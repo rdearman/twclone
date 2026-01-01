@@ -138,11 +138,11 @@ static bool pg_exec_rows_affected_impl(db_t *db, const char *sql, const db_bind_
 
 static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_id, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
-    char sql2[2048]; snprintf(sql2, sizeof(sql2), "%s RETURNING id", sql);
+    
     char **values = calloc(n_params, sizeof(char*));
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     pthread_mutex_lock(&g_pg_mutex);
-    PGresult *res = PQexecParams(impl->conn, sql2, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
     pthread_mutex_unlock(&g_pg_mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
@@ -251,18 +251,18 @@ pg_ship_repair_atomic(db_t *db,
     "WITH player AS ( "
     "  UPDATE players "
     "     SET credits = credits - $1 "
-    "   WHERE id = $2 "
+    "   WHERE player_id = $2 "
     "     AND credits >= $1 "
     "   RETURNING credits "
     "), ship AS ( "
     "  UPDATE ships "
     "     SET hull = 100 "
-    "   WHERE id = $3 "
+    "   WHERE ship_id = $3 "
     "     AND EXISTS (SELECT 1 FROM player) "
-    "   RETURNING id "
+    "   RETURNING ship_id "
     ") "
     "SELECT (SELECT credits FROM player) AS new_credits, "
-    "       (SELECT id FROM ship)        AS ship_id;";
+    "       (SELECT ship_id FROM ship)        AS ship_id;";
 
   char p1[32], p2[32], p3[32];
   snprintf(p1, sizeof p1, "%d", cost);

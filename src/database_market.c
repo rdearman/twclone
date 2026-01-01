@@ -29,7 +29,7 @@ db_insert_commodity_order (db_t *db,
   db_error_t err;
   db_error_clear (&err);
 
-  db_bind_t params[9];
+  db_bind_t params[10];
 
 
   params[0] = db_bind_text (actor_type);
@@ -48,7 +48,7 @@ db_insert_commodity_order (db_t *db,
   const char *sql =
     "INSERT INTO commodity_orders ("
     "actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, ts, expires_at) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10)";
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, to_timestamp($9), to_timestamp($10)) RETURNING commodity_orders_id";
 
   int64_t new_order_id = -1;
 
@@ -84,7 +84,7 @@ db_update_commodity_order (db_t *db,
 
   const char *sql =
     "UPDATE commodity_orders SET quantity = $2, filled_quantity = $3, status = $4 "
-    "WHERE id = $1;";
+    "WHERE commodity_orders_id = $1;";
 
 
   if (!db_exec (db, sql, params, 4, &err))
@@ -184,7 +184,8 @@ db_get_open_order (db_t *db,
   params[3] = db_bind_text (side);
 
   const char *sql =
-    "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
+    "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
+    "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint, filled_quantity "
     "FROM commodity_orders "
     "WHERE actor_type = $1 AND actor_id = $2 AND commodity_id = $3 AND side = $4 AND status = 'open' "
     "LIMIT 1;";
@@ -308,7 +309,8 @@ db_load_open_orders_for_commodity (db_t *db,
   if (strcmp (side, "buy") == 0)
     {
       sql =
-        "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
+        "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
+        "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint, filled_quantity "
         "FROM commodity_orders "
         "WHERE commodity_id = $1 AND side = $2 AND status = 'open' "
         "ORDER BY price DESC, ts ASC;";
@@ -316,7 +318,8 @@ db_load_open_orders_for_commodity (db_t *db,
   else if (strcmp (side, "sell") == 0)
     {
       sql =
-        "SELECT id, actor_type, actor_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity "
+        "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
+        "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint, filled_quantity "
         "FROM commodity_orders "
         "WHERE commodity_id = $1 AND side = $2 AND status = 'open' "
         "ORDER BY price ASC, ts ASC;";
@@ -457,7 +460,7 @@ db_insert_commodity_trade (db_t *db,
   db_error_t err;
   db_error_clear (&err);
 
-  db_bind_t params[10];
+  db_bind_t params[11];
 
 
   params[0] = db_bind_i32 (buy_order_id);
@@ -472,12 +475,13 @@ db_insert_commodity_trade (db_t *db,
   params[9] = db_bind_i32 (settlement_tx_buy);
   params[10] = db_bind_i32 (settlement_tx_sell);
 
+  // FIX: trade_at renamed to ts in Postgres schema, and use to_timestamp
   const char *sql =
     "INSERT INTO commodity_trades ("
-    "buy_order_id, sell_order_id, quantity, price, trade_at, "
+    "buy_order_id, sell_order_id, quantity, price, ts, "
     "buyer_actor_type, buyer_actor_id, seller_actor_type, seller_actor_id, "
     "settlement_tx_buy, settlement_tx_sell) "
-    "VALUES ($1, $2, $3, $4, $6, $5, $7, $8, $9, $10, $11);";
+    "VALUES ($1, $2, $3, $4, to_timestamp($6), $5, $7, $8, $9, $10, $11);";
 
   int64_t new_order_id = -1;
 
@@ -509,7 +513,8 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
   params[1] = db_bind_i32 (actor_id);
 
   const char *sql =
-    "SELECT id, side, commodity_id, quantity, filled_quantity, price, status, ts, expires_at "
+    "SELECT commodity_orders_id, side, commodity_id, quantity, filled_quantity, price, status, "
+    "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint "
     "FROM commodity_orders "
     "WHERE actor_type = $1 AND actor_id = $2 " "ORDER BY status ASC, ts DESC;";
 

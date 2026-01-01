@@ -40,6 +40,7 @@ def ensure_account(host, port, username, password, client_version):
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((host, port))
+    sock.setblocking(False)
 
     buf = b""
 
@@ -119,6 +120,10 @@ def ensure_account(host, port, username, password, client_version):
                 got_reply = True
                 sock.close()
                 if resp.get("status") == "ok":
+                    return
+                # Check if user already exists (error code 1105)
+                elif resp.get("error", {}).get("code") == 1105:
+                    # User already exists - this is fine, treat as success
                     return
                 else:
                     raise RuntimeError(

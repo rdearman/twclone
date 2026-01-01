@@ -42,7 +42,7 @@ is_black_market_port (db_t *db, int port_id)
 {
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql = "SELECT name FROM ports WHERE id = $1;";
+  const char *sql = "SELECT name FROM ports WHERE port_id = $1;";
   bool is_bm = false;
 
 
@@ -201,7 +201,8 @@ play_login (const char *user, const char *pass, int *pid)
       return AUTH_ERR_DB;
     }
   db_res_t *res = NULL; db_error_t err;
-  const char *sql = "SELECT id, passwd, is_npc FROM players WHERE name = $1;";
+  const char *sql =
+    "SELECT player_id, passwd, is_npc FROM players WHERE name = $1;";
 
 
   LOGD ("[play_login] Executing query: %s for user: %s", sql, user);
@@ -279,7 +280,11 @@ play_login (const char *user, const char *pass, int *pid)
 
 
 int
-user_create (db_t *db, const char *user, const char *pass, int *pid)
+user_create (db_t *db,
+             const char *user,
+             const char *pass,
+             const char *ship_name,
+             int *pid)
 {
   if (!user || !pass)
     {
@@ -289,10 +294,11 @@ user_create (db_t *db, const char *user, const char *pass, int *pid)
 
 
   if (!db_exec_insert_id (db,
-                          "INSERT INTO players (name, passwd) VALUES ($1, $2);",
+                          "SELECT register_player($1, $2, $3);",
                           (db_bind_t[]){db_bind_text (user),
-                                        db_bind_text (pass)},
-                          2,
+                                        db_bind_text (pass),
+                                        db_bind_text (ship_name)},
+                          3,
                           &player_id,
                           &err))
     {
@@ -304,11 +310,11 @@ user_create (db_t *db, const char *user, const char *pass, int *pid)
     }
 
   const char *sql_turns =
-    "INSERT INTO turns (player, turns_remaining, last_update) "
-    "SELECT $1, CAST(value AS INTEGER), EXTRACT(EPOCH FROM now()) "
+    "INSERT INTO turns (player_id, turns_remaining, last_update) "
+    "SELECT $1, CAST(value AS INTEGER), CURRENT_TIMESTAMP "
     "FROM config "
     "WHERE key='turnsperday' "
-    "ON CONFLICT(player) DO UPDATE SET "
+    "ON CONFLICT(player_id) DO UPDATE SET "
     "  turns_remaining = excluded.turns_remaining, "
     "  last_update    = excluded.last_update;";
 
@@ -529,21 +535,66 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
     }
 
   db_error_t err;
+  db_res_t *res = NULL;
 
 
-  if (!db_exec (db, sql, NULL, 0, &err))
+  if (!db_query (db, sql, NULL, 0, &res, &err))
     {
       send_response_error (ctx,
                            root,
-                           ERR_PLANET_NOT_FOUND,
+                           ERR_DB_QUERY_FAILED,
                            err.message[0] ? err.message : "SQL error");
     }
   else
     {
-      json_t *res = json_string ("Executed");
+      json_t *jrows = json_array ();
+      int cols = db_res_col_count (res);
 
 
-      send_response_ok_take (ctx, root, "sys.raw_sql_exec", &res);
+      while (db_res_step (res, &err))
+        {
+          json_t *jrow = json_array ();
+
+
+          for (int i = 0; i < cols; i++)
+            {
+              // For simplicity, we convert everything to string or int/float if obvious.
+              // But db_res_col_i64 is safest for most of our needs.
+              // Let's check type if possible, or just try to get as string.
+              const char *val = db_res_col_text (res, i, &err);
+
+
+              if (val)
+                {
+                  // Try parsing as int
+                  char *endptr;
+                  long long iv = strtoll (val, &endptr, 10);
+
+
+                  if (*endptr == '\0')
+                    {
+                      json_array_append_new (jrow, json_integer (iv));
+                    }
+                  else
+                    {
+                      json_array_append_new (jrow, json_string (val));
+                    }
+                }
+              else
+                {
+                  json_array_append_new (jrow, json_null ());
+                }
+            }
+          json_array_append_new (jrows, jrow);
+        }
+      db_res_finalize (res);
+
+
+      json_t *jresp = json_object ();
+
+
+      json_object_set_new (jresp, "rows", jrows);
+      send_response_ok_take (ctx, root, "sys.raw_sql_exec", &jresp);
     }
   return 0;
 #endif
@@ -636,20 +687,20 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, 404, "Target player not found.");
       return 0;
     }
+  if (target_player_id == ctx->player_id)
+    {
+      send_response_error (ctx,
+                           root,
+                           ERR_INVALID_ARG,
+                           "Cannot post bounty on yourself.");
+      return 0;
+    }
   if (target_alignment >= 0)
     {
       send_response_error (ctx,
                            root,
                            REF_TURN_COST_EXCEEDS,
                            "Target must be an evil player.");
-      return 0;
-    }
-  if (target_player_id == ctx->player_id)
-    {
-      send_response_error (ctx,
-                           root,
-                           ERR_BAD_REQUEST,
-                           "Cannot post bounty on yourself.");
       return 0;
     }
   long long new_balance = 0;
@@ -852,18 +903,18 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
   if (alignment >= 0)
     {
       sql =
-        "SELECT b.id, b.target_id, p.name, b.reward, b.posted_by_type "
+        "SELECT b.bounties_id, b.target_id, p.name, b.reward, b.posted_by_type "
         "FROM bounties b "
-        "JOIN players p ON b.target_id = p.id "
+        "JOIN players p ON b.target_id = p.player_id "
         "WHERE b.status = 'open' AND p.alignment < 0 "
         "ORDER BY b.reward DESC LIMIT 20;";
     }
   else
     {
       sql =
-        "SELECT b.id, b.target_id, p.name, b.reward, b.posted_by_type "
+        "SELECT b.bounties_id, b.target_id, p.name, b.reward, b.posted_by_type "
         "FROM bounties b "
-        "JOIN players p ON b.target_id = p.id "
+        "JOIN players p ON b.target_id = p.player_id "
         "WHERE b.status = 'open' AND (p.alignment > 0 OR b.posted_by_type = 'gov') "
         "ORDER BY b.reward DESC LIMIT 20;";
     }
@@ -968,7 +1019,7 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
 
   // 1. Planet Basic Info
   const char *sql_planet =
-    "SELECT id, name, type, owner_id, owner_type FROM planets WHERE id = $1;";
+    "SELECT planet_id, name, type, owner_id, owner_type FROM planets WHERE planet_id = $1;";
 
 
   if (db_query (db,
@@ -1113,7 +1164,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
   // 1. Port Basic Info
-  const char *sql_port = "SELECT id, name, size FROM ports WHERE id = $1;";
+  const char *sql_port = "SELECT port_id, name, size FROM ports WHERE port_id = $1;";
 
 
   if (db_query (db,

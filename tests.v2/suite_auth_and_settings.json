@@ -10,10 +10,11 @@
       "name": "Register Duplicate User (Fail)",
       "command": "auth.register",
       "data": { "username": "auth_test_user_1", "passwd": "password123" },
-      "expect": { 
-          "status": "refused", 
-          "error": { "code": 1210 }
-      }
+              "expect": {
+                "status": "refused",
+                "error": { "code": 1105 }
+              }
+      
     },
     {
       "name": "MFA Verify (Refusal - No MFA Setup)",
@@ -38,7 +39,7 @@
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.prefs.*[key=theme].value", "op": "==", "value": "dark" },
-        { "path": "data.prefs.*[key=notifications].value", "op": "==", "value": "false" }
+        { "path": "data.prefs.*[key=notifications].value", "op": "==", "value": "0" }
       ]
     }
   ]

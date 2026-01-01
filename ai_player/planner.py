@@ -181,10 +181,20 @@ class Planner:
                     return None 
 
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
-                adjacent_sectors = sector_data.get("adjacent", [])
+                adjacent_list = sector_data.get("adjacent", [])
+                
+                # Extract sector numbers from adjacent warps
+                # adjacent could be a list of dicts like [{'to_sector': 7}, ...] or just [7, ...]
+                adjacent_sectors = []
+                for item in adjacent_list:
+                    if isinstance(item, dict):
+                        adjacent_sectors.append(item.get("to_sector"))
+                    else:
+                        adjacent_sectors.append(item)
 
                 # 0. Missing Adjacency Data -> Fetch it
-                if not adjacent_sectors:
+                # Note: "adjacent" not in sector_data means we lack data; empty [] means no warp links exist
+                if "adjacent" not in sector_data:
                     logger.info(f"Goto goal but no adjacency data for sector {current_sector}. Requesting sector.info.")
                     return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
 
@@ -480,14 +490,29 @@ class Planner:
         """
         Ensures we have the basic info (Player, Ship, Current Sector) 
         BEFORE asking the LLM for a plan.
+        Also refreshes sector data periodically to detect enemy ships.
         """
         
-        # 2. Check Ship Info - FIX: Check for 'id' to ensure it's not missing or placeholder
-        ship_info = current_state.get("ship_info")
-        if not ship_info or "id" not in ship_info:
-            logger.info("Bootstrap: Fetching ship info (missing ID).")
-            return {"command": "ship.info", "data": {}}
-
+        # 1. Check Player Info - CRITICAL: Must fetch before anything else
+        player_info = current_state.get("player_info")
+        if not player_info or "player" not in player_info:
+            logger.info("Bootstrap: Fetching player info (missing).")
+            return {"command": "player.my_info", "data": {}}
+        
+        # 1b. Check if player has a ship - if not, let LLM handle acquiring one
+        # (Skip bootstrap ship claiming - too complex without being docked)
+        player_data = player_info.get("player", {})
+        ship_id = player_data.get("ship_id", 0)
+        if ship_id > 0:
+            # 2. Check Ship Info - FIX: Check for 'id' to ensure it's not missing or placeholder
+            ship_info = current_state.get("ship_info")
+            if not ship_info or "id" not in ship_info:
+                logger.info("Bootstrap: Fetching ship info (missing ID).")
+                return {"command": "ship.info", "data": {}}
+        else:
+            # Player has no ship - this is OK, let the LLM ask for one as its first action
+            logger.info("Bootstrap: Player has no ship - LLM will handle ship acquisition.")
+        
         # 3. Check Current Sector Data (CRITICAL FIX)
         # We perform this check EVERY turn, not just at startup.
         current_sector = current_state.get("player_location_sector")
@@ -499,9 +524,25 @@ class Planner:
 
         if current_sector:
             sector_data = current_state.get("sector_data", {}).get(str(current_sector))
-            # If we are blind (no data) or don't know exits (no adjacent), we MUST look.
-            if not sector_data or not sector_data.get("adjacent"):
+            
+            # If we are blind (no data), we MUST look.
+            # But if adjacent is an empty list [], that's valid data meaning no warp links exist.
+            if not sector_data or "adjacent" not in sector_data:
                 logger.info(f"Bootstrap: Blind in sector {current_sector}. Fetching sector info.")
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+            
+            # NEW: If we have no port info for this sector, fetch it
+            # This ensures we know if there's a trading opportunity
+            if "has_port" not in sector_data:
+                logger.info(f"Bootstrap: Missing port info for sector {current_sector}. Fetching sector.info.")
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+            
+            # NEW: Periodic refresh (every 60 seconds) to detect enemy ships
+            # Get the last refresh timestamp for this sector
+            last_refresh = sector_data.get("_last_refreshed", 0)
+            current_time = time.time()
+            if current_time - last_refresh > 60:
+                logger.debug(f"Sector {current_sector} data is {current_time - last_refresh:.0f}s old. Refreshing.")
                 return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
 
         # If we have everything, we don't need to bootstrap.

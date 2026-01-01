@@ -90,7 +90,7 @@ class TWClient:
             return True
         
         err_code = resp.get("error", {}).get("code")
-        if err_code == 1210: # ERR_NAME_TAKEN
+        if err_code == 1105: # ERR_NAME_TAKEN
             return not fail_if_exists
             
         return False

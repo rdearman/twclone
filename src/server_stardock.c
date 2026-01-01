@@ -521,8 +521,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   char location_type[16] = "OTHER";
   int port_id = 0;
   const char *sql_loc_check =
-    "SELECT id, type FROM ports WHERE sector = ? AND (type = " QUOTE (
-      PORT_TYPE_STARDOCK) " OR type = " QUOTE (PORT_TYPE_CLASS0) ");";                                                                                                  // type 9 for Stardock, 0 for Class-0
+    "SELECT port_id, type FROM ports WHERE sector_id = $1 AND (type = 9 OR type = 0);";
+  // type 9 for Stardock, 0 for Class-0
   int rc = db_stmt_prepare_v2 (db, sql_loc_check, -1, &stmt, NULL);
 
 
@@ -531,6 +531,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
       db_stmt_bind_i32 (stmt, 1, sector_id);
       if (db_stmt_step (stmt) == DB_ROW)
         {
+          port_id = db_stmt_col_i32 (stmt, 0);
           port_type = db_stmt_col_i32 (stmt, 1);
           if (port_type == PORT_TYPE_STARDOCK)
             {                   // Stardock
@@ -569,7 +570,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   int can_transwarp = 0, can_planet_scan = 0, can_long_range_scan = 0;
   // Get ship current state
   const char *sql_ship_state =
-    "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = ?;";
+    "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_ship_state, -1, &stmt, NULL);
@@ -578,7 +579,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx,
                            root,
                            ERR_DB_QUERY_FAILED, "Failed to get ship state.");
-      return 0;
+      return 0; return 0;
     }
   db_stmt_bind_i32 (stmt, 1, ship_id);
   if (db_stmt_step (stmt) == DB_ROW)
@@ -606,20 +607,19 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   db_stmt_finalize (stmt);
   stmt = NULL;
   json_t *items_array = json_array ();
-  const char *sql_hardware =
-    "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND (? = '"
-    LOCATION_STARDOCK "' OR (? = '" LOCATION_CLASS0
-    "' AND sold_in_class0 = 1))";
+  const char *sql_items =
+    "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND ($1 = '"
+    LOCATION_STARDOCK "' OR ($2 = '" LOCATION_CLASS0 "'));";
 
 
-  rc = db_stmt_prepare_v2 (db, sql_hardware, -1, &stmt, NULL);
+  rc = db_stmt_prepare_v2 (db, sql_items, -1, &stmt, NULL);
   if (rc != DB_OK)
     {
       send_response_error (ctx,
                            root,
                            ERR_DB_QUERY_FAILED,
                            "Failed to get hardware items.");
-      return 0;
+      return 0; return 0;
     }
   db_stmt_bind_text (stmt, 1, location_type, -1, DB_BIND_STATIC);
   db_stmt_bind_text (stmt, 2, location_type, -1, DB_BIND_STATIC);
@@ -773,6 +773,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -781,6 +782,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
                            "Missing data object.");
+      return 0;
     }
   const char *code = json_string_value (json_object_get (data, "code"));
   int quantity = json_integer_value (json_object_get (data, "quantity"));
@@ -790,6 +792,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       send_response_error (ctx, root, 1301,
                            "Missing or invalid 'quantity'.");
+      return 0;
     }
   // 1. Get Context
   int player_id = ctx->player_id;
@@ -801,12 +804,13 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
                            "No active ship.");
+      return 0;
     }
   // 2. Check Port Location (Stardock or Class 0)
   db_stmt_t *stmt = NULL;
   int port_type = -1;
   const char *sql_port =
-    "SELECT type FROM ports WHERE sector = ? AND (type = 9 OR type = 0);";
+    "SELECT type FROM ports WHERE sector_id = $1 AND (type = 9 OR type = 0);";
 
 
   if (db_stmt_prepare_v2 (db, sql_port, -1, &stmt, NULL) == DB_OK)
@@ -824,6 +828,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
                            root,
                            1811,
                            "Hardware can only be purchased at Stardock or Class-0 ports.");
+      return 0;
     }
   // 3. Get Item Details
   int price = 0;
@@ -832,7 +837,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
   int max_per_ship = 0;
   char category[32] = { 0 };
   const char *sql_item =
-    "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = ? AND enabled = 1;";
+    "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = $1 AND enabled = 1;";
   bool item_found = false;
 
 
@@ -863,6 +868,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       send_response_error (ctx, root, 1812,
                            "Invalid or unavailable hardware item.");
+      return 0;
     }
   // 4. Validate Port Type vs Item Requirements
   if (requires_stardock && port_type != 9)
@@ -871,6 +877,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
                            root,
                            1811,
                            "This hardware item is not sold at Class-0 ports.");
+      return 0;
     }
   if (!sold_in_class0 && port_type == 0)
     {
@@ -878,6 +885,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
                            root,
                            1811,
                            "This hardware item is not sold at Class-0 ports.");
+      return 0;
     }
   // 5. Map Code to Column and Check Limits
   const char *col_name = NULL;
@@ -938,6 +946,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
                            root,
                            500,
                            "Server configuration error: Unknown item mapping.");
+      return 0;
     }
   // Check Limits logic
   int current_val = 0;
@@ -996,7 +1005,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       snprintf (sql_info,
                 sizeof (sql_info),
-                "SELECT s.%s, st.%s FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = ?;",
+                "SELECT s.%s, st.%s FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1;",
                 col_name,
                 limit_col);
     }
@@ -1004,7 +1013,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       snprintf (sql_info,
                 sizeof (sql_info),
-                "SELECT %s, 0 FROM ships WHERE id = ?;", col_name);
+                "SELECT %s, 0 FROM ships WHERE ship_id = $1;", col_name);
     }
   if (db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL) == DB_OK)
     {
@@ -1021,6 +1030,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
         {
           db_stmt_finalize (stmt);
           send_response_error (ctx, root, 500, "Ship info not found.");
+          return 0;
         }
     }
   else
@@ -1028,6 +1038,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
       LOGE ("cmd_hardware_buy: SQL prepare failed: %s", db_errmsg (db));
       send_response_error (ctx, root, 500,
                            "Database error checking limits.");
+      return 0;
     }
   db_stmt_finalize (stmt);
   // 6. Check Logic
@@ -1039,6 +1050,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
             {
               send_response_error (ctx, root, 1814,
                                    "Cloaking Device already installed.");
+              return 0;
             }
           else
             {
@@ -1046,6 +1058,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
                                    root,
                                    1814,
                                    "Purchase would exceed ship type's maximum capacity.");
+              return 0;
             }
         }
     }
@@ -1055,6 +1068,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
                            root,
                            1814,
                            "Purchase would exceed ship type's maximum capacity.");
+      return 0;
     }
   // 7. Check Funds
   long long total_cost = (long long) price * quantity;
@@ -1066,6 +1080,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       send_response_error (ctx, root, 1813,
                            "Insufficient credits on ship for purchase.");
+      return 0;
     }
 
 /* 8. Execute transaction (deduct + update must be atomic) */
@@ -1079,7 +1094,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
       LOGE ("cmd_hardware_buy: tx begin failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
       send_response_error (ctx, root, 500, "Database busy.");
-      return 0;
+      return 0; return 0;
     }
 
 /* Deduct player petty cash */
@@ -1094,12 +1109,12 @@ cmd_hardware_buy (client_ctx_t *ctx,
       /* ensure we undo any partial work */
       db_tx_rollback (db, &err);
       send_response_error (ctx, root, 1813, "Insufficient credits.");
-      return 0;
+      return 0; return 0;
     }
 
 /* Update ship hardware column: build SQL safely (still dynamic column name) */
   char *sql_upd =
-    st_asprintf ("UPDATE ships SET %s = %s + $1 WHERE id = $2;",
+    st_asprintf ("UPDATE ships SET %s = %s + $1 WHERE ship_id = $2;",
                  col_name, col_name);
 
 
@@ -1107,7 +1122,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       db_tx_rollback (db, &err);
       send_response_error (ctx, root, 500, "Out of memory.");
-      return 0;
+      return 0; return 0;
     }
 
   db_bind_t p_upd[2];
@@ -1121,7 +1136,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
       free (sql_upd);
       db_tx_rollback (db, &err);
       send_response_error (ctx, root, 500, "Database update failed.");
-      return 0;
+      return 0; return 0;
     }
 
   free (sql_upd);
@@ -1132,7 +1147,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
       /* commit can fail on serialization/deadlock etc */
       db_tx_rollback (db, &err);
       send_response_error (ctx, root, 1813, "Purchase failed (concurrent).");
-      return 0;
+      return 0; return 0;
     }
 
 /* 9. Response continues... */
@@ -1182,15 +1197,16 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   int player_id = ctx->player_id;
   int sector_id = ctx->sector_id;
   db_stmt_t *stmt = NULL;
   // Check if player is docked at a port of type 9 or 10 in the current sector
-  const char *sql_loc = "SELECT p.id FROM ports p "
-                        "JOIN ships s ON s.ported = p.id "
-                        "JOIN players pl ON pl.ship = s.id "
-                        "WHERE p.sector = ? AND pl.id = ? AND (p.type = 9 OR p.type = 10);";
+  const char *sql_loc = "SELECT p.port_id FROM ports p "
+                        "JOIN ships s ON s.ported = p.port_id "
+                        "JOIN players pl ON pl.ship_id = s.ship_id "
+                        "WHERE p.sector_id = $1 AND pl.player_id = $2 AND (p.type = 9 OR p.type = 10);";
   int rc = db_stmt_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
 
 
@@ -1198,6 +1214,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to check shipyard location.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, sector_id);
   db_stmt_bind_i32 (stmt, 2, player_id);
@@ -1207,6 +1224,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
                            "You are not docked at a shipyard.");
+      return 0; return 0;
     }
   int port_id = db_stmt_col_i32 (stmt, 0);
 
@@ -1221,16 +1239,17 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR,
                            "Could not load server configuration.");
+      return 0;
     }
   // Get current player and ship info
   const char *sql_info = "SELECT "
-                         "p.alignment, p.commission, p.experience, "
-                         "s.id, s.type_id, st.name, st.basecost, "
+                         "p.alignment, p.commission_id, p.experience, "
+                         "s.ship_id, s.type_id, st.name, st.basecost, "
                          "s.fighters, s.shields, s.mines, s.limpets, s.genesis, s.detonators, s.probes, s.cloaking_devices, "
                          "s.colonists, s.ore, s.organics, s.equipment, "
                          "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner "
-                         "FROM players p JOIN ships s ON p.ship = s.id JOIN shiptypes st ON s.type_id = st.id "
-                         "WHERE p.id = ?;";
+                         "FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id "
+                         "WHERE p.player_id = $1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL);
@@ -1239,6 +1258,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       free (cfg);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to fetch player/ship info.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, player_id);
   if (db_stmt_step (stmt) != DB_ROW)
@@ -1247,6 +1267,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       free (cfg);
       send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
                            "Could not find player's active ship.");
+      return 0;
     }
   // Current player/ship state
   int player_alignment = db_stmt_col_i32 (stmt, 0);
@@ -1293,8 +1314,8 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
   json_t *available_array = json_array ();
   const char *sql_inventory =
     "SELECT si.ship_type_id, st.name, st.basecost, st.required_alignment, st.required_commission, st.required_experience, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.max_cloaks, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.maxmines, st.maxlimpets "
-    "FROM shipyard_inventory si JOIN shiptypes st ON si.ship_type_id = st.id "
-    "WHERE si.port_id = ? AND si.enabled = 1 AND st.enabled = 1;";
+    "FROM shipyard_inventory si JOIN shiptypes st ON si.ship_type_id = st.shiptypes_id "
+    "WHERE si.port_id = $1 AND si.enabled = 1 AND st.enabled = 1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_inventory, -1, &stmt, NULL);
@@ -1304,6 +1325,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       free (cfg);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to fetch shipyard inventory.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, port_id);
   while (db_stmt_step (stmt) == DB_ROW)
@@ -1462,6 +1484,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -1470,6 +1493,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   int new_type_id = 0;
   const char *new_ship_name = NULL;
@@ -1480,21 +1504,23 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_MISSING_FIELD,
                            "Missing or invalid 'new_type_id'.");
+      return 0;
     }
   new_ship_name = json_get_string_or_null (data, "new_ship_name");
   if (!new_ship_name || strlen (new_ship_name) == 0)
     {
       send_response_error (ctx, root, ERR_MISSING_FIELD,
                            "Missing or invalid 'new_ship_name'.");
+      return 0;
     }
   // FIX: Declare variables here
   db_stmt_t *stmt = NULL;
   // int port_id = 0; // Unused
   // FIX: Define the missing SQL query string
-  const char *sql_loc = "SELECT p.id FROM ports p "
-                        "JOIN ships s ON s.ported = p.id "
-                        "JOIN players pl ON pl.ship = s.id "
-                        "WHERE p.sector = ? AND pl.id = ? AND (p.type = 9 OR p.type = 10);";
+  const char *sql_loc = "SELECT p.port_id FROM ports p "
+                        "JOIN ships s ON s.ported = p.port_id "
+                        "JOIN players pl ON pl.ship_id = s.ship_id "
+                        "WHERE p.sector_id = $1 AND pl.player_id = $2 AND (p.type = 9 OR p.type = 10);";
 
 
   // Begin transaction
@@ -1503,6 +1529,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to start transaction.");
+      return 0;
     }
   // Re-validate location
   int rc = db_stmt_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
@@ -1513,6 +1540,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to check shipyard location.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, ctx->sector_id);
   db_stmt_bind_i32 (stmt, 2, ctx->player_id);
@@ -1523,6 +1551,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
                            "You are not docked at a shipyard.");
+      return 0; return 0;
     }
   // port_id = db_stmt_col_i32 (stmt, 0); // Unused
   db_stmt_finalize (stmt);
@@ -1535,6 +1564,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_SERVER_ERROR,
                            "Could not load server configuration.");
+      return 0;
     }
   if (strlen (new_ship_name) > (size_t) cfg->max_ship_name_length)
     {
@@ -1542,14 +1572,15 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Ship name is too long.");
+      return 0;
     }
   const char *sql_info = "SELECT "
-                         "p.alignment, p.commission, p.experience, s.credits, "
+                         "p.alignment, p.commission_id, p.experience, s.credits, "
                          "s.fighters, s.shields, s.mines, s.limpets, s.genesis, s.detonators, s.probes, s.cloaking_devices, "
                          "s.colonists, s.ore, s.organics, s.equipment, "
-                         "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, s.id, s.type_id, st.basecost "
-                         "FROM players p JOIN ships s ON p.ship = s.id JOIN shiptypes st ON s.type_id = st.id "
-                         "WHERE p.id = ?;";
+                         "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, s.ship_id, s.type_id, st.basecost "
+                         "FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id "
+                         "WHERE p.player_id = $1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL);
@@ -1559,16 +1590,17 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to check shipyard location.");
+      return 0; return 0;
     }
-  db_stmt_bind_i32 (stmt, 1, ctx->sector_id);
-  db_stmt_bind_i32 (stmt, 2, ctx->player_id);
+  db_stmt_bind_i32 (stmt, 1, ctx->player_id);
   rc = db_stmt_step (stmt);
   if (rc != DB_ROW)
     {
       db_stmt_finalize (stmt);
       stx_rollback (db);
-      send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
-                           "You are not docked at a shipyard.");
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
+                           "Could not find player's active ship.");
+      return 0; return 0;
     }
   int player_alignment = db_stmt_col_i32 (stmt, 0);
   int player_commission = db_stmt_col_i32 (stmt, 1);
@@ -1596,7 +1628,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   db_stmt_finalize (stmt);
   stmt = NULL;
   const char *sql_target_type =
-    "SELECT basecost, required_alignment, required_commission, required_experience, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, max_cloaks, can_transwarp, can_planet_scan, can_long_range_scan, maxmines, maxlimpets, name FROM shiptypes WHERE id = ? AND enabled = 1;";
+    "SELECT basecost, required_alignment, required_commission, required_experience, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, max_cloaks, can_transwarp, can_planet_scan, can_long_range_scan, maxmines, maxlimpets, name FROM shiptypes WHERE shiptypes_id = $1 AND enabled = 1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_target_type, -1, &stmt, NULL);
@@ -1612,6 +1644,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_SHIPYARD_INVALID_SHIP_TYPE,
                            "Target ship type not found or is not available.");
+      return 0;
     }
   bool eligible_for_upgrade = true;
 
@@ -1701,6 +1734,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_SHIPYARD_REQUIREMENTS_NOT_MET,
                            "Ship upgrade requirements not met (capacity or capabilities).");
+      return 0;
     }
   long long new_shiptype_basecost = db_stmt_col_i64 (stmt, 0);
   const char *target_ship_name =
@@ -1722,6 +1756,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                                root,
                                ERR_SHIPYARD_REQUIREMENTS_NOT_MET,
                                "Only a corporation CEO can purchase a Corporate Flagship.");
+          return 0;
         }
     }
   db_stmt_finalize (stmt);
@@ -1738,9 +1773,10 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_SHIPYARD_INSUFFICIENT_FUNDS,
                            "Insufficient credits for ship upgrade.");
+      return 0;
     }
   const char *sql_update =
-    "UPDATE ships SET type_id = ?, name = ?, credits = credits - ? WHERE id = ?;";
+    "UPDATE ships SET type_id = $1, name = $2, credits = credits - $3 WHERE ship_id = $4;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL);
@@ -1750,6 +1786,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare ship update.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, new_type_id);
   db_stmt_bind_text (stmt, 2, new_ship_name, -1, DB_BIND_STATIC);
@@ -1762,6 +1799,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       stx_rollback (db);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to execute ship upgrade.");
+      return 0;
     }
   db_stmt_finalize (stmt);
   if (stx_commit (db) != DB_OK)
@@ -1769,6 +1807,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       free (cfg);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to commit transaction.");
+      return 0;
     }
   json_t *event_payload = json_object ();
 
@@ -1794,7 +1833,7 @@ tavern_settings_load (void)
   db_t *db = game_db_get_handle ();
   db_stmt_t *stmt = NULL;
   const char *sql =
-    "SELECT max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled FROM tavern_settings WHERE id = 1;";
+    "SELECT max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled FROM tavern_settings WHERE tavern_settings_id = 1;";
   int rc = db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL);
   if (rc != DB_OK)
     {
@@ -1836,7 +1875,7 @@ is_player_in_tavern_sector (db_t *db, int sector_id)
 {
   db_stmt_t *stmt = NULL;
   const char *sql =
-    "SELECT 1 FROM taverns WHERE sector_id = ? AND enabled = 1;";
+    "SELECT 1 FROM taverns WHERE sector_id = $1 AND enabled = 1;";
   bool in_tavern = false;
   if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) != DB_OK)
     {
@@ -1861,7 +1900,7 @@ get_player_loan (db_t *db, int player_id, long long *principal,
 {
   db_stmt_t *stmt = NULL;
   const char *sql =
-    "SELECT principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE player_id = ?;";
+    "SELECT principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE player_id = $1;";
   bool found = false;
   if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) != DB_OK)
     {
@@ -1906,7 +1945,7 @@ sanitize_text (char *text, size_t max_len)
   size_t len = strnlen (text, max_len);
 
 
-  for (size_t i = 0; i < len; i++)
+  for (int i = 0; i < len; i++)
     {
       // Allow basic alphanumeric, spaces, and common punctuation
       if (!isalnum ((unsigned char) text[i])
@@ -1940,7 +1979,8 @@ validate_bet_limits (db_t *db, int player_id, long long bet_amount)
     {
       long long player_credits = 0;
       db_stmt_t *stmt = NULL;
-      const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+      const char *sql_credits =
+        "SELECT credits FROM players WHERE player_id = $1;";
 
 
       if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == DB_OK)
@@ -1976,8 +2016,8 @@ update_player_credits_gambling (db_t *db, int player_id, long long amount,
                                 bool is_win)
 {
   const char *sql_update = is_win ?
-                           "UPDATE players SET credits = credits + ? WHERE id = ?;"
-    : "UPDATE players SET credits = credits - ? WHERE id = ?;";
+                           "UPDATE players SET credits = credits + $1 WHERE player_id = $2;"
+    : "UPDATE players SET credits = credits - $1 WHERE player_id = $2;";
   db_stmt_t *stmt = NULL;
   int rc = -1;
   if (db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL) == DB_OK)
@@ -2012,7 +2052,7 @@ has_sufficient_funds (db_t *db, int player_id, long long required_amount)
 {
   long long player_credits = 0;
   db_stmt_t *stmt = NULL;
-  const char *sql = "SELECT credits FROM players WHERE id = ?;";
+  const char *sql = "SELECT credits FROM players WHERE player_id = $1;";
   if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) == DB_OK)
     {
       db_stmt_bind_i32 (stmt, 1, player_id);
@@ -2047,7 +2087,7 @@ check_loan_default (db_t *db, int player_id, int current_time)
         {
           // Mark as defaulted
           const char *sql_default =
-            "UPDATE tavern_loans SET is_defaulted = 1 WHERE player_id = ?;";
+            "UPDATE tavern_loans SET is_defaulted = 1 WHERE player_id = $1;";
           db_stmt_t *stmt = NULL;
 
 
@@ -2089,7 +2129,7 @@ apply_loan_interest (db_t *db, int player_id, long long current_principal,
   long long new_principal = current_principal + interest_amount;
   db_stmt_t *stmt = NULL;
   const char *sql_update =
-    "UPDATE tavern_loans SET principal = ? WHERE player_id = ?;";
+    "UPDATE tavern_loans SET principal = $1 WHERE player_id = $2;";
   int rc = db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL);
   if (rc != DB_OK)
     {
@@ -2126,11 +2166,13 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -2139,6 +2181,7 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   int ticket_number = 0;
 
@@ -2150,6 +2193,7 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_INVALID_ARG,
                            "Lottery ticket number must be between 1 and 999.");
+      return 0;
     }
   // Determine ticket price (example: 100 credits)
   long long ticket_price = 100; // This could be configurable in tavern_settings
@@ -2161,11 +2205,13 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
                            "Bet exceeds maximum per transaction.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -2173,12 +2219,14 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded based on liquid assets.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, ticket_price))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to buy lottery ticket.");
+      return 0;
     }
   // Get current draw date
   char draw_date_str[32];
@@ -2200,9 +2248,10 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for lottery ticket.");
+      return 0;
     }
   const char *sql_insert_ticket =
-    "INSERT INTO tavern_lottery_tickets (draw_date, player_id, number, cost, purchased_at) VALUES (?, ?, ?, ?, ?);";
+    "INSERT INTO tavern_lottery_tickets (draw_date, player_id, number, cost, purchased_at) VALUES ($1, $2, $3, $4, $5);";
   db_stmt_t *stmt = NULL;
 
 
@@ -2213,6 +2262,7 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
       update_player_credits_gambling (db, ctx->player_id, ticket_price, true);  // Refund credits
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare lottery ticket insert.");
+      return 0;
     }
   db_stmt_bind_text (stmt, 1, draw_date_str, -1, DB_BIND_STATIC);
   db_stmt_bind_i32 (stmt, 2, ctx->player_id);
@@ -2225,6 +2275,7 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
       update_player_credits_gambling (db, ctx->player_id, ticket_price, true);  // Refund credits
       send_response_error (ctx, root, ERR_DB,
                            "Failed to insert lottery ticket.");
+      return 0;
     }
   db_stmt_finalize (stmt);
   json_t *response_data = json_object ();
@@ -2254,11 +2305,13 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   json_t *response_data = json_object ();
 
@@ -2279,7 +2332,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   // Query current lottery state
   db_stmt_t *stmt = NULL;
   const char *sql_state =
-    "SELECT draw_date, winning_number, jackpot FROM tavern_lottery_state WHERE draw_date = ?;";
+    "SELECT draw_date, winning_number, jackpot FROM tavern_lottery_state WHERE draw_date = $1;";
   int rc = db_stmt_prepare_v2 (db, sql_state, -1, &stmt, NULL);
 
 
@@ -2288,6 +2341,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
       json_decref (response_data);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare lottery state query.");
+      return 0;
     }
   db_stmt_bind_text (stmt, 1, draw_date_str, -1, DB_BIND_STATIC);
   if (db_stmt_step (stmt) == DB_ROW)
@@ -2308,7 +2362,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   // Query player's tickets for the current draw
   json_t *player_tickets_array = json_array ();
   const char *sql_player_tickets =
-    "SELECT number, cost, purchased_at FROM tavern_lottery_tickets WHERE player_id = ? AND draw_date = ?;";
+    "SELECT number, cost, purchased_at FROM tavern_lottery_tickets WHERE player_id = $1 AND draw_date = $2;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_player_tickets, -1, &stmt, NULL);
@@ -2317,6 +2371,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
       json_decref (response_data);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare player tickets query.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, ctx->player_id);
   db_stmt_bind_text (stmt, 2, draw_date_str, -1, DB_BIND_STATIC);
@@ -2350,11 +2405,13 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -2363,6 +2420,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   int target_id = 0;
   long long bet_amount = 0;
@@ -2373,21 +2431,24 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Invalid target_id.");
+      return 0;
     }
   if (!json_get_int64_flexible (data, "amount", &bet_amount)
       || bet_amount <= 0)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Bet amount must be positive.");
+      return 0;
     }
   if (target_id == ctx->player_id)
     {
       send_response_error (ctx, root, ERR_TAVERN_BET_ON_SELF,
                            "Cannot place a bet on yourself.");
+      return 0;
     }
   // Check if target player exists
   db_stmt_t *stmt = NULL;
-  const char *sql_target_exists = "SELECT 1 FROM players WHERE id = ?;";
+  const char *sql_target_exists = "SELECT 1 FROM players WHERE player_id = $1;";
 
 
   if (db_stmt_prepare_v2 (db, sql_target_exists, -1, &stmt, NULL) !=
@@ -2395,6 +2456,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to check target player existence.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, target_id);
   if (db_stmt_step (stmt) != DB_ROW)
@@ -2402,6 +2464,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
       db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_TAVERN_PLAYER_NOT_FOUND,
                            "Target player not found.");
+      return 0;
     }
   db_stmt_finalize (stmt);
   stmt = NULL;
@@ -2413,11 +2476,13 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
                            "Bet exceeds maximum per transaction.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -2425,12 +2490,14 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded based on liquid assets.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, bet_amount))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to place bet.");
+      return 0;
     }
   // Deduct bet amount
   int rc = update_player_credits_gambling (db, ctx->player_id, bet_amount,
@@ -2441,6 +2508,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for bet.");
+      return 0;
     }
   // Calculate expires_at (e.g., 24 hours from now)
   time_t now = time (NULL);
@@ -2450,7 +2518,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
   int odds_bp = get_random_int (5000, 15000);   // Example: 50%-150% odds
   // Insert bet into tavern_deadpool_bets
   const char *sql_insert_bet =
-    "INSERT INTO tavern_deadpool_bets (bettor_id, target_id, amount, odds_bp, placed_at, expires_at, resolved) VALUES (?, ?, ?, ?, ?, ?, 0);";
+    "INSERT INTO tavern_deadpool_bets (bettor_id, target_id, amount, odds_bp, placed_at, expires_at, resolved) VALUES ($1, $2, $3, $4, $5, $6, 0);";
 
 
   rc = db_stmt_prepare_v2 (db, sql_insert_bet, -1, &stmt, NULL);
@@ -2459,6 +2527,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
       update_player_credits_gambling (db, ctx->player_id, bet_amount, true);    // Refund credits
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare dead pool bet insert.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, ctx->player_id);
   db_stmt_bind_i32 (stmt, 2, target_id);
@@ -2472,6 +2541,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
       update_player_credits_gambling (db, ctx->player_id, bet_amount, true);    // Refund credits
       send_response_error (ctx, root, ERR_DB,
                            "Failed to insert dead pool bet.");
+      return 0;
     }
   db_stmt_finalize (stmt);
   json_t *response_data = json_object ();
@@ -2500,11 +2570,13 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -2513,6 +2585,7 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   long long bet_amount = 0;
 
@@ -2522,6 +2595,7 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Bet amount must be positive.");
+      return 0;
     }
   // Validate bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, bet_amount);
@@ -2531,11 +2605,13 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
                            "Bet exceeds maximum per transaction.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -2543,12 +2619,14 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded based on liquid assets.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, bet_amount))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to play dice.");
+      return 0;
     }
   // Deduct bet amount
   int rc = update_player_credits_gambling (db, ctx->player_id, bet_amount,
@@ -2559,6 +2637,7 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for dice game.");
+      return 0;
     }
   // Simulate dice roll (2d6, win on 7)
   int die1 = get_random_int (1, 6);
@@ -2582,7 +2661,7 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
   // Get updated player credits for response
   long long current_credits = 0;
   db_stmt_t *stmt = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+  const char *sql_credits = "SELECT credits FROM players WHERE player_id = $1;";
 
 
   if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == DB_OK)
@@ -2622,11 +2701,13 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -2635,6 +2716,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   long long bet_amount = 0;
   int rounds = 0;
@@ -2645,12 +2727,14 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Bet amount must be positive.");
+      return 0;
     }
   if (!json_get_int_flexible (data, "rounds", &rounds) || rounds <= 0
       || rounds > 5)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Rounds must be between 1 and 5.");
+      return 0;
     }
   // Validate initial bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, bet_amount);
@@ -2660,11 +2744,13 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
                            "Bet exceeds maximum per transaction.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -2672,6 +2758,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded based on liquid assets.");
+      return 0;
     }
   // Check player funds for initial bet
   if (!has_sufficient_funds (db, ctx->player_id, bet_amount))
@@ -2680,6 +2767,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits for initial high-stakes bet.");
+      return 0;
     }
   // Deduct initial bet amount
   int rc = update_player_credits_gambling (db, ctx->player_id, bet_amount,
@@ -2692,6 +2780,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_DB,
                            "Failed to deduct credits for high-stakes game.");
+      return 0;
     }
   long long current_pot = bet_amount;
   bool player_won_all_rounds = true;
@@ -2730,7 +2819,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
   // Get updated player credits for response
   long long player_credits_after_game = 0;
   db_stmt_t *stmt_credits = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+  const char *sql_credits = "SELECT credits FROM players WHERE player_id = $1;";
 
 
   if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
@@ -2777,11 +2866,13 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   // Fixed ticket price for raffle
   long long ticket_price = 10;  // Example: 10 credits per raffle ticket
@@ -2795,11 +2886,13 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_BET_TOO_HIGH,
                            "Raffle ticket price exceeds maximum per transaction.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -2807,12 +2900,14 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded based on liquid assets.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, ticket_price))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to buy raffle ticket.");
+      return 0;
     }
   // Deduct ticket price
   int rc = update_player_credits_gambling (db,
@@ -2825,6 +2920,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for raffle ticket.");
+      return 0;
     }
   long long current_pot = 0;
   // int last_win_ts = 0;
@@ -2833,7 +2929,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   // Get and update raffle state
   db_stmt_t *stmt = NULL;
   const char *sql_get_raffle =
-    "SELECT pot, last_winner_id, last_payout, last_win_ts FROM tavern_raffle_state WHERE id = 1;";
+    "SELECT pot, last_winner_id, last_payout, last_win_ts FROM tavern_raffle_state WHERE tavern_raffle_state_id = 1;";
 
 
   if (db_stmt_prepare_v2 (db, sql_get_raffle, -1, &stmt, NULL) == DB_OK)
@@ -2856,6 +2952,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
       update_player_credits_gambling (db, ctx->player_id, ticket_price, true);  // Refund
       send_response_error (ctx, root, ERR_DB,
                            "Failed to retrieve raffle state.");
+      return 0;
     }
   current_pot += ticket_price;  // Add ticket price to pot
   bool player_wins = (get_random_int (1, 1000) == 1);   // 1 in 1000 chance to win
@@ -2875,7 +2972,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
         }
       // Reset pot and record win
       sql_update_raffle =
-        "UPDATE tavern_raffle_state SET pot = 0, last_winner_id = ?, last_payout = ?, last_win_ts = ? WHERE id = 1;";
+        "UPDATE tavern_raffle_state SET pot = 0, last_winner_id = $1, last_payout = $2, last_win_ts = $3 WHERE tavern_raffle_state_id = 1;";
       rc = db_stmt_prepare_v2 (db, sql_update_raffle, -1, &stmt, NULL);
       if (rc == DB_OK)
         {
@@ -2904,7 +3001,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       // Just update pot if no win
       sql_update_raffle =
-        "UPDATE tavern_raffle_state SET pot = ? WHERE id = 1;";
+        "UPDATE tavern_raffle_state SET pot = $1 WHERE tavern_raffle_state_id = 1;";
       rc = db_stmt_prepare_v2 (db, sql_update_raffle, -1, &stmt, NULL);
       if (rc == DB_OK)
         {
@@ -2928,7 +3025,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   // Get updated player credits for response
   long long player_credits_after_game = 0;
   db_stmt_t *stmt_credits = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE id = ?;";
+  const char *sql_credits = "SELECT credits FROM players WHERE player_id = $1;";
 
 
   if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
@@ -2971,16 +3068,18 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   // Check player alignment (example: must be < 0 for underground access)
   long long player_alignment = 0;
   db_stmt_t *stmt_align = NULL;
-  const char *sql_align = "SELECT alignment FROM players WHERE id = ?;";
+  const char *sql_align = "SELECT alignment FROM players WHERE player_id = $1;";
 
 
   if (db_stmt_prepare_v2 (db, sql_align, -1, &stmt_align, NULL) == DB_OK)
@@ -3000,6 +3099,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
         db_errmsg (db));
       send_response_error (ctx, root, ERR_DB,
                            "Failed to retrieve player alignment.");
+      return 0;
     }
   if (player_alignment >= 0)
     {                           // Example threshold
@@ -3007,6 +3107,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_TOO_HONORABLE,
                            "You are too honorable to access the underground.");
+      return 0;
     }
   long long password_price = 5000;      // Fixed price for underground password
   // Validate bet limits (using password_price as the bet)
@@ -3021,6 +3122,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_BET_TOO_HIGH,
                            "Password price exceeds maximum transaction limit.");
+      return 0;
     }
   else if (limit_check == -2)
     {
@@ -3028,6 +3130,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded for password purchase.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -3035,6 +3138,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded for password purchase.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, password_price))
@@ -3043,6 +3147,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to buy underground password.");
+      return 0;
     }
   // Deduct password price
   int rc = update_player_credits_gambling (db,
@@ -3055,6 +3160,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for password.");
+      return 0;
     }
   // In a real implementation, this would update a player flag or an access table.
   // For now, we just return a success message.
@@ -3084,11 +3190,13 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -3097,6 +3205,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   const char *post_text_raw = json_get_string_or_null (data, "text");
 
@@ -3105,6 +3214,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Graffiti text cannot be empty.");
+      return 0;
     }
   char post_text[256];          // Max length for graffiti post
 
@@ -3118,11 +3228,12 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_INVALID_ARG,
                            "Graffiti text became empty after sanitization.");
+      return 0;
     }
   time_t now = time (NULL);
   // Insert new graffiti post
   const char *sql_insert =
-    "INSERT INTO tavern_graffiti (player_id, text, created_at) VALUES (?, ?, ?);";
+    "INSERT INTO tavern_graffiti (player_id, text, created_at) VALUES ($1, $2, $3);";
   db_stmt_t *stmt = NULL;
   int rc = db_stmt_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
 
@@ -3131,6 +3242,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare graffiti insert.");
+      return 0;
     }
   db_stmt_bind_i32 (stmt, 1, ctx->player_id);
   db_stmt_bind_text (stmt, 2, post_text, -1, DB_BIND_STATIC);
@@ -3140,6 +3252,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
       db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to insert graffiti post.");
+      return 0;
     }
   db_stmt_finalize (stmt);
   // Optional: Implement FIFO logic - if count exceeds graffiti_max_posts, delete the oldest
@@ -3158,7 +3271,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
   if (current_graffiti_count > g_tavern_cfg.graffiti_max_posts)
     {
       const char *sql_delete_oldest =
-        "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT ?);";
+        "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT $1);";
 
 
       if (db_stmt_prepare_v2 (db, sql_delete_oldest, -1, &stmt, NULL) ==
@@ -3202,11 +3315,13 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   long long cost = g_tavern_cfg.buy_round_cost;
   int alignment_gain = g_tavern_cfg.buy_round_alignment_gain;
@@ -3220,6 +3335,7 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_BET_TOO_HIGH,
                            "Cost to buy a round exceeds transaction limit.");
+      return 0;
     }
   else if (limit_check == -2)
     {
@@ -3227,6 +3343,7 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded for buying a round.");
+      return 0;
     }
   else if (limit_check == -3)
     {
@@ -3234,12 +3351,14 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded for buying a round.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, cost))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to buy a round.");
+      return 0;
     }
   // Deduct cost
   int rc = update_player_credits_gambling (db,
@@ -3252,10 +3371,11 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for buying a round.");
+      return 0;
     }
   // Increase player's alignment
   const char *sql_update_alignment =
-    "UPDATE players SET alignment = alignment + ? WHERE id = ?;";
+    "UPDATE players SET alignment = alignment + $1 WHERE player_id = $2;";
   db_stmt_t *stmt = NULL;
 
 
@@ -3316,16 +3436,19 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   if (!g_tavern_cfg.loan_shark_enabled)
     {
       send_response_error (ctx, root, ERR_TAVERN_LOAN_SHARK_DISABLED,
                            "The Loan Shark is not currently available.");
+      return 0;
     }
   long long current_loan_principal = 0;
 
@@ -3336,6 +3459,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_LOAN_OUTSTANDING,
                            "You already have an outstanding loan.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -3344,6 +3468,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   long long loan_amount = 0;
 
@@ -3355,13 +3480,14 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_INVALID_ARG,
                            "Loan amount must be positive and not exceed 100,000 credits.");
+      return 0;
     }
   int interest_rate_bp = 1000;  // Example: 10% interest (1000 basis points)
   time_t now = time (NULL);
   time_t due_date = now + (7 * 24 * 60 * 60);   // Due in 7 days
   // Insert new loan
   const char *sql_insert_loan =
-    "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES (?, ?, ?, ?, 0);";
+    "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES ($1, $2, $3, $4, 0);";
   db_stmt_t *stmt = NULL;
   int rc = db_stmt_prepare_v2 (db, sql_insert_loan, -1, &stmt, NULL);
 
@@ -3370,6 +3496,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to prepare loan insert.");
+      return 0; return 0;
     }
   db_stmt_bind_i32 (stmt, 1, ctx->player_id);
   db_stmt_bind_i64 (stmt, 2, loan_amount);
@@ -3380,6 +3507,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
       db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to insert loan.");
+      return 0; return 0;
     }
   db_stmt_finalize (stmt);
   // Add loan amount to player's credits
@@ -3416,16 +3544,19 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   if (!g_tavern_cfg.loan_shark_enabled)
     {
       send_response_error (ctx, root, ERR_TAVERN_LOAN_SHARK_DISABLED,
                            "The Loan Shark is not currently available.");
+      return 0;
     }
   long long current_loan_principal = 0;
   int current_loan_interest_rate = 0;
@@ -3441,6 +3572,7 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_NO_LOAN,
                            "You do not have an outstanding loan.");
+      return 0;
     }
   json_t *data = json_object_get (root, "data");
 
@@ -3449,6 +3581,7 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
                            "Missing data payload.");
+      return 0;
     }
   long long pay_amount = 0;
 
@@ -3458,11 +3591,13 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Payment amount must be positive.");
+      return 0;
     }
   if (!has_sufficient_funds (db, ctx->player_id, pay_amount))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to make payment.");
+      return 0;
     }
   // Deduct payment amount from player's credits
   int rc = update_player_credits_gambling (db, ctx->player_id, pay_amount,
@@ -3473,6 +3608,7 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for loan payment.");
+      return 0;
     }
   long long new_principal = current_loan_principal - pay_amount;
 
@@ -3488,13 +3624,14 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
   if (new_principal == 0)
     {
       // Loan fully paid, delete it
-      sql_update_loan = "DELETE FROM tavern_loans WHERE player_id = ?;";
+      sql_update_loan = "DELETE FROM tavern_loans WHERE player_id = $1;";
       rc = db_stmt_prepare_v2 (db, sql_update_loan, -1, &stmt, NULL);
       if (rc != DB_OK)
         {
           update_player_credits_gambling (db, ctx->player_id, pay_amount, true);        // Refund
           send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                                "Failed to prepare loan delete.");
+          return 0;
         }
       db_stmt_bind_i32 (stmt, 1, ctx->player_id);
     }
@@ -3502,13 +3639,14 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       // Update remaining principal and reset default status if paying
       sql_update_loan =
-        "UPDATE tavern_loans SET principal = ?, is_defaulted = 0 WHERE player_id = ?;";
+        "UPDATE tavern_loans SET principal = $1, is_defaulted = 0 WHERE player_id = $2;";
       rc = db_stmt_prepare_v2 (db, sql_update_loan, -1, &stmt, NULL);
       if (rc != DB_OK)
         {
           update_player_credits_gambling (db, ctx->player_id, pay_amount, true);        // Refund
           send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                                "Failed to prepare loan update.");
+          return 0;
         }
       db_stmt_bind_i64 (stmt, 1, new_principal);
       db_stmt_bind_i32 (stmt, 2, ctx->player_id);
@@ -3516,11 +3654,15 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
   if (db_stmt_step (stmt) != DB_DONE)
     {
       db_stmt_finalize (stmt);
+      stmt = NULL;
       update_player_credits_gambling (db, ctx->player_id, pay_amount, true);    // Refund
       send_response_error (ctx, root, ERR_DB,
                            "Failed to update loan principal.");
+      return 0;
     }
   db_stmt_finalize (stmt);
+  stmt = NULL;
+
   json_t *response_data = json_object ();
 
 
@@ -3548,11 +3690,13 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   long long hint_cost = 50;     // Fixed price for a rumour hint
   // Validate bet limits
@@ -3565,23 +3709,27 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_TAVERN_BET_TOO_HIGH,
                            "Hint cost exceeds maximum transaction limit.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded for hint.");
+      return 0;
     }
   else if (limit_check == -3)
     {
       send_response_error (ctx, root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded for hint.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, hint_cost))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to buy a rumour hint.");
+      return 0;
     }
   // Deduct cost
   int rc = update_player_credits_gambling (db, ctx->player_id, hint_cost,
@@ -3592,6 +3740,7 @@ cmd_tavern_rumour_get_hint (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for hint.");
+      return 0;
     }
   // Placeholder for generating a real hint. For now, a generic one.
   const char *hint_messages[] = {
@@ -3631,11 +3780,13 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
                            "Authentication required.");
+      return 0;
     }
   if (!is_player_in_tavern_sector (db, ctx->sector_id))
     {
       send_response_error (ctx, root, ERR_NOT_AT_TAVERN,
                            "You are not in a tavern sector.");
+      return 0;
     }
   long long summary_cost = 100; // Fixed price for market summary
   // Validate bet limits
@@ -3648,23 +3799,27 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
                            root,
                            ERR_TAVERN_BET_TOO_HIGH,
                            "Summary cost exceeds maximum transaction limit.");
+      return 0;
     }
   else if (limit_check == -2)
     {
       send_response_error (ctx, root, ERR_TAVERN_DAILY_WAGER_EXCEEDED,
                            "Daily wager limit exceeded for summary.");
+      return 0;
     }
   else if (limit_check == -3)
     {
       send_response_error (ctx, root,
                            ERR_TAVERN_DYNAMIC_WAGER_EXCEEDED,
                            "Dynamic wager limit exceeded for summary.");
+      return 0;
     }
   // Check player funds
   if (!has_sufficient_funds (db, ctx->player_id, summary_cost))
     {
       send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
                            "Insufficient credits to buy market summary.");
+      return 0;
     }
   // Deduct cost
   int rc = update_player_credits_gambling (db,
@@ -3677,13 +3832,14 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to deduct credits for summary.");
+      return 0;
     }
   json_t *prices_array = json_array ();
   db_stmt_t *stmt = NULL;
   // Placeholder: Query for top commodity prices (simplified for now)
   const char *sql_prices =
-    "SELECT p.sector, c.name, pt.mode, pt.maxproduct, (c.base_price * (10000 + c.volatility * (RANDOM() % 200 - 100)) / 10000) AS price "
-    "FROM ports p JOIN port_trade pt ON p.id = pt.port_id JOIN commodities c ON c.code = pt.commodity "
+    "SELECT p.sector_id, c.name, pt.mode, pt.maxproduct, (c.base_price * (10000 + c.volatility * (RANDOM() % 200 - 100)) / 10000) AS price "
+    "FROM ports p JOIN port_trade pt ON p.port_id = pt.port_id JOIN commodities c ON c.code = pt.commodity "
     "ORDER BY price DESC LIMIT 5;";                                                                                                                                                                                                                                                                     // Top 5 prices example
 
 
@@ -3696,6 +3852,7 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
       update_player_credits_gambling (db, ctx->player_id, summary_cost, true);  // Refund
       send_response_error (ctx, root, ERR_DB,
                            "Failed to retrieve market summary.");
+      return 0;
     }
   while (db_stmt_step (stmt) == DB_ROW)
     {

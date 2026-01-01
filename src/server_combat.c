@@ -288,9 +288,9 @@ db_ship_get_combat_stats (db_t *db,
   db_res_t *res = NULL;
 
   const char *sql =
-    "SELECT id, hull, fighters, shields "
+    "SELECT ship_id, hull, fighters, shields "
     "FROM ships "
-    "WHERE id = $1;";
+    "WHERE ship_id = $1;";
 
   if (!db_query (db,
                  sql,
@@ -336,7 +336,7 @@ db_ship_update_combat_stats (db_t *db,
   const char *sql =
     "UPDATE ships "
     "SET hull = $1, fighters = $2, shields = $3 "
-    "WHERE id = $4;";
+    "WHERE ship_id = $4;";
 
   return db_exec (db,
                   sql,
@@ -364,9 +364,9 @@ db_armid_mines_select_locked (db_t *db,
                               db_error_t *err)
 {
   const char *sql =
-    "SELECT id, quantity, offensive_setting, player, corporation, ttl "
+    "SELECT sector_assets_id as id, quantity, offensive_setting, owner_id as player, corporation_id as corporation, ttl "
     "FROM sector_assets "
-    "WHERE sector = $1 AND asset_type = 1 "
+    "WHERE sector_id = $1 AND asset_type = 1 "
     "FOR UPDATE SKIP LOCKED;";
 
   return db_query (db,
@@ -384,7 +384,7 @@ db_sector_asset_delete (db_t *db,
                         int asset_id,
                         db_error_t *err)
 {
-  const char *sql = "DELETE FROM sector_assets WHERE id = $1;";
+  const char *sql = "DELETE FROM sector_assets WHERE sector_assets_id = $1;";
   return db_exec (db,
                   sql,
                   (db_bind_t[]){ db_bind_i32 (asset_id) },
@@ -610,9 +610,9 @@ db_limpet_assets_select_locked (db_t *db, int sector_id, db_res_t **out_res)
   db_error_t err = {0};
 
   const char *sql =
-    "SELECT id, quantity, player, corporation, ttl "
+    "SELECT sector_assets_id as id, quantity, owner_id as player, corporation_id as corporation, ttl "
     "FROM sector_assets "
-    "WHERE sector = $1 "
+    "WHERE sector_id = $1 "
     "  AND asset_type = 4 "
     "  AND quantity > 0 "
     "FOR UPDATE SKIP LOCKED;";
@@ -695,7 +695,7 @@ db_sector_asset_decrement_or_delete (db_t *db, int asset_id, int quantity)
 
   /* quantity == 1 => delete row */
   {
-    const char *sql = "DELETE FROM sector_assets WHERE id = $1;";
+    const char *sql = "DELETE FROM sector_assets WHERE sector_assets_id = $1;";
 
 
     if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (asset_id) }, 1, &err))
@@ -925,7 +925,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
     db_error_clear (&err);
 
     const char *sql =
-      "SELECT t.maxholds, s.sector "
+      "SELECT t.maxholds, s.sector_id "
       "FROM ships s "
       "JOIN shiptypes t ON s.type_id = t.id "
       "WHERE s.id = $1;";
@@ -1033,7 +1033,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
             }
 
           const char *sql_ship =
-            "UPDATE ships SET sector = $1 WHERE id = $2;";
+            "UPDATE ships SET sector_id = $1 WHERE ship_id = $2;";
 
 
           if (!db_exec (db,
@@ -1051,7 +1051,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
             }
 
           const char *sql_player =
-            "UPDATE players SET sector = $1 WHERE id = $2;";
+            "UPDATE players SET sector_id = $1 WHERE player_id = $2;";
 
 
           if (!db_exec (db,
@@ -1120,34 +1120,34 @@ cmd_deploy_fighters_list (client_ctx_t *ctx, json_t *root)
 {
   const char *sql_query_fighters =
     "SELECT "
-    "  sa.id AS asset_id, "
-    "  sa.sector AS sector_id, "
+    "  sa.sector_assets_id AS asset_id, "
+    "  sa.sector_id AS sector_id, "
     "  sa.quantity AS count, "
     "  sa.offensive_setting AS offense_mode, "
-    "  sa.player AS player_id, "
+    "  sa.owner_id AS player_id, "
     "  p.name AS player_name, "
-    "  c.id AS corp_id, "
+    "  c.corporation_id AS corp_id, "
     "  c.tag AS corp_tag, "
     "  sa.asset_type AS type "
     "FROM sector_assets sa "
-    "JOIN players p ON sa.player = p.id "
-    "LEFT JOIN corp_members cm_player ON cm_player.player_id = sa.player "
-    "LEFT JOIN corporations c ON c.id = cm_player.corp_id "
+    "JOIN players p ON sa.owner_id = p.player_id "
+    "LEFT JOIN corp_members cm_player ON cm_player.player_id = sa.owner_id "
+    "LEFT JOIN corporations c ON c.corporation_id = cm_player.corporation_id "
     "WHERE "
     "  sa.asset_type = 2 "
     "  AND ( "
-    "    sa.player = $1 "
-    "    OR sa.player IN ( "
+    "    sa.owner_id = $1 "
+    "    OR sa.owner_id IN ( "
     "      SELECT cm_member.player_id "
     "      FROM corp_members cm_member "
-    "      WHERE cm_member.corp_id = ( "
-    "        SELECT cm_self.corp_id "
+    "      WHERE cm_member.corporation_id = ( "
+    "        SELECT cm_self.corporation_id "
     "        FROM corp_members cm_self "
     "        WHERE cm_self.player_id = $2 "
     "      ) "
     "    ) "
     "  ) "
-    "ORDER BY sa.sector ASC;";
+    "ORDER BY sa.sector_id ASC;";
 
   return cmd_deploy_assets_list_internal (ctx,
                                           root,
@@ -1162,34 +1162,34 @@ cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root)
 {
   const char *sql_query_mines =
     "SELECT "
-    "  sa.id AS asset_id, "
-    "  sa.sector AS sector_id, "
+    "  sa.sector_assets_id AS asset_id, "
+    "  sa.sector_id AS sector_id, "
     "  sa.quantity AS count, "
     "  sa.offensive_setting AS offense_mode, "
-    "  sa.player AS player_id, "
+    "  sa.owner_id AS player_id, "
     "  p.name AS player_name, "
-    "  c.id AS corp_id, "
+    "  c.corporation_id AS corp_id, "
     "  c.tag AS corp_tag, "
     "  sa.asset_type AS type "
     "FROM sector_assets sa "
-    "JOIN players p ON sa.player = p.id "
-    "LEFT JOIN corp_members cm_player ON cm_player.player_id = sa.player "
-    "LEFT JOIN corporations c ON c.id = cm_player.corp_id "
+    "JOIN players p ON sa.owner_id = p.player_id "
+    "LEFT JOIN corp_members cm_player ON cm_player.player_id = sa.owner_id "
+    "LEFT JOIN corporations c ON c.corporation_id = cm_player.corporation_id "
     "WHERE "
     "  sa.asset_type IN (1, 4) "
     "  AND ( "
-    "    sa.player = $1 "
-    "    OR sa.player IN ( "
+    "    sa.owner_id = $1 "
+    "    OR sa.owner_id IN ( "
     "      SELECT cm_member.player_id "
     "      FROM corp_members cm_member "
-    "      WHERE cm_member.corp_id = ( "
-    "        SELECT cm_self.corp_id "
+    "      WHERE cm_member.corporation_id = ( "
+    "        SELECT cm_self.corporation_id "
     "        FROM corp_members cm_self "
     "        WHERE cm_self.player_id = $2 "
     "      ) "
     "    ) "
     "  ) "
-    "ORDER BY sa.sector ASC, sa.asset_type ASC;";
+    "ORDER BY sa.sector_id ASC, sa.asset_type ASC;";
 
   return cmd_deploy_assets_list_internal (ctx,
                                           root,
@@ -1516,9 +1516,9 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   /* 1) Lock ship row and read current sector (SKIP LOCKED) */
   {
     const char *sql =
-      "SELECT sector "
+      "SELECT sector_id "
       "FROM ships "
-      "WHERE id = $1 "
+      "WHERE ship_id = $1 "
       "FOR UPDATE SKIP LOCKED;";
 
 
@@ -1551,9 +1551,9 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   /* 2) Lock sector row (serialises sector-cap enforcement). SKIP LOCKED => fail fast. */
   {
     const char *sql =
-      "SELECT id "
+      "SELECT sector_id "
       "FROM sectors "
-      "WHERE id = $1 "
+      "WHERE sector_id = $1 "
       "FOR UPDATE SKIP LOCKED;";
 
     int tmp = 0;
@@ -1642,7 +1642,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   int64_t asset_id_i64 = 0;
   {
     const char *sql_get_id =
-      "SELECT MAX(id) FROM sector_assets WHERE sector=$1 AND player=$2 AND asset_type=2";
+      "SELECT MAX(sector_assets_id) FROM sector_assets WHERE sector_id=$1 AND owner_id=$2 AND asset_type=2";
 
 
     db_i64_scalar (db,
@@ -1746,7 +1746,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
     const char *sql =
       "SELECT COALESCE(SUM(quantity), 0) "
       "FROM sector_assets "
-      "WHERE sector = $1 AND asset_type = 2;";
+      "WHERE sector_id = $1 AND asset_type = 2;";
 
 
     (void) db_i32_scalar (db,
@@ -1795,7 +1795,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
 
 static const char *SQL_SECTOR_FIGHTER_SUM =
-  "SELECT COALESCE(SUM(quantity), 0) FROM sector_assets WHERE sector = $1 AND asset_type = 2;";
+  "SELECT COALESCE(SUM(quantity), 0) FROM sector_assets WHERE sector_id = $1 AND asset_type = 2;";
 
 
 static int
@@ -1830,7 +1830,7 @@ sum_sector_fighters (db_t *db, int sector_id, int *total_out)
 static const char *SQL_SECTOR_MINE_SUM =
   "SELECT COALESCE(SUM(quantity), 0) "
   "FROM sector_assets "
-  "WHERE sector = $1 AND asset_type IN (1, 4);"; /* 1 Armid, 4 Limpet */
+  "WHERE sector_id = $1 AND asset_type IN (1, 4);"; /* 1 Armid, 4 Limpet */
 
 
 static int
@@ -1984,7 +1984,7 @@ ship_consume_mines (db_t *db, int ship_id, int asset_type, int amount)
       sql =
         "UPDATE ships "
         "SET mines = mines - $1 "
-        "WHERE id = $2 "
+        "WHERE ship_id = $2 "
         "  AND mines >= $1 "
         "RETURNING mines;";
     }
@@ -1993,7 +1993,7 @@ ship_consume_mines (db_t *db, int ship_id, int asset_type, int amount)
       sql =
         "UPDATE ships "
         "SET limpets = limpets - $1 "
-        "WHERE id = $2 "
+        "WHERE ship_id = $2 "
         "  AND limpets >= $1 "
         "RETURNING limpets;";
     }
@@ -2064,7 +2064,7 @@ insert_sector_mines (db_t *db,
 
   const char *sql =
     "INSERT INTO sector_assets ("
-    "  sector, player, corporation, asset_type, quantity, offensive_setting, deployed_at"
+    "  sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at"
     ") VALUES ("
     "  $1, $2, $3, $4, $5, $6, EXTRACT(EPOCH FROM NOW())::bigint"
     ");";
@@ -2121,7 +2121,7 @@ insert_sector_fighters (db_t *db,
   /* asset_type = 2 for fighters (as per your comment) */
   const char *sql =
     "INSERT INTO sector_assets ("
-    "  sector, player, corporation, asset_type, quantity, offensive_setting, deployed_at"
+    "  sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at"
     ") VALUES ("
     "  $1, $2, $3, 2, $4, $5, EXTRACT(EPOCH FROM NOW())::bigint"
     ");";
@@ -2188,7 +2188,7 @@ get_sector_mine_counts (int sector_id, sector_mine_counts_t *out)
     "  COALESCE(SUM(CASE WHEN asset_type = 1 THEN quantity ELSE 0 END), 0)      AS armid_mines, "
     "  COALESCE(SUM(CASE WHEN asset_type = 4 THEN quantity ELSE 0 END), 0)      AS limpet_mines "
     "FROM sector_assets "
-    "WHERE sector = $1;";
+    "WHERE sector_id = $1;";
 
 
   if (!db_query (db,
@@ -2397,9 +2397,9 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
   {
     db_res_t *res = NULL;
     const char *sql_ship =
-      "SELECT sector, fighters, corporation "
+      "SELECT sector_id, fighters, corporation_id "
       "FROM ships "
-      "WHERE id = $1 "
+      "WHERE ship_id = $1 "
       "FOR UPDATE SKIP LOCKED;";
 
     db_bind_t p[] = { db_bind_i32 (ship_id) };
@@ -2477,11 +2477,11 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
   {
     db_res_t *res = NULL;
     const char *sql_mines =
-      "SELECT id, quantity, player, corporation, ttl "
+      "SELECT sector_assets_id as id, quantity, owner_id as player, corporation_id as corporation, ttl "
       "FROM sector_assets "
-      "WHERE sector = $1 AND asset_type = $2 AND quantity > 0 "
+      "WHERE sector_id = $1 AND asset_type = $2 AND quantity > 0 "
       "FOR UPDATE SKIP LOCKED "
-      "ORDER BY id ASC;";
+      "ORDER BY sector_assets_id ASC;";
 
     db_bind_t p[] = { db_bind_i32 (target_sector_id), db_bind_i32 (mine_type) };
 
@@ -2688,7 +2688,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
       if (new_qty > 0)
         {
           const char *sql_upd =
-            "UPDATE sector_assets SET quantity = $1 WHERE id = $2;";
+            "UPDATE sector_assets SET quantity = $1 WHERE sector_assets_id = $2;";
           db_bind_t p[] = { db_bind_i32 (new_qty), db_bind_i32 (stacks[i].id) };
 
 
@@ -2704,7 +2704,8 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
         }
       else
         {
-          const char *sql_del = "DELETE FROM sector_assets WHERE id = $1;";
+          const char *sql_del =
+            "DELETE FROM sector_assets WHERE sector_assets_id = $1;";
           db_bind_t p[] = { db_bind_i32 (stacks[i].id) };
 
 
@@ -2727,7 +2728,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
   /* 8) Update ship fighters (locked) */
   {
     const char *sql_ship_f =
-      "UPDATE ships SET fighters = fighters - $1 WHERE id = $2;";
+      "UPDATE ships SET fighters = fighters - $1 WHERE ship_id = $2;";
     db_bind_t p[] = { db_bind_i32 (fighters_lost), db_bind_i32 (ship_id) };
 
 
@@ -2748,7 +2749,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx,
     const char *sql_rem =
       "SELECT COALESCE(SUM(quantity),0) "
       "FROM sector_assets "
-      "WHERE sector = $1 AND asset_type = $2 AND quantity > 0;";
+      "WHERE sector_id = $1 AND asset_type = $2 AND quantity > 0;";
 
     db_bind_t p[] = { db_bind_i32 (target_sector_id), db_bind_i32 (mine_type) };
 
@@ -2899,11 +2900,11 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
     }
 
   const char *SQL_SHIP_STATE =
-    "SELECT s.sector, s.fighters, st.maxfighters, COALESCE(cm.corp_id,0) "
+    "SELECT s.sector_id, s.fighters, st.maxfighters, COALESCE(cm.corporation_id,0) "
     "FROM ships s "
-    "JOIN shiptypes st ON s.type_id = st.id "
+    "JOIN shiptypes st ON s.type_id = st.shiptypes_id "
     "LEFT JOIN corp_members cm ON cm.player_id = $1 "
-    "WHERE s.id = $2;";
+    "WHERE s.ship_id = $2;";
 
   db_res_t *res = NULL;
   db_error_t err = {0};
@@ -2953,9 +2954,9 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
 
   /* ---------- 3. Lock and load asset ---------- */
   const char *SQL_ASSET =
-    "SELECT quantity, player, corporation, offensive_setting "
+    "SELECT quantity, owner_id as player, corporation_id as corporation, offensive_setting "
     "FROM sector_assets "
-    "WHERE id = $1 AND sector = $2 AND asset_type = 2 "
+    "WHERE sector_assets_id = $1 AND sector_id = $2 AND asset_type = 2 "
     "FOR UPDATE SKIP LOCKED;";
 
 
@@ -3040,7 +3041,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
     }
 
   if (!db_exec (db,
-                "UPDATE ships SET fighters = fighters + $1 WHERE id = $2;",
+                "UPDATE ships SET fighters = fighters + $1 WHERE ship_id = $2;",
                 (db_bind_t[]){
     db_bind_i32 (take),
     db_bind_i32 (ship_id)
@@ -3052,7 +3053,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
   if (take == asset_qty)
     {
       if (!db_exec (db,
-                    "DELETE FROM sector_assets WHERE id = $1;",
+                    "DELETE FROM sector_assets WHERE sector_assets_id = $1;",
                     (db_bind_t[]){ db_bind_i32 (asset_id) },
                     1, &err))
         {
@@ -3063,7 +3064,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
     {
       if (!db_exec (db,
                     "UPDATE sector_assets "
-                    "SET quantity = quantity - $1 WHERE id = $2;",
+                    "SET quantity = quantity - $1 WHERE sector_assets_id = $2;",
                     (db_bind_t[]){
       db_bind_i32 (take),
       db_bind_i32 (asset_id)
@@ -3226,32 +3227,32 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
      Note: We lock rows in a CTE then delete those locked ids. */
   const char *SQL_DEL_ALL =
     "WITH locked AS ( "
-    "  SELECT id "
+    "  SELECT sector_assets_id as id "
     "  FROM sector_assets "
-    "  WHERE sector = $1 "
+    "  WHERE sector_id = $1 "
     "    AND asset_type = $2 "
-    "    AND (player = $3 OR corporation = $4) "
+    "    AND (owner_id = $3 OR corporation_id = $4) "
     "  FOR UPDATE SKIP LOCKED "
     ") "
     "DELETE FROM sector_assets sa "
     "USING locked "
-    "WHERE sa.id = locked.id "
-    "RETURNING sa.id;";
+    "WHERE sa.sector_assets_id = locked.id "
+    "RETURNING sa.sector_assets_id;";
 
   const char *SQL_DEL_ONE =
     "WITH locked AS ( "
-    "  SELECT id "
+    "  SELECT sector_assets_id as id "
     "  FROM sector_assets "
-    "  WHERE id = $1 "
-    "    AND sector = $2 "
+    "  WHERE sector_assets_id = $1 "
+    "    AND sector_id = $2 "
     "    AND asset_type = $3 "
-    "    AND (player = $4 OR corporation = $5) "
+    "    AND (owner_id = $4 OR corporation_id = $5) "
     "  FOR UPDATE SKIP LOCKED "
     ") "
     "DELETE FROM sector_assets sa "
     "USING locked "
-    "WHERE sa.id = locked.id "
-    "RETURNING sa.id;";
+    "WHERE sa.sector_assets_id = locked.id "
+    "RETURNING sa.sector_assets_id;";
 
   db_res_t *res = NULL;
   int total_scrubbed = 0;
@@ -3331,7 +3332,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
       const char *SQL_DEBIT =
         "UPDATE players "
         "SET credits = credits - $1 "
-        "WHERE id = $2 AND credits >= $1 "
+        "WHERE player_id = $2 AND credits >= $1 "
         "RETURNING credits;";
 
 
@@ -3411,7 +3412,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "cost", json_integer (scrub_cost));
   if (asset_id > 0)
     {
-      json_object_set_new (out, "asset_id", json_integer (asset_id));
+      json_object_set_new (evt, "asset_id", json_integer (asset_id));
     }
 
   send_response_ok_take (ctx, root, "combat.mines_scrubbed_v1", &out);
@@ -3531,7 +3532,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
 
 
     if (!db_query (db,
-                   "SELECT sector FROM ships WHERE id=$1",
+                   "SELECT sector_id FROM ships WHERE ship_id=$1",
                    (db_bind_t[]){ db_bind_i32 (ship_id) },
                    1,
                    &res,
@@ -3607,9 +3608,9 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   {
     const char *sql =
       "INSERT INTO sector_assets "
-      "(sector, player, corporation, asset_type, quantity, offensive_setting, deployed_at) "
+      "(sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at) "
       "VALUES ($1,$2,$3,$4,$5,$6,EXTRACT(EPOCH FROM NOW())) "
-      "RETURNING id";
+      "RETURNING sector_assets_id";
 
 
     if (!db_exec_insert_id (db,
@@ -3746,25 +3747,25 @@ load_ship_combat_stats_locked (db_t *db, int ship_id, combat_ship_t *out,
   db_error_clear (&err);
 
   const char *sql =
-    "SELECT s.id, s.hull, s.shields, s.fighters, s.sector, s.name, "
+    "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, "
     "       st.offense, st.defense, st.maxattack, "
-    "       op.player_id, cm.corp_id "
+    "       op.player_id, cm.corporation_id "
     "FROM ships s "
-    "JOIN shiptypes st ON s.type_id = st.id "
-    "JOIN ship_ownership op ON op.ship_id = s.id AND op.is_primary = TRUE "
+    "JOIN shiptypes st ON s.type_id = st.shiptypes_id "
+    "JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE "
     "LEFT JOIN corp_members cm ON cm.player_id = op.player_id "
-    "WHERE s.id = $1 "
+    "WHERE s.ship_id = $1 "
     "FOR UPDATE ";
 
   const char *sql_skip =
-    "SELECT s.id, s.hull, s.shields, s.fighters, s.sector, s.name, "
+    "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, "
     "       st.offense, st.defense, st.maxattack, "
-    "       op.player_id, cm.corp_id "
+    "       op.player_id, cm.corporation_id "
     "FROM ships s "
-    "JOIN shiptypes st ON s.type_id = st.id "
-    "JOIN ship_ownership op ON op.ship_id = s.id AND op.is_primary = TRUE "
+    "JOIN shiptypes st ON s.type_id = st.shiptypes_id "
+    "JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE "
     "LEFT JOIN corp_members cm ON cm.player_id = op.player_id "
-    "WHERE s.id = $1 "
+    "WHERE s.ship_id = $1 "
     "FOR UPDATE SKIP LOCKED";
 
 
@@ -3849,7 +3850,7 @@ persist_ship_damage (db_t *db, combat_ship_t *ship, int fighters_lost)
     "SET hull = $1, "
     "    shields = $2, "
     "    fighters = GREATEST(0, fighters - $3) "
-    "WHERE id = $4";
+    "WHERE ship_id = $4";
 
   int64_t rows = 0;
 
@@ -4144,14 +4145,14 @@ load_ship_combat_stats_unlocked (db_t *db, int ship_id, combat_ship_t *out)
   db_error_clear (&err);
 
   const char *sql =
-    "SELECT s.id, s.hull, s.shields, s.fighters, s.sector, s.name, "
+    "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, "
     "       st.offense, st.defense, st.maxattack, "
-    "       op.player_id, cm.corp_id "
+    "       op.player_id, cm.corporation_id "
     "FROM ships s "
-    "JOIN shiptypes st ON s.type_id = st.id "
-    "JOIN ship_ownership op ON op.ship_id = s.id AND op.is_primary = TRUE "
+    "JOIN shiptypes st ON s.type_id = st.shiptypes_id "
+    "JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE "
     "LEFT JOIN corp_members cm ON cm.player_id = op.player_id "
-    "WHERE s.id = $1";
+    "WHERE s.ship_id = $1";
 
 
   if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res,
@@ -4429,31 +4430,50 @@ h_trigger_atmosphere_quasar (db_t *db, client_ctx_t *ctx, int planet_id)
   (void)db; (void)ctx; (void)planet_id; return 0;
 }
 
+
 int
 cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 {
   if (!require_auth (ctx, root))
-    return 0;
+    {
+      return 0;
+    }
 
   db_t *db = game_db_get_handle ();
+
+
   if (!db)
     {
-      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+      send_response_error (ctx,
+                           root,
+                           ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable");
       return 0;
     }
 
   /* 1. Parse input */
   json_t *data = json_object_get (root, "data");
+
+
   if (!data || !json_is_object (data))
     {
-      send_response_error (ctx, root, ERR_MISSING_FIELD, "Missing required field: data");
+      send_response_error (ctx,
+                           root,
+                           ERR_MISSING_FIELD,
+                           "Missing required field: data");
       return 0;
     }
   json_t *j_sector_id = json_object_get (data, "sector_id");
   json_t *j_asset_id = json_object_get (data, "asset_id");
-  if (!j_sector_id || !json_is_integer (j_sector_id) || !j_asset_id || !json_is_integer (j_asset_id))
+
+
+  if (!j_sector_id || !json_is_integer (j_sector_id) || !j_asset_id ||
+      !json_is_integer (j_asset_id))
     {
-      send_response_error (ctx, root, ERR_CURSOR_INVALID, "Missing required field or invalid type: sector_id/asset_id");
+      send_response_error (ctx,
+                           root,
+                           ERR_CURSOR_INVALID,
+                           "Missing required field or invalid type: sector_id/asset_id");
       return 0;
     }
 
@@ -4462,9 +4482,14 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
   /* 2. Load player, ship, current_sector_id */
   int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+
+
   if (player_ship_id <= 0)
     {
-      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No active ship found for player.");
+      send_response_error (ctx,
+                           root,
+                           ERR_SHIP_NOT_FOUND,
+                           "No active ship found for player.");
       return 0;
     }
 
@@ -4474,12 +4499,15 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
   {
     const char *sql_player_ship =
-      "SELECT s.sector, s.mines, st.maxmines FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = $1;";
+      "SELECT s.sector_id, s.mines, st.maxmines FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1;";
     db_res_t *res = NULL;
     db_error_t err;
+
+
     memset (&err, 0, sizeof (err));
 
-    if (db_query (db, sql_player_ship, (db_bind_t[]){ db_bind_i32 (player_ship_id) }, 1, &res, &err))
+    if (db_query (db, sql_player_ship,
+                  (db_bind_t[]){ db_bind_i32 (player_ship_id) }, 1, &res, &err))
       {
         if (db_res_step (res, &err))
           {
@@ -4492,7 +4520,10 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
     if (player_current_sector_id <= 0)
       {
-        send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "Could not determine player's current sector.");
+        send_response_error (ctx,
+                             root,
+                             ERR_SECTOR_NOT_FOUND,
+                             "Could not determine player's current sector.");
         return 0;
       }
   }
@@ -4501,12 +4532,18 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   int asset_quantity = 0;
   int asset_type = 0;
   {
-    const char *sql_asset = "SELECT quantity, asset_type FROM sector_assets WHERE id = $1 AND player = $2 AND sector = $3 AND asset_type IN (1, 4);";
+    const char *sql_asset =
+      "SELECT quantity, asset_type FROM sector_assets WHERE sector_assets_id = $1 AND owner_id = $2 AND sector_id = $3 AND asset_type IN (1, 4);";
     db_res_t *res = NULL;
     db_error_t err;
+
+
     memset (&err, 0, sizeof (err));
 
-    db_bind_t params[] = { db_bind_i32 (asset_id), db_bind_i32 (ctx->player_id), db_bind_i32 (requested_sector_id) };
+    db_bind_t params[] = { db_bind_i32 (asset_id), db_bind_i32 (ctx->player_id),
+                           db_bind_i32 (requested_sector_id) };
+
+
     if (db_query (db, sql_asset, params, 3, &res, &err))
       {
         if (db_res_step (res, &err))
@@ -4519,23 +4556,36 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 
     if (asset_quantity <= 0)
       {
-        send_response_error (ctx, root, ERR_NOT_FOUND, "Mine asset not found or does not belong to you in this sector.");
+        send_response_error (ctx,
+                             root,
+                             ERR_NOT_FOUND,
+                             "Mine asset not found or does not belong to you in this sector.");
         return 0;
       }
   }
+
 
   /* 4. Check if ship has capacity for recalled mines */
   if (ship_mines_current + asset_quantity > ship_mines_max)
     {
       json_t *data_opt = json_object ();
-      json_object_set_new (data_opt, "reason", json_string ("insufficient_mine_capacity"));
-      send_response_refused_steal (ctx, root, REF_INSUFFICIENT_CAPACITY, "Insufficient ship capacity to recall all mines.", data_opt);
+
+
+      json_object_set_new (data_opt, "reason",
+                           json_string ("insufficient_mine_capacity"));
+      send_response_refused_steal (ctx,
+                                   root,
+                                   REF_INSUFFICIENT_CAPACITY,
+                                   "Insufficient ship capacity to recall all mines.",
+                                   data_opt);
       return 0;
     }
 
   /* 5. Transaction: delete asset, credit ship */
   {
     db_error_t dberr;
+
+
     memset (&dberr, 0, sizeof (dberr));
 
     if (!db_tx_begin (db, DB_TX_IMMEDIATE, &dberr))
@@ -4544,21 +4594,34 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
         return 0;
       }
 
-    const char *sql_delete = "DELETE FROM sector_assets WHERE id = $1;";
+    const char *sql_delete =
+      "DELETE FROM sector_assets WHERE sector_assets_id = $1;";
     db_bind_t del_params[] = { db_bind_i32 (asset_id) };
+
+
     if (!db_exec (db, sql_delete, del_params, 1, &dberr))
       {
         (void) db_tx_rollback (db, &dberr);
-        send_response_error (ctx, root, ERR_DB, "Failed to delete asset from sector.");
+        send_response_error (ctx,
+                             root,
+                             ERR_DB,
+                             "Failed to delete asset from sector.");
         return 0;
       }
 
-    const char *sql_credit = "UPDATE ships SET mines = mines + $1 WHERE id = $2;";
-    db_bind_t credit_params[] = { db_bind_i32 (asset_quantity), db_bind_i32 (player_ship_id) };
+    const char *sql_credit =
+      "UPDATE ships SET mines = mines + $1 WHERE ship_id = $2;";
+    db_bind_t credit_params[] = { db_bind_i32 (asset_quantity),
+                                  db_bind_i32 (player_ship_id) };
+
+
     if (!db_exec (db, sql_credit, credit_params, 2, &dberr))
       {
         (void) db_tx_rollback (db, &dberr);
-        send_response_error (ctx, root, ERR_DB, "Failed to credit mines to ship.");
+        send_response_error (ctx,
+                             root,
+                             ERR_DB,
+                             "Failed to credit mines to ship.");
         return 0;
       }
 
@@ -4573,17 +4636,29 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   /* 6. Emit engine_event via db_log_engine_event */
   {
     json_t *evt = json_object ();
+
+
     json_object_set_new (evt, "sector_id", json_integer (requested_sector_id));
     json_object_set_new (evt, "player_id", json_integer (ctx->player_id));
     json_object_set_new (evt, "asset_id", json_integer (asset_id));
     json_object_set_new (evt, "amount", json_integer (asset_quantity));
     json_object_set_new (evt, "asset_type", json_integer (asset_type));
-    json_object_set_new (evt, "event_ts", json_integer ((json_int_t) time (NULL)));
-    (void) db_log_engine_event ((long long) time (NULL), "mines.recalled", NULL, ctx->player_id, requested_sector_id, evt, NULL);
+    json_object_set_new (evt,
+                         "event_ts",
+                         json_integer ((json_int_t) time (NULL)));
+    (void) db_log_engine_event ((long long) time (NULL),
+                                "mines.recalled",
+                                NULL,
+                                ctx->player_id,
+                                requested_sector_id,
+                                evt,
+                                NULL);
   }
 
   /* 7. Send enveloped_ok response */
   json_t *out = json_object ();
+
+
   json_object_set_new (out, "sector_id", json_integer (requested_sector_id));
   json_object_set_new (out, "asset_id", json_integer (asset_id));
   json_object_set_new (out, "recalled", json_integer (asset_quantity));
@@ -4592,3 +4667,4 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
   send_response_ok_take (ctx, root, "combat.mines.recalled", &out);
   return 0;
 }
+

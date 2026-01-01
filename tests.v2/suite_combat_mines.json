@@ -6,9 +6,30 @@
       "password": "password"
     },
     {
-      "name": "Setup: Grant Resources and Move",
+      "name": "Setup: Grant Credits",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits=100000, sector=200 WHERE id=@mine_tester_player_id; UPDATE ships SET sector=200, mines=1000, fighters=500 WHERE id=@mine_tester_player_id; INSERT OR IGNORE INTO sectors (id, name) VALUES (200, 'Minefield Alpha'); DELETE FROM sector_assets WHERE sector=200;" },
+      "data": { "sql": "UPDATE players SET credits=100000, sector=200 WHERE id=@mine_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Grant Ship Items",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector=200, mines=1000, fighters=500 WHERE id=@mine_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Create Sector 200",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO sectors (id, name) VALUES (200, 'Minefield Alpha') ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Clear Assets 200",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector=200;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -54,7 +75,7 @@
     {
       "name": "Setup: Fill Sector to Cap",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 49950, 3, 0);" },
+      "data": { "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 49950, 3, to_timestamp(0)) ON CONFLICT (sector, player, asset_type) DO UPDATE SET quantity = EXCLUDED.quantity;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -66,9 +87,23 @@
       "expect": { "status": "refused", "error": { "code": 2301 } }
     },
     {
-      "name": "Setup: Reset for Sweep",
+      "name": "Setup: Reset for Sweep (Clear)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM sector_assets WHERE sector=200; INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 50, 3, 0); UPDATE ships SET fighters=1000 WHERE id=@mine_tester_player_id;" }, 
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector=200;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Reset for Sweep (Seed)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 50, 3, to_timestamp(0)) ON CONFLICT (sector, player, asset_type) DO UPDATE SET quantity = EXCLUDED.quantity;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Reset for Sweep (Fighters)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters=1000 WHERE id=@mine_tester_player_id;" }, 
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -85,9 +120,16 @@
       "expect": { "status": "ok", "data": { "success": true } }
     },
     {
-      "name": "Setup: FedSpace (Sector 1)",
+      "name": "Setup: Move Player to FedSpace",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector=1 WHERE id=@mine_tester_player_id; UPDATE ships SET sector=1 WHERE id=@mine_tester_player_id;" },
+      "data": { "sql": "UPDATE players SET sector=1 WHERE id=@mine_tester_player_id;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Move Ship to FedSpace",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector=1 WHERE id=@mine_tester_player_id;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

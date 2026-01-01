@@ -412,7 +412,7 @@ cluster_economy_step (db_t *db, int64_t now_s)
               const char *sql_avg_real =
                 "SELECT AVG(price) FROM port_trade pt "
                 "JOIN ports p ON p.id = pt.port_id "
-                "JOIN cluster_sectors cs ON cs.sector_id = p.sector "
+                "JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
                 "WHERE cs.cluster_id = $1 AND pt.commodity = $2";
 
               db_bind_t params_avg[] = { db_bind_i32 (cluster_id),
@@ -451,7 +451,7 @@ cluster_economy_step (db_t *db, int64_t now_s)
                 "SET price = CAST(price + 0.1 * ($1 - price) AS INTEGER) "
                 "WHERE commodity = $2 AND port_id IN ("
                 "  SELECT p.id FROM ports p "
-                "  JOIN cluster_sectors cs ON cs.sector_id = p.sector "
+                "  JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
                 "  WHERE cs.cluster_id = $3" ")";
 
               db_bind_t params_drift[] = { db_bind_i32 (mid_price),
@@ -609,7 +609,7 @@ clusters_seed_illegal_goods (db_t *db)
           // Get cluster alignment for the port's sector
           db_res_t *res_align = NULL;
           const char *sql_cluster_align =
-            "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id = $1 LIMIT 1";
+            "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id_id = $1 LIMIT 1";
           db_bind_t params_a[] = { db_bind_i32 (sector_id) };
 
 

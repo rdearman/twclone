@@ -36,6 +36,7 @@
 
 /* ==================================================================== */
 
+
 int
 h_player_bank_balance_add (db_t *db, int player_id, long long delta,
                            long long *new_balance_out)
@@ -46,6 +47,8 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
     }
 
   db_error_t err;
+
+
   db_error_clear (&err);
 
   /*
@@ -80,6 +83,8 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
   };
 
   db_res_t *res = NULL;
+
+
   if (!db_query (db, sql, params, 2, &res, &err))
     {
       return err.code ? err.code : ERR_DB_QUERY_FAILED;
@@ -88,6 +93,7 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
   bool have_row = db_res_step (res, &err);
   int64_t account_id = 0;
   int64_t new_bal = 0;
+
 
   if (have_row && !err.code)
     {
@@ -118,6 +124,8 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
         "LIMIT 1;";
 
       db_bind_t p2[] = { db_bind_i32 ((int32_t) player_id) };
+
+
       res = NULL;
 
       if (!db_query (db, sql_exists, p2, 1, &res, &err))
@@ -126,6 +134,8 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
         }
 
       bool exists = db_res_step (res, &err);
+
+
       db_res_finalize (res);
 
       if (err.code)
@@ -167,6 +177,8 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
     };
 
     db_res_t *tx_res = NULL;
+
+
     if (!db_query (db, tx_sql,
                    tx_params,
                    sizeof (tx_params) / sizeof (tx_params[0]),
@@ -188,7 +200,6 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
   *new_balance_out = (long long) new_bal;
   return 0;
 }
-
 
 
 static int
@@ -481,10 +492,11 @@ h_add_credits_unlocked (db_t *db,
 
 
   const char *sql_tx =
-    "INSERT INTO bank_transactions (account_id, tx_type, amount, balance_after, tx_group_id) VALUES ($1, $2, $3, $4, $5);";
+    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
+    "VALUES ($1, $2, 'CREDIT', $3, 'CRD', $4, $5, EXTRACT(EPOCH FROM now())::bigint);";
   db_bind_t tx_params[] = {
     db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
-    db_bind_i64 (new_balance), db_bind_text (tx_group_id)
+    db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
   };
 
 
@@ -541,10 +553,11 @@ h_deduct_credits_unlocked (db_t *db,
 
 
   const char *sql_tx =
-    "INSERT INTO bank_transactions (account_id, tx_type, amount, balance_after, tx_group_id) VALUES ($1, $2, $3, $4, $5);";
+    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
+    "VALUES ($1, $2, 'DEBIT', $3, 'CRD', $4, $5, EXTRACT(EPOCH FROM now())::bigint);";
   db_bind_t tx_params[] = {
-    db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (-amount),
-    db_bind_i64 (new_balance), db_bind_text (tx_group_id)
+    db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
+    db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
   };
 
 
@@ -675,6 +688,8 @@ h_deduct_credits (db_t *db,
 
   if (rc != 0)
     {
+      LOGE ("h_deduct_credits: Account not found for %s %d", owner_type,
+            owner_id);
       return rc;
     }
 
@@ -685,6 +700,14 @@ h_deduct_credits (db_t *db,
                                   tx_type,
                                   tx_group_id,
                                   out_new_balance);
+  if (rc != 0)
+    {
+      LOGE (
+        "h_deduct_credits: Deduction failed for account %d, amount %lld, rc %d",
+        account_id,
+        amount,
+        rc);
+    }
   if (rc == 0 && strcmp (owner_type, "player") == 0)
     {
       long long threshold = h_get_account_alert_threshold_unlocked (db,
@@ -1251,7 +1274,7 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
     }
 
   const char *sql_query =
-    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.id = BA.owner_id "
+    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.player_id = BA.owner_id "
     "WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT $1;";
   db_bind_t params[] = { db_bind_i32 (limit) };
   db_res_t *res = NULL;
@@ -1287,7 +1310,7 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_object ();
 
 
-  json_object_set (payload, "leaderboard", leaderboard_array);
+  json_object_set_new (payload, "leaderboard", leaderboard_array);
   send_response_ok_take (ctx, root, "bank.leaderboard.response", &payload);
   return 0;
 }
@@ -1380,7 +1403,7 @@ cmd_bank_deposit (client_ctx_t *ctx, json_t *root)
                               account_id,
                               amount,
                               "DEPOSIT",
-                              NULL,
+                              "",
                               &new_bank_balance) != 0)
     {
       db_tx_rollback (db, NULL);
@@ -1585,7 +1608,7 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
                                  account_id,
                                  amount,
                                  "WITHDRAWAL",
-                                 NULL,
+                                 "",
                                  &new_balance) != 0)
     {
       db_tx_rollback (db, NULL);
@@ -1677,7 +1700,7 @@ cmd_fine_list (client_ctx_t *ctx, json_t *root)
   json_t *fines_array = json_array ();
   db_error_t err;
   const char *sql =
-    "SELECT id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = $1 AND status != 'paid';";
+    "SELECT fines_id as id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = $1 AND status != 'paid';";
   db_bind_t params[] = { db_bind_i32 (ctx->player_id) };
   db_res_t *res = NULL;
 
@@ -1778,7 +1801,7 @@ cmd_fine_pay (client_ctx_t *ctx,
 
   db_error_t err;
   const char *sql_select_fine =
-    "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE id = $1;";
+    "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE fines_id = $1;";
   db_bind_t params_fine[] = { db_bind_i32 (fine_id) };
   db_res_t *res_fine = NULL;
 
@@ -1858,7 +1881,7 @@ cmd_fine_pay (client_ctx_t *ctx,
 
   const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid";
   const char *sql_update_fine =
-    "UPDATE fines SET status = $1, amount = amount - $2 WHERE id = $3;";
+    "UPDATE fines SET status = $1, amount = amount - $2 WHERE fines_id = $3;";
   db_bind_t params_update[] = { db_bind_text (new_status),
                                 db_bind_i64 (amount_to_pay),
                                 db_bind_i32 (fine_id) };

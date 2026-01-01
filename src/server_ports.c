@@ -63,6 +63,7 @@ const char * commodity_to_code (db_t *db, const char *commodity);
 #include <jansson.h>
 #include <stdlib.h>
 
+
 int
 parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
 {
@@ -80,12 +81,16 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
     }
 
   size_t n = json_array_size (jitems);
+
+
   if (n == 0)
     {
       return -1;
     }
 
   TradeLine *lines = calloc (n, sizeof (*lines));
+
+
   if (!lines)
     {
       return -1;
@@ -94,6 +99,8 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
   for (size_t i = 0; i < n; i++)
     {
       json_t *it = json_array_get (jitems, i);
+
+
       if (!it || !json_is_object (it))
         {
           free_trade_lines (lines, i);
@@ -101,6 +108,8 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
         }
 
       json_t *jcom = json_object_get (it, "commodity");
+
+
       if (!jcom || !json_is_string (jcom))
         {
           free_trade_lines (lines, i);
@@ -108,6 +117,8 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
         }
 
       const char *com = json_string_value (jcom);
+
+
       if (!com || !*com)
         {
           free_trade_lines (lines, i);
@@ -117,6 +128,8 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
       /* quantity (buy) or amount (sell) */
       int qty = 0;
       json_t *jq = json_object_get (it, "quantity");
+
+
       if (jq && json_is_integer (jq))
         {
           qty = (int) json_integer_value (jq);
@@ -126,6 +139,8 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
       else
         {
           json_t *ja = json_object_get (it, "amount");
+
+
           if (ja && json_is_integer (ja))
             {
               qty = (int) json_integer_value (ja);
@@ -149,9 +164,13 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
       lines[i].unit_price = 0;
       {
         json_t *jup = json_object_get (it, "unit_price");
+
+
         if (jup && json_is_integer (jup))
           {
             int up = (int) json_integer_value (jup);
+
+
             if (up < 0)
               {
                 free_trade_lines (lines, i);
@@ -177,7 +196,6 @@ parse_trade_lines (json_t *jitems, TradeLine **out_lines, size_t *out_n)
 }
 
 
-
 int
 h_update_entity_stock (db_t *db,
                        const char *entity_type,
@@ -187,11 +205,19 @@ h_update_entity_stock (db_t *db,
 {
   int current_quantity = 0;
   /* Get current quantity (ignore error if not found, assume 0) */
-  h_get_entity_stock_quantity (db, entity_type, entity_id, commodity_code, &current_quantity);
+  h_get_entity_stock_quantity (db,
+                               entity_type,
+                               entity_id,
+                               commodity_code,
+                               &current_quantity);
 
   int new_quantity = current_quantity + quantity_delta;
+
+
   if (new_quantity < 0)
-    new_quantity = 0;
+    {
+      new_quantity = 0;
+    }
 
   const char *sql_upsert =
     "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
@@ -199,9 +225,14 @@ h_update_entity_stock (db_t *db,
     "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = $4, last_updated_ts = $5;";
 
   db_error_t err;
+
+
   memset (&err, 0, sizeof (err));
   int64_t now = (int64_t) time (NULL);
-  db_bind_t params[] = { db_bind_text (entity_type), db_bind_i32 (entity_id), db_bind_text (commodity_code), db_bind_i32 (new_quantity), db_bind_i64 (now) };
+  db_bind_t params[] = { db_bind_text (entity_type), db_bind_i32 (entity_id),
+                         db_bind_text (commodity_code),
+                         db_bind_i32 (new_quantity), db_bind_i64 (now) };
+
 
   if (!db_exec (db, sql_upsert, params, 5, &err))
     {
@@ -210,7 +241,9 @@ h_update_entity_stock (db_t *db,
     }
 
   if (new_quantity_out)
-    *new_quantity_out = new_quantity;
+    {
+      *new_quantity_out = new_quantity;
+    }
   return 0;
 }
 
@@ -233,8 +266,8 @@ h_port_buys_commodity (db_t *db, int port_id, const char *commodity)
 
   const char *sql =
     "SELECT es.quantity, p.size * 1000 AS max_capacity "
-    "FROM ports p JOIN entity_stock es ON p.id = es.entity_id "
-    "WHERE es.entity_type = 'port' AND es.commodity_code = $2 AND p.id = $1 LIMIT 1;";
+    "FROM ports p JOIN entity_stock es ON p.port_id = es.entity_id "
+    "WHERE es.entity_type = 'port' AND es.commodity_code = $2 AND p.port_id = $1 LIMIT 1;";
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -539,7 +572,6 @@ json_equal_strict (json_t *a, json_t *b)
 /* } */
 
 
-
 int
 h_entity_calculate_sell_price (db_t *db,
                                const char *entity_type,
@@ -592,9 +624,9 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
     "       ec.price_elasticity, "
     "       ec.volatility_factor "
     "FROM commodities c "
-    "JOIN ports p ON p.id = $1 "
-    "JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code "
-    "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
+    "JOIN ports p ON p.port_id = $1 "
+    "JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code "
+    "JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id "
     "WHERE c.code = $2 LIMIT 1;";
 
   db_res_t *res = NULL;
@@ -869,7 +901,7 @@ h_can_trade_commodity (db_t *db,
 
     db_error_clear (&err);
 
-    const char *sql = "SELECT sector FROM ports WHERE id = $1 LIMIT 1";
+    const char *sql = "SELECT sector_id FROM ports WHERE port_id = $1 LIMIT 1";
 
     db_bind_t params[] = {
       db_bind_i32 (port_id)
@@ -1065,10 +1097,10 @@ h_market_move_port_stock (db_t *db,
     "SELECT es.quantity, p.size * 1000 AS max_capacity "
     "FROM ports p "
     "LEFT JOIN entity_stock es "
-    "  ON p.id = es.entity_id "
+    "  ON p.port_id = es.entity_id "
     " AND es.entity_type = 'port' "
     " AND es.commodity_code = $2 "
-    "WHERE p.id = $1;";
+    "WHERE p.port_id = $1;";
 
   db_bind_t params[] = {
     db_bind_i32 (port_id),
@@ -1161,8 +1193,9 @@ free_trade_lines (TradeLine *lines, size_t n)
 
 
 int
-cmd_trade_quote (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_trade_quote (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   json_t *data = json_object_get (root, "data");
   json_t *payload = NULL;
   const char *commodity = NULL;
@@ -1257,8 +1290,9 @@ cmd_trade_quote (db_t *db, client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_trade_history (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_trade_history (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   json_t *data = json_object_get (root, "data");
 
   if (ctx->player_id <= 0)
@@ -1327,15 +1361,15 @@ cmd_trade_history (db_t *db, client_ctx_t *ctx, json_t *root)
     }
 
   const char *sql_no_cursor =
-    "SELECT timestamp, id, port_id, commodity, units, price_per_unit, action "
+    "SELECT timestamp, trade_log_id as id, port_id, commodity, units, price_per_unit, action "
     "FROM trade_log WHERE player_id = $1 "
-    "ORDER BY timestamp DESC, id DESC LIMIT $2;";
+    "ORDER BY timestamp DESC, trade_log_id DESC LIMIT $2;";
 
   const char *sql_with_cursor =
-    "SELECT timestamp, id, port_id, commodity, units, price_per_unit, action "
+    "SELECT timestamp, trade_log_id as id, port_id, commodity, units, price_per_unit, action "
     "FROM trade_log WHERE player_id = $1 "
-    "AND (timestamp < $3 OR (timestamp = $3 AND id < $4)) "
-    "ORDER BY timestamp DESC, id DESC LIMIT $2;";
+    "AND (timestamp < $3 OR (timestamp = $3 AND trade_log_id < $4)) "
+    "ORDER BY timestamp DESC, trade_log_id DESC LIMIT $2;";
 
   const bool use_cursor = (cursor_ts > 0 && cursor_id > 0);
   const char *sql = use_cursor ? sql_with_cursor : sql_no_cursor;
@@ -1492,8 +1526,9 @@ cmd_trade_history (db_t *db, client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_dock_status (db_t *db,client_ctx_t *ctx, json_t *root)
+cmd_dock_status (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   int player_ship_id = 0;
   int resolved_port_id = 0;
   char *player_name = NULL;
@@ -1583,7 +1618,7 @@ cmd_dock_status (db_t *db,client_ctx_t *ctx, json_t *root)
         db_error_clear (&err);
 
         const char *sql_update_ported =
-          "UPDATE ships SET ported = $1, onplanet = 0 WHERE id = $2;";
+          "UPDATE ships SET ported = $1, onplanet = 0 WHERE ship_id = $2;";
 
         db_bind_t params[] = {
           db_bind_i32 (new_ported_status),
@@ -1639,7 +1674,7 @@ cmd_dock_status (db_t *db,client_ctx_t *ctx, json_t *root)
 
       db_error_clear (&err);
 
-      const char *sql_check = "SELECT ported FROM ships WHERE id = $1";
+      const char *sql_check = "SELECT ported FROM ships WHERE ship_id = $1";
 
       db_bind_t params[] = {
         db_bind_i32 (player_ship_id)
@@ -1727,9 +1762,9 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
     "       ec.price_elasticity, "
     "       ec.volatility_factor "
     "FROM commodities c "
-    "JOIN ports p ON p.id = $1 "
-    "JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code "
-    "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
+    "JOIN ports p ON p.port_id = $1 "
+    "JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code "
+    "JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id "
     "WHERE c.code = $2 LIMIT 1;";
 
   db_res_t *res = NULL;
@@ -1856,8 +1891,9 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
 
 
 int
-cmd_trade_port_info (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   json_t *port = NULL;
   json_t *payload = NULL;
   json_t *commodities_array = NULL;
@@ -1916,16 +1952,16 @@ cmd_trade_port_info (db_t *db, client_ctx_t *ctx, json_t *root)
   if (requested_port_id > 0)
     {
       sql_port_info =
-        "SELECT id, number, name, sector, size, techlevel, petty_cash, type "
-        "FROM ports WHERE id = $1 LIMIT 1;";
+        "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type "
+        "FROM ports WHERE port_id = $1 LIMIT 1;";
       port_id_val = requested_port_id;
       by_port_id = true;
     }
   else if (sector_id > 0)
     {
       sql_port_info =
-        "SELECT id, number, name, sector, size, techlevel, petty_cash, type "
-        "FROM ports WHERE sector = $1 LIMIT 1;";
+        "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type "
+        "FROM ports WHERE sector_id = $1 LIMIT 1;";
       by_port_id = false;
     }
   else
@@ -2206,8 +2242,9 @@ cleanup:
 
 
 int
-cmd_trade_jettison (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   json_t *data = json_object_get (root, "data");
   json_t *payload = NULL;
   const char *commodity = NULL;
@@ -2455,7 +2492,7 @@ h_robbery_get_config (db_t *db,
     "SELECT robbery_evil_threshold, robbery_xp_per_hold, robbery_credits_per_xp, "
     "robbery_bust_chance_base, robbery_turn_cost, good_guy_bust_bonus, "
     "pro_criminal_bust_delta, evil_cluster_bust_bonus, good_align_penalty_mult, "
-    "robbery_real_bust_ttl_days FROM law_enforcement WHERE id=1;";
+    "robbery_real_bust_ttl_days FROM law_enforcement WHERE law_enforcement_id=1;";
 
   db_res_t *res = NULL;
   db_error_t dberr;
@@ -2559,17 +2596,9 @@ h_robbery_get_config (db_t *db,
 
 
 int
-cmd_port_rob (db_t *db,
-              client_ctx_t *ctx,
-              json_t *root)
+cmd_port_rob (client_ctx_t *ctx, json_t *root)
 {
-  if (ctx->player_id <= 0)
-    {
-      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND,
-                           "Not authenticated.");
-      return 0;
-    }
-
+  db_t *db = game_db_get_handle ();
   json_t *data = json_object_get (root, "data");
 
 
@@ -2753,7 +2782,7 @@ cmd_port_rob (db_t *db,
 
   db_player_get_alignment (db, ctx->player_id, &p_align);
   {
-    static const char *SQL = "SELECT experience FROM players WHERE id=$1";
+    static const char *SQL = "SELECT experience FROM players WHERE player_id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
 
@@ -2962,7 +2991,7 @@ cmd_port_rob (db_t *db,
           long long port_cash = 0;
 
           static const char *SQL_GET_CASH =
-            "SELECT petty_cash FROM ports WHERE id=$1";
+            "SELECT petty_cash FROM ports WHERE port_id=$1";
           db_res_t *res = NULL;
           db_bind_t params[1];
 
@@ -2982,7 +3011,7 @@ cmd_port_rob (db_t *db,
           if (loot_credits > 0)
             {
               static const char *SQL_UPD_PORT =
-                "UPDATE ports SET petty_cash = petty_cash - $1 WHERE id=$2";
+                "UPDATE ports SET petty_cash = petty_cash - $1 WHERE port_id=$2";
               db_bind_t uparams[2];
 
 
@@ -3326,13 +3355,10 @@ fail_tx:
 
 
 int
-cmd_trade_sell (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 {
-  LOGD ("cmd_trade_sell: entered for player_id=%d", ctx->player_id);    // ADDED
-  json_t *receipt = NULL;
-  json_t *lines = NULL;
-  json_t *data = NULL;
-  json_t *jitems = NULL;
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
   int rc = 0;
   char *req_s = NULL;
   char *resp_s = NULL;
@@ -3345,7 +3371,9 @@ cmd_trade_sell (db_t *db, client_ctx_t *ctx, json_t *root)
   fee_result_t charges = { 0 };
   long long new_balance = 0;
   char tx_group_id[UUID_STR_LEN];
-
+  json_t *jitems = NULL;
+  json_t *receipt = NULL;
+  json_t *lines = NULL;
 
   h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
   TradeLine *trade_lines = NULL;
@@ -3583,7 +3611,7 @@ cmd_trade_sell (db_t *db, client_ctx_t *ctx, json_t *root)
   if (requested_port_id > 0)
     {
       static const char *SQL_BY_ID =
-        "SELECT id FROM ports WHERE id = $1 LIMIT 1;";
+        "SELECT port_id FROM ports WHERE port_id = $1 LIMIT 1;";
 
       db_res_t *res = NULL;
       db_error_t dberr;
@@ -3619,7 +3647,7 @@ cmd_trade_sell (db_t *db, client_ctx_t *ctx, json_t *root)
   else
     {
       static const char *SQL_BY_SECTOR =
-        "SELECT id FROM ports WHERE sector = $1 LIMIT 1;";
+        "SELECT port_id FROM ports WHERE sector_id = $1 LIMIT 1;";
 
       db_res_t *res = NULL;
       db_error_t dberr;
@@ -4340,8 +4368,9 @@ cleanup:
 
 
 int
-cmd_trade_buy (db_t *db, client_ctx_t *ctx, json_t *root)
+cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 {
+  db_t *db = game_db_get_handle ();
   LOGD ("cmd_trade_buy: entered for player_id=%d", ctx->player_id);
   json_t *receipt = NULL;
   json_t *lines = NULL;
@@ -4559,7 +4588,7 @@ cmd_trade_buy (db_t *db, client_ctx_t *ctx, json_t *root)
   if (requested_port_id > 0)
     {
       static const char *SQL_BY_ID =
-        "SELECT id FROM ports WHERE id = $1 LIMIT 1;";
+        "SELECT port_id FROM ports WHERE port_id = $1 LIMIT 1;";
       db_res_t *res = NULL;
 
 
@@ -4605,7 +4634,7 @@ cmd_trade_buy (db_t *db, client_ctx_t *ctx, json_t *root)
   else
     {
       static const char *SQL_BY_SECTOR =
-        "SELECT id FROM ports WHERE sector = $1 LIMIT 1;";
+        "SELECT port_id FROM ports WHERE sector_id = $1 LIMIT 1;";
       db_res_t *res = NULL;
 
 
@@ -4992,7 +5021,7 @@ cmd_trade_buy (db_t *db, client_ctx_t *ctx, json_t *root)
     if (any_illegal)
       {
         static const char *SQL_ALIGN =
-          "UPDATE players SET alignment = alignment - 10 WHERE id = $1;";
+          "UPDATE players SET alignment = alignment - 10 WHERE player_id = $1;";
 
         db_error_t e;
 
@@ -5324,12 +5353,11 @@ h_get_port_commodity_details (db_t *db,
     "       (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS sells_commodity "
     "FROM ports p "
     "LEFT JOIN entity_stock es "
-    "  ON p.id = es.entity_id "
+    "  ON p.port_id = es.entity_id "
     " AND es.entity_type = 'port' "
     " AND es.commodity_code = $2 "
-    "LEFT JOIN commodities c "
-    "  ON es.commodity_code = c.code "
-    "WHERE p.id = $1;";
+    "JOIN commodities c ON c.code = $2 "
+    "WHERE p.port_id = $1;";
 
   db_res_t *res = NULL;
   db_error_t err;

@@ -139,7 +139,6 @@ cron_find (const char *name)
 /* Schema: cron_tasks(id, name, schedule, last_run_at, next_due_at, enabled, payload) */
 
 
-
 int
 db_load_ports (int *server_port, int *s2s_port)
 {
@@ -150,6 +149,8 @@ db_load_ports (int *server_port, int *s2s_port)
     }
 
   db_t *db = game_db_get_handle ();
+
+
   if (!db)
     {
       return -1;
@@ -157,12 +158,20 @@ db_load_ports (int *server_port, int *s2s_port)
 
   /* Try to load server_port */
   {
-    const char *sql = "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    const char *sql =
+      "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
     db_res_t *res = NULL;
     db_error_t err;
+
+
     memset (&err, 0, sizeof (err));
 
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_text ("server_port") }, 1, &res, &err))
+    if (db_query (db,
+                  sql,
+                  (db_bind_t[]){ db_bind_text ("server_port") },
+                  1,
+                  &res,
+                  &err))
       {
         if (db_res_step (res, &err))
           {
@@ -170,24 +179,36 @@ db_load_ports (int *server_port, int *s2s_port)
           }
         else
           {
-            LOGW ("[config] 'server_port' missing or invalid in DB, using default: %d", *server_port);
+            LOGW (
+              "[config] 'server_port' missing or invalid in DB, using default: %d",
+              *server_port);
           }
         db_res_finalize (res);
       }
     else
       {
-        LOGW ("[config] 'server_port' missing or invalid in DB, using default: %d", *server_port);
+        LOGW (
+          "[config] 'server_port' missing or invalid in DB, using default: %d",
+          *server_port);
       }
   }
 
   /* Try to load s2s_port */
   {
-    const char *sql = "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    const char *sql =
+      "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
     db_res_t *res = NULL;
     db_error_t err;
+
+
     memset (&err, 0, sizeof (err));
 
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_text ("s2s_port") }, 1, &res, &err))
+    if (db_query (db,
+                  sql,
+                  (db_bind_t[]){ db_bind_text ("s2s_port") },
+                  1,
+                  &res,
+                  &err))
       {
         if (db_res_step (res, &err))
           {
@@ -195,13 +216,16 @@ db_load_ports (int *server_port, int *s2s_port)
           }
         else
           {
-            LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d", *s2s_port);
+            LOGW (
+              "[config] 's2s_port' missing or invalid in DB, using default: %d",
+              *s2s_port);
           }
         db_res_finalize (res);
       }
     else
       {
-        LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d", *s2s_port);
+        LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d",
+              *s2s_port);
       }
   }
 
@@ -439,7 +463,7 @@ h_compute_illegal_alignment_delta (int player_alignment,
   db_error_clear (&err);
   db_res_t *res = NULL;
   const char *sql =
-    "SELECT is_good, is_evil FROM alignment_band WHERE id = $1;";
+    "SELECT is_good, is_evil FROM alignment_band WHERE alignment_band_id = $1;";
 
   db_bind_t params[1] = { db_bind_i32 (cluster_align_band_id) };
 
@@ -717,7 +741,7 @@ exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
   int64_t now_s = (int64_t)time (NULL);
   const char *sql =
     "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
-    "VALUES($1, $2, $3, $4, $5);";
+    "VALUES($1, $2, $3, $4, $5) RETURNING system_notice_id;";
 
   db_error_t err;
 
@@ -799,7 +823,7 @@ exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
 
   const char *sql =
     "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-    "VALUES($1, $2, $3, 'Notice', $4, $5, $6);";
+    "VALUES($1, $2, $3, 'Notice', $4, $5, $6) RETURNING system_notice_id;";
 
   db_error_t err;
 
@@ -852,10 +876,10 @@ server_commands_tick (db_t *db, int max_rows)
   int64_t now_s = (int64_t)time (NULL);
 
   const char *sql_select =
-    "SELECT id, type, payload, idem_key "
+    "SELECT engine_commands_id, type, payload, idem_key "
     "FROM engine_commands "
     "WHERE status='ready' AND due_at <= $1 "
-    "ORDER BY priority ASC, due_at ASC, id ASC "
+    "ORDER BY priority ASC, due_at ASC, engine_commands_id ASC "
     "LIMIT $2;";
 
   db_res_t *res = NULL;
@@ -888,7 +912,7 @@ server_commands_tick (db_t *db, int max_rows)
 
       /* mark running */
       const char *sql_running =
-        "UPDATE engine_commands SET status='running', started_at=$1 WHERE id=$2;";
+        "UPDATE engine_commands SET status='running', started_at=$1 WHERE engine_commands_id=$2;";
 
       db_bind_t run_params[2];
 
@@ -939,7 +963,7 @@ server_commands_tick (db_t *db, int max_rows)
       if (ok == 0)
         {
           const char *sql_done =
-            "UPDATE engine_commands SET status='done', finished_at=$1 WHERE id=$2;";
+            "UPDATE engine_commands SET status='done', finished_at=$1 WHERE engine_commands_id=$2;";
           db_bind_t done_params[2] = { db_bind_i64 (now_s),
                                        db_bind_i64 (cmd_id) };
 
@@ -949,7 +973,7 @@ server_commands_tick (db_t *db, int max_rows)
       else
         {
           const char *sql_err =
-            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=$1 WHERE id=$2;";
+            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=$1 WHERE engine_commands_id=$2;";
           db_bind_t err_params[2] = { db_bind_i64 (now_s),
                                       db_bind_i64 (cmd_id) };
 
@@ -1162,7 +1186,7 @@ engine_main_loop (int shutdown_fd)
           uint64_t now_s = (int64_t) time (NULL);
 
           const char *sql_pick =
-            "SELECT id, name, schedule FROM cron_tasks "
+            "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
             "WHERE enabled=1 "
             "  AND (next_due_at IS NULL OR next_due_at <= $1) "
             "ORDER BY next_due_at ASC "
@@ -1391,7 +1415,7 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
   int final_rc = 0;
   // Select error commands ready for retry
   const char *sql_select_deadletters =
-    "SELECT id, attempts FROM engine_commands WHERE status='error' AND attempts < $1 LIMIT 500;";
+    "SELECT engine_commands_id, attempts FROM engine_commands WHERE status='error' AND attempts < $1 LIMIT 500;";
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -1414,7 +1438,7 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
       int64_t cmd_id = db_res_col_i64 (res, 0, &err);
 
       const char *sql_update_deadletter =
-        "UPDATE engine_commands SET status='ready', due_at=$1 + (attempts * 60) WHERE id=$2;";
+        "UPDATE engine_commands SET status='ready', due_at=$1 + (attempts * 60) WHERE engine_commands_id=$2;";
 
       db_bind_t up_params[2];
 

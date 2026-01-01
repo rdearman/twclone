@@ -18,9 +18,16 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Setup: Place User in Tavern Sector",
+      "name": "Setup: Create Tavern Port",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR REPLACE INTO ports (id, sector, type, name) VALUES (1, 1, 10, 'Tavern'); UPDATE players SET sector = 1 WHERE id = @tavern_reg_player_id;" },
+      "data": { "sql": "INSERT INTO ports (id, sector, type, name) VALUES (1, 1, 10, 'Tavern') ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Place User",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector = 1 WHERE id = @tavern_reg_player_id;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

@@ -5,8 +5,8 @@
     {
       "name": "Setup: Auth CEO",
       "setup": "macro_auth_user",
-      "user": "wall_street_wolf",
-      "passwd": "password"
+      "username": "wall_street_wolf",
+      "password": "password"
     },
     {
       "name": "Setup: Fund CEO",
@@ -25,11 +25,20 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Setup: Create Corp & Stock (Fixed IDs)",
+      "name": "Setup: Create Corp",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT OR REPLACE INTO corporations (id, name, owner_id, owner_type) VALUES (100, 'WolfCorp', @wall_street_wolf_player_id, 'player'); INSERT OR REPLACE INTO stocks (id, corp_id, ticker, total_shares, current_price, par_value) VALUES (100, 100, 'WOLF', 1000, 50, 50);"
+        "sql": "INSERT INTO corporations (id, name, owner_id) VALUES (100, 'WolfCorp', @wall_street_wolf_player_id) ON CONFLICT (id) DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Create Stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO stocks (id, corp_id, ticker, total_shares, current_price, par_value) VALUES (100, 100, 'WOLF', 1000, 50, 50) ON CONFLICT (id) DO NOTHING;"
       },
       "expect": { "status": "ok" }
     },

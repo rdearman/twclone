@@ -517,6 +517,9 @@ s2s_send_json (s2s_conn_t *c, json_t *obj, int timeout_ms)
 
   if (len > g_cfg.s2s.frame_size_limit)
     {
+      LOGE ("s2s_send_json: frame too large (%zu > %d)",
+            len,
+            g_cfg.s2s.frame_size_limit);
       free (payload);
       g_ctr.toolarge++;
       return S2S_E_TOOLARGE;
@@ -563,6 +566,9 @@ s2s_recv_json (s2s_conn_t *c, json_t **out, int timeout_ms)
 
   if (len == 0 || len > g_cfg.s2s.frame_size_limit)
     {
+      LOGE ("s2s_recv_json: invalid/large frame length (%u, limit=%d)",
+            len,
+            g_cfg.s2s.frame_size_limit);
       g_ctr.toolarge++;
       return S2S_E_TOOLARGE;
     }

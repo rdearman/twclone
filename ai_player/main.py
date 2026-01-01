@@ -1131,16 +1131,20 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     continue
 
                 if response_type == "auth.session":
-                    state_manager.set("session_id", response_data.get("session"))
+                    # Fix: Use session_token, not session (server returns session_token)
+                    session_token = response_data.get("session_token") or response_data.get("session")
+                    state_manager.set("session_id", session_token)
                     state_manager.update_player_info(response_data)
                 
                 elif response_type == "player.info" or response_type == "player.my_info":
                     state_manager.update_player_info(response_data)
                 
-                elif response_type == "ship.info" or response_type == "ship.status":
+                elif response_type == "ship.info" or response_type == "ship.status" or response_type == "ship.claimed":
                     ship_data = response_data.get("ship", response_data)
                     # Use update_player_info to preserve cargo structure (list vs dict)
                     state_manager.update_player_info({"ship": ship_data})
+                    if response_type == "ship.claimed":
+                        logger.info(f"Bootstrap: Successfully claimed ship {ship_data.get('id', '?')}")
                 
                 if response_type == "move.result":
                     if response.get("status") == "ok":
@@ -1152,6 +1156,11 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             recents.append(new_sector)
                             state_manager.set("recent_sectors", recents[-10:]) # Keep last 10
                             logger.info(f"Move confirmed. Location updated to sector {new_sector}")
+                            
+                            # AUTO-REQUEST sector.info for the new location
+                            logger.info(f"Auto-requesting sector.info for sector {new_sector}")
+                            next_cmd = {"command": "sector.info", "data": {"sector_id": int(new_sector)}}
+                            send_command(game_server, next_cmd, state_manager)
                 
                 # --- NEW: Handle Pathfind Response ---
                 sent_cmd = state_manager.get_pending_command(request_id)
@@ -1174,7 +1183,16 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     # which is the authoritative source.
                     sector_id = response_data.get("sector_id")
                     if sector_id:
+                        # Add refresh timestamp so planner can detect stale data
+                        response_data["_last_refreshed"] = time.time()
                         state_manager.update_sector_data(str(sector_id), response_data)
+                
+                elif response_type == "shipyard.list":
+                    # Store available ships for bootstrap ship claiming
+                    ships = response_data.get("ships", [])
+                    if ships:
+                        state_manager.set("shipyard_list", ships)
+                        logger.info(f"Bootstrap: Received shipyard list with {len(ships)} available ships.")
                 
                 elif response_type == "trade.port_info":
                     port_id = response_data.get("port", {}).get("id")

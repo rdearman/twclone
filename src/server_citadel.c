@@ -20,7 +20,7 @@ get_player_planet (db_t *db, int player_id)
     {
       return 0;
     }
-  const char *sql = "SELECT onplanet FROM ships WHERE id = $1;";
+  const char *sql = "SELECT onplanet FROM ships WHERE ship_id = $1;";
   db_bind_t params[] = { db_bind_i32 (ship_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -94,7 +94,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
 
   const char *sql_planet =
-    "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE id = $1;";
+    "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE planet_id = $1;";
   db_bind_t p_params[] = { db_bind_i32 (planet_id) };
   db_res_t *p_res = NULL;
   db_error_t err;
@@ -216,7 +216,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   snprintf (sql_req,
             sizeof(sql_req),
             "SELECT citadelUpgradeColonist_lvl%d, citadelUpgradeOre_lvl%d, citadelUpgradeOrganics_lvl%d, "
-            "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE id = $1;",
+            "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE planettypes_id = $1;",
             target_level,
             target_level,
             target_level,
@@ -298,7 +298,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   // Deduct resources
   const char *sql_update_planet =
-    "UPDATE planets SET ore_on_hand = ore_on_hand - $1, organics_on_hand = organics_on_hand - $2, equipment_on_hand = equipment_on_hand - $3 WHERE id = $4;";
+    "UPDATE planets SET ore_on_hand = ore_on_hand - $1, organics_on_hand = organics_on_hand - $2, equipment_on_hand = equipment_on_hand - $3 WHERE planet_id = $4;";
   db_bind_t upd_p_params[] = { db_bind_i64 (r_ore), db_bind_i64 (r_org),
                                db_bind_i64 (r_equip), db_bind_i32 (planet_id) };
 
@@ -312,7 +312,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   // Start construction
   const char *sql_update_citadel =
-    "INSERT INTO citadels (planet_id, level, owner, construction_status, target_level, construction_start_time, construction_end_time) VALUES ($1, $2, $3, 'upgrading', $4, $5, $6) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level=$4, construction_start_time=$5, construction_end_time=$6;";
+    "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ($1, $2, $3, 'upgrading', $4, $5, $6) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level=$4, construction_start_time=$5, construction_end_time=$6;";
   long long start_time = time (NULL);
   long long end_time = start_time + (r_days * 86400);
 

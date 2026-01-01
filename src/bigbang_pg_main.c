@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <jansson.h>
+#include <dirent.h>
 
 #include "db/db_api.h"
 #include "server_log.h"
@@ -204,6 +205,24 @@ sync_config_to_db (PGconn *c, json_t *jcfg)
 }
 
 
+/* compare function for qsort - sort by numeric prefix */
+static int
+compare_sql_files (const void *a, const void *b)
+{
+  const char *fa = *(const char **)a;
+  const char *fb = *(const char **)b;
+
+  int num_a = atoi (fa);
+  int num_b = atoi (fb);
+
+  return (num_a > num_b) - (num_a < num_b);
+}
+
+
+/* Forward declaration */
+static int apply_file (PGconn *c, const char *path);
+
+
 static int
 apply_file (PGconn *c, const char *path)
 {
@@ -217,6 +236,79 @@ apply_file (PGconn *c, const char *path)
 
   free (sql);
   return rc;
+}
+
+
+static int
+load_sql_files_in_order (PGconn *app, const char *sql_dir)
+{
+  DIR *dir = opendir (sql_dir);
+  if (!dir)
+    {
+      fprintf (stderr, "ERROR: cannot open sql directory: %s\n", sql_dir);
+      return -1;
+    }
+
+  struct dirent *entry;
+  char **files = NULL;
+  int file_count = 0;
+  int capacity = 0;
+
+
+  while ((entry = readdir (dir)) != NULL)
+    {
+      if (entry->d_type != DT_REG)
+        {
+          continue;
+        }
+
+      if (!strstr (entry->d_name, ".sql"))
+        {
+          continue;
+        }
+
+      if (file_count >= capacity)
+        {
+          capacity = capacity ? capacity * 2 : 10;
+          files = (char **)realloc (files, capacity * sizeof (char *));
+        }
+
+      files[file_count++] = strdup (entry->d_name);
+    }
+
+  closedir (dir);
+
+  if (file_count == 0)
+    {
+      fprintf (stderr, "ERROR: no SQL files found in %s\n", sql_dir);
+      return -1;
+    }
+
+  qsort (files, file_count, sizeof (char *), compare_sql_files);
+
+  int result = 0;
+
+
+  for (int i = 0; i < file_count; i++)
+    {
+      char path[2048];
+
+
+      snprintf (path, sizeof(path), "%s/%s", sql_dir, files[i]);
+      printf ("BIGBANG: Applying %s...\n", files[i]);
+      if (apply_file (app, path) != 0)
+        {
+          result = -1;
+          break;
+        }
+    }
+
+  for (int i = 0; i < file_count; i++)
+    {
+      free (files[i]);
+    }
+  free (files);
+  return result;
 }
 
 
@@ -528,10 +620,10 @@ usage (const char *argv0)
 int
 main (int argc, char **argv)
 {
-  const char *admin_cs = "dbname=postgres";
-  const char *db_name = "twclone";
-  const char *app_cs_tmpl = "dbname=%DB%";
-  const char *sql_dir = "sql/pg";
+  char *admin_cs = strdup ("dbname=postgres");
+  char *db_name = strdup ("twclone");
+  char *app_cs_tmpl = strdup ("dbname=%DB%");
+  char *sql_dir = strdup ("sql/pg");
 
   int sectors = 500;
   int density = 4;
@@ -567,20 +659,20 @@ main (int argc, char **argv)
 
       if ((j = json_object_get (jcfg, "admin")) && (s = json_string_value (j)))
         {
-          admin_cs = strdup (s);
+          free (admin_cs); admin_cs = strdup (s);
         }
       if ((j = json_object_get (jcfg, "db")) && (s = json_string_value (j)))
         {
-          db_name = strdup (s);
+          free (db_name); db_name = strdup (s);
         }
       if ((j = json_object_get (jcfg, "app")) && (s = json_string_value (j)))
         {
-          app_cs_tmpl = strdup (s);
+          free (app_cs_tmpl); app_cs_tmpl = strdup (s);
         }
       if ((j = json_object_get (jcfg,
                                 "sql_dir")) && (s = json_string_value (j)))
         {
-          sql_dir = strdup (s);
+          free (sql_dir); sql_dir = strdup (s);
         }
       if ((j = json_object_get (jcfg, "sectors")) && json_is_integer (j))
         {
@@ -634,10 +726,10 @@ main (int argc, char **argv)
     {
       switch (opt)
         {
-          case 1001: admin_cs = optarg; break;
-          case 1002: db_name = optarg; break;
-          case 1003: app_cs_tmpl = optarg; break;
-          case 1004: sql_dir = optarg; break;
+          case 1001: free (admin_cs); admin_cs = strdup (optarg); break;
+          case 1002: free (db_name); db_name = strdup (optarg); break;
+          case 1003: free (app_cs_tmpl); app_cs_tmpl = strdup (optarg); break;
+          case 1004: free (sql_dir); sql_dir = strdup (optarg); break;
           case 's': sectors = atoi (optarg); break;
           case 'd': density = atoi (optarg); break;
           case 'r': port_ratio = atoi (optarg); break;
@@ -743,25 +835,11 @@ main (int argc, char **argv)
       die ("failed to clean universe");
     }
 
-  // 3) Apply Schema
-  const char *scripts[] = {
-    "000_tables.sql", "005_namegen.sql", "010_indexes.sql",
-    "020_views.sql", "030_seeds.sql", "090_other.sql", "100_procs.sql",
-    "105_gameplay_setup.sql"
-  };
-
-
-  for (int i = 0; i < 8; i++)
+  // 3) Apply Schema (in order: sorted by numeric prefix)
+  printf ("BIGBANG: Loading SQL files from %s...\n", sql_dir);
+  if (load_sql_files_in_order (app, sql_dir) != 0)
     {
-      char path[2048];
-
-
-      snprintf (path, sizeof(path), "%s/%s", sql_dir, scripts[i]);
-      printf ("BIGBANG: Applying %s...\n", scripts[i]);
-      if (apply_file (app, path) != 0)
-        {
-          die ("schema apply failed");
-        }
+      die ("schema apply failed");
     }
 
   // 3.5) Sync Config to DB
@@ -841,23 +919,35 @@ main (int argc, char **argv)
   snprintf (buf, sizeof(buf), "SELECT generate_planets(%d)", max_planets);
   exec_sql (app, buf, "generate_planets");
 
-  exec_sql (app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");
-  exec_sql (app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
-  exec_sql (app, "SELECT setup_orion_syndicate()", "setup_orion");
   exec_sql (app, "SELECT spawn_initial_fleet()", "spawn_fleet");
   exec_sql (app, "SELECT apply_game_defaults()", "apply_game_defaults");
 
   // 5) Graph Brain
   printf ("BIGBANG: Generating topology...\n");
+  
+  // First, create isolated tunnel chains
+  char tunnel_sql[256];
+  snprintf (tunnel_sql, sizeof(tunnel_sql), "SELECT generate_tunnels(%d, %d)", min_tunnels, min_tunnel_len);
+  exec_sql (app, tunnel_sql, "generate_tunnels");
+  
+  // NOW create NPC homeworlds at tunnel endpoints (after tunnels are generated)
+  exec_sql (app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");
+  exec_sql (app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
+  exec_sql (app, "SELECT setup_orion_syndicate()", "setup_orion");
+  
+  // Then generate random warps for the rest of the universe
   create_random_warps (app, sectors, density);
   ensure_fedspace_exit (app, 11, sectors);
-  bigbang_create_tunnels (app, sectors, min_tunnels, min_tunnel_len);
 
   PQfinish (app);
   if (jcfg)
     {
       json_decref (jcfg);
     }
+  free (admin_cs);
+  free (db_name);
+  free (app_cs_tmpl);
+  free (sql_dir);
   printf ("OK: Big Bang Complete.\n");
   return 0;
 }

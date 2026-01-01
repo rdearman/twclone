@@ -294,7 +294,7 @@ h_get_active_ship_id (db_t *db, int player_id)
   db_res_t *res = NULL;
   db_error_t err;
 
-  if (db_query (db, "SELECT ship FROM players WHERE id = $1;",
+  if (db_query (db, "SELECT ship_id FROM players WHERE player_id = $1;",
                 (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -687,7 +687,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   db_error_t err;
 
 
-  if (db_query (db, "SELECT towing_ship_id FROM ships WHERE id = $1;",
+  if (db_query (db, "SELECT towing_ship_id FROM ships WHERE ship_id = $1;",
                 (db_bind_t[]){ db_bind_i32 (player_ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -731,7 +731,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
           // 3a. Clear player's towing field
           if (!db_exec (db,
-                        "UPDATE ships SET towing_ship_id = 0 WHERE id = $1;",
+                        "UPDATE ships SET towing_ship_id = 0 WHERE ship_id = $1;",
                         (db_bind_t[]){ db_bind_i32 (player_ship_id) },
                         1,
                         &err))
@@ -741,7 +741,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
           // 3b. Clear target's "being towed" field
           if (!db_exec (db,
-                        "UPDATE ships SET is_being_towed_by = 0 WHERE id = $1;",
+                        "UPDATE ships SET is_being_towed_by = 0 WHERE ship_id = $1;",
                         (db_bind_t[]){ db_bind_i32 (current_towing_ship_id) },
                         1,
                         &err))
@@ -854,7 +854,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   int is_being_towed = 0;
 
 
-  if (db_query (db, "SELECT is_being_towed_by FROM ships WHERE id = $1;",
+  if (db_query (db, "SELECT is_being_towed_by FROM ships WHERE ship_id = $1;",
                 (db_bind_t[]){ db_bind_i32 (target_ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -883,7 +883,7 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     }
 
   // 5a. Set player's towing_ship_id -> target
-  if (!db_exec (db, "UPDATE ships SET towing_ship_id = $1 WHERE id = $2;",
+  if (!db_exec (db, "UPDATE ships SET towing_ship_id = $1 WHERE ship_id = $2;",
                 (db_bind_t[]){ db_bind_i32 (target_ship_id),
                                db_bind_i32 (player_ship_id) }, 2, &err))
     {
@@ -891,9 +891,12 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     }
 
   // 5b. Set target's is_being_towed_by -> player
-  if (!db_exec (db, "UPDATE ships SET is_being_towed_by = $1 WHERE id = $2;",
+  if (!db_exec (db,
+                "UPDATE ships SET is_being_towed_by = $1 WHERE ship_id = $2;",
                 (db_bind_t[]){ db_bind_i32 (player_ship_id),
-                               db_bind_i32 (target_ship_id) }, 2, &err))
+                               db_bind_i32 (target_ship_id) },
+                2,
+                &err))
     {
       goto rollback;
     }
@@ -985,7 +988,7 @@ h_update_ship_cargo (db_t *db,
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql_check =
-    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE id = $1;";
+    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = $1;";
 
   int ore = 0, org = 0, equ = 0, holds = 0, colonists = 0, slaves = 0,
       weapons = 0, drugs = 0;
@@ -1081,7 +1084,7 @@ h_update_ship_cargo (db_t *db,
 
   snprintf (sql_up,
             sizeof(sql_up),
-            "UPDATE ships SET %s = $1 WHERE id = $2;",
+            "UPDATE ships SET %s = $1 WHERE ship_id = $2;",
             col_name);
 
   if (!db_exec (db,
@@ -1125,7 +1128,7 @@ h_get_ship_cargo_and_holds (db_t *db,
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE id = $1;";
+    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = $1;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))

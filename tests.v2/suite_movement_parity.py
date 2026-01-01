@@ -28,10 +28,10 @@ def run_test():
         # Create ship using macro_user_in_sector equivalent SQL
         # This mirrors the macro functionality to ensure a ship is assigned and player sector is set
         sql_create_ship = f"""
-            INSERT OR IGNORE INTO shiptypes (id, name, basecost, maxholds) VALUES (1, 'Scout', 1000, 100);
-            INSERT OR IGNORE INTO ships (id, type_id, name, holds, sector, ported) VALUES ({client.player_id}, 1, 'TestShip', 100, 1, 0);
+            INSERT INTO shiptypes (id, name, basecost, maxholds) VALUES (1, 'Scout', 1000, 100) ON CONFLICT (id) DO NOTHING ON CONFLICT DO NOTHING;
+            INSERT INTO ships (id, type_id, name, holds, sector, ported) VALUES ({client.player_id}, 1, 'TestShip', 100, 1, 0) ON CONFLICT DO NOTHING;
             UPDATE players SET ship = {client.player_id}, sector = 1 WHERE id = {client.player_id};
-            INSERT OR IGNORE INTO ship_ownership (ship_id, player_id, is_primary) VALUES ({client.player_id}, {client.player_id}, 1);
+            INSERT INTO ship_ownership (ship_id, player_id, is_primary) VALUES ({client.player_id}, {client.player_id}, 1) ON CONFLICT DO NOTHING;
         """
         client.send_json({"command": "sys.raw_sql_exec", "data": {"sql": sql_create_ship}})
         resp = client.recv_next_non_notice()

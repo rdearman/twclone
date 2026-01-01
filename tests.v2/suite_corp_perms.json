@@ -34,9 +34,16 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Setup: Add Members via SQL (Bypass Invite Flow)",
+      "name": "Setup: Add Officer via SQL",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO corp_members (corp_id, player_id, role) VALUES (@corp_id, @officer_user_player_id, 'Officer'), (@corp_id, @member_user_player_id, 'Member');" },
+      "data": { "sql": "INSERT INTO corp_members (corp_id, player_id, role) VALUES (@corp_id, @officer_user_player_id, 'Officer') ON CONFLICT DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Add Member via SQL",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO corp_members (corp_id, player_id, role) VALUES (@corp_id, @member_user_player_id, 'Member') ON CONFLICT DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

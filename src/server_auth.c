@@ -31,7 +31,7 @@ player_is_sysop (db_t *db, int player_id)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE id=$1;";
+    "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE player_id=$1;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
@@ -354,7 +354,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       int unread_news = 0;
       db_res_t *news_res = NULL;
       const char *sql_news =
-        "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE id = $1);";
+        "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE player_id = $1);";
 
 
       if (db_query (db,
@@ -385,7 +385,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       json_object_set_new (resp, "current_sector", json_integer (sid));
       json_object_set_new (resp, "unread_news_count",
                            json_integer (unread_news));
-      json_object_set_new (resp, "session", json_string (tok));
+      json_object_set_new (resp, "session_token", json_string (tok));
 
       const char *sql_sys_sub =
         "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) "
@@ -449,121 +449,139 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int pid = 0;
+  int spawn_sid = (rand () % 10) + 1;
 
 
-  if (user_create (db, name, pass, &pid) == AUTH_OK)
+  if (!ship_name || !*ship_name)
     {
-      struct twconfig *cfg = config_load ();
+      ship_name = "Used Scout Marauder";
+    }
+
+  db_error_t err;
+  int64_t player_id = 0;
 
 
-      if (!cfg)
+  /* Call register_player with sector specified */
+  if (!db_exec_insert_id (db,
+                          "SELECT register_player($1, $2, $3, false, $4);",
+                          (db_bind_t[]){db_bind_text (name),
+                                        db_bind_text (pass),
+                                        db_bind_text (ship_name),
+                                        db_bind_i32 (spawn_sid)},
+                          4,
+                          &player_id,
+                          &err))
+    {
+      if (err.code == ERR_DB_CONSTRAINT)
         {
           send_response_error (ctx,
                                root,
-                               ERR_PLANET_NOT_FOUND,
-                               "Database error (config)");
-          return 0;
+                               ERR_NAME_TAKEN,
+                               "Username already exists");
         }
-
-      int new_acc_id = -1;
-
-
-      db_bank_create_account (db,
-                              "player",
-                              pid,
-                              cfg->startingcredits,
-                              &new_acc_id);
-
-      db_error_t err;
-      const char *sql_turns =
-        "INSERT INTO turns (player, turns_remaining, last_update) VALUES ($1, 750, EXTRACT(EPOCH FROM now()));";
-
-
-      db_exec (db, sql_turns, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
-
-      int spawn_sid = (rand () % 10) + 1;
-
-
-      if (!ship_name || !*ship_name)
-        {
-          ship_name = "Used Scout Marauder";
-        }
-
-      db_create_initial_ship (db, pid, ship_name, spawn_sid);
-      db_player_set_sector (pid, spawn_sid);
-      ctx->sector_id = spawn_sid;
-
-      int start_creds = cfg->startingcredits > 0 ? cfg->startingcredits : 1000;
-      const char *sql_creds = "UPDATE players SET credits = $1 WHERE id = $2;";
-
-
-      db_exec (db,
-               sql_creds,
-               (db_bind_t[]){ db_bind_i32 (start_creds), db_bind_i32 (pid) },
-               2,
-               &err);
-
-      db_player_set_alignment (db, pid, 1);
-
-      const char *sql_news_sub =
-        "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) "
-        "VALUES($1,'news.*','push',1) ON CONFLICT DO NOTHING;";
-
-
-      db_exec (db, sql_news_sub, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
-
-      if (ui_locale)
-        {
-          db_prefs_set_one (db, pid, "ui.locale", PT_STRING, ui_locale);
-        }
-      if (ui_timezone)
-        {
-          db_prefs_set_one (db, pid, "ui.timezone", PT_STRING, ui_timezone);
-        }
-
-      h_send_message_to_player (db, pid,
-                                0,
-                                "Welcome to TWClone!",
-                                get_welcome_message (pid));
-
-      char tok[65];
-
-
-      h_generate_hex_uuid (tok, sizeof (tok));
-      if (db_session_create (pid, tok, (long long)time (NULL) + 86400) != 0)
+      else
         {
           send_response_error (ctx,
                                root,
-                               ERR_PLANET_NOT_FOUND,
-                               "Database error (session)");
-          if (cfg)
-            {
-              free (cfg);
-            }
-          return 0;
+                               AUTH_ERR_DB,
+                               "Failed to create account");
         }
+      return 0;
+    }
 
-      ctx->player_id = pid;
-      json_t *resp_data = json_object ();
+  int pid = (int)player_id;
+
+  struct twconfig *cfg = config_load ();
 
 
-      json_object_set_new (resp_data, "player_id", json_integer (pid));
-      json_object_set_new (resp_data, "session_token", json_string (tok));
-      send_response_ok_take (ctx, root, "auth.session", &resp_data);
+  if (!cfg)
+    {
+      send_response_error (ctx,
+                           root,
+                           ERR_PLANET_NOT_FOUND,
+                           "Database error (config)");
+      return 0;
+    }
 
+  int new_acc_id = -1;
+
+
+  db_bank_create_account (db,
+                          "player",
+                          pid,
+                          cfg->startingcredits,
+                          &new_acc_id);
+
+  const char *sql_turns =
+    "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ($1, 750, EXTRACT(EPOCH FROM now()));";
+
+
+  db_exec (db, sql_turns, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
+
+  ctx->sector_id = spawn_sid;
+
+  int start_creds = cfg->startingcredits > 0 ? cfg->startingcredits : 1000;
+  const char *sql_creds =
+    "UPDATE players SET credits = $1 WHERE player_id = $2;";
+
+
+  db_exec (db,
+           sql_creds,
+           (db_bind_t[]){ db_bind_i32 (start_creds), db_bind_i32 (pid) },
+           2,
+           &err);
+
+  db_player_set_alignment (db, pid, 1);
+
+  const char *sql_news_sub =
+    "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) "
+    "VALUES($1,'news.*','push',1) ON CONFLICT DO NOTHING;";
+
+
+  db_exec (db, sql_news_sub, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
+
+  if (ui_locale)
+    {
+      db_prefs_set_one (db, pid, "ui.locale", PT_STRING, ui_locale);
+    }
+  if (ui_timezone)
+    {
+      db_prefs_set_one (db, pid, "ui.timezone", PT_STRING, ui_timezone);
+    }
+
+  h_send_message_to_player (db, pid,
+                            0,
+                            "Welcome to TWClone!",
+                            get_welcome_message (pid));
+
+  char tok[65];
+
+
+  h_generate_hex_uuid (tok, sizeof (tok));
+  if (db_session_create (pid, tok, (long long)time (NULL) + 86400) != 0)
+    {
+      send_response_error (ctx,
+                           root,
+                           ERR_PLANET_NOT_FOUND,
+                           "Database error (session)");
       if (cfg)
         {
           free (cfg);
         }
+      return 0;
     }
-  else
+
+  ctx->player_id = pid;
+  json_t *resp_data = json_object ();
+
+
+  json_object_set_new (resp_data, "player_id", json_integer (pid));
+  json_object_set_new (resp_data, "session_token", json_string (tok));
+  send_response_ok_take (ctx, root, "auth.session", &resp_data);
+
+  if (cfg)
     {
-      send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NAME_TAKEN,
-                                   "Username already exists",
-                                   NULL);
+      free (cfg);
     }
   return 0;
 }
@@ -826,6 +844,11 @@ get_welcome_message (int pid)
 int
 auth_player_get_type (int player_id)
 {
-  return 0;   // Stub
+  db_t *db = game_db_get_handle ();
+  if (player_is_sysop (db, player_id))
+    {
+      return PLAYER_TYPE_SYSOP;
+    }
+  return PLAYER_TYPE_PLAYER;
 }
 

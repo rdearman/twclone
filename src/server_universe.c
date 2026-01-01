@@ -51,7 +51,7 @@ no_zero_ship (db_t *db, int set_sector, int ship_id)
 
   if (set_sector > 0 && ship_id > 0)
     {
-      const char *sql = "UPDATE ships SET sector = $1 WHERE id = $2;";
+      const char *sql = "UPDATE ships SET sector_id = $1 WHERE ship_id = $2;";
 
 
       if (!db_exec (db, sql,
@@ -63,9 +63,9 @@ no_zero_ship (db_t *db, int set_sector, int ship_id)
       return 0;
     }
   const char *sql_mass = (db_backend (db) == DB_BACKEND_POSTGRES) ?
-                         "UPDATE ships SET sector = floor(random() * 90) + 11 WHERE sector = 0;"
+                         "UPDATE ships SET sector_id = floor(random() * 90) + 11 WHERE sector_id = 0;"
   :
-                         "UPDATE ships SET sector = ABS(RANDOM() % 90) + 11 WHERE sector = 0;";
+                         "UPDATE ships SET sector_id = ABS(RANDOM() % 90) + 11 WHERE sector_id = 0;";
 
 
   if (!db_exec (db, sql_mass, NULL, 0, &err))
@@ -200,7 +200,92 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 void
 cmd_sector_scan_density (void *ctx_in, json_t *root)
 {
-  (void)ctx_in; (void)root;
+  client_ctx_t *ctx = (client_ctx_t *)ctx_in;
+  
+  /* Get target sector from context or request data */
+  int target_sector = ctx->sector_id;
+  json_t *jdata = json_object_get(root, "data");
+  json_t *jsec = (jdata && json_is_object(jdata)) ? 
+                 json_object_get(jdata, "sector_id") : NULL;
+  if (jsec && json_is_integer(jsec))
+    target_sector = (int)json_integer_value(jsec);
+  
+  if (target_sector <= 0)
+    target_sector = ctx->sector_id;
+  
+  db_t *db = game_db_get_handle();
+  if (!db)
+    {
+      send_response_error(ctx, root, ERR_DB, "Database connection failed");
+      return;
+    }
+  
+  db_error_t err;
+  db_res_t *res = NULL;
+  json_t *payload = json_object();
+  json_t *sectors = json_array();
+  
+  /* Build sector list: current + adjacent */
+  const char *sql_sectors = 
+    "WITH sector_list AS ("
+    "  SELECT $1::int as sector_id "
+    "  UNION "
+    "  SELECT to_sector FROM sector_warps WHERE from_sector = $1 "
+    ") "
+    "SELECT DISTINCT sector_id FROM sector_list ORDER BY sector_id;";
+  
+  if (!db_query(db, sql_sectors, (db_bind_t[]){db_bind_i32(target_sector)}, 1, &res, &err))
+    {
+      send_response_error(ctx, root, ERR_DB, "Failed to get sector list");
+      json_decref(payload);
+      json_decref(sectors);
+      return;
+    }
+  
+  /* For each sector, calculate total density */
+  while (db_res_step(res, &err))
+    {
+      int sector_id = (int)db_res_col_i64(res, 0, &err);
+      
+      /* Calculate density for this sector:
+         Fighters: 1 per
+         Mines: 1 per
+         Beacons: 1
+         Ships: 10 per
+         Planets: 100 per
+      */
+      const char *density_sql = 
+        "SELECT "
+        "  COALESCE((SELECT fighters FROM sector_assets WHERE sector_id = $1), 0) + "
+        "  COALESCE((SELECT mines FROM sector_assets WHERE sector_id = $1), 0) + "
+        "  CASE WHEN EXISTS(SELECT 1 FROM sectors WHERE sector_id = $1 AND beacon IS NOT NULL) THEN 1 ELSE 0 END + "
+        "  (SELECT COALESCE(COUNT(*), 0) * 10 FROM ships WHERE sector_id = $1) + "
+        "  (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = $1) "
+        "as total_density;";
+      
+      db_res_t *density_res = NULL;
+      if (db_query(db, density_sql, (db_bind_t[]){db_bind_i32(sector_id)}, 1, &density_res, &err))
+        {
+          int density = 0;
+          if (db_res_step(density_res, &err))
+            {
+              density = (int)db_res_col_i64(density_res, 0, &err);
+            }
+          db_res_finalize(density_res);
+          
+          /* Only include sectors with non-zero density */
+          if (density > 0)
+            {
+              json_array_append_new(sectors, json_integer(sector_id));
+              json_array_append_new(sectors, json_integer(density));
+            }
+        }
+    }
+  db_res_finalize(res);
+  
+  json_object_set_new(payload, "sectors", sectors);
+  
+  send_response_ok_take(ctx, root, "sector.density.scan", &payload);
 }
 
 
@@ -364,7 +449,8 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
 
-  if (!db_query (db, "SELECT MAX(id) FROM sectors;", NULL, 0, &res, &err))
+  if (!db_query (db, "SELECT MAX(sector_id) FROM sectors;", NULL, 0, &res,
+                 &err))
     {
       send_response_error (ctx, root, ERR_DB, "Failed to query universe size");
       return 0;
@@ -595,7 +681,7 @@ attach_sector_asset_counts (db_t *db, int sid, json_t *out)
   int ftrs = 0, armid = 0, limpet = 0;
   db_res_t *res = NULL; db_error_t err;
   const char *sql =
-    "SELECT asset_type, SUM(quantity) FROM sector_assets WHERE sector = $1 GROUP BY asset_type;";
+    "SELECT asset_type, SUM(quantity) FROM sector_assets WHERE sector_id = $1 GROUP BY asset_type;";
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       while (db_res_step (res, &err))

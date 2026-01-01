@@ -36,9 +36,6 @@
 #endif
 
 
-
-
-
 int
 cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
 {
@@ -48,10 +45,6 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
                        "Not implemented: cmd_combat_attack_planet");
   return 0;
 }
-
-
-
-
 
 
 // Helper to check if a commodity is illegal
@@ -139,7 +132,7 @@ h_planet_check_trade_legality (db_t *db,
   int sector_id = 0;
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql = "SELECT sector FROM planets WHERE id = $1";
+  const char *sql = "SELECT sector_id FROM planets WHERE planet_id = $1";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &res, &err))
@@ -227,7 +220,7 @@ h_get_planet_owner_info (db_t *db, int pid, planet_t *p)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT id, owner_id, owner_type FROM planets WHERE id = $1;";
+    "SELECT planet_id, owner_id, owner_type FROM planets WHERE planet_id = $1;";
   int rc = ERR_NOT_FOUND;
 
 
@@ -360,7 +353,7 @@ cmd_planet_rename (client_ctx_t *ctx, json_t *root)
 
 
   if (!db_exec (db,
-                "UPDATE planets SET name = $1 WHERE id = $2;",
+                "UPDATE planets SET name = $1 WHERE planet_id = $2;",
                 (db_bind_t[]){ db_bind_text (new_name),
                                db_bind_i32 (planet_id) },
                 2,
@@ -435,7 +428,7 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT sector, owner_id, owner_type FROM planets WHERE id = $1;";
+    "SELECT sector_id, owner_id, owner_type FROM planets WHERE planet_id = $1;";
   int planet_sector = 0;
   int owner_id = 0;
   char *owner_type = NULL;
@@ -706,8 +699,9 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
   db_error_t err;
   const char *sql_check = (strcmp (target_type,
                                    "player") ==
-                           0) ? "SELECT id FROM players WHERE id=$1" :
-                          "SELECT id FROM corporations WHERE id=$1";
+                           0) ?
+                          "SELECT player_id FROM players WHERE player_id=$1" :
+                          "SELECT corporation_id FROM corporations WHERE corporation_id=$1";
 
 
   if (!db_query (db,
@@ -730,7 +724,7 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
   db_res_finalize (res);
 
   if (!db_exec (db,
-                "UPDATE planets SET owner_id = $1, owner_type = $2 WHERE id = $3;",
+                "UPDATE planets SET owner_id = $1, owner_type = $2 WHERE planet_id = $3;",
                 (db_bind_t[]){ db_bind_i32 (target_id),
                                db_bind_text (target_type),
                                db_bind_i32 (planet_id) },
@@ -1277,7 +1271,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   int current_count = 0;
 
 
-  if (db_query (db, "SELECT COUNT(*) FROM planets WHERE sector = $1;",
+  if (db_query (db, "SELECT COUNT(*) FROM planets WHERE sector_id = $1;",
                 (db_bind_t[]){ db_bind_i32 (target_sector_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1332,7 +1326,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   int torps = 0;
 
 
-  if (db_query (db, "SELECT genesis FROM ships WHERE id = $1;",
+  if (db_query (db, "SELECT genesis FROM ships WHERE ship_id = $1;",
                 (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1356,7 +1350,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
 
 
   if (db_query (db,
-                "SELECT code, genesis_weight FROM planettypes ORDER BY id;",
+                "SELECT code, genesis_weight FROM planettypes ORDER BY planettypes_id;",
                 NULL,
                 0,
                 &res,
@@ -1407,7 +1401,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
 
 
   if (db_query (db,
-                "SELECT id FROM planettypes WHERE code = $1;",
+                "SELECT planettypes_id FROM planettypes WHERE code = $1;",
                 (db_bind_t[]){ db_bind_text (planet_class_str) },
                 1,
                 &res,
@@ -1429,8 +1423,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
 
   const char *sql_ins =
-    "INSERT INTO planets (sector, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1);";
+    "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1) RETURNING planet_id;";
   db_bind_t p_ins[] = {
     db_bind_i32 (target_sector_id), db_bind_text (planet_name),
     db_bind_i32 (owner_id),
@@ -1450,7 +1444,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
 
   db_exec (db,
-           "UPDATE ships SET genesis = genesis - 1 WHERE id = $1 AND genesis >= 1;",
+           "UPDATE ships SET genesis = genesis - 1 WHERE ship_id = $1 AND genesis >= 1;",
            (db_bind_t[]){ db_bind_i32 (ship_id) },
            1,
            &err);
@@ -1459,7 +1453,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   if (navhaz_delta != 0)
     {
       db_exec (db,
-               "UPDATE sectors SET navhaz = GREATEST(0, COALESCE(navhaz, 0) + $1) WHERE id = $2;",
+               "UPDATE sectors SET navhaz = GREATEST(0, COALESCE(navhaz, 0) + $1) WHERE sector_id = $2;",
                (db_bind_t[]){ db_bind_i32 (navhaz_delta),
                               db_bind_i32 (target_sector_id) },
                2,
@@ -1859,7 +1853,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 
 
   if (db_query (db,
-                "SELECT id FROM commodities WHERE code = $1;",
+                "SELECT commodities_id FROM commodities WHERE code = $1;",
                 (db_bind_t[]){ db_bind_text (commodity_code) },
                 1,
                 &res,
@@ -2260,7 +2254,7 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  if (!db_exec (db, "UPDATE planets SET sector=$1 WHERE id=$2",
+  if (!db_exec (db, "UPDATE planets SET sector_id=$1 WHERE planet_id=$2",
                 (db_bind_t[]){ db_bind_i32 (to_sector_id),
                                db_bind_i32 (planet_id) }, 2, &err))
     {
@@ -2309,9 +2303,9 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
   const char *sql_info =
     "SELECT es.quantity, pt.maxore, pt.maxorganics, pt.maxequipment "
     "FROM planets p "
-    "JOIN planettypes pt ON p.type = pt.id "
-    "LEFT JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = $2 "
-    "WHERE p.id = $1;";
+    "JOIN planettypes pt ON p.type = pt.planettypes_id "
+    "LEFT JOIN entity_stock es ON p.planet_id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = $2 "
+    "WHERE p.planet_id = $1;";
 
 
   if (!db_query (db,

@@ -88,25 +88,32 @@ cmd_bulk_execute (client_ctx_t *ctx, json_t *root)
 
       if (!cmd_obj || !json_is_object (cmd_obj))
         {
+          json_decref (ctx->captured_envelopes);
+          ctx->captured_envelopes = NULL;
+          ctx->captured_envelopes_valid = 0;
           send_response_error (ctx,
                                root,
                                ERR_BAD_REQUEST,
                                "Malformed command object in bulk request.");
-          continue;
+          return 0;
         }
 
       // We must pass a fresh root object to server_dispatch_command as it may be decref'd
       cmd_obj_copy = json_deep_copy (cmd_obj);
       if (!cmd_obj_copy)
         {
+          json_decref (ctx->captured_envelopes);
+          ctx->captured_envelopes = NULL;
+          ctx->captured_envelopes_valid = 0;
           send_response_error (ctx,
                                root,
                                1500,
                                "Memory allocation error for deep copy of command.");
-          continue;
+          return 0;
         }
 
       server_dispatch_command (ctx, cmd_obj_copy);      // server_dispatch_command will handle decref of cmd_obj_copy if it passes it along to handlers
+      json_decref (cmd_obj_copy);
 
       // If server_dispatch_command results in an error but does not send response (e.g., cmd not found)
       // then we should make sure something is captured.
@@ -129,11 +136,13 @@ cmd_bulk_execute (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_object_set_new (response_data, "envelopes", ctx->captured_envelopes);    // steals ref
+
+  // Disable capturing BEFORE sending the final bulk response
+  ctx->captured_envelopes = NULL;
+  ctx->captured_envelopes_valid = 0;
+
   send_response_ok_take (ctx, root, "bulk.execute", &response_data);
 
-  // Cleanup
-  ctx->captured_envelopes = NULL;       // Ref stolen by response_data, so set to NULL.
-  ctx->captured_envelopes_valid = 0;
   return 0;
 }
 

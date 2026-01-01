@@ -14,28 +14,8 @@
 
 
 
-# -*- makefile -*-
-# $Id: Makefile.am,v 1.5 2004/01/21 04:00:53 eryndil Exp $
-# Copyright (C) 2002, Nathan Paul Simons (npsimons@hardcorehackers.com)
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License for published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
-#
-# Alternatively, the GPL can be found at
-# http://www.gnu.org/copyleft/gpl.html
-
-# AM_CFLAGS = -Wall -Wextra -Werror -I../src
+# AM_CFLAGS = -Wall -Wextra
+# AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG -ljansson -lpq
 
 
 am__is_gnu_make = { \
@@ -257,7 +237,7 @@ AUTOMAKE = ${SHELL} '/home/rick/twdbfork/missing' automake-1.16
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -I/usr/include/postgresql
+CFLAGS = -g -O2
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -274,7 +254,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-12-24
+ISODATE = 2025-12-29
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -347,8 +327,19 @@ top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
 
-# AM_CFLAGS = -Wall -Wextra
-AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src -DDB_BACKEND_PG -ljansson -lpq
+# 1. Define Sanitizer Flags
+SANITIZE_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g
+
+# 2. Add the PostgreSQL include path explicitly
+# Replace /usr/include/postgresql with the result of 'pg_config --includedir' if different
+PG_INC = -I/usr/include/postgresql
+
+# 3. Update AM_CFLAGS
+# added $(PG_INC) here
+AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+
+# 4. Linker flags
+AM_LDFLAGS = $(SANITIZE_FLAGS)
 server_LDADD = -ljansson -lcrypto -lpthread -lm -lpq
 AUTOMAKE_OPTIONS = subdir-objects
 

@@ -14,7 +14,7 @@ int cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root);
 int cmd_user_create (client_ctx_t *ctx, json_t *root);
 
 int play_login (const char *user, const char *pass, int *pid);
-int user_create (db_t *db, const char *user, const char *pass, int *pid);
+int user_create (db_t *db, const char *user, const char *pass, const char *ship_name, int *pid);
 
 int cmd_sys_cluster_init (client_ctx_t *ctx, json_t *root);
 int cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root);

@@ -13,7 +13,14 @@
     {
       "name": "Setup: Create Planet",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR REPLACE INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (700, 1, 'MyWorld', @planet_gov_player_id, 'player', @planet_gov_player_id, strftime('%s','now')); UPDATE players SET sector=1 WHERE id=@planet_gov_player_id;" },
+      "data": { "sql": "INSERT INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (700, 1, 'MyWorld', @planet_gov_player_id, 'player', @planet_gov_player_id, now()) ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Move Gov User",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector=1 WHERE id=@planet_gov_player_id;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

@@ -529,10 +529,8 @@ main (void)
     }
   /* (Single engine) optionally close the listener now */
   /* close (s2s_listen_fd); s2s_listen_fd = -1; */
-  /* 5) Park conn and start S2S control thread AFTER handshake */
+  /* 5) Park conn - server_s2s_start already started the thread */
   g_s2s_conn = conn;
-  g_s2s_run = 1;
-  pthread_create (&g_s2s_thr, NULL, s2s_control_thread, NULL);
   /* 6) Run the server loop (unchanged behavior/logs) */
   LOGW ("Server loop starting...\n");
   //  LOGE( "Server loop starting...\n");

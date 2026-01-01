@@ -2481,10 +2481,21 @@ def resolve_value(val: Any, ctx: Context) -> Any:
             typ, msg = m.group(1), (m.group(2) or "Enter value")
             raw = input(f"{msg}: ").strip()
             try:
-                return int(raw) if typ == "int" else (float(raw) if typ == "float" else raw)
+                val = int(raw) if typ == "int" else (float(raw) if typ == "float" else raw)
             except Exception:
                 print(f"Invalid {typ}.")
                 return None
+            # Convenience: if prompting for commodity, accept short codes (ORE, ORG, EQU)
+            if typ == 'str' and 'commodity' in (msg or '').lower():
+                if isinstance(val, str):
+                    v = val.strip().lower()
+                    if v in ('ore', 'o'):
+                        return 'ore'
+                    if v in ('org', 'orgs', 'organ', 'organics', 'organi'):
+                        return 'organics'
+                    if v in ('equ', 'equip', 'equipment', 'e'):
+                        return 'equipment'
+            return val
         c = CTX_RE.match(val)
         if c:
             path = c.group(1).split(".")

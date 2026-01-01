@@ -12,10 +12,6 @@
 #include "sqlite/db_sqlite.h" // Include for SQLite backend
 #endif
 
-// The actual definitions for struct db_s and struct db_res_s are in db_int.h
-// These are not needed here again.
-
-
 
 bool
 db_exec_insert_id(db_t *db,

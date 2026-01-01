@@ -232,7 +232,7 @@ AUTOMAKE = ${SHELL} '/home/rick/twdbfork/missing' automake-1.16
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -I/usr/include/postgresql
+CFLAGS = -g -O2
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -249,7 +249,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2025-12-24
+ISODATE = 2025-12-29
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 

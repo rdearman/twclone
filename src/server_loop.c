@@ -63,7 +63,6 @@
 #include "server_envelope.h"
 
 
-
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
 #endif
@@ -147,7 +146,6 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
 }
 
 
-
 /* --------------------------------------------------------------------------
    Command Registry & Dispatch
    -------------------------------------------------------------------------- */
@@ -215,7 +213,7 @@ w_auth_login (client_ctx_t *ctx, json_t *root)
 }
 
 
-/* WRAPPER FIX: Pass the DB handle to autopilot start */
+/* WRAPPER: Pass the DB handle to autopilot start */
 static int
 w_move_autopilot_start (client_ctx_t *ctx, json_t *root)
 {
@@ -624,20 +622,20 @@ static const command_entry_t k_command_registry[] = {
    "Buy an underground password from the grimy trader", schema_placeholder, 0},
 
   /* Trade */
-  {"trade.accept", cmd_trade_accept, "Accept a private trade offer",
+  {"trade.accept", cmd_trade_accept, "Accept a trade offer",
    schema_trade_accept, 0},
   {"trade.buy", cmd_trade_buy, "Buy commodity from port", schema_trade_buy, 0},
-  {"trade.cancel", cmd_trade_cancel, "Cancel a pending trade offer",
+  {"trade.cancel", cmd_trade_cancel, "Cancel a trade offer",
    schema_trade_cancel, 0},
   {"trade.history", cmd_trade_history, "View recent trade transactions",
    schema_trade_history, 0},
   {"trade.jettison", cmd_trade_jettison, "Dump cargo into space",
    schema_trade_jettison, 0},
-  {"trade.offer", cmd_trade_offer,
-   "Create a private player-to-player trade offer", schema_trade_offer, 0},
+  {"trade.offer", cmd_trade_offer, "Create a trade offer to another player",
+   schema_trade_offer, 0},
   {"trade.port_info", cmd_trade_port_info, "Port prices/stock in sector",
    schema_trade_port_info, 0},
-  {"trade.quote", cmd_trade_quote, "Get a quote for a trade action",
+  {"trade.quote", cmd_trade_quote, "Get a price quote from a port",
    schema_trade_quote, 0},
   {"trade.sell", cmd_trade_sell, "Sell commodity to port", schema_trade_sell,
    0},

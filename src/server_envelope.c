@@ -17,17 +17,26 @@
 #include "common.h"             /* now_iso8601, strip_ansi */
 int toss;
 
+
 static inline int
 ctx_ptr_sane (const client_ctx_t *ctx)
 {
   if (!ctx)
-    return 0;
+    {
+      return 0;
+    }
   uintptr_t p = (uintptr_t) ctx;
+
+
   /* reject small/null pointers and kernel-space addresses */
   if (p < 0x10000UL)
-    return 0;
+    {
+      return 0;
+    }
   if (p >= 0x00007ffffffff000UL)
-    return 0;
+    {
+      return 0;
+    }
   return 1;
 }
 
@@ -57,7 +66,8 @@ send_response_ok_take (client_ctx_t *ctx,
     {
       *pdata = NULL;
     }
-  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -78,11 +88,11 @@ send_response_ok_take (client_ctx_t *ctx,
       return;
     }
 
-  /* send_enveloped_ok must follow the same rule: it STEALS 'data' if non-NULL */
+  /* send_enveloped_ok follows the same rule: it BORROWS 'data' */
   send_enveloped_ok (ctx->fd, req, type, data);
   if (data)
     {
-      json_decref (data); /* FIX: Manually fulfill the "steal" contract */
+      json_decref (data); /* Consume the 'taken' reference */
     }
 }
 
@@ -487,14 +497,7 @@ send_enveloped_ok (int fd, json_t *req, const char *type, json_t *data)
     {
       sanitize_json_strings (resp);
     }
-  char *s = json_dumps (resp, JSON_COMPACT);
-
-
-  if (s)
-    {
-      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
-      free (s);
-    }
+  send_all_json (fd, resp);
   json_decref (resp);
 }
 
@@ -534,14 +537,7 @@ send_enveloped_error (int fd,
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
   sanitize_json_strings (resp);
-  char *s = json_dumps (resp, JSON_COMPACT);
-
-
-  if (s)
-    {
-      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
-      free (s);
-    }
+  send_all_json (fd, resp);
   json_decref (resp);
 }
 
@@ -587,14 +583,7 @@ send_enveloped_refused (int fd,
   json_object_set_new (resp, "data", json_null ());
   json_object_set_new (resp, "meta", make_default_meta ());
   sanitize_json_strings (resp);
-  char *s = json_dumps (resp, JSON_COMPACT);
-
-
-  if (s)
-    {
-      send (fd, s, strlen (s), MSG_NOSIGNAL); send (fd, "\n", 1, MSG_NOSIGNAL);
-      free (s);
-    }
+  send_all_json (fd, resp);
   json_decref (resp);
 }
 
@@ -603,7 +592,8 @@ void
 send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
                   json_t *data)
 {
-  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -651,7 +641,8 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
 void
 send_response_error (client_ctx_t *ctx, json_t *req, int code, const char *msg)
 {
-  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 
@@ -700,7 +691,8 @@ send_response_refused (client_ctx_t *ctx,
                        const char *msg,
                        json_t *data_opt)
 {
-  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid && ctx->captured_envelopes)
+  if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
+      ctx->captured_envelopes)
     {
       json_t *resp = json_object ();
 

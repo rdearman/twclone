@@ -23,16 +23,16 @@ s2s_keyring_generate_key (db_t *db,
                           const char *key_b64_in)
 {
   /* Postgres uses $1, $2 syntax.
-     We replace sqlite's strftime('%s') with a bound time(NULL) integer
-     assuming 'created_ts' is a BIGINT/INTEGER column. */
+     'active' is boolean, 'created_ts' is timestamptz */
   const char *SQL_INSERT =
     "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
-    "VALUES ($1, $2, 1, $3, 1);";
+    "VALUES ($1, $2, true, to_timestamp($3), 0);";
 
+  time_t now = time (NULL);
   db_bind_t params[] = {
     db_bind_text (key_id_in),
     db_bind_text (key_b64_in),
-    db_bind_i64 ((long long)time (NULL))
+    db_bind_i64 ((long long)now)
   };
 
   db_error_t err;

@@ -77,7 +77,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
     {                           // Unread
       const char *sql =
         "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE id = $1) "
+        "FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE player_id = $1) "
         "ORDER BY published_ts DESC LIMIT 100;";
 
 
@@ -203,9 +203,9 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 
   // 4. Update read status (Auto-Mark Read behavior requested by audit)
   const char *up_pg =
-    "UPDATE players SET last_news_read_timestamp = EXTRACT(EPOCH FROM now()) WHERE id = $1;";
+    "UPDATE players SET last_news_read_timestamp = to_timestamp(EXTRACT(EPOCH FROM now())) WHERE player_id = $1;";
   const char *up_lite =
-    "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE id = $1;";
+    "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE player_id = $1;";
 
 
   db_exec (db, (db_backend (db) == DB_BACKEND_POSTGRES) ? up_pg : up_lite,
@@ -248,9 +248,9 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
 
   db_error_t err;
   const char *sql_pg =
-    "UPDATE players SET last_news_read_timestamp = EXTRACT(EPOCH FROM now()) WHERE id = $1;";
+    "UPDATE players SET last_news_read_timestamp = to_timestamp(EXTRACT(EPOCH FROM now())) WHERE player_id = $1;";
   const char *sql_lite =
-    "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE id = $1;";
+    "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE player_id = $1;";
   const char *sql = (db_backend (db) ==
                      DB_BACKEND_POSTGRES) ? sql_pg : sql_lite;
 
@@ -290,7 +290,7 @@ news_post (const char *body, const char *cat, int aid)
     }
   db_error_t err;
   const char *sql_pg =
-    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (EXTRACT(EPOCH FROM now()), $1, $2, $3);";
+    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (to_timestamp(EXTRACT(EPOCH FROM now())), $1, $2, $3);";
   const char *sql_lite =
     "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (strftime('%s','now'), $1, $2, $3);";
   const char *sql = (db_backend (db) ==

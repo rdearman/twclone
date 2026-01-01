@@ -146,7 +146,7 @@ db_is_npc_player (db_t *db, int player_id)
     }
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql = "SELECT is_npc FROM players WHERE id = $1;";
+  const char *sql = "SELECT is_npc FROM players WHERE player_id = $1;";
   int is_npc = 0;
 
 
@@ -357,7 +357,7 @@ db_player_update_commission (db_t *db, int player_id)
       db_res_t *res = NULL;
       int align = 0; long long exp = 0;
       const char *sql_sel =
-        "SELECT alignment, experience FROM players WHERE id = $1 FOR UPDATE;";
+        "SELECT alignment, experience FROM players WHERE player_id = $1 FOR UPDATE;";
       db_bind_t p_sel[] = { db_bind_i32 (player_id) };
 
 
@@ -398,7 +398,8 @@ db_player_update_commission (db_t *db, int player_id)
           goto rollback;
         }
 
-      const char *sql_upd = "UPDATE players SET commission = $1 WHERE id = $2;";
+      const char *sql_upd =
+        "UPDATE players SET commission_id = $1 WHERE player_id = $2;";
       db_bind_t p_upd[] = { db_bind_i32 (new_comm_id),
                             db_bind_i32 (player_id) };
 
@@ -438,7 +439,7 @@ db_commission_for_player (db_t *db,
     }
   db_res_t *res = NULL; db_error_t err;
   const char *sql =
-    "SELECT id, description, is_evil FROM commission WHERE is_evil = $1 AND min_exp <= $2 ORDER BY min_exp DESC LIMIT 1;";
+    "SELECT commission_id, description, is_evil FROM commission WHERE is_evil = $1 AND min_exp <= $2 ORDER BY min_exp DESC LIMIT 1;";
   db_bind_t params[] = { db_bind_bool (is_evil_track ? true : false),
                          db_bind_i64 (xp) };
 
@@ -467,7 +468,7 @@ db_commission_for_player (db_t *db,
 
   // Fallback to lowest rank
   sql =
-    "SELECT id, description, is_evil FROM commission WHERE is_evil = $1 ORDER BY min_exp ASC LIMIT 1;";
+    "SELECT commission_id, description, is_evil FROM commission WHERE is_evil = $1 ORDER BY min_exp ASC LIMIT 1;";
   db_bind_t p_fall[] = { db_bind_bool (is_evil_track ? true : false) };
 
 
@@ -512,7 +513,7 @@ db_alignment_band_for_value (db_t *db,
     }
   db_res_t *res = NULL; db_error_t err;
   const char *sql =
-    "SELECT id, code, name, is_good, is_evil, can_buy_iss, can_rob_ports FROM alignment_band WHERE $1 BETWEEN min_align AND max_align LIMIT 1;";
+    "SELECT alignment_band_id, code, name, is_good, is_evil, can_buy_iss, can_rob_ports FROM alignment_band WHERE $1 BETWEEN min_align AND max_align LIMIT 1;";
   db_bind_t params[] = { db_bind_i32 (align) };
 
 
@@ -685,7 +686,7 @@ db_commodity_create_order (db_t *db,
   db_error_t err;
   const char *sql =
     "INSERT INTO commodity_orders (commodity_id, actor_type, actor_id, side, quantity, price) "
-    "SELECT id, $2, $3, $4, $5, $6 FROM commodities WHERE code = $1;";
+    "SELECT commodities_id, $2, $3, $4, $5, $6 FROM commodities WHERE code = $1;";
   db_bind_t params[] = {
     db_bind_text (code), db_bind_text (actor_type), db_bind_i32 (actor_id),
     db_bind_text (side), db_bind_i32 (qty), db_bind_i32 (price)
@@ -750,8 +751,8 @@ db_commodity_get_orders (db_t *db,
     }
   db_error_t err;
   const char *sql =
-    "SELECT co.id, co.actor_type, co.actor_id, c.code as commodity, co.side, co.quantity, co.price, co.status "
-    "FROM commodity_orders co JOIN commodities c ON co.commodity_id = c.id "
+    "SELECT co.commodity_orders_id, co.actor_type, co.actor_id, c.code as commodity, co.side, co.quantity, co.price, co.status "
+    "FROM commodity_orders co JOIN commodities c ON co.commodity_id = c.commodities_id "
     "WHERE c.code = $1 AND co.status = $2 ORDER BY co.ts DESC;";
   db_res_t *res = NULL; int rc = 0;
 
@@ -783,7 +784,7 @@ db_commodity_get_trades (db_t *db, const char *code, int limit, json_t **out)
   db_error_t err;
   const char *sql =
     "SELECT ct.id, c.code as commodity, ct.quantity, ct.price, ct.ts "
-    "FROM commodity_trades ct JOIN commodities c ON ct.commodity_id = c.id "
+    "FROM commodity_trades ct JOIN commodities c ON ct.commodity_id = c.commodities_id "
     "WHERE c.code = $1 ORDER BY ct.ts DESC LIMIT $2;";
   db_res_t *res = NULL; int rc = 0;
 
@@ -918,8 +919,8 @@ db_clear_player_active_ship (db_t *db, int player_id)
 
 
   /* Players table doesn't have active_ship_id in sqlite schema, but postgres schema has it?
-     Actually schema in 000_tables.sql has 'ship' column. */
-  if (!db_exec (db, "UPDATE players SET ship = NULL WHERE id = $1;",
+     Actually schema in 000_tables.sql has 'ship_id' column. */
+  if (!db_exec (db, "UPDATE players SET ship_id = NULL WHERE player_id = $1;",
                 (db_bind_t[]){db_bind_i32 (player_id)}, 1, &err))
     {
       return err.code;
@@ -941,7 +942,7 @@ db_increment_player_stat (db_t *db, int pid, const char *stat)
   /* Use double quotes for the identifier to be backend-neutral */
   snprintf (sql,
             sizeof (sql),
-            "UPDATE players SET \"%s\" = \"%s\" + 1 WHERE id = $1;",
+            "UPDATE players SET \"%s\" = \"%s\" + 1 WHERE player_id = $1;",
             stat,
             stat);
   db_error_t err;
@@ -967,7 +968,7 @@ db_get_player_xp (db_t *db, int pid)
   db_res_t *res = NULL; db_error_t err; int xp = 0;
 
 
-  if (db_query (db, "SELECT experience FROM players WHERE id = $1;",
+  if (db_query (db, "SELECT experience FROM players WHERE player_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -992,7 +993,7 @@ db_update_player_xp (db_t *db, int pid, int xp)
   db_error_t err;
 
 
-  if (!db_exec (db, "UPDATE players SET experience = $1 WHERE id = $2;",
+  if (!db_exec (db, "UPDATE players SET experience = $1 WHERE player_id = $2;",
                 (db_bind_t[]){db_bind_i32 (xp), db_bind_i32 (pid)}, 2, &err))
     {
       return err.code;
@@ -1011,7 +1012,7 @@ db_shiptype_has_escape_pod (db_t *db, int ship_id)
   db_res_t *res = NULL; db_error_t err; int tid = -1;
   /* Need to join shiptypes? Or assumes ship has type_id */
   const char *sql =
-    "SELECT st.id FROM ships s JOIN shiptypes st ON s.type_id = st.id WHERE s.id = $1 AND st.name LIKE '%Escape%';";
+    "SELECT st.shiptypes_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1 AND st.name LIKE '%Escape%';";
 
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
@@ -1203,7 +1204,7 @@ h_get_cluster_alignment (db_t *db, int cid, int *out_align)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT alignment FROM clusters WHERE id = $1;",
+  if (db_query (db, "SELECT alignment FROM clusters WHERE clusters_id = $1;",
                 (db_bind_t[]){db_bind_i32 (cid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1247,7 +1248,7 @@ db_get_shiptype_info (db_t *db, int tid, int *h, int *f, int *s)
 
 
   if (db_query (db,
-                "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE id = $1;",
+                "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE shiptypes_id = $1;",
                 (db_bind_t[]){db_bind_i32 (tid)},
                 1,
                 &res,
@@ -1345,7 +1346,7 @@ db_get_port_sector (db_t *db, int port_id)
   db_res_t *res = NULL; db_error_t err; int sid = 0;
 
 
-  if (db_query (db, "SELECT sector FROM ports WHERE id = $1;",
+  if (db_query (db, "SELECT sector_id FROM ports WHERE port_id = $1;",
                 (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1400,7 +1401,7 @@ db_player_get_alignment (db_t *db, int pid, int *align)
 
 
   if (db_query (db,
-                "SELECT alignment FROM players WHERE id = $1;",
+                "SELECT alignment FROM players WHERE player_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)},
                 1,
                 &res,
@@ -1612,7 +1613,7 @@ db_get_ship_name (db_t *db, int ship_id, char **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT name FROM ships WHERE id = $1;",
+  if (db_query (db, "SELECT name FROM ships WHERE ship_id = $1;",
                 (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1636,7 +1637,7 @@ db_get_port_name (db_t *db, int port_id, char **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT name FROM ports WHERE id = $1;",
+  if (db_query (db, "SELECT name FROM ports WHERE port_id = $1;",
                 (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1713,7 +1714,7 @@ db_get_port_id_by_sector (db_t *db, int sid)
   db_res_t *res = NULL; db_error_t err; int pid = 0;
 
 
-  if (db_query (db, "SELECT id FROM ports WHERE sector = $1;",
+  if (db_query (db, "SELECT port_id FROM ports WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1742,11 +1743,11 @@ db_get_sector_info (int sid,
   db_res_t *res = NULL; db_error_t err;
   // Using sector_ops view for aggregation
   const char *sql = "SELECT s.name, 1 as safe_zone, "
-                    "(SELECT COUNT(*) FROM ports WHERE sector=$1) as pc, "
-                    "(SELECT COUNT(*) FROM ships WHERE sector=$1) as sc, "
-                    "(SELECT COUNT(*) FROM planets WHERE sector=$1) as plc, "
+                    "(SELECT COUNT(*) FROM ports WHERE sector_id=$1) as pc, "
+                    "(SELECT COUNT(*) FROM ships WHERE sector_id=$1) as sc, "
+                    "(SELECT COUNT(*) FROM planets WHERE sector_id=$1) as plc, "
                     "s.beacon "
-                    "FROM sectors s WHERE s.id = $1;";
+                    "FROM sectors s WHERE s.sector_id = $1;";
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
@@ -1853,7 +1854,7 @@ db_path_exists (db_t *db, int from, int to)
   int max_id = 0;
 
 
-  if (db_query (db, "SELECT MAX(id) FROM sectors;", NULL, 0, &res, &err))
+  if (db_query (db, "SELECT MAX(sector_id) FROM sectors;", NULL, 0, &res, &err))
     {
       if (db_res_step (res, &err))
         {
@@ -1944,7 +1945,7 @@ db_apply_lock_policy_for_pilot (db_t *db, int ship_id, int pilot_id)
     {
       /* NPC piloted -> lock it */
       const char *sql =
-        "UPDATE ships SET flags = COALESCE(flags,0) | $1 WHERE id = $2;";
+        "UPDATE ships SET flags = COALESCE(flags,0) | $1 WHERE ship_id = $2;";
 
 
       if (!db_exec (db, sql,
@@ -1958,7 +1959,7 @@ db_apply_lock_policy_for_pilot (db_t *db, int ship_id, int pilot_id)
     {
       /* Not NPC piloted (or unpiloted) -> clear LOCK */
       const char *sql =
-        "UPDATE ships SET flags = COALESCE(flags,0) & ~$1 WHERE id = $2;";
+        "UPDATE ships SET flags = COALESCE(flags,0) & ~$1 WHERE ship_id = $2;";
 
 
       if (!db_exec (db, sql,
@@ -2012,7 +2013,7 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
 
   /* 0) Sector core: name, beacon, security */
   const char *sql_info =
-    "SELECT name, beacon, 1 as safe_zone, 0 as security_level FROM sectors WHERE id = $1;";
+    "SELECT name, beacon, 1 as safe_zone, 0 as security_level FROM sectors WHERE sector_id = $1;";
 
 
   if (db_query (db,
@@ -2097,9 +2098,9 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
   /* 2) Counts */
   const char *sql_counts =
     "SELECT "
-    "  (SELECT COUNT(*) FROM ports WHERE sector=$1) as pc, "
-    "  (SELECT COUNT(*) FROM ships WHERE sector=$1) as sc, "
-    "  (SELECT COUNT(*) FROM planets WHERE sector=$1) as plc;";
+    "  (SELECT COUNT(*) FROM ports WHERE sector_id=$1) as pc, "
+    "  (SELECT COUNT(*) FROM ships WHERE sector_id=$1) as sc, "
+    "  (SELECT COUNT(*) FROM planets WHERE sector_id=$1) as plc;";
 
 
   if (db_query (db,
@@ -2165,7 +2166,7 @@ db_sector_beacon_text (db_t *db, int sid, char **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT beacon FROM sectors WHERE id = $1;",
+  if (db_query (db, "SELECT beacon FROM sectors WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2189,7 +2190,7 @@ db_sector_set_beacon (db_t *db, int sid, const char *txt, int pid)
   db_error_t err;
 
 
-  if (!db_exec (db, "UPDATE sectors SET beacon = $1 WHERE id = $2;",
+  if (!db_exec (db, "UPDATE sectors SET beacon = $1 WHERE sector_id = $2;",
                 (db_bind_t[]){db_bind_text (txt), db_bind_i32 (sid)}, 2, &err))
     {
       return -1;
@@ -2208,7 +2209,7 @@ db_player_set_alignment (db_t *db, int pid, int align)
   db_error_t err;
 
 
-  if (!db_exec (db, "UPDATE players SET alignment = $1 WHERE id = $2;",
+  if (!db_exec (db, "UPDATE players SET alignment = $1 WHERE player_id = $2;",
                 (db_bind_t[]){db_bind_i32 (align), db_bind_i32 (pid)}, 2, &err))
     {
       return -1;
@@ -2234,7 +2235,7 @@ db_port_info_json (int port_id, json_t **out)
 
   /* 1) Details */
   const char *sql_det =
-    "SELECT id, name, type, sector FROM ports WHERE id = $1;";
+    "SELECT port_id, name, type, sector_id FROM ports WHERE port_id = $1;";
 
 
   if (db_query (db,
@@ -2331,7 +2332,7 @@ db_get_player_id_by_name (const char *nm)
       return 0;
     }
   db_res_t *res = NULL; db_error_t err; int pid = 0;
-  if (db_query (db, "SELECT id FROM players WHERE name = $1;",
+  if (db_query (db, "SELECT player_id FROM players WHERE name = $1;",
                 (db_bind_t[]){db_bind_text (nm)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2356,7 +2357,7 @@ db_player_name (db_t *db, int64_t pid, char **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT name FROM players WHERE id = $1;",
+  if (db_query (db, "SELECT name FROM players WHERE player_id = $1;",
                 (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2381,7 +2382,7 @@ db_is_black_market_port (db_t *db, int pid)
 
 
   if (db_query (db,
-                "SELECT 1 FROM ports WHERE id = $1 AND type = 10 LIMIT 1;",
+                "SELECT 1 FROM ports WHERE port_id = $1 AND type = 10 LIMIT 1;",
                 (db_bind_t[]){db_bind_i32 (pid)},
                 1,
                 &res,
@@ -2437,7 +2438,7 @@ db_sector_basic_json (db_t *db, int sid, json_t **out)
 
 
   if (db_query (db,
-                "SELECT id, name FROM sectors WHERE id = $1;",
+                "SELECT sector_id, name FROM sectors WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)},
                 1,
                 &res,
@@ -2488,8 +2489,12 @@ db_ports_at_sector_json (db_t *db, int sid, json_t **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT id, name, type FROM ports WHERE sector = $1;",
-                (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
+  if (db_query (db,
+                "SELECT port_id, name, type FROM ports WHERE sector_id = $1;",
+                (db_bind_t[]){db_bind_i32 (sid)},
+                1,
+                &res,
+                &err))
     {
       int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
 
@@ -2510,7 +2515,7 @@ db_ships_at_sector_json (db_t *db, int pid, int sid, json_t **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT id, name FROM ships WHERE sector = $1;",
+  if (db_query (db, "SELECT ship_id, name FROM ships WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
@@ -2532,7 +2537,7 @@ db_planets_at_sector_json (db_t *db, int sid, json_t **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT id, name FROM planets WHERE sector = $1;",
+  if (db_query (db, "SELECT planet_id, name FROM planets WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
@@ -2554,7 +2559,7 @@ db_players_at_sector_json (db_t *db, int sid, json_t **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT id, name FROM players WHERE sector = $1;",
+  if (db_query (db, "SELECT player_id, name FROM players WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
@@ -2576,7 +2581,7 @@ db_fighters_at_sector_json (db_t *db, int sid, json_t **out)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT id, player as player_id, quantity FROM sector_assets WHERE sector = $1 AND asset_type = 2;";
+    "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = $1 AND asset_type = 2;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
@@ -2601,7 +2606,7 @@ db_mines_at_sector_json (db_t *db, int sid, json_t **out)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT id, player as player_id, quantity FROM sector_assets WHERE sector = $1 AND asset_type = 3;";
+    "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = $1 AND asset_type = 3;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
@@ -2626,7 +2631,7 @@ db_beacons_at_sector_json (db_t *db, int sid, json_t **out)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT id, player as player_id, quantity FROM sector_assets WHERE sector = $1 AND asset_type = 1;";
+    "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = $1 AND asset_type = 1;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
@@ -2651,7 +2656,7 @@ db_update_player_sector (db_t *db, int pid, int sid)
   db_error_t err;
 
 
-  if (!db_exec (db, "UPDATE players SET sector = $1 WHERE id = $2;",
+  if (!db_exec (db, "UPDATE players SET sector_id = $1 WHERE player_id = $2;",
                 (db_bind_t[]){db_bind_i32 (sid), db_bind_i32 (pid)}, 2, &err))
     {
       return -1;
@@ -2668,7 +2673,7 @@ db_ship_flags_set (db_t *db, int ship_id, int flags)
       return ERR_DB_MISUSE;
     }
   db_error_t err;
-  const char *sql = "UPDATE ships SET flags = flags | $1 WHERE id = $2;";
+  const char *sql = "UPDATE ships SET flags = flags | $1 WHERE ship_id = $2;";
   db_bind_t params[] = { db_bind_i32 (flags), db_bind_i32 (ship_id) };
 
 
@@ -2688,7 +2693,7 @@ db_ship_flags_clear (db_t *db, int ship_id, int flags)
       return ERR_DB_MISUSE;
     }
   db_error_t err;
-  const char *sql = "UPDATE ships SET flags = flags & ~$1 WHERE id = $2;";
+  const char *sql = "UPDATE ships SET flags = flags & ~$1 WHERE ship_id = $2;";
   db_bind_t params[] = { db_bind_i32 (flags), db_bind_i32 (ship_id) };
 
 
@@ -2724,7 +2729,7 @@ db_get_port_details_json (db_t *db, int pid, json_t **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT * FROM ports WHERE id = $1;",
+  if (db_query (db, "SELECT * FROM ports WHERE port_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
@@ -2773,7 +2778,7 @@ db_planet_get_details_json (db_t *db, int pid, json_t **out)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT * FROM planets WHERE id = $1;",
+  if (db_query (db, "SELECT * FROM planets WHERE planet_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
@@ -2841,7 +2846,7 @@ db_player_get_sector (db_t *db, int pid, int *out_sector)
   db_res_t *res = NULL; db_error_t err;
 
 
-  if (db_query (db, "SELECT sector FROM players WHERE id = $1;",
+  if (db_query (db, "SELECT sector_id FROM players WHERE player_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2867,13 +2872,13 @@ db_ships_inspectable_at_sector_json (db_t *db,
     }
   db_res_t *res = NULL; db_error_t err;
   /* const char *sql = */
-  /*   "SELECT id, name FROM ships WHERE sector = $1 AND (cloaked IS NULL OR $2 = (SELECT player_id FROM ship_ownership WHERE ship_id = ships.id AND is_primary = TRUE));"; */
+  /*   "SELECT ship_id, name FROM ships WHERE sector_id = $1 AND (cloaked IS NULL OR $2 = (SELECT player_id FROM ship_ownership WHERE ship_id = ships.ship_id AND is_primary = TRUE));"; */
   const char *sql =
-    "SELECT id, name FROM ships "
-    "WHERE sector = $1 AND ( cloaked IS NULL "
+    "SELECT ship_id, name FROM ships "
+    "WHERE sector_id = $1 AND ( cloaked IS NULL "
     "        OR EXISTS ( SELECT 1 "
     "            FROM ship_ownership "
-    "            WHERE ship_id = ships.id "
+    "            WHERE ship_id = ships.ship_id "
     "              AND is_primary = TRUE "
     "              AND player_id = $2 )); ";
 
@@ -2932,7 +2937,7 @@ db_notice_list_unseen_for_player (db_t *db, int player_id)
     }
   db_res_t *res = NULL; db_error_t err;
   const char *sql =
-    "SELECT n.id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.id = r.notice_id AND r.player_id = $1 WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > EXTRACT(EPOCH FROM NOW()));";
+    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = $1 WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > EXTRACT(EPOCH FROM NOW()));";
 
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1, &res, &err))
@@ -2996,12 +3001,12 @@ db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
   db_error_t err;
   /* Rich scan query using sector_ops view logic or subqueries */
   const char *sql =
-    "SELECT s.id, s.name, 1 as safe_zone, "
-    "(SELECT COUNT(*) FROM ports WHERE sector=$1) as port_count, "
-    "(SELECT COUNT(*) FROM ships WHERE sector=$1) as ship_count, "
-    "(SELECT COUNT(*) FROM planets WHERE sector=$1) as planet_count, "
+    "SELECT s.sector_id, s.name, 1 as safe_zone, "
+    "(SELECT COUNT(*) FROM ports WHERE sector_id=$1) as port_count, "
+    "(SELECT COUNT(*) FROM ships WHERE sector_id=$1) as ship_count, "
+    "(SELECT COUNT(*) FROM planets WHERE sector_id=$1) as planet_count, "
     "s.beacon as beacon_text "
-    "FROM sectors s WHERE s.id = $1;";
+    "FROM sectors s WHERE s.sector_id = $1;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
@@ -3097,10 +3102,10 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
 
   /* 1. Check if ship is claimable (correct sector, no pilot) */
   const char *sql_check =
-    "SELECT s.id FROM ships s "
-    "LEFT JOIN players pil ON pil.ship = s.id "
-    "WHERE s.id=$1 AND s.sector=$2 "
-    "AND pil.id IS NULL;";
+    "SELECT s.ship_id FROM ships s "
+    "LEFT JOIN players pil ON pil.ship_id = s.ship_id "
+    "WHERE s.ship_id=$1 AND s.sector_id=$2 "
+    "AND pil.player_id IS NULL;";
 
 
   if (!db_query (db,
@@ -3122,7 +3127,7 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
 
   /* 2. Switch current pilot */
   if (!db_exec (db,
-                "UPDATE players SET ship = $1 WHERE id = $2;",
+                "UPDATE players SET ship_id = $1 WHERE player_id = $2;",
                 (db_bind_t[]){ db_bind_i32 (ship_id), db_bind_i32 (pid) },
                 2,
                 &err))
@@ -3151,21 +3156,21 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
 
   /* 4. Fetch snapshot for reply */
   const char *sql_fetch =
-    "SELECT s.id AS ship_id, "
-    "       COALESCE(NULLIF(s.name,''), st.name || ' #' || s.id) AS ship_name, "
-    "       st.id AS type_id, st.name AS type_name, "
-    "       s.sector AS sector_id, "
+    "SELECT s.ship_id AS ship_id, "
+    "       COALESCE(NULLIF(s.name,''), st.name || ' #' || s.ship_id) AS ship_name, "
+    "       st.shiptypes_id AS type_id, st.name AS type_name, "
+    "       s.sector_id AS sector_id, "
     "       own.player_id AS owner_id, "
-    "       COALESCE( (SELECT name FROM players WHERE id=own.player_id), 'derelict') AS owner_name, "
+    "       COALESCE( (SELECT name FROM players WHERE player_id=own.player_id), 'derelict') AS owner_name, "
     "       0 AS is_derelict, "
     "       s.fighters, s.shields, "
     "       s.holds AS holds_total, (s.holds - s.holds) AS holds_free, "
     "       s.ore, s.organics, s.equipment, s.colonists, "
     "       COALESCE(s.flags, 0) AS perms "
     "FROM ships s "
-    "LEFT JOIN shiptypes st       ON st.id = s.type_id "
-    "LEFT JOIN ship_ownership own ON own.ship_id = s.id "
-    "WHERE s.id=$1;";
+    "LEFT JOIN shiptypes st       ON st.shiptypes_id = s.type_id "
+    "LEFT JOIN ship_ownership own ON own.ship_id = s.ship_id "
+    "WHERE s.ship_id=$1;";
 
 
   if (db_query (db,
@@ -3385,7 +3390,8 @@ db_is_sector_fedspace (db_t *db, int sector_id)
     }
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql = "SELECT 1 FROM sectors WHERE id = $1 AND is_fedspace = 1;";
+  const char *sql =
+    "SELECT 1 FROM sectors WHERE sector_id = $1 AND is_fedspace = 1;";
   int is_fed = 0;
 
 
@@ -3412,7 +3418,7 @@ db_sector_has_beacon (db_t *db, int sector_id)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT 1 FROM sector_assets WHERE sector = $1 AND asset_type = 1 LIMIT 1;";
+    "SELECT 1 FROM sector_assets WHERE sector_id = $1 AND asset_type = 1 LIMIT 1;";
   int has_beacon = 0;
 
 
@@ -3439,7 +3445,7 @@ db_player_has_beacon_on_ship (db_t *db, int player_id)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT 1 FROM entity_stock es JOIN players p ON es.entity_id = p.ship WHERE p.id = $1 AND es.entity_type = 'ship' AND es.commodity_code = 'BEACON' AND es.quantity > 0 LIMIT 1;";
+    "SELECT 1 FROM entity_stock es JOIN players p ON es.entity_id = p.ship_id WHERE p.player_id = $1 AND es.entity_type = 'ship' AND es.commodity_code = 'BEACON' AND es.quantity > 0 LIMIT 1;";
   int has_beacon = 0;
 
 
@@ -3465,7 +3471,7 @@ db_player_decrement_beacon_count (db_t *db, int player_id)
     }
   db_error_t err;
   const char *sql =
-    "UPDATE entity_stock SET quantity = quantity - 1 WHERE entity_type = 'ship' AND entity_id = (SELECT ship FROM players WHERE id = $1) AND commodity_code = 'BEACON' AND quantity > 0;";
+    "UPDATE entity_stock SET quantity = quantity - 1 WHERE entity_type = 'ship' AND entity_id = (SELECT ship_id FROM players WHERE player_id = $1) AND commodity_code = 'BEACON' AND quantity > 0;";
 
 
   if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &err))
@@ -3486,7 +3492,7 @@ db_get_ship_sector_id (db_t *db, int ship_id)
   db_res_t *res = NULL; db_error_t err; int sid = 0;
 
 
-  if (db_query (db, "SELECT sector FROM ships WHERE id = $1;",
+  if (db_query (db, "SELECT sector_id FROM ships WHERE ship_id = $1;",
                 (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -3544,7 +3550,7 @@ db_is_ship_piloted (db_t *db, int ship_id)
   db_res_t *res = NULL; db_error_t err; bool piloted = false;
 
 
-  if (db_query (db, "SELECT 1 FROM players WHERE ship = $1 LIMIT 1;",
+  if (db_query (db, "SELECT 1 FROM players WHERE ship_id = $1 LIMIT 1;",
                 (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -3666,12 +3672,12 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
   const char *sql_traps =
     "WITH ow AS (SELECT from_sector AS id, COUNT(*) AS c FROM sector_warps GROUP BY from_sector), "
     "     iw AS (SELECT to_sector   AS id, COUNT(*) AS c FROM sector_warps GROUP BY to_sector) "
-    "SELECT s.id "
+    "SELECT s.sector_id "
     "FROM sectors s "
-    "LEFT JOIN ow ON ow.id = s.id "
-    "LEFT JOIN iw ON iw.id = s.id "
-    "WHERE s.id > $1 AND COALESCE(ow.c,0)=0 AND COALESCE(iw.c,0)=0 "
-    "ORDER BY s.id;";
+    "LEFT JOIN ow ON ow.id = s.sector_id "
+    "LEFT JOIN iw ON iw.id = s.sector_id "
+    "WHERE s.sector_id > $1 AND COALESCE(ow.c,0)=0 AND COALESCE(iw.c,0)=0 "
+    "ORDER BY s.sector_id;";
 
 
   db_res_t *res_traps = NULL;
@@ -3743,12 +3749,12 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
 
   const char *sql_anchor =
     "WITH x AS ("
-    "  SELECT s.id "
+    "  SELECT s.sector_id "
     "  FROM sectors s "
-    "  WHERE s.id > $1 AND EXISTS ("
+    "  WHERE s.sector_id > $1 AND EXISTS ("
     "    SELECT 1 FROM sector_warps w "
-    "    WHERE w.from_sector = s.id OR w.to_sector = s.id"
-    "  )" ") SELECT id FROM x ORDER BY RANDOM() LIMIT 1;";
+    "    WHERE w.from_sector = s.sector_id OR w.to_sector = s.sector_id"
+    "  )" ") SELECT sector_id FROM x ORDER BY RANDOM() LIMIT 1;";
 
 
   int anchor = 0;
@@ -3802,7 +3808,7 @@ db_ship_rename_if_owner (db_t *db,
 
 
   if (!db_exec (db,
-                "UPDATE ships SET name = $1 WHERE id = $2 AND EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = $2 AND player_id = $3 AND is_primary = TRUE);",
+                "UPDATE ships SET name = $1 WHERE ship_id = $2 AND EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = $2 AND player_id = $3 AND is_primary = TRUE);",
                 (db_bind_t[]){db_bind_text (new_name), db_bind_i32 (ship_id),
                               db_bind_i32 (player_id)},
                 3,
@@ -3824,14 +3830,14 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT p.id, p.name, p.experience, p.alignment, p.credits, p.sector, "
-    "       s.id as ship_id, s.name as ship_name, s.type_id as ship_type, "
+    "SELECT p.player_id, p.name, p.experience, p.alignment, p.credits, p.sector_id, "
+    "       s.ship_id, s.name as ship_name, s.type_id as ship_type, "
     "       s.holds, s.fighters, s.shields, s.onplanet, s.ported, "
     "       sec.name as sector_name "
     "FROM players p "
-    "LEFT JOIN ships s ON p.ship = s.id "
-    "LEFT JOIN sectors sec ON p.sector = sec.id "
-    "WHERE p.id = $1;";
+    "LEFT JOIN ships s ON p.ship_id = s.ship_id "
+    "LEFT JOIN sectors sec ON p.sector_id = sec.sector_id "
+    "WHERE p.player_id = $1;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
@@ -4146,7 +4152,8 @@ db_player_set_sector (int pid, int sid)
     }
 
 
-  const char *sql_player = "UPDATE players SET sector = $1 WHERE id = $2;";
+  const char *sql_player =
+    "UPDATE players SET sector_id = $1 WHERE player_id = $2;";
 
 
   if (!db_exec (db, sql_player,
@@ -4158,7 +4165,8 @@ db_player_set_sector (int pid, int sid)
 
 
   /* Sync the ship sector if player has an active ship */
-  const char *sql_ship_info = "SELECT ship FROM players WHERE id = $1;";
+  const char *sql_ship_info =
+    "SELECT ship_id FROM players WHERE player_id = $1;";
   db_res_t *res = NULL;
   int ship_id = 0;
 
@@ -4180,7 +4188,8 @@ db_player_set_sector (int pid, int sid)
 
   if (ship_id > 0)
     {
-      const char *sql_ship = "UPDATE ships SET sector = $1 WHERE id = $2;";
+      const char *sql_ship =
+        "UPDATE ships SET sector_id = $1 WHERE ship_id = $2;";
 
 
       if (!db_exec (db,

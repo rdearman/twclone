@@ -22,7 +22,7 @@ h_get_player_corp_role (db_t *db, int player_id, int corp_id,
                         char *role_buffer, size_t buffer_size)
 {
   const char *sql =
-    "SELECT role FROM corp_members WHERE player_id = $1 AND corp_id = $2;";
+    "SELECT role FROM corp_members WHERE player_id = $1 AND corporation_id = $2;";
   db_bind_t params[] = { db_bind_i32 (player_id), db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -62,7 +62,8 @@ h_is_player_corp_ceo (db_t *db, int player_id, int *out_corp_id)
     {
       return 0;
     }
-  const char *sql = "SELECT id FROM corporations WHERE owner_id = $1;";
+  const char *sql =
+    "SELECT corporation_id FROM corporations WHERE owner_id = $1;";
   db_bind_t params[] = { db_bind_i32 (player_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -91,7 +92,8 @@ h_is_player_corp_ceo (db_t *db, int player_id, int *out_corp_id)
 int
 h_get_player_corp_id (db_t *db, int player_id)
 {
-  const char *sql = "SELECT corp_id FROM corp_members WHERE player_id = $1;";
+  const char *sql =
+    "SELECT corporation_id FROM corp_members WHERE player_id = $1;";
   db_bind_t params[] = { db_bind_i32 (player_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -142,7 +144,8 @@ h_get_corp_bank_account_id (db_t *db, int corp_id)
 int
 h_get_corp_credit_rating (db_t *db, int corp_id, int *rating)
 {
-  const char *sql = "SELECT credit_rating FROM corporations WHERE id = $1;";
+  const char *sql =
+    "SELECT credit_rating FROM corporations WHERE corporation_id = $1;";
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -438,7 +441,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   const char *sql_flagship_check =
     "SELECT st.name "
     "FROM players p "
-    "JOIN ships s ON p.ship = s.id "
+    "JOIN ships s ON p.ship_id = s.id "
     "JOIN shiptypes st ON s.type_id = st.id WHERE p.id = $1;";
 
   db_bind_t params_fs[] = { db_bind_i32 (ctx->player_id) };
@@ -529,7 +532,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   if (ok)
     {
       const char *sql_update_owner =
-        "UPDATE corporations SET owner_id = $1 WHERE id = $2;";
+        "UPDATE corporations SET owner_id = $1 WHERE corporation_id = $2;";
       db_bind_t params_owner[] = { db_bind_i32 (target_player_id),
                                    db_bind_i32 (corp_id) };
 
@@ -893,10 +896,11 @@ cmd_corp_list (client_ctx_t *ctx, json_t *root)
     }
   json_t *corp_array = json_array ();
   const char *sql =
-    "SELECT c.id, c.name, c.tag, c.owner_id, p.name, "
-    "(SELECT COUNT(*) FROM corp_members cm WHERE cm.corp_id = c.id) as member_count "
+    "SELECT c.corporation_id, c.name, c.tag, c.owner_id, p.name, "
+    "(SELECT COUNT(*) FROM corp_members cm WHERE cm.corporation_id = c.corporation_id) as member_count "
     "FROM corporations c "
-    "LEFT JOIN players p ON c.owner_id = p.id " "WHERE c.id > 0;";
+    "LEFT JOIN players p ON c.owner_id = p.player_id "
+    "WHERE c.corporation_id > 0;";
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -995,7 +999,8 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
   const char *sql =
     "SELECT cm.player_id, p.name, cm.role "
     "FROM corp_members cm "
-    "JOIN players p ON cm.player_id = p.id " "WHERE cm.corp_id = $1;";
+    "JOIN players p ON cm.player_id = p.player_id "
+    "WHERE cm.corporation_id = $1;";
 
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
@@ -1248,7 +1253,8 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_delete_corp = "DELETE FROM corporations WHERE id = $1;";
+  const char *sql_delete_corp =
+    "DELETE FROM corporations WHERE corporation_id = $1;";
 
 
   if (!db_exec (db, sql_delete_corp, params, 1, &err))
@@ -1352,7 +1358,8 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
           return 0;
         }
 
-      const char *sql_delete_corp = "DELETE FROM corporations WHERE id = $1;";
+      const char *sql_delete_corp =
+        "DELETE FROM corporations WHERE corporation_id = $1;";
       db_bind_t params_del[] = { db_bind_i32 (corp_id) };
 
 
@@ -1841,7 +1848,7 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
     }
 
   const char *sql_corp_info =
-    "SELECT name, tag, created_at, owner_id FROM corporations WHERE id = $1;";
+    "SELECT name, tag, created_at, owner_id FROM corporations WHERE corporation_id = $1;";
   db_bind_t params_corp[] = { db_bind_i32 (corp_id) };
   db_res_t *res_corp = NULL;
   db_error_t err;

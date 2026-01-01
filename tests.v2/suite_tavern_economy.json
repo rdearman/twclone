@@ -22,7 +22,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT OR REPLACE INTO ports (id, sector, type, name) VALUES (1, 1, 10, 'Tavern Dock');"
+        "sql": "INSERT INTO ports (id, sector, type, name) VALUES (1, 1, 10, 'Tavern Dock');"
       },
       "expect": { "status": "ok" }
     },

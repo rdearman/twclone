@@ -13,6 +13,8 @@ static pthread_key_t g_db_handle_key;
 static pthread_once_t g_db_key_once = PTHREAD_ONCE_INIT;
 static char g_main_conninfo[1024];
 static db_backend_t g_main_backend;
+
+
 // static const char *g_main_sqlite_path;
 
 

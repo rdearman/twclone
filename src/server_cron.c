@@ -93,7 +93,7 @@ tow_ship (db_t *db, int ship_id, int new_sector_id, int admin_id,
     }
 
   const char *sql_select_ship_info =
-    "SELECT T1.sector, T2.id FROM ships T1 LEFT JOIN players T2 ON T1.id = T2.ship WHERE T1.id = $1;";
+    "SELECT T1.sector_id, T2.player_id FROM ships T1 LEFT JOIN players T2 ON T1.ship_id = T2.ship_id WHERE T1.ship_id = $1;";
 
   db_res_t *res = NULL;
   db_bind_t params[1] = { db_bind_i32 (ship_id) };
@@ -152,7 +152,8 @@ tow_ship (db_t *db, int ship_id, int new_sector_id, int admin_id,
         break;
     }
 
-  const char *sql_update_ship = "UPDATE ships SET sector = $1 WHERE id = $2;";
+  const char *sql_update_ship =
+    "UPDATE ships SET sector_id = $1 WHERE ship_id = $2;";
   db_bind_t update_ship_params[2] = {
     db_bind_i32 (new_sector_id),
     db_bind_i32 (ship_id)
@@ -169,7 +170,7 @@ tow_ship (db_t *db, int ship_id, int new_sector_id, int admin_id,
   if (owner_id > 0)
     {
       const char *sql_update_player =
-        "UPDATE players SET sector = $1 WHERE id = $2;";
+        "UPDATE players SET sector_id = $1 WHERE player_id = $2;";
       db_bind_t update_player_params[2] = {
         db_bind_i32 (new_sector_id),
         db_bind_i32 (owner_id)
@@ -266,7 +267,12 @@ universe_pathfind_get_sectors (db_t *db, int start_sector, int end_sector,
   db_error_clear (&err);
 
 
-  if (db_query (db, "SELECT MAX(id) FROM sectors;", NULL, 0, &max_res, &err))
+  if (db_query (db,
+                "SELECT MAX(sector_id) FROM sectors;",
+                NULL,
+                0,
+                &max_res,
+                &err))
     {
       if (db_res_step (max_res, &err))
         {
@@ -423,7 +429,8 @@ _insert_path_sectors (db_t *db, int start_sector,
     }
 
   const char *sql =
-    "INSERT OR IGNORE INTO " MSL_TABLE_NAME " (sector_id) VALUES ($1);";
+    "INSERT INTO " MSL_TABLE_NAME
+    " (sector_id) VALUES ($1) ON CONFLICT(sector_id) DO NOTHING;";
   db_error_t err;
 
 
@@ -698,7 +705,7 @@ h_reset_turns_for_player (db_t *db, int64_t now_s)
     db_res_t *res = NULL;
 
 
-    if (!db_query (db, "SELECT player FROM turns;", NULL, 0, &res, &err))
+    if (!db_query (db, "SELECT player_id FROM turns;", NULL, 0, &res, &err))
       {
         LOGE ("SQL error preparing player select: %s", err.message);
         return -1;
@@ -739,7 +746,7 @@ h_reset_turns_for_player (db_t *db, int64_t now_s)
     }
 
   const char *sql_update =
-    "UPDATE turns SET turns_remaining = $1, last_update = $2 WHERE player = $3;";
+    "UPDATE turns SET turns_remaining = $1, last_update = to_timestamp($2) WHERE player_id = $3;";
 
 
   for (size_t i = 0; i < player_count; i++)
@@ -953,14 +960,14 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
 
   /* 3. Illegal Assets on MSL */
   const char *select_assets_sql =
-    "SELECT player, asset_type, sector, quantity FROM sector_assets WHERE sector IN (SELECT sector_id FROM msl_sectors) AND player != 0;";
+    "SELECT owner_id as player, asset_type, sector_id as sector, quantity FROM sector_assets WHERE sector_id IN (SELECT sector_id FROM msl_sectors) AND owner_id != 0;";
 
 
   if (db_query (db, select_assets_sql, NULL, 0, &res, &err))
     {
       char message[256];
       const char *delete_sql =
-        "DELETE FROM sector_assets WHERE player = $1 AND asset_type = $2 AND sector = $3 AND quantity = $4;";
+        "DELETE FROM sector_assets WHERE owner_id = $1 AND asset_type = $2 AND sector_id = $3 AND quantity = $4;";
 
 
       while (db_res_step (res, &err))
@@ -1006,7 +1013,7 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
   /* Note: Original code used a transaction here implicitly? No, separate statement.
      db_exec is atomic. */
   const char *sql_timeout_logout =
-    "UPDATE players SET loggedin = 0 WHERE loggedin = 1 AND $1 - last_update > $2;";
+    "UPDATE players SET loggedin = to_timestamp(0) WHERE loggedin != to_timestamp(0) AND last_update < to_timestamp($1 - $2);";
 
   db_bind_t timeout_params[2] = {
     db_bind_i64 (now_s),
@@ -1031,10 +1038,10 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
 
   const char *sql_insert_eligible =
     "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
-    "SELECT T1.id, T1.sector, T2.id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) "
-    "FROM ships T1 LEFT JOIN players T2 ON T1.id = T2.ship "
-    "WHERE T1.sector BETWEEN $1 AND $2 AND (T2.id IS NULL OR (T2.loggedin = 0 AND ($3 - T2.last_login > $4))) "
-    "ORDER BY T1.id ASC;";
+    "SELECT T1.ship_id, T1.sector_id, T2.player_id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) "
+    "FROM ships T1 LEFT JOIN players T2 ON T1.ship_id = T2.ship_id "
+    "WHERE T1.sector_id BETWEEN $1 AND $2 AND (T2.player_id IS NULL OR COALESCE(T2.login_time, to_timestamp(0)) < to_timestamp($3 - $4)) "
+    "ORDER BY T1.ship_id ASC;";
 
   db_bind_t eligible_params[4] = {
     db_bind_i32 (FEDSPACE_SECTOR_START),
@@ -1212,7 +1219,7 @@ h_robbery_daily_cleanup (db_t *db, int64_t now_s)
     "WHERE active = 1 AND ( "
     "    (bust_type = 'fake') "
     "    OR "
-    "    (bust_type = 'real' AND last_bust_at < $1 - (SELECT robbery_real_bust_ttl_days * 86400 FROM law_enforcement WHERE id=1)) "
+    "    (bust_type = 'real' AND last_bust_at < $1 - (SELECT robbery_real_bust_ttl_days * 86400 FROM law_enforcement WHERE law_enforcement_id=1)) "
     ");";
 
   db_bind_t params[1] = { db_bind_i64 (now_s) };
@@ -1318,7 +1325,7 @@ h_autouncloak_sweeper (db_t *db, int64_t now_s)
   int64_t uncloak_threshold_s = now_s - max_duration_seconds;
 
   const char *sql_update =
-    "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < $1;";
+    "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < to_timestamp($1);";
 
   db_bind_t params[1] = { db_bind_i64 (uncloak_threshold_s) };
 
@@ -1359,8 +1366,10 @@ h_terra_replenish (db_t *db, int64_t now_s)
     }
 
   if (!db_exec (db,
-                "UPDATE planets SET terraform_turns_left = 1 WHERE owner > 0;",
-                NULL, 0, &err))
+                "UPDATE planets SET terraform_turns_left = 1 WHERE owner_id > 0;",
+                NULL,
+                0,
+                &err))
     {
       LOGE ("terra_replenish (turns reset) failed: %s", err.message);
       return -1;
@@ -1376,10 +1385,10 @@ h_planet_population_tick (db_t *db, int64_t now_s)
   const double GROWTH_RATE = 0.05;
 
   const char *sql =
-    "SELECT p.id, p.population, "
+    "SELECT p.planet_id, p.population, "
     "       COALESCE(pt.maxColonist_ore, 0) + COALESCE(pt.maxColonist_organics, 0) + COALESCE(pt.maxColonist_equipment, 0) AS max_pop "
     "FROM planets p "
-    "JOIN planettypes pt ON p.type = pt.id "
+    "JOIN planettypes pt ON p.type = pt.planettypes_id "
     "WHERE p.owner_id > 0 AND p.population > 0;";
 
   db_res_t *res = NULL;
@@ -1394,7 +1403,8 @@ h_planet_population_tick (db_t *db, int64_t now_s)
       return -1;
     }
 
-  const char *sql_update = "UPDATE planets SET population = $1 WHERE id = $2;";
+  const char *sql_update =
+    "UPDATE planets SET population = $1 WHERE planet_id = $2;";
 
 
   while (db_res_step (res, &err))
@@ -1496,7 +1506,7 @@ h_planet_treasury_interest_tick (db_t *db, int64_t now_s)
     }
 
   const char *sql =
-    "SELECT id, treasury FROM citadels WHERE level >= 1 AND treasury > 0;";
+    "SELECT citadel_id, treasury FROM citadels WHERE level >= 1 AND treasury > 0;";
 
   db_res_t *res = NULL;
 
@@ -1511,7 +1521,7 @@ h_planet_treasury_interest_tick (db_t *db, int64_t now_s)
   const char *sql_update =
     "UPDATE citadels "
     "SET treasury = treasury + ( (treasury * $1) / 10000 ) "
-    "WHERE id = $2;";
+    "WHERE citadel_id = $2;";
 
 
   while (db_res_step (res, &err))
@@ -1595,9 +1605,9 @@ h_planet_growth (db_t *db, int64_t now_s)
     "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
     "SELECT "
     "  'planet', "
-    "  p.id, "
+    "  p.planet_id, "
     "  pp.commodity_code, "
-    "  MAX(0, MIN("
+    "  GREATEST(0, LEAST("
     "    CASE pp.commodity_code "
     "        WHEN 'ORE' THEN pltype.maxore "
     "        WHEN 'ORG' THEN pltype.maxorganics "
@@ -1621,8 +1631,8 @@ h_planet_growth (db_t *db, int64_t now_s)
     "  $1 "
     "FROM planets p "
     "JOIN planet_production pp ON p.type = pp.planet_type_id "
-    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.id AND es.commodity_code = pp.commodity_code "
-    "LEFT JOIN planettypes pltype ON p.type = pltype.id "
+    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
+    "LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id "
     "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0) "
     "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET "
     "quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;";
@@ -1655,10 +1665,10 @@ h_planet_market_tick (db_t *db, int64_t now_s)
 {
   // This function is assumed to be called within a transaction by h_planet_growth
   const char *sql_select_planets_commodities =
-    "SELECT p.id AS planet_id, "
+    "SELECT p.planet_id, "
     "       pt.maxore, pt.maxorganics, pt.maxequipment, " // Max capacities for common commodities
     "       pp.commodity_code, "
-    "       c.id AS commodity_id, " // Needed for orders
+    "       c.commodities_id, " // Needed for orders
     "       es.quantity AS current_quantity, "
     "       pp.base_prod_rate, pp.base_cons_rate, "
     "       c.base_price, " // Base price for orders
@@ -1666,9 +1676,9 @@ h_planet_market_tick (db_t *db, int64_t now_s)
     "       p.owner_id, " // ADDED for PE1
     "       p.owner_type " // ADDED for PE1
     "FROM planets p "
-    "JOIN planettypes pt ON p.type = pt.id "
+    "JOIN planettypes pt ON p.type = pt.planettypes_id "
     "JOIN planet_production pp ON p.type = pp.planet_type_id "
-    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.id AND es.commodity_code = pp.commodity_code "
+    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
     "JOIN commodities c ON pp.commodity_code = c.code "
     "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) AND c.illegal = 0;";
 
@@ -1784,7 +1794,7 @@ h_planet_market_tick (db_t *db, int64_t now_s)
         }
       else if (current_quantity > desired_stock)
         {
-          surplus = current_quantity - desired_stock; // Fixed typo desired_quantity -> desired_stock
+          surplus = current_quantity - desired_stock; // Fixed typo desired_stock
         }
 
       int order_qty = 0;
@@ -1889,7 +1899,7 @@ h_broadcast_ttl_cleanup (db_t *db, int64_t now_s)
   db_error_clear (&err);
 
   const char *sql =
-    "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= $1;";
+    "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= to_timestamp($1);";
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
 
@@ -1918,8 +1928,8 @@ h_traps_process (db_t *db, int64_t now_s)
 
   const char *sql_insert =
     "INSERT INTO engine_commands(type, payload, created_at, due_at) "
-    "SELECT 'trap.trigger', json_object('trap_id',id), $1, $1 "
-    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= $1;";
+    "SELECT 'trap.trigger', json_build_object('trap_id',id), to_timestamp($1), to_timestamp($1) "
+    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp($1);";
 
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
@@ -1932,7 +1942,7 @@ h_traps_process (db_t *db, int64_t now_s)
     }
 
   const char *sql_delete =
-    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= $1;";
+    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp($1);";
 
 
   if (!db_exec (db, sql_delete, params, 1, &err))
@@ -2016,31 +2026,6 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
 }
 
 
-/* int */
-/* h_npc_step (sqlite3 *db, int64_t now_s) */
-/* { */
-/*   (void) now_s; */
-/*   int64_t now_ms = (int64_t) monotonic_millis (); */
-
-
-/*   if (iss_init_once () == 1) */
-/*     { */
-/*       iss_tick (now_ms); */
-/*     } */
-/*   if (fer_init_once () == 1) */
-/*     { */
-/*       fer_attach_db (db); */
-/*       fer_tick (now_ms); */
-/*     } */
-/*   if (ori_init_once () == 1) */
-/*     { */
-/*       ori_attach_db (db); */
-/*       ori_tick (now_ms); */
-/*     } */
-/*   return 0; */
-/* } */
-
-
 int
 h_port_economy_tick (db_t *db, int64_t now_s)
 {
@@ -2055,17 +2040,17 @@ h_port_economy_tick (db_t *db, int64_t now_s)
   db_error_clear (&err);
 
   const char *sql_select_ports_commodities =
-    "SELECT p.id AS port_id, "
+    "SELECT p.port_id AS port_id, "
     "       p.size AS port_size, "
     "       p.type AS port_type, "
     "       es.commodity_code, "
     "       es.quantity AS current_quantity, "
     "       ec.base_restock_rate, "
     "       ec.target_stock, "
-    "       c.id AS commodity_id "
+    "       c.commodities_id AS commodity_id "
     "FROM ports p "
-    "JOIN entity_stock es ON p.id = es.entity_id AND es.entity_type = 'port' "
-    "JOIN economy_curve ec ON p.economy_curve_id = ec.id "
+    "JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' "
+    "JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id "
     "JOIN commodities c ON es.commodity_code = c.code;";
 
   db_res_t *res = NULL;
@@ -2250,7 +2235,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
   db_error_clear (&err);
 
   // 3. Get list of commodities to iterate over
-  const char *sql_comm = "SELECT id, code FROM commodities;";
+  const char *sql_comm = "SELECT commodities_id, code FROM commodities;";
   db_res_t *res_comm = NULL;
 
 
@@ -2498,7 +2483,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 
   // 6. Handle Expiry
   const char *sql_expire =
-    "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < $1;";
+    "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < to_timestamp($1);";
   db_bind_t expire_params[1] = { db_bind_i64 (now_s) };
 
 
@@ -2530,7 +2515,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
 
   int64_t yesterday_s = now_s - 86400;  // 24 hours ago
   const char *sql_select_events =
-    "SELECT id, ts, type, actor_player_id, sector_id, payload "
+    "SELECT engine_events_id, ts, type, actor_player_id, sector_id, payload "
     "FROM engine_events " "WHERE ts >= $1 AND ts < $2 " "ORDER BY ts ASC;";
 
   db_bind_t params[2] = { db_bind_i64 (yesterday_s), db_bind_i64 (now_s) };
@@ -2796,7 +2781,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                   (payload_obj, "total_assets"));
           // Fetch corp name and tag
           const char *sql_corp_info =
-            "SELECT name, tag FROM corporations WHERE id = $1;";
+            "SELECT name, tag FROM corporations WHERE corporation_id = $1;";
           char corp_name_buf[64] = { 0 };
           char corp_tag_buf[16] = { 0 };
 
@@ -2877,7 +2862,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                   (payload_obj, "total_assets"));
           // Fetch corp name and tag
           const char *sql_corp_info =
-            "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE id = $1;";
+            "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE corporation_id = $1;";
           char corp_name_buf[64] = { 0 };
           char corp_tag_buf[16] = { 0 };
           long long tax_arrears = 0;
@@ -2965,7 +2950,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
             json_string_value (json_object_get (payload_obj, "ticker"));
           // Fetch corp name
           const char *sql_corp_name =
-            "SELECT name FROM corporations WHERE id = $1;";
+            "SELECT name FROM corporations WHERE corporation_id = $1;";
           char corp_name_buf[64] = { 0 };
 
           db_res_t *corp_res = NULL;
@@ -3038,7 +3023,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                   (payload_obj, "total_payout"));
           // Fetch corp name and ticker
           const char *sql_info =
-            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = $1 AND s.id = $2;";
+            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.corporation_id = s.corp_id WHERE c.corporation_id = $1 AND s.id = $2;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
 
@@ -3123,7 +3108,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
             json_integer_value (json_object_get (payload_obj, "available"));
           // Fetch corp name and ticker
           const char *sql_info =
-            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = $1 AND s.id = $2;";
+            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.corporation_id = s.corp_id WHERE c.corporation_id = $1 AND s.id = $2;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
 
@@ -3207,7 +3192,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                                  "actual_payout"));
           // Fetch corp name and ticker
           const char *sql_info =
-            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = $1 AND s.id = $2;";
+            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.corporation_id = s.corp_id WHERE c.corporation_id = $1 AND s.id = $2;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
 
@@ -3321,7 +3306,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                   (payload_obj, "total_assets"));
           // Fetch corp name and tag
           const char *sql_corp_info =
-            "SELECT name, tag FROM corporations WHERE id = $1;";
+            "SELECT name, tag FROM corporations WHERE corporation_id = $1;";
           char corp_name_buf[64] = { 0 };
           char corp_tag_buf[16] = { 0 };
 
@@ -3402,7 +3387,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                   (payload_obj, "total_assets"));
           // Fetch corp name and tag
           const char *sql_corp_info =
-            "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE id = $1;";
+            "SELECT name, tag, tax_arrears, credit_rating FROM corporations WHERE corporation_id = $1;";
           char corp_name_buf[64] = { 0 };
           char corp_tag_buf[16] = { 0 };
           long long tax_arrears = 0;
@@ -3490,7 +3475,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
             json_string_value (json_object_get (payload_obj, "ticker"));
           // Fetch corp name
           const char *sql_corp_name =
-            "SELECT name FROM corporations WHERE id = $1;";
+            "SELECT name FROM corporations WHERE corporation_id = $1;";
           char corp_name_buf[64] = { 0 };
 
           db_res_t *corp_res = NULL;
@@ -3563,7 +3548,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                   (payload_obj, "total_payout"));
           // Fetch corp name and ticker
           const char *sql_info =
-            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = $1 AND s.id = $2;";
+            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.corporation_id = s.corp_id WHERE c.corporation_id = $1 AND s.id = $2;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
 
@@ -3648,7 +3633,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
             json_integer_value (json_object_get (payload_obj, "available"));
           // Fetch corp name and ticker
           const char *sql_info =
-            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = $1 AND s.id = $2;";
+            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.corporation_id = s.corp_id WHERE c.corporation_id = $1 AND s.id = $2;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
 
@@ -3732,7 +3717,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
                                                  "actual_payout"));
           // Fetch corp name and ticker
           const char *sql_info =
-            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.id = s.corp_id WHERE c.id = $1 AND s.id = $2;";
+            "SELECT c.name, s.ticker FROM corporations c JOIN stocks s ON c.corporation_id = s.corp_id WHERE c.corporation_id = $1 AND s.id = $2;";
           char corp_name_buf[64] = { 0 };
           char ticker_buf[16] = { 0 };
 
@@ -4162,7 +4147,7 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
 
   // 1. Mark expired bets as resolved
   const char *sql_expire =
-    "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = $1 WHERE resolved = 0 AND expires_at <= $2;";
+    "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = $1 WHERE resolved = 0 AND expires_at <= to_timestamp($2);";
 
   db_bind_t expire_params[2] = { db_bind_i32 ((int)now_s),
                                  db_bind_i32 ((int)now_s) };
@@ -4230,7 +4215,7 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
 
     // Find matching unresolved bets for the destroyed player
     const char *sql_bets =
-      "SELECT id, bettor_id, amount, odds_bp FROM tavern_deadpool_bets WHERE target_id = $1 AND resolved = 0;";
+      "SELECT tavern_deadpool_bets_id AS id, bettor_id, amount, odds_bp FROM tavern_deadpool_bets WHERE target_id = $1 AND resolved = 0;";
 
     db_res_t *res_bets = NULL;
     db_bind_t bet_params[1] = { db_bind_i32 (destroyed_player_id) };
@@ -4270,7 +4255,7 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
 
             // Mark bet as won
             const char *sql_update_won =
-              "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'won', resolved_at = $1 WHERE id = $2;";
+              "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'won', resolved_at = $1 WHERE tavern_deadpool_bets_id = $2;";
             db_bind_t won_params[2] = { db_bind_i32 ((int)now_s),
                                         db_bind_i32 (bet_id) };
 
@@ -4333,11 +4318,10 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
   const char *sql_delete_notices =
 
 
-    "DELETE FROM tavern_notices WHERE expires_at <= "
-    "CAST(strftime('%s', 'now') AS INTEGER);";
+    "DELETE FROM tavern_notices WHERE expires_at <= to_timestamp($1);";
 
 
-  db_bind_t params[1] = { db_bind_i32 ((int)now_s) };
+  db_bind_t params[1] = { db_bind_i64 ((int64_t)now_s) };
 
 
   if (!db_exec (db, sql_delete_notices, params, 1, &err))
@@ -4361,8 +4345,7 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
   const char *sql_delete_corp_recruiting =
 
 
-    "DELETE FROM corp_recruiting WHERE expires_at <= "
-    "CAST(strftime('%s', 'now') AS INTEGER);";
+    "DELETE FROM corp_recruiting WHERE expires_at <= to_timestamp($1);";
 
 
   if (!db_exec (db, sql_delete_corp_recruiting, params, 1, &err))
@@ -4614,7 +4597,7 @@ h_shield_regen_tick (db_t *db, int64_t now_s)
 
   const char *sql =
     "UPDATE ships "
-    "SET shields = MIN(installed_shields, "
+    "SET shields = LEAST(installed_shields, "
     "                   shields + ((installed_shields * $1) / 100)) "
     "WHERE destroyed = 0 "
     "  AND installed_shields > 0 "

@@ -110,7 +110,8 @@ save_watermark (db_t *db, const char *key, long long last_id,
 static int
 fetch_max_event_id (db_t *db, long long *max_id)
 {
-  const char *sql = "SELECT COALESCE(MAX(id),0) FROM engine_events;";
+  const char *sql =
+    "SELECT COALESCE(MAX(engine_events_id),0) FROM engine_events;";
   db_res_t *res = NULL;
   db_error_t err;
 
@@ -132,9 +133,9 @@ quarantine (db_t *db, db_res_t *row, const char *err_msg)
 {
   /* row columns: id, ts, type, actor_player_id, sector_id, payload */
   const char *sql =
-    "INSERT INTO engine_events_deadletter(id,ts,type,payload,error,moved_at) "
+    "INSERT INTO engine_events_deadletter(engine_events_deadletter_id,ts,type,payload,error,moved_at) "
     "VALUES($1,$2,$3,$4,$5,$6) "
-    "ON CONFLICT(id) DO UPDATE SET error=excluded.error, moved_at=excluded.moved_at;";
+    "ON CONFLICT(engine_events_deadletter_id) DO UPDATE SET error=excluded.error, moved_at=excluded.moved_at;";
 
   db_error_t err;
   int64_t id = db_res_col_i64 (row, 0, &err);
@@ -151,6 +152,7 @@ quarantine (db_t *db, db_res_t *row, const char *err_msg)
     db_bind_i32 (get_now_epoch ())
   };
 
+
   if (!db_exec (db, sql, params, 6, &err))
     {
       return err.code;
@@ -165,18 +167,18 @@ quarantine (db_t *db, db_res_t *row, const char *err_msg)
    Each pass never breaks id ordering within itself; overall ordering is still strict
    per-pass; cross-pass “prioritisation” is documented. */
 static const char *BASE_SELECT_SQLITE =
-  "SELECT id, ts, type, payload "
+  "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
   "FROM engine_events "
-  "WHERE id > $1 "
+  "WHERE engine_events_id > $1 "
   "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_each($3))) "
-  "ORDER BY id ASC " "LIMIT $4;";
+  "ORDER BY engine_events_id ASC " "LIMIT $4;";
 
 static const char *BASE_SELECT_PG =
-  "SELECT id, ts, type, payload "
+  "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
   "FROM engine_events "
-  "WHERE id > $1 "
+  "WHERE engine_events_id > $1 "
   "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text($3::json))) "
-  "ORDER BY id ASC " "LIMIT $4;";
+  "ORDER BY engine_events_id ASC " "LIMIT $4;";
 
 
 static int
@@ -229,7 +231,8 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   int ship_id = 0;
   {
     db_res_t *st_ship = NULL;
-    const char *sql_get_ship_id = "SELECT ship FROM players WHERE id = $1;";
+    const char *sql_get_ship_id =
+      "SELECT ship_id FROM players WHERE player_id = $1;";
     db_bind_t params[] = { db_bind_i32 (player_id) };
 
 
@@ -255,7 +258,8 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   char ship_name[256] = { 0 };
   {
     db_res_t *st_name = NULL;
-    const char *sql_get_ship_name = "SELECT name FROM ships WHERE id = $1;";
+    const char *sql_get_ship_name =
+      "SELECT name FROM ships WHERE ship_id = $1;";
     db_bind_t params[] = { db_bind_i32 (ship_id) };
 
 
@@ -408,21 +412,21 @@ engine_consume_tick (db_t *db,
     {
       snprintf (expanded_sql,
                 sizeof(expanded_sql),
-                "SELECT id, ts, type, actor_player_id, sector_id, payload "
+                "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                 "FROM engine_events "
-                "WHERE id > $1 "
+                "WHERE engine_events_id > $1 "
                 "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text($3::json))) "
-                "ORDER BY id ASC LIMIT $4;");
+                "ORDER BY engine_events_id ASC LIMIT $4;");
     }
   else
     {
       snprintf (expanded_sql,
                 sizeof(expanded_sql),
-                "SELECT id, ts, type, actor_player_id, sector_id, payload "
+                "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                 "FROM engine_events "
-                "WHERE id > $1 "
+                "WHERE engine_events_id > $1 "
                 "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_each($3))) "
-                "ORDER BY id ASC LIMIT $4;");
+                "ORDER BY engine_events_id ASC LIMIT $4;");
     }
 
 

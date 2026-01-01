@@ -94,11 +94,7 @@ int handle_turn_consumption_error (client_ctx_t *ctx,
 int h_player_petty_cash_add (db_t *db, int player_id, long long delta,
 			     long long *new_balance_out);
 
-
-
-#define PLAYER_TYPE_NPC     1
-#define PLAYER_TYPE_HUMAN   2
-#define PLAYER_TYPE_SYSOP   3
+#include "server_auth.h"
 
 int auth_player_get_type (int player_id);
 

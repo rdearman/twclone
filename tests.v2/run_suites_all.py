@@ -16,14 +16,23 @@ def run_all():
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
 
-    runner = JsonSuiteRunner(args.host, args.port)
+    # Get the directory where this script is located
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # Find all .json suites in tests.v2
-    suites_to_run = sorted(glob.glob("tests.v2/suite_*.json"))
+    runner = JsonSuiteRunner(args.host, args.port, macros_path=os.path.join(base_dir, "macros.json"))
     
-    # Add python suites if needed (excluding this script and run_suites.py)
-    py_suites = sorted(glob.glob("tests.v2/suite_*.py"))
-    suites_to_run.extend(py_suites)
+    # Find all .json suites relative to this script
+    suites_to_run = sorted(glob.glob(os.path.join(base_dir, "suite_*.json")))
+    
+    # Add python suites if needed
+    py_suites = sorted(glob.glob(os.path.join(base_dir, "suite_*.py")))
+    for p in py_suites:
+        if os.path.basename(p) not in ["run_suites_all.py", "run_suites.py"]:
+            suites_to_run.append(p)
+
+    if not suites_to_run:
+        print("ERROR: No test suites found!")
+        sys.exit(1)
 
     failed = []
     for suite in suites_to_run:

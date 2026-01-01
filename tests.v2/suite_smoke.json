@@ -2,8 +2,8 @@
   "tests": [
     {
       "setup": "macro_auth_user",
-      "user": "smoke_user",
-      "passwd": "password"
+      "username": "smoke_user",
+      "password": "password"
     },
     {
       "name": "System Hello",

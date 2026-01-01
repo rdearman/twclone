@@ -16,14 +16,21 @@
     {
       "name": "Ensure Stardock Port Exists",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9);" },
+      "data": { "sql": "INSERT INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9) ON CONFLICT (id) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Ensure Port 1 Exists and has ORE",
+      "name": "Ensure Port 1 Exists",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT OR IGNORE INTO ports (id, name, sector, type) VALUES (1, 'Port One', 1, 1); INSERT OR REPLACE INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price) VALUES ('port', 1, 'ORE', 1000, 10);" },
+      "data": { "sql": "INSERT INTO ports (id, name, sector, type) VALUES (1, 'Port One', 1, 1) ON CONFLICT (id) DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ensure Port 1 has ORE",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price) VALUES ('port', 1, 'ORE', 1000, 10) ON CONFLICT (entity_type, entity_id, commodity_code) DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

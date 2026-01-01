@@ -15,6 +15,12 @@ int cmd_user_create (client_ctx_t *ctx, json_t *root);          // "user.create"
 int cmd_auth_refresh (client_ctx_t *ctx, json_t *root);
 const char *get_welcome_message (int player_id);
 int cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root);
+
+#define PLAYER_TYPE_SYSOP 1
+#define PLAYER_TYPE_PLAYER 2
+#define PLAYER_TYPE_NPC 3
+int auth_player_get_type (int player_id);
+
 #ifdef __cplusplus
 }
 #endif

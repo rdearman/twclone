@@ -1076,7 +1076,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
     {
       db_res_t *chk_res = NULL;
       const char *sql =
-        "SELECT id FROM mail WHERE idempotency_key=$1 AND recipient_id=$2 LIMIT 1;";
+        "SELECT mail_id FROM mail WHERE idempotency_key=$1 AND recipient_id=$2 LIMIT 1;";
       db_bind_t p[] = { db_bind_text (idem), db_bind_i32 (to_id) };
 
 
@@ -1111,7 +1111,7 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
             {
               db_res_t *chk_res = NULL;
               const char *sql_chk =
-                "SELECT id FROM mail WHERE idempotency_key=$1 AND recipient_id=$2 LIMIT 1;";
+                "SELECT mail_id FROM mail WHERE idempotency_key=$1 AND recipient_id=$2 LIMIT 1;";
               db_bind_t p_chk[] = { db_bind_text (idem), db_bind_i32 (to_id) };
 
 
@@ -1349,7 +1349,7 @@ cmd_mail_read (client_ctx_t *ctx,
 
       strftime (iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime (&now));
 
-      const char *up_sql = "UPDATE mail SET read_at=$1 WHERE id=$2;";
+      const char *up_sql = "UPDATE mail SET read_at=$1 WHERE mail_id=$2;";
       db_bind_t up_params[2];
 
 
