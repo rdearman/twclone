@@ -67,7 +67,10 @@ static char* pg_bind_param_to_string(const db_bind_t *param) {
         case DB_BIND_I64: asprintf(&buf, "%lld", (long long)param->v.i64); break;
         case DB_BIND_I32: asprintf(&buf, "%d", param->v.i32); break;
         case DB_BIND_BOOL: asprintf(&buf, "%s", param->v.b ? "t" : "f"); break;
-        case DB_BIND_TEXT: return strdup(param->v.text.ptr);
+        case DB_BIND_TEXT: 
+            if (param->v.text.ptr == NULL)
+                return NULL;
+            return strdup(param->v.text.ptr);
         default: return NULL;
     }
     return buf;
