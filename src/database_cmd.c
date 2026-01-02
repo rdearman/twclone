@@ -921,16 +921,24 @@ db_mark_ship_destroyed (db_t *db, int ship_id)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err; db_res_t *res = NULL;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB;
   /* Use stored procedure */
   const char *sql = "SELECT * FROM ship_destroy($1);";
 
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &res, &err))
     {
-      db_res_finalize (res); return 0;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  rc = 0;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -992,20 +1000,31 @@ db_get_player_xp (db_t *db, int pid)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int xp = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int xp = 0;
 
 
-  if (db_query (db, "SELECT experience FROM players WHERE player_id = $1;",
-                (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
+  if (!db_query (db, "SELECT experience FROM players WHERE player_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          xp = db_res_col_i32 (res,
-                               0,
-                               &err);
-        }
-      db_res_finalize (res);
+      xp = 0;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      xp = db_res_col_i32 (res,
+                           0,
+                           &err);
+    }
+  else
+    {
+      xp = 0;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return xp;
 }
 
@@ -1036,20 +1055,31 @@ db_shiptype_has_escape_pod (db_t *db, int ship_id)
     {
       return false;
     }
-  db_res_t *res = NULL; db_error_t err; int tid = -1;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int tid = -1;
   /* Need to join shiptypes? Or assumes ship has type_id */
   const char *sql =
     "SELECT st.shiptypes_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1 AND st.name LIKE '%Escape%';";
 
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          tid = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      tid = -1;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      tid = db_res_col_i32 (res, 0, &err);
+    }
+  else
+    {
+      tid = -1;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return (tid > 0);
 }
 
