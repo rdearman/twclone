@@ -4248,3 +4248,57 @@ db_ship_get_hull (db_t *db, int ship_id, int *out)
   return 0;
 }
 
+int
+h_update_planet_stock (db_t *db, int planet_id, const char *commodity_code,
+                       int quantity_change, int *new_quantity)
+{
+  if (!db || !commodity_code || planet_id <= 0)
+    {
+      return ERR_DB_MISUSE;
+    }
+
+  db_error_t err;
+  db_error_clear(&err);
+  
+  const char *sql = "UPDATE planet_goods SET quantity = quantity + $1 "
+                    "WHERE planet_id = $2 AND commodity = $3";
+  db_bind_t params[] = {
+    db_bind_i32 (quantity_change),
+    db_bind_i32 (planet_id),
+    db_bind_text (commodity_code)
+  };
+  
+  if (!db_exec(db, sql, params, 3, &err))
+    {
+      LOGE ("h_update_planet_stock: Failed to update: %s", err.message);
+      return ERR_DB;
+    }
+  
+  if (new_quantity)
+    {
+      const char *qty_sql = "SELECT quantity FROM planet_goods "
+                            "WHERE planet_id = $1 AND commodity = $2";
+      db_bind_t qty_params[] = {
+        db_bind_i32 (planet_id),
+        db_bind_text (commodity_code)
+      };
+      
+      db_res_t *res = NULL;
+      if (db_query(db, qty_sql, qty_params, 2, &res, &err))
+        {
+          if (db_res_step(res, &err))
+            {
+              *new_quantity = (int)db_res_col_int(res, 0, &err);
+            }
+          db_res_finalize(res);
+        }
+      else
+        {
+          LOGE ("h_update_planet_stock: Failed to query quantity: %s", err.message);
+        }
+    }
+  
+  return 0;
+}
+
+
