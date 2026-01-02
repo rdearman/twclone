@@ -20,6 +20,7 @@
 #include "globals.h"
 #include "server_planets.h"
 #include "game_db.h"
+#include "database_cmd.h"
 #include "db/db_api.h"
 
 
@@ -196,6 +197,134 @@ armid_stack_is_active (const sector_asset_t *row, time_t now)
       return true;
     }
   return row->ttl > now;
+}
+
+/* Apply sector fighter hazards when ship enters a sector */
+int
+apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
+{
+  if (!ctx || sector_id <= 0)
+    {
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      return 0;
+    }
+
+  /* Sector fighter damage configuration (from old system) */
+  int damage_per_unit = 10;   /* Hull damage per fighter */
+
+  /* Load ship stats */
+  db_error_t err;
+  db_res_t *res = NULL;
+
+  const char *sql_ship = 
+    "SELECT hull, fighters, shields FROM ships WHERE ship_id = $1;";
+  db_bind_t params_ship[] = { db_bind_i32 (ship_id) };
+
+  if (!db_query (db, sql_ship, params_ship, 1, &res, &err))
+    {
+      return 0;
+    }
+
+  combat_ship_t ship = { 0 };
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      return 0;
+    }
+
+  ship.hull = db_res_col_int (res, 0, &err);
+  ship.fighters = db_res_col_int (res, 1, &err);
+  ship.shields = db_res_col_int (res, 2, &err);
+  db_res_finalize (res);
+
+  int ship_corp_id = ctx->corp_id;
+
+  /* Query all hostile fighters in sector */
+  const char *sql_ftr =
+    "SELECT id, quantity, player, corporation, offensive_setting "
+    "FROM sector_assets "
+    "WHERE sector_id = $1 AND asset_type = 2 AND quantity > 0;";
+
+  db_bind_t params_ftr[] = { db_bind_i32 (sector_id) };
+
+  if (!db_query (db, sql_ftr, params_ftr, 1, &res, &err))
+    {
+      return 0;
+    }
+
+  /* Process each fighter asset */
+  while (db_res_step (res, &err))
+    {
+      int asset_id = db_res_col_int (res, 0, &err);
+      int quantity = db_res_col_int (res, 1, &err);
+      int owner_id = db_res_col_int (res, 2, &err);
+      int corp_id = db_res_col_int (res, 3, &err);
+      int mode = db_res_col_int (res, 4, &err);  /* 1=Toll, 2=Attack */
+
+      /* Skip if asset owner is not hostile */
+      if (!is_asset_hostile (owner_id, corp_id, ctx->player_id, ship_corp_id))
+        {
+          continue;
+        }
+
+      /* For now, always attack (toll system requires h_bank_transfer_unlocked implementation) */
+      {
+        int damage = quantity * damage_per_unit;
+
+        /* Apply damage to ship */
+        armid_damage_breakdown_t breakdown = { 0 };
+        apply_armid_damage_to_ship (&ship, damage, &breakdown);
+
+        /* Update ship in database */
+        const char *sql_upd = 
+          "UPDATE ships SET hull = $1, fighters = $2, shields = $3 WHERE ship_id = $4;";
+        db_bind_t params_upd[] = {
+          db_bind_i32 (ship.hull),
+          db_bind_i32 (ship.fighters),
+          db_bind_i32 (ship.shields),
+          db_bind_i32 (ship_id)
+        };
+
+        db_error_t upd_err;
+        db_exec (db, sql_upd, params_upd, 4, &upd_err);
+
+        /* Remove the fighter asset (one-time attack) */
+        const char *sql_del = "DELETE FROM sector_assets WHERE id = $1;";
+        db_bind_t params_del[] = { db_bind_i32 (asset_id) };
+        db_exec (db, sql_del, params_del, 1, &upd_err);
+
+        /* Log the attack */
+        json_t *evt = json_object ();
+        json_object_set_new (evt, "damage", json_integer (damage));
+        json_object_set_new (evt, "fighters_engaged", json_integer (quantity));
+        db_log_engine_event ((long long)time (NULL),
+                            "combat.hit.fighters",
+                            "player", ctx->player_id,
+                            sector_id, evt, NULL);
+
+        /* Check if ship destroyed */
+        if (ship.hull <= 0)
+          {
+            db_res_finalize (res);
+            destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
+            return 1;  /* Ship destroyed */
+          }
+      }
+    }
+
+  db_res_finalize (res);
+  return 0;  /* No destruction */
 }
 
 

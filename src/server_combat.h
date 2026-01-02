@@ -19,6 +19,7 @@ int cmd_deploy_fighters_list (client_ctx_t *ctx, json_t *root);
 int cmd_deploy_mines_list (client_ctx_t *ctx, json_t *root);
 int cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root);
 
+int apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id);
 int h_handle_sector_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id);
 int h_trigger_atmosphere_quasar (db_t *db, client_ctx_t *ctx, int planet_id);
 
