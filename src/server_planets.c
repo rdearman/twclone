@@ -35,14 +35,316 @@
 #define GENESIS_NAVHAZ_DELTA 5
 #endif
 
+/* Common helper: authentication check */
+static inline int
+require_auth (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id > 0)
+    {
+      return 1;
+    }
+  send_response_refused_steal (ctx, root, ERR_SECTOR_NOT_FOUND,
+                              "Not authenticated", NULL);
+  return 0;
+}
+
+/* Apply Terra sanctions (destroy all assets and zero credits) */
+static void
+h_apply_terra_sanctions (db_t *db, int player_id)
+{
+  if (!db || player_id <= 0)
+    return;
+
+  db_error_t err;
+
+  /* 1. Delete all ships owned by player */
+  const char *sql_ships = 
+    "DELETE FROM ships WHERE ship_id IN ("
+    "  SELECT ship_id FROM ship_ownership WHERE player_id = $1"
+    ");";
+  db_bind_t params[] = { db_bind_i32 (player_id) };
+  db_exec (db, sql_ships, params, 1, &err);
+
+  /* 2. Zero player credits */
+  const char *sql_credits = "UPDATE players SET credits = 0 WHERE player_id = $1;";
+  db_exec (db, sql_credits, params, 1, &err);
+
+  /* 3. Zero bank accounts */
+  const char *sql_bank = 
+    "UPDATE bank_accounts SET balance = 0 "
+    "WHERE owner_type = 'player' AND owner_id = $1;";
+  db_exec (db, sql_bank, params, 1, &err);
+
+  /* 4. Delete sector assets */
+  const char *sql_assets = 
+    "DELETE FROM sector_assets WHERE player = $1;";
+  db_exec (db, sql_assets, params, 1, &err);
+
+  /* 5. Delete limpet mines */
+  const char *sql_limpets = 
+    "DELETE FROM limpet_attached WHERE owner_player_id = $1;";
+  db_exec (db, sql_limpets, params, 1, &err);
+}
+
 
 int
 cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-                       root,
-                       ERR_NOT_IMPLEMENTED,
-                       "Not implemented: cmd_combat_attack_planet");
+  if (!require_auth (ctx, root))
+    {
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE, 
+                          "Database unavailable");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Missing data");
+      return 0;
+    }
+
+  json_t *j_pid = json_object_get (data, "planet_id");
+  if (!j_pid || !json_is_integer (j_pid))
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing planet_id");
+      return 0;
+    }
+  int planet_id = (int)json_integer_value (j_pid);
+
+  /* Get active ship */
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No active ship");
+      return 0;
+    }
+
+  /* Get current sector */
+  int current_sector = ctx->sector_id;
+  db_error_t err;
+  db_res_t *res = NULL;
+
+  if (current_sector <= 0)
+    {
+      const char *sql = "SELECT sector_id FROM ships WHERE ship_id=$1;";
+      db_bind_t params[] = { db_bind_i32 (ship_id) };
+      if (db_query (db, sql, params, 1, &res, &err) && db_res_step (res, &err))
+        {
+          current_sector = db_res_col_int (res, 0, &err);
+        }
+      if (res) db_res_finalize (res);
+    }
+
+  /* Get planet info */
+  const char *sql_planet = 
+    "SELECT sector_id, owner_id, fighters FROM planets WHERE id=$1;";
+  db_bind_t params_planet[] = { db_bind_i32 (planet_id) };
+
+  if (!db_query (db, sql_planet, params_planet, 1, &res, &err))
+    {
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Planet not found");
+      return 0;
+    }
+
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Planet not found");
+      return 0;
+    }
+
+  int p_sector = db_res_col_int (res, 0, &err);
+  int p_owner_id = db_res_col_int (res, 1, &err);
+  int p_fighters = db_res_col_int (res, 2, &err);
+  db_res_finalize (res);
+
+  /* Check sector match */
+  if (p_sector != current_sector)
+    {
+      send_response_error (ctx, root, REF_NOT_IN_SECTOR, 
+                          "Planet not in current sector");
+      return 0;
+    }
+
+  /* Terra protection: instant destruction + sanctions */
+  if (planet_id == 1 || p_sector == 1)
+    {
+      destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
+      h_apply_terra_sanctions (db, ctx->player_id);
+
+      json_t *evt = json_object ();
+      json_object_set_new (evt, "planet_id", json_integer (planet_id));
+      json_object_set_new (evt, "sanctioned", json_true ());
+      db_log_engine_event ((long long)time (NULL),
+                          "player.terra_attack_sanction.v1",
+                          "player", ctx->player_id, current_sector, evt, NULL);
+
+      send_response_error (ctx, root, 403,
+                          "You have attacked Terra! Federation forces have destroyed your ship and seized your assets.");
+      return 0;
+    }
+
+  /* Get attacker ship fighters */
+  const char *sql_ship = "SELECT fighters FROM ships WHERE ship_id=$1;";
+  db_bind_t params_ship[] = { db_bind_i32 (ship_id) };
+
+  if (!db_query (db, sql_ship, params_ship, 1, &res, &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Failed to load ship");
+      return 0;
+    }
+
+  int s_fighters = 0;
+  if (db_res_step (res, &err))
+    {
+      s_fighters = db_res_col_int (res, 0, &err);
+    }
+  db_res_finalize (res);
+
+  if (s_fighters <= 0)
+    {
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+                          "You have no fighters to attack with.");
+      return 0;
+    }
+
+  /* Get citadel defense */
+  const char *sql_cit = 
+    "SELECT level, planetary_shields, military_reaction_level FROM citadels WHERE planet_id=$1;";
+  db_bind_t params_cit[] = { db_bind_i32 (planet_id) };
+
+  int cit_level = 0;
+  int cit_shields = 0;
+  int cit_reaction = 0;
+
+  if (db_query (db, sql_cit, params_cit, 1, &res, &err) && db_res_step (res, &err))
+    {
+      cit_level = db_res_col_int (res, 0, &err);
+      cit_shields = db_res_col_int (res, 1, &err);
+      cit_reaction = db_res_col_int (res, 2, &err);
+    }
+  if (res) db_res_finalize (res);
+
+  int fighters_absorbed = 0;
+
+  /* Citadel shields (level >= 5) */
+  if (cit_level >= 5 && cit_shields > 0)
+    {
+      int absorbed = (s_fighters < cit_shields) ? s_fighters : cit_shields;
+      s_fighters -= absorbed;
+      fighters_absorbed = absorbed;
+      int new_shields = cit_shields - absorbed;
+
+      const char *sql_upd = 
+        "UPDATE citadels SET planetary_shields=$1 WHERE planet_id=$2;";
+      db_bind_t params_upd[] = { db_bind_i32 (new_shields), db_bind_i32 (planet_id) };
+      db_exec (db, sql_upd, params_upd, 2, &err);
+    }
+
+  /* CCC military reaction (level >= 2) */
+  int effective_p_fighters = p_fighters;
+  if (cit_level >= 2 && cit_reaction > 0)
+    {
+      int pct = 100;
+      if (cit_reaction == 1) pct = 125;
+      else if (cit_reaction >= 2) pct = 150;
+      effective_p_fighters = (int)floor ((double)p_fighters * (double)pct / 100.0);
+    }
+
+  /* Combat resolution */
+  bool attacker_wins = (s_fighters > effective_p_fighters);
+  int ship_loss = 0;
+  int planet_loss = 0;
+  bool captured = false;
+
+  if (attacker_wins)
+    {
+      ship_loss = effective_p_fighters;
+      planet_loss = p_fighters;
+      captured = true;
+    }
+  else
+    {
+      ship_loss = s_fighters;
+      planet_loss = s_fighters;
+      captured = false;
+    }
+
+  ship_loss += fighters_absorbed;
+
+  /* Update database in transaction */
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Transaction failed");
+      return 0;
+    }
+
+  /* Update attacker ship fighters */
+  const char *sql_upd_ship = 
+    "UPDATE ships SET fighters = fighters - $1 WHERE ship_id = $2;";
+  db_bind_t params_ship_upd[] = { db_bind_i32 (ship_loss), db_bind_i32 (ship_id) };
+  db_exec (db, sql_upd_ship, params_ship_upd, 2, &err);
+
+  /* Update planet */
+  if (captured)
+    {
+      int corp_id = ctx->corp_id;
+      const char *new_type = (corp_id > 0) ? "corporation" : "player";
+      int new_owner = (corp_id > 0) ? corp_id : ctx->player_id;
+
+      const char *sql_cap = 
+        "UPDATE planets SET fighters=0, owner_id=$1, owner_type=$2 WHERE id=$3;";
+      db_bind_t params_cap[] = { 
+        db_bind_i32 (new_owner), 
+        db_bind_text (new_type), 
+        db_bind_i32 (planet_id) 
+      };
+      db_exec (db, sql_cap, params_cap, 3, &err);
+
+      json_t *cap_evt = json_object ();
+      json_object_set_new (cap_evt, "planet_id", json_integer (planet_id));
+      json_object_set_new (cap_evt, "previous_owner", json_integer (p_owner_id));
+      db_log_engine_event ((long long)time (NULL),
+                          "player.capture_planet.v1",
+                          "player", ctx->player_id, current_sector, cap_evt, NULL);
+    }
+  else
+    {
+      const char *sql_def = 
+        "UPDATE planets SET fighters = fighters - $1 WHERE id = $2;";
+      db_bind_t params_def[] = { db_bind_i32 (planet_loss), db_bind_i32 (planet_id) };
+      db_exec (db, sql_def, params_def, 2, &err);
+    }
+
+  db_tx_commit (db, &err);
+
+  /* Log attack */
+  json_t *atk_evt = json_object ();
+  json_object_set_new (atk_evt, "planet_id", json_integer (planet_id));
+  json_object_set_new (atk_evt, "result", json_string (attacker_wins ? "win" : "loss"));
+  json_object_set_new (atk_evt, "ship_loss", json_integer (ship_loss));
+  json_object_set_new (atk_evt, "planet_loss", json_integer (planet_loss));
+  db_log_engine_event ((long long)time (NULL),
+                      "player.attack_planet.v1",
+                      "player", ctx->player_id, current_sector, atk_evt, NULL);
+
+  /* Send response */
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "planet_id", json_integer (planet_id));
+  json_object_set_new (resp, "attacker_remaining_fighters",
+                      json_integer (s_fighters - ship_loss));
+  json_object_set_new (resp, "defender_remaining_fighters",
+                      json_integer (p_fighters - planet_loss));
+  json_object_set_new (resp, "captured", json_boolean (captured));
+
+  send_response_ok_take (ctx, root, "combat.attack_planet", &resp);
   return 0;
 }
 
