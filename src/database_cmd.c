@@ -1613,26 +1613,31 @@ db_get_law_config_text (const char *key, const char *def)
       return strdup (def);
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  char *value = NULL;
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = $1 AND value_type = 'TEXT';";
-  char *value = NULL;
 
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          const char *txt = db_res_col_text (res, 0, &err);
-
-
-          if (txt)
-            {
-              value = strdup (txt);
-            }
-        }
-      db_res_finalize (res);
+      value = NULL;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      const char *txt = db_res_col_text (res, 0, &err);
+
+
+      if (txt)
+        {
+          value = strdup (txt);
+        }
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return value ? value : strdup (def);
 }
 
@@ -1640,33 +1645,45 @@ db_get_law_config_text (const char *key, const char *def)
 int
 db_player_get_last_rob_attempt (int pid, int *lpid, long long *lts)
 {
-  db_t *db = game_db_get_handle (); if (!db)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
-  if (db_query (db,
-                "SELECT port_id, last_attempt_at FROM player_last_rob WHERE player_id = $1;",
-                (db_bind_t[]){db_bind_i32 (pid)},
-                1,
-                &res,
-                &err))
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
+  if (!db_query (db,
+                 "SELECT port_id, last_attempt_at FROM player_last_rob WHERE player_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (pid)},
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          if (lpid)
-            {
-              *lpid = db_res_col_i32 (res, 0, &err);
-            }
-          if (lts)
-            {
-              *lts = db_res_col_i64 (res, 1, &err);
-            }
-          db_res_finalize (res); return 0;
-        }
-      db_res_finalize (res); return ERR_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      if (lpid)
+        {
+          *lpid = db_res_col_i32 (res, 0, &err);
+        }
+      if (lts)
+        {
+          *lts = db_res_col_i64 (res, 1, &err);
+        }
+      rc = 0;
+    }
+  else
+    {
+      rc = ERR_NOT_FOUND;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1719,45 +1736,59 @@ db_port_get_active_busts (int port_id, json_t **out)
       return -1;
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = -1;
   const char *sql =
     "SELECT player_id, bust_type, last_bust_at FROM port_busts WHERE port_id = $1 AND active = 1;";
 
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err);
-
-
-      db_res_finalize (res);
-      return rc;
+      rc = -1;
+      goto cleanup;
     }
-  return -1;
+  rc = stmt_to_json_array (res, out, &err);
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
 int
 db_port_is_busted (int port_id, int pid)
 {
-  db_t *db = game_db_get_handle (); if (!db)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err; int busted = 0;
-  if (db_query (db,
-                "SELECT 1 FROM port_busts WHERE port_id = $1 AND player_id = $2 LIMIT 1;",
-                (db_bind_t[]){db_bind_i32 (port_id), db_bind_i32 (pid)},
-                2,
-                &res,
-                &err))
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int busted = 0;
+  if (!db_query (db,
+                 "SELECT 1 FROM port_busts WHERE port_id = $1 AND player_id = $2 LIMIT 1;",
+                 (db_bind_t[]){db_bind_i32 (port_id), db_bind_i32 (pid)},
+                 2,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res,
-                       &err))
-        {
-          busted = 1;
-        }
-      db_res_finalize (res);
+      busted = 0;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      busted = 1;
+    }
+  else
+    {
+      busted = 0;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return (busted) ? 0 : -1;
 }
 
@@ -1769,20 +1800,31 @@ db_get_ship_name (db_t *db, int ship_id, char **out)
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
 
 
-  if (db_query (db, "SELECT name FROM ships WHERE ship_id = $1;",
-                (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
+  if (!db_query (db, "SELECT name FROM ships WHERE ship_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *out = strdup (db_res_col_text (res, 0, &err) ?: "");
-          db_res_finalize (res); return 0;
-        }
-      db_res_finalize (res); return ERR_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      *out = strdup (db_res_col_text (res, 0, &err) ?: "");
+      rc = 0;
+    }
+  else
+    {
+      rc = ERR_NOT_FOUND;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
