@@ -1972,11 +1972,14 @@ db_get_sector_info (int sid,
                     int *plc,
                     char **bt)
 {
-  db_t *db = game_db_get_handle (); if (!db)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
   // Using sector_ops view for aggregation
   const char *sql = "SELECT s.name, 1 as safe_zone, "
                     "(SELECT COUNT(*) FROM ports WHERE sector_id=$1) as pc, "
@@ -1985,39 +1988,48 @@ db_get_sector_info (int sid,
                     "s.beacon "
                     "FROM sectors s WHERE s.sector_id = $1;";
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          if (nm)
-            {
-              *nm = strdup (db_res_col_text (res, 0, &err) ?: "");
-            }
-          if (sz)
-            {
-              *sz = db_res_col_i32 (res, 1, &err);
-            }
-          if (pc)
-            {
-              *pc = db_res_col_i32 (res, 2, &err);
-            }
-          if (sc)
-            {
-              *sc = db_res_col_i32 (res, 3, &err);
-            }
-          if (plc)
-            {
-              *plc = db_res_col_i32 (res, 4, &err);
-            }
-          if (bt)
-            {
-              *bt = strdup (db_res_col_text (res, 5, &err) ?: "");
-            }
-          db_res_finalize (res); return 0;
-        }
-      db_res_finalize (res);
+      rc = -1;
+      goto cleanup;
     }
-  return -1;
+  if (db_res_step (res, &err))
+    {
+      if (nm)
+        {
+          *nm = strdup (db_res_col_text (res, 0, &err) ?: "");
+        }
+      if (sz)
+        {
+          *sz = db_res_col_i32 (res, 1, &err);
+        }
+      if (pc)
+        {
+          *pc = db_res_col_i32 (res, 2, &err);
+        }
+      if (sc)
+        {
+          *sc = db_res_col_i32 (res, 3, &err);
+        }
+      if (plc)
+        {
+          *plc = db_res_col_i32 (res, 4, &err);
+        }
+      if (bt)
+        {
+          *bt = strdup (db_res_col_text (res, 5, &err) ?: "");
+        }
+      rc = 0;
+    }
+  else
+    {
+      rc = -1;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2025,23 +2037,29 @@ int
 db_news_get_recent (int pid, json_t **out)
 {
   (void)pid;
-  db_t *db = game_db_get_handle (); if (!db)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
   const char *sql =
     "SELECT news_id, published_ts, news_category, article_text FROM news_feed ORDER BY published_ts DESC LIMIT 50;";
 
 
-  if (db_query (db, sql, NULL, 0, &res, &err))
+  if (!db_query (db, sql, NULL, 0, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = -1;
+      goto cleanup;
     }
-  return -1;
+  rc = stmt_to_json_array (res, out, &err);
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2052,25 +2070,37 @@ db_port_get_goods_on_hand (db_t *db, int pid, const char *code, int *qty)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
   const char *sql =
     "SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=$1 AND commodity_code=$2;";
 
 
-  if (db_query (db,
-                sql,
-                (db_bind_t[]){db_bind_i32 (pid), db_bind_text (code)},
-                2,
-                &res,
-                &err))
+  if (!db_query (db,
+                 sql,
+                 (db_bind_t[]){db_bind_i32 (pid), db_bind_text (code)},
+                 2,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *qty = db_res_col_i32 (res, 0, &err); db_res_finalize (res); return 0;
-        }
-      db_res_finalize (res);
+      rc = -1;
+      goto cleanup;
     }
-  return -1;
+  if (db_res_step (res, &err))
+    {
+      *qty = db_res_col_i32 (res, 0, &err);
+      rc = 0;
+    }
+  else
+    {
+      rc = -1;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
