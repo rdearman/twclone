@@ -47,6 +47,12 @@ static int g_stardock_sector = 0;
 static int g_patrol_budget = 0;
 #define kIssPatrolBudget 5000
 
+/* ============ Orion (Orion Syndicate) Globals ============ */
+static db_t *ori_db = NULL;
+static bool ori_initialized = false;
+static int ori_owner_id = -1;
+static int ori_home_sector_id = -1;
+
 /* ============ ISS Helper Function Forward Declarations ============ */
 static int db_get_stardock_sector (db_t *db);
 static int db_get_iss_player (db_t *db, int *out_player_id, int *out_sector);
@@ -296,21 +302,167 @@ no_zero_ship (db_t *db, int set_sector, int ship_id)
 void
 ori_attach_db (db_t *db)
 {
-  (void)db;
+  ori_db = db;
+}
+
+
+/* Loops through all Orion ships and executes their movement logic */
+static void
+ori_move_all_ships (void)
+{
+  db_error_t err;
+  db_error_clear (&err);
+
+  /* Select all ships owned by the Orion Syndicate */
+  const char *sql_select_orion_ships =
+    "SELECT s.id, s.sector, s.target_sector "
+    "FROM ships s "
+    "JOIN ship_ownership so ON s.id = so.ship_id "
+    "WHERE so.player_id = $1;";
+
+  db_bind_t params[] = { db_bind_i32 (ori_owner_id) };
+  db_res_t *res = NULL;
+
+  if (!db_query (ori_db, sql_select_orion_ships, params, 1, &res, &err))
+    {
+      LOGE ("ORI_MOVE: Failed to query Orion ships: %s", err.message);
+      return;
+    }
+
+  while (db_res_step (res, &err))
+    {
+      int ship_id = db_res_col_i32 (res, 0, &err);
+      int current_sector = db_res_col_i32 (res, 1, &err);
+      int target_sector = db_res_col_i32 (res, 2, &err);
+      int new_target = target_sector;
+
+      /* Core Orion Movement Strategy:
+         60% chance to target Black Market home sector for resupply/patrol
+         40% chance to target a random unprotected sector for piracy */
+      if (new_target == 0 || new_target == current_sector)
+        {
+          if (rand () % 10 < 6 && ori_home_sector_id != -1)
+            {
+              new_target = ori_home_sector_id;
+            }
+          else
+            {
+              /* Random sector in unprotected range (11..999) */
+              new_target = (rand () % (999 - 11 + 1)) + 11;
+            }
+          /* Don't target the current sector */
+          if (new_target == current_sector)
+            {
+              new_target = (new_target % 999) + 1;
+            }
+        }
+
+      /* Update the target for the next tick */
+      const char *sql_update_target =
+        "UPDATE ships SET target_sector = $1 WHERE id = $2;";
+
+      db_bind_t update_params[] = {
+        db_bind_i32 (new_target),
+        db_bind_i32 (ship_id)
+      };
+
+      db_error_clear (&err);
+      if (!db_exec (ori_db, sql_update_target, update_params, 2, &err))
+        {
+          LOGE ("ORI_MOVE: Failed to update target for ship %d: %s",
+                ship_id, err.message);
+        }
+      else
+        {
+          LOGI ("ORI_MOVE: Ship %d targeting sector %d (from %d).",
+                ship_id, new_target, current_sector);
+        }
+    }
+
+  db_res_finalize (res);
 }
 
 
 int
 ori_init_once (void)
 {
-  return 0;
+  if (ori_initialized || ori_db == NULL)
+    {
+      return (ori_owner_id != -1);
+    }
+
+  db_error_t err;
+  db_error_clear (&err);
+
+  /* Step 1: Find the Orion Syndicate owner ID from corporation tag */
+  const char *sql_find_owner = "SELECT owner_id FROM corporations WHERE tag=$1;";
+  db_bind_t params_owner[] = { db_bind_text ("ORION") };
+  db_res_t *res = NULL;
+
+  if (!db_query (ori_db, sql_find_owner, params_owner, 1, &res, &err))
+    {
+      LOGW ("ORI_INIT: Failed to find Orion Syndicate owner (query error: %s). Skipping.",
+            err.message);
+      ori_initialized = true;
+      return 0;
+    }
+
+  if (db_res_step (res, &err))
+    {
+      ori_owner_id = db_res_col_i32 (res, 0, &err);
+    }
+  db_res_finalize (res);
+
+  if (ori_owner_id == -1)
+    {
+      LOGW ("ORI_INIT: Failed to find Orion Syndicate owner. Skipping.");
+      ori_initialized = true;
+      return 0;
+    }
+
+  /* Step 2: Find the Black Market home sector ID (from Port ID 10) */
+  const char *sql_find_sector = "SELECT sector FROM ports WHERE id=$1 AND name=$2;";
+  db_bind_t params_sector[] = {
+    db_bind_i32 (10),
+    db_bind_text ("Orion Black Market Dock")
+  };
+  res = NULL;
+  db_error_clear (&err);
+
+  if (!db_query (ori_db, sql_find_sector, params_sector, 2, &res, &err))
+    {
+      LOGW ("ORI_INIT: Failed to find Black Market sector (query error: %s). Movement will be random.",
+            err.message);
+    }
+  else if (db_res_step (res, &err))
+    {
+      ori_home_sector_id = db_res_col_i32 (res, 0, &err);
+      db_res_finalize (res);
+    }
+  else
+    {
+      LOGW ("ORI_INIT: Failed to find Black Market home sector (Port ID 10). Movement will be random.");
+      db_res_finalize (res);
+    }
+
+  LOGI ("ORI_INIT: Orion Syndicate owner ID is %d, Home Sector is %d",
+        ori_owner_id, ori_home_sector_id);
+  ori_initialized = true;
+  return 1;
 }
 
 
 void
 ori_tick (int64_t now_ms)
 {
-  (void)now_ms;
+  if (!ori_initialized || ori_owner_id == -1 || ori_db == NULL)
+    {
+      return;
+    }
+  LOGI ("ORI_TICK: Running movement logic for Orion Syndicate... @%ld",
+        now_ms);
+  ori_move_all_ships ();
+  LOGI ("ORI_TICK: Complete.");
 }
 
 
@@ -1501,6 +1653,167 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
   send_response_ok_take (ctx, root, "move.transwarp", &data);
   return 0;
+}
+
+
+/* Ferengi Trading at Port - Core NPC trading logic */
+static int
+ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
+                       int sector_id)
+{
+  if (!db || ship_id <= 0 || port_id <= 0)
+    return 1;
+
+  db_error_t err;
+  char tx_group_id[UUID_STR_LEN];
+  h_generate_hex_uuid (tx_group_id, sizeof(tx_group_id));
+
+  int fer_ore = 0, fer_organics = 0, fer_equipment = 0;
+  int fer_holds = 0;
+
+  if (h_get_ship_cargo_and_holds (db, ship_id,
+                                  &fer_ore, &fer_organics, &fer_equipment,
+                                  &fer_holds, NULL, NULL, NULL, NULL) != 0)
+    {
+      LOGW ("[fer] Failed to get ship %d cargo", ship_id);
+      return 1;
+    }
+
+  int fer_current_cargo_total = fer_ore + fer_organics + fer_equipment;
+  int fer_empty_holds = fer_holds - fer_current_cargo_total;
+
+  long long fer_credits = 0;
+  db_error_clear (&err);
+  db_get_corp_bank_balance (db, g_fer_corp_id, &fer_credits);
+
+  int port_ore_qty = 0, port_org_qty = 0, port_equ_qty = 0;
+  int dummy_cap = 0;
+  bool dummy_bool = false;
+
+  h_get_port_commodity_details (db, port_id, "ORE", &port_ore_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+  h_get_port_commodity_details (db, port_id, "ORG", &port_org_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+  h_get_port_commodity_details (db, port_id, "EQU", &port_equ_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+
+  int port_ore_buy = h_calculate_port_buy_price (db, port_id, "ORE");
+  int port_ore_sell = h_calculate_port_sell_price (db, port_id, "ORE");
+  int port_org_buy = h_calculate_port_buy_price (db, port_id, "ORG");
+  int port_org_sell = h_calculate_port_sell_price (db, port_id, "ORG");
+  int port_equ_buy = h_calculate_port_buy_price (db, port_id, "EQU");
+  int port_equ_sell = h_calculate_port_sell_price (db, port_id, "EQU");
+
+  const char *commodities[] = {"ORE", "ORG", "EQU"};
+  int fer_hold_values[] = {fer_ore, fer_organics, fer_equipment};
+  int port_buy_prices[] = {port_ore_buy, port_org_buy, port_equ_buy};
+  int port_sell_prices[] = {port_ore_sell, port_org_sell, port_equ_sell};
+  int port_quantities[] = {port_ore_qty, port_org_qty, port_equ_qty};
+
+  int best_sell_idx = -1;
+  int best_buy_idx = -1;
+
+  for (int c_idx = 0; c_idx < 3; ++c_idx)
+    {
+      if (fer_hold_values[c_idx] > 0 && port_buy_prices[c_idx] > 0)
+        {
+          if (best_sell_idx == -1 || port_buy_prices[c_idx] > port_buy_prices[best_sell_idx])
+            best_sell_idx = c_idx;
+        }
+    }
+
+  for (int c_idx = 0; c_idx < 3; ++c_idx)
+    {
+      if (fer_empty_holds > 0 && port_quantities[c_idx] > 0 && port_sell_prices[c_idx] > 0)
+        {
+          if (best_buy_idx == -1 || port_sell_prices[c_idx] < port_sell_prices[best_buy_idx])
+            best_buy_idx = c_idx;
+        }
+    }
+
+  int rc = 0;
+
+  if (best_sell_idx != -1)
+    {
+      const char *commodity = commodities[best_sell_idx];
+      int price_per_unit = port_buy_prices[best_sell_idx];
+      int max_sell_to_port = port_quantities[best_sell_idx] / 2;
+      if (max_sell_to_port == 0)
+        max_sell_to_port = 1;
+
+      int qty_to_trade = MIN (fer_hold_values[best_sell_idx], max_sell_to_port);
+      long long port_balance = 0;
+      db_get_port_bank_balance (db, port_id, &port_balance);
+      qty_to_trade = MIN (qty_to_trade, (int)(port_balance / price_per_unit));
+
+      if (qty_to_trade > 0 && price_per_unit > 0)
+        {
+          long long total_credits = (long long)qty_to_trade * price_per_unit;
+
+          db_error_clear (&err);
+          rc = h_bank_transfer_unlocked (db, "port", port_id, "corp", g_fer_corp_id,
+                                         total_credits, "TRADE_SELL", tx_group_id);
+          if (rc == 0)
+            {
+              rc = h_update_ship_cargo (db, ship_id, commodity, -qty_to_trade, NULL);
+              if (rc == 0)
+                rc = h_market_move_port_stock (db, port_id, commodity, qty_to_trade);
+            }
+
+          if (rc == 0)
+            {
+              fer_event_json ("npc.trade", sector_id,
+                            "{ \"kind\":\"ferrengi_sell\", \"ship_id\":%d, \"port_id\":%d, "
+                            "\"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%"PRId64" }",
+                            ship_id, port_id, commodity, qty_to_trade, price_per_unit, total_credits);
+              LOGI ("[fer] Sold %d %s to Port %d for %lld credits.",
+                    qty_to_trade, commodity, port_id, total_credits);
+            }
+          else
+            {
+              LOGW ("[fer] Failed to sell %d %s to Port %d (rc=%d)",
+                    qty_to_trade, commodity, port_id, rc);
+            }
+        }
+    }
+
+  if (rc == 0 && best_buy_idx != -1 && fer_empty_holds > 0)
+    {
+      const char *commodity = commodities[best_buy_idx];
+      int price_per_unit = port_sell_prices[best_buy_idx];
+      int qty_to_trade = MIN (fer_empty_holds, port_quantities[best_buy_idx]);
+      if (qty_to_trade <= 0)
+        qty_to_trade = 1;
+
+      long long total_credits = (long long)qty_to_trade * price_per_unit;
+
+      if (qty_to_trade > 0 && total_credits > 0 && fer_credits >= total_credits)
+        {
+          db_error_clear (&err);
+          rc = h_bank_transfer_unlocked (db, "corp", g_fer_corp_id, "port", port_id,
+                                         total_credits, "TRADE_BUY", tx_group_id);
+          if (rc == 0)
+            {
+              rc = h_update_ship_cargo (db, ship_id, commodity, qty_to_trade, NULL);
+              if (rc == 0)
+                rc = h_market_move_port_stock (db, port_id, commodity, -qty_to_trade);
+            }
+
+          if (rc == 0)
+            {
+              fer_event_json ("npc.trade", sector_id,
+                            "{ \"kind\":\"ferrengi_buy\", \"ship_id\":%d, \"port_id\":%d, "
+                            "\"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%"PRId64" }",
+                            ship_id, port_id, commodity, qty_to_trade, price_per_unit, total_credits);
+              LOGI ("[fer] Bought %d %s from Port %d for %lld credits.",
+                    qty_to_trade, commodity, port_id, total_credits);
+            }
+          else
+            {
+              LOGW ("[fer] Failed to buy %d %s from Port %d (rc=%d)",
+                    qty_to_trade, commodity, port_id, rc);
+            }
+        }
+    }
+
+  return rc;
 }
 
 
