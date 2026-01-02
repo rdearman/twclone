@@ -1835,20 +1835,31 @@ db_get_port_name (db_t *db, int port_id, char **out)
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
 
 
-  if (db_query (db, "SELECT name FROM ports WHERE port_id = $1;",
-                (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
+  if (!db_query (db, "SELECT name FROM ports WHERE port_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *out = strdup (db_res_col_text (res, 0, &err) ?: "");
-          db_res_finalize (res); return 0;
-        }
-      db_res_finalize (res); return ERR_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      *out = strdup (db_res_col_text (res, 0, &err) ?: "");
+      rc = 0;
+    }
+  else
+    {
+      rc = ERR_NOT_FOUND;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1912,18 +1923,29 @@ db_get_port_id_by_sector (db_t *db, int sid)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int pid = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int pid = 0;
 
 
-  if (db_query (db, "SELECT port_id FROM ports WHERE sector_id = $1;",
-                (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
+  if (!db_query (db, "SELECT port_id FROM ports WHERE sector_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          pid = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      pid = 0;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      pid = db_res_col_i32 (res, 0, &err);
+    }
+  else
+    {
+      pid = 0;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return pid;
 }
 
