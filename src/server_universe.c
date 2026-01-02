@@ -1654,6 +1654,47 @@ iss_init_once (void)
   return 1;
 }
 
+/* ============ NPC Encounter Handler ============ */
+
+void
+h_handle_npc_encounters (db_t *db, client_ctx_t *ctx, int new_sector_id)
+{
+  if (!db || !ctx || new_sector_id <= 0)
+    {
+      LOGE ("h_handle_npc_encounters: Invalid input.");
+      return;
+    }
+
+  /* 10% chance of a generic NPC encounter */
+  if (rand () % 10 == 0)
+    {
+      json_t *payload = json_object ();
+
+      if (!payload)
+        {
+          LOGE ("h_handle_npc_encounters: Out of memory for event payload.");
+          return;
+        }
+      json_object_set_new (payload, "player_id", json_integer (ctx->player_id));
+      json_object_set_new (payload, "sector_id", json_integer (new_sector_id));
+      json_object_set_new (payload, "npc_type", json_string ("Generic NPC"));
+      json_object_set_new (payload, "message",
+                           json_string ("A generic NPC has been encountered!"));
+
+      db_log_engine_event (time (NULL),
+                           "npc.encounter",
+                           "player",
+                           ctx->player_id,
+                           new_sector_id,
+                           payload,
+                           NULL);
+      LOGI (
+        "h_handle_npc_encounters: Generic NPC encounter logged for player %d in sector %d.",
+        ctx->player_id,
+        new_sector_id);
+    }
+}
+
 /* ============ ISS Helper Stubs (TODO: Full implementation) ============ */
 
 int
