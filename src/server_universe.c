@@ -54,6 +54,47 @@ static void iss_move_to (db_t *db, int sector_id, int warp_enabled, const char *
 static int iss_try_consume_summon (db_t *db);
 static void iss_patrol_step (db_t *db);
 
+/* ============ Ferengi Event Logging ============ */
+/* Log events to engine_events table with formatted payload */
+static void
+fer_event_json (const char *type, int sector_id, const char *fmt, ...)
+{
+  if (!g_fer_db)
+    {
+      LOGE ("fer_event_json: Received NULL DB handle. Cannot proceed.");
+      return;
+    }
+  if (!type)
+    {
+      LOGE ("fer_event_json: Event type is NULL. Cannot proceed.");
+      return;
+    }
+
+  /* Format payload from variadic args */
+  char payload[512];
+  va_list ap;
+  va_start (ap, fmt);
+  vsnprintf (payload, sizeof payload, fmt, ap);
+  va_end (ap);
+
+  /* INSERT into engine_events(type, sector_id, payload, ts) */
+  db_error_t err;
+  db_error_clear (&err);
+  
+  const char *sql = "INSERT INTO engine_events(type, sector_id, payload, ts) "
+                    "VALUES ($1, $2, $3, NOW())";
+  db_bind_t params[] = {
+    db_bind_text (type),
+    db_bind_i32 (sector_id),
+    db_bind_text (payload)
+  };
+
+  if (!db_exec (g_fer_db, sql, params, 3, &err))
+    {
+      LOGE ("fer_event_json: Failed to insert event: %s", err.message);
+    }
+}
+
 /* ============ Navigation Helper Functions ============ */
 
 /* Breadth-first search to find one hop toward goal sector from start sector */
