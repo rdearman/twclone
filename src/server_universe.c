@@ -47,6 +47,13 @@ static int g_stardock_sector = 0;
 static int g_patrol_budget = 0;
 #define kIssPatrolBudget 5000
 
+/* ============ ISS Helper Function Forward Declarations ============ */
+static int db_get_stardock_sector (db_t *db);
+static int db_get_iss_player (db_t *db, int *out_player_id, int *out_sector);
+static void iss_move_to (db_t *db, int sector_id, int warp_enabled, const char *reason);
+static int iss_try_consume_summon (db_t *db);
+static void iss_patrol_step (db_t *db);
+
 /* ============ Navigation Helper Functions ============ */
 
 /* Breadth-first search to find one hop toward goal sector from start sector */
@@ -284,9 +291,222 @@ make_player_object (int64_t player_id)
 
 
 int
+parse_sector_search_input (json_t *root,
+                           char **q_out,
+                           int *type_any, int *type_sector, int *type_port,
+                           int *limit_out, int *offset_out)
+{
+  *q_out = NULL;
+  *type_any = *type_sector = *type_port = 0;
+  *limit_out = 20;  /* SEARCH_DEFAULT_LIMIT */
+  *offset_out = 0;
+  json_t *data = json_object_get (root, "data");
+
+  if (!json_is_object (data))
+    {
+      return -1;
+    }
+  /* q (optional, empty means "match all") */
+  json_t *jq = json_object_get (data, "q");
+
+  if (json_is_string (jq))
+    {
+      const char *qs = json_string_value (jq);
+      *q_out = strdup (qs ? qs : "");
+    }
+  else
+    {
+      *q_out = strdup ("");
+    }
+  if (!*q_out)
+    {
+      return -2;
+    }
+  /* type */
+  const char *type = "any";
+  json_t *jtype = json_object_get (data, "type");
+
+  if (json_is_string (jtype))
+    {
+      type = json_string_value (jtype);
+    }
+  if (!type || strcasecmp (type, "any") == 0)
+    {
+      *type_any = 1;
+    }
+  else if (strcasecmp (type, "sector") == 0)
+    {
+      *type_sector = 1;
+    }
+  else if (strcasecmp (type, "port") == 0)
+    {
+      *type_port = 1;
+    }
+  else
+    {
+      free (*q_out);
+      return -3;
+    }
+  /* limit */
+  json_t *jlimit = json_object_get (data, "limit");
+
+  if (json_is_integer (jlimit))
+    {
+      int lim = (int) json_integer_value (jlimit);
+      if (lim <= 0)
+        {
+          lim = 20;
+        }
+      if (lim > 100)  /* SEARCH_MAX_LIMIT */
+        {
+          lim = 100;
+        }
+      *limit_out = lim;
+    }
+  /* cursor (offset) */
+  json_t *jcur = json_object_get (data, "cursor");
+
+  if (json_is_integer (jcur))
+    {
+      *offset_out = (int) json_integer_value (jcur);
+      if (*offset_out < 0)
+        {
+          *offset_out = 0;
+        }
+    }
+  else if (json_is_string (jcur))
+    {
+      /* allow stringified integers too */
+      const char *s = json_string_value (jcur);
+      if (s && *s)
+        {
+          *offset_out = atoi (s);
+          if (*offset_out < 0)
+            {
+              *offset_out = 0;
+            }
+        }
+    }
+  return 0;
+}
+
+int
 cmd_sector_search (client_ctx_t *ctx, json_t *root)
 {
-  (void)ctx; (void)root; return 0;
+  if (!root)
+    {
+      return -1;
+    }
+  char *q = NULL;
+  int type_any = 0, type_sector = 0, type_port = 0;
+  int limit = 0, offset = 0;
+  int prc = parse_sector_search_input (root, &q, &type_any, &type_sector, 
+                                        &type_port, &limit, &offset);
+
+  if (prc != 0)
+    {
+      free (q);
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "Expected data { ... }");
+      return 0;
+    }
+  
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      free (q);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "No database handle.");
+      return 0;
+    }
+  
+  /* Build SQL query based on search type */
+  char sql[512];
+  int params_count = 3;
+  db_bind_t params[3];
+  
+  const char *base_sql = 
+    "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index ";
+  const char *order_limit = " ORDER BY kind, name, id LIMIT $2 OFFSET $3";
+  
+  /* Build WHERE clause */
+  if (type_any)
+    {
+      snprintf (sql, sizeof(sql), 
+                "%s WHERE (($1 = '') OR (search_term_1 ILIKE $1)) %s",
+                base_sql, order_limit);
+    }
+  else if (type_sector)
+    {
+      snprintf (sql, sizeof(sql),
+                "%s WHERE kind = 'sector' AND (($1 = '') OR (search_term_1 ILIKE $1)) %s",
+                base_sql, order_limit);
+    }
+  else
+    {  /* type_port */
+      snprintf (sql, sizeof(sql),
+                "%s WHERE kind = 'port' AND (($1 = '') OR (search_term_1 ILIKE $1)) %s",
+                base_sql, order_limit);
+    }
+  
+  /* Bind parameters */
+  params[0] = db_bind_text(q ? q : "");
+  params[1] = db_bind_i32(limit + 1);
+  params[2] = db_bind_i32(offset);
+  
+  db_error_t err;
+  db_res_t *res = NULL;
+  
+  if (!db_query (db, sql, params, params_count, &res, &err))
+    {
+      free (q);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Search query failed");
+      return 0;
+    }
+  
+  json_t *items = json_array ();
+  int row_count = 0;
+  
+  while (db_res_step (res, &err))
+    {
+      const char *kind = db_res_col_text (res, 0, &err);
+      int id = (int)db_res_col_i64 (res, 1, &err);
+      const char *name = db_res_col_text (res, 2, &err);
+      int sector_id = (int)db_res_col_i64 (res, 3, &err);
+      const char *sector_name = db_res_col_text (res, 4, &err);
+      
+      if (row_count < limit)
+        {
+          json_t *it = json_object ();
+          json_object_set_new (it, "kind", json_string (kind ? kind : ""));
+          json_object_set_new (it, "id", json_integer (id));
+          json_object_set_new (it, "name", json_string (name ? name : ""));
+          json_object_set_new (it, "sector_id", json_integer (sector_id));
+          json_object_set_new (it, "sector_name", 
+                              json_string (sector_name ? sector_name : ""));
+          json_array_append_new (items, it);
+        }
+      row_count++;
+      if (row_count >= limit + 1)
+        {
+          break;
+        }
+    }
+  db_res_finalize (res);
+  free (q);
+  
+  json_t *jdata = json_object ();
+  json_object_set_new (jdata, "items", items);
+  
+  if (row_count > limit)
+    {
+      json_object_set_new (jdata, "next_cursor", json_integer (offset + limit));
+    }
+  else
+    {
+      json_object_set_new (jdata, "next_cursor", json_null ());
+    }
+  
+  send_response_ok_take (ctx, root, "sector.search_results_v1", &jdata);
+  return 0;
 }
 
 
