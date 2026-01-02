@@ -1111,26 +1111,34 @@ db_get_player_podded_count_today (db_t *db, int pid)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int cnt = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int cnt = 0;
 
 
-  if (db_query (db,
-                "SELECT podded_count_today FROM podded_status WHERE player_id = $1;",
-                (db_bind_t[]){db_bind_i32 (pid)},
-                1,
-                &res,
-                &err))
+  if (!db_query (db,
+                 "SELECT podded_count_today FROM podded_status WHERE player_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (pid)},
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          cnt = db_res_col_i32 (res, 0, &err);
-        }
-      else
-        {
-          db_create_podded_status_entry (db, pid);
-        }
-      db_res_finalize (res);
+      cnt = 0;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      cnt = db_res_col_i32 (res, 0, &err);
+    }
+  else
+    {
+      db_create_podded_status_entry (db, pid);
+      cnt = 0;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return cnt;
 }
 
@@ -1142,26 +1150,34 @@ db_get_player_podded_last_reset (db_t *db, int pid)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; long long ts = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  long long ts = 0;
 
 
-  if (db_query (db,
-                "SELECT podded_last_reset FROM podded_status WHERE player_id = $1;",
-                (db_bind_t[]){db_bind_i32 (pid)},
-                1,
-                &res,
-                &err))
+  if (!db_query (db,
+                 "SELECT podded_last_reset FROM podded_status WHERE player_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (pid)},
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          ts = db_res_col_i64 (res, 0, &err);
-        }
-      else
-        {
-          db_create_podded_status_entry (db, pid); ts = time (NULL);
-        }
-      db_res_finalize (res);
+      ts = 0;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      ts = db_res_col_i64 (res, 0, &err);
+    }
+  else
+    {
+      db_create_podded_status_entry (db, pid);
+      ts = time (NULL);
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return ts;
 }
 
@@ -1327,25 +1343,37 @@ db_get_shiptype_info (db_t *db, int tid, int *h, int *f, int *s)
     {
       return ERR_DB_CLOSED;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
 
 
-  if (db_query (db,
-                "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE shiptypes_id = $1;",
-                (db_bind_t[]){db_bind_i32 (tid)},
-                1,
-                &res,
-                &err))
+  if (!db_query (db,
+                 "SELECT initialholds, maxfighters, maxshields FROM shiptypes WHERE shiptypes_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (tid)},
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *h = db_res_col_i32 (res, 0, &err);
-          *f = db_res_col_i32 (res, 1, &err);
-          *s = db_res_col_i32 (res, 2, &err); db_res_finalize (res); return 0;
-        }
-      db_res_finalize (res); return ERR_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      *h = db_res_col_i32 (res, 0, &err);
+      *f = db_res_col_i32 (res, 1, &err);
+      *s = db_res_col_i32 (res, 2, &err);
+      rc = 0;
+    }
+  else
+    {
+      rc = ERR_NOT_FOUND;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
