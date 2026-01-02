@@ -530,8 +530,31 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
         }
     }
 
-  db_res_finalize (res);
   return blocked;
+}
+
+/* Check if sector has a port */
+int
+sector_has_port (db_t *db, int sector)
+{
+  if (!db || sector <= 0)
+    {
+      return 0;
+    }
+
+  db_error_t err;
+  db_res_t *res = NULL;
+  const char *sql = "SELECT 1 FROM ports WHERE sector_id=$1 LIMIT 1;";
+  db_bind_t params[] = { db_bind_i32 (sector) };
+
+  if (!db_query (db, sql, params, 1, &res, &err))
+    {
+      return 0;
+    }
+
+  int has_port = db_res_step (res, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return has_port;
 }
 
 
