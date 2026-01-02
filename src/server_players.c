@@ -1503,6 +1503,25 @@ h_get_player_petty_cash (db_t *db, int player_id, long long *bal)
 
 
 int
+h_deduct_ship_credits (db_t *db, int player_id, int amount, int *new_balance)
+{
+  long long new_balance_ll = 0;
+  int rc = h_deduct_credits (db,
+                             "player",
+                             player_id,
+                             amount,
+                             "WITHDRAWAL",
+                             NULL,
+                             &new_balance_ll);
+  if (rc == 0 && new_balance)
+    {
+      *new_balance = (int) new_balance_ll;
+    }
+  return rc;
+}
+
+
+int
 
 
 h_deduct_player_petty_cash_unlocked (db_t *db,

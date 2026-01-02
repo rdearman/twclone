@@ -53,6 +53,7 @@ int h_deduct_player_petty_cash (db_t *db,
                                 int player_id,
                                 long long amount,
                                 long long *new_balance_out);
+int h_deduct_ship_credits (db_t *db, int player_id, int amount, int *new_balance);
 int h_add_player_petty_cash (db_t *db,
                              int player_id,
                              long long amount,
