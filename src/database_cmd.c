@@ -223,7 +223,8 @@ static int
 column_exists_unlocked (db_t *db, const char *table, const char *col)
 {
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = 0;
   /* Standard SQL information_schema query */
   const char *sql =
     "SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2;";
@@ -231,15 +232,21 @@ column_exists_unlocked (db_t *db, const char *table, const char *col)
   int found = 0;
 
 
-  if (db_query (db, sql, params, 2, &res, &err))
+  if (!db_query (db, sql, params, 2, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          found = 1;
-        }
-      db_res_finalize (res);
+      rc = 0;  /* query failed, column doesn't exist */
+      goto cleanup;
     }
-  return found;
+  if (db_res_step (res, &err))
+    {
+      found = 1;
+    }
+  rc = found;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
