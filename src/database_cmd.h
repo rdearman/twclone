@@ -218,6 +218,7 @@ int h_bank_transfer_unlocked (db_t *db,
                               long long amount,
                               const char *tx_type,
                               const char *tx_group_id);
+bool h_is_black_market_port (db_t *db, int port_id);
 int db_bank_get_transactions (db_t *db,
                               const char *owner_type,
                               int owner_id,

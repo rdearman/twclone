@@ -28,6 +28,7 @@ int h_warp_exists (db_t *db, int from, int to);
 int h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id);
 int sector_has_port (db_t *db, int sector);
 int db_pick_adjacent (db_t *db, int sector);
+int validate_warp_rule (int from_sector, int to_sector);
 
 int cmd_move_describe_sector (client_ctx_t *ctx, json_t *root);
 int cmd_move_warp (client_ctx_t *ctx, json_t *root);

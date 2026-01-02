@@ -885,6 +885,36 @@ cmd_move_describe_sector (client_ctx_t *ctx,
   return 0;
 }
 
+/* Validate that a warp link exists between two sectors */
+int
+validate_warp_rule (int from_sector, int to_sector)
+{
+  if (to_sector <= 0)
+    {
+      return ERR_BAD_REQUEST;
+    }
+  if (from_sector <= 0)
+    {
+      return ERR_BAD_STATE;
+    }
+  if (from_sector == to_sector)
+    {
+      return 0;             /* no-op warp is fine (cheap "success") */
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      return ERR_DB;
+    }
+
+  if (!h_warp_exists (db, from_sector, to_sector))
+    {
+      return REF_NO_WARP_LINK;
+    }
+
+  return 0;
+}
 
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)

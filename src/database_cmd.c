@@ -4372,3 +4372,37 @@ h_bank_transfer_unlocked (db_t *db,
   
   return 0;
 }
+
+/* Check if a port is a black market based on port name */
+bool
+h_is_black_market_port (db_t *db, int port_id)
+{
+  if (!db || port_id <= 0)
+    {
+      return false;
+    }
+  
+  db_res_t *res = NULL;
+  db_error_t err;
+  bool is_bm = false;
+  
+  if (db_query (db, 
+                "SELECT name FROM ports WHERE id = $1 LIMIT 1;",
+                (db_bind_t[]){db_bind_i32 (port_id)},
+                1,
+                &res,
+                &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          const char *name = db_res_col_text (res, 0, &err);
+          if (name && strstr (name, "Black Market"))
+            {
+              is_bm = true;
+            }
+        }
+      db_res_finalize (res);
+    }
+  
+  return is_bm;
+}

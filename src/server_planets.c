@@ -2691,3 +2691,33 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
   return 0;
 }
 
+/* Look up commodity ID by code */
+int
+h_get_commodity_id_by_code (db_t *db, const char *code)
+{
+  if (!db || !code)
+    {
+      return 0;
+    }
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  int id = 0;
+
+  if (db_query (db,
+                "SELECT id FROM commodities WHERE code = $1 LIMIT 1;",
+                (db_bind_t[]){db_bind_text (code)},
+                1,
+                &res,
+                &err))
+    {
+      if (db_res_step (res, &err))
+        {
+          id = db_res_col_int (res, 0, &err);
+        }
+      db_res_finalize (res);
+    }
+
+  return id;
+}
+

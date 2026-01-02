@@ -35,5 +35,6 @@ int h_planet_check_trade_legality (db_t *db,
                                    bool buy);
 int h_get_planet_owner_info (db_t *db, int pid, planet_t *p);
 int h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta);
+int h_get_commodity_id_by_code (db_t *db, const char *code);
 
 #endif
