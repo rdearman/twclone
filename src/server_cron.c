@@ -1972,7 +1972,7 @@ h_npc_step (db_t *db, int64_t now_s)
   if (fer_init_once () == 1)
     {
       fer_attach_db (db);
-      fer_tick (now_ms);
+      fer_tick (game_db_get_handle(), now_ms);
     }
 
   if (ori_init_once () == 1)

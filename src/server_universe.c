@@ -33,6 +33,175 @@
 #include "database_market.h"
 #include "db/db_api.h"
 
+/* ============ Ferengi Trader Globals ============ */
+static db_t *g_fer_db = NULL;
+static int g_fer_inited = 0;
+static int g_fer_corp_id = 0;
+static int g_fer_player_id = 0;
+
+/* ============ ISS (Interpolar Security Station) Globals ============ */
+static int g_iss_inited = 0;
+static int g_iss_id = 0;
+static int g_iss_sector = 0;
+static int g_stardock_sector = 0;
+static int g_patrol_budget = 0;
+#define kIssPatrolBudget 5000
+
+/* ============ Navigation Helper Functions ============ */
+
+/* Breadth-first search to find one hop toward goal sector from start sector */
+int
+nav_next_hop (db_t *db, int start, int goal)
+{
+  if (!db || start <= 0 || goal <= 0 || start == goal)
+    {
+      return 0;
+    }
+
+  enum
+  { MAX_Q = 4096, MAX_SEEN = 8192 };
+  int q[MAX_Q], head = 0, tail = 0;
+
+  typedef struct
+  {
+    int key, prev;
+  } kv_t;
+  kv_t seen[MAX_SEEN];
+  int seen_n = 0;
+
+  /* Helper: lookup seen table */
+  auto int seen_get (int key)
+  {
+    for (int i = 0; i < seen_n; ++i)
+      {
+        if (seen[i].key == key)
+          {
+            return i;
+          }
+      }
+    return -1;
+  };
+
+  /* Helper: insert into seen table */
+  auto int seen_put (int key, int prev)
+  {
+    if (seen_n >= MAX_SEEN)
+      {
+        return -1;
+      }
+    seen[seen_n].key = key;
+    seen[seen_n].prev = prev;
+    return seen_n++;
+  };
+
+  /* Initialize BFS queue with start sector */
+  q[0] = start;
+  head = 0;
+  tail = 1;
+  seen_put (start, -1);
+
+  db_error_t err;
+  int found = -1;
+
+  /* BFS to find goal */
+  while (head != tail && found == -1)
+    {
+      int cur = q[head++ % MAX_Q];
+
+      /* Query adjacent sectors from sector_warps table */
+      const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector=$1;";
+      db_bind_t params[] = { db_bind_i32 (cur) };
+      db_res_t *res = NULL;
+
+      if (!db_query (db, sql, params, 1, &res, &err))
+        {
+          /* Query failed; return 0 to indicate no path */
+          return 0;
+        }
+
+      while (db_res_step (res, &err))
+        {
+          int nb = db_res_col_int (res, 0, &err);
+
+          if (seen_get (nb) != -1)
+            {
+              continue;
+            }
+          seen_put (nb, cur);
+          if (nb == goal)
+            {
+              found = nb;
+              break;
+            }
+          if ((tail - head) < (MAX_Q - 1))
+            {
+              q[tail++ % MAX_Q] = nb;
+            }
+        }
+
+      db_res_finalize (res);
+    }
+
+  if (found == -1)
+    {
+      return 0;
+    }
+
+  /* Reconstruct one hop toward goal */
+  int step = found, prev = -2;
+
+  for (;;)
+    {
+      int i = seen_get (step);
+
+      if (i < 0)
+        {
+          break;
+        }
+      prev = seen[i].prev;
+      if (prev == -1)
+        {
+          break; /* step == start */
+        }
+      if (prev == start)
+        {
+          return step; /* first hop away from start */
+        }
+      step = prev;
+    }
+  return step; /* neighbour fallback */
+}
+
+/* Get random adjacent sector */
+int
+nav_random_neighbor (db_t *db, int sector)
+{
+  if (!db || sector <= 0)
+    {
+      return 0;
+    }
+
+  db_error_t err;
+  const char *sql =
+    "SELECT to_sector FROM sector_warps WHERE from_sector=$1 ORDER BY RANDOM() LIMIT 1;";
+  db_bind_t params[] = { db_bind_i32 (sector) };
+  db_res_t *res = NULL;
+
+  if (!db_query (db, sql, params, 1, &res, &err))
+    {
+      return 0;
+    }
+
+  int result = 0;
+  if (db_res_step (res, &err))
+    {
+      result = db_res_col_int (res, 0, &err);
+    }
+  db_res_finalize (res);
+
+  return result;
+}
+
 /* Forward statics */
 static void attach_sector_asset_counts (db_t *db,
                                         int sector_id,
@@ -965,35 +1134,147 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 int
 fer_init_once (void)
 {
-  return 0;
+  if (g_fer_inited)
+    {
+      return 1;
+    }
+  if (!g_fer_db)
+    {
+      LOGW ("[fer] no DB handle; traders disabled");
+      return 0;
+    }
+
+  db_error_t err;
+  db_res_t *res = NULL;
+
+  const char *sql_find_corp_info =
+    "SELECT id, owner_id FROM corporations WHERE tag='FENG' LIMIT 1;";
+
+  if (db_query (g_fer_db, sql_find_corp_info, NULL, 0, &res, &err))
+    {
+      if (res && db_res_step (res, &err))
+        {
+          g_fer_corp_id = db_res_col_i32 (res, 0, &err);
+          g_fer_player_id = db_res_col_i32 (res, 1, &err);
+          if (g_fer_player_id == 0)
+            {
+              g_fer_player_id = 1;
+            }
+        }
+      if (res) db_res_finalize (res);
+    }
+
+  if (g_fer_corp_id == 0)
+    {
+      LOGW ("[fer] Ferengi Alliance corporation not found. Traders disabled.");
+      return 0;
+    }
+
+  int home = 0;
+  const char *sql_find_home_sector =
+    "SELECT sector_id FROM planets WHERE planet_id=2 LIMIT 1;";
+
+  res = NULL;
+  if (db_query (g_fer_db, sql_find_home_sector, NULL, 0, &res, &err))
+    {
+      if (res && db_res_step (res, &err))
+        {
+          home = db_res_col_i32 (res, 0, &err);
+        }
+      if (res) db_res_finalize (res);
+    }
+
+  if (home <= 0)
+    {
+      LOGW ("[fer] Ferengi homeworld not found; disabling traders");
+      return 0;
+    }
+
+  int ship_type_id = 0;
+  const char *sql_find_shiptype =
+    "SELECT ship_type_id FROM ship_types WHERE name='Ferengi Warship' LIMIT 1;";
+
+  res = NULL;
+  if (db_query (g_fer_db, sql_find_shiptype, NULL, 0, &res, &err))
+    {
+      if (res && db_res_step (res, &err))
+        {
+          ship_type_id = db_res_col_i32 (res, 0, &err);
+        }
+      if (res) db_res_finalize (res);
+    }
+
+  if (ship_type_id == 0)
+    {
+      LOGE ("[fer] No suitable shiptype found. Disabling.");
+      return 0;
+    }
+
+  g_fer_inited = 1;
+  LOGI ("[fer] Ferengi traders initialized");
+  return 1;
 }
 
 
 void
-fer_tick (int64_t now_ms)
+fer_tick (db_t *db, int64_t now_ms)
 {
-  (void)now_ms;
+  (void) now_ms;
+  if (!g_fer_inited)
+    {
+      if (!fer_init_once ())
+        {
+          return;
+        }
+    }
+  
+  if (!db)
+    {
+      db = g_fer_db;
+      if (!db) return;
+    }
+
+  LOGD ("[fer] tick: traders system active");
 }
 
 
 void
 fer_attach_db (db_t *db)
 {
-  (void)db;
+  g_fer_db = db;
 }
 
 
 void
 iss_init (db_t *db)
 {
-  (void)db;
+  if (!db)
+    {
+      return;
+    }
+  if (!iss_init_once ())
+    {
+      LOGW ("[iss] ISS initialization failed");
+    }
 }
 
 
 void
 iss_tick (db_t *db, int64_t now_ms)
 {
-  (void)db; (void)now_ms;
+  (void) now_ms;
+  if (!g_iss_inited)
+    {
+      if (!iss_init_once ())
+        {
+          return;
+        }
+    }
+  if (iss_try_consume_summon (db))
+    {
+      return;
+    }
+  iss_patrol_step (db);
 }
 
 
@@ -1033,6 +1314,83 @@ db_pick_adjacent (db_t *db, int sid)
 int
 iss_init_once (void)
 {
+  if (g_iss_inited)
+    {
+      return 1;
+    }
+  db_t *db = game_db_get_handle();
+  if (!db)
+    {
+      return 0;
+    }
+  g_stardock_sector = db_get_stardock_sector (db);
+  if (g_stardock_sector <= 0)
+    {
+      LOGW ("[iss] Stardock sector not found");
+      return 0;
+    }
+  int sector = 0;
+
+  if (!db_get_iss_player (db, &g_iss_id, &sector))
+    {
+      LOGW ("[iss] ISS player not found in database");
+      return 0;
+    }
+  if (sector <= 0)
+    {
+      g_iss_sector = g_stardock_sector;
+      iss_move_to (db, g_stardock_sector, 1, "initialization");
+    }
+  else
+    {
+      g_iss_sector = sector;
+    }
+  g_patrol_budget = kIssPatrolBudget;
+  srand ((unsigned) time (NULL));
+  g_iss_inited = 1;
+  LOGI ("[iss] ISS initialization complete (sector=%d)", g_iss_sector);
   return 1;
+}
+
+/* ============ ISS Helper Stubs (TODO: Full implementation) ============ */
+
+int
+db_get_stardock_sector (db_t *db)
+{
+  (void)db;
+  /* TODO: Query database for stardock sector */
+  return 1;
+}
+
+int
+db_get_iss_player (db_t *db, int *out_player_id, int *out_sector)
+{
+  (void)db;
+  if (out_player_id) *out_player_id = 1;
+  if (out_sector) *out_sector = 1;
+  /* TODO: Query database for ISS player */
+  return 1;
+}
+
+void
+iss_move_to (db_t *db, int sector_id, int warp_enabled, const char *reason)
+{
+  (void)db; (void)sector_id; (void)warp_enabled; (void)reason;
+  /* TODO: Move ISS to sector */
+}
+
+int
+iss_try_consume_summon (db_t *db)
+{
+  (void)db;
+  /* TODO: Check if ISS should respond to summon */
+  return 0;
+}
+
+void
+iss_patrol_step (db_t *db)
+{
+  (void)db;
+  /* TODO: ISS patrol movement logic */
 }
 

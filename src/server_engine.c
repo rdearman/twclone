@@ -1131,7 +1131,7 @@ engine_main_loop (int shutdown_fd)
         }
       if (fer_ok)
         {
-          fer_tick (now_ms);
+          fer_tick (game_db_get_handle(), now_ms);
         }
       if (now_ms - last_cmd_tick_ms >= CRON_PERIOD_MS)
         {

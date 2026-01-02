@@ -11,7 +11,7 @@ void universe_shutdown (void);
 
 void fer_attach_db (db_t *db);
 int fer_init_once (void);
-void fer_tick (int64_t now_ms);
+void fer_tick (db_t *db, int64_t now_ms);
 
 void ori_attach_db (db_t *db);
 int ori_init_once (void);
@@ -22,6 +22,8 @@ void iss_tick (db_t *db, int64_t now_ms);
 int iss_init_once (void);
 
 int no_zero_ship (db_t *db, int set_sector, int ship_id);
+int nav_next_hop (db_t *db, int start, int goal);
+int nav_random_neighbor (db_t *db, int sector);
 int h_warp_exists (db_t *db, int from, int to);
 int db_pick_adjacent (db_t *db, int sector);
 

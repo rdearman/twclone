@@ -1300,7 +1300,7 @@ cmd_sys_npc_ferengi_tick_once (client_ctx_t *ctx, json_t *root)
 
   // Trigger one tick of Ferengi logic
   // Passing 0 as now_ms as it's reserved/unused for rate limiting in the current implementation
-  fer_tick (0);
+  fer_tick (game_db_get_handle(), 0);
 
   send_response_ok_take (ctx, root, "sys.npc.ferengi_tick_once", NULL);
   return 0;
