@@ -19,6 +19,22 @@ def run_all():
     # Get the directory where this script is located
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # --- RIG DATABASE ---
+    print("\n>>> RIGGING DATABASE...")
+    rig_script = os.path.join(base_dir, "rig_db.py")
+    rig_config = os.path.join(base_dir, "test_rig.json")
+    try:
+        # Run rig_db.py with --reset
+        ret = subprocess.run([sys.executable, rig_script, "--config", rig_config, "--reset"], check=True)
+        print(">>> DATABASE RIGGED SUCCESSFULLY.")
+    except subprocess.CalledProcessError:
+        print(">>> FATAL: DATABASE RIGGING FAILED. Aborting tests.")
+        sys.exit(1)
+    except Exception as e:
+        print(f">>> FATAL: Error running rig script: {e}")
+        sys.exit(1)
+    # --------------------
+
     runner = JsonSuiteRunner(args.host, args.port, macros_path=os.path.join(base_dir, "macros.json"))
     
     # Find all .json suites relative to this script

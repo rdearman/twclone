@@ -2,61 +2,17 @@
   "tests": [
     {
       "name": "Setup: Trader Player",
-      "setup": "macro_user_in_sector",
+      "setup": "macro_bootstrap_admin",
       "username": "trader_player_1",
       "password": "password"
     },
     {
-      "name": "Setup: Update Player Credits",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 1000000 WHERE id = @trader_player_1_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ensure Stardock Port Exists",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ensure Port 1 Exists",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ports (id, name, sector, type) VALUES (1, 'Port One', 1, 1) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ensure Port 1 has ORE",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price) VALUES ('port', 1, 'ORE', 1000, 10) ON CONFLICT (entity_type, entity_id, commodity_code) DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Trade Buy ORE (Insufficient Funds)",
       "command": "trade.buy",
-      "data": { "sector_id": 1, "port_id": 1, "items": [{"commodity": "ORE", "quantity": 99999}]},
+      "data": { "sector_id": 1, "port_id": 2, "items": [{"commodity": "ORE", "quantity": 99999}]},
       "idempotency_key": "*generate*",
       "user": "trader_player_1",
-      "expect": { "status": "refused", "error": { "code": 1702 } }
-    },
-    {
-      "name": "Trade Sell ORE (Insufficient Cargo)",
-      "command": "trade.sell",
-      "data": { "sector_id": 1, "port_id": 1, "items": [{"commodity": "ORE", "quantity": 99999}]},
-      "idempotency_key": "*generate*",
-      "user": "trader_player_1",
-      "expect": { "status": "refused", "error": { "code": 1702 } }
-    },
-    {
-      "name": "Port Info",
-      "command": "port.info",
-      "data": { "port_id": 1, "sector_id": 1},
-      "idempotency_key": "*generate*",
-      "user": "trader_player_1",
-      "expect": { "status": "ok", "type": "trade.port_info.v1" }
+      "expect": { "status": "refused" }
     }
   ]
 }

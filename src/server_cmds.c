@@ -1072,7 +1072,7 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
   // 2. Current Stock
   json_t *stock_arr = json_array ();
   const char *sql_stock =
-    "SELECT es.commodity_code, c.id, es.quantity "
+    "SELECT es.commodity_code, c.commodities_id, es.quantity "
     "FROM entity_stock es "
     "JOIN commodities c ON es.commodity_code = c.code "
     "WHERE es.entity_type = 'planet' AND es.entity_id = $1;";
@@ -1202,7 +1202,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   // 2. Current Stock
   json_t *stock_arr = json_array ();
   const char *sql_stock =
-    "SELECT es.commodity_code, c.id, es.quantity "
+    "SELECT es.commodity_code, c.commodities_id, es.quantity "
     "FROM entity_stock es "
     "JOIN commodities c ON es.commodity_code = c.code "
     "WHERE es.entity_type = 'port' AND es.entity_id = $1;";

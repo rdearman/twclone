@@ -333,8 +333,11 @@ s2s_tcp_server_accept (int listen_fd, int timeout_ms)
   set_cloexec (fd);
   set_nodelay (fd);
   s2s_conn_t *c = calloc (1, sizeof (*c));
-
-
+  if (!c)
+    {
+      close (fd);
+      return NULL;
+    }
   c->fd = fd;
   c->role = S2S_ROLE_SERVER;
   return c;
@@ -366,8 +369,11 @@ s2s_tcp_client_connect (const char *host, uint16_t port, int total_timeout_ms)
         {
           set_nodelay (fd);
           s2s_conn_t *c = calloc (1, sizeof (*c));
-
-
+          if (!c)
+            {
+              close (fd);
+              return NULL;
+            }
           c->fd = fd;
           c->role = S2S_ROLE_CLIENT;
           return c;

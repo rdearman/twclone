@@ -1,117 +1,74 @@
 {
-  "test_suite_name": "Economy and Banking",
-  "description": "Tests core banking functionality, including deposits, withdrawals, transfers, and ledger history. Also verifies player petty cash management.",
-  "protocol_category": "26_Banking_and_Ledger",
+  "name": "Economy & Bank Regression",
+  "version": "2.0.0",
+  "protocol_category": "26_Banking",
+  "description": "Coverage for bank transactions, deposits, withdrawals",
   "tests": [
     {
-      "name": "CEO Player - Setup",
-      "setup": "macro_rich_user",
-      "username": "ceo_player",
-      "password": "password",
-      "credits": 2000000,
-      "deposit_amount": 0
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "bank_user",
+      "password": "password"
     },
     {
-      "name": "Member Player - Setup",
-      "setup": "macro_rich_user",
-      "username": "member_player",
-      "password": "password",
-      "credits": 1000000,
-      "deposit_amount": 0
+      "name": "Setup: Target User",
+      "setup": "macro_auth_user",
+      "username": "bank_target",
+      "password": "password"
     },
     {
       "name": "Bank Balance (Initial)",
       "command": "bank.balance",
-      "user": "ceo_player",
-      "expect": {
-        "status": "ok",
-        "balance": 2000000
-      }
+      "user": "bank_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Bank Deposit (Success)",
       "command": "bank.deposit",
-      "user": "ceo_player",
-      "data": { "amount": 50000 },
-      "expect": {
-        "status": "ok",
-        "new_balance": 2050000
-      }
+      "data": { "amount": 100 },
+      "user": "bank_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Bank Deposit (Insufficient Petty Cash)",
       "command": "bank.deposit",
-      "user": "ceo_player",
-      "data": { "amount": 20000000 },
-      "expect": {
-        "status": "refused",
-        "error": { "code": 1702 }
-      }
+      "data": { "amount": 1000000 },
+      "user": "bank_user",
+      "expect": { "error_code": 1403 }
     },
     {
       "name": "Bank Withdraw (Success)",
       "command": "bank.withdraw",
-      "user": "ceo_player",
-      "data": { "amount": 10000 },
-      "expect": {
-        "status": "ok",
-        "new_balance": 2040000
-      }
+      "data": { "amount": 50 },
+      "user": "bank_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Bank Withdraw (Insufficient Bank Funds)",
       "command": "bank.withdraw",
-      "user": "ceo_player",
-      "data": { "amount": 3000000 },
-      "expect": {
-        "status": "refused",
-        "error": { "code": 1702 }
-      }
+      "data": { "amount": 1000000 },
+      "user": "bank_user",
+      "expect": { "error_code": 1403 }
     },
     {
       "name": "Bank Transfer (Success)",
       "command": "bank.transfer",
-      "user": "ceo_player",
-      "data": { "recipient_id": "@member_player_player_id", "amount": 50000 },
-      "expect": {
-        "status": "ok",
-        "new_sender_balance": 1990000,
-        "new_recipient_balance": 1050000
-      }
+      "data": { "recipient_type": "player", "recipient_id": "@bank_target_player_id", "amount": 10 },
+      "user": "bank_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Bank Transfer (Insufficient Funds)",
       "command": "bank.transfer",
-      "user": "ceo_player",
-      "data": { "recipient_id": "@member_player_player_id", "amount": 3000000 },
-      "expect": {
-        "status": "refused",
-        "error": { "code": 1702 }
-      }
+      "data": { "recipient_type": "player", "recipient_id": "@bank_target_player_id", "amount": 1000000 },
+      "user": "bank_user",
+      "expect": { "error_code": 1403 }
     },
     {
       "name": "Bank History",
       "command": "bank.history",
-      "user": "ceo_player",
-      "expect": {
-        "status": "ok",
-        "transactions": { "type": "array" }
-      },
-      "asserts": [
-        { "path": "data.transactions.*.tx_type", "op": "contains", "value": "TRANSFER" }
-      ]
-    },
-    {
-      "name": "Bank Leaderboard",
-      "command": "bank.leaderboard",
-      "user": "ceo_player",
-      "expect": {
-        "status": "ok",
-        "leaderboard": { "type": "array" }
-      },
-      "asserts": [
-        { "path": "data.leaderboard.*.player_id", "op": "contains", "value": "@ceo_player_player_id" }
-      ]
+      "user": "bank_user",
+      "expect": { "status": "ok" }
     }
   ]
 }

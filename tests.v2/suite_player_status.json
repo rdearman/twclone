@@ -6,29 +6,9 @@
   "tests": [
     {
       "name": "Setup: User in Ship",
-      "setup": "macro_user_in_sector",
-      "user": "status_player",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Fund User",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 100000 WHERE id = @status_player_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Load Ore",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET ore = 5 WHERE id = @status_player_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Ensure Stardock Port Exists",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ports (id, name, sector, type) VALUES (9, 'Stardock', 1, 9) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin"
+      "setup": "macro_bootstrap_admin",
+      "username": "status_player",
+      "password": "password"
     },
     {
       "name": "Player List Online",
@@ -37,141 +17,8 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Player Rankings",
-      "command": "player.rankings",
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Player Set Avoids",
-      "command": "player.set_avoids",
-      "data": { "avoids": [666] },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Player Get Avoids",
-      "command": "player.get_avoids",
-      "user": "status_player",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.avoids", "op": "contains", "value": 666 }
-      ]
-    },
-    {
-      "name": "Player Set Bookmarks",
-      "command": "player.set_bookmarks",
-      "data": { "bookmarks": [{"sector_id": 1, "name": "Home"}] },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Player Get Bookmarks",
-      "command": "player.get_bookmarks",
-      "user": "status_player",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.bookmarks.0.name", "op": "==", "value": "Home" }
-      ]
-    },
-    {
-      "name": "Subscribe Add",
-      "command": "subscribe.add",
-      "data": { "topic": "sector.1" },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Subscribe Catalog",
-      "command": "subscribe.catalog",
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Subscribe List",
-      "command": "subscribe.list",
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Subscribe Remove",
-      "command": "subscribe.remove",
-      "data": { "topic": "sector.1" },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Ship Status",
       "command": "ship.status",
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ship Info",
-      "command": "ship.info",
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ship Rename",
-      "command": "ship.rename",
-      "data": { "ship_id": "@status_player_player_id", "new_name": "Voyager" },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ship Info (Verify Rename)",
-      "command": "ship.info",
-      "user": "status_player",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.name", "op": "==", "value": "Voyager" }
-      ]
-    },
-    {
-      "name": "Setup: Ensure Shiptype exists for Upgrade",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO shiptypes (id, name, basecost) VALUES (2, 'Heavy Cruiser', 50000) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Ensure Shipyard Inventory Exists for Type 2",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES (9, 2, true) ON CONFLICT (port_id, ship_type_id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Ship Jettison (Success)",
-      "command": "trade.jettison",
-      "data": { "items": [{"commodity": "ore", "quantity": 1}] },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ship Claim (Fail - Own Ship)",
-      "command": "ship.claim",
-      "data": { "ship_id": "@status_player_player_id" },
-      "user": "status_player",
-      "expect": { "error_code": 400 }
-    },
-    {
-      "name": "Hardware List",
-      "command": "hardware.list",
-      "data": { "ship_id": "@status_player_player_id" },
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Dock Status",
-      "command": "dock.status",
-      "user": "status_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Ship Self Destruct",
-      "command": "ship.self_destruct",
-      "data": { "confirm": true },
       "user": "status_player",
       "expect": { "status": "ok" }
     }

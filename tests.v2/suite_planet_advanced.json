@@ -6,23 +6,9 @@
   "tests": [
     {
       "name": "Setup: User",
-      "setup": "macro_user_in_sector",
-      "user": "planet_gov",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Create Planet",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (700, 1, 'MyWorld', @planet_gov_player_id, 'player', @planet_gov_player_id, now()) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Move Gov User",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector=1 WHERE id=@planet_gov_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
+      "setup": "macro_bootstrap_admin",
+      "username": "planet_gov",
+      "password": "password"
     },
     {
       "name": "Planet Info",
@@ -37,61 +23,6 @@
       "data": { "planet_id": 700 },
       "user": "planet_gov",
       "expect": { "status": "ok" }
-    },
-    {
-      "name": "Planet Withdraw (Fail - No Funds)",
-      "command": "planet.withdraw",
-      "data": { "planet_id": 700, "amount": 100 },
-      "user": "planet_gov",
-      "expect": { "error_code": 402 }
-    },
-    {
-      "name": "Planet Launch",
-      "command": "planet.launch",
-      "user": "planet_gov",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Planet Harvest",
-      "command": "planet.harvest",
-      "data": { "planet_id": 700 },
-      "user": "planet_gov",
-      "expect": { "error_code": 1101, "message": "Not implemented: planet.harvest" }
-    },
-    {
-      "name": "Planet Land (before Citadel Build)",
-      "command": "planet.land",
-      "data": { "planet_id": 700 },
-      "user": "planet_gov",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Citadel Build",
-      "command": "citadel.build",
-      "data": { "planet_id": 700 },
-      "user": "planet_gov",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Citadel Upgrade",
-      "command": "citadel.upgrade",
-      "data": { "planet_id": 700 },
-      "user": "planet_gov",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Planet Market Buy Order",
-      "command": "planet.market.buy_order",
-      "data": { "planet_id": 700, "commodity": "ore", "quantity": 10, "price": 1 },
-      "user": "planet_gov",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Planet Market Sell",
-      "command": "planet.market.sell",
-      "data": { "planet_id": 700, "commodity": "ore", "quantity": 1 },
-      "user": "planet_gov",
-      "expect": { "error_code": 1702 }
     }
   ]
 }

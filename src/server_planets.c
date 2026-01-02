@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <jansson.h>
 #include <stdbool.h>
+#include <limits.h>
+#include <math.h>
 
 /* local includes */
 #include "server_planets.h"
@@ -2658,8 +2660,13 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
     }
   db_res_finalize (res);
 
-  // 2. Calculate new quantity with bounds checking
-  int new_quantity = current_quantity + delta;
+  // 2. Calculate new quantity with overflow and bounds checking
+  int new_quantity;
+  if (__builtin_add_overflow(current_quantity, delta, &new_quantity))
+    {
+      /* Overflow: clamp based on delta direction */
+      new_quantity = (delta > 0) ? INT_MAX : 0;
+    }
 
 
   new_quantity = (new_quantity < 0) ? 0 : new_quantity;

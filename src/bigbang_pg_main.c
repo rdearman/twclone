@@ -139,7 +139,7 @@ static int
 sync_config_to_db (PGconn *c, json_t *jcfg)
 {
   const char *key;
-  json_t *val;
+  json_t *val = NULL;
   printf ("BIGBANG: Syncing config to database...\n");
 
   json_object_foreach (jcfg, key, val) {
@@ -653,7 +653,7 @@ main (int argc, char **argv)
   if (jcfg)
     {
       printf ("BIGBANG: Loading config from bigbang.json...\n");
-      json_t *j;
+      json_t *j = NULL;
       const char *s;
 
 

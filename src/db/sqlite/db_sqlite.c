@@ -147,8 +147,21 @@ static bool sqlite_query_impl(db_t *db, const char *sql, const db_bind_t *params
     if (rc != SQLITE_OK) { sqlite_map_error(impl->db_conn, rc, err); return false; }
     if (sqlite_bind_all(stmt, params, n_params, err) != SQLITE_OK) { sqlite3_finalize(stmt); return false; }
     db_sqlite_res_impl_t *res_impl = calloc(1, sizeof(db_sqlite_res_impl_t));
+    if (!res_impl) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        sqlite3_finalize(stmt);
+        return false;
+    }
     res_impl->stmt = stmt;
     db_res_t *res = calloc(1, sizeof(db_res_t));
+    if (!res) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        free(res_impl);
+        sqlite3_finalize(stmt);
+        return false;
+    }
     res->db = db; res->impl = res_impl; res->num_cols = sqlite3_column_count(stmt); res->current_row = -1;
     *out_res = res; return true;
 }
@@ -225,6 +238,12 @@ void* db_sqlite_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_
     int rc = sqlite3_open_v2(cfg->sqlite_path, &db_conn, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, NULL);
     if (rc != SQLITE_OK) { sqlite_map_error(NULL, rc, err); return NULL; }
     db_sqlite_impl_t *impl = calloc(1, sizeof(db_sqlite_impl_t));
+    if (!impl) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        sqlite3_close(db_conn);
+        return NULL;
+    }
     impl->db_conn = db_conn;
     parent_db->vt = &sqlite_vt;
     return impl;

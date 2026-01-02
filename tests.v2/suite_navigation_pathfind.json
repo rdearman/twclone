@@ -1,0 +1,28 @@
+{
+  "name": "Navigation Pathfind",
+  "version": "2.0.0",
+  "protocol_category": "15_Navigation",
+  "description": "Tests for pathfinding",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "nav_path_user",
+      "password": "password"
+    },
+    {
+      "name": "move.pathfind - Basic pathfind",
+      "command": "move.pathfind",
+      "data": { "to": 2 },
+      "user": "nav_path_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "move.pathfind - Same sector",
+      "command": "move.pathfind",
+      "data": { "to": 1 },
+      "user": "nav_path_user",
+      "expect": { "status": "ok", "steps": [1] }
+    }
+  ]
+}

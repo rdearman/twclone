@@ -1,0 +1,19 @@
+{
+  "test_suite_name": "Planet Creation",
+  "description": "Tests planet creation mechanics",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "planet_creator",
+      "password": "password"
+    },
+    {
+      "name": "planet.info - Get planet information",
+      "command": "planet.info",
+      "data": { "planet_id": 700 },
+      "user": "planet_creator",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

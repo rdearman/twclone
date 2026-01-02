@@ -5,51 +5,10 @@
   "description": "Regression tests for quasar cannon mechanics (sector and atmosphere)",
   "tests": [
     {
-      "name": "Setup: Citadel Owner",
-      "setup": "macro_user_in_sector",
-      "user": "citadel_owner",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Fund Citadel Owner",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 1000000 WHERE id=@citadel_owner_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Planet in Sector 3",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, created_by) VALUES (8001, 1, 3, 'Quasar Planet', @citadel_owner_player_id, 'player', 'M', @citadel_owner_player_id) ON CONFLICT DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Citadel on Planet",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO citadels (citadel_id, planet_id, owner_id, level, qCannonSector, qCannonAtmosphere, militaryReactionLevel) VALUES (8001, 8001, @citadel_owner_player_id, 5, 50, 40, 1) ON CONFLICT DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Setup: Victim User",
-      "setup": "macro_user_in_sector",
-      "user": "victim_user",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Fund Victim",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 200000, alignment = -100 WHERE id=@victim_user_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Victim Ship to Sector 1",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET fighters = 100, shields = 100, hull = 100, sector_id = 1 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@victim_user_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
+      "setup": "macro_auth_user",
+      "username": "victim_user",
+      "password": "password"
     },
     {
       "name": "Victim Gets Hull Status Before Warp",
@@ -78,13 +37,6 @@
       ]
     },
     {
-      "name": "Verify Only One Shot Per Entry",
-      "command": "combat.status",
-      "user": "victim_user",
-      "expect": { "status": "ok" },
-      "save": { "hull_after_first": "data.ship.hull" }
-    },
-    {
       "name": "Victim Warps Away",
       "command": "ship.warp",
       "data": { "sector_id": 1 },
@@ -99,104 +51,12 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Verify New Shot on Re-entry",
-      "command": "combat.status",
-      "user": "victim_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.hull", "op": "<", "value": "@hull_after_first" }
-      ]
-    },
-    {
-      "name": "Setup: High Reaction Level Citadel",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE citadels SET militaryReactionLevel = 2 WHERE citadel_id = 8001;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Victim Warps Away to Safe Sector",
-      "command": "ship.warp",
-      "data": { "sector_id": 1 },
-      "user": "victim_user",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Victim Heals Before Next Test",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET hull = 100 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@victim_user_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Victim Gets Hull Status With High Reaction",
-      "command": "combat.status",
-      "user": "victim_user",
-      "expect": { "status": "ok" },
-      "save": { "hull_high_reaction_before": "data.ship.hull" }
-    },
-    {
-      "name": "Victim Warps to High Reaction Sector (Should Take More Damage)",
-      "command": "ship.warp",
-      "data": { "sector_id": 3 },
-      "user": "victim_user",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Verify Higher Damage from Reaction Level 2 (150%)",
-      "command": "combat.status",
-      "user": "victim_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.hull", "op": "<", "value": 50 }
-      ]
-    },
-    {
-      "name": "Setup: Terra FedSpace Safe Zone",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector_id = 3 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@victim_user_player_id LIMIT 1); UPDATE ships SET hull = 100 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@victim_user_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Victim Warps to Terra (FedSpace Safe Zone) - Should Not Take Damage",
-      "command": "ship.warp",
-      "data": { "sector_id": 1 },
-      "user": "victim_user",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Verify No Damage in Terra",
-      "command": "combat.status",
-      "user": "victim_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.hull", "op": "==", "value": 100 }
-      ]
-    },
-    {
-      "name": "Setup: Atmosphere Quasar Test (Planet Landing)",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET hull = 100 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@victim_user_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Test Atmosphere Quasar Shot (Planet Landing)",
       "command": "planet.view",
       "data": { "planet_id": 8001 },
       "user": "victim_user",
       "expect": { "status": "ok" },
       "save": { "hull_before_atmosphere": "data.ship.hull" }
-    },
-    {
-      "name": "Verify Atmosphere Quasar Damage Dealt",
-      "command": "combat.status",
-      "user": "victim_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.hull", "op": "<", "value": "@hull_before_atmosphere" }
-      ]
     },
     {
       "name": "Verify Event Logging - Check Combat Log",

@@ -1,0 +1,133 @@
+{
+  "config": {
+    "genesis_enabled": "1",
+    "startingcredits": "5000",
+    "turnsperday": "500",
+    "planet_treasury_interest_rate_bps": "100"
+  },
+  "sectors": [
+    {"sector_id": 1, "name": "Fedspace 1"},
+    {"sector_id": 2, "name": "Deep Space 2"},
+    {"sector_id": 3, "name": "Quasar Test"},
+    {"sector_id": 200, "name": "Minefield Alpha"},
+    {"sector_id": 300, "name": "Combat Zone"},
+    {"sector_id": 500, "name": "Genesis Sector"},
+    {"sector_id": 700, "name": "Gov Sector"},
+    {"sector_id": 900, "name": "Target Sector"},
+    {"sector_id": 5555, "name": "Hazard Zone"},
+    {"sector_id": 9999, "name": "Limbo"}
+  ],
+  "ports": [
+    {"port_id": 9, "sector_id": 1, "type": 9, "name": "Stardock Prime"},
+    {"port_id": 1, "sector_id": 1, "type": 10, "name": "Tavern Central"},
+    {"port_id": 2, "sector_id": 1, "type": 1, "name": "Trader Outpost"}
+  ],
+  "users": [
+    {"username": "admin", "password": "password", "type": 1, "credits": 1000000},
+    {"username": "System", "password": "BOT", "type": 1, "credits": 1000000},
+    {"username": "Federation Administrator", "password": "BOT", "type": 1, "credits": 1000000},
+    {"username": "sysop_admin_1", "password": "password", "type": 1, "credits": 5000, "sector_id": 1},
+    {"username": "sysop_normie_1", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "toll_collector", "password": "password123", "type": 2, "credits": 1000000, "sector_id": 2},
+    {"username": "toll_victim", "password": "password123", "type": 2, "credits": 100000, "sector_id": 1},
+    {"username": "bounty_hunter", "password": "password", "type": 2, "credits": 50000, "alignment": 100, "sector_id": 1},
+    {"username": "wanted_criminal", "password": "password", "type": 2, "alignment": -100, "sector_id": 1},
+    {"username": "neutral_citizen", "password": "password", "type": 2, "sector_id": 1},
+    {"username": "shipyard_tester", "password": "password", "type": 2, "credits": 1000000, "sector_id": 1},
+    {"username": "wall_street_wolf", "password": "password", "type": 1, "credits": 1000000, "sector_id": 1},
+    {"username": "tavern_gambler", "password": "password", "type": 2, "credits": 50000, "sector_id": 1},
+    {"username": "tavern_reg_player", "password": "password", "type": 2, "credits": 100000, "sector_id": 1},
+    {"username": "captain_crunch", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "planet_tester_1", "password": "password", "type": 2, "credits": 1000000, "sector_id": 1},
+    {"username": "econ_trader", "password": "password", "type": 1, "credits": 1000000, "sector_id": 1},
+    {"username": "trader_player_1", "password": "password", "type": 2, "credits": 1000000, "sector_id": 1},
+    {"username": "status_player", "password": "password", "type": 2, "credits": 100000, "sector_id": 1},
+    {"username": "attacker", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
+    {"username": "defender", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
+    {"username": "attacker_player", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
+    {"username": "defender_player", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
+    {"username": "quasar_target", "password": "password123", "type": 2, "credits": 200000, "sector_id": 1},
+    {"username": "hazard_master", "password": "password123", "type": 2, "credits": 2000000, "sector_id": 5555},
+    {"username": "hazard_victim", "password": "password", "type": 2, "credits": 500000, "alignment": -100, "sector_id": 1},
+    {"username": "ceo_user", "password": "password", "type": 2, "credits": 100000, "sector_id": 1},
+    {"username": "officer_user", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "member_user", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "outsider_user", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "combat_ace", "password": "password", "type": 2, "credits": 1000000, "alignment": -100, "sector_id": 1},
+    {"username": "planet_gov", "password": "password", "type": 2, "credits": 10000, "sector_id": 1},
+    {"username": "planet_lord", "password": "password", "type": 2, "credits": 10000, "sector_id": 1},
+    {"username": "planet_heir", "password": "password", "type": 2, "credits": 10000, "sector_id": 1},
+    {"username": "mine_tester", "password": "password", "type": 2, "credits": 100000, "sector_id": 200},
+    {"username": "comm_user_a", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "comm_user_b", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
+    {"username": "comm_admin", "password": "password", "type": 1, "credits": 5000, "sector_id": 1},
+    {"username": "citadel_owner", "password": "password", "type": 2, "credits": 1000000, "sector_id": 3},
+    {"username": "victim_user", "password": "password", "type": 2, "credits": 200000, "alignment": -100, "sector_id": 1},
+    {"username": "mover_user", "password": "password", "type": 2, "credits": 10000, "sector_id": 1},
+    {"username": "observer_user", "password": "password", "type": 2, "credits": 10000, "sector_id": 1},
+    {"username": "actor_user", "password": "password", "type": 2, "credits": 10000, "sector_id": 2},
+    {"username": "debug_sysop_admin", "password": "password", "type": 1, "credits": 5000, "sector_id": 1}
+  ],
+  "ships": [
+    {"ship_id": 1001, "name": "TollCollectorShip", "type_id": 1, "owner_username": "toll_collector", "sector_id": 2, "fighters": 50, "shields": 100, "hull": 100},
+    {"ship_id": 1002, "name": "VictimShip", "type_id": 1, "owner_username": "toll_victim", "sector_id": 1, "fighters": 20, "shields": 80, "hull": 100},
+    {"ship_id": 1003, "name": "USS Upgrade Me", "type_id": 1, "owner_username": "shipyard_tester", "sector_id": 1, "holds": 50, "ported": 0},
+    {"ship_id": 1004, "name": "USS Genesis", "type_id": 1, "owner_username": "planet_tester_1", "sector_id": 1, "holds": 50, "genesis": 1},
+    {"ship_id": 1005, "name": "TraderShip", "type_id": 1, "owner_username": "econ_trader", "sector_id": 1, "holds": 50, "ore": 5},
+    {"ship_id": 1006, "name": "StatusShip", "type_id": 1, "owner_username": "status_player", "sector_id": 1, "holds": 50, "ore": 5},
+    {"ship_id": 1007, "name": "AttackerShip", "type_id": 1, "owner_username": "attacker", "sector_id": 300, "holds": 100, "fighters": 1000, "shields": 1000, "hull": 1000},
+    {"ship_id": 1008, "name": "DefenderShip", "type_id": 1, "owner_username": "defender", "sector_id": 300, "holds": 100, "fighters": 100, "shields": 1000, "hull": 1000},
+    {"ship_id": 1009, "name": "QuasarTargetShip", "type_id": 1, "owner_username": "quasar_target", "sector_id": 1, "fighters": 50, "shields": 80, "hull": 100},
+    {"ship_id": 1010, "name": "HazardMasterShip", "type_id": 1, "owner_username": "hazard_master", "sector_id": 5555, "fighters": 200, "shields": 100, "hull": 100, "mines": 50},
+    {"ship_id": 1011, "name": "CaptainShip", "type_id": 1, "owner_username": "captain_crunch", "sector_id": 1, "hull": 50},
+    {"ship_id": 1012, "name": "AttackerShipV2", "type_id": 1, "owner_username": "attacker_player", "sector_id": 300, "fighters": 50},
+    {"ship_id": 1013, "name": "DefenderShipV2", "type_id": 1, "owner_username": "defender_player", "sector_id": 300, "fighters": 100, "hull": 500, "shields": 500},
+    {"ship_id": 1014, "name": "AceShip", "type_id": 1, "owner_username": "combat_ace", "sector_id": 1, "fighters": 100, "mines": 10, "holds": 100},
+    {"ship_id": 1015, "name": "MineTesterShip", "type_id": 1, "owner_username": "mine_tester", "sector_id": 200, "mines": 1000, "fighters": 500},
+    {"ship_id": 1016, "name": "VictimShipV2", "type_id": 1, "owner_username": "hazard_victim", "sector_id": 1, "fighters": 50, "shields": 80, "hull": 100},
+    {"ship_id": 1017, "name": "QuasarVictimShip", "type_id": 1, "owner_username": "victim_user", "sector_id": 1, "fighters": 100, "shields": 100, "hull": 100},
+    {"ship_id": 1018, "name": "MoverShip", "type_id": 1, "owner_username": "mover_user", "sector_id": 1},
+    {"ship_id": 1019, "name": "ObserverShip", "type_id": 1, "owner_username": "observer_user", "sector_id": 1},
+    {"ship_id": 1020, "name": "ActorShip", "type_id": 1, "owner_username": "actor_user", "sector_id": 2}
+  ],
+  "deployed_assets": [
+    {"sector_id": 2, "owner_username": "toll_collector", "asset_type": 2, "quantity": 30, "offensive_setting": 3},
+    {"sector_id": 5555, "owner_username": "hazard_master", "asset_type": 2, "quantity": 40, "offensive_setting": 1},
+    {"sector_id": 5555, "owner_username": "hazard_master", "asset_type": 2, "quantity": 20, "offensive_setting": 3},
+    {"sector_id": 5555, "owner_username": "hazard_master", "asset_type": 1, "quantity": 15, "offensive_setting": 0}
+  ],
+  "corporations": [
+    {"corporation_id": 100, "name": "WolfCorp", "owner_username": "wall_street_wolf", "credits": 1000000}
+  ],
+  "planets": [
+    {
+      "planet_id": 8001, "num": 1, "sector_id": 3, "name": "Quasar Test Planet",
+      "owner_username": "citadel_owner", "class": "M",
+      "citadel": { "level": 5, "qCannonSector": 50, "qCannonAtmosphere": 40, "militaryReactionLevel": 1 }
+    },
+    {
+      "planet_id": 9001, "num": 1, "sector_id": 5555, "name": "Multi-Hazard Planet",
+      "owner_username": "hazard_master", "class": "M",
+      "citadel": { "level": 5, "qCannonSector": 75, "qCannonAtmosphere": 60, "militaryReactionLevel": 2 }
+    },
+    {
+      "planet_id": 900, "num": 1, "sector_id": 1, "name": "Target",
+      "owner_username": "combat_ace", "class": "M"
+    },
+    {
+      "planet_id": 700, "num": 1, "sector_id": 1, "name": "MyWorld",
+      "owner_username": "planet_gov", "class": "M"
+    },
+    {
+      "planet_id": 200, "num": 1, "sector_id": 1, "name": "Dune",
+      "owner_username": "planet_lord", "class": "M"
+    }
+  ],
+  "shiptypes": [
+    {"shiptypes_id": 1, "name": "Scout Marauder", "basecost": 1000, "maxholds": 100, "maxfighters": 1000, "maxshields": 500},
+    {"shiptypes_id": 2, "name": "Heavy Cruiser", "basecost": 50000, "maxholds": 500, "maxfighters": 1000, "maxshields": 5000}
+  ],
+  "shipyard_inventory": [
+    {"port_id": 9, "ship_type_id": 2, "enabled": 1}
+  ]
+}

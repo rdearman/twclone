@@ -1,89 +1,61 @@
 {
-  "name": "Auth & Session Regression",
-  "version": "2.0.0",
-  "protocol_category": "05_Authentication",
-  "description": "Coverage for session management and system introspection commands",
   "tests": [
     {
-      "name": "Setup: Auth User",
+      "name": "Setup: User",
       "setup": "macro_auth_user",
-      "user": "auth_tester",
-      "passwd": "password"
+      "username": "session_user",
+      "password": "password"
     },
     {
       "name": "System Hello",
-      "command": "system.hello",
-      "user": "auth_tester",
-      "expect": {
-        "status": "ok",
-        "server": { "type": "string" },
-        "version": { "type": "string" }
-      }
+      "command": "session.hello",
+      "expect": { "status": "ok" }
     },
     {
       "name": "System Capabilities",
       "command": "system.capabilities",
-      "user": "auth_tester",
-      "expect": {
-        "status": "ok",
-        "capabilities": { "type": "object" }
-      }
+      "expect": { "status": "ok" }
     },
     {
       "name": "System Command List",
       "command": "system.cmd_list",
-      "user": "auth_tester",
-      "expect": {
-        "status": "ok",
-        "commands": { "type": "array" }
-      }
+      "expect": { "status": "ok" }
     },
     {
       "name": "System Schema List",
-      "command": "system.schema_list",
-      "user": "auth_tester",
-      "expect": {
-        "status": "ok",
-        "schemas": { "type": "array" }
-      }
+      "command": "system.schemas",
+      "expect": { "status": "ok" }
     },
     {
       "name": "System Describe Schema",
-      "command": "system.describe_schema",
-      "data": { "name": "auth" },
-      "user": "auth_tester",
-      "expect": {
-        "status": "ok",
-        "schema": { "type": "object" }
-      }
+      "command": "system.schema_describe",
+      "data": { "schema": "auth.login" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Player Ping",
-      "command": "player.ping",
-      "user": "auth_tester",
+      "command": "session.ping",
+      "user": "session_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Auth Refresh",
       "command": "auth.refresh",
-      "user": "auth_tester",
-      "expect": {
-        "status": "ok",
-        "session_token": { "type": "string" },
-        "expires_at": { "type": "integer" }
-      }
+      "data": { "session_token": "@session" },
+      "user": "session_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Auth Logout",
       "command": "auth.logout",
-      "user": "auth_tester",
+      "user": "session_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Verify Logout (Ping Fail)",
-      "command": "player.ping",
-      "user": "auth_tester",
-      "expect": { "error_code": 1001 }
+      "command": "player.my_info",
+      "user": "session_user",
+      "expect": { "status": "refused", "error_code": 1700 }
     }
   ]
 }

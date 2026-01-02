@@ -1,13 +1,18 @@
 {
+  "name": "Smoke Test",
+  "version": "2.0.0",
+  "protocol_category": "00_Smoke",
+  "description": "Basic system sanity checks",
   "tests": [
     {
+      "name": "Setup: User",
       "setup": "macro_auth_user",
       "username": "smoke_user",
       "password": "password"
     },
     {
       "name": "System Hello",
-      "command": "system.hello",
+      "command": "session.hello",
       "expect": { "status": "ok" }
     },
     {

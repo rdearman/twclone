@@ -290,18 +290,21 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
+  json_t *items = NULL;
+  json_t *resp = NULL;
+  int rc = 0;
 
   const char *sql_pg =
-    "SELECT n.id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
+    "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
     "FROM system_notice n "
-    "LEFT JOIN notice_seen s ON s.notice_id = n.id AND s.player_id = $1 "
+    "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = $1 "
     "WHERE ($2 = 1 OR n.expires_at IS NULL OR n.expires_at > EXTRACT(EPOCH FROM now())) "
     "ORDER BY n.created_at DESC " "LIMIT $3;";
 
   const char *sql_lite =
-    "SELECT n.id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
+    "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
     "FROM system_notice n "
-    "LEFT JOIN notice_seen s ON s.notice_id = n.id AND s.player_id = $1 "
+    "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = $1 "
     "WHERE ($2 = 1 OR n.expires_at IS NULL OR n.expires_at > strftime('%s','now')) "
     "ORDER BY n.created_at DESC " "LIMIT $3;";
 
@@ -318,10 +321,11 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
   if (!db_query (db, sql, params, 3, &res, &err))
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
-      return 0;
+      rc = 0;
+      goto cleanup;
     }
 
-  json_t *items = json_array ();
+  items = json_array ();
 
 
   while (db_res_step (res, &err))
@@ -357,14 +361,22 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
         }
       json_array_append_new (items, row);
     }
-  db_res_finalize (res);
 
-  json_t *resp = json_object ();
-
-
+  resp = json_object ();
   json_object_set_new (resp, "items", items);
+  items = NULL;
   send_response_ok_take (ctx, root, "notice.list_v1", &resp);
-  return 0;
+  resp = NULL;
+  rc = 0;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  if (items)
+    json_decref (items);
+  if (resp)
+    json_decref (resp);
+  return rc;
 }
 
 
@@ -585,7 +597,7 @@ comm_broadcast_message (comm_scope_t scope,
     {
       /* merge: extra wins on key collisions */
       const char *k;
-      json_t *v;
+      json_t *v = NULL;
       void *it = json_object_iter (extra);
 
 
@@ -1177,10 +1189,10 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
       limit = 50;
     }
   const char *SQL =
-    "SELECT m.id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.id "
+    "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at "
+    "FROM mail m JOIN players p ON m.sender_id = p.player_id "
     "WHERE m.recipient_id=$1 AND m.deleted=0 AND m.archived=0 "
-    "  AND ($2=0 OR m.id<$2) " "ORDER BY m.id DESC " "LIMIT $3;";
+    "  AND ($2=0 OR m.mail_id<$2) " "ORDER BY m.mail_id DESC " "LIMIT $3;";
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -1289,8 +1301,8 @@ cmd_mail_read (client_ctx_t *ctx,
         ctx->player_id);
   /* Load and verify ownership */
   const char *SEL =
-    "SELECT m.id, m.thread_id, m.sender_id, p.name, m.subject, m.body, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.id WHERE m.id=$1 AND m.recipient_id=$2 AND m.deleted=0;";
+    "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.body, m.sent_at, m.read_at "
+    "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id=$1 AND m.recipient_id=$2 AND m.deleted=0;";
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -1441,14 +1453,14 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
                            "Too many bulk items");
       return 0;
     }
-  /* Create: UPDATE mail SET deleted=1 WHERE recipient_id=$1 AND id IN ($2,$3,...) */
+  /* Create: UPDATE mail SET deleted=1 WHERE recipient_id=$1 AND mail_id IN ($2,$3,...) */
   char sql[4096];
   char *p = sql;
 
 
   p +=
     snprintf (p, sizeof (sql),
-              "UPDATE mail SET deleted=1 WHERE recipient_id=$1 AND id IN (");
+              "UPDATE mail SET deleted=1 WHERE recipient_id=$1 AND mail_id IN (");
   for (size_t i = 0; i < n; i++)
     {
       p +=

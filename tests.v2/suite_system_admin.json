@@ -1,0 +1,9 @@
+{
+  "tests": [
+    {
+      "name": "system.hello - System hello",
+      "command": "system.hello",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

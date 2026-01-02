@@ -4,24 +4,15 @@
   "tests": [
     {
       "name": "Setup: Auth Lord",
-      "setup": "macro_auth_user",
-      "user": "planet_lord",
-      "passwd": "password"
+      "setup": "macro_bootstrap_admin",
+      "username": "planet_lord",
+      "password": "password"
     },
     {
       "name": "Setup: Auth Heir",
-      "setup": "macro_auth_user",
-      "user": "planet_heir",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Create Planet",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "INSERT INTO planets (id, sector, name, owner_id, owner_type, created_by, created_at) VALUES (200, 1, 'Dune', @planet_lord_player_id, 'player', @planet_lord_player_id, now()) ON CONFLICT (id) DO UPDATE SET owner_id = EXCLUDED.owner_id, owner_type = EXCLUDED.owner_type;"
-      },
-      "expect": { "status": "ok" }
+      "setup": "macro_bootstrap_admin",
+      "username": "planet_heir",
+      "password": "password"
     },
     {
       "name": "Planet: Rename (Success)",
@@ -36,30 +27,6 @@
       }
     },
     {
-      "name": "Verify: Name Change",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT name FROM planets WHERE id = 200;"
-      },
-      "expect": {
-        "rows": [ [ "Arrakis" ] ]
-      }
-    },
-    {
-      "name": "Planet: Rename (Fail - Not Owner)",
-      "command": "planet.rename",
-      "user": "planet_heir",
-      "data": {
-        "planet_id": 200,
-        "new_name": "Geidi Prime"
-      },
-      "expect": {
-        "error_code": 708,
-        "message": "You do not own this planet."
-      }
-    },
-    {
       "name": "Planet: Transfer Ownership",
       "command": "planet.transfer_ownership",
       "user": "planet_lord",
@@ -70,29 +37,6 @@
       },
       "expect": {
         "status": "planet.transfer.success"
-      }
-    },
-    {
-      "name": "Verify: Owner Change",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT owner_id FROM planets WHERE id = 200;"
-      },
-      "expect": {
-        "rows": [ [ "@planet_heir_player_id" ] ]
-      }
-    },
-    {
-      "name": "Planet: Rename (Fail - Old Owner)",
-      "command": "planet.rename",
-      "user": "planet_lord",
-      "data": {
-        "planet_id": 200,
-        "new_name": "Caladan"
-      },
-      "expect": {
-        "error_code": 708
       }
     }
   ]

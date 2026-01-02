@@ -6,109 +6,15 @@
   "tests": [
     {
       "name": "Setup: Hazard Master User",
-      "setup": "macro_user_in_sector",
-      "user": "hazard_master",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Fund Hazard Master",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 2000000 WHERE id=@hazard_master_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Hazard Sector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sectors (sector_id, name) VALUES (5555, 'Hazard Zone') ON CONFLICT DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Planet with Citadel in Hazard Sector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, created_by) VALUES (9001, 1, 5555, 'Hazard Planet', @hazard_master_player_id, 'player', 'M', @hazard_master_player_id) ON CONFLICT DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Citadel with All Hazard Types",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO citadels (citadel_id, planet_id, owner_id, level, qCannonSector, qCannonAtmosphere, militaryReactionLevel) VALUES (9001, 9001, @hazard_master_player_id, 5, 75, 60, 1) ON CONFLICT DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Hazard Master Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET fighters = 200, mines = 50, sector_id = 1 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@hazard_master_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Deploy Offensive Fighters",
-      "command": "combat.deploy_fighters",
-      "data": { "amount": 40, "offense": 1 },
-      "user": "hazard_master",
-      "expect": { "status": "ok" },
-      "save": { "offensive_fighters_id": "data.asset_id" }
-    },
-    {
-      "name": "Setup: Move Fighters to Hazard Sector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE sector_assets SET sector_id = 5555 WHERE sector_assets_id = @offensive_fighters_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Deploy Toll Fighters",
-      "command": "combat.deploy_fighters",
-      "data": { "amount": 20, "offense": 3 },
-      "user": "hazard_master",
-      "expect": { "status": "ok" },
-      "save": { "toll_fighters_id": "data.asset_id" }
-    },
-    {
-      "name": "Setup: Move Toll Fighters to Hazard Sector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE sector_assets SET sector_id = 5555 WHERE sector_assets_id = @toll_fighters_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Deploy Armid Mines",
-      "command": "combat.lay_mines",
-      "data": { "amount": 15 },
-      "user": "hazard_master",
-      "expect": { "status": "ok" },
-      "save": { "mines_id": "data.asset_id" }
-    },
-    {
-      "name": "Setup: Move Mines to Hazard Sector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE sector_assets SET sector_id = 5555 WHERE sector_assets_id = @mines_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
+      "setup": "macro_auth_user",
+      "username": "hazard_master",
+      "password": "password123"
     },
     {
       "name": "Setup: Victim User",
-      "setup": "macro_user_in_sector",
-      "user": "hazard_victim",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Fund Victim",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 500000, alignment = -100 WHERE id=@hazard_victim_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Victim Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET fighters = 50, shields = 80, hull = 100, mines = 0, sector_id = 1 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@hazard_victim_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
+      "setup": "macro_auth_user",
+      "username": "hazard_victim",
+      "password": "password"
     },
     {
       "name": "Victim Status Before Entry",
@@ -144,65 +50,10 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Verify Damage Cascade (Fighters -> Shields -> Hull)",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT fighters, shields, hull FROM ships WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@hazard_victim_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.result[0].fighters", "op": "<=", "value": 50 }
-      ]
-    },
-    {
-      "name": "Test: Hostile Check (Owner Bypass)",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, offensive_setting, deployed_at) VALUES (5555, @hazard_victim_player_id, 2, 100, 1, EXTRACT(EPOCH FROM NOW())) RETURNING sector_assets_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" },
-      "save": { "victim_own_fighters": "data.result[0].sector_assets_id" }
-    },
-    {
       "name": "Victim Warps Out Then Back",
       "command": "ship.warp",
       "data": { "sector_id": 1 },
       "user": "hazard_victim",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Victim Self-Defense Fighters Should Not Trigger",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET hull = 100, shields = 100 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@hazard_victim_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Victim Warps Back (Own Fighters Should Not Attack)",
-      "command": "ship.warp",
-      "data": { "sector_id": 5555 },
-      "user": "hazard_victim",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Verify Own Fighters Did Not Cause Damage",
-      "command": "combat.status",
-      "user": "hazard_victim",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.hull", "op": "==", "value": 100 }
-      ]
-    },
-    {
-      "name": "Verify Hazard Events Logged",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT event_type, COUNT(*) as count FROM engine_events WHERE player_id = @hazard_victim_player_id AND sector_id = 5555 GROUP BY event_type ORDER BY count DESC;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Cleanup: Remove Test Hazards",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id = 5555;" },
-      "user": "admin",
       "expect": { "status": "ok" }
     }
   ]

@@ -1,0 +1,25 @@
+{
+  "test_suite_name": "Player Preferences",
+  "description": "Tests player preference management",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "pref_user",
+      "password": "password"
+    },
+    {
+      "name": "player.get_prefs - Get all preferences",
+      "command": "player.get_prefs",
+      "user": "pref_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "player.set_prefs - Set language preference",
+      "command": "player.set_prefs",
+      "data": { "lang": "en" },
+      "user": "pref_user",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

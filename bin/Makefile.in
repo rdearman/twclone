@@ -336,7 +336,7 @@ PG_INC = -I/usr/include/postgresql
 
 # 3. Update AM_CFLAGS
 # added $(PG_INC) here
-AM_CFLAGS = -Wall -Wextra -D_GNU_SOURCE -I../src $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)

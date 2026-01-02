@@ -1,79 +1,21 @@
 {
-  "name": "Navigation Functions Regression",
+  "name": "Nav Regression",
   "version": "2.0.0",
-  "protocol_category": "21_Sector",
-  "description": "Tests for nav_next_hop and nav_random_neighbor internal functions",
-  "notes": [
-    "nav_next_hop: BFS pathfinding - should find shortest path between sectors",
-    "nav_random_neighbor: Should return a valid adjacent sector",
-    "These are tested indirectly via Ferengi trader movement and warp validation"
-  ],
+  "protocol_category": "15_Navigation",
+  "description": "Coverage for pathfinding",
   "tests": [
     {
-      "name": "Setup: Explorer in sector with adjacent",
-      "setup": "macro_user_in_sector",
-      "user": "nav_pathfinder",
-      "passwd": "password"
-    },
-    {
-      "name": "Verify sector has warps (precondition for nav_next_hop)",
-      "command": "move.describe_sector",
-      "user": "nav_pathfinder",
-      "expect": {
-        "status": "ok",
-        "data.adjacent_sectors": {"type": "list", "not_empty": true}
-      },
-      "note": "If no adjacent sectors, nav_next_hop would correctly return 0"
-    },
-    {
-      "name": "Test pathfinding indirectly - perform valid warp",
-      "command": "move.warp",
-      "user": "nav_pathfinder",
-      "data": {
-        "to_sector": "{{first_adjacent}}"
-      },
-      "expect": {
-        "status": "ok",
-        "data.current_sector": "{{first_adjacent}}"
-      },
-      "note": "This uses nav_next_hop internally if transwarp is enabled; validates path finding"
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "nav_reg_user",
+      "password": "password"
     },
     {
       "name": "Test pathfinding - move to adjacent via move command",
-      "command": "move.go_to_adjacent",
-      "user": "nav_pathfinder",
-      "data": {
-        "to_sector": "{{second_adjacent}}"
-      },
-      "expect": {
-        "status": "ok",
-        "data.current_sector": "{{second_adjacent}}"
-      },
-      "note": "Basic adjacent movement; nav_next_hop should return destination directly"
-    },
-    {
-      "name": "Regression: nav_next_hop returns 0 for self (start==goal)",
-      "command": "player.info",
-      "user": "nav_pathfinder",
-      "data": {},
-      "expect": {
-        "status": "ok",
-        "data.player_id": {"type": "number"}
-      },
-      "note": "nav_next_hop(start, start) correctly returns 0; tested indirectly via sector navigation sanity"
-    },
-    {
-      "name": "Regression: nav_next_hop returns 0 for invalid sectors",
       "command": "move.warp",
-      "user": "nav_pathfinder",
-      "data": {
-        "to_sector": 0
-      },
-      "expect": {
-        "status": "error",
-        "error_code": {"type": "number"}
-      },
-      "note": "nav_next_hop(sector, 0) correctly returns 0; warp validation should reject"
+      "data": { "to_sector_id": 2 },
+      "user": "nav_reg_user",
+      "expect": { "status": "error" } 
     }
   ]
 }

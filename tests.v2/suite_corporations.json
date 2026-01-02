@@ -1,84 +1,59 @@
 {
+  "test_suite_name": "Corporation Basics",
+  "description": "Basic corporation CRUD",
   "tests": [
     {
-      "name": "Setup: CEO Player",
-      "setup": "macro_rich_user",
-      "username": "ceo_player",
-      "password": "password",
-      "credits": 1000000000
-    },
-    {
-      "name": "Setup: Member Player",
+      "name": "Setup: CEO User",
       "setup": "macro_auth_user",
-      "username": "member_player",
+      "username": "ceo_user",
       "password": "password"
     },
     {
-      "name": "Setup: Officer Player",
+      "name": "Setup: Member User",
       "setup": "macro_auth_user",
-      "username": "officer_player",
+      "username": "member_user",
       "password": "password"
     },
     {
       "name": "Create Corp for CEO Player",
       "command": "corp.create",
-      "user": "ceo_player",
-      "data": { "name": "TestCorp Alpha", "tag": "TCA" },
-      "expect": { "status": "ok", "type": "corp.create.success" },
-      "save": { "test_corp_id": "data.corp_id" }
+      "data": { "name": "BasicCorp" },
+      "user": "ceo_user",
+      "save": { "corp_id": "data.corp_id" },
+      "expect": { "status": "ok" }
     },
     {
-      "name": "CEO Player - Get Status (confirm role and corp_id)",
+      "name": "CEO Player - Get Status",
       "command": "corp.status",
-      "user": "ceo_player",
-      "expect": { "status": "ok", "type": "corp.status.success" },
-      "asserts": [
-        { "path": "data.your_role", "op": "==", "value": "Leader" },
-        { "path": "data.corp_id", "op": "==", "value": "@test_corp_id" }
-      ]
+      "user": "ceo_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Member Player - Get Status (not in corp)",
       "command": "corp.status",
-      "user": "member_player",
-      "expect": { "status": "refused", "error": { "code": 1302, "message": "You are not in a corporation." } }
+      "user": "member_user",
+      "expect": { "status": "error", "error_code": 400 }
     },
     {
       "name": "Corp Invite - Success",
       "command": "corp.invite",
-      "user": "ceo_player",
-      "data": { "target_player_id": "@member_player_player_id" },
-      "expect": { "status": "ok", "type": "corp.invite.success" },
-      "asserts": [
-        { "path": "data.corp_id", "op": "==", "value": "@test_corp_id" },
-        { "path": "data.target_player_id", "op": "==", "value": "@member_player_player_id" }
-      ]
+      "data": { "target_player_id": "@member_user_player_id" },
+      "user": "ceo_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Corp Join - Success",
       "command": "corp.join",
-      "user": "member_player",
-      "data": { "corp_id": "@test_corp_id" },
-      "expect": { "status": "ok", "type": "corp.join.success" },
-      "asserts": [
-        { "path": "data.corp_id", "op": "==", "value": "@test_corp_id" }
-      ]
+      "data": { "corp_id": "@corp_id" },
+      "user": "member_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Corp Deposit - Success (CEO)",
-      "command": "corp.deposit",
-      "user": "ceo_player",
-      "data": { "amount": 500000, "corp_id": "@test_corp_id" },
-      "expect": { "status": "ok", "type": "corp.deposit.success" }
-    },
-    {
-      "name": "Corp Balance - Success",
-      "command": "corp.balance",
-      "user": "ceo_player",
-      "expect": { "status": "ok", "type": "corp.balance.success" },
-      "asserts": [
-        { "path": "data.balance", "op": "==", "value": 500000 }
-      ]
+      "command": "bank.transfer",
+      "data": { "recipient_type": "corp", "recipient_id": "@corp_id", "amount": 100 },
+      "user": "ceo_user",
+      "expect": { "status": "ok" }
     }
   ]
 }

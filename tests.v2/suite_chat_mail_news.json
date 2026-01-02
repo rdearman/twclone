@@ -17,18 +17,6 @@
       "password": "password"
     },
     {
-      "name": "Setup: Admin",
-      "setup": "macro_auth_user",
-      "username": "comm_admin",
-      "password": "password"
-    },
-    {
-      "name": "Promote Admin",
-      "setup": "macro_sysop",
-      "username": "comm_admin",
-      "password": "password"
-    },
-    {
       "name": "Mail Send",
       "command": "mail.send",
       "data": { "recipient_id": "@comm_user_b_player_id", "subject": "Test", "body": "Body" },

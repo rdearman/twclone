@@ -318,23 +318,25 @@ h_get_account_id_unlocked (db_t *db,
     "SELECT id FROM bank_accounts WHERE owner_type = $1 AND owner_id = $2";
   db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id) };
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
 
 
   if (!db_query (db, sql, params, 2, &res, &err))
     {
-      return err.code;
+      rc = err.code;
+      goto cleanup;
     }
-
-  int rc = ERR_NOT_FOUND;
-
 
   if (db_res_step (res, &err))
     {
       *account_id_out = db_res_col_i32 (res, 0, &err);
       rc = 0;
     }
-  db_res_finalize (res);
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return rc;
 }
 
@@ -482,6 +484,13 @@ h_add_credits_unlocked (db_t *db,
   if (db_res_step (res, &err))
     {
       new_balance = db_res_col_i64 (res, 0, &err);
+      /* Sanity check: balance should never be negative after adding credits */
+      if (new_balance < 0)
+        {
+          db_res_finalize (res);
+          LOGE("Overflow detected: balance became negative after credit");
+          return ERR_DB_QUERY_FAILED;
+        }
     }
   else
     {
@@ -1020,6 +1029,7 @@ db_bank_get_frozen_status (db_t *db,
       return ERR_DB_MISUSE;
     }
   db_res_t *res = NULL; db_error_t err;
+  int rc = 0;
   db_bind_t params[] = { db_bind_i32 (owner_id) };
 
 
@@ -1040,9 +1050,15 @@ db_bank_get_frozen_status (db_t *db,
         {
           *out_frozen = 0;
         }
-      db_res_finalize (res); return 0;
+      rc = 0;
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+      db_res_finalize(res);
+  return rc;
 }
 
 

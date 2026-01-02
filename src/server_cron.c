@@ -250,13 +250,12 @@ universe_pathfind_get_sectors (db_t *db, int start_sector, int end_sector,
   if (start_sector == end_sector)
     {
       int *path = malloc (2 * sizeof (int));
-
-
-      if (path)
+      if (!path)
         {
-          path[0] = start_sector;
-          path[1] = 0;
+          return NULL;
         }
+      path[0] = start_sector;
+      path[1] = 0;
       return path;
     }
   int max_sector_id = 0;
@@ -2406,8 +2405,17 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
                                              0,
                                              0);
 
-                  buy->filled_quantity += trade_qty;
-                  sell->filled_quantity += trade_qty;
+                  /* Checked arithmetic to prevent overflow */
+                  if (__builtin_add_overflow(buy->filled_quantity, trade_qty, &buy->filled_quantity))
+                    {
+                      LOGE("Integer overflow in buy order filled_quantity");
+                      break;
+                    }
+                  if (__builtin_add_overflow(sell->filled_quantity, trade_qty, &sell->filled_quantity))
+                    {
+                      LOGE("Integer overflow in sell order filled_quantity");
+                      break;
+                    }
 
                   const char *b_status = (buy->filled_quantity >=
                                           buy->quantity) ? "filled" : "partial";
@@ -4200,7 +4208,7 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
   db_res_finalize (res_events);
 
   size_t event_idx;
-  json_t *payload_obj;
+  json_t *payload_obj = NULL;
 
 
   json_array_foreach (events_list, event_idx, payload_obj)

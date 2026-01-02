@@ -1,0 +1,58 @@
+{
+  "tests": [
+    {
+      "name": "Setup: Register chat user 1",
+      "command": "auth.register",
+      "data": { "username": "chat_test_user1", "passwd": "password" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Setup: Login chat user 1",
+      "command": "auth.login",
+      "data": { "username": "chat_test_user1", "passwd": "password" },
+      "user": "chat_test_user1",
+      "save": { "session": "data.session" }
+    },
+    {
+      "name": "Setup: Register chat user 2",
+      "command": "auth.register",
+      "data": { "username": "chat_test_user2", "passwd": "password" },
+      "register_if_missing": true
+    },
+    {
+      "name": "Setup: Login chat user 2",
+      "command": "auth.login",
+      "data": { "username": "chat_test_user2", "passwd": "password" },
+      "user": "chat_test_user2",
+      "save": { "session": "data.session" }
+    },
+    {
+      "name": "chat.send - Send private message",
+      "command": "chat.send",
+      "user": "chat_test_user1",
+      "data": { "to_player": "chat_test_user2", "message": "Hello player 2!" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "chat.broadcast - Send broadcast message",
+      "command": "chat.broadcast",
+      "user": "chat_test_user1",
+      "data": { "message": "Broadcast message to all!" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "chat.history - Get personal chat history",
+      "command": "chat.history",
+      "user": "chat_test_user1",
+      "data": { "limit": 10 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "chat.history - Get history with filter",
+      "command": "chat.history",
+      "user": "chat_test_user1",
+      "data": { "from_player": "chat_test_user2", "limit": 5 },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

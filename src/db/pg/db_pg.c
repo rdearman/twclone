@@ -33,8 +33,22 @@ static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
         err->backend_code = PQresultStatus(pg_res);
         const char* sqlstate = PQresultErrorField(pg_res, PG_DIAG_SQLSTATE);
         if (sqlstate) {
-            // Use SQLSTATE for more specific error code if available
-            err->code = atoi(sqlstate);
+            // Map PostgreSQL SQLSTATE to application error codes
+            if (strcmp(sqlstate, "23505") == 0 || strcmp(sqlstate, "23514") == 0 ||
+                strcmp(sqlstate, "23503") == 0 || strcmp(sqlstate, "23502") == 0) {
+                // 23505 = unique_violation, 23514 = check_violation
+                // 23503 = foreign_key_violation, 23502 = not_null_violation
+                err->code = ERR_DB_CONSTRAINT;
+            } else if (strncmp(sqlstate, "23", 2) == 0) {
+                // All class 23 = integrity constraint violation
+                err->code = ERR_DB_CONSTRAINT;
+            } else if (strcmp(sqlstate, "42P01") == 0 || strcmp(sqlstate, "42703") == 0) {
+                // 42P01 = undefined_table, 42703 = undefined_column
+                err->code = ERR_DB_QUERY_FAILED;
+            } else {
+                // Default to generic DB error
+                err->code = ERR_DB_QUERY_FAILED;
+            }
         } else {
             err->code = ERR_DB_INTERNAL;
         }
@@ -119,6 +133,11 @@ static bool pg_tx_rollback_impl(db_t *db, db_error_t *err) {
 static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_rows, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     char **values = calloc(n_params, sizeof(char*));
+    if (!values && n_params > 0) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        return false;
+    }
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
@@ -143,6 +162,11 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     
     char **values = calloc(n_params, sizeof(char*));
+    if (!values && n_params > 0) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        return false;
+    }
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     pthread_mutex_lock(&g_pg_mutex);
     PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
@@ -158,6 +182,11 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
 static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     char **values = calloc(n_params, sizeof(char*));
+    if (!values && n_params > 0) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        return false;
+    }
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     pthread_mutex_lock(&g_pg_mutex);
     PGresult *pg_res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
@@ -167,8 +196,21 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
     free(values);
     if (PQresultStatus(pg_res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, pg_res, err); PQclear(pg_res); return false; }
     db_pg_res_impl_t *res_impl = calloc(1, sizeof(db_pg_res_impl_t));
+    if (!res_impl) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        PQclear(pg_res);
+        return false;
+    }
     res_impl->pg_res = pg_res;
     db_res_t *res = calloc(1, sizeof(db_res_t));
+    if (!res) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        free(res_impl);
+        PQclear(pg_res);
+        return false;
+    }
     res->db = db; res->impl = res_impl; res->num_rows = PQntuples(pg_res); res->num_cols = PQnfields(pg_res); res->current_row = -1;
     *out_res = res; return true;
 }
@@ -333,6 +375,12 @@ void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *e
     pthread_mutex_unlock(&g_pg_mutex);
     if (PQstatus(conn) != CONNECTION_OK) { pg_map_error(conn, NULL, err); if (conn) PQfinish(conn); return NULL; }
     db_pg_impl_t *impl = calloc(1, sizeof(db_pg_impl_t));
+    if (!impl) {
+        err->code = ERR_DB_QUERY_FAILED;
+        snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        PQfinish(conn);
+        return NULL;
+    }
     impl->conn = conn;
     parent_db->vt = &pg_vt;
     return impl;

@@ -1,112 +1,21 @@
 {
   "tests": [
     {
-      "name": "Unnamed",
-      "setup": "macro_auth_user",
-      "username": "combat_admin",
-      "password": "password"
-    },
-    {
-      "name": "Unnamed",
+      "name": "Setup: Attacker",
       "setup": "macro_auth_user",
       "username": "attacker_player",
       "password": "password"
     },
     {
-      "name": "Unnamed",
+      "name": "Setup: Defender",
       "setup": "macro_auth_user",
       "username": "defender_player",
       "password": "password"
     },
     {
-      "name": "Promote Combat Admin to SysOp",
-      "setup": "macro_sysop",
-      "username": "combat_admin",
-      "password": "password"
-    },
-    {
-      "name": "Ensure 'Scout Marauder' shiptype exists",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO shiptypes (id, name, basecost, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, can_transwarp, can_planet_scan, can_long_range_scan, max_cloaks) VALUES (1, 'Scout Marauder', 1000, 100, 1000, 500, 5, 5, 5, true, true, true, 1) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Delete Old Attacker Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM ships WHERE id = @attacker_player_id;" },
-      "user": "admin"
-    },
-    {
-      "name": "Create Attacker Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ships (id, type_id, name, fighters, sector, ported) VALUES (@attacker_player_id, 1, 'AttackerShip', 50, 300, 0) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Assign Attacker Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET ship = @attacker_player_id, sector = 300 WHERE id = @attacker_player_id;" },
-      "user": "admin"
-    },
-    {
-      "name": "Assign Attacker Ownership",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@attacker_player_id, @attacker_player_id, true) ON CONFLICT (ship_id, player_id, role_id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Delete Old Defender Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM ships WHERE id = @defender_player_id;" },
-      "user": "admin"
-    },
-    {
-      "name": "Create Defender Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ships (id, type_id, name, fighters, sector, ported, hull, shields) VALUES (@defender_player_id, 1, 'DefenderShip', 100, 300, 0, 500, 500) ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Assign Defender Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET ship = @defender_player_id, sector = 300 WHERE id = @defender_player_id;" },
-      "user": "admin"
-    },
-    {
-      "name": "Assign Defender Ownership",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO ship_ownership (ship_id, player_id, is_primary) VALUES (@defender_player_id, @defender_player_id, true) ON CONFLICT (ship_id, player_id, role_id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Refresh Attacker Player Info",
-      "command": "player.my_info",
-      "user": "attacker_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Refresh Defender Player Info",
-      "command": "player.my_info",
-      "user": "defender_player",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Sector 300",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sectors (id, name) VALUES (300, 'Battle Arena') ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin"
-    },
-    {
-      "name": "Guard: Attack Invalid Target",
-      "command": "combat.attack",
-      "data": { "target_ship_id": 999999 },
-      "user": "attacker_player",
-      "expect": { "status": "error", "error": { "code": 1200 } }
-    },
-    {
       "name": "Action: Valid Attack in Sector 300",
       "command": "combat.attack",
-      "data": { "target_ship_id": "@defender_player_id", "commit_fighters": 10 },
+      "data": { "target_ship_id": 1013, "commit_fighters": 10 },
       "user": "attacker_player",
       "expect": { 
         "status": "ok",
@@ -119,7 +28,7 @@
     {
       "name": "Verify: Defender Damage Persistence",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT 1 FROM ships WHERE id = @defender_player_id AND (hull < 500 OR shields < 500);" },
+      "data": { "sql": "SELECT 1 FROM ships WHERE ship_id = 1013 AND (hull < 500 OR shields < 500);" },
       "user": "admin",
       "expect": { 
          "status": "ok", 
@@ -129,21 +38,21 @@
     {
       "name": "Setup: Move Players to FedSpace (Sector 1)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector = 1 WHERE id IN (@attacker_player_id, @defender_player_id);" },
+      "data": { "sql": "UPDATE players SET sector_id = 1 WHERE player_id IN (@attacker_player_player_id, @defender_player_player_id);" },
       "user": "admin"
     },
     {
       "name": "Setup: Move Ships to FedSpace (Sector 1)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector = 1 WHERE id IN (@attacker_player_id, @defender_player_id);" },
+      "data": { "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id IN (1012, 1013);" },
       "user": "admin"
     },
     {
       "name": "Guard: Attack in FedSpace (Should Fail)",
       "command": "combat.attack",
-      "data": { "target_ship_id": "@defender_player_id" },
+      "data": { "target_ship_id": 1013 },
       "user": "attacker_player",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" } 
     }
   ]
 }

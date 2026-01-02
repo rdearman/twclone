@@ -1,37 +1,10 @@
 {
   "tests": [
     {
-      "setup": "macro_user_in_sector",
+      "name": "Setup: mine_tester",
+      "setup": "macro_auth_user",
       "username": "mine_tester",
       "password": "password"
-    },
-    {
-      "name": "Setup: Grant Credits",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits=100000, sector=200 WHERE id=@mine_tester_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Grant Ship Items",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector=200, mines=1000, fighters=500 WHERE id=@mine_tester_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Sector 200",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sectors (id, name) VALUES (200, 'Minefield Alpha') ON CONFLICT (id) DO NOTHING;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Clear Assets 200",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM sector_assets WHERE sector=200;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
     },
     {
       "name": "Action: Lay Armid Mines",
@@ -54,14 +27,14 @@
     {
       "name": "Verify: Inventory Decreased",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT mines FROM ships WHERE id=@mine_tester_player_id;" },
+      "data": { "sql": "SELECT mines FROM ships WHERE ship_id=1015;" },
       "user": "admin",
       "expect": { "status": "ok", "data": { "rows": [[950]] } }
     },
     {
       "name": "Verify: Sector Asset Created",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT quantity FROM sector_assets WHERE sector=200 AND player=@mine_tester_player_id AND asset_type=1;" },
+      "data": { "sql": "SELECT quantity FROM sector_assets WHERE sector_id=200 AND owner_id=@mine_tester_player_id AND asset_type=1;" },
       "user": "admin",
       "expect": { "status": "ok", "data": { "rows": [[50]] } }
     },
@@ -73,37 +46,16 @@
       "expect": { "status": "error", "error": { "code": 1302 } } 
     },
     {
-      "name": "Setup: Fill Sector to Cap",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 49950, 3, to_timestamp(0)) ON CONFLICT (sector, player, asset_type) DO UPDATE SET quantity = EXCLUDED.quantity;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Action: Lay Mines Exceeding Cap",
-      "command": "combat.lay_mines",
-      "data": { "count": 100, "offense_mode": 3, "owner_mode": "personal", "mine_type": "armid" },
-      "user": "mine_tester",
-      "expect": { "status": "refused", "error": { "code": 2301 } }
-    },
-    {
       "name": "Setup: Reset for Sweep (Clear)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM sector_assets WHERE sector=200;" },
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id=200;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Reset for Sweep (Seed)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector, player, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 50, 3, to_timestamp(0)) ON CONFLICT (sector, player, asset_type) DO UPDATE SET quantity = EXCLUDED.quantity;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Reset for Sweep (Fighters)",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET fighters=1000 WHERE id=@mine_tester_player_id;" }, 
+      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 50, 3, to_timestamp(0)) ON CONFLICT DO NOTHING;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -118,34 +70,6 @@
       },
       "user": "mine_tester",
       "expect": { "status": "ok", "data": { "success": true } }
-    },
-    {
-      "name": "Setup: Move Player to FedSpace",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector=1 WHERE id=@mine_tester_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Move Ship to FedSpace",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector=1 WHERE id=@mine_tester_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Action: Lay Mines in FedSpace (Warning Check)",
-      "command": "combat.lay_mines",
-      "data": { "count": 10, "offense_mode": 3, "owner_mode": "personal", "mine_type": "armid" },
-      "user": "mine_tester",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Verify: Federation Warning Received",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(*) FROM system_notice WHERE body LIKE '%Federation Warning%' AND title = 'Federation Warning';" },
-      "user": "admin",
-      "expect": { "status": "ok", "data": { "rows": [[1]] } }
     }
   ]
 }

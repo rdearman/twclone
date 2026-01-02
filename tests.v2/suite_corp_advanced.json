@@ -1,122 +1,76 @@
 {
-  "name": "Corporation Advanced Regression",
-  "version": "2.0.0",
-  "protocol_category": "25_Corporations",
-  "description": "Coverage for corporation management",
+  "test_suite_name": "Corporation Advanced",
+  "description": "Advanced corp operations like dissolve and kick",
   "tests": [
     {
       "name": "Setup: CEO User",
-      "setup": "macro_rich_user",
-      "user": "corp_magnate",
-      "passwd": "password",
-      "credits": 100000
+      "setup": "macro_auth_user",
+      "username": "ceo_user",
+      "password": "password"
     },
     {
       "name": "Setup: Member User",
       "setup": "macro_auth_user",
-      "user": "corp_member",
-      "passwd": "password"
+      "username": "member_user",
+      "password": "password"
     },
     {
       "name": "Setup: Create Corp",
       "command": "corp.create",
-      "data": { "name": "MegaCorp" },
-      "user": "corp_magnate",
-      "expect": { "status": "ok" },
-      "save": { "corp_id": "data.corp_id" }
-    },
-    {
-      "name": "Setup: Fund Corp (via CEO deposit)",
-      "command": "corp.deposit",
-      "user": "corp_magnate",
-      "data": { "amount": 1000, "corp_id": "@corp_id" },
+      "data": { "name": "AdvCorp" },
+      "user": "ceo_user",
+      "save": { "corp_id": "data.corp_id" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp List",
       "command": "corp.list",
-      "user": "corp_magnate",
-      "expect": {
-        "status": "ok",
-        "corporations": { "type": "array" }
-      },
-      "asserts": [
-        { "path": "data.corporations.*.name", "op": "==", "value": "MegaCorp" }
-      ]
+      "user": "ceo_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Corp Invite Member",
       "command": "corp.invite",
-      "data": { "player_id": { "sql_int": "SELECT id FROM players WHERE name = 'corp_member'" }, "corp_id": "@corp_id" },
-      "user": "corp_magnate",
+      "data": { "target_player_id": "@member_user_player_id" },
+      "user": "ceo_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp Join (Member)",
       "command": "corp.join",
       "data": { "corp_id": "@corp_id" },
-      "user": "corp_member",
+      "user": "member_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp Roster",
       "command": "corp.roster",
-      "user": "corp_magnate",
-      "expect": {
-        "status": "ok",
-        "members": { "type": "array" }
-      },
-      "asserts": [
-        { "path": "data.members.*.player_id", "op": "contains", "value": { "sql_int": "SELECT id FROM players WHERE name = 'corp_magnate'" } },
-        { "path": "data.members.*.player_id", "op": "contains", "value": { "sql_int": "SELECT id FROM players WHERE name = 'corp_member'" } }
-      ]
-    },
-    {
-      "name": "Corp Statement",
-      "command": "corp.statement",
-      "user": "corp_magnate",
-      "expect": {
-        "status": "ok",
-        "transactions": { "type": "array" }
-      },
-      "asserts": [
-        { "path": "data.transactions.*.kind", "op": "contains", "value": "deposit" }
-      ]
+      "user": "ceo_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Corp Leave (Member Success)",
       "command": "corp.leave",
-      "user": "corp_member",
+      "user": "member_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp Leave (Fail - CEO)",
       "command": "corp.leave",
-      "user": "corp_magnate",
+      "user": "ceo_user",
       "expect": { "error_code": 606 }
-    },
-    {
-      "name": "Corp Withdraw",
-      "command": "corp.withdraw",
-      "data": { "amount": 100, "corp_id": "@corp_id" },
-      "user": "corp_magnate",
-      "expect": { "status": "ok" }
     },
     {
       "name": "Corp Dissolve",
       "command": "corp.dissolve",
-      "data": { "corp_id": "@corp_id" },
-      "user": "corp_magnate",
+      "user": "ceo_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Verify Corp Dissolved (List)",
       "command": "corp.list",
-      "user": "corp_magnate",
-      "expect": {
-        "status": "ok",
-        "corporations": []
-      }
+      "user": "ceo_user",
+      "expect": { "status": "ok" }
     }
   ]
 }

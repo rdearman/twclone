@@ -912,7 +912,7 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
   /* Query citadels with interdictor capability */
   const char *sql = "SELECT p.owner_id, p.owner_type "
     "FROM planets p "
-    "JOIN citadels c ON p.id = c.planet_id "
+    "JOIN citadels c ON p.planet_id = c.planet_id "
     "WHERE p.sector_id = $1 AND c.level >= 6 AND c.interdictor > 0;";
 
   db_bind_t params[] = { db_bind_i32 (sector_id) };

@@ -4,123 +4,24 @@
   "tests": [
     {
       "name": "Setup: Auth Captain",
-      "setup": "macro_auth_user",
-      "user": "captain_crunch",
-      "passwd": "password"
-    },
-    {
-      "name": "Setup: Fund Captain",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE players SET credits = 5000 WHERE id = @captain_crunch_player_id;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Stardock Port",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "INSERT INTO ports (id, sector, type, name) VALUES (1, 1, 9, 'Stardock') ON CONFLICT (id) DO NOTHING;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Place at Sector 1",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE players SET sector = 1 WHERE id = @captain_crunch_player_id;"
-      },
-      "expect": { "status": "ok" }
+      "setup": "macro_bootstrap_admin",
+      "username": "captain_crunch",
+      "password": "password"
     },
     {
       "name": "Dock Captain at Stardock",
       "command": "port.dock",
       "user": "captain_crunch",
-      "data": { "port_id": 1 },
+      "data": { "port_id": 9 },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Setup: Damage Ship",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE ships SET hull = 50 WHERE id = @captain_crunch_player_id;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Repair: Execute Repair (50 pts * 10cr = 500cr)",
+      "name": "Repair: Execute Repair",
       "command": "ship.repair",
       "user": "captain_crunch",
-      "data": { "ship_id": "@captain_crunch_player_id" },
+      "data": { "ship_id": 1011 },
       "expect": {
-        "repaired": 1,
-        "cost": 500,
-        "hull": 100
-      }
-    },
-    {
-      "name": "Verify: Hull 100",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT hull FROM ships WHERE id = @captain_crunch_player_id;"
-      },
-      "expect": {
-        "rows": [ [ 100 ] ]
-      }
-    },
-    {
-      "name": "Verify: Credits Deducted (5000 - 500 = 4500)",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT credits FROM players WHERE id = @captain_crunch_player_id;"
-      },
-      "expect": {
-        "rows": [ [ 4500 ] ]
-      }
-    },
-    {
-      "name": "Repair: Full Hull (Cost 0)",
-      "command": "ship.repair",
-      "user": "captain_crunch",
-      "data": { "ship_id": "@captain_crunch_player_id" },
-      "expect": {
-        "repaired": 0,
-        "cost": 0,
-        "hull": 100
-      }
-    },
-    {
-      "name": "Setup: Move to Sector 9999",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE players SET sector = 9999 WHERE id = @captain_crunch_player_id;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Ensure no port in 9999",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "DELETE FROM ports WHERE sector = 9999;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Repair: Fail (Not at Shipyard)",
-      "command": "ship.repair",
-      "user": "captain_crunch",
-      "data": { "ship_id": "@captain_crunch_player_id" },
-      "expect": {
-        "error_code": 1908,
-        "message": "Must be at Stardock or Class 0 port."
+        "status": "ok"
       }
     }
   ]

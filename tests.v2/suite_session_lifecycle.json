@@ -1,0 +1,30 @@
+{
+  "name": "Session Lifecycle",
+  "version": "2.0.0",
+  "protocol_category": "05_Authentication",
+  "description": "Tests session management",
+  "tests": [
+    {
+      "name": "session.hello - Initialize session",
+      "command": "session.hello",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "session.ping - Ping session",
+      "command": "session.ping",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "session_lifecycle_user",
+      "password": "password"
+    },
+    {
+      "name": "session.ping - Ping authenticated session",
+      "command": "session.ping",
+      "user": "session_lifecycle_user",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

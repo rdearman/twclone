@@ -17,15 +17,6 @@
       "password": "password"
     },
     {
-      "name": "Setup: Promote Admin",
-      "command": "sys.raw_sql_exec",
-      "data": {
-        "sql": "UPDATE players SET type = 1 WHERE name = '@sys_admin';"
-      },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Boundary: admin.notice (Deny)",
       "command": "admin.notice",
       "user": "sys_hacker",

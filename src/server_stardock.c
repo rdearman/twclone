@@ -1335,7 +1335,12 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       bool eligible = true;
       const char *type_name = (const char *) db_stmt_col_text (stmt, 1);
       long long new_ship_basecost = db_stmt_col_i64 (stmt, 2);
-      long long net_cost = new_ship_basecost - trade_in_value;
+      long long net_cost;
+      if (__builtin_sub_overflow(new_ship_basecost, trade_in_value, &net_cost))
+        {
+          /* Underflow shouldn't happen but handle defensively */
+          net_cost = 0;
+        }
 
 
       /* Corporate Flagship: CEO-only */
@@ -1764,7 +1769,18 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   long trade_in_value =
     floor (old_ship_basecost * (cfg->shipyard_trade_in_factor_bp / 10000.0));
   long tax = floor (new_shiptype_basecost * (cfg->shipyard_tax_bp / 10000.0));
-  long long final_cost = new_shiptype_basecost - trade_in_value + tax;
+  long long temp_sum, final_cost;
+  /* Check for overflow in: new_basecost - trade_in + tax */
+  if (__builtin_sub_overflow(new_shiptype_basecost, trade_in_value, &temp_sum) ||
+      __builtin_add_overflow(temp_sum, tax, &final_cost))
+    {
+      /* Overflow in cost calculation - treat as unaffordable */
+      free (cfg);
+      stx_rollback (db);
+      send_response_error (ctx, root, ERR_SHIPYARD_INSUFFICIENT_FUNDS,
+                           "Ship cost calculation overflow.");
+      return 0;
+    }
 
 
   if (current_credits < final_cost)

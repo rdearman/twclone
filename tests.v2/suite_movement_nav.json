@@ -1,102 +1,93 @@
 {
-  "name": "Movement & Nav Regression",
+  "name": "Movement & Navigation Regression",
   "version": "2.0.0",
-  "protocol_category": "21_Sector",
-  "description": "Coverage for sector info, scanning, and navigation",
+  "protocol_category": "15_Navigation",
+  "description": "Coverage for sector info, scanning, bookmarks, avoids",
   "tests": [
     {
-      "name": "Setup: User in Sector",
-      "setup": "macro_user_in_sector",
-      "user": "nav_explorer",
-      "passwd": "password"
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "nav_user",
+      "password": "password"
     },
     {
       "name": "Sector Info",
       "command": "sector.info",
-      "user": "nav_explorer",
+      "user": "nav_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Move Describe Sector",
       "command": "move.describe_sector",
-      "user": "nav_explorer",
+      "data": { "sector_id": 1 },
+      "user": "nav_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Move Scan",
       "command": "move.scan",
-      "user": "nav_explorer",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Sector Scan",
-      "command": "sector.scan",
-      "user": "nav_explorer",
+      "user": "nav_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Sector Scan Density",
       "command": "sector.scan.density",
-      "user": "nav_explorer",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Sector Search",
-      "command": "sector.search",
-      "data": { "query": "Sol" },
-      "user": "nav_explorer",
+      "user": "nav_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Sector Set Beacon",
       "command": "sector.set_beacon",
-      "data": { "sector_id": 1, "message": "Hello" },
-      "user": "nav_explorer",
-      "expect": { "error_code": 1300, "message": "Invalid request schema" }
+      "data": { "beacon": "Hello World" },
+      "user": "nav_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Nav Bookmark Add",
       "command": "nav.bookmark.add",
-      "data": { "bookmarks": [{"sector_id": 1, "name": "Home"}] },
-      "user": "nav_explorer",
+      "data": { "name": "Home", "sector_id": 1 },
+      "user": "nav_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Nav Bookmark List",
       "command": "nav.bookmark.list",
-      "user": "nav_explorer",
-      "expect": {
-        "status": "ok",
-        "items": { "type": "array" }
-      }
+      "user": "nav_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Nav Bookmark Remove",
       "command": "nav.bookmark.remove",
       "data": { "name": "Home" },
-      "user": "nav_explorer",
-      "expect": { "status": "nav.bookmark.removed" }
+      "user": "nav_user",
+      "expect": { "status": "ok" }
     },
     {
-      "name": "Nav Bookmark Set",
-      "command": "nav.bookmark.set",
-      "data": { "bookmarks": [{"sector_id": 1, "name": "Home"}] },
-      "user": "nav_explorer",
-      "expect": { "status": "nav.bookmark.set" }
+      "name": "Nav Avoid Add",
+      "command": "nav.avoid.add",
+      "data": { "sector_id": 666 },
+      "user": "nav_user",
+      "expect": { "status": "ok" }
     },
     {
-      "name": "Nav Avoid Set",
-      "command": "nav.avoid.set",
-      "data": { "avoids": [666] },
-      "user": "nav_explorer",
-      "expect": { "status": "nav.avoid.set" }
+      "name": "Nav Avoid List",
+      "command": "nav.avoid.list",
+      "user": "nav_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Nav Avoid Remove",
+      "command": "nav.avoid.remove",
+      "data": { "sector_id": 666 },
+      "user": "nav_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Move Transwarp (Fail - No Equipment)",
       "command": "move.transwarp",
-      "data": { "sector_id": 50 },
-      "user": "nav_explorer",
-      "expect": { "error_code": 1502 }
+      "data": { "sector_id": 2 },
+      "user": "nav_user",
+      "expect": { "error_code": 1458 }
     }
   ]
 }

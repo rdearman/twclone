@@ -416,7 +416,7 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
     db_ships_inspectable_at_sector_json (db, ctx->player_id, sector_id, &ships);
 
 
-  if (!rc || !ships)
+  if (rc != 0 || !ships)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
       return 0;

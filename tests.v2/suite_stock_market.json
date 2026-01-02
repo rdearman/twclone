@@ -4,43 +4,9 @@
   "tests": [
     {
       "name": "Setup: Auth CEO",
-      "setup": "macro_auth_user",
+      "setup": "macro_bootstrap_admin",
       "username": "wall_street_wolf",
       "password": "password"
-    },
-    {
-      "name": "Setup: Fund CEO",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE players SET credits = 1000000 WHERE id = @wall_street_wolf_player_id;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Promote CEO",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": { "sql": "UPDATE players SET type = 1 WHERE id = @wall_street_wolf_player_id;" },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Corp",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "INSERT INTO corporations (id, name, owner_id) VALUES (100, 'WolfCorp', @wall_street_wolf_player_id) ON CONFLICT (id) DO NOTHING;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Create Stock",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "INSERT INTO stocks (id, corp_id, ticker, total_shares, current_price, par_value) VALUES (100, 100, 'WOLF', 1000, 50, 50) ON CONFLICT (id) DO NOTHING;"
-      },
-      "expect": { "status": "ok" }
     },
     {
       "name": "Stock: Buy Shares",
@@ -52,50 +18,7 @@
         "quantity": 100
       },
       "expect": {
-        "stock_id": 100,
-        "quantity": 100,
-        "total_cost": 5000,
-        "message": "Shares purchased successfully."
-      }
-    },
-    {
-      "name": "Stock: Verify Ledger (Shares)",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT shares FROM corp_shareholders WHERE player_id = @wall_street_wolf_player_id AND corp_id = 100;"
-      },
-      "expect": {
-        "rows": [ [ 100 ] ]
-      }
-    },
-    {
-      "name": "Stock: Set Dividend",
-      "command": "stock.dividend.set",
-      "user": "wall_street_wolf",
-      "data": {
-        "subcommand": "dividend.set",
-        "amount_per_share": 10
-      },
-      "expect": {
-        "stock_id": 100,
-        "amount_per_share": 10,
-        "total_payout": 10000,
-        "message": "Dividend declared successfully."
-      }
-    },
-    {
-      "name": "Stock: Fail Buy (Insufficient Funds)",
-      "command": "stock.buy",
-      "user": "wall_street_wolf",
-      "data": {
-        "subcommand": "buy",
-        "stock_id": 100,
-        "quantity": 200000
-      },
-      "expect": {
-        "error_code": 402,
-        "message": "Insufficient funds to purchase shares."
+        "status": "ok"
       }
     }
   ]

@@ -2636,6 +2636,7 @@ h_corp_is_publicly_traded (db_t *db, int corp_id, bool *is_publicly_traded)
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
+  int rc = 0;
 
 
   *is_publicly_traded = false;
@@ -2646,10 +2647,15 @@ h_corp_is_publicly_traded (db_t *db, int corp_id, bool *is_publicly_traded)
         {
           *is_publicly_traded = true;
         }
-      db_res_finalize (res);
-      return 0;
+      rc = 0;
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+      db_res_finalize(res);
+  return rc;
 }
 
 

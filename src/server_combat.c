@@ -1884,7 +1884,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (stardock_sectors && json_is_array (stardock_sectors))
     {
       size_t index;
-      json_t *sector_value;
+      json_t *sector_value = NULL;
 
 
       json_array_foreach (stardock_sectors, index, sector_value)
@@ -3863,7 +3863,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (stardock_sectors)
     {
       size_t i;
-      json_t *v;
+      json_t *v = NULL;
 
 
       json_array_foreach (stardock_sectors, i, v)

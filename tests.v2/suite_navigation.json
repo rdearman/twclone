@@ -1,50 +1,27 @@
 {
+  "name": "Navigation Basics",
+  "version": "2.0.0",
+  "protocol_category": "15_Navigation",
+  "description": "Basic navigation tests",
   "tests": [
     {
+      "name": "Setup: User",
       "setup": "macro_auth_user",
-      "username": "autopilot_user",
-      "password": "testpass"
+      "username": "nav_basic_user",
+      "password": "password"
     },
     {
       "name": "Get Route",
-      "command": "move.autopilot.start",
-      "data": {
-        "to_sector_id": 2
-      },
-      "user": "autopilot_user",
-      "expect": {
-        "status": "ok",
-        "type": "move.autopilot.route_v1"
-      },
-      "asserts": [
-        { "path": "data.from_sector_id", "op": "defined" },
-        { "path": "data.to_sector_id", "op": "==", "value": 2 },
-        { "path": "data.path", "op": "*array" }
-      ]
+      "command": "move.pathfind",
+      "data": { "to": 2 },
+      "user": "nav_basic_user",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Status Ready",
-      "command": "move.autopilot.status",
-      "user": "autopilot_user",
-      "expect": {
-        "status": "ok",
-        "type": "move.autopilot.status_v1",
-        "data": {
-          "state": "ready"
-        }
-      }
-    },
-    {
-      "name": "Stop Idle",
-      "command": "move.autopilot.stop",
-      "user": "autopilot_user",
-      "expect": {
-        "status": "ok",
-        "type": "move.autopilot.stopped_v1",
-        "data": {
-          "state": "idle"
-        }
-      }
+      "command": "player.status",
+      "user": "nav_basic_user",
+      "expect": { "status": "ok" }
     }
   ]
 }

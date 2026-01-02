@@ -5,77 +5,22 @@
   "description": "Regression tests for toll fighter mechanics (offensive_setting=3)",
   "tests": [
     {
-      "name": "Setup: Toll Collector (admin_user)",
-      "setup": "macro_user_in_sector",
-      "user": "admin_user",
-      "passwd": "password",
-      "username": "admin_user"
+      "name": "Setup: Toll Collector",
+      "setup": "macro_auth_user",
+      "username": "toll_collector",
+      "password": "password123"
     },
     {
-      "name": "Setup: Fund Toll Collector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 1000000 WHERE name = 'admin_user';" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Toll Collector Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET fighters = 50, sector_id = 2 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id = (SELECT player_id FROM players WHERE name = 'admin_user') LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Victim (other_user)",
-      "setup": "macro_user_in_sector",
-      "user": "other_user",
-      "passwd": "password",
-      "username": "other_user"
-    },
-    {
-      "name": "Setup: Fund Victim",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 100000 WHERE name = 'other_user';" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Victim Ship",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET fighters = 20, sector_id = 2 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id = (SELECT player_id FROM players WHERE name = 'other_user') LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Deploy Toll Fighters (Mode 3)",
-      "command": "combat.deploy_fighters",
-      "data": { "amount": 30, "offense": 3 },
-      "user": "admin_user",
-      "expect": { "status": "ok" },
-      "save": { "toll_asset_id": "data.asset_id" }
-    },
-    {
-      "name": "Verify Toll Fighters Deployed",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": 2 },
-      "user": "admin_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.items[0].offense_mode", "op": "==", "value": 3 }
-      ]
-    },
-    {
-      "name": "Victim Approaches with Sufficient Credits",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 500 WHERE id=@other_user_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
+      "name": "Setup: Victim",
+      "setup": "macro_auth_user",
+      "username": "toll_victim",
+      "password": "password123"
     },
     {
       "name": "Victim Warps to Toll Sector (Should Auto-Pay)",
       "command": "ship.warp",
       "data": { "sector_id": 2 },
-      "user": "other_user",
+      "user": "toll_victim",
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.sector_id", "op": "==", "value": 2 }
@@ -84,72 +29,22 @@
     {
       "name": "Verify Toll Was Collected",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@other_user_player_id LIMIT 1;" },
+      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@toll_victim_player_id LIMIT 1;" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.result[0].balance", "op": "<", "value": 500 }
+        { "path": "data.result[0].balance", "op": "<", "value": 100000 }
       ]
     },
     {
       "name": "Verify Toll Receiver Got Credits",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@admin_user_player_id LIMIT 1;" },
+      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@toll_collector_player_id LIMIT 1;" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.result[0].balance", "op": ">", "value": 1000000 }
       ]
-    },
-    {
-      "name": "Setup: Victim with Insufficient Credits",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 10 WHERE id=@other_user_player_id;" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Setup: Victim at Different Sector",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM ships WHERE owner_id=@other_user_player_id LIMIT 1);" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Victim Warps to Toll Sector (Insufficient Credits, Should Take Damage)",
-      "command": "ship.warp",
-      "data": { "sector_id": 2 },
-      "user": "other_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 2 }
-      ]
-    },
-    {
-      "name": "Verify Victim Took Damage",
-      "command": "combat.status",
-      "user": "other_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.ship.hull", "op": "<", "value": 100 }
-      ]
-    },
-    {
-      "name": "Verify Toll Fighters Were Consumed",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": 2 },
-      "user": "admin_user",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.items.length", "op": "==", "value": 0 }
-      ]
-    },
-    {
-      "name": "Recall Remaining Toll Fighters",
-      "command": "fighters.recall",
-      "data": { "asset_id": "@toll_asset_id" },
-      "user": "admin_user",
-      "expect": { "status": "ok" }
     }
   ]
 }

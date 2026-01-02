@@ -281,6 +281,9 @@ db_ensure_ship_perms_column (db_t *db)
 static int
 stmt_to_json_array (db_res_t *st, json_t **out_array, db_error_t *err)
 {
+  json_t *arr = NULL;
+  int rc = 0;
+
   if (!out_array)
     {
       while (db_res_step (st, err))
@@ -288,9 +291,8 @@ stmt_to_json_array (db_res_t *st, json_t **out_array, db_error_t *err)
         }
       return 0;
     }
-  json_t *arr = json_array ();
 
-
+  arr = json_array ();
   if (!arr)
     {
       return ERR_NOMEM;
@@ -301,39 +303,75 @@ stmt_to_json_array (db_res_t *st, json_t **out_array, db_error_t *err)
       int cols = db_res_col_count (st);
       json_t *obj = json_object ();
 
-
       if (!obj)
         {
-          db_res_cancel (st); json_decref (arr); return ERR_NOMEM;
+          rc = ERR_NOMEM;
+          goto cleanup;
         }
+
       for (int i = 0; i < cols; i++)
         {
           const char *col_name = db_res_col_name (st, i);
           db_col_type_t col_type = db_res_col_type (st, i);
           json_t *val = NULL;
 
-
           switch (col_type)
             {
-              case DB_TYPE_INTEGER: val = json_integer (db_res_col_i64 (st,
-                                                                        i,
-                                                                        err));
+              case DB_TYPE_INTEGER:
+                val = json_integer (db_res_col_i64 (st, i, err));
                 break;
-              case DB_TYPE_FLOAT: val = json_real (db_res_col_double (st, i,
-                                                                      err));
+              case DB_TYPE_FLOAT:
+                val = json_real (db_res_col_double (st, i, err));
                 break;
-              case DB_TYPE_TEXT: val = json_string (db_res_col_text (st, i,
-                                                                     err) ?:
-                                                    ""); break;
-              case DB_TYPE_NULL: val = json_null (); break;
-              default: val = json_null (); break;
+              case DB_TYPE_TEXT:
+                val = json_string (db_res_col_text (st, i, err) ?: "");
+                break;
+              case DB_TYPE_NULL:
+                val = json_null ();
+                break;
+              default:
+                val = json_null ();
+                break;
             }
-          json_object_set_new (obj, col_name, val ?: json_null ());
+
+          if (!val)
+            {
+              json_decref (obj);
+              rc = ERR_NOMEM;
+              goto cleanup;
+            }
+
+          if (json_object_set_new (obj, col_name, val) < 0)
+            {
+              json_decref (obj);
+              rc = ERR_NOMEM;
+              goto cleanup;
+            }
         }
-      json_array_append_new (arr, obj);
+
+      if (json_array_append_new (arr, obj) < 0)
+        {
+          json_decref (obj);
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
     }
+
+  /* Check if db_res_step failed with an error */
+  if (err && err->code != 0)
+    {
+      rc = err->code;
+      goto cleanup;
+    }
+
   *out_array = arr;
-  return 0;
+  arr = NULL;  /* Transfer ownership to caller */
+  rc = 0;
+
+cleanup:
+  if (arr)
+    json_decref (arr);
+  return rc;
 }
 
 
@@ -538,7 +576,9 @@ db_alignment_band_for_value (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = 0;
   const char *sql =
     "SELECT alignment_band_id, code, name, is_good, is_evil, can_buy_iss, can_rob_ports FROM alignment_band WHERE $1 BETWEEN min_align AND max_align LIMIT 1;";
   db_bind_t params[] = { db_bind_i32 (align) };
@@ -546,7 +586,8 @@ db_alignment_band_for_value (db_t *db,
 
   if (!db_query (db, sql, params, 1, &res, &err))
     {
-      return -1;
+      rc = -1;
+      goto cleanup;
     }
   if (db_res_step (res, &err))
     {
@@ -610,7 +651,11 @@ db_alignment_band_for_value (db_t *db,
           *out_can_rob_ports = 0;
         }
     }
-  db_res_finalize (res); return 0;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -633,7 +678,9 @@ db_commodity_get_price (db_t *db, const char *code, int *out_price)
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB;
 
 
   static const char *cols[] = { "last_price", "price", "base_price", NULL };
@@ -653,15 +700,19 @@ db_commodity_get_price (db_t *db, const char *code, int *out_price)
           if (db_res_step (res, &err))
             {
               *out_price = db_res_col_i32 (res, 0, &err);
-              db_res_finalize (res);
-              return 0;
+              rc = 0;
+              goto cleanup;
             }
-          db_res_finalize (res);
-          return ERR_NOT_FOUND;
+          rc = ERR_NOT_FOUND;
+          goto cleanup;
         }
       db_error_clear (&err);
     }
-  return ERR_DB;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -736,7 +787,9 @@ db_commodity_fill_order (db_t *db, int order_id, int qty)
     {
       return ERR_DB_MISUSE;
     }
-  db_error_t err; db_res_t *res = NULL;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = 0;
 
   // Call market_fill_order(p_order_id bigint, p_fill_qty bigint, p_actor_id bigint)
   // Note: Actor ID is not passed here? Legacy signature mismatch.
@@ -759,10 +812,15 @@ db_commodity_fill_order (db_t *db, int order_id, int qty)
                                  0,
                                  &err);        // (code, message, id) tuple
         }
-      db_res_finalize (res);
-      return (code == 0) ? 0 : ERR_DB_CONSTRAINT;
+      rc = (code == 0) ? 0 : ERR_DB_CONSTRAINT;
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2246,15 +2304,24 @@ db_destroy_ship (db_t *db, int pid, int sid)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err; db_res_t *res = NULL;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = 0;
   const char *sql = "SELECT * FROM ship_destroy($1);";
 
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i64 (sid)}, 1, &res, &err))
     {
-      db_res_finalize (res); (void)pid; return 0;
+      (void)pid;
+      rc = 0;
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2266,21 +2333,22 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
       return ERR_DB_CLOSED;
     }
 
-
-  json_t *root = json_object ();
-
-
-  json_object_set_new (root, "sector_id", json_integer (sector_id));
-
-
+  json_t *root = NULL;
   db_res_t *res = NULL;
   db_error_t err;
+  int rc = 0;
 
+  root = json_object ();
+  if (!root)
+    {
+      return ERR_MEMORY;
+    }
+
+  json_object_set_new (root, "sector_id", json_integer (sector_id));
 
   /* 0) Sector core: name, beacon, security */
   const char *sql_info =
     "SELECT name, beacon, 1 as safe_zone, 0 as security_level FROM sectors WHERE sector_id = $1;";
-
 
   if (db_query (db,
                 sql_info,
@@ -2293,46 +2361,43 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
         {
           const char *nm = db_res_col_text (res, 0, &err);
 
-
           if (nm)
             {
               json_object_set_new (root, "name", json_string (nm));
             }
 
-
           const char *btxt = db_res_col_text (res, 1, &err);
-
 
           if (btxt && btxt[0])
             {
               json_t *b = json_object ();
-
-
-              json_object_set_new (b, "text", json_string (btxt));
-              json_object_set_new (root, "beacon", b);
+              if (b)
+                {
+                  json_object_set_new (b, "text", json_string (btxt));
+                  json_object_set_new (root, "beacon", b);
+                }
             }
 
-
           json_t *sec = json_object ();
-
-
-          json_object_set_new (sec,
-                               "level",
-                               json_integer (db_res_col_i32 (res,
-                                                             3,
-                                                             &err)));
-          json_object_set_new (sec, "is_safe_zone",
-                               json_boolean (db_res_col_i32 (res, 2, &err)));
-          json_object_set_new (root, "security", sec);
+          if (sec)
+            {
+              json_object_set_new (sec,
+                                   "level",
+                                   json_integer (db_res_col_i32 (res,
+                                                                 3,
+                                                                 &err)));
+              json_object_set_new (sec, "is_safe_zone",
+                                   json_boolean (db_res_col_i32 (res, 2, &err)));
+              json_object_set_new (root, "security", sec);
+            }
         }
       db_res_finalize (res);
+      res = NULL;
     }
-
 
   /* 1) Adjacency via sector_warps */
   const char *sql_adj =
-    "SELECT to_sector FROM sector_warps WHERE from_sector = $1;";
-
+    "SELECT to_sector FROM sector_warps FROM from_sector = $1;";
 
   if (db_query (db,
                 sql_adj,
@@ -2342,24 +2407,25 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
                 &err))
     {
       json_t *adj = json_array ();
-
-
-      while (db_res_step (res, &err))
+      if (adj)
         {
-          json_array_append_new (adj,
-                                 json_integer (db_res_col_i32 (res, 0, &err)));
-        }
-      if (json_array_size (adj) > 0)
-        {
-          json_object_set_new (root, "adjacent", adj);
-        }
-      else
-        {
-          json_decref (adj);
+          while (db_res_step (res, &err))
+            {
+              json_array_append_new (adj,
+                                     json_integer (db_res_col_i32 (res, 0, &err)));
+            }
+          if (json_array_size (adj) > 0)
+            {
+              json_object_set_new (root, "adjacent", adj);
+            }
+          else
+            {
+              json_decref (adj);
+            }
         }
       db_res_finalize (res);
+      res = NULL;
     }
-
 
   /* 2) Counts */
   const char *sql_counts =
@@ -2367,7 +2433,6 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
     "  (SELECT COUNT(*) FROM ports WHERE sector_id=$1) as pc, "
     "  (SELECT COUNT(*) FROM ships WHERE sector_id=$1) as sc, "
     "  (SELECT COUNT(*) FROM planets WHERE sector_id=$1) as plc;";
-
 
   if (db_query (db,
                 sql_counts,
@@ -2386,11 +2451,11 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
                                json_integer (db_res_col_i32 (res, 2, &err)));
         }
       db_res_finalize (res);
+      res = NULL;
     }
 
-
   *out = root;
-  return 0;
+  return rc;
 }
 
 
@@ -2401,7 +2466,9 @@ db_rand_npc_shipname (db_t *db, char *out, size_t sz)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db,
@@ -2414,11 +2481,16 @@ db_rand_npc_shipname (db_t *db, char *out, size_t sz)
       if (db_res_step (res, &err))
         {
           strncpy (out, db_res_col_text (res, 0, &err) ?: "NPC Ship", sz - 1);
-          out[sz - 1] = '\0'; db_res_finalize (res); return 0;
+          out[sz - 1] = '\0';
+          rc = 0;
+          goto cleanup;
         }
-      db_res_finalize (res);
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2429,7 +2501,9 @@ db_sector_beacon_text (db_t *db, int sid, char **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT beacon FROM sectors WHERE sector_id = $1;",
@@ -2438,11 +2512,15 @@ db_sector_beacon_text (db_t *db, int sid, char **out)
       if (db_res_step (res, &err))
         {
           *out = strdup (db_res_col_text (res, 0, &err) ?: "");
-          db_res_finalize (res); return 0;
+          rc = 0;
+          goto cleanup;
         }
-      db_res_finalize (res);
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2493,16 +2571,21 @@ db_port_info_json (int port_id, json_t **out)
       return -1;
     }
 
-
-  json_t *root = json_object ();
+  json_t *root = NULL;
+  json_t *goods = NULL;
   db_res_t *res = NULL;
   db_error_t err;
+  int rc = 0;
 
+  root = json_object ();
+  if (!root)
+    {
+      return -1;
+    }
 
   /* 1) Details */
   const char *sql_det =
     "SELECT port_id, name, type, sector_id FROM ports WHERE port_id = $1;";
-
 
   if (db_query (db,
                 sql_det,
@@ -2531,14 +2614,19 @@ db_port_info_json (int port_id, json_t **out)
                                                              &err)));
         }
       db_res_finalize (res);
+      res = NULL;
     }
 
-
   /* 2) Goods (using entity_stock) */
-  json_t *goods = json_object ();
+  goods = json_object ();
+  if (!goods)
+    {
+      rc = -1;
+      goto cleanup;
+    }
+
   const char *sql_goods =
     "SELECT commodity_code, quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = $1;";
-
 
   if (db_query (db,
                 sql_goods,
@@ -2552,40 +2640,53 @@ db_port_info_json (int port_id, json_t **out)
           const char *comm = db_res_col_text (res, 0, &err);
           int qty = (int) db_res_col_i32 (res, 1, &err);
 
-
           if (comm)
             {
               json_object_set_new (goods, comm, json_integer (qty));
             }
         }
       db_res_finalize (res);
+      res = NULL;
     }
   json_object_set_new (root, "goods", goods);
-
+  goods = NULL;
 
   *out = root;
-  return 0;
+  root = NULL;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  if (root)
+    json_decref (root);
+  if (goods)
+    json_decref (goods);
+  return rc;
 }
 
 
 int
 db_get_online_player_count (void)
 {
-  db_t *db = game_db_get_handle (); if (!db)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int cnt = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int cnt = 0;
+
   if (db_query (db, "SELECT COUNT(*) FROM sessions;", NULL, 0, &res, &err))
     {
       if (db_res_step (res, &err))
         {
-          cnt = db_res_col_i32 (res,
-                                0,
-                                &err);
+          cnt = db_res_col_i32 (res, 0, &err);
         }
-      db_res_finalize (res);
     }
+
+  if (res)
+    db_res_finalize (res);
   return cnt;
 }
 
@@ -2593,22 +2694,26 @@ db_get_online_player_count (void)
 int
 db_get_player_id_by_name (const char *nm)
 {
-  db_t *db = game_db_get_handle (); if (!db || !nm)
+  db_t *db = game_db_get_handle ();
+  if (!db || !nm)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int pid = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int pid = 0;
+
   if (db_query (db, "SELECT player_id FROM players WHERE name = $1;",
                 (db_bind_t[]){db_bind_text (nm)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
         {
-          pid = db_res_col_i32 (res,
-                                0,
-                                &err);
+          pid = db_res_col_i32 (res, 0, &err);
         }
-      db_res_finalize (res);
     }
+
+  if (res)
+    db_res_finalize (res);
   return pid;
 }
 
@@ -2620,7 +2725,9 @@ db_player_name (db_t *db, int64_t pid, char **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT name FROM players WHERE player_id = $1;",
@@ -2629,11 +2736,15 @@ db_player_name (db_t *db, int64_t pid, char **out)
       if (db_res_step (res, &err))
         {
           *out = strdup (db_res_col_text (res, 0, &err) ?: "");
-          db_res_finalize (res); return 0;
+          rc = 0;
+          goto cleanup;
         }
-      db_res_finalize (res);
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2644,7 +2755,9 @@ db_is_black_market_port (db_t *db, int pid)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int black = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int black = 0;
 
 
   if (db_query (db,
@@ -2658,8 +2771,10 @@ db_is_black_market_port (db_t *db, int pid)
         {
           black = 1;
         }
-      db_res_finalize (res);
     }
+
+  if (res)
+    db_res_finalize (res);
   return black;
 }
 
@@ -2671,7 +2786,9 @@ db_get_port_commodity_quantity (db_t *db, int pid, const char *code, int *qty)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
   const char *sql =
     "SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=$1 AND commodity_code=$2;";
 
@@ -2685,11 +2802,16 @@ db_get_port_commodity_quantity (db_t *db, int pid, const char *code, int *qty)
     {
       if (db_res_step (res, &err))
         {
-          *qty = db_res_col_i32 (res, 0, &err); db_res_finalize (res); return 0;
+          *qty = db_res_col_i32 (res, 0, &err);
+          rc = 0;
+          goto cleanup;
         }
-      db_res_finalize (res);
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2700,7 +2822,9 @@ db_sector_basic_json (db_t *db, int sid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db,
@@ -2710,12 +2834,14 @@ db_sector_basic_json (db_t *db, int sid, json_t **out)
                 &res,
                 &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2726,7 +2852,9 @@ db_adjacent_sectors_json (db_t *db, int sid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db,
@@ -2736,12 +2864,14 @@ db_adjacent_sectors_json (db_t *db, int sid, json_t **out)
                 &res,
                 &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2752,7 +2882,9 @@ db_ports_at_sector_json (db_t *db, int sid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db,
@@ -2762,12 +2894,14 @@ db_ports_at_sector_json (db_t *db, int sid, json_t **out)
                 &res,
                 &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2778,18 +2912,23 @@ db_ships_at_sector_json (db_t *db, int pid, int sid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT ship_id, name FROM ships WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      (void)pid; return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      (void)pid;
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2800,18 +2939,22 @@ db_planets_at_sector_json (db_t *db, int sid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT planet_id, name FROM planets WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2822,18 +2965,22 @@ db_players_at_sector_json (db_t *db, int sid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT player_id, name FROM players WHERE sector_id = $1;",
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2845,20 +2992,23 @@ db_fighters_at_sector_json (db_t *db, int sid, json_t **out)
       return ERR_DB_MISUSE;
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = 0;
   const char *sql =
     "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = $1 AND asset_type = 2;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err);
-
-
-      db_res_finalize (res);
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2870,20 +3020,23 @@ db_mines_at_sector_json (db_t *db, int sid, json_t **out)
       return ERR_DB_MISUSE;
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = 0;
   const char *sql =
     "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = $1 AND asset_type = 3;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err);
-
-
-      db_res_finalize (res);
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2895,20 +3048,23 @@ db_beacons_at_sector_json (db_t *db, int sid, json_t **out)
       return ERR_DB_MISUSE;
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = 0;
   const char *sql =
     "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = $1 AND asset_type = 1;";
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err);
-
-
-      db_res_finalize (res);
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -2992,18 +3148,22 @@ db_get_port_details_json (db_t *db, int pid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT * FROM ports WHERE port_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3014,7 +3174,9 @@ db_port_get_goods_json (db_t *db, int pid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   /* Use entity_stock */
@@ -3025,12 +3187,14 @@ db_port_get_goods_json (db_t *db, int pid, json_t **out)
                 &res,
                 &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3041,18 +3205,22 @@ db_planet_get_details_json (db_t *db, int pid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT * FROM planets WHERE planet_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3063,18 +3231,22 @@ db_planet_get_goods_json (db_t *db, int pid, json_t **out)
     {
       return -1;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = -1;
 
 
   if (db_query (db, "SELECT * FROM planet_goods WHERE planet_id = $1;",
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
-      int rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out, &err);
+      goto cleanup;
     }
-  return -1;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3136,7 +3308,9 @@ db_ships_inspectable_at_sector_json (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = 0;
   /* const char *sql = */
   /*   "SELECT ship_id, name FROM ships WHERE sector_id = $1 AND (cloaked IS NULL OR $2 = (SELECT player_id FROM ship_ownership WHERE ship_id = ships.ship_id AND is_primary = TRUE));"; */
   const char *sql =
@@ -3156,12 +3330,15 @@ db_ships_inspectable_at_sector_json (db_t *db,
                 &res,
                 &err))
     {
-      int rc = stmt_to_json_array (res, out_array, &err); db_res_finalize (res);
-
-
-      return rc;
+      rc = stmt_to_json_array (res, out_array, &err);
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3265,6 +3442,8 @@ db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
     }
   db_res_t *res = NULL;
   db_error_t err;
+  json_t *obj = NULL;
+  int rc = -1;
   /* Rich scan query using sector_ops view logic or subqueries */
   const char *sql =
     "SELECT s.sector_id, s.name, 1 as safe_zone, "
@@ -3275,51 +3454,44 @@ db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
     "FROM sectors s WHERE s.sector_id = $1;";
 
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
-                &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          json_t *obj = json_object ();
-
-
-          if (!obj)
-            {
-              db_res_finalize (res);
-              return ERR_NOMEM;
-            }
-          json_object_set_new (obj, "id", json_integer (db_res_col_i32 (res,
-                                                                        0,
-                                                                        &err)));
-          json_object_set_new (obj, "name", json_string (db_res_col_text (res,
-                                                                          1,
-                                                                          &err)
-      ?: ""));
-          json_object_set_new (obj, "safe_zone",
-                               json_integer (db_res_col_i32 (res,
-                                                             2,
-                                                             &err)));
-          json_object_set_new (obj, "port_count",
-                               json_integer (db_res_col_i32 (res,
-                                                             3,
-                                                             &err)));
-          json_object_set_new (obj, "ship_count",
-                               json_integer (db_res_col_i32 (res,
-                                                             4,
-                                                             &err)));
-          json_object_set_new (obj, "planet_count",
-                               json_integer (db_res_col_i32 (res, 5, &err)));
-          json_object_set_new (obj,
-                               "beacon_text",
-                               json_string (db_res_col_text (res, 6,
-                                                             &err) ?: ""));
-          *out_obj = obj;
-          db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res);
+      rc = -1;
+      goto cleanup;
     }
-  return -1;
+
+  if (!db_res_step (res, &err))
+    {
+      rc = -1;
+      goto cleanup;
+    }
+
+  obj = json_object ();
+  if (!obj)
+    {
+      rc = ERR_NOMEM;
+      goto cleanup;
+    }
+
+  json_object_set_new (obj, "id", json_integer (db_res_col_i32 (res, 0, &err)));
+  json_object_set_new (obj, "name", json_string (db_res_col_text (res, 1, &err) ?: ""));
+  json_object_set_new (obj, "safe_zone", json_integer (db_res_col_i32 (res, 2, &err)));
+  json_object_set_new (obj, "port_count", json_integer (db_res_col_i32 (res, 3, &err)));
+  json_object_set_new (obj, "ship_count", json_integer (db_res_col_i32 (res, 4, &err)));
+  json_object_set_new (obj, "planet_count", json_integer (db_res_col_i32 (res, 5, &err)));
+  json_object_set_new (obj, "beacon_text", json_string (db_res_col_text (res, 6, &err) ?: ""));
+
+  *out_obj = obj;
+  obj = NULL;  /* Transfer ownership to caller */
+  rc = 0;
+
+cleanup:
+  if (obj)
+    json_decref (obj);
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3369,6 +3541,14 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
     }
   db_error_t err;
   db_res_t *res = NULL;
+  json_t *root = NULL;
+  json_t *type_obj = NULL;
+  json_t *owner_obj = NULL;
+  json_t *flags_obj = NULL;
+  json_t *defence_obj = NULL;
+  json_t *holds_obj = NULL;
+  json_t *cargo = NULL;
+  int rc = -1;
 
 
   /* 1. Check if ship is claimable (correct sector, no pilot) */
@@ -3386,15 +3566,16 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
                  &res,
                  &err))
     {
-      return -1;
+      rc = -1;
+      goto cleanup;
     }
   if (!db_res_step (res, &err))
     {
-      db_res_finalize (res);
-      return -1;
+      rc = -1;
+      goto cleanup;
     }
   db_res_finalize (res);
-
+  res = NULL;
 
   /* 2. Switch current pilot */
   if (!db_exec (db,
@@ -3403,7 +3584,8 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
                 2,
                 &err))
     {
-      return -1;
+      rc = -1;
+      goto cleanup;
     }
 
 
@@ -3421,7 +3603,8 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
                 2,
                 &err))
     {
-      return -1;
+      rc = -1;
+      goto cleanup;
     }
 
 
@@ -3444,123 +3627,129 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
     "WHERE s.ship_id=$1;";
 
 
-  if (db_query (db,
-                sql_fetch,
-                (db_bind_t[]){ db_bind_i32 (ship_id) },
-                1,
-                &res,
-                &err))
+  if (!db_query (db,
+                 sql_fetch,
+                 (db_bind_t[]){ db_bind_i32 (ship_id) },
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res,
-                       &err))
-        {
-          if (out)
-            {
-              json_t *root = json_object ();
-
-
-              json_object_set_new (root, "id",
-                                   json_integer (db_res_col_i32 (res,
-                                                                 0,
-                                                                 &err)));
-              json_object_set_new (root, "name",
-                                   json_string (db_res_col_text (res,
-                                                                 1,
-                                                                 &err) ?: ""));
-
-              json_t *type_obj = json_object ();
-
-
-              json_object_set_new (type_obj, "id",
-                                   json_integer (db_res_col_i32 (res, 2,
-                                                                 &err)));
-              json_object_set_new (type_obj, "name",
-                                   json_string (db_res_col_text (res, 3,
-                                                                 &err) ?: ""));
-              json_object_set_new (root, "type", type_obj);
-
-
-              json_object_set_new (root, "sector_id",
-                                   json_integer (db_res_col_i32 (res, 4,
-                                                                 &err)));
-
-
-              json_t *owner_obj = json_object ();
-
-
-              json_object_set_new (owner_obj, "id",
-                                   json_integer (db_res_col_i32 (res, 5,
-                                                                 &err)));
-              json_object_set_new (owner_obj, "name",
-                                   json_string (db_res_col_text (res, 6,
-                                                                 &err) ?:
-                                                "derelict"));
-              json_object_set_new (root, "owner", owner_obj);
-
-
-              json_t *flags_obj = json_object ();
-
-
-              json_object_set_new (flags_obj, "derelict",
-                                   json_boolean (db_res_col_i32 (res, 7,
-                                                                 &err) != 0));
-              json_object_set_new (flags_obj, "raw",
-                                   json_integer (db_res_col_i32 (res, 16,
-                                                                 &err)));
-              json_object_set_new (root, "flags", flags_obj);
-
-
-              json_t *defence_obj = json_object ();
-
-
-              json_object_set_new (defence_obj, "fighters",
-                                   json_integer (db_res_col_i32 (res, 8,
-                                                                 &err)));
-              json_object_set_new (defence_obj, "shields",
-                                   json_integer (db_res_col_i32 (res, 9,
-                                                                 &err)));
-              json_object_set_new (root, "defence", defence_obj);
-
-
-              json_t *holds_obj = json_object ();
-
-
-              json_object_set_new (holds_obj, "total",
-                                   json_integer (db_res_col_i32 (res, 10,
-                                                                 &err)));
-              json_object_set_new (holds_obj, "free",
-                                   json_integer (db_res_col_i32 (res, 11,
-                                                                 &err)));
-              json_object_set_new (root, "holds", holds_obj);
-
-
-              json_t *cargo = json_object ();
-
-
-              json_object_set_new (cargo, "ore",
-                                   json_integer (db_res_col_i32 (res,
-                                                                 12,
-                                                                 &err)));
-              json_object_set_new (cargo, "organics",
-                                   json_integer (db_res_col_i32 (res, 13,
-                                                                 &err)));
-              json_object_set_new (cargo, "equipment",
-                                   json_integer (db_res_col_i32 (res, 14,
-                                                                 &err)));
-              json_object_set_new (cargo, "colonists",
-                                   json_integer (db_res_col_i32 (res, 15,
-                                                                 &err)));
-              json_object_set_new (root, "cargo", cargo);
-
-
-              *out = root;
-            }
-          db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res);
+      rc = -1;
+      goto cleanup;
     }
-  return -1;
+
+  if (!db_res_step (res, &err))
+    {
+      rc = -1;
+      goto cleanup;
+    }
+
+  if (out)
+    {
+      root = json_object ();
+      if (!root)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+
+      json_object_set_new (root, "id", json_integer (db_res_col_i32 (res, 0, &err)));
+      json_object_set_new (root, "name", json_string (db_res_col_text (res, 1, &err) ?: ""));
+
+      type_obj = json_object ();
+      if (!type_obj)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (type_obj, "id", json_integer (db_res_col_i32 (res, 2, &err)));
+      json_object_set_new (type_obj, "name", json_string (db_res_col_text (res, 3, &err) ?: ""));
+      json_object_set_new (root, "type", type_obj);
+      type_obj = NULL;  /* Stolen by root */
+
+      json_object_set_new (root, "sector_id", json_integer (db_res_col_i32 (res, 4, &err)));
+
+      owner_obj = json_object ();
+      if (!owner_obj)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (owner_obj, "id", json_integer (db_res_col_i32 (res, 5, &err)));
+      json_object_set_new (owner_obj, "name", json_string (db_res_col_text (res, 6, &err) ?: "derelict"));
+      json_object_set_new (root, "owner", owner_obj);
+      owner_obj = NULL;  /* Stolen by root */
+
+      flags_obj = json_object ();
+      if (!flags_obj)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (flags_obj, "derelict", json_boolean (db_res_col_i32 (res, 7, &err) != 0));
+      json_object_set_new (flags_obj, "raw", json_integer (db_res_col_i32 (res, 16, &err)));
+      json_object_set_new (root, "flags", flags_obj);
+      flags_obj = NULL;  /* Stolen by root */
+
+      defence_obj = json_object ();
+      if (!defence_obj)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (defence_obj, "fighters", json_integer (db_res_col_i32 (res, 8, &err)));
+      json_object_set_new (defence_obj, "shields", json_integer (db_res_col_i32 (res, 9, &err)));
+      json_object_set_new (root, "defence", defence_obj);
+      defence_obj = NULL;  /* Stolen by root */
+
+      holds_obj = json_object ();
+      if (!holds_obj)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (holds_obj, "total", json_integer (db_res_col_i32 (res, 10, &err)));
+      json_object_set_new (holds_obj, "free", json_integer (db_res_col_i32 (res, 11, &err)));
+      json_object_set_new (root, "holds", holds_obj);
+      holds_obj = NULL;  /* Stolen by root */
+
+      cargo = json_object ();
+      if (!cargo)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (cargo, "ore", json_integer (db_res_col_i32 (res, 12, &err)));
+      json_object_set_new (cargo, "organics", json_integer (db_res_col_i32 (res, 13, &err)));
+      json_object_set_new (cargo, "equipment", json_integer (db_res_col_i32 (res, 14, &err)));
+      json_object_set_new (cargo, "colonists", json_integer (db_res_col_i32 (res, 15, &err)));
+      json_object_set_new (root, "cargo", cargo);
+      cargo = NULL;  /* Stolen by root */
+
+      *out = root;
+      root = NULL;  /* Transfer ownership to caller */
+    }
+
+  rc = 0;
+
+cleanup:
+  if (cargo)
+    json_decref (cargo);
+  if (holds_obj)
+    json_decref (holds_obj);
+  if (defence_obj)
+    json_decref (defence_obj);
+  if (flags_obj)
+    json_decref (flags_obj);
+  if (owner_obj)
+    json_decref (owner_obj);
+  if (type_obj)
+    json_decref (type_obj);
+  if (root)
+    json_decref (root);
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -4100,6 +4289,10 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
     }
   db_res_t *res = NULL;
   db_error_t err;
+  json_t *root = NULL;
+  json_t *loc = NULL;
+  json_t *ship = NULL;
+  int rc = ERR_DB_QUERY_FAILED;
   const char *sql =
     "SELECT p.player_id, p.name, p.experience, p.alignment, p.credits, p.sector_id, "
     "       s.ship_id, s.name as ship_name, s.type_id as ship_type, "
@@ -4111,94 +4304,80 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
     "WHERE p.player_id = $1;";
 
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
-                &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          json_t *root = json_object ();
-
-
-          json_object_set_new (root, "id", json_integer (db_res_col_i32 (res,
-                                                                         0,
-                                                                         &err)));
-          json_object_set_new (root, "name", json_string (db_res_col_text (res,
-                                                                           1,
-                                                                           &err)
-      ?: ""));
-          json_object_set_new (root, "experience",
-                               json_integer (db_res_col_i32 (res, 2, &err)));
-          json_object_set_new (root, "alignment",
-                               json_integer (db_res_col_i32 (res,
-                                                             3,
-                                                             &err)));
-          json_object_set_new (root, "credits",
-                               json_integer (db_res_col_i64 (res,
-                                                             4,
-                                                             &err)));
-
-
-          json_t *loc = json_object ();
-
-
-          json_object_set_new (loc, "sector_id",
-                               json_integer (db_res_col_i32 (res,
-                                                             5,
-                                                             &err)));
-          json_object_set_new (loc, "sector_name",
-                               json_string (db_res_col_text (res, 14,
-                                                             &err) ?: ""));
-          json_object_set_new (root,
-                               "location",
-                               loc);
-
-
-          if (db_res_col_i32 (res, 6, &err) > 0)
-            {
-              json_t *ship = json_object ();
-
-
-              json_object_set_new (ship, "id",
-                                   json_integer (db_res_col_i32 (res,
-                                                                 6,
-                                                                 &err)));
-              json_object_set_new (ship, "name",
-                                   json_string (db_res_col_text (res,
-                                                                 7,
-                                                                 &err) ?: ""));
-              json_object_set_new (ship, "type_id",
-                                   json_integer (db_res_col_i32 (res, 8,
-                                                                 &err)));
-              json_object_set_new (ship, "holds",
-                                   json_integer (db_res_col_i32 (res,
-                                                                 9,
-                                                                 &err)));
-              json_object_set_new (ship, "fighters",
-                                   json_integer (db_res_col_i32 (res, 10,
-                                                                 &err)));
-              json_object_set_new (ship, "shields",
-                                   json_integer (db_res_col_i32 (res, 11,
-                                                                 &err)));
-              json_object_set_new (ship, "onplanet",
-                                   json_integer (db_res_col_i32 (res, 12,
-                                                                 &err)));
-              json_object_set_new (ship, "ported",
-                                   json_integer (db_res_col_i32 (res, 13,
-                                                                 &err)));
-              json_object_set_new (root, "ship", ship);
-            }
-          else
-            {
-              json_object_set_new (root, "ship", json_null ());
-            }
-          *out_json = root;
-          db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res);
-      return ERR_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+
+  if (!db_res_step (res, &err))
+    {
+      rc = ERR_NOT_FOUND;
+      goto cleanup;
+    }
+
+  root = json_object ();
+  if (!root)
+    {
+      rc = ERR_NOMEM;
+      goto cleanup;
+    }
+
+  json_object_set_new (root, "id", json_integer (db_res_col_i32 (res, 0, &err)));
+  json_object_set_new (root, "name", json_string (db_res_col_text (res, 1, &err) ?: ""));
+  json_object_set_new (root, "experience", json_integer (db_res_col_i32 (res, 2, &err)));
+  json_object_set_new (root, "alignment", json_integer (db_res_col_i32 (res, 3, &err)));
+  json_object_set_new (root, "credits", json_integer (db_res_col_i64 (res, 4, &err)));
+
+  loc = json_object ();
+  if (!loc)
+    {
+      rc = ERR_NOMEM;
+      goto cleanup;
+    }
+  json_object_set_new (loc, "sector_id", json_integer (db_res_col_i32 (res, 5, &err)));
+  json_object_set_new (loc, "sector_name", json_string (db_res_col_text (res, 14, &err) ?: ""));
+  json_object_set_new (root, "location", loc);
+  loc = NULL;  /* Stolen by root */
+
+  if (db_res_col_i32 (res, 6, &err) > 0)
+    {
+      ship = json_object ();
+      if (!ship)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      json_object_set_new (ship, "id", json_integer (db_res_col_i32 (res, 6, &err)));
+      json_object_set_new (ship, "name", json_string (db_res_col_text (res, 7, &err) ?: ""));
+      json_object_set_new (ship, "type_id", json_integer (db_res_col_i32 (res, 8, &err)));
+      json_object_set_new (ship, "holds", json_integer (db_res_col_i32 (res, 9, &err)));
+      json_object_set_new (ship, "fighters", json_integer (db_res_col_i32 (res, 10, &err)));
+      json_object_set_new (ship, "shields", json_integer (db_res_col_i32 (res, 11, &err)));
+      json_object_set_new (ship, "onplanet", json_integer (db_res_col_i32 (res, 12, &err)));
+      json_object_set_new (ship, "ported", json_integer (db_res_col_i32 (res, 13, &err)));
+      json_object_set_new (root, "ship", ship);
+      ship = NULL;  /* Stolen by root */
+    }
+  else
+    {
+      json_object_set_new (root, "ship", json_null ());
+    }
+
+  *out_json = root;
+  root = NULL;  /* Transfer ownership to caller */
+  rc = 0;
+
+cleanup:
+  if (ship)
+    json_decref (ship);
+  if (loc)
+    json_decref (loc);
+  if (root)
+    json_decref (root);
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -4216,7 +4395,7 @@ db_player_info_selected_fields (db_t *db,
 
   char select_clause[4096] = "";
   size_t index;
-  json_t *value;
+  json_t *value = NULL;
   int valid_fields = 0;
 
 

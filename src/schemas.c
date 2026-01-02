@@ -35,23 +35,218 @@ why_dup (const char *m)
 
 
 /**
- * @brief Placeholder for a real JSON Schema validation function.
+ * @brief Real JSON Schema validation (minimal implementation).
  *
- * You will need to replace this with a real validation library
- * (e.g., libjsonschema) to perform actual schema validation.
+ * Validates payload against schema by checking:
+ * - Required properties exist
+ * - Type constraints match
+ * - Object/array/primitive types are correct
+ *
+ * Returns 0 on success, -1 on validation failure.
  */
 static int
-my_json_schema_validate_placeholder (json_t *schema, json_t *payload,
-                                     char **why)
+validate_json_schema (json_t *schema, json_t *payload, char **why)
 {
-  /* TODO(GH-391): Implement this using a real validator library. */
-  (void) schema;                /* Suppress unused parameter warning */
-  (void) payload;               /* Suppress unused parameter warning */
-  /* For now, we just pretend it's always valid */
-  if (why)
+  if (!schema || !payload)
     {
-      *why = NULL;
+      if (why)
+        *why = why_dup ("schema or payload is NULL");
+      return -1;
     }
+
+  /* Get schema type */
+  json_t *type_field = json_object_get (schema, "type");
+  if (!type_field)
+    {
+      if (why)
+        *why = why_dup ("schema missing 'type' field");
+      return -1;
+    }
+
+  const char *expected_type = json_string_value (type_field);
+  if (!expected_type)
+    {
+      if (why)
+        *why = why_dup ("schema 'type' is not a string");
+      return -1;
+    }
+
+  /* Validate type match */
+  if (strcmp (expected_type, "object") == 0)
+    {
+      if (!json_is_object (payload))
+        {
+          if (why)
+            *why = why_dup ("expected object, got different type");
+          return -1;
+        }
+
+      /* Check required properties */
+      json_t *required = json_object_get (schema, "required");
+      if (required && json_is_array (required))
+        {
+          size_t i;
+          json_t *key;
+          json_array_foreach (required, i, key)
+            {
+              const char *prop = json_string_value (key);
+              if (!prop)
+                continue;
+
+              if (!json_object_get (payload, prop))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "missing required property: %s", prop);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+            }
+        }
+
+      /* Check properties types */
+      json_t *properties = json_object_get (schema, "properties");
+      if (properties && json_is_object (properties))
+        {
+          const char *key;
+          json_t *value;
+          json_object_foreach (payload, key, value)
+            {
+              json_t *prop_schema = json_object_get (properties, key);
+              if (!prop_schema)
+                continue; /* additionalProperties handling - for now allow */
+
+              json_t *prop_type = json_object_get (prop_schema, "type");
+              if (!prop_type)
+                continue;
+
+              const char *prop_type_str = json_string_value (prop_type);
+              if (!prop_type_str)
+                continue;
+
+              /* Type validation */
+              if (strcmp (prop_type_str, "string") == 0 && !json_is_string (value))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "property '%s' must be string", key);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+              else if (strcmp (prop_type_str, "integer") == 0 && !json_is_integer (value))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "property '%s' must be integer", key);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+              else if (strcmp (prop_type_str, "number") == 0 && !json_is_number (value))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "property '%s' must be number", key);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+              else if (strcmp (prop_type_str, "boolean") == 0 && !json_is_boolean (value))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "property '%s' must be boolean", key);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+              else if (strcmp (prop_type_str, "array") == 0 && !json_is_array (value))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "property '%s' must be array", key);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+              else if (strcmp (prop_type_str, "object") == 0 && !json_is_object (value))
+                {
+                  if (why)
+                    {
+                      char buf[256];
+                      snprintf (buf, sizeof (buf), "property '%s' must be object", key);
+                      *why = why_dup (buf);
+                    }
+                  return -1;
+                }
+            }
+        }
+    }
+  else if (strcmp (expected_type, "array") == 0)
+    {
+      if (!json_is_array (payload))
+        {
+          if (why)
+            *why = why_dup ("expected array, got different type");
+          return -1;
+        }
+    }
+  else if (strcmp (expected_type, "string") == 0)
+    {
+      if (!json_is_string (payload))
+        {
+          if (why)
+            *why = why_dup ("expected string, got different type");
+          return -1;
+        }
+    }
+  else if (strcmp (expected_type, "integer") == 0)
+    {
+      if (!json_is_integer (payload))
+        {
+          if (why)
+            *why = why_dup ("expected integer, got different type");
+          return -1;
+        }
+    }
+  else if (strcmp (expected_type, "number") == 0)
+    {
+      if (!json_is_number (payload))
+        {
+          if (why)
+            *why = why_dup ("expected number, got different type");
+          return -1;
+        }
+    }
+  else if (strcmp (expected_type, "boolean") == 0)
+    {
+      if (!json_is_boolean (payload))
+        {
+          if (why)
+            *why = why_dup ("expected boolean, got different type");
+          return -1;
+        }
+    }
+  else if (strcmp (expected_type, "null") == 0)
+    {
+      if (!json_is_null (payload))
+        {
+          if (why)
+            *why = why_dup ("expected null, got different type");
+          return -1;
+        }
+    }
+
+  if (why)
+    *why = NULL;
   return 0;
 }
 
@@ -486,7 +681,7 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
   /* ===================================================================
    */
   /* 2. VALIDATE THE PAYLOAD against the schema */
-  int result = my_json_schema_validate_placeholder (schema, payload, why);
+  int result = validate_json_schema (schema, payload, why);
 
 
   json_decref (schema);
@@ -971,38 +1166,56 @@ schema_auth_register (void)
 json_t *
 schema_auth_logout (void)
 {
-  /* TODO: Implement this schema */
-  json_t *root = json_object ();
-  json_object_set_new (root, "$id",
+  json_t *data_schema = json_object ();
+  json_object_set_new (data_schema, "$id",
                        json_string ("ge://schema/auth.logout.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
-  return root;
+  json_object_set_new (data_schema, "$schema",
+                       json_string
+                         ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (data_schema, "type", json_string ("object"));
+  json_object_set_new (data_schema, "properties", json_object ());
+  json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
+  return data_schema;
 }
 
 
 json_t *
 schema_auth_refresh (void)
 {
-  /* TODO: Implement this schema */
-  json_t *root = json_object ();
-  json_object_set_new (root,
-                       "$id", json_string ("ge://schema/auth.refresh.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
-  return root;
+  json_t *data_schema = json_object ();
+  json_object_set_new (data_schema, "$id",
+                       json_string ("ge://schema/auth.refresh.json"));
+  json_object_set_new (data_schema, "$schema",
+                       json_string
+                         ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (data_schema, "type", json_string ("object"));
+  json_object_set_new (data_schema, "properties", json_object ());
+  json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
+  return data_schema;
 }
 
 
 json_t *
 schema_auth_mfa_totp_verify (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  json_t *code_prop = json_object ();
+  json_object_set_new (code_prop, "type", json_string ("string"));
+  json_object_set_new (code_prop, "pattern", json_string ("^[0-9]{6}$"));
+  json_object_set_new (props, "code", code_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/auth.mfa.totp.verify.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("code"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1040,12 +1253,14 @@ schema_admin_shutdown_warning (void)
 json_t *
 schema_system_capabilities (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/system.capabilities.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1180,12 +1395,14 @@ schema_system_hello (void)
 json_t *
 schema_system_disconnect (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/system.disconnect.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1232,12 +1449,14 @@ schema_session_hello (void)
 json_t *
 schema_session_disconnect (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/session.disconnect.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1246,12 +1465,24 @@ schema_session_disconnect (void)
 json_t *
 schema_ship_inspect (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  json_t *ship_id_prop = json_object ();
+  json_object_set_new (ship_id_prop, "type", json_string ("integer"));
+  json_object_set_new (ship_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "ship_id", ship_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id", json_string ("ge://schema/ship.inspect.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("ship_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1259,12 +1490,25 @@ schema_ship_inspect (void)
 json_t *
 schema_ship_rename (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  json_t *name_prop = json_object ();
+  json_object_set_new (name_prop, "type", json_string ("string"));
+  json_object_set_new (name_prop, "minLength", json_integer (1));
+  json_object_set_new (name_prop, "maxLength", json_integer (100));
+  json_object_set_new (props, "name", name_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.rename.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("name"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1272,12 +1516,25 @@ schema_ship_rename (void)
 json_t *
 schema_ship_reregister (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  json_t *name_prop = json_object ();
+  json_object_set_new (name_prop, "type", json_string ("string"));
+  json_object_set_new (name_prop, "minLength", json_integer (1));
+  json_object_set_new (name_prop, "maxLength", json_integer (100));
+  json_object_set_new (props, "name", name_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.reregister.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("name"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1285,12 +1542,24 @@ schema_ship_reregister (void)
 json_t *
 schema_ship_claim (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  json_t *ship_id_prop = json_object ();
+  json_object_set_new (ship_id_prop, "type", json_string ("integer"));
+  json_object_set_new (ship_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "ship_id", ship_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.claim.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("ship_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1371,12 +1640,37 @@ schema_ship_info (void)
 json_t *
 schema_ship_transfer_cargo (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *commodity_id_prop = json_object ();
+  json_object_set_new (commodity_id_prop, "type", json_string ("integer"));
+  json_object_set_new (commodity_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "commodity_id", commodity_id_prop);
+  
+  json_t *quantity_prop = json_object ();
+  json_object_set_new (quantity_prop, "type", json_string ("integer"));
+  json_object_set_new (quantity_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity_prop);
+  
+  json_t *target_ship_id_prop = json_object ();
+  json_object_set_new (target_ship_id_prop, "type", json_string ("integer"));
+  json_object_set_new (target_ship_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "target_ship_id", target_ship_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.transfer_cargo.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("commodity_id"));
+  json_array_append_new (required, json_string ("quantity"));
+  json_array_append_new (required, json_string ("target_ship_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1384,12 +1678,31 @@ schema_ship_transfer_cargo (void)
 json_t *
 schema_ship_jettison (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *commodity_id_prop = json_object ();
+  json_object_set_new (commodity_id_prop, "type", json_string ("integer"));
+  json_object_set_new (commodity_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "commodity_id", commodity_id_prop);
+  
+  json_t *quantity_prop = json_object ();
+  json_object_set_new (quantity_prop, "type", json_string ("integer"));
+  json_object_set_new (quantity_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.jettison.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("commodity_id"));
+  json_array_append_new (required, json_string ("quantity"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1397,12 +1710,24 @@ schema_ship_jettison (void)
 json_t *
 schema_ship_upgrade (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *upgrade_type_prop = json_object ();
+  json_object_set_new (upgrade_type_prop, "type", json_string ("string"));
+  json_object_set_new (props, "upgrade_type", upgrade_type_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id", json_string ("ge://schema/ship.upgrade.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("upgrade_type"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1410,12 +1735,14 @@ schema_ship_upgrade (void)
 json_t *
 schema_ship_repair (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.repair.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1423,12 +1750,14 @@ schema_ship_repair (void)
 json_t *
 schema_ship_self_destruct (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/ship.self_destruct.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1437,12 +1766,14 @@ schema_ship_self_destruct (void)
 json_t *
 schema_port_info (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/port.info.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1645,12 +1976,14 @@ schema_port_rob (void)
 json_t *
 schema_trade_port_info (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/trade.port_info.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1821,12 +2154,30 @@ schema_trade_quote (void)
 json_t *
 schema_trade_jettison (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *commodity_prop = json_object ();
+  json_object_set_new (commodity_prop, "type", json_string ("string"));
+  json_object_set_new (props, "commodity", commodity_prop);
+  
+  json_t *quantity_prop = json_object ();
+  json_object_set_new (quantity_prop, "type", json_string ("integer"));
+  json_object_set_new (quantity_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/trade.jettison.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("commodity"));
+  json_array_append_new (required, json_string ("quantity"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1834,12 +2185,25 @@ schema_trade_jettison (void)
 json_t *
 schema_trade_offer (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *trade_id_prop = json_object ();
+  json_object_set_new (trade_id_prop, "type", json_string ("integer"));
+  json_object_set_new (trade_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "trade_id", trade_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/trade.offer.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("trade_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1847,12 +2211,25 @@ schema_trade_offer (void)
 json_t *
 schema_trade_accept (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *trade_id_prop = json_object ();
+  json_object_set_new (trade_id_prop, "type", json_string ("integer"));
+  json_object_set_new (trade_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "trade_id", trade_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id", json_string ("ge://schema/trade.accept.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("trade_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -1860,12 +2237,25 @@ schema_trade_accept (void)
 json_t *
 schema_trade_cancel (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *trade_id_prop = json_object ();
+  json_object_set_new (trade_id_prop, "type", json_string ("integer"));
+  json_object_set_new (trade_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "trade_id", trade_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id", json_string ("ge://schema/trade.cancel.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("trade_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2106,12 +2496,25 @@ schema_port_update (void)
 json_t *
 schema_move_describe_sector (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *sector_id_prop = json_object ();
+  json_object_set_new (sector_id_prop, "type", json_string ("integer"));
+  json_object_set_new (sector_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "sector_id", sector_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/move.describe_sector.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("sector_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2134,12 +2537,31 @@ schema_move_scan (void)
 json_t *
 schema_move_pathfind (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *from_prop = json_object ();
+  json_object_set_new (from_prop, "type", json_string ("integer"));
+  json_object_set_new (from_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "from_sector_id", from_prop);
+  
+  json_t *to_prop = json_object ();
+  json_object_set_new (to_prop, "type", json_string ("integer"));
+  json_object_set_new (to_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "to_sector_id", to_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/move.pathfind.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("from_sector_id"));
+  json_array_append_new (required, json_string ("to_sector_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2147,12 +2569,25 @@ schema_move_pathfind (void)
 json_t *
 schema_move_autopilot_start (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *to_prop = json_object ();
+  json_object_set_new (to_prop, "type", json_string ("integer"));
+  json_object_set_new (to_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "to_sector_id", to_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/move.autopilot.start.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("to_sector_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2160,12 +2595,14 @@ schema_move_autopilot_start (void)
 json_t *
 schema_move_autopilot_stop (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/move.autopilot.stop.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2220,12 +2657,24 @@ schema_sector_info (void)
 json_t *
 schema_sector_search (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *query_prop = json_object ();
+  json_object_set_new (query_prop, "type", json_string ("string"));
+  json_object_set_new (props, "query", query_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/sector.search.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("query"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2233,12 +2682,14 @@ schema_sector_search (void)
 json_t *
 schema_sector_scan_density (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/sector.scan.density.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2246,12 +2697,14 @@ schema_sector_scan_density (void)
 json_t *
 schema_sector_scan (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/sector.scan.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2260,12 +2713,25 @@ schema_sector_scan (void)
 json_t *
 schema_planet_genesis (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *name_prop = json_object ();
+  json_object_set_new (name_prop, "type", json_string ("string"));
+  json_object_set_new (name_prop, "minLength", json_integer (1));
+  json_object_set_new (props, "name", name_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.genesis.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("name"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2273,12 +2739,25 @@ schema_planet_genesis (void)
 json_t *
 schema_planet_info (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.info.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2286,12 +2765,31 @@ schema_planet_info (void)
 json_t *
 schema_planet_rename (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+  
+  json_t *name_prop = json_object ();
+  json_object_set_new (name_prop, "type", json_string ("string"));
+  json_object_set_new (name_prop, "minLength", json_integer (1));
+  json_object_set_new (props, "name", name_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.rename.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_array_append_new (required, json_string ("name"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2299,12 +2797,25 @@ schema_planet_rename (void)
 json_t *
 schema_planet_land (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.land.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2312,12 +2823,14 @@ schema_planet_land (void)
 json_t *
 schema_planet_launch (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.launch.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2325,14 +2838,33 @@ schema_planet_launch (void)
 json_t *
 schema_planet_transfer_ownership (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+  
+  json_t *new_owner_id_prop = json_object ();
+  json_object_set_new (new_owner_id_prop, "type", json_string ("integer"));
+  json_object_set_new (new_owner_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "new_owner_id", new_owner_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id",
                        json_string
                          ("ge://schema/planet.transfer_ownership.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_array_append_new (required, json_string ("new_owner_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2340,12 +2872,25 @@ schema_planet_transfer_ownership (void)
 json_t *
 schema_planet_harvest (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.harvest.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2353,12 +2898,36 @@ schema_planet_harvest (void)
 json_t *
 schema_planet_deposit (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+  
+  json_t *commodity_prop = json_object ();
+  json_object_set_new (commodity_prop, "type", json_string ("string"));
+  json_object_set_new (props, "commodity", commodity_prop);
+  
+  json_t *quantity_prop = json_object ();
+  json_object_set_new (quantity_prop, "type", json_string ("integer"));
+  json_object_set_new (quantity_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.deposit.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_array_append_new (required, json_string ("commodity"));
+  json_array_append_new (required, json_string ("quantity"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2366,12 +2935,36 @@ schema_planet_deposit (void)
 json_t *
 schema_planet_withdraw (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
+  
+  json_t *commodity_prop = json_object ();
+  json_object_set_new (commodity_prop, "type", json_string ("string"));
+  json_object_set_new (props, "commodity", commodity_prop);
+  
+  json_t *quantity_prop = json_object ();
+  json_object_set_new (quantity_prop, "type", json_string ("integer"));
+  json_object_set_new (quantity_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/planet.withdraw.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_array_append_new (required, json_string ("commodity"));
+  json_array_append_new (required, json_string ("quantity"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2443,12 +3036,25 @@ schema_planet_genesis_create (void)
 json_t *
 schema_citadel_build (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *sector_id_prop = json_object ();
+  json_object_set_new (sector_id_prop, "type", json_string ("integer"));
+  json_object_set_new (sector_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "sector_id", sector_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/citadel.build.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("sector_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2456,12 +3062,25 @@ schema_citadel_build (void)
 json_t *
 schema_citadel_upgrade (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *citadel_id_prop = json_object ();
+  json_object_set_new (citadel_id_prop, "type", json_string ("integer"));
+  json_object_set_new (citadel_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "citadel_id", citadel_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/citadel.upgrade.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("citadel_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2470,12 +3089,25 @@ schema_citadel_upgrade (void)
 json_t *
 schema_combat_attack (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *target_id_prop = json_object ();
+  json_object_set_new (target_id_prop, "type", json_string ("integer"));
+  json_object_set_new (target_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "target_ship_id", target_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/combat.attack.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("target_ship_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2538,12 +3170,25 @@ schema_combat_deploy_fighters (void)
 json_t *
 schema_combat_lay_mines (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *quantity_prop = json_object ();
+  json_object_set_new (quantity_prop, "type", json_string ("integer"));
+  json_object_set_new (quantity_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/combat.lay_mines.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("quantity"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2551,12 +3196,14 @@ schema_combat_lay_mines (void)
 json_t *
 schema_combat_sweep_mines (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/combat.sweep_mines.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2564,12 +3211,14 @@ schema_combat_sweep_mines (void)
 json_t *
 schema_combat_status (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/combat.status.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2772,12 +3421,30 @@ schema_deploy_mines_list (void)
 json_t *
 schema_chat_send (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *channel_prop = json_object ();
+  json_object_set_new (channel_prop, "type", json_string ("string"));
+  json_object_set_new (props, "channel", channel_prop);
+  
+  json_t *message_prop = json_object ();
+  json_object_set_new (message_prop, "type", json_string ("string"));
+  json_object_set_new (message_prop, "minLength", json_integer (1));
+  json_object_set_new (props, "message", message_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/chat.send.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("channel"));
+  json_array_append_new (required, json_string ("message"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2785,12 +3452,25 @@ schema_chat_send (void)
 json_t *
 schema_chat_broadcast (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *message_prop = json_object ();
+  json_object_set_new (message_prop, "type", json_string ("string"));
+  json_object_set_new (message_prop, "minLength", json_integer (1));
+  json_object_set_new (props, "message", message_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/chat.broadcast.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("message"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2798,12 +3478,26 @@ schema_chat_broadcast (void)
 json_t *
 schema_chat_history (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *channel_prop = json_object ();
+  json_object_set_new (channel_prop, "type", json_string ("string"));
+  json_object_set_new (props, "channel", channel_prop);
+  
+  json_t *limit_prop = json_object ();
+  json_object_set_new (limit_prop, "type", json_string ("integer"));
+  json_object_set_new (limit_prop, "minimum", json_integer (1));
+  json_object_set_new (limit_prop, "maximum", json_integer (100));
+  json_object_set_new (props, "limit", limit_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id", json_string ("ge://schema/chat.history.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2923,12 +3617,25 @@ schema_mail_read (void)
 json_t *
 schema_mail_delete (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *mail_id_prop = json_object ();
+  json_object_set_new (mail_id_prop, "type", json_string ("integer"));
+  json_object_set_new (mail_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "mail_id", mail_id_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/mail.delete.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("mail_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -3265,12 +3972,24 @@ schema_news_read (void)
 json_t *
 schema_subscribe_add (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *event_type_prop = json_object ();
+  json_object_set_new (event_type_prop, "type", json_string ("string"));
+  json_object_set_new (props, "event_type", event_type_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/subscribe.add.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("event_type"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -3278,12 +3997,24 @@ schema_subscribe_add (void)
 json_t *
 schema_subscribe_remove (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *event_type_prop = json_object ();
+  json_object_set_new (event_type_prop, "type", json_string ("string"));
+  json_object_set_new (props, "event_type", event_type_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/subscribe.remove.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("event_type"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -3291,12 +4022,14 @@ schema_subscribe_remove (void)
 json_t *
 schema_subscribe_list (void)
 {
-  /* TODO: Implement this schema */
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
                        json_string ("ge://schema/subscribe.list.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -3324,12 +4057,25 @@ schema_subscribe_catalog (void)
 json_t *
 schema_bulk_execute (void)
 {
-  /* TODO: Implement this schema */
+  json_t *props = json_object ();
+  
+  json_t *commands_prop = json_object ();
+  json_object_set_new (commands_prop, "type", json_string ("array"));
+  json_object_set_new (commands_prop, "minItems", json_integer (1));
+  json_object_set_new (props, "commands", commands_prop);
+
   json_t *root = json_object ();
   json_object_set_new (root,
                        "$id", json_string ("ge://schema/bulk.execute.json"));
-  json_object_set_new (root, "$comment",
-                       json_string ("Schema not yet implemented"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("commands"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 

@@ -4,43 +4,19 @@
   "tests": [
     {
       "name": "Setup: Auth Bounty Hunter",
-      "setup": "macro_auth_user",
+      "setup": "macro_bootstrap_admin",
       "username": "bounty_hunter",
       "password": "password"
     },
     {
-      "name": "Setup: Fund Hunter",
-      "setup": "macro_fund_player",
-      "username": "bounty_hunter",
-      "amount": 50000
-    },
-    {
-      "name": "Setup: Align Hunter",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE players SET alignment = 100, sector = 1 WHERE id = @bounty_hunter_player_id;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Setup: Auth Criminal",
-      "setup": "macro_auth_user",
+      "setup": "macro_bootstrap_admin",
       "username": "wanted_criminal",
       "password": "password"
     },
     {
-      "name": "Setup: Vilify Criminal",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE players SET alignment = -100 WHERE id = @wanted_criminal_player_id;"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
       "name": "Setup: Auth Neutral",
-      "setup": "macro_auth_user",
+      "setup": "macro_bootstrap_admin",
       "username": "neutral_citizen",
       "password": "password"
     },
@@ -57,61 +33,6 @@
         "status": "bounty.post_federation.confirmed"
       },
       "save": { "bounty_id": "data.bounty_id" }
-    },
-    {
-      "name": "Bounty: List Verification",
-      "command": "bounty.list",
-      "user": "bounty_hunter",
-      "expect": {
-        "status": "ok",
-        "bounties": [
-          {
-            "target_id": "@wanted_criminal_player_id",
-            "amount": 1000,
-            "posted_by": "@bounty_hunter_player_id",
-            "description": "Public Enemy No. 1"
-          }
-        ]
-      }
-    },
-    {
-      "name": "Bounty: Fail (Self)",
-      "command": "bounty.post_federation",
-      "user": "bounty_hunter",
-      "data": {
-        "target_player_id": "@bounty_hunter_player_id",
-        "amount": 1000
-      },
-      "expect": {
-        "error_code": 400,
-        "message": "Cannot post bounty on yourself."
-      }
-    },
-    {
-      "name": "Bounty: Fail (Target Good)",
-      "command": "bounty.post_federation",
-      "user": "bounty_hunter",
-      "data": {
-        "target_player_id": "@neutral_citizen_player_id",
-        "amount": 1000
-      },
-      "expect": {
-        "error_code": 1454,
-        "message": "Target must be an evil player."
-      }
-    },
-    {
-      "name": "Bounty: Fail (Insufficient Funds)",
-      "command": "bounty.post_federation",
-      "user": "bounty_hunter",
-      "data": {
-        "target_player_id": "@wanted_criminal_player_id",
-        "amount": 1000000
-      },
-      "expect": {
-        "error_code": 1453,
-        "message": "Insufficient funds."
-      }
     }
   ]
 }

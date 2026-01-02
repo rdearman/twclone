@@ -106,7 +106,7 @@ class JsonSuiteRunner:
         if not self._admin_client:
             self._admin_client = TWClient(self.host, self.port)
             self._admin_client.connect()
-            self._admin_client.login("Federation Administrator", "BOT")
+            self._admin_client.login("admin", "password")
         return self._admin_client
 
     def run_suite(self, suite_path: str) -> bool:
@@ -224,7 +224,17 @@ class JsonSuiteRunner:
                 if var_name.startswith("@"):
                     var_name = var_name[1:]
                 self.vars[var_name] = val
+                
+                # Update client session if we just saved one
+                if var_name == "session" or path == "data.session":
+                    client.session_token = val
         
+        # Auto-update session on login even if not explicitly saved
+        if cmd_json.get("command") == "auth.login" and actual_status == "ok":
+            session = self._get_path(resp, "data.session")
+            if session:
+                client.session_token = session
+
         # Custom assertions
         if "asserts" in test:
             for assertion in test["asserts"]:

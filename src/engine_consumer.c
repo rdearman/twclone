@@ -65,6 +65,7 @@ load_watermark (db_t *db, const char *key, long long *last_id,
     "SELECT last_event_id, last_event_ts FROM engine_offset WHERE key=$1;";
   db_res_t *res = NULL;
   db_error_t err;
+  int rc = 0;
   db_bind_t params[] = { db_bind_text (key) };
 
   if (db_query (db, sql, params, 1, &res, &err))
@@ -79,10 +80,15 @@ load_watermark (db_t *db, const char *key, long long *last_id,
           *last_id = 0;
           *last_ts = 0;
         }
-      db_res_finalize (res);
-      return 0;
+      rc = 0;
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+      db_res_finalize(res);
+  return rc;
 }
 
 
@@ -114,6 +120,7 @@ fetch_max_event_id (db_t *db, long long *max_id)
     "SELECT COALESCE(MAX(engine_events_id),0) FROM engine_events;";
   db_res_t *res = NULL;
   db_error_t err;
+  int rc = 0;
 
   if (db_query (db, sql, NULL, 0, &res, &err))
     {
@@ -121,10 +128,15 @@ fetch_max_event_id (db_t *db, long long *max_id)
         {
           *max_id = db_res_col_i64 (res, 0, &err);
         }
-      db_res_finalize (res);
-      return 0;
+      rc = 0;
+      goto cleanup;
     }
-  return err.code;
+  rc = err.code;
+
+cleanup:
+  if (res)
+      db_res_finalize(res);
+  return rc;
 }
 
 

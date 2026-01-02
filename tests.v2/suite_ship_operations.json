@@ -1,0 +1,32 @@
+{
+  "test_suite_name": "Ship Operations",
+  "description": "Tests ship management commands",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "ship_ops_user",
+      "password": "password"
+    },
+    {
+      "name": "ship.inspect - Inspect derelict ship",
+      "command": "ship.inspect",
+      "data": { "ship_id": 1003 },
+      "user": "ship_ops_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "ship.rename - Rename ship",
+      "command": "ship.rename",
+      "data": { "ship_id": "@ship_ops_user_player_id", "new_name": "NewName" },
+      "user": "ship_ops_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "hardware.list - List available hardware",
+      "command": "hardware.list",
+      "user": "ship_ops_user",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

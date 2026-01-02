@@ -411,7 +411,7 @@ cluster_economy_step (db_t *db, int64_t now_s)
               db_res_t *res_avg = NULL;
               const char *sql_avg_real =
                 "SELECT AVG(price) FROM port_trade pt "
-                "JOIN ports p ON p.id = pt.port_id "
+                "JOIN ports p ON p.port_id = pt.port_id "
                 "JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
                 "WHERE cs.cluster_id = $1 AND pt.commodity = $2";
 
@@ -450,7 +450,7 @@ cluster_economy_step (db_t *db, int64_t now_s)
                 "UPDATE port_trade "
                 "SET price = CAST(price + 0.1 * ($1 - price) AS INTEGER) "
                 "WHERE commodity = $2 AND port_id IN ("
-                "  SELECT p.id FROM ports p "
+                "  SELECT p.port_id FROM ports p "
                 "  JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
                 "  WHERE cs.cluster_id = $3" ")";
 

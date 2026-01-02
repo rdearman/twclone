@@ -72,10 +72,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
     db_res_t *res = NULL;
 
 
-    if (!db_query (db, "SELECT MAX(id) FROM sectors;", NULL, 0, &res, &err))
+    if (!db_query (db, "SELECT MAX(sector_id) FROM sectors;", NULL, 0, &res, &err))
       {
         LOGE (
-          "cmd_move_autopilot_start: MAX(sectors.id) failed: %s (code=%d backend=%d)",
+          "cmd_move_autopilot_start: MAX(sectors.sector_id) failed: %s (code=%d backend=%d)",
           err.message,
           err.code,
           err.backend_code);

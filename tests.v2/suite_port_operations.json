@@ -1,0 +1,34 @@
+{
+  "name": "Port Operations",
+  "version": "2.0.0",
+  "protocol_category": "18_Ports",
+  "description": "Coverage for port interactions",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "port_user",
+      "password": "password"
+    },
+    {
+      "name": "port.status - Get port status",
+      "command": "port.status",
+      "data": { "port_id": 1 },
+      "user": "port_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "port.describe - Describe port details",
+      "command": "port.describe",
+      "data": { "port_id": 1 },
+      "user": "port_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "dock.status - Dock status (at sector)",
+      "command": "dock.status",
+      "user": "port_user",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

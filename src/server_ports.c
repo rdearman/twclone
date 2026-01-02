@@ -6,6 +6,7 @@
 #include <string.h>             // For strcasecmp, strdup etc.
 #include <math.h>               // For pow() function
 #include <stddef.h>             // For size_t
+#include <limits.h>             // For INT_MAX
 /* local includes */
 #include "server_ports.h"
 #include "database.h"
@@ -211,7 +212,12 @@ h_update_entity_stock (db_t *db,
                                commodity_code,
                                &current_quantity);
 
-  int new_quantity = current_quantity + quantity_delta;
+  int new_quantity;
+  if (__builtin_add_overflow(current_quantity, quantity_delta, &new_quantity))
+    {
+      /* Overflow: clamp to INT_MAX or 0 depending on sign */
+      new_quantity = (quantity_delta > 0) ? INT_MAX : 0;
+    }
 
 
   if (new_quantity < 0)
@@ -1156,8 +1162,13 @@ h_market_move_port_stock (db_t *db,
 
   db_res_finalize (res);
 
-  /* 2. Calculate new quantity with bounds checking */
-  int new_quantity = current_quantity + quantity_delta;
+  /* 2. Calculate new quantity with overflow and bounds checking */
+  int new_quantity;
+  if (__builtin_add_overflow(current_quantity, quantity_delta, &new_quantity))
+    {
+      /* Overflow: clamp based on delta direction */
+      new_quantity = (quantity_delta > 0) ? INT_MAX : 0;
+    }
 
 
   new_quantity = (new_quantity < 0) ? 0 : new_quantity;
