@@ -4302,3 +4302,73 @@ h_update_planet_stock (db_t *db, int planet_id, const char *commodity_code,
 }
 
 
+
+int
+h_bank_transfer_unlocked (db_t *db,
+                          const char *from_owner_type, int from_owner_id,
+                          const char *to_owner_type, int to_owner_id,
+                          long long amount,
+                          const char *tx_type, const char *tx_group_id)
+{
+  if (!db || !from_owner_type || !to_owner_type || !tx_type || amount < 0)
+    {
+      return ERR_DB_MISUSE;
+    }
+
+  int from_account_id, to_account_id;
+  int rc;
+  
+  /* Get source account ID */
+  rc = h_get_account_id_unlocked (db, from_owner_type, from_owner_id,
+                                  &from_account_id);
+  if (rc != 0)
+    {
+      if (strcmp(from_owner_type, "system") != 0 && strcmp(from_owner_type, "gov") != 0)
+        {
+          LOGW ("h_bank_transfer_unlocked: Source account %s:%d not found.",
+                from_owner_type, from_owner_id);
+          return ERR_NOT_FOUND;
+        }
+      LOGW ("h_bank_transfer_unlocked: Implicit system/gov source account %s:%d. Insufficient funds.",
+            from_owner_type, from_owner_id);
+      return ERR_INSUFFICIENT_FUNDS;
+    }
+  
+  /* Get or create destination account ID */
+  rc = h_get_account_id_unlocked (db, to_owner_type, to_owner_id, &to_account_id);
+  if (rc != 0)
+    {
+      rc = h_create_bank_account_unlocked (db, to_owner_type, to_owner_id, 0,
+                                           &to_account_id);
+      if (rc != 0)
+        {
+          LOGE ("h_bank_transfer_unlocked: Failed to create destination account %s:%d",
+                to_owner_type, to_owner_id);
+          return rc;
+        }
+    }
+  
+  /* Deduct from source */
+  rc = h_deduct_credits_unlocked (db, from_account_id, amount, tx_type,
+                                  tx_group_id, NULL);
+  if (rc != 0)
+    {
+      LOGW ("h_bank_transfer_unlocked: Failed to deduct %lld from %s:%d (account %d). Error: %d",
+            amount, from_owner_type, from_owner_id, from_account_id, rc);
+      return rc;
+    }
+  
+  /* Add to destination */
+  rc = h_add_credits_unlocked (db, to_account_id, amount, tx_type, tx_group_id, NULL);
+  if (rc != 0)
+    {
+      LOGE ("h_bank_transfer_unlocked: Failed to add %lld to %s:%d (account %d). Error: %d",
+            amount, to_owner_type, to_owner_id, to_account_id, rc);
+      /* Attempt refund */
+      h_add_credits_unlocked (db, from_account_id, amount, "REFUND",
+                              "TRANSFER_FAILED", NULL);
+      return rc;
+    }
+  
+  return 0;
+}
