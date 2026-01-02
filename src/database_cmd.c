@@ -776,27 +776,30 @@ db_commodity_get_orders (db_t *db,
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err;
+  db_error_t err = {0};
   const char *sql =
     "SELECT co.commodity_orders_id, co.actor_type, co.actor_id, c.code as commodity, co.side, co.quantity, co.price, co.status "
     "FROM commodity_orders co JOIN commodities c ON co.commodity_id = c.commodities_id "
     "WHERE c.code = $1 AND co.status = $2 ORDER BY co.ts DESC;";
-  db_res_t *res = NULL; int rc = 0;
+  db_res_t *res = NULL;
+  int rc = 0;
 
 
-  if (db_query (db,
-                sql,
-                (db_bind_t[]){db_bind_text (code), db_bind_text (status)},
-                2,
-                &res,
-                &err))
-    {
-      rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-    }
-  else
+  if (!db_query (db,
+                 sql,
+                 (db_bind_t[]){db_bind_text (code), db_bind_text (status)},
+                 2,
+                 &res,
+                 &err))
     {
       rc = err.code;
+      goto cleanup;
     }
+  rc = stmt_to_json_array (res, out, &err);
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return rc;
 }
 
@@ -808,27 +811,30 @@ db_commodity_get_trades (db_t *db, const char *code, int limit, json_t **out)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err;
+  db_error_t err = {0};
   const char *sql =
     "SELECT ct.id, c.code as commodity, ct.quantity, ct.price, ct.ts "
     "FROM commodity_trades ct JOIN commodities c ON ct.commodity_id = c.commodities_id "
     "WHERE c.code = $1 ORDER BY ct.ts DESC LIMIT $2;";
-  db_res_t *res = NULL; int rc = 0;
+  db_res_t *res = NULL;
+  int rc = 0;
 
 
-  if (db_query (db,
-                sql,
-                (db_bind_t[]){db_bind_text (code), db_bind_i32 (limit)},
-                2,
-                &res,
-                &err))
-    {
-      rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
-    }
-  else
+  if (!db_query (db,
+                 sql,
+                 (db_bind_t[]){db_bind_text (code), db_bind_i32 (limit)},
+                 2,
+                 &res,
+                 &err))
     {
       rc = err.code;
+      goto cleanup;
     }
+  rc = stmt_to_json_array (res, out, &err);
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return rc;
 }
 
@@ -852,27 +858,34 @@ db_planet_get_goods_on_hand (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB;
   const char *sql =
     "SELECT quantity FROM planet_goods WHERE planet_id = $1 AND commodity = $2;";
   db_bind_t params[] = { db_bind_i32 (planet_id), db_bind_text (code) };
 
 
-  if (db_query (db, sql, params, 2, &res, &err))
+  if (!db_query (db, sql, params, 2, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *out_qty = db_res_col_i32 (res,
-                                     0,
-                                     &err);
-        }
-      else
-        {
-          *out_qty = 0;
-        }
-      db_res_finalize (res); return 0;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      *out_qty = db_res_col_i32 (res, 0, &err);
+      rc = 0;
+    }
+  else
+    {
+      *out_qty = 0;
+      rc = 0;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
