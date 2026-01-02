@@ -1384,29 +1384,36 @@ db_player_land_on_planet (db_t *db, int pid, int planet_id)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err; db_res_t *res = NULL;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB;
   /* Use stored procedure: SELECT * FROM player_land(pid, planet_id) */
   const char *sql = "SELECT * FROM player_land($1, $2);";
 
 
-  if (db_query (db,
-                sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (planet_id)},
-                2,
-                &res,
-                &err))
+  if (!db_query (db,
+                 sql,
+                 (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (planet_id)},
+                 2,
+                 &res,
+                 &err))
     {
-      int code = 0;
-
-
-      if (db_res_step (res, &err))
-        {
-          code = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-      return (code == 0) ? 0 : code;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  int code = 0;
+
+
+  if (db_res_step (res, &err))
+    {
+      code = db_res_col_i32 (res, 0, &err);
+    }
+  rc = (code == 0) ? 0 : code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1417,33 +1424,41 @@ db_player_launch_from_planet (db_t *db, int pid, int *out_sid)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err; db_res_t *res = NULL;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB;
   const char *sql = "SELECT * FROM player_launch($1);";
 
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
     {
-      int code = 0;
-
-
-      if (db_res_step (res, &err))
-        {
-          code = db_res_col_i32 (res,
-                                 0,
-                                 &err);
-        }
-      db_res_finalize (res);
-      if (code == 0)
-        {
-          /* Fetch current sector */
-          if (db_player_get_sector (db, pid, out_sid) == 0)
-            {
-              return 0;
-            }
-        }
-      return code;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  int code = 0;
+
+
+  if (db_res_step (res, &err))
+    {
+      code = db_res_col_i32 (res,
+                             0,
+                             &err);
+    }
+  if (code == 0)
+    {
+      /* Fetch current sector */
+      if (db_player_get_sector (db, pid, out_sid) == 0)
+        {
+          rc = 0;
+          goto cleanup;
+        }
+    }
+  rc = code;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1454,20 +1469,31 @@ db_get_port_sector (db_t *db, int port_id)
     {
       return 0;
     }
-  db_res_t *res = NULL; db_error_t err; int sid = 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int sid = 0;
 
 
-  if (db_query (db, "SELECT sector_id FROM ports WHERE port_id = $1;",
-                (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
+  if (!db_query (db, "SELECT sector_id FROM ports WHERE port_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          sid = db_res_col_i32 (res,
-                                0,
-                                &err);
-        }
-      db_res_finalize (res);
+      sid = 0;
+      goto cleanup;
     }
+  if (db_res_step (res, &err))
+    {
+      sid = db_res_col_i32 (res,
+                            0,
+                            &err);
+    }
+  else
+    {
+      sid = 0;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return sid;
 }
 
