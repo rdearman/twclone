@@ -995,8 +995,16 @@ def move_to_adjacent(ctx: Context):
     except ValueError:
         print("Invalid sector ID."); return
 
-    if target not in adj:
-        print(f"{target} is not adjacent. Valid: {', '.join(map(str, adj)) if adj else '(none)'}")
+    # Extract sector numbers from adjacent_sectors format
+    adj_nums = []
+    for a in adj:
+        if isinstance(a, dict):
+            adj_nums.append(a.get("to_sector"))
+        else:
+            adj_nums.append(a)
+    
+    if target not in adj_nums:
+        print(f"{target} is not adjacent. Valid: {', '.join(map(str, adj_nums)) if adj_nums else '(none)'}")
         return
 
     resp = ctx.conn.rpc("move.warp", {"to_sector_id": target})
@@ -1034,15 +1042,19 @@ def warp_flow(ctx: Context):
     elif status in ("refused", "error"):
         # Show reason and stay where we are
         data = (resp or {}).get("data") or {}
-        err = (resp.get("error") or {}).get("message") if resp else None
+        err_obj = (resp.get("error") or {})
+        err_code = err_obj.get("code")
+        err_msg = err_obj.get("message")
         from_id = data.get("from")
         to_id = data.get("to")
         reason = data.get("reason")
         msg = f"Warp {from_id}->{to_id} refused" if status == "refused" else "Warp failed"
+        if err_code:
+            msg += f" (code: {err_code})"
         if reason:
             msg += f": {reason}"
-        if err:
-            msg += f" — {err}"
+        if err_msg:
+            msg += f" — {err_msg}"
         print(msg)
     else:
         print("Warp failed: unexpected response")
@@ -2633,7 +2645,14 @@ def redisplay_sector(ctx: Context):
     beacon = d.get("beacon")
 
     print(f"\nYou are in sector {sid}{' — ' + name if name else ''}.")
-    print(f"Adjacent sectors: {', '.join(map(str, adj)) if adj else 'none'}")
+    # Extract sector numbers from adjacent_sectors format
+    adj_nums = []
+    for a in adj:
+        if isinstance(a, dict):
+            adj_nums.append(str(a.get("to_sector", "?")))
+        else:
+            adj_nums.append(str(a))
+    print(f"Adjacent sectors: {', '.join(adj_nums) if adj_nums else 'none'}")
 
     if port:
         cls = port.get("class", "?")
@@ -3133,6 +3152,9 @@ def print_inspect_response_pretty(ctx):
     
     # Directly access data to see where it fails
     data = resp.get("data")
+    if data is None:
+        print("[no data in response]")
+        return
 
     ships = data.get("ships") or []
     if not isinstance(ships, list) or not ships:
@@ -3230,7 +3252,8 @@ def enter_ship_menu(ctx: Context):
 
         elif cmd == "i":
             resp = ctx.conn.rpc("ship.inspect", {"ship_id": ship_id})
-            print_inspect_response_pretty(resp)
+            ctx.state["last_rpc"] = resp
+            print_inspect_response_pretty(ctx)
 
         elif cmd == "c":
             # Claim an unpiloted ship in this sector
@@ -3290,8 +3313,17 @@ def move_to_adjacent(ctx: Context):
         target = int(raw)
     except ValueError:
         print("Invalid sector ID."); return
-    if target not in adj:
-        print(f"{target} is not adjacent. Valid: {', '.join(map(str, adj)) if adj else '(none)'}")
+    
+    # Extract sector numbers from adjacent_sectors format
+    adj_nums = []
+    for a in adj:
+        if isinstance(a, dict):
+            adj_nums.append(a.get("to_sector"))
+        else:
+            adj_nums.append(a)
+    
+    if target not in adj_nums:
+        print(f"{target} is not adjacent. Valid: {', '.join(map(str, adj_nums)) if adj_nums else '(none)'}")
         return
     _ = ctx.conn.rpc("move.warp", {"to_sector_id": target})
     new = ctx.conn.rpc("move.describe_sector", {"sector_id": target})

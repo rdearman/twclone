@@ -124,7 +124,7 @@ INSERT INTO shiptypes (name, basecost, maxattack, initialholds, maxholds, maxfig
     ('Tholian Sentinel', 47500, 800, 10, 50, 2500, 4, 50, 0, 1, FALSE, 3, 4000, 1, 1, 10, TRUE, FALSE, 0, 0, TRUE, TRUE),
     ('Taurean Mule', 63600, 150, 50, 150, 300, 4, 0, 0, 1, FALSE, 5, 600, 5, 5, 20, TRUE, TRUE, 0, 0, TRUE, TRUE),
     ('Interdictor Cruiser', 539000, 15000, 10, 40, 100000, 15, 200, 0, 20, FALSE, 20, 4000, 12, 12, 100, TRUE, TRUE, 0, 0, TRUE, TRUE),
-    ('Ferrengi Warship', 150000, 5000, 20, 100, 15000, 5, 20, 0, 5, FALSE, 10, 5000, 15, 15, 50, TRUE, TRUE, 1, 0, FALSE, TRUE),
+    ('Ferengi Warship', 150000, 5000, 20, 100, 15000, 5, 20, 0, 5, FALSE, 10, 5000, 15, 15, 50, TRUE, TRUE, 1, 0, FALSE, TRUE),
     ('Imperial Starship (NPC)', 329000, 10000, 40, 150, 50000, 4, 125, 0, 10, TRUE, 15, 2000, 15, 15, 150, TRUE, TRUE, 1, 0, FALSE, TRUE),
     ('Orion Heavy Fighter Patrol', 150000, 5000, 20, 50, 20000, 5, 10, 0, 5, FALSE, 10, 5000, 20, 10, 25, TRUE, TRUE, 1, 0, FALSE, TRUE),
     ('Orion Scout/Looter', 80000, 4000, 10, 150, 5000, 5, 10, 0, 5, FALSE, 10, 3000, 8, 8, 25, TRUE, TRUE, 1, 0, FALSE, TRUE),

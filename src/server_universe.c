@@ -1624,7 +1624,7 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
   if (!has_transwarp)
     {
-      send_response_refused_steal (ctx, root, 1453,
+      send_response_refused_steal (ctx, root, REF_TRANSWARP_UNAVAILABLE,
                                    "Ship does not have transwarp capability.", NULL);
       return 0;
     }
@@ -1834,7 +1834,7 @@ fer_init_once (void)
   db_res_t *res = NULL;
 
   const char *sql_find_corp_info =
-    "SELECT id, owner_id FROM corporations WHERE tag='FENG' LIMIT 1;";
+    "SELECT corporation_id, owner_id FROM corporations WHERE tag='FENG' LIMIT 1;";
 
   if (db_query (g_fer_db, sql_find_corp_info, NULL, 0, &res, &err))
     {
@@ -1846,8 +1846,17 @@ fer_init_once (void)
             {
               g_fer_player_id = 1;
             }
+          LOGD ("[fer] Found Ferengi corp_id=%d, player_id=%d", g_fer_corp_id, g_fer_player_id);
+        }
+      else
+        {
+          LOGW ("[fer] db_res_step failed: %s", err.message);
         }
       if (res) db_res_finalize (res);
+    }
+  else
+    {
+      LOGW ("[fer] db_query failed: %s", err.message);
     }
 
   if (g_fer_corp_id == 0)
@@ -1878,7 +1887,7 @@ fer_init_once (void)
 
   int ship_type_id = 0;
   const char *sql_find_shiptype =
-    "SELECT ship_type_id FROM ship_types WHERE name='Ferengi Warship' LIMIT 1;";
+    "SELECT shiptypes_id FROM shiptypes WHERE name='Ferengi Warship' LIMIT 1;";
 
   res = NULL;
   if (db_query (g_fer_db, sql_find_shiptype, NULL, 0, &res, &err))

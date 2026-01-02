@@ -425,7 +425,7 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (payload, "sector", json_integer (sector_id));
-  json_object_set (payload, "ships", ships);
+  json_object_set_new (payload, "ships", ships);
 
 
   send_response_ok_take (ctx, root, "ship.inspect", &payload);
