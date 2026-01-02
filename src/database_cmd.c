@@ -1534,24 +1534,35 @@ db_player_get_alignment (db_t *db, int pid, int *align)
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
 
 
-  if (db_query (db,
-                "SELECT alignment FROM players WHERE player_id = $1;",
-                (db_bind_t[]){db_bind_i32 (pid)},
-                1,
-                &res,
-                &err))
+  if (!db_query (db,
+                 "SELECT alignment FROM players WHERE player_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (pid)},
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *align = db_res_col_i32 (res, 0, &err); db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res); return ERR_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      *align = db_res_col_i32 (res, 0, &err);
+      rc = 0;
+    }
+  else
+    {
+      rc = ERR_NOT_FOUND;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1564,21 +1575,32 @@ db_get_law_config_int (const char *key, int def)
       return def;
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int value = def;
+  int rc = def;
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = $1 AND value_type = 'INTEGER';";
-  int value = def;
 
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          value = (int) db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      rc = def;
+      goto cleanup;
     }
-  return value;
+  if (db_res_step (res, &err))
+    {
+      value = (int) db_res_col_i32 (res, 0, &err);
+      rc = value;
+    }
+  else
+    {
+      rc = def;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
