@@ -25,6 +25,7 @@ int no_zero_ship (db_t *db, int set_sector, int ship_id);
 int nav_next_hop (db_t *db, int start, int goal);
 int nav_random_neighbor (db_t *db, int sector);
 int h_warp_exists (db_t *db, int from, int to);
+int h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id);
 int db_pick_adjacent (db_t *db, int sector);
 
 int cmd_move_describe_sector (client_ctx_t *ctx, json_t *root);

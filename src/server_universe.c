@@ -484,6 +484,56 @@ h_warp_exists (db_t *db, int from, int to)
   return has;
 }
 
+/* Check if sector has hostile interdictors */
+int
+h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
+{
+  if (!db || sector_id <= 0)
+    {
+      return 0;
+    }
+
+  db_error_t err;
+  db_res_t *res = NULL;
+
+  /* Query citadels with interdictor capability */
+  const char *sql = "SELECT p.owner_id, p.owner_type "
+    "FROM planets p "
+    "JOIN citadels c ON p.id = c.planet_id "
+    "WHERE p.sector_id = $1 AND c.level >= 6 AND c.interdictor > 0;";
+
+  db_bind_t params[] = { db_bind_i32 (sector_id) };
+
+  if (!db_query (db, sql, params, 1, &res, &err))
+    {
+      LOGE ("h_check_interdiction: query failed: %s", err.message);
+      return 0; /* Fail open */
+    }
+
+  int blocked = 0;
+  while (db_res_step (res, &err))
+    {
+      int owner_id = db_res_col_int (res, 0, &err);
+      const char *owner_type = db_res_col_text (res, 1, &err);
+
+      int p_corp_id = 0;
+      if (owner_type && (strcasecmp (owner_type, "corp") == 0
+                         || strcasecmp (owner_type, "corporation") == 0))
+        {
+          p_corp_id = owner_id;
+        }
+
+      if (is_asset_hostile (owner_id, p_corp_id, player_id, corp_id))
+        {
+          blocked = 1;
+          break;
+        }
+    }
+
+  db_res_finalize (res);
+  return blocked;
+}
+
 
 int
 universe_init (void)
@@ -561,18 +611,27 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     }
   json_t *data = json_object_get (root, "data");
   int to = (int)json_integer_value (json_object_get (data, "to_sector_id"));
+  
+  /* Check warp link exists */
   if (!h_warp_exists (db, ctx->sector_id, to))
     {
-      send_response_error (ctx, root, REF_NO_WARP_LINK, "No link"); return 0;
+      send_response_error (ctx, root, REF_NO_WARP_LINK, "No link"); 
+      return 0;
     }
-  if (db_player_set_sector ( ctx->player_id, to) == 0)
+  
+  /* Check for hostile interdictors */
+  if (h_check_interdiction (db, to, ctx->player_id, ctx->corp_id))
+    {
+      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS, 
+                          "Warp interdicted by hostile planetary defences");
+      return 0;
+    }
+  
+  if (db_player_set_sector (ctx->player_id, to) == 0)
     {
       ctx->sector_id = to;
-      json_t *resp = json_object (); json_object_set_new (resp,
-                                                          "to_sector_id",
-                                                          json_integer (to));
-
-
+      json_t *resp = json_object (); 
+      json_object_set_new (resp, "to_sector_id", json_integer (to));
       send_response_ok_take (ctx, root, "move.result", &resp);
     }
   else
