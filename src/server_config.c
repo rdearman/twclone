@@ -732,9 +732,10 @@ load_bootstrap_config (const char *filename)
           return -1;
         }
 
-      strncpy (g_cfg.pg_conn_str, app_conn_tmpl, prefix_len);
-      strcpy (g_cfg.pg_conn_str + prefix_len, db_name);
-      strcpy (g_cfg.pg_conn_str + prefix_len + db_len, found + strlen (marker));
+      memcpy (g_cfg.pg_conn_str, app_conn_tmpl, prefix_len);
+      memcpy (g_cfg.pg_conn_str + prefix_len, db_name, db_len);
+      memcpy (g_cfg.pg_conn_str + prefix_len + db_len, found + strlen (marker), suffix_len);
+      g_cfg.pg_conn_str[prefix_len + db_len + suffix_len] = '\0';
     }
   else
     {

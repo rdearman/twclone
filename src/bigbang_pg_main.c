@@ -867,7 +867,10 @@ main (int argc, char **argv)
   if (port_size > 0 || tech_level > 0 || port_credits > 0)
     {
       char updates[512] = "UPDATE ports SET ";
+      size_t updates_used = strlen(updates);
+      const size_t updates_cap = sizeof(updates);
       int needs_comma = 0;
+      int overflow_error = 0;
 
 
       if (port_size > 0)
@@ -876,40 +879,115 @@ main (int argc, char **argv)
 
 
           snprintf (tmp, sizeof(tmp), "size = %d", port_size);
-          strcat (updates, tmp);
-          needs_comma = 1;
+          size_t tmp_len = strlen(tmp);
+          if (updates_used + tmp_len >= updates_cap)
+            {
+              LOGE ("Updates string overflow");
+              overflow_error = 1;
+            }
+          else
+            {
+              memcpy (updates + updates_used, tmp, tmp_len);
+              updates_used += tmp_len;
+              updates[updates_used] = '\0';
+              needs_comma = 1;
+            }
         }
-      if (tech_level > 0)
+      if (!overflow_error && tech_level > 0)
         {
           if (needs_comma)
             {
-              strcat (updates, ", ");
+              const char *sep = ", ";
+              size_t sep_len = 2;
+              if (updates_used + sep_len >= updates_cap)
+                {
+                  LOGE ("Updates string overflow");
+                  overflow_error = 1;
+                }
+              else
+                {
+                  memcpy (updates + updates_used, sep, sep_len);
+                  updates_used += sep_len;
+                  updates[updates_used] = '\0';
+                }
             }
-          char tmp[64];
+          if (!overflow_error)
+            {
+              char tmp[64];
 
 
-          snprintf (tmp, sizeof(tmp), "techlevel = %d", tech_level);
-          strcat (updates, tmp);
-          needs_comma = 1;
+              snprintf (tmp, sizeof(tmp), "techlevel = %d", tech_level);
+              size_t tmp_len = strlen(tmp);
+              if (updates_used + tmp_len >= updates_cap)
+                {
+                  LOGE ("Updates string overflow");
+                  overflow_error = 1;
+                }
+              else
+                {
+                  memcpy (updates + updates_used, tmp, tmp_len);
+                  updates_used += tmp_len;
+                  updates[updates_used] = '\0';
+                  needs_comma = 1;
+                }
+            }
         }
-      if (port_credits > 0)
+      if (!overflow_error && port_credits > 0)
         {
           if (needs_comma)
             {
-              strcat (updates, ", ");
+              const char *sep = ", ";
+              size_t sep_len = 2;
+              if (updates_used + sep_len >= updates_cap)
+                {
+                  LOGE ("Updates string overflow");
+                  overflow_error = 1;
+                }
+              else
+                {
+                  memcpy (updates + updates_used, sep, sep_len);
+                  updates_used += sep_len;
+                  updates[updates_used] = '\0';
+                }
             }
-          char tmp[64];
+          if (!overflow_error)
+            {
+              char tmp[64];
 
 
-          snprintf (tmp, sizeof(tmp), "petty_cash = %d", port_credits);
-          strcat (updates, tmp);
+              snprintf (tmp, sizeof(tmp), "petty_cash = %d", port_credits);
+              size_t tmp_len = strlen(tmp);
+              if (updates_used + tmp_len >= updates_cap)
+                {
+                  LOGE ("Updates string overflow");
+                  overflow_error = 1;
+                }
+              else
+                {
+                  memcpy (updates + updates_used, tmp, tmp_len);
+                  updates_used += tmp_len;
+                  updates[updates_used] = '\0';
+                }
+            }
         }
-      if (needs_comma)
+      if (!overflow_error && needs_comma)
         {
           // Only update standard ports (1-8), leave Stardock (9) alone
-          strcat (updates, " WHERE type BETWEEN 1 AND 8");
-          printf ("BIGBANG: Applying port defaults from config...\n");
-          exec_sql (app, updates, "apply_port_defaults");
+          const char *where = " WHERE type BETWEEN 1 AND 8";
+          size_t where_len = strlen(where);
+          if (updates_used + where_len >= updates_cap)
+            {
+              LOGE ("Updates string overflow");
+              overflow_error = 1;
+            }
+          else
+            {
+              memcpy (updates + updates_used, where, where_len);
+              updates_used += where_len;
+              updates[updates_used] = '\0';
+              printf ("BIGBANG: Applying port defaults from config...\n");
+              exec_sql (app, updates, "apply_port_defaults");
+            }
         }
     }
 

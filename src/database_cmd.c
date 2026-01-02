@@ -44,10 +44,10 @@ h_get_port_commodity_quantity (db_t *db,
     "LIMIT 1;";
 
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
+  int rc = ERR_DB_NOT_FOUND;
 
-
-  memset (&err, 0, sizeof (err));
+  *qty_out = 0;
 
   db_bind_t binds[] = {
     db_bind_i32 (port_id),
@@ -58,13 +58,9 @@ h_get_port_commodity_quantity (db_t *db,
   if (!db_query (db, sql, binds, 2, &res, &err))
     {
       /* keep behaviour: propagate as DB error */
-      return err.code ? err.code : ERR_DB;
+      rc = err.code ? err.code : ERR_DB;
+      goto cleanup;
     }
-
-  int rc = ERR_DB_NOT_FOUND;
-
-
-  *qty_out = 0;
 
   if (db_res_step (res, &err))
     {
@@ -72,7 +68,9 @@ h_get_port_commodity_quantity (db_t *db,
       rc = 0;
     }
 
-  db_res_finalize (res);
+cleanup:
+  if (res)
+    db_res_finalize (res);
   return rc;
 }
 
@@ -369,16 +367,17 @@ db_player_update_commission (db_t *db, int player_id)
         {
           align = db_res_col_i32 (res, 0, &err);
           exp = db_res_col_i64 (res, 1, &err);
+          db_res_finalize (res);
         }
       else
         {
-          db_res_finalize (res); if (err.code == 0)
+          db_res_finalize (res);
+          if (err.code == 0)
             {
-              db_tx_rollback (db, NULL); return ERR_NOT_FOUND;
+              err.code = ERR_NOT_FOUND;
             }
           goto rollback;
         }
-      db_res_finalize (res);
 
       int band_id = 0, is_evil = 0;
 
@@ -437,7 +436,11 @@ db_commission_for_player (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_NOT_FOUND;
+  
   const char *sql =
     "SELECT commission_id, description, is_evil FROM commission WHERE is_evil = $1 AND min_exp <= $2 ORDER BY min_exp DESC LIMIT 1;";
   db_bind_t params[] = { db_bind_bool (is_evil_track ? true : false),
@@ -446,7 +449,8 @@ db_commission_for_player (db_t *db,
 
   if (!db_query (db, sql, params, 2, &res, &err))
     {
-      return err.code;
+      rc = err.code;
+      goto cleanup;
     }
   if (db_res_step (res, &err))
     {
@@ -462,11 +466,13 @@ db_commission_for_player (db_t *db,
         {
           *out_is_evil = db_res_col_bool (res, 2, &err);
         }
-      db_res_finalize (res); return 0;
+      rc = 0;
+      goto cleanup;
     }
   db_res_finalize (res);
+  res = NULL;
 
-  // Fallback to lowest rank
+  /* Fallback to lowest rank */
   sql =
     "SELECT commission_id, description, is_evil FROM commission WHERE is_evil = $1 ORDER BY min_exp ASC LIMIT 1;";
   db_bind_t p_fall[] = { db_bind_bool (is_evil_track ? true : false) };
@@ -474,7 +480,8 @@ db_commission_for_player (db_t *db,
 
   if (!db_query (db, sql, p_fall, 1, &res, &err))
     {
-      return err.code;
+      rc = err.code;
+      goto cleanup;
     }
   if (db_res_step (res, &err))
     {
@@ -490,9 +497,15 @@ db_commission_for_player (db_t *db,
         {
           *out_is_evil = db_res_col_bool (res, 2, &err);
         }
-      db_res_finalize (res); return 0;
+      rc = 0;
+      goto cleanup;
     }
-  db_res_finalize (res); return ERR_NOT_FOUND;
+  rc = ERR_NOT_FOUND;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1173,24 +1186,36 @@ h_get_cluster_id_for_sector (db_t *db, int sid, int *out_cid)
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB_NOT_FOUND;
 
 
-  if (db_query (db,
-                "SELECT cluster_id FROM cluster_sectors WHERE sector_id = $1;",
-                (db_bind_t[]){db_bind_i32 (sid)},
-                1,
-                &res,
-                &err))
+  if (!db_query (db,
+                 "SELECT cluster_id FROM cluster_sectors WHERE sector_id = $1;",
+                 (db_bind_t[]){db_bind_i32 (sid)},
+                 1,
+                 &res,
+                 &err))
     {
-      if (db_res_step (res, &err))
-        {
-          *out_cid = db_res_col_i32 (res, 0, &err); db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res); return ERR_DB_NOT_FOUND;
+      rc = err.code;
+      goto cleanup;
     }
-  return err.code;
+  if (db_res_step (res, &err))
+    {
+      *out_cid = db_res_col_i32 (res, 0, &err);
+      rc = 0;
+    }
+  else
+    {
+      rc = ERR_DB_NOT_FOUND;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -1201,7 +1226,10 @@ h_get_cluster_alignment (db_t *db, int cid, int *out_align)
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
+  
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  int rc = ERR_DB_NOT_FOUND;
 
 
   if (db_query (db, "SELECT alignment FROM clusters WHERE clusters_id = $1;",
@@ -1209,12 +1237,23 @@ h_get_cluster_alignment (db_t *db, int cid, int *out_align)
     {
       if (db_res_step (res, &err))
         {
-          *out_align = db_res_col_i32 (res, 0, &err); db_res_finalize (res);
-          return 0;
+          *out_align = db_res_col_i32 (res, 0, &err);
+          rc = 0;
         }
-      db_res_finalize (res); return ERR_DB_NOT_FOUND;
+      else
+        {
+          rc = ERR_DB_NOT_FOUND;
+        }
     }
-  return err.code;
+  else
+    {
+      rc = err.code;
+    }
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
@@ -3017,6 +3056,11 @@ db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
           json_t *obj = json_object ();
 
 
+          if (!obj)
+            {
+              db_res_finalize (res);
+              return ERR_NOMEM;
+            }
           json_object_set_new (obj, "id", json_integer (db_res_col_i32 (res,
                                                                         0,
                                                                         &err)));
