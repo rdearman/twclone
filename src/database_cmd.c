@@ -143,9 +143,10 @@ db_is_npc_player (db_t *db, int player_id)
       return 0;
     }
   db_res_t *res = NULL;
-  db_error_t err;
+  db_error_t err = {0};
   const char *sql = "SELECT is_npc FROM players WHERE player_id = $1;";
   int is_npc = 0;
+  int rc = 0;
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
@@ -155,9 +156,15 @@ db_is_npc_player (db_t *db, int player_id)
         {
           is_npc = (int) db_res_col_i32 (res, 0, &err);
         }
-      db_res_finalize (res);
+      rc = is_npc;
+      goto cleanup;
     }
-  return is_npc;
+  rc = 0;
+
+cleanup:
+  if (res)
+    db_res_finalize (res);
+  return rc;
 }
 
 
