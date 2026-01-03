@@ -26,6 +26,7 @@
 #include "server_loop.h"
 #include "server_bank.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 /* ==================================================================== */
@@ -369,10 +370,18 @@ static int
 h_create_personal_bank_alert_notice (db_t *db, int player_id, const char *msg)
 {
   db_error_t err;
-  const char *sql =
-    "INSERT INTO system_notice (created_at, scope, player_id, title, body, severity) VALUES (EXTRACT(EPOCH FROM now()), 'player', $1, 'Bank Alert', $2, 'info');";
+  const char *now_ts = sql_now_timestamptz(db);
+  if (!now_ts)
+    {
+      return -1;  /* Unsupported backend */
+    }
+  
+  char sql[512];
+  snprintf(sql, sizeof(sql),
+    "INSERT INTO system_notice (created_at, scope, player_id, title, body, severity) VALUES (%s, 'player', $1, 'Bank Alert', $2, 'info');",
+    now_ts);
+  
   db_bind_t params[] = { db_bind_i32 (player_id), db_bind_text (msg) };
-
 
   if (!db_exec (db, sql, params, 2, &err))
     {
@@ -500,9 +509,18 @@ h_add_credits_unlocked (db_t *db,
   db_res_finalize (res);
 
 
-  const char *sql_tx =
+  const char *now_epoch = sql_epoch_now(db);
+  if (!now_epoch)
+    {
+      return ERR_DB_QUERY_FAILED;  /* Unsupported backend */
+    }
+  
+  char sql_tx[512];
+  snprintf(sql_tx, sizeof(sql_tx),
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
-    "VALUES ($1, $2, 'CREDIT', $3, 'CRD', $4, $5, EXTRACT(EPOCH FROM now())::bigint);";
+    "VALUES ($1, $2, 'CREDIT', $3, 'CRD', $4, $5, %s);",
+    now_epoch);
+  
   db_bind_t tx_params[] = {
     db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
     db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
@@ -561,9 +579,18 @@ h_deduct_credits_unlocked (db_t *db,
   db_res_finalize (res);
 
 
-  const char *sql_tx =
+  const char *now_epoch = sql_epoch_now(db);
+  if (!now_epoch)
+    {
+      return ERR_DB_QUERY_FAILED;  /* Unsupported backend */
+    }
+  
+  char sql_tx[512];
+  snprintf(sql_tx, sizeof(sql_tx),
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
-    "VALUES ($1, $2, 'DEBIT', $3, 'CRD', $4, $5, EXTRACT(EPOCH FROM now())::bigint);";
+    "VALUES ($1, $2, 'DEBIT', $3, 'CRD', $4, $5, %s);",
+    now_epoch);
+  
   db_bind_t tx_params[] = {
     db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
     db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")

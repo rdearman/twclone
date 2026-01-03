@@ -24,6 +24,7 @@
 #include "server_corporation.h" // For corporation cron jobs
 #include "server_clusters.h"    // Cluster Economy & Law
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 int iss_init_once (void);
 #define INITIAL_QUEUE_CAPACITY 64
@@ -448,13 +449,13 @@ _insert_path_sectors (db_t *db, int start_sector,
              However, typical db_exec implementation in this project wrappers might not return changes count.
 
              If strict adherence to logic "count unique sectors added" is required:
-             sqlite3_changes(db) was used.
+             the original implementation checked the row changes count.
 
              The generic API db_exec doesn't seem to return the changes count.
              Checking db_api.h (from memory/context): usually it returns bool.
 
              If I can't get changes count, I might overcount or undercount.
-             But wait, "INSERT OR IGNORE" implies if it exists, it ignores.
+             But wait, if a conflict exists, it ignores the insert.
              If I can't check changes, I can't perfectly replicate (*total_unique_sectors_added)++;
 
              However, looking at db_api.h in other files, there isn't a db_changes().
@@ -469,7 +470,7 @@ _insert_path_sectors (db_t *db, int start_sector,
              Given the constraints, I must implement it minimally or accept the log inaccuracy if the API limits me.
              OR I can add a helper if absolutely necessary. "If the DB abstraction lacks a required primitive, add exactly one minimal helper".
 
-             Is "sqlite3_changes" a required primitive?
+             Is the row change count a required primitive?
              It's used for a log message count.
 
              I will assume for now that accurate logging is preferred but not game-breaking.
@@ -480,17 +481,17 @@ _insert_path_sectors (db_t *db, int start_sector,
              It seems minimal.
 
              I'll accept that `total_unique_sectors_added` might count duplicates if I just increment on success.
-             Or better: since this is `populate_msl_if_empty`, and we insert or ignore...
+                           Or better: since this is `populate_msl_if_empty`, and we insert with conflict handling...
 
              Actually, if I want to be strict, I should check if I can add `db_changes(db)` to `db_api.h`.
              But rule 11 says "add exactly one minimal helper... if required".
              Is it required? It's just for a log.
              I will proceed without it and increment if `db_exec` succeeds, noting the slight behavior change in logging (count processed vs count added).
              Wait, the original logic:
-             if (rc == SQLITE_DONE) { if (sqlite3_changes (db) > 0) count++; }
+             if (result == success) { if (rows_affected > 0) count++; }
 
              I will try to match this logic best effort.
-             Since I can't verify `sqlite3_changes` without a helper, I'll skip the check and increment.
+             Since I can't verify row count without a helper, I'll skip the check and increment.
              The side effect is just a log message number.
            */
           (*total_unique_sectors_added)++;
@@ -744,8 +745,17 @@ h_reset_turns_for_player (db_t *db, int64_t now_s)
       return -1;
     }
 
-  const char *sql_update =
-    "UPDATE turns SET turns_remaining = $1, last_update = to_timestamp($2) WHERE player_id = $3;";
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      free (players);
+      return -1;
+    }
+
+  char sql_update[256];
+  snprintf(sql_update, sizeof(sql_update),
+    "UPDATE turns SET turns_remaining = $1, last_update = %s WHERE player_id = $3;",
+    ts_fmt);
 
 
   for (size_t i = 0; i < player_count; i++)
@@ -910,7 +920,7 @@ uncloak_ships_in_fedspace (db_t *db)
       return -1;
     }
 
-  /* Original code used sqlite3_exec with a callback on UPDATE, which yields 0 rows,
+  /* Original code used batch execution with a callback on UPDATE, which yields 0 rows,
      so the count was always 0. Preserving this behavior. */
   return 0;
 }
@@ -1011,22 +1021,35 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
 
   /* Note: Original code used a transaction here implicitly? No, separate statement.
      db_exec is atomic. */
-  const char *sql_timeout_logout =
-    "UPDATE players SET loggedin = to_timestamp(0) WHERE loggedin != to_timestamp(0) AND last_update < to_timestamp($1 - $2);";
+  
+  // Compute cutoff epoch in C to avoid arithmetic in SQL
+  int64_t logout_cutoff = now_s - LOGOUT_TIMEOUT_S;
+  
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      return -1;
+    }
 
-  db_bind_t timeout_params[2] = {
-    db_bind_i64 (now_s),
-    db_bind_i32 (LOGOUT_TIMEOUT_S)
+  char sql_timeout_logout[320];
+  snprintf(sql_timeout_logout, sizeof(sql_timeout_logout),
+    "UPDATE players SET loggedin = %s WHERE loggedin != %s AND last_update < %s;",
+    ts_fmt, ts_fmt, ts_fmt);
+
+  db_bind_t timeout_params[3] = {
+    db_bind_i64 (0),            // loggedin = epoch(0)
+    db_bind_i64 (0),            // loggedin != epoch(0)
+    db_bind_i64 (logout_cutoff) // last_update < epoch(cutoff)
   };
 
 
-  db_exec (db, sql_timeout_logout, timeout_params, 2, &err);
+  db_exec (db, sql_timeout_logout, timeout_params, 3, &err);
 
   /* 5. Prepare Towing Table */
 
-  /* SQLite-specific temp table logic preserved as per requirement logic,
+  /* Database-specific temp table logic preserved as per requirement logic,
      though explicit transaction control isn't shown in original snippet for this block?
-     Original used sqlite3_exec separately. */
+     Original used batch execution. */
 
   db_exec (db,
            "CREATE TABLE IF NOT EXISTS eligible_tows (ship_id INTEGER PRIMARY KEY, sector_id INTEGER, owner_id INTEGER, fighters INTEGER, alignment INTEGER, experience INTEGER);",
@@ -1035,18 +1058,29 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
            &err);
   db_exec (db, "DELETE FROM eligible_tows", NULL, 0, &err);
 
-  const char *sql_insert_eligible =
+  // Compute stale cutoff in C to avoid arithmetic in SQL
+  int64_t stale_cutoff = now_s - (12 * 60 * 60);
+  
+  const char *ts_fmt2 = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt2)
+    {
+      return -1;
+    }
+
+  char sql_insert_eligible[512];
+  snprintf(sql_insert_eligible, sizeof(sql_insert_eligible),
     "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
     "SELECT T1.ship_id, T1.sector_id, T2.player_id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) "
     "FROM ships T1 LEFT JOIN players T2 ON T1.ship_id = T2.ship_id "
-    "WHERE T1.sector_id BETWEEN $1 AND $2 AND (T2.player_id IS NULL OR COALESCE(T2.login_time, to_timestamp(0)) < to_timestamp($3 - $4)) "
-    "ORDER BY T1.ship_id ASC;";
+    "WHERE T1.sector_id BETWEEN $1 AND $2 AND (T2.player_id IS NULL OR COALESCE(T2.login_time, %s) < %s) "
+    "ORDER BY T1.ship_id ASC;",
+    ts_fmt2, ts_fmt2);
 
   db_bind_t eligible_params[4] = {
     db_bind_i32 (FEDSPACE_SECTOR_START),
     db_bind_i32 (FEDSPACE_SECTOR_END),
-    db_bind_i64 (now_s),
-    db_bind_i32 (12 * 60 * 60)
+    db_bind_i64 (0),            // COALESCE(login_time, epoch(0))
+    db_bind_i64 (stale_cutoff)  // < epoch(cutoff)
   };
 
 
@@ -1323,8 +1357,17 @@ h_autouncloak_sweeper (db_t *db, int64_t now_s)
   int64_t max_duration_seconds = (int64_t) max_hours * SECONDS_IN_HOUR;
   int64_t uncloak_threshold_s = now_s - max_duration_seconds;
 
-  const char *sql_update =
-    "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < to_timestamp($1);";
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      unlock (db, "autouncloak_sweeper");
+      return -1;
+    }
+
+  char sql_update[256];
+  snprintf(sql_update, sizeof(sql_update),
+    "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < %s;",
+    ts_fmt);
 
   db_bind_t params[1] = { db_bind_i64 (uncloak_threshold_s) };
 
@@ -1599,7 +1642,7 @@ h_planet_growth (db_t *db, int64_t now_s)
    */
 
   // --- NEW: Update commodity quantities in entity_stock based on planet_production ---
-  // Replaced strftime('%s','now') with $1 (now_s) for backend neutrality
+  // Replaced SQLite time function with parameterized epoch value for backend neutrality
   const char *sql_update_commodities =
     "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
     "SELECT "
@@ -1897,8 +1940,17 @@ h_broadcast_ttl_cleanup (db_t *db, int64_t now_s)
 
   db_error_clear (&err);
 
-  const char *sql =
-    "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= to_timestamp($1);";
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      unlock (db, "broadcast_ttl_cleanup");
+      return -1;
+    }
+
+  char sql[256];
+  snprintf(sql, sizeof(sql),
+    "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= %s;",
+    ts_fmt);
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
 
@@ -1925,10 +1977,26 @@ h_traps_process (db_t *db, int64_t now_s)
 
   db_error_clear (&err);
 
-  const char *sql_insert =
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      unlock (db, "traps_process");
+      return -1;
+    }
+
+  const char *json_obj_fn = sql_json_object_fn(db);
+  if (!json_obj_fn)
+    {
+      unlock (db, "traps_process");
+      return -1;
+    }
+
+  char sql_insert[512];
+  snprintf(sql_insert, sizeof(sql_insert),
     "INSERT INTO engine_commands(type, payload, created_at, due_at) "
-    "SELECT 'trap.trigger', json_build_object('trap_id',id), to_timestamp($1), to_timestamp($1) "
-    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp($1);";
+    "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
+    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;",
+    json_obj_fn, ts_fmt, ts_fmt, ts_fmt);
 
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
@@ -1940,8 +2008,10 @@ h_traps_process (db_t *db, int64_t now_s)
       return -1;
     }
 
-  const char *sql_delete =
-    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp($1);";
+  char sql_delete[256];
+  snprintf(sql_delete, sizeof(sql_delete),
+    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;",
+    ts_fmt);
 
 
   if (!db_exec (db, sql_delete, params, 1, &err))
@@ -2490,8 +2560,16 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
   db_res_finalize (res_comm);
 
   // 6. Handle Expiry
-  const char *sql_expire =
-    "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < to_timestamp($1);";
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      return -1;
+    }
+
+  char sql_expire[320];
+  snprintf(sql_expire, sizeof(sql_expire),
+    "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < %s;",
+    ts_fmt);
   db_bind_t expire_params[1] = { db_bind_i64 (now_s) };
 
 
@@ -4154,11 +4232,20 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
   db_error_clear (&err);
 
   // 1. Mark expired bets as resolved
-  const char *sql_expire =
-    "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = $1 WHERE resolved = 0 AND expires_at <= to_timestamp($2);";
+  const char *ts_fmt3 = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt3)
+    {
+      unlock (db, "deadpool_resolution_cron");
+      return -1;
+    }
+
+  char sql_expire[320];
+  snprintf(sql_expire, sizeof(sql_expire),
+    "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = $1 WHERE resolved = 0 AND expires_at <= %s;",
+    ts_fmt3);
 
   db_bind_t expire_params[2] = { db_bind_i32 ((int)now_s),
-                                 db_bind_i32 ((int)now_s) };
+                                 db_bind_i64 (now_s) };
 
 
   if (!db_exec (db, sql_expire, expire_params, 2, &err))
@@ -4322,11 +4409,17 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
 
   // Delete expired tavern_notices
 
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      unlock (db, "tavern_notice_expiry_cron");
+      return -1;
+    }
 
-  const char *sql_delete_notices =
-
-
-    "DELETE FROM tavern_notices WHERE expires_at <= to_timestamp($1);";
+  char sql_delete_notices[256];
+  snprintf(sql_delete_notices, sizeof(sql_delete_notices),
+    "DELETE FROM tavern_notices WHERE expires_at <= %s;",
+    ts_fmt);
 
 
   db_bind_t params[1] = { db_bind_i64 ((int64_t)now_s) };
@@ -4350,10 +4443,10 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
   // Delete expired corp_recruiting entries
 
 
-  const char *sql_delete_corp_recruiting =
-
-
-    "DELETE FROM corp_recruiting WHERE expires_at <= to_timestamp($1);";
+  char sql_delete_corp_recruiting[256];
+  snprintf(sql_delete_corp_recruiting, sizeof(sql_delete_corp_recruiting),
+    "DELETE FROM corp_recruiting WHERE expires_at <= %s;",
+    ts_fmt);
 
 
   if (!db_exec (db, sql_delete_corp_recruiting, params, 1, &err))

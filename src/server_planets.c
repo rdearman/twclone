@@ -26,6 +26,7 @@
 #include "server_config.h"
 #include "server_combat.h"
 #include "server_ports.h"
+#include "db/sql_driver.h"
 
 #ifndef GENESIS_ENABLED
 #define GENESIS_ENABLED 1
@@ -2323,12 +2324,18 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_ins_pg =
-    "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ($1, $2, 'planet', $3, $4, 'buy', $5, $6, 'open', EXTRACT(EPOCH FROM now()), $7, 0)";
-  const char *sql_ins_lite =
-    "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ($1, $2, 'planet', $3, $4, 'buy', $5, $6, 'open', strftime('%s','now'), $7, 0)";
-  const char *sql_ins = (db_backend (db) ==
-                         DB_BACKEND_POSTGRES) ? sql_ins_pg : sql_ins_lite;
+  const char *now_expr = sql_now_timestamptz(db);
+  if (!now_expr)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Database backend error");
+      return 0;
+    }
+
+  char sql_ins[512];
+  snprintf(sql_ins, sizeof(sql_ins),
+    "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ($1, $2, 'planet', $3, $4, 'buy', $5, $6, 'open', %s, $7, 0)",
+    now_expr);
 
   int64_t order_id = 0;
   db_bind_t params[] = {
@@ -2673,20 +2680,20 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
   new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
 
   // 3. Update DB
-  const char *sql_upsert_pg =
-    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-    "VALUES ('planet', $1, $2, $3, 0, EXTRACT(EPOCH FROM now())) "
-    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = $3, last_updated_ts = EXTRACT(EPOCH FROM now());";
+  const char *epoch_expr = sql_epoch_now(db);
+  if (!epoch_expr)
+    {
+      return ERR_DB_INTERNAL;
+    }
 
-  const char *sql_upsert_lite =
-    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-    "VALUES ('planet', $1, $2, $3, 0, strftime('%s','now')) "
-    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = $3, last_updated_ts = strftime('%s','now');";
+  const char *sql_fmt = sql_entity_stock_upsert_epoch_fmt(db);
+  if (!sql_fmt)
+    {
+      return ERR_DB_INTERNAL;
+    }
 
-  const char *sql_upsert = (db_backend (db) ==
-                            DB_BACKEND_POSTGRES) ? sql_upsert_pg :
-                           sql_upsert_lite;
-
+  char sql_upsert[512];
+  snprintf(sql_upsert, sizeof(sql_upsert), sql_fmt, epoch_expr, epoch_expr);
 
   if (!db_exec (db, sql_upsert,
                 (db_bind_t[]){ db_bind_i32 (pid), db_bind_text (code),

@@ -24,10 +24,10 @@
         "ported": 0,
         "cargo": []
     },
-    "player_location_sector": 8,
+    "player_location_sector": 2,
     "sector_data": {
         "8": {
-            "server_tick": 8118,
+            "server_tick": 11660,
             "sector_id": 8,
             "adjacent": [
                 {
@@ -52,7 +52,112 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443394.1012614,
+            "_last_refreshed": 1767443748.8012347,
+            "has_port": false
+        },
+        "2": {
+            "server_tick": 21950,
+            "sector_id": 2,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 7
+                },
+                {
+                    "to_sector": 8
+                },
+                {
+                    "to_sector": 9
+                },
+                {
+                    "to_sector": 10
+                }
+            ],
+            "ships": [
+                {
+                    "ship_id": 8,
+                    "name": "ai_qa_bot_004's ship"
+                },
+                {
+                    "ship_id": 7,
+                    "name": "ai_qa_bot_003's ship"
+                }
+            ],
+            "ports": [],
+            "planets": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767444779.1843548,
+            "has_port": false
+        },
+        "1": {
+            "server_tick": 18522,
+            "sector_id": 1,
+            "adjacent": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 4
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 6
+                },
+                {
+                    "to_sector": 7
+                }
+            ],
+            "ships": [
+                {
+                    "ship_id": 1,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 2,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 4,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 9,
+                    "name": "ai_qa_bot_005's ship"
+                },
+                {
+                    "ship_id": 7,
+                    "name": "ai_qa_bot_003's ship"
+                },
+                {
+                    "ship_id": 8,
+                    "name": "ai_qa_bot_004's ship"
+                }
+            ],
+            "ports": [],
+            "planets": [
+                {
+                    "planet_id": 1,
+                    "name": "Terra"
+                }
+            ],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767444435.9889417,
             "has_port": false
         }
     },
@@ -101,13 +206,16 @@
             "next_retry_time": 1767442652.9022374
         },
         "sector.info": {
-            "next_retry_time": 1767443398.597146
+            "next_retry_time": 1767444783.6798086
         },
         "sector.scan.density": {
-            "next_retry_time": 1767443399.116798
+            "next_retry_time": 1767444784.2016118
         },
         "bank.balance": {
             "next_retry_time": 1767443061.127524
+        },
+        "move.warp": {
+            "next_retry_time": 1767444441.0072308
         }
     },
     "strategy_plan": [],
@@ -121,7 +229,7 @@
     "n_table": {
         "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "move.warp": 0,
-            "bank.balance": 406
+            "bank.balance": 417
         }
     },
     "command_schemas": {
@@ -2228,7 +2336,10 @@
         "trade.sell": "c-b48e95cc"
     },
     "recent_sectors": [
-        8
+        8,
+        2,
+        1,
+        2
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
@@ -2237,9 +2348,9 @@
     "last_action_result": {
         "status": "ok",
         "command": "sector.scan.density",
-        "request_id": "c-2d9e802d",
+        "request_id": "c-f382986c",
         "response_type": "sector.density.scan",
-        "ts": "2026-01-03T12:29:54Z"
+        "ts": "2026-01-03T12:52:59Z"
     },
     "last_quotes": {},
     "current_qa_objective": null,

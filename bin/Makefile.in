@@ -106,16 +106,18 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/bigbang_pg_main.$(OBJEXT) \
-	../src/db/db_api.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
-	../src/common.$(OBJEXT) ../src/server_log.$(OBJEXT)
+	../src/db/db_api.$(OBJEXT) ../src/db/sql_driver.$(OBJEXT) \
+	../src/db/pg/db_pg.$(OBJEXT) ../src/common.$(OBJEXT) \
+	../src/server_log.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 am__DEPENDENCIES_1 =
 bigbang_DEPENDENCIES = $(am__DEPENDENCIES_1)
 bigbang_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bigbang_LDFLAGS) \
 	$(LDFLAGS) -o $@
 am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
-	../src/db/pg/db_pg.$(OBJEXT) ../src/game_db.$(OBJEXT) \
-	../src/database_cmd.$(OBJEXT) ../src/database_market.$(OBJEXT) \
+	../src/db/sql_driver.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
+	../src/game_db.$(OBJEXT) ../src/database_cmd.$(OBJEXT) \
+	../src/database_market.$(OBJEXT) \
 	../src/db_player_settings.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/s2s_keyring.$(OBJEXT) ../src/s2s_transport.$(OBJEXT) \
@@ -188,7 +190,9 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
-	../src/db/$(DEPDIR)/db_api.Po ../src/db/pg/$(DEPDIR)/db_pg.Po
+	../src/db/$(DEPDIR)/db_api.Po \
+	../src/db/$(DEPDIR)/sql_driver.Po \
+	../src/db/pg/$(DEPDIR)/db_pg.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -347,6 +351,7 @@ AUTOMAKE_OPTIONS = subdir-objects
 bigbang_SOURCES = \
         ../src/bigbang_pg_main.c \
         ../src/db/db_api.c \
+        ../src/db/sql_driver.c \
         ../src/db/pg/db_pg.c \
         ../src/common.c \
         ../src/server_log.c
@@ -358,6 +363,7 @@ bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
 server_SOURCES = \
 	../src/common.c \
 	../src/db/db_api.c \
+	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
 	../src/game_db.c \
 	../src/database_cmd.c \
@@ -486,6 +492,8 @@ clean-binPROGRAMS:
 	@$(MKDIR_P) ../src/db/$(DEPDIR)
 	@: > ../src/db/$(DEPDIR)/$(am__dirstamp)
 ../src/db/db_api.$(OBJEXT): ../src/db/$(am__dirstamp) \
+	../src/db/$(DEPDIR)/$(am__dirstamp)
+../src/db/sql_driver.$(OBJEXT): ../src/db/$(am__dirstamp) \
 	../src/db/$(DEPDIR)/$(am__dirstamp)
 ../src/db/pg/$(am__dirstamp):
 	@$(MKDIR_P) ../src/db/pg
@@ -626,6 +634,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/server_warp_post_processing.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/$(DEPDIR)/sysop_interaction.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/$(DEPDIR)/db_api.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/$(DEPDIR)/sql_driver.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/pg/$(DEPDIR)/db_pg.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -821,6 +830,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/db/$(DEPDIR)/db_api.Po
+	-rm -f ../src/db/$(DEPDIR)/sql_driver.Po
 	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -906,6 +916,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/db/$(DEPDIR)/db_api.Po
+	-rm -f ../src/db/$(DEPDIR)/sql_driver.Po
 	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic

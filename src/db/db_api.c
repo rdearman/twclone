@@ -12,6 +12,21 @@
 #include "sqlite/db_sqlite.h" // Include for SQLite backend
 #endif
 
+/**
+ * @brief Helper to set error with category
+ */
+static inline void
+db_error_set(db_error_t *err, int code, db_error_category_t category, const char *msg)
+{
+  if (!err) return;
+  err->code = code;
+  err->category = category;
+  if (msg)
+    snprintf(err->message, sizeof(err->message), "%s", msg);
+  else
+    err->message[0] = '\0';
+}
+
 
 bool
 db_exec_insert_id(db_t *db,
@@ -182,6 +197,22 @@ bool db_query(db_t *db, const char *sql, const db_bind_t *params, size_t n_param
         return false;
     }
     return db->vt->query(db, sql, params, n_params, out_res, err);
+}
+
+bool db_exec_returning(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
+    if (!db || !db->vt) {
+        err->code = ERR_DB_CLOSED;
+        strncpy(err->message, "db_exec_returning: Invalid DB handle or vtable", sizeof(err->message));
+        return false;
+    }
+    
+    if (!db->vt->exec_returning) {
+        err->code = ERR_DB_INTERNAL;
+        strncpy(err->message, "db_exec_returning: Not implemented for this backend", sizeof(err->message));
+        return false;
+    }
+    
+    return db->vt->exec_returning(db, sql, params, n_params, out_res, err);
 }
 
 bool db_res_step(db_res_t *res, db_error_t *err) {

@@ -8,6 +8,7 @@
 #include "database.h"
 #include "game_db.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "common.h"
 
 
@@ -130,12 +131,21 @@ db_bookmark_remove (db_t *db, int64_t pid, const char *name)
 int
 db_avoid_add (db_t *db, int64_t pid, int64_t sid)
 {
-  db_error_t err; if (!db)
+  db_error_t err;
+  if (!db)
     {
       return -1;
     }
-  if (!db_exec (db,
-                "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;",
+  const char *conflict_clause = sql_insert_ignore_clause(db);
+  if (!conflict_clause)
+    {
+      return -1;
+    }
+  char sql_buf[256];
+  snprintf(sql_buf, sizeof(sql_buf),
+      "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) %s;",
+      conflict_clause);
+  if (!db_exec (db, sql_buf,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (sid)},
                 2,
                 &err))

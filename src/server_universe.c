@@ -1094,6 +1094,13 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   
+  /* Consume turn */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
+    }
+  
   if (db_player_set_sector (ctx->player_id, to) == 0)
     {
       ctx->sector_id = to;

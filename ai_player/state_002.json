@@ -24,10 +24,10 @@
         "ported": 0,
         "cargo": []
     },
-    "player_location_sector": 1,
+    "player_location_sector": 3,
     "sector_data": {
         "2": {
-            "server_tick": 3413,
+            "server_tick": 20605,
             "sector_id": 2,
             "adjacent": [
                 {
@@ -55,8 +55,12 @@
                     "name": "ai_qa_bot_002's ship"
                 },
                 {
-                    "ship_id": 5,
-                    "name": "ai_qa_bot_001's ship"
+                    "ship_id": 8,
+                    "name": "ai_qa_bot_004's ship"
+                },
+                {
+                    "ship_id": 7,
+                    "name": "ai_qa_bot_003's ship"
                 }
             ],
             "ports": [],
@@ -65,11 +69,11 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767442923.0017438,
+            "_last_refreshed": 1767444644.5876684,
             "has_port": false
         },
         "3": {
-            "server_tick": 6737,
+            "server_tick": 20616,
             "sector_id": 3,
             "adjacent": [
                 {
@@ -94,11 +98,11 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443255.835532,
+            "_last_refreshed": 1767444646.1308901,
             "has_port": false
         },
         "1": {
-            "server_tick": 10235,
+            "server_tick": 13681,
             "sector_id": 1,
             "adjacent": [
                 {
@@ -130,16 +134,24 @@
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 3,
-                    "name": "Bit Banger"
-                },
-                {
                     "ship_id": 4,
                     "name": "Used Scout Marauder"
                 },
                 {
                     "ship_id": 6,
                     "name": "ai_qa_bot_002's ship"
+                },
+                {
+                    "ship_id": 9,
+                    "name": "ai_qa_bot_005's ship"
+                },
+                {
+                    "ship_id": 7,
+                    "name": "ai_qa_bot_003's ship"
+                },
+                {
+                    "ship_id": 5,
+                    "name": "ai_qa_bot_001's ship"
                 }
             ],
             "ports": [],
@@ -153,7 +165,7 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443606.1223915,
+            "_last_refreshed": 1767443951.2107298,
             "has_port": false
         }
     },
@@ -190,13 +202,13 @@
             "next_retry_time": 1767442664.1043134
         },
         "sector.info": {
-            "next_retry_time": 1767443610.6181183
+            "next_retry_time": 1767444650.1264923
         },
         "move.warp": {
-            "next_retry_time": 1767443260.8547637
+            "next_retry_time": 1767444649.6063352
         },
         "sector.scan.density": {
-            "next_retry_time": 1767443611.1389396
+            "next_retry_time": 1767444301.431451
         }
     },
     "strategy_plan": [],
@@ -210,7 +222,7 @@
     "n_table": {
         "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "move.warp": 0,
-            "bank.balance": 416
+            "bank.balance": 424
         }
     },
     "command_schemas": {
@@ -2319,7 +2331,9 @@
     "recent_sectors": [
         2,
         3,
-        1
+        1,
+        2,
+        3
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
@@ -2327,10 +2341,10 @@
     "current_path": [],
     "last_action_result": {
         "status": "ok",
-        "command": "sector.scan.density",
-        "request_id": "c-ab2f67cc",
-        "response_type": "sector.density.scan",
-        "ts": "2026-01-03T12:33:26Z"
+        "command": "sector.info",
+        "request_id": "c-c163e581",
+        "response_type": "sector.info",
+        "ts": "2026-01-03T12:50:45Z"
     },
     "last_quotes": {},
     "current_qa_objective": null,

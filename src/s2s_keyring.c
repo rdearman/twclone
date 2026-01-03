@@ -8,6 +8,7 @@
 #include "s2s_keyring.h"
 #include "server_log.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "common.h"
 
 
@@ -24,9 +25,18 @@ s2s_keyring_generate_key (db_t *db,
 {
   /* Postgres uses $1, $2 syntax.
      'active' is boolean, 'created_ts' is timestamptz */
-  const char *SQL_INSERT =
+  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
+  if (!conv_fmt)
+    {
+      LOGE ("S2S_GEN: Unsupported database backend\n");
+      return -1;
+    }
+
+  char SQL_INSERT[256];
+  snprintf(SQL_INSERT, sizeof(SQL_INSERT),
     "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
-    "VALUES ($1, $2, true, to_timestamp($3), 0);";
+    "VALUES ($1, $2, true, %s, 0);",
+    conv_fmt);
 
   time_t now = time (NULL);
   db_bind_t params[] = {

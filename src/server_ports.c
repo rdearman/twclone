@@ -25,6 +25,7 @@
 #include "db_player_settings.h"
 #include "server_clusters.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "game_db.h"
 
 
@@ -551,31 +552,7 @@ json_equal_strict (json_t *a, json_t *b)
 /* if (db_query(db, &res, sql, binds, DB_NBINDS(binds), &err) != 0) { ... } */
 
 
-/* static int */
 
-
-/* bind_text_or_null (sqlite3_stmt *st, int idx, const char *s) */
-
-
-/* { */
-
-
-/*   if (s) */
-
-
-/*     { */
-
-
-/*       return sqlite3_bind_text (st, idx, s, -1, SQLITE_TRANSIENT); */
-
-
-/*     } */
-
-
-/*   return sqlite3_bind_null (st, idx); */
-
-
-/* } */
 
 
 int
@@ -2898,49 +2875,56 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           return 0;
         }
 
-      static const char *SQL_BUST =
-        "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
-        "VALUES ($1, $2, strftime('%s','now'), 'fake', 1) "
-        "ON CONFLICT(port_id, player_id) DO UPDATE SET "
-        "last_bust_at=strftime('%s','now'), bust_type='fake', active=1";
+      {
+        const char *now_epoch = sql_epoch_now(db);
+        char sql_bust[256], sql_last[256];
+        
+        snprintf(sql_bust, sizeof(sql_bust),
+          "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
+          "VALUES ($1, $2, %s, 'fake', 1) "
+          "ON CONFLICT(port_id, player_id) DO UPDATE SET "
+          "last_bust_at=%s, bust_type='fake', active=1",
+          now_epoch, now_epoch);
 
-      static const char *SQL_LAST =
-        "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-        "VALUES ($1, $2, strftime('%s','now'), 0) "
-        "ON CONFLICT(player_id) DO UPDATE SET "
-        "port_id=EXCLUDED.port_id, last_attempt_at=strftime('%s','now'), was_success=0";
+        snprintf(sql_last, sizeof(sql_last),
+          "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
+          "VALUES ($1, $2, %s, 0) "
+          "ON CONFLICT(player_id) DO UPDATE SET "
+          "port_id=EXCLUDED.port_id, last_attempt_at=%s, was_success=0",
+          now_epoch, now_epoch);
 
-      db_bind_t params[2];
-
-
-      params[0] = db_bind_i64 (port_id);
-      params[1] = db_bind_i64 (ctx->player_id);
-
-      if (!db_exec (db, SQL_BUST, params, 2, &dberr))
-        {
-          db_tx_rollback (db, NULL);
-          send_response_error (ctx, root, ERR_DB, "Database error.");
-          return 0;
-        }
-
-      db_bind_t params2[2];
+        db_bind_t params[2];
 
 
-      params2[0] = db_bind_i64 (ctx->player_id);
-      params2[1] = db_bind_i64 (port_id);
+        params[0] = db_bind_i64 (port_id);
+        params[1] = db_bind_i64 (ctx->player_id);
 
-      if (!db_exec (db, SQL_LAST, params2, 2, &dberr))
-        {
-          db_tx_rollback (db, NULL);
-          send_response_error (ctx, root, ERR_DB, "Database error.");
-          return 0;
-        }
+        if (!db_exec (db, sql_bust, params, 2, &dberr))
+          {
+            db_tx_rollback (db, NULL);
+            send_response_error (ctx, root, ERR_DB, "Database error.");
+            return 0;
+          }
 
-      if (!db_tx_commit (db, &dberr))
-        {
-          send_response_error (ctx, root, ERR_DB, "Database error.");
-          return 0;
-        }
+        db_bind_t params2[2];
+
+
+         params2[0] = db_bind_i64 (ctx->player_id);
+         params2[1] = db_bind_i64 (port_id);
+
+         if (!db_exec (db, sql_last, params2, 2, &dberr))
+           {
+             db_tx_rollback (db, NULL);
+             send_response_error (ctx, root, ERR_DB, "Database error.");
+             return 0;
+           }
+
+         if (!db_tx_commit (db, &dberr))
+           {
+             send_response_error (ctx, root, ERR_DB, "Database error.");
+             return 0;
+           }
+      }
 
       json_t *fresp = json_object ();
 
@@ -3211,20 +3195,26 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
             }
         }
 
-      static const char *SQL_LAST_SUCCESS =
-        "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-        "VALUES ($1, $2, strftime('%s','now'), 1) "
-        "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
-        "last_attempt_at=strftime('%s','now'), was_success=1";
-      db_bind_t lparams[2];
+      {
+        const char *now_epoch = sql_epoch_now(db);
+        char sql_last_success[256];
+        
+        snprintf(sql_last_success, sizeof(sql_last_success),
+          "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
+          "VALUES ($1, $2, %s, 1) "
+          "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
+          "last_attempt_at=%s, was_success=1",
+          now_epoch, now_epoch);
+        db_bind_t lparams[2];
 
 
-      lparams[0] = db_bind_i64 (ctx->player_id);
-      lparams[1] = db_bind_i64 (port_id);
-      if (!db_exec (db, SQL_LAST_SUCCESS, lparams, 2, &dberr))
+        lparams[0] = db_bind_i64 (ctx->player_id);
+        lparams[1] = db_bind_i64 (port_id);
+        if (!db_exec (db, sql_last_success, lparams, 2, &dberr))
         {
           goto fail_tx;
         }
+      }
 
       if (!db_tx_commit (db, &dberr))
         {
@@ -3250,31 +3240,41 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
                                align_change_bust,
                                "port.rob.bust");
 
-      static const char *SQL_BUST_REAL =
-        "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
-        "VALUES ($1, $2, strftime('%s','now'), 'real', 1) "
-        "ON CONFLICT(port_id, player_id) DO UPDATE SET "
-        "last_bust_at=strftime('%s','now'), bust_type='real', active=1";
-      db_bind_t bparams[2];
+      {
+        const char *now_epoch = sql_epoch_now(db);
+        char sql_bust_real[256];
+        
+        snprintf(sql_bust_real, sizeof(sql_bust_real),
+          "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
+          "VALUES ($1, $2, %s, 'real', 1) "
+          "ON CONFLICT(port_id, player_id) DO UPDATE SET "
+          "last_bust_at=%s, bust_type='real', active=1",
+          now_epoch, now_epoch);
+        db_bind_t bparams[2];
 
 
-      bparams[0] = db_bind_i64 (port_id);
-      bparams[1] = db_bind_i64 (ctx->player_id);
-      if (!db_exec (db, SQL_BUST_REAL, bparams, 2, &dberr))
+        bparams[0] = db_bind_i64 (port_id);
+        bparams[1] = db_bind_i64 (ctx->player_id);
+        if (!db_exec (db, sql_bust_real, bparams, 2, &dberr))
         {
           goto fail_tx;
         }
+      }
 
       int susp_inc = is_good_cluster ? 10 : 5;
 
 
       if (cluster_id > 0)
         {
-          static const char *SQL_CLUST_UPD =
+          const char *now_epoch = sql_epoch_now(db);
+          char sql_clust_upd[512];
+          
+          snprintf(sql_clust_upd, sizeof(sql_clust_upd),
             "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
-            "VALUES ($1, $2, $3, 1, strftime('%s','now')) "
+            "VALUES ($1, $2, $3, 1, %s) "
             "ON CONFLICT(cluster_id, player_id) DO UPDATE SET "
-            "suspicion = suspicion + $4, bust_count = bust_count + 1, last_bust_at = strftime('%s','now')";
+            "suspicion = suspicion + $4, bust_count = bust_count + 1, last_bust_at = %s",
+            now_epoch, now_epoch);
           db_bind_t cparams[4];
 
 
@@ -3282,7 +3282,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           cparams[1] = db_bind_i64 (ctx->player_id);
           cparams[2] = db_bind_i64 (susp_inc);
           cparams[3] = db_bind_i64 (susp_inc);
-          if (!db_exec (db, SQL_CLUST_UPD, cparams, 4, &dberr))
+          if (!db_exec (db, sql_clust_upd, cparams, 4, &dberr))
             {
               goto fail_tx;
             }
@@ -3300,20 +3300,26 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
             }
         }
 
-      static const char *SQL_LAST_FAIL =
-        "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-        "VALUES ($1, $2, strftime('%s','now'), 0) "
-        "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
-        "last_attempt_at=strftime('%s','now'), was_success=0";
-      db_bind_t lparams[2];
+      {
+        const char *now_epoch = sql_epoch_now(db);
+        char sql_last_fail[256];
+        
+        snprintf(sql_last_fail, sizeof(sql_last_fail),
+          "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
+          "VALUES ($1, $2, %s, 0) "
+          "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
+          "last_attempt_at=%s, was_success=0",
+          now_epoch, now_epoch);
+        db_bind_t lparams[2];
 
 
-      lparams[0] = db_bind_i64 (ctx->player_id);
-      lparams[1] = db_bind_i64 (port_id);
-      if (!db_exec (db, SQL_LAST_FAIL, lparams, 2, &dberr))
+        lparams[0] = db_bind_i64 (ctx->player_id);
+        lparams[1] = db_bind_i64 (port_id);
+        if (!db_exec (db, sql_last_fail, lparams, 2, &dberr))
         {
           goto fail_tx;
         }
+      }
 
       json_t *news_pl = json_object ();
 
@@ -3987,7 +3993,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       int amount = trade_lines[i].amount;
       long long line_credits = trade_lines[i].line_cost;
       int buy_price = trade_lines[i].unit_price;
-      sqlite3_stmt *st = NULL;
       /* log row */
       {
         static const char *LOG_SQL =

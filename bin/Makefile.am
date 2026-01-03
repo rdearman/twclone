@@ -31,6 +31,7 @@ bin_PROGRAMS = \
 bigbang_SOURCES = \
         ../src/bigbang_pg_main.c \
         ../src/db/db_api.c \
+        ../src/db/sql_driver.c \
         ../src/db/pg/db_pg.c \
         ../src/common.c \
         ../src/server_log.c
@@ -42,6 +43,7 @@ bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
 server_SOURCES = \
 	../src/common.c \
 	../src/db/db_api.c \
+	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
 	../src/game_db.c \
 	../src/database_cmd.c \

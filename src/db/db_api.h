@@ -30,12 +30,29 @@ typedef struct db_res_s db_res_t;
 // Error Model
 // -----------------------------------------------------------------------------
 
+/**
+ * @brief Backend-agnostic error categories for semantic error handling.
+ */
+typedef enum
+{
+  DB_ERR_CAT_UNKNOWN = 0,          // Unknown or uncategorized error
+  DB_ERR_CAT_CONSTRAINT,           // Unique constraint or check constraint violation
+  DB_ERR_CAT_FK,                   // Foreign key constraint violation
+  DB_ERR_CAT_DEADLOCK,             // Transaction deadlock or cycle detected
+  DB_ERR_CAT_LOCK_TIMEOUT,         // Lock wait timeout (may retry)
+  DB_ERR_CAT_SERIALIZATION,        // Serialization conflict / isolation violation
+  DB_ERR_CAT_NOT_FOUND,            // Resource not found (no rows affected)
+  DB_ERR_CAT_IO,                   // Disk I/O error
+  DB_ERR_CAT_CONNECTION,           // Connection lost or refused
+} db_error_category_t;
+
 // Structure to hold detailed error information
 typedef struct
 {
-  int       code;           // Generic category from errors.h
-  int       backend_code;   // backend-native code (for logs only; do not branch on it)
-  char      message[256];   // stable, human-readable; driver fills best effort
+  int                 code;           // Generic category from errors.h
+  int                 backend_code;   // backend-native code (for logs only; do not branch on it)
+  db_error_category_t category;       // Backend-agnostic error classification
+  char                message[256];   // stable, human-readable; driver fills best effort
 } db_error_t;
 
 // Clears an error structure
@@ -43,8 +60,9 @@ static inline void
 db_error_clear (db_error_t *e)
 {
   if (!e) return;
-  e->code = 0; // Use 0 for 0
+  e->code = 0;
   e->backend_code = 0;
+  e->category = DB_ERR_CAT_UNKNOWN;
   e->message[0] = '\0';
 }
 
@@ -285,6 +303,36 @@ bool db_query (db_t *db,
                db_res_t **out_res,
                db_error_t *err);
 
+/**
+ * @brief Executes an INSERT/UPDATE with RETURNING clause and returns result set.
+ *
+ * PostgreSQL: Executes SQL with RETURNING natively, returns result set.
+ * MySQL: Not yet implemented; future implementation must:
+ *   1. Execute the INSERT/UPDATE statement
+ *   2. Within the same transaction, SELECT the affected row(s) by WHERE/PK
+ *   3. Return the result set from the SELECT
+ *   Caller is responsible for wrapping in db_tx_begin/commit.
+ * SQLite: Similar to MySQL fallback (not yet implemented).
+ *
+ * Contract: SQL string should include RETURNING clause for PostgreSQL.
+ *           For backends without native RETURNING, the caller must structure
+ *           the query to be fetched back via SELECT.
+ *
+ * @param db Database handle.
+ * @param sql SQL statement (typically INSERT/UPDATE ... RETURNING ...)
+ * @param params Parameter bindings.
+ * @param n_params Number of parameters.
+ * @param out_res Pointer to store result set handle (caller must finalize).
+ * @param err Error structure.
+ * @return true on success (out_res filled), false on failure.
+ */
+bool db_exec_returning (db_t *db,
+                        const char *sql,
+                        const db_bind_t *params,
+                        size_t n_params,
+                        db_res_t **out_res,
+                        db_error_t *err);
+
 // -----------------------------------------------------------------------------
 // Result Set Inspection
 // -----------------------------------------------------------------------------
@@ -485,8 +533,43 @@ bool db_ship_repair_atomic(db_t *db,
                            int cost,
                            int64_t *out_new_credits,
                            db_error_t *err);
-  
-  
+
+/**
+ * @brief Helper: Check if error is a constraint violation.
+ * @param err Error structure
+ * @return true if constraint violation (unique/check), false otherwise
+ */
+static inline bool db_error_is_constraint_violation(const db_error_t *err) {
+  return err && err->category == DB_ERR_CAT_CONSTRAINT;
+}
+
+/**
+ * @brief Helper: Check if error is a deadlock.
+ * @param err Error structure
+ * @return true if deadlock, false otherwise
+ */
+static inline bool db_error_is_deadlock(const db_error_t *err) {
+  return err && err->category == DB_ERR_CAT_DEADLOCK;
+}
+
+/**
+ * @brief Helper: Check if error is a lock timeout (retryable).
+ * @param err Error structure
+ * @return true if lock timeout, false otherwise
+ */
+static inline bool db_error_is_lock_timeout(const db_error_t *err) {
+  return err && err->category == DB_ERR_CAT_LOCK_TIMEOUT;
+}
+
+/**
+ * @brief Helper: Check if error is a foreign key violation.
+ * @param err Error structure
+ * @return true if FK violation, false otherwise
+ */
+static inline bool db_error_is_fk_violation(const db_error_t *err) {
+  return err && err->category == DB_ERR_CAT_FK;
+}
+
 #ifdef __cplusplus
 }
 #endif

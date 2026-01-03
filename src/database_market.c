@@ -5,6 +5,7 @@
 #include "database.h"           // For db_get_handle, db_begin, db_commit, db_rollback
 #include "server_log.h"         // For LOGE, LOGI
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "common.h"
 #include "game_db.h"
 #include "server_envelope.h"
@@ -29,6 +30,13 @@ db_insert_commodity_order (db_t *db,
   db_error_t err;
   db_error_clear (&err);
 
+  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
+  if (!conv_fmt)
+    {
+      LOGE ("db_insert_commodity_order: Unsupported database backend");
+      return -1;
+    }
+
   db_bind_t params[10];
 
 
@@ -45,10 +53,12 @@ db_insert_commodity_order (db_t *db,
     ? db_bind_i64 (expires_at)
     : db_bind_null ();
 
-  const char *sql =
+  char sql[512];
+  snprintf(sql, sizeof(sql),
     "INSERT INTO commodity_orders ("
     "actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, ts, expires_at) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, to_timestamp($9), to_timestamp($10)) RETURNING commodity_orders_id";
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, %s, %s) RETURNING commodity_orders_id",
+    conv_fmt, conv_fmt);
 
   int64_t new_order_id = -1;
 
@@ -460,6 +470,13 @@ db_insert_commodity_trade (db_t *db,
   db_error_t err;
   db_error_clear (&err);
 
+  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
+  if (!conv_fmt)
+    {
+      LOGE ("db_insert_commodity_trade: Unsupported database backend");
+      return -1;
+    }
+
   db_bind_t params[11];
 
 
@@ -476,12 +493,14 @@ db_insert_commodity_trade (db_t *db,
   params[10] = db_bind_i32 (settlement_tx_sell);
 
   // FIX: trade_at renamed to ts in Postgres schema, and use to_timestamp
-  const char *sql =
+  char sql[512];
+  snprintf(sql, sizeof(sql),
     "INSERT INTO commodity_trades ("
     "buy_order_id, sell_order_id, quantity, price, ts, "
     "buyer_actor_type, buyer_actor_id, seller_actor_type, seller_actor_id, "
     "settlement_tx_buy, settlement_tx_sell) "
-    "VALUES ($1, $2, $3, $4, to_timestamp($6), $5, $7, $8, $9, $10, $11);";
+    "VALUES ($1, $2, $3, $4, %s, $5, $7, $8, $9, $10, $11);",
+    conv_fmt);
 
   int64_t new_order_id = -1;
 

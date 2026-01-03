@@ -104,7 +104,7 @@
             "has_port": false
         },
         "1": {
-            "server_tick": 10981,
+            "server_tick": 21287,
             "sector_id": 1,
             "adjacent": [
                 {
@@ -136,20 +136,16 @@
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 3,
-                    "name": "Bit Banger"
-                },
-                {
                     "ship_id": 4,
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 6,
-                    "name": "ai_qa_bot_002's ship"
-                },
-                {
                     "ship_id": 9,
                     "name": "ai_qa_bot_005's ship"
+                },
+                {
+                    "ship_id": 5,
+                    "name": "ai_qa_bot_001's ship"
                 }
             ],
             "ports": [],
@@ -163,7 +159,7 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443681.373843,
+            "_last_refreshed": 1767444712.7988038,
             "has_port": false
         }
     },
@@ -208,13 +204,16 @@
             "next_retry_time": 1767442671.8028796
         },
         "sector.info": {
-            "next_retry_time": 1767443685.369622
+            "next_retry_time": 1767444717.2945998
         },
         "move.warp": {
             "next_retry_time": 1767443684.8508875
         },
         "sector.scan.density": {
-            "next_retry_time": 1767443329.4352374
+            "next_retry_time": 1767444717.8152106
+        },
+        "bank.balance": {
+            "next_retry_time": 1767444371.410745
         }
     },
     "strategy_plan": [],
@@ -228,7 +227,7 @@
     "n_table": {
         "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "move.warp": 0,
-            "bank.balance": 407
+            "bank.balance": 413
         }
     },
     "command_schemas": {
@@ -2345,10 +2344,10 @@
     "current_path": [],
     "last_action_result": {
         "status": "ok",
-        "command": "sector.info",
-        "request_id": "c-32bb4bed",
-        "response_type": "sector.info",
-        "ts": "2026-01-03T12:34:40Z"
+        "command": "sector.scan.density",
+        "request_id": "c-5e23d42d",
+        "response_type": "sector.density.scan",
+        "ts": "2026-01-03T12:51:52Z"
     },
     "last_quotes": {},
     "current_qa_objective": null,

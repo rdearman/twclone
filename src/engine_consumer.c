@@ -200,10 +200,10 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   // Columns in ev_row: id, ts, type, payload (from BASE_SELECT)
   // But wait, the original code accessed index 3, 4, 5??
   // Original BASE_SELECT: "SELECT id, ts, type, payload FROM engine_events ..."
-  // Original access:
-  // int player_id = sqlite3_column_int (ev_row, 3); // actor_player_id
-  // int sector_id = sqlite3_column_int (ev_row, 4); // sector_id
-  // const char *payload_str = (const char *) sqlite3_column_text (ev_row, 5);
+  // Original access (from prior implementation):
+  // int player_id = db_result_int(ev_row, 3); // actor_player_id
+  // int sector_id = db_result_int(ev_row, 4); // sector_id
+  // const char *payload_str = (const char *) db_result_text(ev_row, 5);
   // This implies the original BASE_SELECT in memory might have been different or I misread the file.
   // Looking at the file content I read:
   // static const char *BASE_SELECT = "SELECT id, ts, type, payload ...";
@@ -217,10 +217,10 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   // To be safe, I should add them to BASE_SELECT.
 
   // Let's redefine BASE_SELECT to include these columns to match the handler's expectation if it used to grab them from cols 3 and 4.
-  // Wait, in the file:
-  // int player_id = sqlite3_column_int (ev_row, 3);
-  // int sector_id = sqlite3_column_int (ev_row, 4);
-  // const char *payload_str = (const char *) sqlite3_column_text (ev_row, 5);
+  // Wait, in the file (original implementation):
+  // int player_id = db_result_int(ev_row, 3);
+  // int sector_id = db_result_int(ev_row, 4);
+  // const char *payload_str = (const char *) db_result_text(ev_row, 5);
 
   // If I change BASE_SELECT to: SELECT id, ts, type, actor_player_id, sector_id, payload ...
   // Then: 0=id, 1=ts, 2=type, 3=actor, 4=sector, 5=payload.

@@ -31,6 +31,7 @@ typedef struct db_vt_s {
 
     // Query (rows)
     bool (*query)(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err);
+    bool (*exec_returning)(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err);
 
     // Result Set Navigation
     bool (*res_step)(db_res_t *res, db_error_t *err);

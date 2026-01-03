@@ -18,6 +18,7 @@
 #include "db_player_settings.h"
 #include "server_log.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 static bool
@@ -512,9 +513,17 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
                           cfg->startingcredits,
                           &new_acc_id);
 
-  const char *sql_turns =
-    "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ($1, 750, EXTRACT(EPOCH FROM now()));";
-
+  const char *now_ts = sql_now_timestamptz(db);
+  if (!now_ts)
+    {
+      send_response_error (ctx, root, ERR_DB, "Unsupported database backend.");
+      return 0;
+    }
+  
+  char sql_turns[256];
+  snprintf(sql_turns, sizeof(sql_turns),
+    "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ($1, 750, %s);",
+    now_ts);
 
   db_exec (db, sql_turns, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
 

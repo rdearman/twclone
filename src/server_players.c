@@ -26,6 +26,7 @@
 #include "server_loop.h"
 #include "server_bank.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 /* Constants */
 enum { MAX_BOOKMARKS = 64, MAX_BM_NAME = 64 };
@@ -171,11 +172,18 @@ static int
 h_db_avoid_add (int player_id, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) ON CONFLICT DO NOTHING";
+  const char *conflict_clause = sql_insert_ignore_clause(db);
+  if (!conflict_clause)
+    {
+      return -1;
+    }
+  char sql_buf[256];
+  snprintf(sql_buf, sizeof(sql_buf),
+      "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) %s",
+      conflict_clause);
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_i32 (sector_id) };
   db_error_t err;
-  return db_exec (db, sql, p, 2, &err) ? 0 : -1;
+  return db_exec (db, sql_buf, p, 2, &err) ? 0 : -1;
 }
 
 
@@ -1779,7 +1787,7 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
   const char *sql_update =
 
 
-    "UPDATE turns SET turns_remaining = turns_remaining - $1, last_update = EXTRACT(EPOCH FROM NOW())::int WHERE player_id = $2 AND turns_remaining >= $1 "
+    "UPDATE turns SET turns_remaining = turns_remaining - $1, last_update = NOW() WHERE player_id = $2 AND turns_remaining >= $1 "
     ";";
 
 

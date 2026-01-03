@@ -7,6 +7,7 @@
 #include "database.h"
 #include "game_db.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 /* Internal Helpers */
@@ -88,8 +89,17 @@ _create_cluster (db_t *db,
 static void
 _add_sector_to_cluster (db_t *db, int cluster_id, int sector_id)
 {
-  const char *sql =
-    "INSERT OR IGNORE INTO cluster_sectors (cluster_id, sector_id) VALUES ($1, $2)";
+  const char *conflict_clause = sql_insert_ignore_clause(db);
+  if (!conflict_clause)
+    {
+      return;  /* Unsupported backend */
+    }
+  
+  char sql[256];
+  snprintf(sql, sizeof(sql),
+    "INSERT INTO cluster_sectors (cluster_id, sector_id) VALUES ($1, $2) %s",
+    conflict_clause);
+  
   db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (sector_id) };
   db_error_t err;
   db_exec (db, sql, params, 2, &err);
@@ -433,9 +443,21 @@ cluster_economy_step (db_t *db, int64_t now_s)
                 }
               int mid_price = (int) avg_price;
               // Update Index
-              const char *sql_idx =
+              const char *conflict_fmt = sql_conflict_target_fmt(db);
+              if (!conflict_fmt)
+                {
+                  continue;  /* Unsupported backend */
+                }
+              
+              char sql_idx[512];
+              char conflict_clause[128];
+              snprintf(conflict_clause, sizeof(conflict_clause),
+                conflict_fmt, "cluster_id, commodity_code");
+              
+              snprintf(sql_idx, sizeof(sql_idx),
                 "INSERT INTO cluster_commodity_index (cluster_id, commodity_code, mid_price, last_updated) VALUES ($1, $2, $3, CURRENT_TIMESTAMP) "
-                "ON CONFLICT(cluster_id, commodity_code) DO UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP";
+                "%s UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP",
+                conflict_clause);
 
               db_bind_t params_idx[] = { db_bind_i32 (cluster_id),
                                          db_bind_text (comm),
@@ -557,13 +579,25 @@ cluster_on_crime (db_t *db,
       susp_inc += 10;
     }
 
-  const char *sql_upsert =
+  const char *conflict_fmt = sql_conflict_target_fmt(db);
+  if (!conflict_fmt)
+    {
+      return;  /* Unsupported backend */
+    }
+  
+  char conflict_clause[128];
+  snprintf(conflict_clause, sizeof(conflict_clause),
+    conflict_fmt, "cluster_id, player_id");
+  
+  char sql_upsert[512];
+  snprintf(sql_upsert, sizeof(sql_upsert),
     "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
     "VALUES ($1, $2, $3, $4, CASE WHEN $5=1 THEN CURRENT_TIMESTAMP ELSE NULL END) "
-    "ON CONFLICT(cluster_id, player_id) DO UPDATE SET "
+    "%s UPDATE SET "
     "suspicion = suspicion + $6, "
     "bust_count = bust_count + $7, "
-    "last_bust_at = CASE WHEN $8=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;";
+    "last_bust_at = CASE WHEN $8=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;",
+    conflict_clause);
 
   db_bind_t params[] = {
     db_bind_i32 (cluster_id),
@@ -636,10 +670,22 @@ clusters_seed_illegal_goods (db_t *db)
               int weapons_qty = (rand () % 15 + 1) * severity_factor;
               int drugs_qty = (rand () % 20 + 1) * severity_factor;
 
-              const char *sql_update_stock =
+              const char *conflict_fmt = sql_conflict_target_fmt(db);
+              if (!conflict_fmt)
+                {
+                  continue;  /* Unsupported backend */
+                }
+              
+              char conflict_clause[128];
+              snprintf(conflict_clause, sizeof(conflict_clause),
+                conflict_fmt, "entity_type, entity_id, commodity_code");
+              
+              char sql_update_stock[512];
+              snprintf(sql_update_stock, sizeof(sql_update_stock),
                 "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
                 "VALUES ('port', $1, $2, $3, 0, $4) "
-                "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;";
+                "%s UPDATE SET quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;",
+                conflict_clause);
 
               int64_t now_s = (int64_t)time (NULL);
 

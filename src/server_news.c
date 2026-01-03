@@ -14,6 +14,7 @@
 #include "server_log.h"
 #include "server_players.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 // Helper to check if a category is in the filter string
@@ -93,17 +94,19 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
     }
   else
     {                           // Last N days
-      const char *sql_pg =
-        "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (EXTRACT(EPOCH FROM now()) - $1) "
-        "ORDER BY published_ts DESC LIMIT 100;";
-      const char *sql_lite =
-        "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (strftime('%s','now') - $1) "
-        "ORDER BY published_ts DESC LIMIT 100;";
-      const char *sql = (db_backend (db) ==
-                         DB_BACKEND_POSTGRES) ? sql_pg : sql_lite;
+      const char *epoch_expr = sql_epoch_now(db);
+      if (!epoch_expr)
+        {
+          LOGE ("news.feed: unsupported database backend");
+          goto sql_err;
+        }
 
+      char sql[256];
+      snprintf(sql, sizeof(sql),
+        "SELECT news_id, published_ts, news_category, article_text, author_id "
+        "FROM news_feed WHERE published_ts > (%s - $1) "
+        "ORDER BY published_ts DESC LIMIT 100;",
+        epoch_expr);
 
       if (!db_query (db,
                      sql,
@@ -202,13 +205,19 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
   db_res_finalize (res);
 
   // 4. Update read status (Auto-Mark Read behavior requested by audit)
-  const char *up_pg =
-    "UPDATE players SET last_news_read_timestamp = to_timestamp(EXTRACT(EPOCH FROM now())) WHERE player_id = $1;";
-  const char *up_lite =
-    "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE player_id = $1;";
+  const char *now_expr = sql_now_timestamptz(db);
+  if (!now_expr)
+    {
+      LOGE ("cmd_news_feed: unsupported database backend");
+      goto sql_err;
+    }
 
+  char sql_update[256];
+  snprintf(sql_update, sizeof(sql_update),
+    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = $1;",
+    now_expr);
 
-  db_exec (db, (db_backend (db) == DB_BACKEND_POSTGRES) ? up_pg : up_lite,
+  db_exec (db, sql_update,
            (db_bind_t[]){db_bind_i32 (ctx->player_id)}, 1, &err);
 
   // 5. Send response
@@ -247,13 +256,18 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
     }
 
   db_error_t err;
-  const char *sql_pg =
-    "UPDATE players SET last_news_read_timestamp = to_timestamp(EXTRACT(EPOCH FROM now())) WHERE player_id = $1;";
-  const char *sql_lite =
-    "UPDATE players SET last_news_read_timestamp = strftime('%s','now') WHERE player_id = $1;";
-  const char *sql = (db_backend (db) ==
-                     DB_BACKEND_POSTGRES) ? sql_pg : sql_lite;
+  const char *now_expr = sql_now_timestamptz(db);
+  if (!now_expr)
+    {
+      LOGE ("cmd_news_mark_feed_read: unsupported database backend");
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Database error.");
+      return 0;
+    }
 
+  char sql[256];
+  snprintf(sql, sizeof(sql),
+    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = $1;",
+    now_expr);
 
   if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (ctx->player_id) }, 1,
                 &err))
@@ -289,12 +303,17 @@ news_post (const char *body, const char *cat, int aid)
       return -1;
     }
   db_error_t err;
-  const char *sql_pg =
-    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (to_timestamp(EXTRACT(EPOCH FROM now())), $1, $2, $3);";
-  const char *sql_lite =
-    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (strftime('%s','now'), $1, $2, $3);";
-  const char *sql = (db_backend (db) ==
-                     DB_BACKEND_POSTGRES) ? sql_pg : sql_lite;
+  const char *epoch_expr = sql_epoch_now(db);
+  if (!epoch_expr)
+    {
+      LOGE ("news_post: unsupported database backend");
+      return -1;
+    }
+
+  char sql[256];
+  snprintf(sql, sizeof(sql),
+    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (%s, $1, $2, $3);",
+    epoch_expr);
 
   db_bind_t params[] = {
     db_bind_text (cat),

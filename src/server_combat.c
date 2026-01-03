@@ -22,6 +22,7 @@
 #include "game_db.h"
 #include "database_cmd.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 /* Global Combat Constants (Physics) */
@@ -494,11 +495,12 @@ db_armid_mines_select_locked (db_t *db,
                               db_res_t **out_res,
                               db_error_t *err)
 {
-  const char *sql =
+  char sql[512];
+  snprintf (sql, sizeof (sql),
     "SELECT sector_assets_id as id, quantity, offensive_setting, owner_id as player, corporation_id as corporation, ttl "
     "FROM sector_assets "
-    "WHERE sector_id = $1 AND asset_type = 1 "
-    "FOR UPDATE SKIP LOCKED;";
+    "WHERE sector_id = $1 AND asset_type = 1%s;",
+    sql_for_update_skip_locked (db));
 
   return db_query (db,
                    sql,
@@ -539,12 +541,13 @@ apply_sector_quasar_on_entry (client_ctx_t *ctx, int sector_id)
   db_error_t err = {0};
 
   /* Find planets in sector with quasar cannons (citadel level >= 3) */
-  const char *sql =
+  char sql[512];
+  snprintf (sql, sizeof (sql),
     "SELECT p.planet_id, p.owner_id, p.owner_type, c.level, c.qCannonSector, c.militaryReactionLevel "
     "FROM planets p "
     "LEFT JOIN citadels c ON p.planet_id = c.planet_id "
-    "WHERE p.sector_id = $1 AND c.level >= 3 AND c.qCannonSector > 0 "
-    "FOR UPDATE SKIP LOCKED;";
+    "WHERE p.sector_id = $1 AND c.level >= 3 AND c.qCannonSector > 0%s;",
+    sql_for_update_skip_locked (db));
 
   db_res_t *res = NULL;
   if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
@@ -816,13 +819,14 @@ db_limpet_assets_select_locked (db_t *db, int sector_id, db_res_t **out_res)
 {
   db_error_t err = {0};
 
-  const char *sql =
+  char sql[512];
+  snprintf (sql, sizeof (sql),
     "SELECT sector_assets_id as id, quantity, owner_id as player, corporation_id as corporation, ttl "
     "FROM sector_assets "
     "WHERE sector_id = $1 "
     "  AND asset_type = 4 "
-    "  AND quantity > 0 "
-    "FOR UPDATE SKIP LOCKED;";
+    "  AND quantity > 0%s;",
+    sql_for_update_skip_locked (db));
 
   if (!db_query (db,
                  sql,
@@ -1722,11 +1726,12 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   /* 1) Lock ship row and read current sector (SKIP LOCKED) */
   {
-    const char *sql =
+    char sql[256];
+    snprintf (sql, sizeof (sql),
       "SELECT sector_id "
       "FROM ships "
-      "WHERE ship_id = $1 "
-      "FOR UPDATE SKIP LOCKED;";
+      "WHERE ship_id = $1%s;",
+      sql_for_update_skip_locked (db));
 
 
     if (!db_i32_scalar (db,
@@ -1757,17 +1762,18 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   /* 2) Lock sector row (serialises sector-cap enforcement). SKIP LOCKED => fail fast. */
   {
-    const char *sql =
+    char sql2[256];
+    snprintf (sql2, sizeof (sql2),
       "SELECT sector_id "
       "FROM sectors "
-      "WHERE sector_id = $1 "
-      "FOR UPDATE SKIP LOCKED;";
+      "WHERE sector_id = $1%s;",
+      sql_for_update_skip_locked (db));
 
     int tmp = 0;
 
 
     if (!db_i32_scalar (db,
-                        sql,
+                        sql2,
                         (db_bind_t[]){ db_bind_i32 (sector_id) },
                         1,
                         &tmp,

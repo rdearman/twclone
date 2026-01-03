@@ -24,7 +24,7 @@
         "ported": 0,
         "cargo": []
     },
-    "player_location_sector": 2,
+    "player_location_sector": 1,
     "sector_data": {
         "5": {
             "server_tick": 2099,
@@ -56,7 +56,7 @@
             "has_port": false
         },
         "1": {
-            "server_tick": 5397,
+            "server_tick": 22650,
             "sector_id": 1,
             "adjacent": [
                 {
@@ -88,12 +88,16 @@
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 3,
-                    "name": "Bit Banger"
-                },
-                {
                     "ship_id": 4,
                     "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 9,
+                    "name": "ai_qa_bot_005's ship"
+                },
+                {
+                    "ship_id": 5,
+                    "name": "ai_qa_bot_001's ship"
                 },
                 {
                     "ship_id": 7,
@@ -111,11 +115,11 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443121.6722775,
+            "_last_refreshed": 1767444849.7757976,
             "has_port": false
         },
         "2": {
-            "server_tick": 8795,
+            "server_tick": 22639,
             "sector_id": 2,
             "adjacent": [
                 {
@@ -139,12 +143,8 @@
             ],
             "ships": [
                 {
-                    "ship_id": 5,
-                    "name": "ai_qa_bot_001's ship"
-                },
-                {
-                    "ship_id": 9,
-                    "name": "ai_qa_bot_005's ship"
+                    "ship_id": 8,
+                    "name": "ai_qa_bot_004's ship"
                 },
                 {
                     "ship_id": 7,
@@ -157,7 +157,7 @@
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443461.8555977,
+            "_last_refreshed": 1767444848.2320678,
             "has_port": false
         }
     },
@@ -202,13 +202,13 @@
             "next_retry_time": 1767442660.2390163
         },
         "sector.info": {
-            "next_retry_time": 1767443466.3513656
+            "next_retry_time": 1767444853.770975
         },
         "move.warp": {
-            "next_retry_time": 1767443126.6915174
+            "next_retry_time": 1767444853.2521842
         },
         "sector.scan.density": {
-            "next_retry_time": 1767443466.8715227
+            "next_retry_time": 1767444164.3418658
         }
     },
     "strategy_plan": [],
@@ -222,7 +222,7 @@
     "n_table": {
         "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "move.warp": 0,
-            "bank.balance": 441
+            "bank.balance": 452
         }
     },
     "command_schemas": {
@@ -2331,7 +2331,10 @@
     "recent_sectors": [
         5,
         1,
-        2
+        2,
+        1,
+        2,
+        1
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
@@ -2339,10 +2342,10 @@
     "current_path": [],
     "last_action_result": {
         "status": "ok",
-        "command": "sector.scan.density",
-        "request_id": "c-31596f3e",
-        "response_type": "sector.density.scan",
-        "ts": "2026-01-03T12:31:01Z"
+        "command": "sector.info",
+        "request_id": "c-d6f24a86",
+        "response_type": "sector.info",
+        "ts": "2026-01-03T12:54:08Z"
     },
     "last_quotes": {},
     "current_qa_objective": null,

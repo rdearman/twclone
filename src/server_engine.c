@@ -28,6 +28,7 @@
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
 #include "database.h"
+#include "db/sql_driver.h"
 
 
 static inline int
@@ -740,9 +741,18 @@ exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
     }
 
   int64_t now_s = (int64_t)time (NULL);
-  const char *sql =
+  
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      return -1;
+    }
+
+  char sql[512];
+  snprintf(sql, sizeof(sql),
     "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
-    "VALUES(to_timestamp($1), $2, $3, $4, to_timestamp($5)) RETURNING system_notice_id;";
+    "VALUES(%s, $2, $3, $4, %s) RETURNING system_notice_id;",
+    ts_fmt, ts_fmt);
 
   db_error_t err;
 
@@ -822,9 +832,17 @@ exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
 
   int64_t now_s = (int64_t)time (NULL);
 
-  const char *sql =
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      return -1;
+    }
+
+  char sql[512];
+  snprintf(sql, sizeof(sql),
     "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-    "VALUES(to_timestamp($1), $2, $3, 'Notice', $4, $5, to_timestamp($6)) RETURNING system_notice_id;";
+    "VALUES(%s, $2, $3, 'Notice', $4, $5, %s) RETURNING system_notice_id;",
+    ts_fmt, ts_fmt);
 
   db_error_t err;
 
@@ -912,8 +930,16 @@ server_commands_tick (db_t *db, int max_rows)
       char *idem_key = tmp_idem ? strdup (tmp_idem) : NULL;
 
       /* mark running */
-      const char *sql_running =
-        "UPDATE engine_commands SET status='running', started_at=to_timestamp($1) WHERE engine_commands_id=$2;";
+      const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+      if (!ts_fmt)
+        {
+          return 0;
+        }
+
+      char sql_running[256];
+      snprintf(sql_running, sizeof(sql_running),
+        "UPDATE engine_commands SET status='running', started_at=%s WHERE engine_commands_id=$2;",
+        ts_fmt);
 
       db_bind_t run_params[2];
 
@@ -963,8 +989,10 @@ server_commands_tick (db_t *db, int max_rows)
       /* finalize status */
       if (ok == 0)
         {
-          const char *sql_done =
-            "UPDATE engine_commands SET status='done', finished_at=to_timestamp($1) WHERE engine_commands_id=$2;";
+          char sql_done[256];
+          snprintf(sql_done, sizeof(sql_done),
+            "UPDATE engine_commands SET status='done', finished_at=%s WHERE engine_commands_id=$2;",
+            sql_epoch_param_to_timestamptz(db));
           db_bind_t done_params[2] = { db_bind_i64 (now_s),
                                        db_bind_i64 (cmd_id) };
 
@@ -973,8 +1001,10 @@ server_commands_tick (db_t *db, int max_rows)
         }
       else
         {
-          const char *sql_err =
-            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=to_timestamp($1) WHERE engine_commands_id=$2;";
+          char sql_err[256];
+          snprintf(sql_err, sizeof(sql_err),
+            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=%s WHERE engine_commands_id=$2;",
+            sql_epoch_param_to_timestamptz(db));
           db_bind_t err_params[2] = { db_bind_i64 (now_s),
                                       db_bind_i64 (cmd_id) };
 
@@ -1186,12 +1216,15 @@ engine_main_loop (int shutdown_fd)
           const int LIMIT = CRON_BATCH_LIMIT;
           uint64_t now_s = (int64_t) time (NULL);
 
-          const char *sql_pick =
+          const char *ts_fmt = sql_epoch_param_to_timestamptz(db_handle);
+          char sql_pick[512];
+          snprintf(sql_pick, sizeof(sql_pick),
             "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
             "WHERE enabled=TRUE "
-            "  AND (next_due_at IS NULL OR next_due_at <= to_timestamp($1)) "
+            "  AND (next_due_at IS NULL OR next_due_at <= %s) "
             "ORDER BY next_due_at ASC "
-            "LIMIT $2;";
+            "LIMIT $2;",
+            ts_fmt);
 
 
           typedef struct {
@@ -1248,10 +1281,14 @@ engine_main_loop (int shutdown_fd)
 
               /* reschedule deterministically */
               int64_t next_due = cron_next_due_from (now_s, sch);
-              const char *sql_upd =
+              
+              const char *ts_fmt = sql_epoch_param_to_timestamptz(db_handle);
+              char sql_upd[256];
+              snprintf(sql_upd, sizeof(sql_upd),
                 "UPDATE cron_tasks "
-                "SET last_run_at=to_timestamp($2), next_due_at=to_timestamp($3) "
-                "WHERE cron_tasks_id=$1;";
+                "SET last_run_at=%s, next_due_at=%s "
+                "WHERE cron_tasks_id=$1;",
+                ts_fmt, ts_fmt);
 
               db_bind_t up_params[3];
 
@@ -1375,24 +1412,26 @@ engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
 {
   int64_t now_s = now_ms / 1000;
   /* delete ephemerals whose ttl expired; bounded batch */
-  const char *sql =
+  
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+  if (!ts_fmt)
+    {
+      return -1;
+    }
+
+  char sql[512];
+  snprintf(sql, sizeof(sql),
     "DELETE FROM system_notice "
-    "WHERE expires_at IS NOT NULL AND expires_at <= to_timestamp($1) "
-    // LIMIT is not standard in DELETE in all SQLs (e.g. Postgres DELETE doesn't support LIMIT directly without CTID tricks)
-    // But standard Postgres driver might support it or we ignore it?
-    // SQLite supports DELETE ... LIMIT if compiled with it.
-    // To be safe and generic, maybe just DELETE all expired?
-    // Or use a subquery for ID?
-    // "DELETE FROM system_notice WHERE id IN (SELECT id FROM system_notice WHERE ... LIMIT 500)"
-    // This is safer for Postgres.
-    "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= to_timestamp($1) LIMIT 500);";
+    "WHERE expires_at IS NOT NULL AND expires_at <= %s "
+    "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= %s LIMIT 500);",
+    ts_fmt, ts_fmt);
 
   // Wait, binding $1 twice?
   // db_api supports reusing bind params if the backend does.
-  // SQLite supports ?1 used multiple times. Postgres supports $1 used multiple times.
-  // So "AND expires_at <= to_timestamp($1) ... WHERE ... expires_at <= to_timestamp($1)" works.
+  // PostgreSQL supports $1 used multiple times.
+  // So "AND expires_at <= [epoch_timestamp_conversion]($1) ... WHERE ... [epoch_timestamp_conversion]($1)" works.
 
-  // Actually, simplest is just "DELETE ... WHERE ... <= to_timestamp($1)".
+  // Actually, simplest is just "DELETE ... WHERE ... <= [epoch_timestamp_conversion]($1)".
   // If we want batching, we need LIMIT.
   // Using subquery with LIMIT is the standard cross-DB way for batch delete.
 
@@ -1499,18 +1538,20 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
 
   long long expiry_threshold_s =
     now_s - ((long long) g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
-  const char *sql_delete_expired =
+  
+  const char *epoch_expr = sql_epoch_to_timestamptz_fmt(db);
+  char sql_delete_expired[256];
+  
+  snprintf(sql_delete_expired, sizeof(sql_delete_expired),
     "DELETE FROM sector_assets "
-    "WHERE asset_type = $1 AND deployed_at <= to_timestamp($2);";
-
+    "WHERE asset_type = $1 AND deployed_at <= %s;",
+    epoch_expr);
 
   db_error_t err;
-
 
   db_error_clear (&err);
 
   db_bind_t params[2];
-
 
   params[0] = db_bind_i32 (ASSET_LIMPET_MINE);
   params[1] = db_bind_i64 (expiry_threshold_s);

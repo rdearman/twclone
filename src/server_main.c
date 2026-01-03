@@ -318,20 +318,7 @@ get_scalar_int (const char *sql)
 static int
 needs_bigbang (void)
 {
-  db_t *db = game_db_get_handle ();
-  if (db_backend (db) == DB_BACKEND_SQLITE)
-    {
-      // Primary flag: PRAGMA user_version (SQLite only)
-      int uv = get_scalar_int ("PRAGMA user_version");
-
-
-      if (uv > 0)
-        {
-          return 0;                 // already seeded
-        }
-    }
-
-  // Belt-and-braces: look at contents in case user_version wasn't set (or for Postgres)
+  // Belt-and-braces: look at contents to determine if schema is seeded
   int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
   int warps = get_scalar_int ("SELECT COUNT(*) FROM sector_warps");
   int ports = get_scalar_int ("SELECT COUNT(*) FROM ports");
@@ -382,6 +369,13 @@ main (void)
     {
       LOGW ("Failed to init DB.\n");
       //      LOGE( "Failed to init DB.\n");
+      return EXIT_FAILURE;
+    }
+
+  /* 0a) Fail fast if SQLite was selected */
+  if (db_backend (game_db_get_handle ()) != DB_BACKEND_POSTGRES)
+    {
+      LOGE ("FATAL: SQLite backend is not supported. PostgreSQL is required.");
       return EXIT_FAILURE;
     }
 

@@ -33,24 +33,43 @@ static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
         err->backend_code = PQresultStatus(pg_res);
         const char* sqlstate = PQresultErrorField(pg_res, PG_DIAG_SQLSTATE);
         if (sqlstate) {
-            // Map PostgreSQL SQLSTATE to application error codes
-            if (strcmp(sqlstate, "23505") == 0 || strcmp(sqlstate, "23514") == 0 ||
-                strcmp(sqlstate, "23503") == 0 || strcmp(sqlstate, "23502") == 0) {
+            // Map PostgreSQL SQLSTATE to application error codes and categories
+            if (strcmp(sqlstate, "23505") == 0 || strcmp(sqlstate, "23514") == 0) {
                 // 23505 = unique_violation, 23514 = check_violation
-                // 23503 = foreign_key_violation, 23502 = not_null_violation
                 err->code = ERR_DB_CONSTRAINT;
+                err->category = DB_ERR_CAT_CONSTRAINT;
+            } else if (strcmp(sqlstate, "23503") == 0) {
+                // 23503 = foreign_key_violation
+                err->code = ERR_DB_CONSTRAINT;
+                err->category = DB_ERR_CAT_FK;
+            } else if (strcmp(sqlstate, "23502") == 0) {
+                // 23502 = not_null_violation
+                err->code = ERR_DB_CONSTRAINT;
+                err->category = DB_ERR_CAT_CONSTRAINT;
             } else if (strncmp(sqlstate, "23", 2) == 0) {
                 // All class 23 = integrity constraint violation
                 err->code = ERR_DB_CONSTRAINT;
+                err->category = DB_ERR_CAT_CONSTRAINT;
+            } else if (strcmp(sqlstate, "40P01") == 0) {
+                // 40P01 = serialization_failure (deadlock)
+                err->code = ERR_DB_QUERY_FAILED;
+                err->category = DB_ERR_CAT_DEADLOCK;
+            } else if (strcmp(sqlstate, "55P03") == 0) {
+                // 55P03 = lock_not_available
+                err->code = ERR_DB_QUERY_FAILED;
+                err->category = DB_ERR_CAT_LOCK_TIMEOUT;
             } else if (strcmp(sqlstate, "42P01") == 0 || strcmp(sqlstate, "42703") == 0) {
                 // 42P01 = undefined_table, 42703 = undefined_column
                 err->code = ERR_DB_QUERY_FAILED;
+                err->category = DB_ERR_CAT_UNKNOWN;
             } else {
                 // Default to generic DB error
                 err->code = ERR_DB_QUERY_FAILED;
+                err->category = DB_ERR_CAT_UNKNOWN;
             }
         } else {
             err->code = ERR_DB_INTERNAL;
+            err->category = DB_ERR_CAT_UNKNOWN;
         }
         const char *msg = PQresultErrorMessage(pg_res);
         if (msg && *msg) {
@@ -61,6 +80,7 @@ static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
     } else if (conn) {
         err->backend_code = PQstatus(conn);
         err->code = ERR_DB_CONNECT;
+        err->category = DB_ERR_CAT_CONNECTION;
         const char* msg = PQerrorMessage(conn);
         if (msg && *msg) {
             strlcpy(err->message, msg, sizeof(err->message));
@@ -69,6 +89,7 @@ static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
         }
     } else {
         err->code = ERR_UNKNOWN;
+        err->category = DB_ERR_CAT_UNKNOWN;
         strlcpy(err->message, "An unknown database error occurred.", sizeof(err->message));
     }
 }
@@ -355,12 +376,23 @@ pg_ship_repair_atomic(db_t *db,
   return true;
 }
 
+/**
+ * @brief PostgreSQL implementation of exec_returning.
+ * 
+ * PostgreSQL supports RETURNING natively, so this is a thin wrapper over pg_query_impl.
+ */
+static bool pg_exec_returning_impl(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
+  /* For PostgreSQL, RETURNING is native; delegate to query */
+  return pg_query_impl(db, sql, params, n_params, out_res, err);
+}
+
 
 static const db_vt_t pg_vt = {
     .close = pg_close_impl,
     .tx_begin = pg_tx_begin_impl, .tx_commit = pg_tx_commit_impl, .tx_rollback = pg_tx_rollback_impl,
     .exec = pg_exec_impl, .exec_rows_affected = pg_exec_rows_affected_impl, .exec_insert_id = pg_exec_insert_id_impl,
     .query = pg_query_impl,
+    .exec_returning = pg_exec_returning_impl,
     .res_step = pg_res_step_impl, .res_finalize = pg_res_finalize_impl, .res_cancel = pg_res_cancel_impl,
     .res_col_count = pg_res_col_count_impl, .res_col_name = pg_res_col_name_impl, .res_col_type = pg_res_col_type_impl,
     .res_col_is_null = pg_res_col_is_null_impl,

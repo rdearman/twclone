@@ -20,6 +20,7 @@
 #include "server_log.h"
 #include "database_cmd.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 enum
@@ -294,22 +295,21 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = NULL;
   int rc = 0;
 
-  const char *sql_pg =
+  const char *now_expr = sql_now_timestamptz(db);
+  if (!now_expr)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
+      return 0;
+    }
+
+  char sql[512];
+  snprintf(sql, sizeof(sql),
     "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
     "FROM system_notice n "
     "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = $1 "
-    "WHERE ($2 = 1 OR n.expires_at IS NULL OR n.expires_at > EXTRACT(EPOCH FROM now())) "
-    "ORDER BY n.created_at DESC " "LIMIT $3;";
-
-  const char *sql_lite =
-    "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
-    "FROM system_notice n "
-    "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = $1 "
-    "WHERE ($2 = 1 OR n.expires_at IS NULL OR n.expires_at > strftime('%s','now')) "
-    "ORDER BY n.created_at DESC " "LIMIT $3;";
-
-  const char *sql = (db_backend (db) ==
-                     DB_BACKEND_POSTGRES) ? sql_pg : sql_lite;
+    "WHERE ($2 = 1 OR n.expires_at IS NULL OR n.expires_at > %s) "
+    "ORDER BY n.created_at DESC LIMIT $3;",
+    now_expr);
 
   db_bind_t params[3];
 

@@ -15,6 +15,7 @@
 #include "server_players.h"
 #include "common.h"
 #include "server_cron.h"
+#include "db/sql_driver.h"
 
 
 int
@@ -288,10 +289,22 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
   if (quantity_change > 0)
     {
       // Add shares, or insert if not exists
-      const char *sql_add =
+      const char *conflict_fmt = sql_conflict_target_fmt(db);
+      if (!conflict_fmt)
+        {
+          return -1;  /* Unsupported backend */
+        }
+      
+      char conflict_clause[128];
+      snprintf(conflict_clause, sizeof(conflict_clause),
+        conflict_fmt, "player_id, corp_id");
+      
+      char sql_add[512];
+      snprintf(sql_add, sizeof(sql_add),
         "INSERT INTO corp_shareholders (player_id, corp_id, shares) "
         "VALUES ($1, (SELECT corp_id FROM stocks WHERE id = $2), $3) "
-        "ON CONFLICT(player_id, corp_id) DO UPDATE SET shares = shares + excluded.shares;";
+        "%s UPDATE SET shares = shares + excluded.shares;",
+        conflict_clause);
 
       db_bind_t params[] = { db_bind_i32 (player_id), db_bind_i32 (stock_id),
                              db_bind_i32 (quantity_change) };
@@ -499,16 +512,27 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   /* Ensure target has a membership row */
   if (ok)
     {
-      const char *sql_insert_member =
-        "INSERT OR IGNORE INTO corp_members (corp_id, player_id, role) "
-        "VALUES ($1, $2, 'Member');";
-      db_bind_t params_ins[] = { db_bind_i32 (corp_id),
-                                 db_bind_i32 (target_player_id) };
-
-
-      if (!db_exec (db, sql_insert_member, params_ins, 2, &err))
+      const char *conflict_clause = sql_insert_ignore_clause(db);
+      if (!conflict_clause)
         {
-          ok = false;
+          ok = false;  /* Unsupported backend */
+        }
+      else
+        {
+          char sql_insert_member[256];
+          snprintf(sql_insert_member, sizeof(sql_insert_member),
+            "INSERT INTO corp_members (corp_id, player_id, role) "
+            "VALUES ($1, $2, 'Member') %s;",
+            conflict_clause);
+          
+          db_bind_t params_ins[] = { db_bind_i32 (corp_id),
+                                     db_bind_i32 (target_player_id) };
+
+
+          if (!db_exec (db, sql_insert_member, params_ins, 2, &err))
+            {
+              ok = false;
+            }
         }
     }
 
@@ -1503,9 +1527,26 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long expires_at = (long long) time (NULL) + 86400;
-  const char *sql_insert_invite =
+  const char *conflict_fmt = sql_conflict_target_fmt(db);
+  if (!conflict_fmt)
+    {
+      send_response_error (ctx,
+                           root,
+                           ERR_DB,
+                           "Unsupported database backend.");
+      return 0;
+    }
+  
+  char conflict_clause[128];
+  snprintf(conflict_clause, sizeof(conflict_clause),
+    conflict_fmt, "corp_id, player_id");
+  
+  char sql_insert_invite[512];
+  snprintf(sql_insert_invite, sizeof(sql_insert_invite),
     "INSERT INTO corp_invites (corp_id, player_id, invited_at, expires_at) VALUES ($1, $2, $3, $4) "
-    "ON CONFLICT(corp_id, player_id) DO UPDATE SET invited_at = excluded.invited_at, expires_at = excluded.expires_at;";
+    "%s UPDATE SET invited_at = excluded.invited_at, expires_at = excluded.expires_at;",
+    conflict_clause);
+  
   db_bind_t params[] = {
     db_bind_i32 (inviter_corp_id),
     db_bind_i32 (target_player_id),
