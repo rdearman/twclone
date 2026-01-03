@@ -901,7 +901,7 @@ uncloak_ships_in_fedspace (db_t *db)
   db_error_clear (&err);
 
   const char *sql =
-    "UPDATE ships SET cloaked=NULL WHERE cloaked IS NOT NULL AND (sector IN (SELECT sector_id FROM stardock_location) OR sector IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10));";
+    "UPDATE ships SET cloaked=NULL WHERE cloaked IS NOT NULL AND (sector_id IN (SELECT sector_id FROM stardock_location) OR sector_id IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10));";
 
 
   if (!db_exec (db, sql, NULL, 0, &err))

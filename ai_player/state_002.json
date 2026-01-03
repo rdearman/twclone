@@ -1,21 +1,21 @@
 {
-    "session_id": "dcf04ed36cffab13da3ef1c836a02c1f",
+    "session_id": "113476fde5c72cb1a86a3d1a97cdf861",
     "player_info": {
         "player": {
-            "id": 18,
-            "username": "qa_test_co_002",
+            "id": 12,
+            "username": "ai_qa_bot_002",
             "credits": "5000.00",
             "turns_remaining": 500,
-            "sector": 5,
-            "ship_id": 111,
+            "sector": 2,
+            "ship_id": 6,
             "corp_id": 0,
             "alignment": 1,
             "experience": 0
         }
     },
     "ship_info": {
-        "id": 111,
-        "name": "qa_test_co_002's ship",
+        "id": 6,
+        "name": "ai_qa_bot_002's ship",
         "type_id": 2,
         "holds": 10,
         "fighters": 1,
@@ -24,44 +24,157 @@
         "ported": 0,
         "cargo": []
     },
-    "player_location_sector": 5,
+    "player_location_sector": 1,
     "sector_data": {
-        "5": {
-            "server_tick": 433,
-            "sector_id": 5,
+        "2": {
+            "server_tick": 3413,
+            "sector_id": 2,
             "adjacent": [
                 {
                     "to_sector": 1
                 },
                 {
-                    "to_sector": 4
+                    "to_sector": 3
                 },
                 {
-                    "to_sector": 6
+                    "to_sector": 7
+                },
+                {
+                    "to_sector": 8
+                },
+                {
+                    "to_sector": 9
+                },
+                {
+                    "to_sector": 10
                 }
             ],
             "ships": [
                 {
-                    "id": 111,
-                    "name": "qa_test_co_002's ship"
+                    "ship_id": 6,
+                    "name": "ai_qa_bot_002's ship"
+                },
+                {
+                    "ship_id": 5,
+                    "name": "ai_qa_bot_001's ship"
+                }
+            ],
+            "ports": [],
+            "planets": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767442923.0017438,
+            "has_port": false
+        },
+        "3": {
+            "server_tick": 6737,
+            "sector_id": 3,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 4
+                }
+            ],
+            "ships": [
+                {
+                    "ship_id": 6,
+                    "name": "ai_qa_bot_002's ship"
+                }
+            ],
+            "ports": [],
+            "planets": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767443255.835532,
+            "has_port": false
+        },
+        "1": {
+            "server_tick": 10235,
+            "sector_id": 1,
+            "adjacent": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 4
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 6
+                },
+                {
+                    "to_sector": 7
+                }
+            ],
+            "ships": [
+                {
+                    "ship_id": 1,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 2,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 3,
+                    "name": "Bit Banger"
+                },
+                {
+                    "ship_id": 4,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 6,
+                    "name": "ai_qa_bot_002's ship"
                 }
             ],
             "ports": [],
             "planets": [
                 {
-                    "id": 8,
-                    "name": "Planet 8"
+                    "planet_id": 1,
+                    "name": "Terra"
                 }
             ],
             "counts": {
                 "fighters": 0,
                 "mines": 0
             },
+            "_last_refreshed": 1767443606.1223915,
             "has_port": false
         }
     },
     "universe_map": {
         "5": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3": {
             "is_explored": true,
             "has_port": false
         }
@@ -71,26 +184,35 @@
     "bank_balance": 0,
     "command_retry_info": {
         "player.my_info": {
-            "next_retry_time": 1767179013.898232
+            "next_retry_time": 1767442662.998666
         },
         "ship.info": {
-            "next_retry_time": 1767179015.1881309
+            "next_retry_time": 1767442664.1043134
         },
         "sector.info": {
-            "next_retry_time": 1767179016.2009034
+            "next_retry_time": 1767443610.6181183
+        },
+        "move.warp": {
+            "next_retry_time": 1767443260.8547637
         },
         "sector.scan.density": {
-            "next_retry_time": 1767180946.9425774,
-            "failures": 3
-        },
-        "move.pathfind": {
-            "next_retry_time": 1767180428.3787248
+            "next_retry_time": 1767443611.1389396
         }
     },
     "strategy_plan": [],
     "trade_successful": false,
-    "q_table": {},
-    "n_table": {},
+    "q_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 0.0,
+            "bank.balance": 0.1
+        }
+    },
+    "n_table": {
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 0,
+            "bank.balance": 416
+        }
+    },
     "command_schemas": {
         "admin.notice": {
             "$id": "ge://schema/admin.notice.json",
@@ -122,11 +244,25 @@
         },
         "auth.logout": {
             "$id": "ge://schema/auth.logout.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "auth.mfa.totp.verify": {
             "$id": "ge://schema/auth.mfa.totp.verify.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
+                }
+            },
+            "required": [
+                "code"
+            ],
+            "additionalProperties": false
         },
         "auth.register": {
             "$id": "ge://schema/auth.register.json",
@@ -157,7 +293,10 @@
         },
         "auth.refresh": {
             "$id": "ge://schema/auth.refresh.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "bank.balance": {
             "$id": "ge://schema/bank.balance.json",
@@ -260,7 +399,18 @@
         },
         "bulk.execute": {
             "$id": "ge://schema/bulk.execute.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commands": {
+                    "type": "array",
+                    "minItems": 1
+                }
+            },
+            "required": [
+                "commands"
+            ],
+            "additionalProperties": false
         },
         "fine.list": {
             "$id": "ge://schema/fine.list.json",
@@ -346,27 +496,98 @@
         },
         "chat.broadcast": {
             "$id": "ge://schema/chat.broadcast.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "message"
+            ],
+            "additionalProperties": false
         },
         "chat.history": {
             "$id": "ge://schema/chat.history.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                }
+            },
+            "additionalProperties": false
         },
         "chat.send": {
             "$id": "ge://schema/chat.send.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "channel",
+                "message"
+            ],
+            "additionalProperties": false
         },
         "citadel.build": {
             "$id": "ge://schema/citadel.build.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "sector_id"
+            ],
+            "additionalProperties": false
         },
         "citadel.upgrade": {
             "$id": "ge://schema/citadel.upgrade.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "citadel_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "citadel_id"
+            ],
+            "additionalProperties": false
         },
         "combat.attack": {
             "$id": "ge://schema/combat.attack.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "target_ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "target_ship_id"
+            ],
+            "additionalProperties": false
         },
         "combat.attack_planet": {
             "$id": "ge://schema/placeholder.json",
@@ -420,15 +641,32 @@
         },
         "combat.lay_mines": {
             "$id": "ge://schema/combat.lay_mines.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "quantity"
+            ],
+            "additionalProperties": false
         },
         "combat.status": {
             "$id": "ge://schema/combat.status.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "combat.sweep_mines": {
             "$id": "ge://schema/combat.sweep_mines.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "deploy.fighters.list": {
             "$id": "ge://schema/deploy.fighters.list.json",
@@ -589,7 +827,18 @@
         },
         "mail.delete": {
             "$id": "ge://schema/mail.delete.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "mail_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "mail_id"
+            ],
+            "additionalProperties": false
         },
         "mail.inbox": {
             "$id": "ge://schema/mail.inbox.json",
@@ -637,7 +886,18 @@
         },
         "move.autopilot.start": {
             "$id": "ge://schema/move.autopilot.start.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": false
         },
         "move.autopilot.status": {
             "$id": "ge://schema/move.autopilot.status.json",
@@ -649,15 +909,45 @@
         },
         "move.autopilot.stop": {
             "$id": "ge://schema/move.autopilot.stop.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "move.describe_sector": {
             "$id": "ge://schema/move.describe_sector.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "sector_id"
+            ],
+            "additionalProperties": false
         },
         "move.pathfind": {
             "$id": "ge://schema/move.pathfind.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "from_sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "to_sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "from_sector_id",
+                "to_sector_id"
+            ],
+            "additionalProperties": false
         },
         "move.scan": {
             "$id": "ge://schema/move.scan.json",
@@ -800,11 +1090,42 @@
         },
         "planet.deposit": {
             "$id": "ge://schema/planet.deposit.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
         },
         "planet.genesis": {
             "$id": "ge://schema/planet.genesis.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
         },
         "planet.genesis_create": {
             "$id": "ge://schema/planet.genesis_create.json",
@@ -837,19 +1158,55 @@
         },
         "planet.harvest": {
             "$id": "ge://schema/planet.harvest.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id"
+            ],
+            "additionalProperties": false
         },
         "planet.info": {
             "$id": "ge://schema/planet.info.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id"
+            ],
+            "additionalProperties": false
         },
         "planet.land": {
             "$id": "ge://schema/planet.land.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id"
+            ],
+            "additionalProperties": false
         },
         "planet.launch": {
             "$id": "ge://schema/planet.launch.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "planet.market.buy_order": {
             "$id": "ge://schema/placeholder.json",
@@ -863,15 +1220,67 @@
         },
         "planet.rename": {
             "$id": "ge://schema/planet.rename.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "name"
+            ],
+            "additionalProperties": false
         },
         "planet.transfer_ownership": {
             "$id": "ge://schema/planet.transfer_ownership.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "new_owner_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "new_owner_id"
+            ],
+            "additionalProperties": false
         },
         "planet.withdraw": {
             "$id": "ge://schema/planet.withdraw.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
         },
         "player.get_avoids": {
             "$id": "ge://schema/placeholder.json",
@@ -997,7 +1406,10 @@
         },
         "port.info": {
             "$id": "ge://schema/port.info.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "port.rob": {
             "$id": "ge://schema/port.rob.json",
@@ -1076,15 +1488,31 @@
         },
         "sector.scan": {
             "$id": "ge://schema/sector.scan.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "sector.scan.density": {
             "$id": "ge://schema/sector.scan.density.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "sector.search": {
             "$id": "ge://schema/sector.search.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "query"
+            ],
+            "additionalProperties": false
         },
         "sector.set_beacon": {
             "$id": "ge://schema/sector.set_beacon.json",
@@ -1106,7 +1534,10 @@
         },
         "session.disconnect": {
             "$id": "ge://schema/session.disconnect.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "session.hello": {
             "$id": "ge://schema/session.hello.json",
@@ -1158,11 +1589,25 @@
         },
         "system.disconnect": {
             "$id": "ge://schema/system.disconnect.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "ship.claim": {
             "$id": "ge://schema/ship.claim.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "ship_id"
+            ],
+            "additionalProperties": false
         },
         "ship.info": {
             "$id": "ge://schema/ship.info.json",
@@ -1190,27 +1635,84 @@
         },
         "ship.inspect": {
             "$id": "ge://schema/ship.inspect.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "ship_id"
+            ],
+            "additionalProperties": false
         },
         "ship.jettison": {
             "$id": "ge://schema/ship.jettison.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "commodity_id",
+                "quantity"
+            ],
+            "additionalProperties": false
         },
         "ship.rename": {
             "$id": "ge://schema/ship.rename.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
         },
         "ship.repair": {
             "$id": "ge://schema/ship.repair.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "ship.reregister": {
             "$id": "ge://schema/ship.reregister.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
         },
         "ship.self_destruct": {
             "$id": "ge://schema/ship.self_destruct.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "ship.status": {
             "$id": "ge://schema/ship.status.json",
@@ -1238,11 +1740,42 @@
         },
         "ship.transfer_cargo": {
             "$id": "ge://schema/ship.transfer_cargo.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "target_ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "commodity_id",
+                "quantity",
+                "target_ship_id"
+            ],
+            "additionalProperties": false
         },
         "ship.upgrade": {
             "$id": "ge://schema/ship.upgrade.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "upgrade_type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "upgrade_type"
+            ],
+            "additionalProperties": false
         },
         "shipyard.list": {
             "$id": "ge://schema/placeholder.json",
@@ -1291,7 +1824,17 @@
         },
         "subscribe.add": {
             "$id": "ge://schema/subscribe.add.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "event_type"
+            ],
+            "additionalProperties": false
         },
         "subscribe.catalog": {
             "$id": "ge://schema/subscribe.catalog.json",
@@ -1303,11 +1846,24 @@
         },
         "subscribe.list": {
             "$id": "ge://schema/subscribe.list.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "subscribe.remove": {
             "$id": "ge://schema/subscribe.remove.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "event_type"
+            ],
+            "additionalProperties": false
         },
         "tavern.barcharts.get_prices_summary": {
             "$id": "ge://schema/placeholder.json",
@@ -1376,7 +1932,18 @@
         },
         "trade.accept": {
             "$id": "ge://schema/trade.accept.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "trade_id"
+            ],
+            "additionalProperties": false
         },
         "trade.buy": {
             "$id": "ge://schema/trade.buy.json",
@@ -1430,7 +1997,18 @@
         },
         "trade.cancel": {
             "$id": "ge://schema/trade.cancel.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "trade_id"
+            ],
+            "additionalProperties": false
         },
         "trade.history": {
             "$id": "ge://schema/trade.history.json",
@@ -1451,15 +2029,44 @@
         },
         "trade.jettison": {
             "$id": "ge://schema/trade.jettison.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
         },
         "trade.offer": {
             "$id": "ge://schema/trade.offer.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "trade_id"
+            ],
+            "additionalProperties": false
         },
         "trade.port_info": {
             "$id": "ge://schema/trade.port_info.json",
-            "$comment": "Schema not yet implemented"
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
         },
         "trade.quote": {
             "$id": "ge://schema/trade.quote.json",
@@ -1536,203 +2143,199 @@
     },
     "schema_blacklist": [],
     "pending_schema_requests": {
-        "system.cmd_list": "c-91fcaba9",
-        "admin.notice": "c-c1be1e93",
-        "admin.shutdown_warning": "c-67327bb9",
-        "auth.login": "c-5ea309d0",
-        "auth.logout": "c-c07247e4",
-        "auth.mfa.totp.verify": "c-8272cd96",
-        "auth.register": "c-e2d2bc61",
-        "auth.refresh": "c-bc375539",
-        "bank.balance": "c-c27d77bf",
-        "bank.deposit": "c-c036cec1",
-        "bank.history": "c-2b74b73d",
-        "bank.leaderboard": "c-8af53e64",
-        "bank.transfer": "c-f2255071",
-        "bank.withdraw": "c-e045de7a",
-        "bounty.list": "c-a3943e66",
-        "bounty.post_federation": "c-c71352a5",
-        "bounty.post_hitlist": "c-029575e5",
-        "bulk.execute": "c-b3ebd6d7",
-        "fine.list": "c-b36be05d",
-        "fine.pay": "c-53e7f87f",
-        "insurance.policies.list": "c-29ef5b28",
-        "insurance.policies.buy": "c-b76ea10c",
-        "insurance.claim.file": "c-9a3db2e8",
-        "chat.broadcast": "c-dd485954",
-        "chat.history": "c-90575541",
-        "chat.send": "c-383ed859",
-        "citadel.build": "c-823ef785",
-        "citadel.upgrade": "c-ee245833",
-        "combat.attack": "c-e4b0ef69",
-        "combat.attack_planet": "c-b6e41ddc",
-        "combat.deploy_fighters": "c-a6b9d800",
-        "combat.deploy_mines": "c-719fcad1",
-        "combat.lay_mines": "c-25d5f464",
-        "combat.status": "c-0309a8e6",
-        "combat.sweep_mines": "c-a7e0d7fb",
-        "deploy.fighters.list": "c-5ba4f292",
-        "deploy.mines.list": "c-1c056e28",
-        "fighters.recall": "c-615c0247",
-        "mines.recall": "c-f986a580",
-        "corp.balance": "c-7de2dfd7",
-        "corp.create": "c-e684ca57",
-        "corp.deposit": "c-19407899",
-        "corp.dissolve": "c-5f4da224",
-        "corp.invite": "c-991c10d3",
-        "corp.join": "c-215ed386",
-        "corp.kick": "c-89de6751",
-        "corp.leave": "c-9eee2c4d",
-        "corp.list": "c-0f9fe9b1",
-        "corp.roster": "c-5642ad60",
-        "corp.statement": "c-e196ec35",
-        "corp.status": "c-114190a8",
-        "corp.transfer_ceo": "c-9dd90f17",
-        "corp.withdraw": "c-7022207f",
-        "dock.status": "c-7d5c6cae",
-        "hardware.buy": "c-420bccd2",
-        "hardware.list": "c-91732189",
-        "mail.delete": "c-c4cfe44e",
-        "mail.inbox": "c-29fb0fdf",
-        "mail.read": "c-35eb1ad9",
-        "mail.send": "c-28a0f449",
-        "move.autopilot.start": "c-84f40339",
-        "move.autopilot.status": "c-5938bf45",
-        "move.autopilot.stop": "c-038dd2ee",
-        "move.describe_sector": "c-183b01b6",
-        "move.pathfind": "c-28a542e0",
-        "move.scan": "c-ce6b9783",
-        "move.transwarp": "c-0c395358",
-        "move.warp": "c-7ef83a64",
-        "nav.avoid.add": "c-c067b3d8",
-        "nav.avoid.list": "c-d04c4334",
-        "nav.avoid.remove": "c-e68c07a2",
-        "nav.avoid.set": "c-5bb1e157",
-        "nav.bookmark.add": "c-d32443bb",
-        "nav.bookmark.list": "c-224007b6",
-        "nav.bookmark.remove": "c-b09c5612",
-        "nav.bookmark.set": "c-0b45738b",
-        "news.get_feed": "c-fa2d41e0",
-        "news.mark_feed_read": "c-2e1dc887",
-        "news.read": "c-5448e1fc",
-        "notes.list": "c-b0f83adc",
-        "notice.ack": "c-53ec3038",
-        "notice.list": "c-88704e0d",
-        "planet.create": "c-1c6705dd",
-        "planet.deposit": "c-fb947417",
-        "planet.genesis": "c-30b2a4ac",
-        "planet.genesis_create": "c-5bf61c79",
-        "planet.harvest": "c-161cb9e9",
-        "planet.info": "c-42507745",
-        "planet.land": "c-7a0c6ea3",
-        "planet.launch": "c-9b2f2cc3",
-        "planet.market.buy_order": "c-cb86217f",
-        "planet.market.sell": "c-1da6c444",
-        "planet.rename": "c-0b359b71",
-        "planet.transfer_ownership": "c-dd2cc17f",
-        "planet.withdraw": "c-c65b5da0",
-        "player.get_avoids": "c-45af8ab5",
-        "player.get_bookmarks": "c-b76848d1",
-        "player.get_notes": "c-c04ff5c6",
-        "player.get_prefs": "c-68c939f5",
-        "player.get_settings": "c-ee936d1d",
-        "player.get_subscriptions": "c-7841ad5f",
-        "player.get_topics": "c-4aea2eea",
-        "player.my_info": "c-b63094b7",
-        "player.rankings": "c-a3783ead",
-        "player.set_avoids": "c-b30319d0",
-        "player.set_bookmarks": "c-787e6d53",
-        "player.set_prefs": "c-9a5143fd",
-        "player.set_settings": "c-c21dd2fc",
-        "player.set_subscriptions": "c-5640b22c",
-        "player.set_topics": "c-fc215d54",
-        "player.set_trade_account_preference": "c-075d3eb7",
-        "port.describe": "c-2e2099e6",
-        "port.info": "c-60e6672e",
-        "port.rob": "c-2b9e3a34",
-        "port.status": "c-14b9643b",
-        "sector.info": "c-dbf744c1",
-        "sector.scan": "c-52dc2ca1",
-        "sector.scan.density": "c-6711995a",
-        "sector.search": "c-192a2d53",
-        "sector.set_beacon": "c-e98b8f30",
-        "session.disconnect": "c-07ca8cd3",
-        "session.hello": "c-8134d5ef",
-        "session.ping": "c-ea0cadd8",
-        "player.ping": "c-256ee75d",
-        "sys.notice.create": "c-8dc69cb4",
-        "system.disconnect": "c-4823fd1e",
-        "ship.claim": "c-8118664e",
-        "ship.info": "c-c16cb102",
-        "ship.inspect": "c-3abf7e5b",
-        "ship.jettison": "c-030f3051",
-        "ship.rename": "c-9d904891",
-        "ship.repair": "c-ea4f3b5d",
-        "ship.reregister": "c-854d7676",
-        "ship.self_destruct": "c-db746373",
-        "ship.status": "c-908cb55e",
-        "ship.transfer_cargo": "c-1eb9b8c9",
-        "ship.upgrade": "c-e7bf6116",
-        "shipyard.list": "c-aaee8459",
-        "shipyard.upgrade": "c-925cade2",
-        "stock.buy": "c-e2928160",
-        "stock.dividend.set": "c-ee9a66bd",
-        "stock.exchange.list_stocks": "c-70748e97",
-        "stock.exchange.orders.cancel": "c-0d8a5ad6",
-        "stock.exchange.orders.create": "c-b0fb1c89",
-        "stock.ipo.register": "c-46ade33e",
-        "stock.portfolio.list": "c-bd6a48d5",
-        "subscribe.add": "c-9b4e2379",
-        "subscribe.catalog": "c-ae2892fd",
-        "subscribe.list": "c-b76ce273",
-        "subscribe.remove": "c-dc7fbf4a",
-        "tavern.barcharts.get_prices_summary": "c-efd3dd74",
-        "tavern.deadpool.place_bet": "c-16c8a396",
-        "tavern.dice.play": "c-1f61a5db",
-        "tavern.graffiti.post": "c-980e7183",
-        "tavern.highstakes.play": "c-1bb69802",
-        "tavern.loan.pay": "c-3e3ef465",
-        "tavern.loan.take": "c-a0241ce5",
-        "tavern.lottery.buy_ticket": "c-736d5cfb",
-        "tavern.lottery.status": "c-7233da89",
-        "tavern.raffle.buy_ticket": "c-1ecbbfbd",
-        "tavern.round.buy": "c-242d7434",
-        "tavern.rumour.get_hint": "c-5163ff4f",
-        "tavern.trader.buy_password": "c-00f3dea1",
-        "trade.accept": "c-dd7281e2",
-        "trade.buy": "c-55ee204b",
-        "trade.cancel": "c-939cd58c",
-        "trade.history": "c-77282f0e",
-        "trade.jettison": "c-aa0cdff0",
-        "trade.offer": "c-6cc7d5b0",
-        "trade.port_info": "c-01c764f4",
-        "trade.quote": "c-9c3ef5dd",
-        "trade.sell": "c-b90377a7"
+        "system.cmd_list": "c-299337f4",
+        "admin.notice": "c-8828a635",
+        "admin.shutdown_warning": "c-e5e5fdea",
+        "auth.login": "c-e3ec7224",
+        "auth.logout": "c-566efaa4",
+        "auth.mfa.totp.verify": "c-e34859c9",
+        "auth.register": "c-af8fb220",
+        "auth.refresh": "c-c14742f6",
+        "bank.balance": "c-c126478c",
+        "bank.deposit": "c-b48a4b52",
+        "bank.history": "c-0cd153d0",
+        "bank.leaderboard": "c-066460ec",
+        "bank.transfer": "c-2b9257f8",
+        "bank.withdraw": "c-1b8656df",
+        "bounty.list": "c-df5e2340",
+        "bounty.post_federation": "c-bdc80336",
+        "bounty.post_hitlist": "c-ac834671",
+        "bulk.execute": "c-48643675",
+        "fine.list": "c-cec3bf56",
+        "fine.pay": "c-b3664da0",
+        "insurance.policies.list": "c-24325dcf",
+        "insurance.policies.buy": "c-874f250a",
+        "insurance.claim.file": "c-009d043f",
+        "chat.broadcast": "c-8ab8e052",
+        "chat.history": "c-c2ef824c",
+        "chat.send": "c-d97b2257",
+        "citadel.build": "c-14d78797",
+        "citadel.upgrade": "c-a339dd4a",
+        "combat.attack": "c-a0c2f305",
+        "combat.attack_planet": "c-42686a5c",
+        "combat.deploy_fighters": "c-7d583475",
+        "combat.deploy_mines": "c-8660d498",
+        "combat.lay_mines": "c-ae156c05",
+        "combat.status": "c-cd26b447",
+        "combat.sweep_mines": "c-a47afbcc",
+        "deploy.fighters.list": "c-2fdad2e2",
+        "deploy.mines.list": "c-29b4ff21",
+        "fighters.recall": "c-bed3b6ce",
+        "mines.recall": "c-885150dd",
+        "corp.balance": "c-d4cd443c",
+        "corp.create": "c-f13225e1",
+        "corp.deposit": "c-7839e0b6",
+        "corp.dissolve": "c-9956d0f2",
+        "corp.invite": "c-77b13ffe",
+        "corp.join": "c-3706f271",
+        "corp.kick": "c-a376e439",
+        "corp.leave": "c-7d837d7b",
+        "corp.list": "c-a76c88aa",
+        "corp.roster": "c-37815ee2",
+        "corp.statement": "c-87887362",
+        "corp.status": "c-8158d609",
+        "corp.transfer_ceo": "c-9ada978d",
+        "corp.withdraw": "c-30ef5f6b",
+        "dock.status": "c-2b38d4ba",
+        "hardware.buy": "c-ad3d9e85",
+        "hardware.list": "c-431fe438",
+        "mail.delete": "c-a6335a76",
+        "mail.inbox": "c-eb61552b",
+        "mail.read": "c-b738ceea",
+        "mail.send": "c-7ac0ba5c",
+        "move.autopilot.start": "c-1b03220c",
+        "move.autopilot.status": "c-9edbd608",
+        "move.autopilot.stop": "c-a264c5d9",
+        "move.describe_sector": "c-ec859d4f",
+        "move.pathfind": "c-207e9c82",
+        "move.scan": "c-064d2d1c",
+        "move.transwarp": "c-edbd9cbb",
+        "move.warp": "c-a715f34e",
+        "nav.avoid.add": "c-c236a289",
+        "nav.avoid.list": "c-fa1c4240",
+        "nav.avoid.remove": "c-05e0dc0c",
+        "nav.avoid.set": "c-dcfacf06",
+        "nav.bookmark.add": "c-39239748",
+        "nav.bookmark.list": "c-34bcd6b0",
+        "nav.bookmark.remove": "c-e3072fe9",
+        "nav.bookmark.set": "c-d06dce1c",
+        "news.get_feed": "c-8c691237",
+        "news.mark_feed_read": "c-15917698",
+        "news.read": "c-c1a25e89",
+        "notes.list": "c-73036c5f",
+        "notice.ack": "c-a2e8be6c",
+        "notice.list": "c-e5fdc3c4",
+        "planet.create": "c-ed7c6ed6",
+        "planet.deposit": "c-ef46a6ad",
+        "planet.genesis": "c-4c3fd5c1",
+        "planet.genesis_create": "c-74a57a59",
+        "planet.harvest": "c-7e1c1d17",
+        "planet.info": "c-a3a68651",
+        "planet.land": "c-cba1e346",
+        "planet.launch": "c-a05c5201",
+        "planet.market.buy_order": "c-a8de5a9e",
+        "planet.market.sell": "c-1565f803",
+        "planet.rename": "c-46500a6d",
+        "planet.transfer_ownership": "c-6041202d",
+        "planet.withdraw": "c-8b350952",
+        "player.get_avoids": "c-36bc3ffb",
+        "player.get_bookmarks": "c-aee273cc",
+        "player.get_notes": "c-5e6ab83a",
+        "player.get_prefs": "c-5d6a8ba9",
+        "player.get_settings": "c-fb82573a",
+        "player.get_subscriptions": "c-7369aa50",
+        "player.get_topics": "c-8003a5a4",
+        "player.my_info": "c-61d0b008",
+        "player.rankings": "c-c0e9a77b",
+        "player.set_avoids": "c-502fb81f",
+        "player.set_bookmarks": "c-4b5efd2b",
+        "player.set_prefs": "c-559c5594",
+        "player.set_settings": "c-95a9694d",
+        "player.set_subscriptions": "c-4d469ed9",
+        "player.set_topics": "c-f8e1308d",
+        "player.set_trade_account_preference": "c-d457099c",
+        "port.describe": "c-60c09e37",
+        "port.info": "c-baa88b98",
+        "port.rob": "c-54750d55",
+        "port.status": "c-06bb81ba",
+        "sector.info": "c-a4710e48",
+        "sector.scan": "c-8fd3fd4f",
+        "sector.scan.density": "c-dbcc2e5b",
+        "sector.search": "c-f846347a",
+        "sector.set_beacon": "c-85326eef",
+        "session.disconnect": "c-45df1fee",
+        "session.hello": "c-857e6f38",
+        "session.ping": "c-19f0e3be",
+        "player.ping": "c-5e4735cd",
+        "sys.notice.create": "c-fb4f15c9",
+        "system.disconnect": "c-69fe8a93",
+        "ship.claim": "c-663fde3f",
+        "ship.info": "c-845a2f1f",
+        "ship.inspect": "c-0c054d0d",
+        "ship.jettison": "c-530340cf",
+        "ship.rename": "c-4b0ca8b1",
+        "ship.repair": "c-d486b89f",
+        "ship.reregister": "c-9737644c",
+        "ship.self_destruct": "c-063af324",
+        "ship.status": "c-d04b7961",
+        "ship.transfer_cargo": "c-45772bf3",
+        "ship.upgrade": "c-7cea904b",
+        "shipyard.list": "c-52637212",
+        "shipyard.upgrade": "c-ee952cc6",
+        "stock.buy": "c-169711e0",
+        "stock.dividend.set": "c-d15a1064",
+        "stock.exchange.list_stocks": "c-44df249b",
+        "stock.exchange.orders.cancel": "c-a8a46d60",
+        "stock.exchange.orders.create": "c-0b634d59",
+        "stock.ipo.register": "c-b5864098",
+        "stock.portfolio.list": "c-64ba4862",
+        "subscribe.add": "c-89f4b640",
+        "subscribe.catalog": "c-e7fc8a72",
+        "subscribe.list": "c-8fc7c823",
+        "subscribe.remove": "c-e0fbc38a",
+        "tavern.barcharts.get_prices_summary": "c-9e429737",
+        "tavern.deadpool.place_bet": "c-84a5e586",
+        "tavern.dice.play": "c-4eee74d2",
+        "tavern.graffiti.post": "c-f77fa1f6",
+        "tavern.highstakes.play": "c-11646f15",
+        "tavern.loan.pay": "c-8d2e2979",
+        "tavern.loan.take": "c-849dbff0",
+        "tavern.lottery.buy_ticket": "c-54d7bd70",
+        "tavern.lottery.status": "c-2a3468f2",
+        "tavern.raffle.buy_ticket": "c-900889a6",
+        "tavern.round.buy": "c-bc1aa1f4",
+        "tavern.rumour.get_hint": "c-1548e836",
+        "tavern.trader.buy_password": "c-b53a969e",
+        "trade.accept": "c-196638ce",
+        "trade.buy": "c-77d7c3a4",
+        "trade.cancel": "c-40079ddb",
+        "trade.history": "c-c1769fea",
+        "trade.jettison": "c-4e62e2fc",
+        "trade.offer": "c-cf5f87fb",
+        "trade.port_info": "c-2c65a63b",
+        "trade.quote": "c-94f6e72c",
+        "trade.sell": "c-05f463ab"
     },
     "recent_sectors": [
-        5
+        2,
+        3,
+        1
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
     "warp_blacklist": [],
     "current_path": [],
     "last_action_result": {
-        "status": "error",
+        "status": "ok",
         "command": "sector.scan.density",
-        "error_code": 500,
-        "error_msg": "Handler produced no response",
-        "sector_id": 5,
-        "sent_command": {
-            "id": "c-1a525191",
-            "command": "sector.scan.density",
-            "data": {},
-            "meta": {
-                "client_version": "AI_QA_Bot/1.1",
-                "idempotency_key": "1a525191-dc7b-4882-88c5-e498060bf80a"
-            }
-        }
+        "request_id": "c-ab2f67cc",
+        "response_type": "sector.density.scan",
+        "ts": "2026-01-03T12:33:26Z"
     },
     "last_quotes": {},
     "current_qa_objective": null,
-    "needs_bootstrap": false
+    "needs_bootstrap": false,
+    "last_action": "bank.balance",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "explore"
 }

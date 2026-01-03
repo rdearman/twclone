@@ -185,7 +185,7 @@ db_get_open_order (db_t *db,
 
   const char *sql =
     "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
-    "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint, filled_quantity "
+    "ts, expires_at, filled_quantity "
     "FROM commodity_orders "
     "WHERE actor_type = $1 AND actor_id = $2 AND commodity_id = $3 AND side = $4 AND status = 'open' "
     "LIMIT 1;";
@@ -310,7 +310,7 @@ db_load_open_orders_for_commodity (db_t *db,
     {
       sql =
         "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
-        "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint, filled_quantity "
+        "ts, expires_at, filled_quantity "
         "FROM commodity_orders "
         "WHERE commodity_id = $1 AND side = $2 AND status = 'open' "
         "ORDER BY price DESC, ts ASC;";
@@ -319,7 +319,7 @@ db_load_open_orders_for_commodity (db_t *db,
     {
       sql =
         "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
-        "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint, filled_quantity "
+        "ts, expires_at, filled_quantity "
         "FROM commodity_orders "
         "WHERE commodity_id = $1 AND side = $2 AND status = 'open' "
         "ORDER BY price ASC, ts ASC;";
@@ -514,7 +514,7 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
 
   const char *sql =
     "SELECT commodity_orders_id, side, commodity_id, quantity, filled_quantity, price, status, "
-    "EXTRACT(EPOCH FROM ts)::bigint, EXTRACT(EPOCH FROM expires_at)::bigint "
+    "ts, expires_at "
     "FROM commodity_orders "
     "WHERE actor_type = $1 AND actor_id = $2 " "ORDER BY status ASC, ts DESC;";
 

@@ -518,3 +518,58 @@ BEGIN
 END;
 $$;
 
+-- Additional seed data (restored from deleted 030_seeds.sql)
+
+-- NOTE: planet_goods for Earth and Ferringhi Homeworld is handled by stored procedures
+-- after planets are created during BigBang topology generation
+
+-- Bank Interest Policy
+INSERT INTO bank_interest_policy (id, apr_bps, compounding, last_run_at, currency)
+VALUES (1, 0, 'none', NULL, 'CRD')
+ON CONFLICT (id) DO NOTHING;
+
+-- Corporation Interest Policy
+INSERT INTO corp_interest_policy (id, apr_bps, compounding, last_run_at, currency)
+VALUES (1, 0, 'none', CURRENT_TIMESTAMP, 'CRD')
+ON CONFLICT (id) DO NOTHING;
+
+-- Engine Offset
+INSERT INTO engine_offset(key, last_event_id, last_event_ts) VALUES ('events', 0, 0)
+ON CONFLICT (key) DO NOTHING;
+
+-- S2S Keys
+INSERT INTO s2s_keys(key_id, key_b64, is_default_tx, active, created_ts)
+VALUES ('k0', 'c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==', 1, TRUE, CURRENT_TIMESTAMP)
+ON CONFLICT (key_id) DO NOTHING;
+
+-- Config: Escape Pod Ship Type (placeholder, updated by bigbang after ship types are loaded)
+INSERT INTO config (key, value, type)
+VALUES ('death.escape_pod_shiptype_id', '0', 'int')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type;
+
+-- Cron Tasks
+INSERT INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES
+('daily_turn_reset', 'daily@03:00Z', NULL, now(), TRUE, NULL),
+  ('terra_replenish', 'daily@04:00Z', NULL, now(), TRUE, NULL),
+  ('planet_growth', 'every:10m', NULL, now(), TRUE, NULL),
+  ('fedspace_cleanup', 'every:2m', NULL, now(), TRUE, NULL),
+  ('autouncloak_sweeper', 'every:15m', NULL, now(), TRUE, NULL),
+  ('npc_step', 'every:30s', NULL, now(), TRUE, NULL),
+  ('broadcast_ttl_cleanup', 'every:5m', NULL, now(), TRUE, NULL),
+  ('daily_news_compiler', 'daily@06:00Z', NULL, now(), TRUE, NULL),
+  ('traps_process', 'every:1m', NULL, now(), TRUE, NULL),
+  ('cleanup_old_news', 'daily@07:00Z', NULL, now(), TRUE, NULL),
+  ('limpet_ttl_cleanup', 'every:5m', NULL, now(), TRUE, NULL),
+  ('daily_lottery_draw', 'daily@23:00Z', NULL, now(), TRUE, NULL),
+  ('deadpool_resolution_cron', 'daily@01:00Z', NULL, now(), TRUE, NULL),
+  ('tavern_notice_expiry_cron', 'daily@07:00Z', NULL, now(), TRUE, NULL),
+  ('loan_shark_interest_cron', 'daily@00:00Z', NULL, now(), TRUE, NULL),
+  ('dividend_payout', 'daily@05:00Z', NULL, now(), TRUE, NULL),
+  ('daily_stock_price_recalculation', 'daily@04:30Z', NULL, now(), TRUE, NULL),
+  ('daily_market_settlement', 'daily@05:30Z', NULL, now(), TRUE, NULL),
+  ('system_notice_ttl', 'daily@00:05Z', NULL, now(), TRUE, NULL),
+  ('shield_regen', 'every:1m', NULL, now(), TRUE, '{"regen_percent":5}'),
+  ('deadletter_retry', 'every:1m', NULL, now(), TRUE, NULL),
+  ('daily_corp_tax', 'daily@05:00Z', NULL, now(), TRUE, NULL)
+ON CONFLICT (name) DO NOTHING;
+

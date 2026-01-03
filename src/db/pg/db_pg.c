@@ -374,6 +374,13 @@ void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *e
     PGconn *conn = PQconnectdb(cfg->pg_conninfo);
     pthread_mutex_unlock(&g_pg_mutex);
     if (PQstatus(conn) != CONNECTION_OK) { pg_map_error(conn, NULL, err); if (conn) PQfinish(conn); return NULL; }
+
+    /* Suppress NOTICE messages (e.g. "relation already exists, skipping") */
+    pthread_mutex_lock(&g_pg_mutex);
+    PGresult *res_quiet = PQexec(conn, "SET client_min_messages TO WARNING");
+    if (res_quiet) PQclear(res_quiet);
+    pthread_mutex_unlock(&g_pg_mutex);
+
     db_pg_impl_t *impl = calloc(1, sizeof(db_pg_impl_t));
     if (!impl) {
         err->code = ERR_DB_QUERY_FAILED;

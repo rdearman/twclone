@@ -50,6 +50,7 @@ get_utc_epoch_day (int64_t ts)
 #include "common.h"
 #include "server_config.h"
 #include "server_clusters.h"
+#include "server_corporation.h"
 #include "globals.h"        // For g_xp_align config
 #include "database_cmd.h"   // For h_player_apply_progress, db_player_get_alignment, h_get_cluster_alignment_band
 #include "server_stardock.h"
@@ -741,7 +742,7 @@ exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
   int64_t now_s = (int64_t)time (NULL);
   const char *sql =
     "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
-    "VALUES($1, $2, $3, $4, $5) RETURNING system_notice_id;";
+    "VALUES(to_timestamp($1), $2, $3, $4, to_timestamp($5)) RETURNING system_notice_id;";
 
   db_error_t err;
 
@@ -823,7 +824,7 @@ exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
 
   const char *sql =
     "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-    "VALUES($1, $2, $3, 'Notice', $4, $5, $6) RETURNING system_notice_id;";
+    "VALUES(to_timestamp($1), $2, $3, 'Notice', $4, $5, to_timestamp($6)) RETURNING system_notice_id;";
 
   db_error_t err;
 
@@ -912,7 +913,7 @@ server_commands_tick (db_t *db, int max_rows)
 
       /* mark running */
       const char *sql_running =
-        "UPDATE engine_commands SET status='running', started_at=$1 WHERE engine_commands_id=$2;";
+        "UPDATE engine_commands SET status='running', started_at=to_timestamp($1) WHERE engine_commands_id=$2;";
 
       db_bind_t run_params[2];
 
@@ -963,7 +964,7 @@ server_commands_tick (db_t *db, int max_rows)
       if (ok == 0)
         {
           const char *sql_done =
-            "UPDATE engine_commands SET status='done', finished_at=$1 WHERE engine_commands_id=$2;";
+            "UPDATE engine_commands SET status='done', finished_at=to_timestamp($1) WHERE engine_commands_id=$2;";
           db_bind_t done_params[2] = { db_bind_i64 (now_s),
                                        db_bind_i64 (cmd_id) };
 
@@ -973,7 +974,7 @@ server_commands_tick (db_t *db, int max_rows)
       else
         {
           const char *sql_err =
-            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=$1 WHERE engine_commands_id=$2;";
+            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=to_timestamp($1) WHERE engine_commands_id=$2;";
           db_bind_t err_params[2] = { db_bind_i64 (now_s),
                                       db_bind_i64 (cmd_id) };
 
@@ -1187,8 +1188,8 @@ engine_main_loop (int shutdown_fd)
 
           const char *sql_pick =
             "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
-            "WHERE enabled=1 "
-            "  AND (next_due_at IS NULL OR next_due_at <= $1) "
+            "WHERE enabled=TRUE "
+            "  AND (next_due_at IS NULL OR next_due_at <= to_timestamp($1)) "
             "ORDER BY next_due_at ASC "
             "LIMIT $2;";
 
@@ -1237,15 +1238,20 @@ engine_main_loop (int shutdown_fd)
 
               if (fn)
                 {
+                  LOGI ("[cron] running task: %s", nm);
                   fn (db_handle, now_s);
+                }
+              else
+                {
+                  LOGW ("[cron] task '%s' has no registered handler", nm);
                 }
 
               /* reschedule deterministically */
               int64_t next_due = cron_next_due_from (now_s, sch);
               const char *sql_upd =
                 "UPDATE cron_tasks "
-                "SET last_run_at=$2, next_due_at=$3 "
-                "WHERE id=$1;";
+                "SET last_run_at=to_timestamp($2), next_due_at=to_timestamp($3) "
+                "WHERE cron_tasks_id=$1;";
 
               db_bind_t up_params[3];
 
@@ -1371,7 +1377,7 @@ engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
   /* delete ephemerals whose ttl expired; bounded batch */
   const char *sql =
     "DELETE FROM system_notice "
-    "WHERE expires_at IS NOT NULL AND expires_at <= $1 "
+    "WHERE expires_at IS NOT NULL AND expires_at <= to_timestamp($1) "
     // LIMIT is not standard in DELETE in all SQLs (e.g. Postgres DELETE doesn't support LIMIT directly without CTID tricks)
     // But standard Postgres driver might support it or we ignore it?
     // SQLite supports DELETE ... LIMIT if compiled with it.
@@ -1379,14 +1385,14 @@ engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
     // Or use a subquery for ID?
     // "DELETE FROM system_notice WHERE id IN (SELECT id FROM system_notice WHERE ... LIMIT 500)"
     // This is safer for Postgres.
-    "AND id IN (SELECT id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= $1 LIMIT 500);";
+    "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= to_timestamp($1) LIMIT 500);";
 
   // Wait, binding $1 twice?
   // db_api supports reusing bind params if the backend does.
   // SQLite supports ?1 used multiple times. Postgres supports $1 used multiple times.
-  // So "AND expires_at <= $1 ... WHERE ... expires_at <= $1" works.
+  // So "AND expires_at <= to_timestamp($1) ... WHERE ... expires_at <= to_timestamp($1)" works.
 
-  // Actually, simplest is just "DELETE ... WHERE ... <= $1".
+  // Actually, simplest is just "DELETE ... WHERE ... <= to_timestamp($1)".
   // If we want batching, we need LIMIT.
   // Using subquery with LIMIT is the standard cross-DB way for batch delete.
 
@@ -1396,8 +1402,8 @@ engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
 
-  // Note: if id is not primary key or unique, this might be slow, but it is standard.
-  // system_notice usually has id PK.
+  // Note: if system_notice_id is not primary key or unique, this might be slow, but it is standard.
+  // system_notice usually has system_notice_id PK.
 
   if (!db_exec (db, sql, params, 1, &err))
     {
@@ -1495,7 +1501,7 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
     now_s - ((long long) g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
   const char *sql_delete_expired =
     "DELETE FROM sector_assets "
-    "WHERE asset_type = $1 AND deployed_at <= $2;";
+    "WHERE asset_type = $1 AND deployed_at <= to_timestamp($2);";
 
 
   db_error_t err;

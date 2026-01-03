@@ -4,7 +4,7 @@
   "ollama_model": "qwen2.5-coder:latest",
   "log_file": "ai_player_004.log",
   "state_file": "state_004.json",
-  "player_username": "qa_test_co_004",
+  "player_username": "ai_qa_bot_004",
   "player_password": "quality",
   "client_version": "AI_QA_Bot/1.1",
   "protocol_doc_path": "../docs/PROTOCOL.v2.md",

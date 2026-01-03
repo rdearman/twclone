@@ -943,6 +943,7 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
         }
     }
 
+  db_res_finalize (res);
   return blocked;
 }
 

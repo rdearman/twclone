@@ -1,0 +1,14 @@
+{
+    "$id": "ge://schema/move_warp.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+        "to_sector_id": {
+            "type": "integer"
+        }
+    },
+    "required": [
+        "to_sector_id"
+    ],
+    "additionalProperties": false
+}
