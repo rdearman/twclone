@@ -748,11 +748,14 @@ exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
       return -1;
     }
 
-  char sql[512];
-  snprintf(sql, sizeof(sql),
+  char sql_tmpl[512];
+  snprintf(sql_tmpl, sizeof(sql_tmpl),
     "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
     "VALUES(%s, {2}, {3}, {4}, %s)",
     ts_fmt, ts_fmt);
+
+  char sql[512];
+  sql_build(db, sql_tmpl, sql, sizeof(sql));
 
   db_error_t err;
 
@@ -838,11 +841,14 @@ exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
       return -1;
     }
 
-  char sql[512];
-  snprintf(sql, sizeof(sql),
+  char sql_tmpl[512];
+  snprintf(sql_tmpl, sizeof(sql_tmpl),
     "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
     "VALUES(%s, {2}, {3}, 'Notice', {4}, {5}, %s)",
     ts_fmt, ts_fmt);
+
+  char sql[512];
+  sql_build(db, sql_tmpl, sql, sizeof(sql));
 
   db_error_t err;
 
@@ -932,10 +938,12 @@ server_commands_tick (db_t *db, int max_rows)
           return 0;
         }
 
-      char sql_running[256];
-      snprintf(sql_running, sizeof(sql_running),
+      char sql_running_tmpl[256];
+      snprintf(sql_running_tmpl, sizeof(sql_running_tmpl),
         "UPDATE engine_commands SET status='running', started_at=%s WHERE engine_commands_id={2}",
         ts_fmt);
+      char sql_running[256];
+      sql_build(db, sql_running_tmpl, sql_running, sizeof(sql_running));
 
       db_bind_t run_params[2];
 
@@ -985,10 +993,12 @@ server_commands_tick (db_t *db, int max_rows)
       /* finalize status */
       if (ok == 0)
         {
-          char sql_done[256];
-          snprintf(sql_done, sizeof(sql_done),
+          char sql_done_tmpl[256];
+          snprintf(sql_done_tmpl, sizeof(sql_done_tmpl),
             "UPDATE engine_commands SET status='done', finished_at=%s WHERE engine_commands_id={2}",
             sql_epoch_param_to_timestamptz(db));
+          char sql_done[256];
+          sql_build(db, sql_done_tmpl, sql_done, sizeof(sql_done));
           db_bind_t done_params[2] = { db_bind_i64 (now_s),
                                        db_bind_i64 (cmd_id) };
 
@@ -997,10 +1007,12 @@ server_commands_tick (db_t *db, int max_rows)
         }
       else
         {
-          char sql_err[256];
-          snprintf(sql_err, sizeof(sql_err),
+          char sql_err_tmpl[256];
+          snprintf(sql_err_tmpl, sizeof(sql_err_tmpl),
             "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=%s WHERE engine_commands_id={2}",
             sql_epoch_param_to_timestamptz(db));
+          char sql_err[256];
+          sql_build(db, sql_err_tmpl, sql_err, sizeof(sql_err));
           db_bind_t err_params[2] = { db_bind_i64 (now_s),
                                       db_bind_i64 (cmd_id) };
 
@@ -1213,14 +1225,20 @@ engine_main_loop (int shutdown_fd)
           uint64_t now_s = (int64_t) time (NULL);
 
           const char *ts_fmt = sql_epoch_param_to_timestamptz(db_handle);
-          char sql_pick[512];
-          snprintf(sql_pick, sizeof(sql_pick),
+          char ts_expr[64];
+          snprintf(ts_expr, sizeof(ts_expr), ts_fmt, "{1}");
+
+          char sql_pick_tmpl[512];
+          snprintf(sql_pick_tmpl, sizeof(sql_pick_tmpl),
             "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
             "WHERE enabled=TRUE "
             "  AND (next_due_at IS NULL OR next_due_at <= %s) "
             "ORDER BY next_due_at ASC "
             "LIMIT {2}",
-            ts_fmt);
+            ts_expr);
+
+          char sql_pick[512];
+          sql_build(db_handle, sql_pick_tmpl, sql_pick, sizeof(sql_pick));
 
 
           typedef struct {
@@ -1279,12 +1297,20 @@ engine_main_loop (int shutdown_fd)
               int64_t next_due = cron_next_due_from (now_s, sch);
               
               const char *ts_fmt = sql_epoch_param_to_timestamptz(db_handle);
-              char sql_upd[256];
-              snprintf(sql_upd, sizeof(sql_upd),
+              char ts_expr1[64];
+              char ts_expr2[64];
+              snprintf(ts_expr1, sizeof(ts_expr1), ts_fmt, "{2}");
+              snprintf(ts_expr2, sizeof(ts_expr2), ts_fmt, "{3}");
+
+              char sql_upd_tmpl[256];
+              snprintf(sql_upd_tmpl, sizeof(sql_upd_tmpl),
                 "UPDATE cron_tasks "
                 "SET last_run_at=%s, next_due_at=%s "
-                "WHERE cron_tasks_id={1}",
-                ts_fmt, ts_fmt);
+                "WHERE cron_tasks_id={1};",
+                ts_expr1, ts_expr2);
+
+              char sql_upd[256];
+              sql_build(db_handle, sql_upd_tmpl, sql_upd, sizeof(sql_upd));
 
               db_bind_t up_params[3];
 
