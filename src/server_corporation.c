@@ -22,8 +22,8 @@ int
 h_get_player_corp_role (db_t *db, int player_id, int corp_id,
                         char *role_buffer, size_t buffer_size)
 {
-  const char *sql =
-    "SELECT role FROM corp_members WHERE player_id = $1 AND corporation_id = $2;";
+  char sql[512];
+  sql_build (db, "SELECT role FROM corp_members WHERE player_id = {1} AND corporation_id = {2};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (player_id), db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -63,8 +63,8 @@ h_is_player_corp_ceo (db_t *db, int player_id, int *out_corp_id)
     {
       return 0;
     }
-  const char *sql =
-    "SELECT corporation_id FROM corporations WHERE owner_id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT corporation_id FROM corporations WHERE owner_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (player_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -93,8 +93,8 @@ h_is_player_corp_ceo (db_t *db, int player_id, int *out_corp_id)
 int
 h_get_player_corp_id (db_t *db, int player_id)
 {
-  const char *sql =
-    "SELECT corporation_id FROM corp_members WHERE player_id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT corporation_id FROM corp_members WHERE player_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (player_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -119,8 +119,8 @@ h_get_player_corp_id (db_t *db, int player_id)
 int
 h_get_corp_bank_account_id (db_t *db, int corp_id)
 {
-  const char *sql =
-    "SELECT id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -145,8 +145,8 @@ h_get_corp_bank_account_id (db_t *db, int corp_id)
 int
 h_get_corp_credit_rating (db_t *db, int corp_id, int *rating)
 {
-  const char *sql =
-    "SELECT credit_rating FROM corporations WHERE corporation_id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT credit_rating FROM corporations WHERE corporation_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -183,7 +183,8 @@ h_get_corp_credit_rating (db_t *db, int corp_id, int *rating)
 int
 h_get_corp_stock_id (db_t *db, int corp_id, int *out_stock_id)
 {
-  const char *sql = "SELECT id FROM stocks WHERE corp_id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT id FROM stocks WHERE corp_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -223,8 +224,8 @@ h_get_stock_info (db_t *db, int stock_id, char **out_ticker,
                   int *out_par_value, int *out_current_price,
                   long long *out_last_dividend_ts)
 {
-  const char *sql =
-    "SELECT ticker, corp_id, total_shares, par_value, current_price, last_dividend_ts FROM stocks WHERE id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT ticker, corp_id, total_shares, par_value, current_price, last_dividend_ts FROM stocks WHERE id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (stock_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -300,11 +301,13 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
         conflict_fmt, "player_id, corp_id");
       
       char sql_add[512];
-      snprintf(sql_add, sizeof(sql_add),
+      char sql_template[512];
+      snprintf(sql_template, sizeof(sql_template),
         "INSERT INTO corp_shareholders (player_id, corp_id, shares) "
-        "VALUES ($1, (SELECT corp_id FROM stocks WHERE id = $2), $3) "
+        "VALUES ({1}, (SELECT corp_id FROM stocks WHERE id = {2}), {3}) "
         "%s UPDATE SET shares = shares + excluded.shares;",
         conflict_clause);
+      sql_build(db, sql_template, sql_add, sizeof(sql_add));
 
       db_bind_t params[] = { db_bind_i32 (player_id), db_bind_i32 (stock_id),
                              db_bind_i32 (quantity_change) };
@@ -319,10 +322,10 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
     }
   else
     {
-      // Deduct shares, ensure not negative
-      const char *sql_deduct =
-        "UPDATE corp_shareholders SET shares = shares + $1 "
-        "WHERE player_id = $2 AND corp_id = (SELECT corp_id FROM stocks WHERE id = $3) AND (shares + $4) >= 0;";
+      char sql_deduct[512];
+      sql_build (db, "UPDATE corp_shareholders SET shares = shares + {1} "
+        "WHERE player_id = {2} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {3}) AND (shares + {4}) >= 0;",
+        sql_deduct, sizeof(sql_deduct));
 
       db_bind_t params[] = {
         db_bind_i32 (quantity_change),
@@ -422,8 +425,8 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* Ensure target is a member of the same corp */
-  const char *sql_check_member =
-    "SELECT role FROM corp_members WHERE corp_id = $1 AND player_id = $2;";
+  char sql_check_member[512];
+  sql_build (db, "SELECT role FROM corp_members WHERE corp_id = {1} AND player_id = {2};", sql_check_member, sizeof(sql_check_member));
   db_bind_t params_check[] = { db_bind_i32 (corp_id),
                                db_bind_i32 (target_player_id) };
   db_res_t *res_check = NULL;
@@ -451,11 +454,13 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   db_res_finalize (res_check);
 
   /* Guard: current CEO must NOT be flying the Corporate Flagship */
-  const char *sql_flagship_check =
+  char sql_flagship_check[512];
+  sql_build (db,
     "SELECT st.name "
     "FROM players p "
     "JOIN ships s ON p.ship_id = s.id "
-    "JOIN shiptypes st ON s.type_id = st.id WHERE p.id = $1;";
+    "JOIN shiptypes st ON s.type_id = st.id WHERE p.id = {1};",
+    sql_flagship_check, sizeof(sql_flagship_check));
 
   db_bind_t params_fs[] = { db_bind_i32 (ctx->player_id) };
   db_res_t *res_fs = NULL;
@@ -496,10 +501,8 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   bool ok = true;
 
   /* Demote current CEO to Officer */
-  const char *sql_demote =
-    "UPDATE corp_members "
-    "SET role = 'Officer' "
-    "WHERE corp_id = $1 AND player_id = $2 AND role = 'Leader';";
+  char sql_demote[512];
+  sql_build (db, "UPDATE corp_members SET role = 'Officer' WHERE corp_id = {1} AND player_id = {2} AND role = 'Leader';", sql_demote, sizeof(sql_demote));
   db_bind_t params_demote[] = { db_bind_i32 (corp_id),
                                 db_bind_i32 (ctx->player_id) };
 
@@ -520,10 +523,12 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
       else
         {
           char sql_insert_member[256];
-          snprintf(sql_insert_member, sizeof(sql_insert_member),
+          char sql_insert_template[256];
+          snprintf(sql_insert_template, sizeof(sql_insert_template),
             "INSERT INTO corp_members (corp_id, player_id, role) "
-            "VALUES ($1, $2, 'Member') %s;",
+            "VALUES ({1}, {2}, 'Member') %s;",
             conflict_clause);
+          sql_build(db, sql_insert_template, sql_insert_member, sizeof(sql_insert_member));
           
           db_bind_t params_ins[] = { db_bind_i32 (corp_id),
                                      db_bind_i32 (target_player_id) };
@@ -539,9 +544,8 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   /* Promote target to Leader */
   if (ok)
     {
-      const char *sql_promote =
-        "UPDATE corp_members "
-        "SET role = 'Leader' WHERE corp_id = $1 AND player_id = $2;";
+      char sql_promote[512];
+      sql_build (db, "UPDATE corp_members SET role = 'Leader' WHERE corp_id = {1} AND player_id = {2};", sql_promote, sizeof(sql_promote));
       db_bind_t params_promote[] = { db_bind_i32 (corp_id),
                                      db_bind_i32 (target_player_id) };
 
@@ -555,8 +559,8 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   /* Update corporations.owner_id */
   if (ok)
     {
-      const char *sql_update_owner =
-        "UPDATE corporations SET owner_id = $1 WHERE corporation_id = $2;";
+      char sql_update_owner[512];
+      sql_build (db, "UPDATE corporations SET owner_id = {1} WHERE corporation_id = {2};", sql_update_owner, sizeof(sql_update_owner));
       db_bind_t params_owner[] = { db_bind_i32 (target_player_id),
                                    db_bind_i32 (corp_id) };
 
@@ -692,8 +696,8 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_insert_corp =
-    "INSERT INTO corporations (name, owner_id) VALUES ($1, $2);";
+  char sql_insert_corp[512];
+  sql_build (db, "INSERT INTO corporations (name, owner_id) VALUES ({1}, {2});", sql_insert_corp, sizeof(sql_insert_corp));
   db_bind_t params_corp[] = { db_bind_text (name),
                               db_bind_i32 (ctx->player_id) };
   int64_t new_corp_id = 0;
@@ -724,8 +728,8 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
 
   int corp_id = (int) new_corp_id;
 
-  const char *sql_insert_member =
-    "INSERT INTO corp_members (corp_id, player_id, role) VALUES ($1, $2, 'Leader');";
+  char sql_insert_member[512];
+  sql_build (db, "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Leader');", sql_insert_member, sizeof(sql_insert_member));
   db_bind_t params_mem[] = { db_bind_i32 (corp_id),
                              db_bind_i32 (ctx->player_id) };
 
@@ -737,8 +741,8 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_create_bank =
-    "INSERT INTO bank_accounts (owner_type, owner_id, currency) VALUES ('corp', $1, 'CRD');";
+  char sql_create_bank[512];
+  sql_build (db, "INSERT INTO bank_accounts (owner_type, owner_id, currency) VALUES ('corp', {1}, 'CRD');", sql_create_bank, sizeof(sql_create_bank));
   db_bind_t params_bank[] = { db_bind_i32 (corp_id) };
 
 
@@ -749,8 +753,8 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_convert_planets =
-    "UPDATE planets SET owner_id = $1, owner_type = 'corp' WHERE owner_id = $2 AND owner_type = 'player';";
+  char sql_convert_planets[512];
+  sql_build (db, "UPDATE planets SET owner_id = {1}, owner_type = 'corp' WHERE owner_id = {2} AND owner_type = 'player';", sql_convert_planets, sizeof(sql_convert_planets));
   db_bind_t params_pl[] = { db_bind_i32 (corp_id),
                             db_bind_i32 (ctx->player_id) };
 
@@ -829,8 +833,8 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
     }
 
   long long expires_at = 0;
-  const char *sql_check_invite =
-    "SELECT expires_at FROM corp_invites WHERE corp_id = $1 AND player_id = $2;";
+  char sql_check_invite[512];
+  sql_build (db, "SELECT expires_at FROM corp_invites WHERE corp_id = {1} AND player_id = {2};", sql_check_invite, sizeof(sql_check_invite));
   db_bind_t params_check[] = { db_bind_i32 (corp_id),
                                db_bind_i32 (ctx->player_id) };
   db_res_t *res = NULL;
@@ -861,8 +865,8 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_insert_member =
-    "INSERT INTO corp_members (corp_id, player_id, role) VALUES ($1, $2, 'Member');";
+  char sql_insert_member[512];
+  sql_build (db, "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Member');", sql_insert_member, sizeof(sql_insert_member));
   db_bind_t params_mem[] = { db_bind_i32 (corp_id),
                              db_bind_i32 (ctx->player_id) };
 
@@ -878,8 +882,8 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_delete_invite =
-    "DELETE FROM corp_invites WHERE corp_id = $1 AND player_id = $2;";
+  char sql_delete_invite[512];
+  sql_build (db, "DELETE FROM corp_invites WHERE corp_id = {1} AND player_id = {2};", sql_delete_invite, sizeof(sql_delete_invite));
 
 
   if (!db_exec (db, sql_delete_invite, params_mem, 2, &err))
@@ -1020,11 +1024,13 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
     }
   corp_id = (int) json_integer_value (j_corp_id);
   json_t *roster_array = json_array ();
-  const char *sql =
+  char sql[1024];
+  sql_build (db,
     "SELECT cm.player_id, p.name, cm.role "
     "FROM corp_members cm "
     "JOIN players p ON cm.player_id = p.player_id "
-    "WHERE cm.corporation_id = $1;";
+    "WHERE cm.corporation_id = {1};",
+    sql, sizeof(sql));
 
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
@@ -1177,8 +1183,8 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
                            "Your rank is not high enough to kick this member.");
       return 0;
     }
-  const char *sql_delete_member =
-    "DELETE FROM corp_members WHERE corp_id = $1 AND player_id = $2;";
+  char sql_delete_member[512];
+  sql_build (db, "DELETE FROM corp_members WHERE corp_id = {1} AND player_id = {2};", sql_delete_member, sizeof(sql_delete_member));
   db_bind_t params[] = { db_bind_i32 (kicker_corp_id),
                          db_bind_i32 (target_player_id) };
   db_error_t err;
@@ -1258,8 +1264,8 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_update_planets =
-    "UPDATE planets SET owner_id = 0, owner_type = 'player' WHERE owner_id = $1 AND owner_type = 'corp';";
+  char sql_update_planets[512];
+  sql_build (db, "UPDATE planets SET owner_id = 0, owner_type = 'player' WHERE owner_id = {1} AND owner_type = 'corp';", sql_update_planets, sizeof(sql_update_planets));
   db_bind_t params[] = { db_bind_i32 (corp_id) };
 
 
@@ -1277,8 +1283,8 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_delete_corp =
-    "DELETE FROM corporations WHERE corporation_id = $1;";
+  char sql_delete_corp[512];
+  sql_build (db, "DELETE FROM corporations WHERE corporation_id = {1};", sql_delete_corp, sizeof(sql_delete_corp));
 
 
   if (!db_exec (db, sql_delete_corp, params, 1, &err))
@@ -1351,8 +1357,8 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
   if (strcasecmp (role, "Leader") == 0)
     {
       int member_count = 0;
-      const char *sql_count =
-        "SELECT COUNT(*) FROM corp_members WHERE corp_id = $1;";
+      char sql_count[512];
+      sql_build (db, "SELECT COUNT(*) FROM corp_members WHERE corp_id = {1};", sql_count, sizeof(sql_count));
       db_bind_t params_count[] = { db_bind_i32 (corp_id) };
       db_res_t *res_count = NULL;
       db_error_t err;
@@ -1382,8 +1388,8 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
           return 0;
         }
 
-      const char *sql_delete_corp =
-        "DELETE FROM corporations WHERE corporation_id = $1;";
+      char sql_delete_corp[512];
+      sql_build (db, "DELETE FROM corporations WHERE corporation_id = {1};", sql_delete_corp, sizeof(sql_delete_corp));
       db_bind_t params_del[] = { db_bind_i32 (corp_id) };
 
 
@@ -1414,8 +1420,8 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      const char *sql_delete_member =
-        "DELETE FROM corp_members WHERE corp_id = $1 AND player_id = $2;";
+      char sql_delete_member[512];
+      sql_build (db, "DELETE FROM corp_members WHERE corp_id = {1} AND player_id = {2};", sql_delete_member, sizeof(sql_delete_member));
       db_bind_t params_del[] = { db_bind_i32 (corp_id),
                                  db_bind_i32 (ctx->player_id) };
       db_error_t err;
@@ -1542,10 +1548,12 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
     conflict_fmt, "corp_id, player_id");
   
   char sql_insert_invite[512];
-  snprintf(sql_insert_invite, sizeof(sql_insert_invite),
-    "INSERT INTO corp_invites (corp_id, player_id, invited_at, expires_at) VALUES ($1, $2, $3, $4) "
+  char sql_insert_template[512];
+  snprintf(sql_insert_template, sizeof(sql_insert_template),
+    "INSERT INTO corp_invites (corp_id, player_id, invited_at, expires_at) VALUES ({1}, {2}, {3}, {4}) "
     "%s UPDATE SET invited_at = excluded.invited_at, expires_at = excluded.expires_at;",
     conflict_clause);
+  sql_build(db, sql_insert_template, sql_insert_invite, sizeof(sql_insert_invite));
   
   db_bind_t params[] = {
     db_bind_i32 (inviter_corp_id),
@@ -1888,8 +1896,8 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_corp_info =
-    "SELECT name, tag, created_at, owner_id FROM corporations WHERE corporation_id = $1;";
+  char sql_corp_info[512];
+  sql_build (db, "SELECT name, tag, created_at, owner_id FROM corporations WHERE corporation_id = {1};", sql_corp_info, sizeof(sql_corp_info));
   db_bind_t params_corp[] = { db_bind_i32 (corp_id) };
   db_res_t *res_corp = NULL;
   db_error_t err;
@@ -1934,8 +1942,8 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *sql_member_count =
-    "SELECT COUNT(*) FROM corp_members WHERE corp_id = $1;";
+  char sql_member_count[512];
+  sql_build (db, "SELECT COUNT(*) FROM corp_members WHERE corp_id = {1};", sql_member_count, sizeof(sql_member_count));
   db_bind_t params_count[] = { db_bind_i32 (corp_id) };
   db_res_t *res_count = NULL;
 
@@ -2090,8 +2098,8 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   db_error_t err;
-  const char *sql_insert_stock =
-    "INSERT INTO stocks (corp_id, ticker, total_shares, par_value, current_price) VALUES ($1, $2, $3, $4, $5);";
+  char sql_insert_stock[512];
+  sql_build (db, "INSERT INTO stocks (corp_id, ticker, total_shares, par_value, current_price) VALUES ({1}, {2}, {3}, {4}, {5});", sql_insert_stock, sizeof(sql_insert_stock));
   db_bind_t params_stock[] = { db_bind_i32 (corp_id), db_bind_text (ticker),
                                db_bind_i32 (total_shares),
                                db_bind_i32 (par_value),
@@ -2404,8 +2412,8 @@ cmd_stock_dividend_set (client_ctx_t *ctx,
     }
 
   db_error_t err;
-  const char *sql_insert_dividend =
-    "INSERT INTO stock_dividends (stock_id, amount_per_share, declared_ts) VALUES ($1, $2, $3);";
+  char sql_insert_dividend[512];
+  sql_build (db, "INSERT INTO stock_dividends (stock_id, amount_per_share, declared_ts) VALUES ({1}, {2}, {3});", sql_insert_dividend, sizeof(sql_insert_dividend));
   db_bind_t params[] = { db_bind_i32 (stock_id), db_bind_i32 (amount_per_share),
                          db_bind_i64 (time (NULL)) };
 
@@ -2525,8 +2533,8 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
   long long total_proceeds = (long long) quantity * current_price;
 
   // Verify shares owned
-  const char *sql_shares =
-    "SELECT shares FROM corp_shareholders WHERE player_id = $1 AND corp_id = (SELECT corp_id FROM stocks WHERE id = $2);";
+  char sql_shares[512];
+  sql_build (db, "SELECT shares FROM corp_shareholders WHERE player_id = {1} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {2});", sql_shares, sizeof(sql_shares));
   db_bind_t params_s[] = { db_bind_i32 (ctx->player_id),
                            db_bind_i32 (stock_id) };
   db_res_t *res_s = NULL;
@@ -2673,7 +2681,8 @@ h_corp_is_publicly_traded (db_t *db, int corp_id, bool *is_publicly_traded)
       return ERR_INVALID_ARG;
     }
 
-  const char *sql = "SELECT 1 FROM stocks WHERE corp_id = $1;";
+  char sql[512];
+  sql_build (db, "SELECT 1 FROM stocks WHERE corp_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -2823,9 +2832,9 @@ h_dividend_payout (db_t *db, int64_t now_s)
 
               if (ok)
                 {
-                  const char *sql_holders =
-                    "SELECT player_id, shares FROM corp_shareholders WHERE corp_id = (SELECT corp_id FROM stocks WHERE id = $1) AND shares > 0;";
-                  db_bind_t params_h[] = { db_bind_i32 (stock_id) };
+              char sql_holders[512];
+              sql_build (db, "SELECT player_id, shares FROM corp_shareholders WHERE corp_id = (SELECT corp_id FROM stocks WHERE id = {1}) AND shares > 0;", sql_holders, sizeof(sql_holders));
+              db_bind_t params_h[] = { db_bind_i32 (stock_id) };
                   db_res_t *res_holders = NULL;
 
 
@@ -2871,10 +2880,10 @@ h_dividend_payout (db_t *db, int64_t now_s)
 
               if (ok)
                 {
-                  const char *sql_mark_paid =
-                    "UPDATE stock_dividends SET paid_ts = $1 WHERE id = $2;";
-                  db_bind_t params_paid[] = { db_bind_i64 (now_s),
-                                              db_bind_i32 (div_id) };
+              char sql_mark_paid[512];
+              sql_build (db, "UPDATE stock_dividends SET paid_ts = {1} WHERE id = {2};", sql_mark_paid, sizeof(sql_mark_paid));
+              db_bind_t params_paid[] = { db_bind_i64 (now_s),
+                                          db_bind_i32 (div_id) };
 
 
                   if (!db_exec (db, sql_mark_paid, params_paid, 2, &err))
