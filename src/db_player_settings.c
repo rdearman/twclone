@@ -30,9 +30,11 @@ db_subscribe_upsert (db_t *db,
     {
       return -1;
     }
-  const char *sql =
-    "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) VALUES ($1, $2, $3, $4, 1) "
-    "ON CONFLICT(player_id, event_type) DO UPDATE SET filter_json = $3, locked = $4, enabled = 1;";
+  char sql[512];
+  sql_build (db,
+             "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) VALUES ({1}, {2}, {3}, {4}, 1) "
+             "ON CONFLICT(player_id, event_type) DO UPDATE SET filter_json = {3}, locked = {4}, enabled = 1;",
+             sql, sizeof (sql));
   if (!db_exec (db,
                 sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (topic),
@@ -53,8 +55,12 @@ db_subscribe_disable (db_t *db, int64_t pid, const char *topic, int *locked_out)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "UPDATE subscriptions SET enabled = 0 WHERE player_id = {1} AND event_type = {2} AND locked = 0;",
+             sql, sizeof (sql));
   if (!db_exec (db,
-                "UPDATE subscriptions SET enabled = 0 WHERE player_id = $1 AND event_type = $2 AND locked = 0;",
+                sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (topic)},
                 2,
                 &err))
@@ -76,9 +82,11 @@ db_bookmark_upsert (db_t *db, int64_t pid, const char *name, int64_t sid)
     {
       return -1;
     }
-  const char *sql =
-    "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ($1, $2, $3) "
-    "ON CONFLICT(player_id, name) DO UPDATE SET sector_id = $3;";
+  char sql[512];
+  sql_build (db,
+             "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3}) "
+             "ON CONFLICT(player_id, name) DO UPDATE SET sector_id = {3};",
+             sql, sizeof (sql));
   if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (name),
                               db_bind_i64 (sid)}, 3, &err))
@@ -96,8 +104,12 @@ db_bookmark_list (db_t *db, int64_t pid, db_res_t **it)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "SELECT name, sector_id FROM player_bookmarks WHERE player_id = {1} ORDER BY name;",
+             sql, sizeof (sql));
   if (!db_query (db,
-                 "SELECT name, sector_id FROM player_bookmarks WHERE player_id = $1 ORDER BY name;",
+                 sql,
                  (db_bind_t[]){db_bind_i64 (pid)},
                  1,
                  it,
@@ -116,8 +128,12 @@ db_bookmark_remove (db_t *db, int64_t pid, const char *name)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "DELETE FROM player_bookmarks WHERE player_id = {1} AND name = {2};",
+             sql, sizeof (sql));
   if (!db_exec (db,
-                "DELETE FROM player_bookmarks WHERE player_id = $1 AND name = $2;",
+                sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (name)},
                 2,
                 &err))
@@ -143,9 +159,11 @@ db_avoid_add (db_t *db, int64_t pid, int64_t sid)
     }
   char sql_buf[256];
   snprintf(sql_buf, sizeof(sql_buf),
-      "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) %s;",
+      "INSERT INTO player_avoid (player_id, sector_id) VALUES ({1}, {2}) %s;",
       conflict_clause);
-  if (!db_exec (db, sql_buf,
+  char sql[512];
+  sql_build (db, sql_buf, sql, sizeof (sql));
+  if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (sid)},
                 2,
                 &err))
@@ -163,8 +181,12 @@ db_avoid_list (db_t *db, int64_t pid, db_res_t **it)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "SELECT sector_id FROM player_avoid WHERE player_id = {1} ORDER BY sector_id;",
+             sql, sizeof (sql));
   if (!db_query (db,
-                 "SELECT sector_id FROM player_avoid WHERE player_id = $1 ORDER BY sector_id;",
+                 sql,
                  (db_bind_t[]){db_bind_i64 (pid)},
                  1,
                  it,
@@ -183,8 +205,12 @@ db_avoid_remove (db_t *db, int64_t pid, int64_t sid)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "DELETE FROM player_avoid WHERE player_id = {1} AND sector_id = {2};",
+             sql, sizeof (sql));
   if (!db_exec (db,
-                "DELETE FROM player_avoid WHERE player_id = $1 AND sector_id = $2;",
+                sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (sid)},
                 2,
                 &err))
@@ -206,9 +232,11 @@ db_note_set (db_t *db,
     {
       return -1;
     }
-  const char *sql =
-    "INSERT INTO player_notes (player_id, scope, key, note) VALUES ($1, $2, $3, $4) "
-    "ON CONFLICT(player_id, scope, key) DO UPDATE SET note = $4;";
+  char sql[512];
+  sql_build (db,
+             "INSERT INTO player_notes (player_id, scope, key, note) VALUES ({1}, {2}, {3}, {4}) "
+             "ON CONFLICT(player_id, scope, key) DO UPDATE SET note = {4};",
+             sql, sizeof (sql));
   if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (scope),
                               db_bind_text (key), db_bind_text (note)}, 4,
@@ -227,8 +255,12 @@ db_note_delete (db_t *db, int64_t pid, const char *scope, const char *key)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "DELETE FROM player_notes WHERE player_id = {1} AND scope = {2} AND key = {3};",
+             sql, sizeof (sql));
   if (!db_exec (db,
-                "DELETE FROM player_notes WHERE player_id = $1 AND scope = $2 AND key = $3;",
+                sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (scope),
                               db_bind_text (key)},
                 3,
@@ -247,11 +279,17 @@ db_note_list (db_t *db, int64_t pid, const char *scope, db_res_t **it)
     {
       return -1;
     }
-  const char *sql =
-    scope ?
-    "SELECT scope, key, note FROM player_notes WHERE player_id = $1 AND scope = $2 ORDER BY key;"
-                          :
-    "SELECT scope, key, note FROM player_notes WHERE player_id = $1 ORDER BY scope, key;";
+  char sql_tmpl[512];
+  if (scope)
+    {
+      strncpy(sql_tmpl, "SELECT scope, key, note FROM player_notes WHERE player_id = {1} AND scope = {2} ORDER BY key;", sizeof(sql_tmpl));
+    }
+  else
+    {
+      strncpy(sql_tmpl, "SELECT scope, key, note FROM player_notes WHERE player_id = {1} ORDER BY scope, key;", sizeof(sql_tmpl));
+    }
+  char sql[512];
+  sql_build (db, sql_tmpl, sql, sizeof (sql));
   db_bind_t params[2]; params[0] = db_bind_i64 (pid); if (scope)
     {
       params[1] = db_bind_text (scope);
@@ -271,8 +309,12 @@ db_for_each_subscriber (db_t *db, const char *event, player_id_cb cb, void *arg)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "SELECT DISTINCT player_id FROM subscriptions WHERE event_type = {1} AND enabled = 1;",
+             sql, sizeof (sql));
   if (db_query (db,
-                "SELECT DISTINCT player_id FROM subscriptions WHERE event_type = $1 AND enabled = 1;",
+                sql,
                 (db_bind_t[]){db_bind_text (event)},
                 1,
                 &res,
@@ -298,8 +340,12 @@ db_prefs_get_all (db_t *db, int64_t pid, db_res_t **it)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "SELECT key, value FROM player_prefs WHERE player_id = {1};",
+             sql, sizeof (sql));
   if (!db_query (db,
-                 "SELECT key, value FROM player_prefs WHERE player_id = $1;",
+                 sql,
                  (db_bind_t[]){db_bind_i64 (pid)},
                  1,
                  it,
@@ -318,8 +364,12 @@ db_prefs_get_one (db_t *db, int64_t pid, const char *key, char **out)
     {
       return -1;
     }
+  char sql[512];
+  sql_build (db,
+             "SELECT value FROM player_prefs WHERE player_id = {1} AND key = {2} LIMIT 1;",
+             sql, sizeof (sql));
   if (db_query (db,
-                "SELECT value FROM player_prefs WHERE player_id = $1 AND key = $2 LIMIT 1;",
+                sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (key)},
                 2,
                 &res,
@@ -346,8 +396,10 @@ db_prefs_set_one (db_t *db,
     {
       return -1;
     }
-  const char *sql =
-    "INSERT INTO player_prefs (player_id, key, value) VALUES ($1, $2, $3) ON CONFLICT(player_id, key) DO UPDATE SET value = $3;";
+  char sql[512];
+  sql_build (db,
+             "INSERT INTO player_prefs (player_id, key, value) VALUES ({1}, {2}, {3}) ON CONFLICT(player_id, key) DO UPDATE SET value = {3};",
+             sql, sizeof (sql));
   if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_text (key),
                               db_bind_text (val)}, 3, &err))

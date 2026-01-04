@@ -133,7 +133,7 @@ h_db_prefs_set_one (int player_id,
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "INSERT INTO player_prefs (player_id, key, type, value) VALUES ($1, $2, $3, $4) "
+    "INSERT INTO player_prefs (player_id, key, type, value) VALUES ({1}, {2}, {3}, {4}) "
     "ON CONFLICT (player_id, key) DO UPDATE SET type = EXCLUDED.type, value = EXCLUDED.value";
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (key),
                     db_bind_text (type), db_bind_text (value) };
@@ -147,7 +147,7 @@ h_db_bookmark_upsert (int player_id, const char *name, int sector_id)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ($1, $2, $3) "
+    "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3}) "
     "ON CONFLICT (player_id, name) DO UPDATE SET sector_id = EXCLUDED.sector_id";
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (name),
                     db_bind_i32 (sector_id) };
@@ -161,7 +161,7 @@ h_db_bookmark_remove (int player_id, const char *name)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "DELETE FROM player_bookmarks WHERE player_id = $1 AND name = $2";
+    "DELETE FROM player_bookmarks WHERE player_id = {1} AND name = {2}";
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (name) };
   db_error_t err;
   return db_exec (db, sql, p, 2, &err) ? 0 : -1;
@@ -179,7 +179,7 @@ h_db_avoid_add (int player_id, int sector_id)
     }
   char sql_buf[256];
   snprintf(sql_buf, sizeof(sql_buf),
-      "INSERT INTO player_avoid (player_id, sector_id) VALUES ($1, $2) %s",
+      "INSERT INTO player_avoid (player_id, sector_id) VALUES ({1}, {2}) %s",
       conflict_clause);
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_i32 (sector_id) };
   db_error_t err;
@@ -192,7 +192,7 @@ h_db_avoid_remove (int player_id, int sector_id)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "DELETE FROM player_avoid WHERE player_id = $1 AND sector_id = $2";
+    "DELETE FROM player_avoid WHERE player_id = {1} AND sector_id = {2}";
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_i32 (sector_id) };
   db_error_t err;
   return db_exec (db, sql, p, 2, &err) ? 0 : -1;
@@ -204,7 +204,7 @@ h_db_subscribe_disable (int player_id, const char *topic)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "UPDATE player_subscriptions SET enabled = 0 WHERE player_id = $1 AND topic = $2";
+    "UPDATE player_subscriptions SET enabled = 0 WHERE player_id = {1} AND topic = {2}";
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (topic) };
   db_error_t err;
   return db_exec (db, sql, p, 2, &err) ? 0 : -1;
@@ -219,7 +219,7 @@ h_db_subscribe_upsert (int player_id,
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ($1, $2, 1, $3, $4) "
+    "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, 1, {3}, {4}) "
     "ON CONFLICT (player_id, topic) DO UPDATE SET enabled = 1, delivery = EXCLUDED.delivery, filter = EXCLUDED.filter";
   db_bind_t p[] = {
     db_bind_i32 (player_id), db_bind_text (topic),
@@ -239,7 +239,7 @@ prefs_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "SELECT key, type, value FROM player_prefs WHERE player_id = $1";
+    "SELECT key, type, value FROM player_prefs WHERE player_id = {1}";
   db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -272,7 +272,7 @@ bookmarks_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "SELECT name, sector_id FROM player_bookmarks WHERE player_id=$1 ORDER BY name";
+    "SELECT name, sector_id FROM player_bookmarks WHERE player_id={1} ORDER BY name";
   db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -301,7 +301,7 @@ avoid_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "SELECT sector_id FROM player_avoid WHERE player_id=$1 ORDER BY sector_id";
+    "SELECT sector_id FROM player_avoid WHERE player_id={1} ORDER BY sector_id";
   db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -324,7 +324,7 @@ subscriptions_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
   const char *sql =
-    "SELECT topic, locked, enabled, delivery, filter FROM player_subscriptions WHERE player_id=$1";
+    "SELECT topic, locked, enabled, delivery, filter FROM player_subscriptions WHERE player_id={1}";
   db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
@@ -856,7 +856,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
     "FROM players p "
     "LEFT JOIN turns t ON t.player_id = p.player_id "
     "LEFT JOIN corp_members cm ON cm.player_id = p.player_id "
-    "WHERE p.player_id = $1";
+    "WHERE p.player_id = {1}";
 
   db_bind_t params[] = { db_bind_i32 (ctx->player_id) };
   db_res_t *res = NULL;
@@ -947,7 +947,7 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
     }
 
   const char *sql =
-    "SELECT alignment, experience, commission_id FROM players WHERE player_id = $1;";
+    "SELECT alignment, experience, commission_id FROM players WHERE player_id = {1};";
   db_res_t *res = NULL;
   db_error_t err;
 
@@ -1054,7 +1054,7 @@ h_send_message_to_player (db_t *db,
     }
 
   const char *sql =
-    "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES ($1, $2, $3, $4);";
+    "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES ({1}, {2}, {3}, {4});";
   db_bind_t params[] = {
     db_bind_i32 (sender_id),
     db_bind_i32 (recipient_id),
@@ -1116,7 +1116,7 @@ h_get_cargo_space_free (db_t *db, int player_id, int *free_out)
     "SELECT (COALESCE(s.holds, 0) - COALESCE(s.colonists + s.equipment + s.organics + s.ore + s.slaves + s.weapons + s.drugs, 0)) "
     "FROM players p "
     "JOIN ships s ON s.ship_id = p.ship_id "
-    "WHERE p.player_id = $1;";
+    "WHERE p.player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -1194,7 +1194,7 @@ h_player_is_npc (db_t *db, int player_id)
     }
 
 
-  const char *sql = "SELECT is_npc FROM players WHERE player_id = $1;";
+  const char *sql = "SELECT is_npc FROM players WHERE player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -1256,7 +1256,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
   const char *sql_type =
 
 
-    "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = $1;";
+    "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = {1};";
 
 
   db_res_t *res = NULL;
@@ -1316,7 +1316,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
   const char *sql_ins =
 
 
-    "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;";
+    "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6}) RETURNING id;";
 
 
   db_bind_t ins_params[] = {
@@ -1381,7 +1381,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
   const char *sql_own =
 
 
-    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES ($1, $2, 1, 1);";
+    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES ({1}, {2}, 1, 1);";
 
 
   db_bind_t own_params[] = {
@@ -1404,7 +1404,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
   const char *sql_upd =
 
 
-    "UPDATE players SET ship_id = $1, sector_id = $2 WHERE player_id = $3;";
+    "UPDATE players SET ship_id = {1}, sector_id = {2} WHERE player_id = {3};";
 
 
   db_bind_t upd_params[] = {
@@ -1430,7 +1430,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
   const char *sql_pod =
 
 
-    "UPDATE podded_status SET status = $1 WHERE player_id = $2;";
+    "UPDATE podded_status SET status = {1} WHERE player_id = {2};";
 
 
   db_bind_t pod_params[] = {
@@ -1466,7 +1466,7 @@ h_get_player_petty_cash (db_t *db, int player_id, long long *bal)
     }
 
 
-  const char *sql = "SELECT credits FROM players WHERE player_id = $1;";
+  const char *sql = "SELECT credits FROM players WHERE player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -1564,7 +1564,7 @@ h_deduct_player_petty_cash_unlocked (db_t *db,
   const char *sql =
 
 
-    "UPDATE players SET credits = credits - $1 WHERE player_id = $2 AND credits >= $1 RETURNING credits;";
+    "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1} RETURNING credits;";
 
 
   db_bind_t params[] = {
@@ -1653,7 +1653,7 @@ h_add_player_petty_cash (db_t *db,
   const char *sql =
 
 
-    "UPDATE players SET credits = credits + $1 WHERE player_id = $2 RETURNING credits;";
+    "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
 
 
   db_bind_t params[] = {
@@ -1731,7 +1731,7 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
   const char *sql_check =
 
 
-    "SELECT turns_remaining FROM turns WHERE player_id = $1;";
+    "SELECT turns_remaining FROM turns WHERE player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -1787,7 +1787,7 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
   const char *sql_update =
 
 
-    "UPDATE turns SET turns_remaining = turns_remaining - $1, last_update = NOW() WHERE player_id = $2 AND turns_remaining >= $1 "
+    "UPDATE turns SET turns_remaining = turns_remaining - {1}, last_update = NOW() WHERE player_id = {2} AND turns_remaining >= {1} "
     ";";
 
 
@@ -1958,7 +1958,7 @@ h_player_apply_progress (db_t *db,
   const char *sql_get =
 
 
-    "SELECT alignment, experience FROM players WHERE player_id = $1;";
+    "SELECT alignment, experience FROM players WHERE player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -2051,7 +2051,7 @@ h_player_apply_progress (db_t *db,
   const char *sql_upd =
 
 
-    "UPDATE players SET experience = $1, alignment = $2 WHERE player_id = $3;";
+    "UPDATE players SET experience = {1}, alignment = {2} WHERE player_id = {3};";
 
 
   db_bind_t upd_params[] = {
@@ -2111,7 +2111,7 @@ h_get_player_sector (db_t *db, int player_id)
 
 
   const char *sql =
-    "SELECT COALESCE(sector_id, 0) FROM players WHERE player_id = $1;";
+    "SELECT COALESCE(sector_id, 0) FROM players WHERE player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -2195,7 +2195,7 @@ h_add_player_petty_cash_unlocked (db_t *db,
   const char *sql =
 
 
-    "UPDATE players SET credits = credits + $1 WHERE player_id = $2 RETURNING credits;";
+    "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
 
 
   db_bind_t params[] = {
@@ -2285,10 +2285,10 @@ h_player_petty_cash_add (db_t *db, int player_id, long long delta,
     "UPDATE players "
 
 
-    "SET credits = credits + $2 "
+    "SET credits = credits + {2} "
 
 
-    "WHERE player_id = $1 AND (credits + $2) >= 0 "
+    "WHERE player_id = {1} AND (credits + {2}) >= 0 "
 
 
     "RETURNING credits;";

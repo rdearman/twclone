@@ -28,6 +28,28 @@
 extern "C" {
 #endif
 
+
+
+/**
+ * @brief Builds a dialect-specific SQL string from a template.
+ *
+ * Placeholders:
+ *   - "{N}" where N is a positive integer.
+ *
+ * Escapes:
+ *   - "{{" -> "{"
+ *   - "}}" -> "}"
+ *
+ * Dialects:
+ *   - PostgreSQL: "{1}" -> "$1"
+ *   - SQLite:     "{1}" -> "?1"  (preserves index; allows reuse like "... {1} ... {1} ...")
+ *   - Others:     "{1}" -> "?"   (typical)
+ *
+ * @return 0 on success, -1 on overflow/parse error.
+ */
+  int sql_build(const db_t *db, const char *template, char *out_buf, size_t buf_size); 
+
+  
 /**
  * @brief Return SQL for current timestamp in TIMESTAMP/TIMESTAMPTZ fields.
  *

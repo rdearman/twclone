@@ -12,6 +12,12 @@
 #include "db_api.h"
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
+#include <limits.h>
+#include <stddef.h>
+
+
+
 
 /**
  * @brief Return SQL for current timestamp in TIMESTAMP/TIMESTAMPTZ fields.
@@ -416,4 +422,143 @@ sql_upsert_do_update(const db_t *db,
       /* Fail fast for unsupported backends */
       return -1;
     }
+}
+
+
+/* Safe append helpers */
+static int
+sqlb_putc(char *out, size_t out_cap, size_t *io, char c)
+{
+  if (!out || !io || out_cap == 0) return -1;
+  if (*io + 1 >= out_cap) return -1;          /* need space for char + NUL */
+  out[(*io)++] = c;
+  out[*io] = '\0';
+  return 0;
+}
+
+static int
+sqlb_puts(char *out, size_t out_cap, size_t *io, const char *s)
+{
+  if (!out || !io || out_cap == 0 || !s) return -1;
+  while (*s)
+    {
+      if (sqlb_putc(out, out_cap, io, *s++) != 0)
+        return -1;
+    }
+  return 0;
+}
+
+/**
+ * @brief Builds a dialect-specific SQL string from a template.
+ *
+ * Placeholders:
+ *   - "{N}" where N is a positive integer.
+ *
+ * Escapes:
+ *   - "{{" -> "{"
+ *   - "}}" -> "}"
+ *
+ * Dialects:
+ *   - PostgreSQL: "{1}" -> "$1"
+ *   - SQLite:     "{1}" -> "?1"  (preserves index; allows reuse like "... {1} ... {1} ...")
+ *   - Others:     "{1}" -> "?"   (typical)
+ *
+ * @return 0 on success, -1 on overflow/parse error.
+ */
+int
+sql_build(const db_t *db, const char *template, char *out_buf, size_t buf_size)
+{
+  size_t out_i = 0;
+  const char *p;
+  db_backend_t backend;
+
+  if (!out_buf || buf_size == 0)
+    return -1;
+
+  out_buf[0] = '\0';
+
+  if (!template)
+    return -1;
+
+  backend = db ? db_backend(db) : DB_BACKEND_POSTGRES;
+  p = template;
+
+  while (*p)
+    {
+      /* Literal brace escapes */
+      if (p[0] == '{' && p[1] == '{')
+        {
+          if (sqlb_putc(out_buf, buf_size, &out_i, '{') != 0) goto overflow;
+          p += 2;
+          continue;
+        }
+      if (p[0] == '}' && p[1] == '}')
+        {
+          if (sqlb_putc(out_buf, buf_size, &out_i, '}') != 0) goto overflow;
+          p += 2;
+          continue;
+        }
+
+      /* Placeholder: {N} */
+      if (*p == '{' && isdigit((unsigned char)p[1]))
+        {
+          const char *start = p;   /* in case we need to treat as literal */
+          unsigned long n = 0;
+
+          p++; /* skip '{' */
+
+          while (isdigit((unsigned char)*p))
+            {
+              unsigned digit = (unsigned)(*p - '0');
+              if (n > (ULONG_MAX - digit) / 10) goto parse_error; /* overflow */
+              n = (n * 10) + digit;
+              p++;
+            }
+
+          if (*p == '}' && n > 0 && n <= (unsigned long)INT_MAX)
+            {
+              char tmp[32];
+              p++; /* skip '}' */
+
+              if (backend == DB_BACKEND_POSTGRES)
+                {
+                  /* $N */
+                  /* tmp size is ample for "$2147483647" */
+                  int written = snprintf(tmp, sizeof tmp, "$%lu", n);
+                  if (written <= 0 || (size_t)written >= sizeof tmp) goto parse_error;
+                  if (sqlb_puts(out_buf, buf_size, &out_i, tmp) != 0) goto overflow;
+                }
+              else if (backend == DB_BACKEND_SQLITE)
+                {
+                  /* ?N  (SQLite supports numbered parameters like ?1 ?2 ...) */
+                  int written = snprintf(tmp, sizeof tmp, "?%lu", n);
+                  if (written <= 0 || (size_t)written >= sizeof tmp) goto parse_error;
+                  if (sqlb_puts(out_buf, buf_size, &out_i, tmp) != 0) goto overflow;
+                }
+              else
+                {
+                  /* Generic '?' */
+                  if (sqlb_putc(out_buf, buf_size, &out_i, '?') != 0) goto overflow;
+                }
+
+              continue;
+            }
+
+          /* Not a valid {N} -> treat literally from '{' and continue normally */
+          p = start;
+          /* fall through to copy one char */
+        }
+
+      /* Normal character */
+      if (sqlb_putc(out_buf, buf_size, &out_i, *p) != 0) goto overflow;
+      p++;
+    }
+
+  return 0;
+
+overflow:
+parse_error:
+  /* Fail safe: never return partial SQL. */
+  out_buf[0] = '\0';
+  return -1;
 }
