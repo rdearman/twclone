@@ -160,8 +160,8 @@ db_load_ports (int *server_port, int *s2s_port)
 
   /* Try to load server_port */
   {
-    const char *sql =
-      "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    char sql[512];
+    sql_build(db, "SELECT value FROM config WHERE key = {1} AND type = 'int' LIMIT 1;", sql, sizeof(sql));
     db_res_t *res = NULL;
     db_error_t err;
 
@@ -197,8 +197,8 @@ db_load_ports (int *server_port, int *s2s_port)
 
   /* Try to load s2s_port */
   {
-    const char *sql =
-      "SELECT value FROM config WHERE key = $1 AND type = 'int' LIMIT 1;";
+    char sql[512];
+    sql_build(db, "SELECT value FROM config WHERE key = {1} AND type = 'int' LIMIT 1;", sql, sizeof(sql));
     db_res_t *res = NULL;
     db_error_t err;
 
@@ -464,8 +464,8 @@ h_compute_illegal_alignment_delta (int player_alignment,
 
   db_error_clear (&err);
   db_res_t *res = NULL;
-  const char *sql =
-    "SELECT is_good, is_evil FROM alignment_band WHERE alignment_band_id = $1;";
+  char sql[512];
+  sql_build(db, "SELECT is_good, is_evil FROM alignment_band WHERE alignment_band_id = {1};", sql, sizeof(sql));
 
   db_bind_t params[1] = { db_bind_i32 (cluster_align_band_id) };
 
@@ -751,7 +751,7 @@ exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
   char sql[512];
   snprintf(sql, sizeof(sql),
     "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
-    "VALUES(%s, $2, $3, $4, %s) RETURNING system_notice_id;",
+    "VALUES(%s, {2}, {3}, {4}, %s)",
     ts_fmt, ts_fmt);
 
   db_error_t err;
@@ -841,7 +841,7 @@ exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
   char sql[512];
   snprintf(sql, sizeof(sql),
     "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-    "VALUES(%s, $2, $3, 'Notice', $4, $5, %s) RETURNING system_notice_id;",
+    "VALUES(%s, {2}, {3}, 'Notice', {4}, {5}, %s)",
     ts_fmt, ts_fmt);
 
   db_error_t err;
@@ -894,12 +894,8 @@ server_commands_tick (db_t *db, int max_rows)
   int processed = 0;
   int64_t now_s = (int64_t)time (NULL);
 
-  const char *sql_select =
-    "SELECT engine_commands_id, type, payload, idem_key "
-    "FROM engine_commands "
-    "WHERE status='ready' AND due_at <= $1 "
-    "ORDER BY priority ASC, due_at ASC, engine_commands_id ASC "
-    "LIMIT $2;";
+  char sql_select[512];
+  sql_build(db, "SELECT engine_commands_id, type, payload, idem_key FROM engine_commands WHERE status='ready' AND due_at <= {1} ORDER BY priority ASC, due_at ASC, engine_commands_id ASC LIMIT {2};", sql_select, sizeof(sql_select));
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -938,7 +934,7 @@ server_commands_tick (db_t *db, int max_rows)
 
       char sql_running[256];
       snprintf(sql_running, sizeof(sql_running),
-        "UPDATE engine_commands SET status='running', started_at=%s WHERE engine_commands_id=$2;",
+        "UPDATE engine_commands SET status='running', started_at=%s WHERE engine_commands_id={2}",
         ts_fmt);
 
       db_bind_t run_params[2];
@@ -991,7 +987,7 @@ server_commands_tick (db_t *db, int max_rows)
         {
           char sql_done[256];
           snprintf(sql_done, sizeof(sql_done),
-            "UPDATE engine_commands SET status='done', finished_at=%s WHERE engine_commands_id=$2;",
+            "UPDATE engine_commands SET status='done', finished_at=%s WHERE engine_commands_id={2}",
             sql_epoch_param_to_timestamptz(db));
           db_bind_t done_params[2] = { db_bind_i64 (now_s),
                                        db_bind_i64 (cmd_id) };
@@ -1003,7 +999,7 @@ server_commands_tick (db_t *db, int max_rows)
         {
           char sql_err[256];
           snprintf(sql_err, sizeof(sql_err),
-            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=%s WHERE engine_commands_id=$2;",
+            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=%s WHERE engine_commands_id={2}",
             sql_epoch_param_to_timestamptz(db));
           db_bind_t err_params[2] = { db_bind_i64 (now_s),
                                       db_bind_i64 (cmd_id) };
@@ -1204,8 +1200,8 @@ engine_main_loop (int shutdown_fd)
             int64_t stale_threshold_ms =
               monotonic_millis () - CRON_LOCK_STALE_MS;
 
-            const char *sql_reclaim =
-              "DELETE FROM locks WHERE owner='server' AND until_ms < $1;";
+            char sql_reclaim[512];
+            sql_build(db_handle, "DELETE FROM locks WHERE owner='server' AND until_ms < {1};", sql_reclaim, sizeof(sql_reclaim));
             db_bind_t params[1] = { db_bind_i64 (stale_threshold_ms) };
 
 
@@ -1223,7 +1219,7 @@ engine_main_loop (int shutdown_fd)
             "WHERE enabled=TRUE "
             "  AND (next_due_at IS NULL OR next_due_at <= %s) "
             "ORDER BY next_due_at ASC "
-            "LIMIT $2;",
+            "LIMIT {2}",
             ts_fmt);
 
 
@@ -1287,7 +1283,7 @@ engine_main_loop (int shutdown_fd)
               snprintf(sql_upd, sizeof(sql_upd),
                 "UPDATE cron_tasks "
                 "SET last_run_at=%s, next_due_at=%s "
-                "WHERE cron_tasks_id=$1;",
+                "WHERE cron_tasks_id={1}",
                 ts_fmt, ts_fmt);
 
               db_bind_t up_params[3];
@@ -1426,13 +1422,7 @@ engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
     "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= %s LIMIT 500);",
     ts_fmt, ts_fmt);
 
-  // Wait, binding $1 twice?
-  // db_api supports reusing bind params if the backend does.
-  // PostgreSQL supports $1 used multiple times.
-  // So "AND expires_at <= [epoch_timestamp_conversion]($1) ... WHERE ... [epoch_timestamp_conversion]($1)" works.
-
-  // Actually, simplest is just "DELETE ... WHERE ... <= [epoch_timestamp_conversion]($1)".
-  // If we want batching, we need LIMIT.
+  // Backend bind parameters can be reused if the database supports it.
   // Using subquery with LIMIT is the standard cross-DB way for batch delete.
 
   db_error_t err;
@@ -1459,8 +1449,8 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
   int retried_count = 0;
   int final_rc = 0;
   // Select error commands ready for retry
-  const char *sql_select_deadletters =
-    "SELECT engine_commands_id, attempts FROM engine_commands WHERE status='error' AND attempts < $1 LIMIT 500;";
+  char sql_select_deadletters[512];
+  sql_build(db, "SELECT engine_commands_id, attempts FROM engine_commands WHERE status='error' AND attempts < {1} LIMIT 500;", sql_select_deadletters, sizeof(sql_select_deadletters));
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -1482,8 +1472,8 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
     {
       int64_t cmd_id = db_res_col_i64 (res, 0, &err);
 
-      const char *sql_update_deadletter =
-        "UPDATE engine_commands SET status='ready', due_at=$1 + (attempts * 60) WHERE engine_commands_id=$2;";
+      char sql_update_deadletter[512];
+      sql_build(db, "UPDATE engine_commands SET status='ready', due_at={1} + (attempts * 60) WHERE engine_commands_id={2};", sql_update_deadletter, sizeof(sql_update_deadletter));
 
       db_bind_t up_params[2];
 
@@ -1544,7 +1534,7 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
   
   snprintf(sql_delete_expired, sizeof(sql_delete_expired),
     "DELETE FROM sector_assets "
-    "WHERE asset_type = $1 AND deployed_at <= %s;",
+    "WHERE asset_type = {1} AND deployed_at <= %s",
     epoch_expr);
 
   db_error_t err;
@@ -1669,8 +1659,8 @@ h_daily_bank_interest_tick (db_t *db, int64_t now_s)
                 }
             }
         }
-      const char *sql_update_tick =
-        "UPDATE bank_accounts SET last_interest_tick = $1 WHERE id = $2;";
+      char sql_update_tick[512];
+      sql_build(db, "UPDATE bank_accounts SET last_interest_tick = {1} WHERE id = {2};", sql_update_tick, sizeof(sql_update_tick));
 
       db_bind_t up_params[2];
 
