@@ -754,11 +754,11 @@ h_reset_turns_for_player (db_t *db, int64_t now_s)
     }
 
   char sql_update[256];
-  char ts_buf[64];
-  snprintf(ts_buf, sizeof(ts_buf), "%s", ts_fmt);
-  snprintf(sql_update, sizeof(sql_update),
-    "UPDATE turns SET turns_remaining = {1}, last_update = '%s' WHERE player_id = {3}",
-    ts_buf);
+  if (sql_build(db, "UPDATE turns SET turns_remaining = {1}, last_update = to_timestamp({2}) WHERE player_id = {3}", sql_update, sizeof(sql_update)) != 0)
+    {
+      free (players);
+      return -1;
+    }
 
 
   for (size_t i = 0; i < player_count; i++)
@@ -982,7 +982,13 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
     {
       char message[256];
       char delete_sql[512];
-      sql_build(db, "DELETE FROM sector_assets WHERE owner_id = {1} AND asset_type = {2} AND sector_id = {3} AND quantity = {4};", delete_sql, sizeof(delete_sql));
+      
+      if (sql_build(db, "DELETE FROM sector_assets WHERE owner_id = {1} AND asset_type = {2} AND sector_id = {3} AND quantity = {4};", delete_sql, sizeof(delete_sql)) != 0)
+        {
+          LOGE("fedspace_cleanup: Failed to build delete SQL");
+          db_res_finalize (res);
+          return -1;
+        }
 
 
       while (db_res_step (res, &err))
@@ -1038,9 +1044,10 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
     }
 
   char sql_timeout_logout[320];
-  snprintf(sql_timeout_logout, sizeof(sql_timeout_logout),
-    "UPDATE players SET loggedin = %s WHERE loggedin != %s AND last_update < %s;",
-    ts_fmt, ts_fmt, ts_fmt);
+  if (sql_build(db, "UPDATE players SET loggedin = to_timestamp({1}) WHERE loggedin != to_timestamp({2}) AND last_update < to_timestamp({3});", sql_timeout_logout, sizeof(sql_timeout_logout)) != 0)
+    {
+      return -1;
+    }
 
   db_bind_t timeout_params[3] = {
     db_bind_i64 (0),            // loggedin = epoch(0)
@@ -1074,15 +1081,14 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
     }
 
   char sql_insert_eligible[512];
-  char ts_buf2[64];
-  snprintf(ts_buf2, sizeof(ts_buf2), "%s", ts_fmt2);
-  snprintf(sql_insert_eligible, sizeof(sql_insert_eligible),
-    "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
+  if (sql_build(db, "INSERT INTO eligible_tows (ship_id, sector_id, owner_id, fighters, alignment, experience) "
     "SELECT T1.ship_id, T1.sector_id, T2.player_id, T1.fighters, COALESCE(T2.alignment, 0), COALESCE(T2.experience, 0) "
     "FROM ships T1 LEFT JOIN players T2 ON T1.ship_id = T2.ship_id "
-    "WHERE T1.sector_id BETWEEN {1} AND {2} AND (T2.player_id IS NULL OR COALESCE(T2.login_time, '%s') < '%s') "
-    "ORDER BY T1.ship_id ASC",
-    ts_buf2, ts_buf2);
+    "WHERE T1.sector_id BETWEEN {1} AND {2} AND (T2.player_id IS NULL OR COALESCE(T2.login_time, to_timestamp({3})) < to_timestamp({4})) "
+    "ORDER BY T1.ship_id ASC", sql_insert_eligible, sizeof(sql_insert_eligible)) != 0)
+    {
+      return -1;
+    }
 
   db_bind_t eligible_params[4] = {
     db_bind_i32 (FEDSPACE_SECTOR_START),
@@ -1367,9 +1373,11 @@ h_autouncloak_sweeper (db_t *db, int64_t now_s)
     }
 
   char sql_update[256];
-  snprintf(sql_update, sizeof(sql_update),
-    "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < %s;",
-    ts_fmt);
+  if (sql_build(db, "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < to_timestamp({1});", sql_update, sizeof(sql_update)) != 0)
+    {
+      unlock (db, "autouncloak_sweeper");
+      return -1;
+    }
 
   db_bind_t params[1] = { db_bind_i64 (uncloak_threshold_s) };
 
@@ -1915,9 +1923,11 @@ h_broadcast_ttl_cleanup (db_t *db, int64_t now_s)
     }
 
   char sql[256];
-  snprintf(sql, sizeof(sql),
-    "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= %s;",
-    ts_fmt);
+  if (sql_build(db, "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= to_timestamp({1});", sql, sizeof(sql)) != 0)
+    {
+      unlock (db, "broadcast_ttl_cleanup");
+      return -1;
+    }
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
 
@@ -1944,8 +1954,8 @@ h_traps_process (db_t *db, int64_t now_s)
 
   db_error_clear (&err);
 
-  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
-  if (!ts_fmt)
+  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
+  if (!conv_fmt)
     {
       unlock (db, "traps_process");
       return -1;
@@ -1958,12 +1968,36 @@ h_traps_process (db_t *db, int64_t now_s)
       return -1;
     }
 
+  char sql_insert_tmpl[512];
+  char sql_insert_with_conv[512];
   char sql_insert[512];
-  snprintf(sql_insert, sizeof(sql_insert),
+  
+  /* Template with %s for timestamps and {1} for parameters */
+  const char *sql_tmpl =
+    "INSERT INTO engine_commands(type, payload, created_at, due_at) "
+    "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
+    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;";
+  
+  /* Substitute json_obj_fn and conv_fmt */
+  if (snprintf(sql_insert_with_conv, sizeof(sql_insert_with_conv),
+    sql_tmpl, json_obj_fn, conv_fmt, conv_fmt, conv_fmt) >= (int)sizeof(sql_insert_with_conv))
+    {
+      unlock (db, "traps_process");
+      return -1;
+    }
+  
+  /* Now build with {1} parameter */
+  snprintf(sql_insert_tmpl, sizeof(sql_insert_tmpl),
     "INSERT INTO engine_commands(type, payload, created_at, due_at) "
     "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
     "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;",
-    json_obj_fn, ts_fmt, ts_fmt, ts_fmt);
+    json_obj_fn, "{1}", "{1}", "{1}");
+  
+  if (sql_build(db, sql_insert_tmpl, sql_insert, sizeof(sql_insert)) != 0)
+    {
+      unlock (db, "traps_process");
+      return -1;
+    }
 
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
@@ -1975,10 +2009,22 @@ h_traps_process (db_t *db, int64_t now_s)
       return -1;
     }
 
+  char sql_delete_tmpl[256];
   char sql_delete[256];
-  snprintf(sql_delete, sizeof(sql_delete),
+  
+  if (snprintf(sql_delete_tmpl, sizeof(sql_delete_tmpl),
     "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;",
-    ts_fmt);
+    "{1}") >= (int)sizeof(sql_delete_tmpl))
+    {
+      unlock (db, "traps_process");
+      return -1;
+    }
+  
+  if (sql_build(db, sql_delete_tmpl, sql_delete, sizeof(sql_delete)) != 0)
+    {
+      unlock (db, "traps_process");
+      return -1;
+    }
 
 
   if (!db_exec (db, sql_delete, params, 1, &err))
@@ -2534,9 +2580,10 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
     }
 
   char sql_expire[320];
-  snprintf(sql_expire, sizeof(sql_expire),
-    "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < %s;",
-    ts_fmt);
+  if (sql_build(db, "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < to_timestamp({1});", sql_expire, sizeof(sql_expire)) != 0)
+    {
+      return -1;
+    }
   db_bind_t expire_params[1] = { db_bind_i64 (now_s) };
 
 
@@ -4206,13 +4253,13 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
     }
 
   char sql_expire[320];
-  char ts_buf3[64];
-  snprintf(ts_buf3, sizeof(ts_buf3), "%s", ts_fmt3);
-  snprintf(sql_expire, sizeof(sql_expire),
-    "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = {1} WHERE resolved = 0 AND expires_at <= '%s'",
-    ts_buf3);
+  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = to_timestamp({1}) WHERE resolved = 0 AND expires_at <= to_timestamp({2})", sql_expire, sizeof(sql_expire)) != 0)
+    {
+      unlock (db, "deadpool_resolution_cron");
+      return -1;
+    }
 
-  db_bind_t expire_params[2] = { db_bind_i32 ((int)now_s),
+  db_bind_t expire_params[2] = { db_bind_i64 (now_s),
                                  db_bind_i64 (now_s) };
 
 
@@ -4385,9 +4432,11 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
     }
 
   char sql_delete_notices[256];
-  snprintf(sql_delete_notices, sizeof(sql_delete_notices),
-    "DELETE FROM tavern_notices WHERE expires_at <= %s;",
-    ts_fmt);
+  if (sql_build(db, "DELETE FROM tavern_notices WHERE expires_at <= to_timestamp({1});", sql_delete_notices, sizeof(sql_delete_notices)) != 0)
+    {
+      unlock (db, "tavern_notice_expiry_cron");
+      return -1;
+    }
 
 
   db_bind_t params[1] = { db_bind_i64 ((int64_t)now_s) };
@@ -4412,9 +4461,11 @@ h_tavern_notice_expiry_cron (db_t *db, int64_t now_s)
 
 
   char sql_delete_corp_recruiting[256];
-  snprintf(sql_delete_corp_recruiting, sizeof(sql_delete_corp_recruiting),
-    "DELETE FROM corp_recruiting WHERE expires_at <= %s;",
-    ts_fmt);
+  if (sql_build(db, "DELETE FROM corp_recruiting WHERE expires_at <= to_timestamp({1});", sql_delete_corp_recruiting, sizeof(sql_delete_corp_recruiting)) != 0)
+    {
+      unlock (db, "tavern_notice_expiry_cron");
+      return -1;
+    }
 
 
   if (!db_exec (db, sql_delete_corp_recruiting, params, 1, &err))

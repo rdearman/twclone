@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <directory>"
+  exit 1
+fi
+
+DIR="$1"
+
+find "$DIR" -type f -name '*.c' -print0 |
+  xargs -0 awk '
+    function count_params(s,   n,t) {
+      n=0; t=s
+      while (match(t, /\$[1-9][0-9]*/)) { n++; t=substr(t, RSTART+RLENGTH) }
+      return n
+    }
+
+    BEGIN { total = 0; in_block_comment = 0 }
+
+    {
+      line = $0
+
+      # crude block comment stripping (good enough for counting)
+      if (in_block_comment) {
+        if (line ~ /\*\//) { sub(/^.*\*\//, "", line); in_block_comment = 0 }
+        else next
+      }
+      if (line ~ /\/\*/) {
+        in_block_comment = (line !~ /\*\//)
+        sub(/\/\*.*$/, "", line)
+      }
+
+      # ignore // comments
+      sub(/\/\/.*$/, "", line)
+
+      # only count on lines containing a double-quote (string literal fragments)
+      if (index(line, "\"") == 0) next
+
+      total += count_params(line)
+    }
+
+    END { if (total > 0) printf "%8d %s\n", total, FILENAME }
+  ' | sort -nr

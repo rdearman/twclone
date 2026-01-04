@@ -53,17 +53,29 @@ db_insert_commodity_order (db_t *db,
     ? db_bind_i64 (expires_at)
     : db_bind_null ();
 
-  char sql[512];
-  snprintf(sql, sizeof(sql),
-    "INSERT INTO commodity_orders ("
-    "actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, ts, expires_at) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, %s, %s) RETURNING commodity_orders_id",
-    conv_fmt, conv_fmt);
 
+  const char *sql_tmpl =
+    "INSERT INTO commodity_orders ("
+    "actor_type, actor_id, location_type, location_id, commodity_id, side, "
+    "quantity, filled_quantity, price, ts, expires_at) "
+    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, %s, %s) "
+    "RETURNING commodity_orders_id";
+
+  char sql_with_conv[512];
+
+  if (snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, conv_fmt, conv_fmt) >= (int)sizeof(sql_with_conv))
+    return ERR_DB;
+
+  char sql_final[512];
+
+  if (sql_build(db, sql_with_conv, sql_final, sizeof(sql_final)) != 0)
+    return ERR_DB_INTERNAL;
+
+ 
   int64_t new_order_id = -1;
 
 
-  if (!db_exec_insert_id (db, sql, params, 10, &new_order_id, &err))
+  if (!db_exec_insert_id (db, sql_final, params, 10, &new_order_id, &err))
     {
       LOGE ("db_insert_commodity_order: insert failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
@@ -92,11 +104,18 @@ db_update_commodity_order (db_t *db,
   params[2] = db_bind_i32 (new_filled_quantity);
   params[3] = db_bind_text (new_status);
 
-  const char *sql =
-    "UPDATE commodity_orders SET quantity = $2, filled_quantity = $3, status = $4 "
-    "WHERE commodity_orders_id = $1;";
 
+ const char *sql_tmpl =
+  "UPDATE commodity_orders "
+  "SET quantity = {2}, filled_quantity = {3}, status = {4} "
+  "WHERE commodity_orders_id = {1};";
 
+ char sql[256];
+
+ if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
+   return ERR_DB;
+
+ 
   if (!db_exec (db, sql, params, 4, &err))
     {
       LOGE ("db_update_commodity_order: update failed: %s (code=%d backend=%d)",
@@ -126,10 +145,16 @@ db_cancel_commodity_orders_for_actor_and_commodity (db_t *db,
   params[2] = db_bind_i32 (commodity_id);
   params[3] = db_bind_text (side);
 
-  const char *sql =
+  const char *sql_tmpl =
     "UPDATE commodity_orders SET status = 'cancelled' "
-    "WHERE actor_type = $1 AND actor_id = $2 AND commodity_id = $3 AND side = $4 AND status = 'open';";
+    " WHERE actor_type = {1} actor_id = {2}  AND commodity_id = {3} AND side = {4} AND status = 'open';";
+  
+  char sql[256];
 
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
+    return ERR_DB; 
+
+  
 
   if (!db_exec (db, sql, params, 4,  &err))
     {
@@ -193,12 +218,18 @@ db_get_open_order (db_t *db,
   params[2] = db_bind_i32 (commodity_id);
   params[3] = db_bind_text (side);
 
-  const char *sql =
-    "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
-    "ts, expires_at, filled_quantity "
+  const char *sql_tmpl =
+    "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, "
+    "quantity, price, status, ts, expires_at, filled_quantity "
     "FROM commodity_orders "
-    "WHERE actor_type = $1 AND actor_id = $2 AND commodity_id = $3 AND side = $4 AND status = 'open' "
+    "WHERE actor_type = {1} AND actor_id = {2} AND commodity_id = {3} "
+    "AND side = {4} AND status = 'open' "
     "LIMIT 1;";
+
+  char sql[512];
+
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
+    return ERR_DB;
 
   db_res_t *res = NULL;
 
@@ -313,30 +344,39 @@ db_load_open_orders_for_commodity (db_t *db,
   params[0] = db_bind_i32 (commodity_id);
   params[1] = db_bind_text (side);
 
-  const char *sql = NULL;
 
 
-  if (strcmp (side, "buy") == 0)
+  const char *sql_tmpl = NULL;
+
+  if (strcmp(side, "buy") == 0)
     {
-      sql =
-        "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
-        "ts, expires_at, filled_quantity "
-        "FROM commodity_orders "
-        "WHERE commodity_id = $1 AND side = $2 AND status = 'open' "
-        "ORDER BY price DESC, ts ASC;";
+      sql_tmpl =
+	"SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
+	"ts, expires_at, filled_quantity "
+	"FROM commodity_orders "
+	"WHERE commodity_id = {1} AND side = {2} AND status = 'open' "
+	"ORDER BY price DESC, ts ASC;";
     }
-  else if (strcmp (side, "sell") == 0)
+  else if (strcmp(side, "sell") == 0)
     {
-      sql =
-        "SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
-        "ts, expires_at, filled_quantity "
-        "FROM commodity_orders "
-        "WHERE commodity_id = $1 AND side = $2 AND status = 'open' "
-        "ORDER BY price ASC, ts ASC;";
+      sql_tmpl =
+	"SELECT commodity_orders_id, actor_type, actor_id, commodity_id, side, quantity, price, status, "
+	"ts, expires_at, filled_quantity "
+	"FROM commodity_orders "
+	"WHERE commodity_id = {1} AND side = {2} AND status = 'open' "
+	"ORDER BY price ASC, ts ASC;";
     }
   else
     {
-      LOGE ("db_load_open_orders_for_commodity: Invalid side '%s'", side);
+      LOGE("db_load_open_orders_for_commodity: Invalid side '%s'", side);
+      return NULL;
+    }
+
+  char sql[512];
+
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
+    {
+      LOGE("db_load_open_orders_for_commodity: sql_build overflow/parse error");
       return NULL;
     }
 
@@ -449,9 +489,6 @@ db_load_open_orders_for_commodity (db_t *db,
 }
 
 
-////// WORKING HERE ////////
-// Helper to insert a new commodity trade.
-// Returns the new trade's ID on success, or -1 on failure.
 int
 db_insert_commodity_trade (db_t *db,
                            int buy_order_id,
@@ -463,56 +500,53 @@ db_insert_commodity_trade (db_t *db,
                            const char *seller_actor_type,
                            int seller_actor_id,
                            int settlement_tx_buy,
-                           int settlement_tx_sell
-                           )
+                           int settlement_tx_sell)
 {
-  int64_t now = time (NULL);
   db_error_t err;
-  db_error_clear (&err);
+  db_error_clear(&err);
 
   const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
-  if (!conv_fmt)
-    {
-      LOGE ("db_insert_commodity_trade: Unsupported database backend");
-      return -1;
-    }
-
+  int64_t now = time(NULL);
   db_bind_t params[11];
 
+  params[0]  = db_bind_i32 (buy_order_id);         /* {1} */
+  params[1]  = db_bind_i32 (sell_order_id);        /* {2} */
+  params[2]  = db_bind_i32 (quantity);             /* {3} */
+  params[3]  = db_bind_i32 (price);                /* {4} */
+  params[4]  = db_bind_i64 (now);                  /* {5}  <-- NEW */
+  params[5]  = db_bind_text(buyer_actor_type);     /* {6} */
+  params[6]  = db_bind_i32 (buyer_actor_id);       /* {7} */
+  params[7]  = db_bind_text(seller_actor_type);    /* {8} */
+  params[8]  = db_bind_i32 (seller_actor_id);      /* {9} */
+  params[9]  = db_bind_i32 (settlement_tx_buy);    /* {10} */
+  params[10] = db_bind_i32 (settlement_tx_sell);   /* {11} */
 
-  params[0] = db_bind_i32 (buy_order_id);
-  params[1] = db_bind_i32 (sell_order_id);
-  params[2] = db_bind_i32 (quantity);
-  params[3] = db_bind_i32 (price);
-  params[4] = db_bind_text (buyer_actor_type);
-  params[5] = db_bind_i64 (now);
-  params[6] = db_bind_i32 (buyer_actor_id);
-  params[7] = db_bind_text (seller_actor_type);
-  params[8] = db_bind_i32 (seller_actor_id);
-  params[9] = db_bind_i32 (settlement_tx_buy);
-  params[10] = db_bind_i32 (settlement_tx_sell);
-
-  // FIX: trade_at renamed to ts in Postgres schema, and use to_timestamp
-  char sql[512];
-  snprintf(sql, sizeof(sql),
+  const char *sql_tmpl =
     "INSERT INTO commodity_trades ("
     "buy_order_id, sell_order_id, quantity, price, ts, "
     "buyer_actor_type, buyer_actor_id, seller_actor_type, seller_actor_id, "
     "settlement_tx_buy, settlement_tx_sell) "
-    "VALUES ($1, $2, $3, $4, %s, $5, $7, $8, $9, $10, $11);",
-    conv_fmt);
+    "VALUES ({1}, {2}, {3}, {4}, %s, {6}, {7}, {8}, {9}, {10}, {11});";
 
-  int64_t new_order_id = -1;
+  char sql_with_conv[512];
+  int n = snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, conv_fmt);
+  if (n < 0 || (size_t)n >= sizeof(sql_with_conv))
+    return -1;
 
+  char sql[512];
+  if (sql_build(db, sql_with_conv, sql, sizeof(sql)) != 0)
+    return -1;
 
-  if (!db_exec_insert_id (db, sql, params, 11, &new_order_id, &err))
+  
+  int64_t new_id = -1;
+  if (!db_exec_insert_id(db, sql, params, 10, &new_id, &err))
     {
-      LOGE ("db_insert_commodity_trade: insert failed: %s (code=%d backend=%d)",
-            err.message, err.code, err.backend_code);
+      LOGE("db_insert_commodity_trade: insert failed: %s (code=%d backend=%d)",
+           err.message, err.code, err.backend_code);
       return -1;
     }
 
-  return (int)new_order_id;
+  return (int)new_id;
 }
 
 
@@ -527,15 +561,19 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
 
   db_bind_t params[2];
 
+  params[0] = db_bind_text(actor_type);  /* {1} */
+  params[1] = db_bind_i32(actor_id);     /* {2} */
 
-  params[0] = db_bind_text (actor_type);
-  params[1] = db_bind_i32 (actor_id);
-
-  const char *sql =
+  const char *sql_tmpl =
     "SELECT commodity_orders_id, side, commodity_id, quantity, filled_quantity, price, status, "
     "ts, expires_at "
     "FROM commodity_orders "
-    "WHERE actor_type = $1 AND actor_id = $2 " "ORDER BY status ASC, ts DESC;";
+    "WHERE actor_type = {1} AND actor_id = {2} "
+    "ORDER BY status ASC, ts DESC;";
+
+  char sql[512];
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
+    return ERR_DB; /* or your project error */
 
   db_res_t *res = NULL;
 
@@ -630,8 +668,6 @@ db_orders_summary (db_t *db, int filter_commodity_id)
     }
 
   db_error_t err;
-
-
   db_error_clear (&err);
 
   const char *sql_all =
@@ -643,20 +679,24 @@ db_orders_summary (db_t *db, int filter_commodity_id)
   const char *sql_filter =
     "SELECT commodity_id, side, COUNT(*), SUM(quantity - filled_quantity) "
     "FROM commodity_orders "
-    "WHERE status = 'open' AND commodity_id = $1 "
+    "WHERE status = 'open' AND commodity_id = {1} "
     "GROUP BY commodity_id, side;";
 
-  const char *sql = (filter_commodity_id > 0) ? sql_filter : sql_all;
+  const char *sql_tmpl = (filter_commodity_id > 0) ? sql_filter : sql_all;
 
   db_bind_t params[1];
   size_t n_params = 0;
 
-
   if (filter_commodity_id > 0)
     {
-      params[0] = db_bind_i32 (filter_commodity_id);
+      params[0] = db_bind_i32(filter_commodity_id);  /* {1} */
       n_params = 1;
     }
+
+  /* build */
+  char sql[256];
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
+    return ERR_DB;
 
   db_res_t *res = NULL;
 

@@ -213,9 +213,11 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
   time_t now = time (NULL);
   db_error_t err;
 
-  const char *sql =
+  char sql[256];
+  sql_build(db, 
     "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
-    "VALUES ($1, $2, $3, $4, $5);";
+    "VALUES ({1}, {2}, {3}, {4}, {5});",
+    sql, sizeof(sql));
 
   db_bind_t params[5];
 
@@ -303,13 +305,15 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
     }
 
   char sql[512];
-  snprintf(sql, sizeof(sql),
+  char sql_tmpl[512];
+  snprintf(sql_tmpl, sizeof(sql_tmpl),
     "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
     "FROM system_notice n "
-    "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = $1 "
-    "WHERE ($2 = 1 OR n.expires_at IS NULL OR n.expires_at > %s) "
-    "ORDER BY n.created_at DESC LIMIT $3;",
+    "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = {1} "
+    "WHERE ({2} = 1 OR n.expires_at IS NULL OR n.expires_at > %s) "
+    "ORDER BY n.created_at DESC LIMIT {3};",
     now_expr);
+  sql_build(db, sql_tmpl, sql, sizeof(sql));
 
   db_bind_t params[3];
 
@@ -403,9 +407,12 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
   time_t now = time (NULL);
   db_error_t err;
 
-  const char *sql = "INSERT INTO notice_seen (notice_id, player_id, seen_at) "
-                    "VALUES ($1, $2, $3) "
-                    "ON CONFLICT(notice_id, player_id) DO UPDATE SET seen_at = excluded.seen_at;";
+  char sql[256];
+  sql_build(db,
+    "INSERT INTO notice_seen (notice_id, player_id, seen_at) "
+    "VALUES ({1}, {2}, {3}) "
+    "ON CONFLICT(notice_id, player_id) DO UPDATE SET seen_at = excluded.seen_at;",
+    sql, sizeof(sql));
 
   db_bind_t params[3];
 
@@ -1032,8 +1039,10 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   if (to_id <= 0 && to_name)
     {
       db_res_t *res = NULL;
-      const char *sql =
-        "SELECT id FROM players WHERE lower(name) = lower($1) LIMIT 1;";
+      char sql[256];
+      sql_build(db,
+        "SELECT id FROM players WHERE lower(name) = lower({1}) LIMIT 1;",
+        sql, sizeof(sql));
 
 
       if (db_query (db,
@@ -1058,8 +1067,10 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   /* Check if recipient has blocked the sender */
   {
     db_res_t *res = NULL;
-    const char *sql =
-      "SELECT 1 FROM player_block WHERE blocker_id=$1 AND blocked_id=$2 LIMIT 1;";
+    char sql[256];
+    sql_build(db,
+      "SELECT 1 FROM player_block WHERE blocker_id={1} AND blocked_id={2} LIMIT 1;",
+      sql, sizeof(sql));
     db_bind_t p[] = { db_bind_i32 (to_id), db_bind_i32 (ctx->player_id) };
     int blocked = 0;
 
@@ -1087,8 +1098,10 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   if (idem && *idem)
     {
       db_res_t *chk_res = NULL;
-      const char *sql =
-        "SELECT mail_id FROM mail WHERE idempotency_key=$1 AND recipient_id=$2 LIMIT 1;";
+      char sql[256];
+      sql_build(db,
+        "SELECT mail_id FROM mail WHERE idempotency_key={1} AND recipient_id={2} LIMIT 1;",
+        sql, sizeof(sql));
       db_bind_t p[] = { db_bind_text (idem), db_bind_i32 (to_id) };
 
 
@@ -1104,9 +1117,11 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   /* Insert if not already present */
   if (mail_id == 0)
     {
-      const char *sql =
+      char sql[256];
+      sql_build(db,
         "INSERT INTO mail(sender_id, recipient_id, subject, body, idempotency_key) "
-        "VALUES($1,$2,$3,$4,$5);";
+        "VALUES({1},{2},{3},{4},{5});",
+        sql, sizeof(sql));
       db_bind_t p[5];
 
 
@@ -1122,8 +1137,10 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
           if (idem && *idem)
             {
               db_res_t *chk_res = NULL;
-              const char *sql_chk =
-                "SELECT mail_id FROM mail WHERE idempotency_key=$1 AND recipient_id=$2 LIMIT 1;";
+              char sql_chk[256];
+              sql_build(db,
+                "SELECT mail_id FROM mail WHERE idempotency_key={1} AND recipient_id={2} LIMIT 1;",
+                sql_chk, sizeof(sql_chk));
               db_bind_t p_chk[] = { db_bind_text (idem), db_bind_i32 (to_id) };
 
 
@@ -1188,11 +1205,13 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
     {
       limit = 50;
     }
-  const char *SQL =
+  char SQL[512];
+  sql_build(db,
     "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at "
     "FROM mail m JOIN players p ON m.sender_id = p.player_id "
-    "WHERE m.recipient_id=$1 AND m.deleted=0 AND m.archived=0 "
-    "  AND ($2=0 OR m.mail_id<$2) " "ORDER BY m.mail_id DESC " "LIMIT $3;";
+    "WHERE m.recipient_id={1} AND m.deleted=0 AND m.archived=0 "
+    "  AND ({2}=0 OR m.mail_id<{2}) " "ORDER BY m.mail_id DESC " "LIMIT {3};",
+    SQL, sizeof(SQL));
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -1300,9 +1319,11 @@ cmd_mail_read (client_ctx_t *ctx,
   LOGI ("cmd_mail_read: reading mail id %d for player %d", id,
         ctx->player_id);
   /* Load and verify ownership */
-  const char *SEL =
+  char SEL[512];
+  sql_build(db,
     "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.body, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id=$1 AND m.recipient_id=$2 AND m.deleted=0;";
+    "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id={1} AND m.recipient_id={2} AND m.deleted=0;",
+    SEL, sizeof(SEL));
 
   db_res_t *res = NULL;
   db_error_t err;
@@ -1361,7 +1382,9 @@ cmd_mail_read (client_ctx_t *ctx,
 
       strftime (iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime (&now));
 
-      const char *up_sql = "UPDATE mail SET read_at=$1 WHERE mail_id=$2;";
+      char up_sql[256];
+      sql_build(db, "UPDATE mail SET read_at={1} WHERE mail_id={2};",
+        up_sql, sizeof(up_sql));
       db_bind_t up_params[2];
 
 
@@ -1453,19 +1476,19 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
                            "Too many bulk items");
       return 0;
     }
-  /* Create: UPDATE mail SET deleted=1 WHERE recipient_id=$1 AND mail_id IN ($2,$3,...) */
+  /* Create: UPDATE mail SET deleted=1 WHERE recipient_id={1} AND mail_id IN ({2},{3},...) */
   char sql[4096];
   char *p = sql;
 
 
   p +=
     snprintf (p, sizeof (sql),
-              "UPDATE mail SET deleted=1 WHERE recipient_id=$1 AND mail_id IN (");
+              "UPDATE mail SET deleted=1 WHERE recipient_id={1} AND mail_id IN (");
   for (size_t i = 0; i < n; i++)
     {
       p +=
         snprintf (p, (size_t) (sql + sizeof (sql) - p),
-                  (i ? ",$%zu" : "$%zu"), i + 2);
+                  (i ? ",{%zu}" : "{%zu}"), i + 2);
     }
   p += snprintf (p, (size_t) (sql + sizeof (sql) - p), ");");
 
@@ -1614,8 +1637,10 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql =
-    "SELECT COUNT(*) FROM subscriptions WHERE player_id=$1 AND enabled=1;";
+  char sql[256];
+  sql_build(db,
+    "SELECT COUNT(*) FROM subscriptions WHERE player_id={1} AND enabled=1;",
+    sql, sizeof(sql));
   int have = 0;
 
 
@@ -1771,8 +1796,10 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql =
-    "SELECT event_type, locked, enabled, delivery, filter_json FROM subscriptions WHERE player_id = $1;";
+  char sql[256];
+  sql_build(db,
+    "SELECT event_type, locked, enabled, delivery, filter_json FROM subscriptions WHERE player_id = {1};",
+    sql, sizeof(sql));
 
 
   if (!db_query (db,

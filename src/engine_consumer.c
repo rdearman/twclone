@@ -61,8 +61,10 @@ static int
 load_watermark (db_t *db, const char *key, long long *last_id,
                 long long *last_ts)
 {
-  const char *sql =
-    "SELECT last_event_id, last_event_ts FROM engine_offset WHERE key=$1;";
+  char sql[512];
+  sql_build (db,
+             "SELECT last_event_id, last_event_ts FROM engine_offset WHERE key={1};",
+             sql, sizeof (sql));
   db_res_t *res = NULL;
   db_error_t err;
   int rc = 0;
@@ -96,10 +98,12 @@ static int
 save_watermark (db_t *db, const char *key, long long last_id,
                 long long last_ts)
 {
-  const char *up =
-    "INSERT INTO engine_offset(key,last_event_id,last_event_ts) "
-    "VALUES($1,$2,$3) "
-    "ON CONFLICT(key) DO UPDATE SET last_event_id=excluded.last_event_id, last_event_ts=excluded.last_event_ts;";
+  char up[512];
+  sql_build (db,
+             "INSERT INTO engine_offset(key,last_event_id,last_event_ts) "
+             "VALUES({1},{2},{3}) "
+             "ON CONFLICT(key) DO UPDATE SET last_event_id=excluded.last_event_id, last_event_ts=excluded.last_event_ts;",
+             up, sizeof (up));
 
   db_bind_t params[] = { db_bind_text (key), db_bind_i64 (last_id),
                          db_bind_i64 (last_ts) };
@@ -144,10 +148,12 @@ static int
 quarantine (db_t *db, db_res_t *row, const char *err_msg)
 {
   /* row columns: id, ts, type, actor_player_id, sector_id, payload */
-  const char *sql =
-    "INSERT INTO engine_events_deadletter(engine_events_deadletter_id,ts,type,payload,error,moved_at) "
-    "VALUES($1,$2,$3,$4,$5,$6) "
-    "ON CONFLICT(engine_events_deadletter_id) DO UPDATE SET error=excluded.error, moved_at=excluded.moved_at;";
+  char sql[512];
+  sql_build (db,
+             "INSERT INTO engine_events_deadletter(engine_events_deadletter_id,ts,type,payload,error,moved_at) "
+             "VALUES({1},{2},{3},{4},{5},{6}) "
+             "ON CONFLICT(engine_events_deadletter_id) DO UPDATE SET error=excluded.error, moved_at=excluded.moved_at;",
+             sql, sizeof (sql));
 
   db_error_t err;
   int64_t id = db_res_col_i64 (row, 0, &err);
@@ -181,16 +187,16 @@ quarantine (db_t *db, db_res_t *row, const char *err_msg)
 static const char *BASE_SELECT_SQLITE =
   "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
   "FROM engine_events "
-  "WHERE engine_events_id > $1 "
-  "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_each($3))) "
-  "ORDER BY engine_events_id ASC " "LIMIT $4;";
+  "WHERE engine_events_id > {1} "
+  "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_each({3}))) "
+  "ORDER BY engine_events_id ASC " "LIMIT {4};";
 
 static const char *BASE_SELECT_PG =
   "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
   "FROM engine_events "
-  "WHERE engine_events_id > $1 "
-  "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text($3::json))) "
-  "ORDER BY engine_events_id ASC " "LIMIT $4;";
+  "WHERE engine_events_id > {1} "
+  "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text({3}::json))) "
+  "ORDER BY engine_events_id ASC " "LIMIT {4};";
 
 
 static int
@@ -243,8 +249,10 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   int ship_id = 0;
   {
     db_res_t *st_ship = NULL;
-    const char *sql_get_ship_id =
-      "SELECT ship_id FROM players WHERE player_id = $1;";
+    char sql_get_ship_id[512];
+    sql_build (db,
+               "SELECT ship_id FROM players WHERE player_id = {1};",
+               sql_get_ship_id, sizeof (sql_get_ship_id));
     db_bind_t params[] = { db_bind_i32 (player_id) };
 
 
@@ -270,8 +278,10 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   char ship_name[256] = { 0 };
   {
     db_res_t *st_name = NULL;
-    const char *sql_get_ship_name =
-      "SELECT name FROM ships WHERE ship_id = $1;";
+    char sql_get_ship_name[512];
+    sql_build (db,
+               "SELECT name FROM ships WHERE ship_id = {1};",
+               sql_get_ship_name, sizeof (sql_get_ship_name));
     db_bind_t params[] = { db_bind_i32 (ship_id) };
 
 
@@ -422,23 +432,27 @@ engine_consume_tick (db_t *db,
 
   if (db_backend (db) == DB_BACKEND_POSTGRES)
     {
-      snprintf (expanded_sql,
-                sizeof(expanded_sql),
+      char expanded_sql_tmpl[1024];
+      snprintf (expanded_sql_tmpl,
+                sizeof(expanded_sql_tmpl),
                 "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                 "FROM engine_events "
-                "WHERE engine_events_id > $1 "
-                "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text($3::json))) "
-                "ORDER BY engine_events_id ASC LIMIT $4;");
+                "WHERE engine_events_id > {1} "
+                "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text({3}::json))) "
+                "ORDER BY engine_events_id ASC LIMIT {4};");
+      sql_build (db, expanded_sql_tmpl, expanded_sql, sizeof (expanded_sql));
     }
   else
     {
-      snprintf (expanded_sql,
-                sizeof(expanded_sql),
+      char expanded_sql_tmpl[1024];
+      snprintf (expanded_sql_tmpl,
+                sizeof(expanded_sql_tmpl),
                 "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                 "FROM engine_events "
-                "WHERE engine_events_id > $1 "
-                "  AND ($2 = 0 OR type IN (SELECT trim(value) FROM json_each($3))) "
-                "ORDER BY engine_events_id ASC LIMIT $4;");
+                "WHERE engine_events_id > {1} "
+                "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_each({3}))) "
+                "ORDER BY engine_events_id ASC LIMIT {4};");
+      sql_build (db, expanded_sql_tmpl, expanded_sql, sizeof (expanded_sql));
     }
 
 
