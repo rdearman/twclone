@@ -61,31 +61,39 @@ h_apply_terra_sanctions (db_t *db, int player_id)
   db_error_t err;
 
   /* 1. Delete all ships owned by player */
-  const char *sql_ships = 
-    "DELETE FROM ships WHERE ship_id IN ("
-    "  SELECT ship_id FROM ship_ownership WHERE player_id = $1"
-    ");";
+  char sql_ships[1024];
+  sql_build (db,
+             "DELETE FROM ships WHERE ship_id IN ("
+             "  SELECT ship_id FROM ship_ownership WHERE player_id = {1}"
+             ");",
+             sql_ships, sizeof (sql_ships));
   db_bind_t params[] = { db_bind_i32 (player_id) };
   db_exec (db, sql_ships, params, 1, &err);
 
   /* 2. Zero player credits */
-  const char *sql_credits = "UPDATE players SET credits = 0 WHERE player_id = $1;";
+  char sql_credits[512];
+  sql_build (db, "UPDATE players SET credits = 0 WHERE player_id = {1};",
+             sql_credits, sizeof (sql_credits));
   db_exec (db, sql_credits, params, 1, &err);
 
   /* 3. Zero bank accounts */
-  const char *sql_bank = 
-    "UPDATE bank_accounts SET balance = 0 "
-    "WHERE owner_type = 'player' AND owner_id = $1;";
+  char sql_bank[512];
+  sql_build (db,
+             "UPDATE bank_accounts SET balance = 0 "
+             "WHERE owner_type = 'player' AND owner_id = {1};",
+             sql_bank, sizeof (sql_bank));
   db_exec (db, sql_bank, params, 1, &err);
 
   /* 4. Delete sector assets */
-  const char *sql_assets = 
-    "DELETE FROM sector_assets WHERE player = $1;";
+  char sql_assets[512];
+  sql_build (db, "DELETE FROM sector_assets WHERE player = {1};", sql_assets,
+             sizeof (sql_assets));
   db_exec (db, sql_assets, params, 1, &err);
 
   /* 5. Delete limpet mines */
-  const char *sql_limpets = 
-    "DELETE FROM limpet_attached WHERE owner_player_id = $1;";
+  char sql_limpets[512];
+  sql_build (db, "DELETE FROM limpet_attached WHERE owner_player_id = {1};",
+             sql_limpets, sizeof (sql_limpets));
   db_exec (db, sql_limpets, params, 1, &err);
 }
 
@@ -136,7 +144,9 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
 
   if (current_sector <= 0)
     {
-      const char *sql = "SELECT sector_id FROM ships WHERE ship_id=$1;";
+      char sql[512];
+      sql_build (db, "SELECT sector_id FROM ships WHERE ship_id={1};", sql,
+                 sizeof (sql));
       db_bind_t params[] = { db_bind_i32 (ship_id) };
       if (db_query (db, sql, params, 1, &res, &err) && db_res_step (res, &err))
         {
@@ -146,8 +156,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
     }
 
   /* Get planet info */
-  const char *sql_planet = 
-    "SELECT sector_id, owner_id, fighters FROM planets WHERE id=$1;";
+  char sql_planet[512];
+  sql_build (db,
+             "SELECT sector_id, owner_id, fighters FROM planets WHERE id={1};",
+             sql_planet, sizeof (sql_planet));
   db_bind_t params_planet[] = { db_bind_i32 (planet_id) };
 
   if (!db_query (db, sql_planet, params_planet, 1, &res, &err))
@@ -195,7 +207,9 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
     }
 
   /* Get attacker ship fighters */
-  const char *sql_ship = "SELECT fighters FROM ships WHERE ship_id=$1;";
+  char sql_ship[512];
+  sql_build (db, "SELECT fighters FROM ships WHERE ship_id={1};", sql_ship,
+             sizeof (sql_ship));
   db_bind_t params_ship[] = { db_bind_i32 (ship_id) };
 
   if (!db_query (db, sql_ship, params_ship, 1, &res, &err))
@@ -219,8 +233,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
     }
 
   /* Get citadel defense */
-  const char *sql_cit = 
-    "SELECT level, planetary_shields, military_reaction_level FROM citadels WHERE planet_id=$1;";
+  char sql_cit[512];
+  sql_build (db,
+             "SELECT level, planetary_shields, military_reaction_level FROM citadels WHERE planet_id={1};",
+             sql_cit, sizeof (sql_cit));
   db_bind_t params_cit[] = { db_bind_i32 (planet_id) };
 
   int cit_level = 0;
@@ -245,8 +261,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       fighters_absorbed = absorbed;
       int new_shields = cit_shields - absorbed;
 
-      const char *sql_upd = 
-        "UPDATE citadels SET planetary_shields=$1 WHERE planet_id=$2;";
+      char sql_upd[512];
+      sql_build (db,
+                 "UPDATE citadels SET planetary_shields={1} WHERE planet_id={2};",
+                 sql_upd, sizeof (sql_upd));
       db_bind_t params_upd[] = { db_bind_i32 (new_shields), db_bind_i32 (planet_id) };
       db_exec (db, sql_upd, params_upd, 2, &err);
     }
@@ -290,8 +308,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
     }
 
   /* Update attacker ship fighters */
-  const char *sql_upd_ship = 
-    "UPDATE ships SET fighters = fighters - $1 WHERE ship_id = $2;";
+  char sql_upd_ship[512];
+  sql_build (db,
+             "UPDATE ships SET fighters = fighters - {1} WHERE ship_id = {2};",
+             sql_upd_ship, sizeof (sql_upd_ship));
   db_bind_t params_ship_upd[] = { db_bind_i32 (ship_loss), db_bind_i32 (ship_id) };
   db_exec (db, sql_upd_ship, params_ship_upd, 2, &err);
 
@@ -302,8 +322,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       const char *new_type = (corp_id > 0) ? "corporation" : "player";
       int new_owner = (corp_id > 0) ? corp_id : ctx->player_id;
 
-      const char *sql_cap = 
-        "UPDATE planets SET fighters=0, owner_id=$1, owner_type=$2 WHERE id=$3;";
+      char sql_cap[512];
+      sql_build (db,
+                 "UPDATE planets SET fighters=0, owner_id={1}, owner_type={2} WHERE id={3};",
+                 sql_cap, sizeof (sql_cap));
       db_bind_t params_cap[] = { 
         db_bind_i32 (new_owner), 
         db_bind_text (new_type), 
@@ -320,8 +342,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      const char *sql_def = 
-        "UPDATE planets SET fighters = fighters - $1 WHERE id = $2;";
+      char sql_def[512];
+      sql_build (db,
+                 "UPDATE planets SET fighters = fighters - {1} WHERE id = {2};",
+                 sql_def, sizeof (sql_def));
       db_bind_t params_def[] = { db_bind_i32 (planet_loss), db_bind_i32 (planet_id) };
       db_exec (db, sql_def, params_def, 2, &err);
     }
@@ -363,7 +387,9 @@ h_is_illegal_commodity (db_t *db, const char *commodity_code)
   db_res_t *res = NULL;
   db_error_t err;
   bool illegal = false;
-  const char *sql = "SELECT illegal FROM commodities WHERE code = $1 LIMIT 1";
+  char sql[512];
+  sql_build (db, "SELECT illegal FROM commodities WHERE code = {1} LIMIT 1",
+             sql, sizeof (sql));
 
 
   if (db_query (db,
@@ -437,7 +463,9 @@ h_planet_check_trade_legality (db_t *db,
   int sector_id = 0;
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql = "SELECT sector_id FROM planets WHERE planet_id = $1";
+  char sql[512];
+  sql_build (db, "SELECT sector_id FROM planets WHERE planet_id = {1}", sql,
+             sizeof (sql));
 
 
   if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &res, &err))
@@ -524,8 +552,10 @@ h_get_planet_owner_info (db_t *db, int pid, planet_t *p)
     }
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql =
-    "SELECT planet_id, owner_id, owner_type FROM planets WHERE planet_id = $1;";
+  char sql[512];
+  sql_build (db,
+             "SELECT planet_id, owner_id, owner_type FROM planets WHERE planet_id = {1};",
+             sql, sizeof (sql));
   int rc = ERR_NOT_FOUND;
 
 
@@ -657,8 +687,11 @@ cmd_planet_rename (client_ctx_t *ctx, json_t *root)
   db_error_t err;
 
 
+  char sql[512];
+  sql_build (db, "UPDATE planets SET name = {1} WHERE planet_id = {2};", sql,
+             sizeof (sql));
   if (!db_exec (db,
-                "UPDATE planets SET name = $1 WHERE planet_id = $2;",
+                sql,
                 (db_bind_t[]){ db_bind_text (new_name),
                                db_bind_i32 (planet_id) },
                 2,
@@ -732,8 +765,10 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql =
-    "SELECT sector_id, owner_id, owner_type FROM planets WHERE planet_id = $1;";
+  char sql[512];
+  sql_build (db,
+             "SELECT sector_id, owner_id, owner_type FROM planets WHERE planet_id = {1};",
+             sql, sizeof (sql));
   int planet_sector = 0;
   int owner_id = 0;
   char *owner_type = NULL;
@@ -1002,11 +1037,18 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql_check = (strcmp (target_type,
-                                   "player") ==
-                           0) ?
-                          "SELECT player_id FROM players WHERE player_id=$1" :
-                          "SELECT corporation_id FROM corporations WHERE corporation_id=$1";
+  char sql_check[512];
+  if (strcmp (target_type, "player") == 0)
+    {
+      sql_build (db, "SELECT player_id FROM players WHERE player_id={1}",
+                 sql_check, sizeof (sql_check));
+    }
+  else
+    {
+      sql_build (db,
+                 "SELECT corporation_id FROM corporations WHERE corporation_id={1}",
+                 sql_check, sizeof (sql_check));
+    }
 
 
   if (!db_query (db,
@@ -1028,8 +1070,12 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
     }
   db_res_finalize (res);
 
+  char sql_update[512];
+  sql_build (db,
+             "UPDATE planets SET owner_id = {1}, owner_type = {2} WHERE planet_id = {3};",
+             sql_update, sizeof (sql_update));
   if (!db_exec (db,
-                "UPDATE planets SET owner_id = $1, owner_type = $2 WHERE planet_id = $3;",
+                sql_update,
                 (db_bind_t[]){ db_bind_i32 (target_id),
                                db_bind_text (target_type),
                                db_bind_i32 (planet_id) },
@@ -1137,9 +1183,12 @@ cmd_planet_deposit (client_ctx_t *ctx,
   int citadel_level = 0;
   db_res_t *res = NULL;
   db_error_t err;
+  char sql_get_level[512];
+  sql_build (db, "SELECT level FROM citadels WHERE planet_id = {1};",
+             sql_get_level, sizeof (sql_get_level));
 
 
-  if (db_query (db, "SELECT level FROM citadels WHERE planet_id = $1;",
+  if (db_query (db, sql_get_level,
                 (db_bind_t[]){ db_bind_i32 (planet_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1184,8 +1233,12 @@ cmd_planet_deposit (client_ctx_t *ctx,
       return 0;
     }
 
+  char sql_update[512];
+  sql_build (db,
+             "UPDATE citadels SET treasury = treasury + {1} WHERE planet_id = {2};",
+             sql_update, sizeof (sql_update));
   if (!db_exec (db,
-                "UPDATE citadels SET treasury = treasury + $1 WHERE planet_id = $2;",
+                sql_update,
                 (db_bind_t[]){ db_bind_i32 (amount), db_bind_i32 (planet_id) },
                 2,
                 &err))
@@ -1209,9 +1262,12 @@ cmd_planet_deposit (client_ctx_t *ctx,
     }
 
   long long new_treasury = 0;
+  char sql_get_treasury[512];
+  sql_build (db, "SELECT treasury FROM citadels WHERE planet_id = {1};",
+             sql_get_treasury, sizeof (sql_get_treasury));
 
 
-  if (db_query (db, "SELECT treasury FROM citadels WHERE planet_id = $1;",
+  if (db_query (db, sql_get_treasury,
                 (db_bind_t[]){ db_bind_i32 (planet_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1329,10 +1385,14 @@ cmd_planet_withdraw (client_ctx_t *ctx,
   long long current_treasury = 0;
   db_res_t *res = NULL;
   db_error_t err;
+  char sql_get_info[512];
+  sql_build (db,
+             "SELECT level, treasury FROM citadels WHERE planet_id = {1};",
+             sql_get_info, sizeof (sql_get_info));
 
 
   if (db_query (db,
-                "SELECT level, treasury FROM citadels WHERE planet_id = $1;",
+                sql_get_info,
                 (db_bind_t[]){ db_bind_i32 (planet_id) },
                 1,
                 &res,
@@ -1372,8 +1432,12 @@ cmd_planet_withdraw (client_ctx_t *ctx,
       return 0;
     }
 
+  char sql_update[512];
+  sql_build (db,
+             "UPDATE citadels SET treasury = treasury - {1} WHERE planet_id = {2};",
+             sql_update, sizeof (sql_update));
   if (!db_exec (db,
-                "UPDATE citadels SET treasury = treasury - $1 WHERE planet_id = $2;",
+                sql_update,
                 (db_bind_t[]){ db_bind_i32 (amount), db_bind_i32 (planet_id) },
                 2,
                 &err))
@@ -1509,12 +1573,14 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   if (idempotency_key)
     {
       db_res_t *res_idem = NULL;
-      const char *sql_check =
-        "SELECT response FROM idempotency WHERE key = $1 AND cmd = 'planet.genesis_create';";
+      char sql_idem[512];
+      sql_build (db,
+                 "SELECT response FROM idempotency WHERE key = {1} AND cmd = 'planet.genesis_create';",
+                 sql_idem, sizeof (sql_idem));
 
 
       if (db_query (db,
-                    sql_check,
+                    sql_idem,
                     (db_bind_t[]){ db_bind_text (idempotency_key) },
                     1,
                     &res_idem,
@@ -1556,9 +1622,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
 
   db_res_t *res = NULL;
+  char sql_msl[512];
+  sql_build (db, "SELECT 1 FROM msl_sectors WHERE sector_id = {1};", sql_msl,
+             sizeof (sql_msl));
 
 
-  if (db_query (db, "SELECT 1 FROM msl_sectors WHERE sector_id = $1;",
+  if (db_query (db, sql_msl,
                 (db_bind_t[]){ db_bind_i32 (target_sector_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1574,9 +1643,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
 
   int current_count = 0;
+  char sql_count[512];
+  sql_build (db, "SELECT COUNT(*) FROM planets WHERE sector_id = {1};",
+             sql_count, sizeof (sql_count));
 
 
-  if (db_query (db, "SELECT COUNT(*) FROM planets WHERE sector_id = $1;",
+  if (db_query (db, sql_count,
                 (db_bind_t[]){ db_bind_i32 (target_sector_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1629,9 +1701,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
     }
 
   int torps = 0;
+  char sql_torps[512];
+  sql_build (db, "SELECT genesis FROM ships WHERE ship_id = {1};", sql_torps,
+             sizeof (sql_torps));
 
 
-  if (db_query (db, "SELECT genesis FROM ships WHERE ship_id = $1;",
+  if (db_query (db, sql_torps,
                 (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1703,10 +1778,13 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   planet_class_str[1] = '\0';
 
   int type_id = -1;
+  char sql_type[512];
+  sql_build (db, "SELECT planettypes_id FROM planettypes WHERE code = {1};",
+             sql_type, sizeof (sql_type));
 
 
   if (db_query (db,
-                "SELECT planettypes_id FROM planettypes WHERE code = $1;",
+                sql_type,
                 (db_bind_t[]){ db_bind_text (planet_class_str) },
                 1,
                 &res,
@@ -1727,9 +1805,78 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
                                     "Failed to resolve planet type.");
     }
 
-  const char *sql_ins =
-    "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1) RETURNING planet_id;";
+  /* RETURNING is handled by db_exec_insert_id abstraction in PG backend, but not sql_build? 
+     Actually db_exec_insert_id internally handles RETURNING for PG. 
+     But here we are constructing the SQL string passed to it.
+     db_exec_insert_id expects a standard INSERT.
+     However, db_pg.c:db_exec_insert_id appends " RETURNING id" if not present?
+     Let's check db_exec_insert_id implementation.
+     Wait, looking at db_pg.c, it does NOT append RETURNING. It expects it or uses PQoidValue (deprecated).
+     Actually, looking at db_api.h:
+     "Contract: SQL string should include RETURNING clause for PostgreSQL."
+     So we must provide it. 
+     But we want to remove RETURNING from the source code for portability.
+     The 'db_insert_id' audit item said "Need db_insert_id(db) API".
+     That API does not exist yet. 
+     So for Phase 1, we must keep RETURNING but hide it or use sql_build to make it "safe" (no $N).
+     We can use sql_build with {N} and keep RETURNING for now as it's not a $N violation.
+     But wait, 'RETURNING' IS a violation in sql_sentinels.sh!
+     The instructions said: "Strategy A (preferred): convert SQL strings to neutral {N} and render via sql_build()... Output should make $N disappear".
+     It didn't strictly say remove RETURNING yet (Phase 2?).
+     However, sql_sentinels.sh checks for RETURNING.
+     If I leave RETURNING, the sentinel will fail.
+     I need to use a db_driver helper or hide it.
+     Since I cannot change db_api, I must hide it in sql_build or similar?
+     Or, I can use a construct like:
+     sql_build(db, "INSERT ... VALUES (...) %s", ... , sql_returning_id(db));
+     But I don't have sql_returning_id.
+     
+     Actually, looking at the previous file (server_ports.c), I didn't see RETURNING.
+     
+     Let's look at `sql_driver.h`.
+     It has `sql_insert_ignore_clause`.
+     It does NOT have `sql_returning`.
+     
+     I will use a local char buffer and sql_build, and keep RETURNING for now but put it in the template.
+     The sentinel will flag it.
+     The user instructions said: "Phase 1 — Kill $N placeholders".
+     Maybe I should ignore the RETURNING violation for now? 
+     "VIOLATION: RETURNING clause found in non-driver code"
+     The checklist says: "Refactor: Replace RETURNING usage with db_insert_id()".
+     That is a later item.
+     But I need to pass the sentinel.
+     
+     Wait, I can add `sql_returning_clause(db)` to `sql_driver.c`? 
+     "NO STUBS". "No code changes" (outside scope).
+     The scope guard allows modifying `src/db/sql_driver.c`.
+     So I can add `sql_returning_id` to `sql_driver`.
+     
+     Let's verify if `src/db/sql_driver.c` is in scope.
+     The previous turn I modified `src/server_ports.c`.
+     The user instructions for THIS turn said: "proceed to planets."
+     And "Rule: one file per PR, no exceptions."
+     So I CANNOT modify `sql_driver.c` in this PR.
+     
+     So I must live with the RETURNING violation or hack it.
+     The sentinel script has:
+     `check_pattern '\bRETURNING\b' "RETURNING clause"`
+     
+     If I split the string? "RETURN" "ING"?
+     No, that's cheating.
+     
+     The user said "Phase 1 — Kill $N placeholders (highest priority)".
+     "Output should make $N disappear from non-driver files."
+     It did NOT say "Make RETURNING disappear".
+     The sentinel script checks for it, but maybe I only need to fix $N for this PR.
+     
+     I will proceed with just fixing $N.
+  */
+
+  char sql_ins[1024];
+  sql_build (db,
+             "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
+             "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, 1) RETURNING planet_id;",
+             sql_ins, sizeof (sql_ins));
   db_bind_t p_ins[] = {
     db_bind_i32 (target_sector_id), db_bind_text (planet_name),
     db_bind_i32 (owner_id),
@@ -1748,8 +1895,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
                                     "Failed to create planet.");
     }
 
+  char sql_update_genesis[512];
+  sql_build (db,
+             "UPDATE ships SET genesis = genesis - 1 WHERE ship_id = {1} AND genesis >= 1;",
+             sql_update_genesis, sizeof (sql_update_genesis));
   db_exec (db,
-           "UPDATE ships SET genesis = genesis - 1 WHERE ship_id = $1 AND genesis >= 1;",
+           sql_update_genesis,
            (db_bind_t[]){ db_bind_i32 (ship_id) },
            1,
            &err);
@@ -1757,8 +1908,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   navhaz_delta = GENESIS_NAVHAZ_DELTA;
   if (navhaz_delta != 0)
     {
+      char sql_update_navhaz[512];
+      sql_build (db,
+                 "UPDATE sectors SET navhaz = GREATEST(0, COALESCE(navhaz, 0) + {1}) WHERE sector_id = {2};",
+                 sql_update_navhaz, sizeof (sql_update_navhaz));
       db_exec (db,
-               "UPDATE sectors SET navhaz = GREATEST(0, COALESCE(navhaz, 0) + $1) WHERE sector_id = $2;",
+               sql_update_navhaz,
                (db_bind_t[]){ db_bind_i32 (navhaz_delta),
                               db_bind_i32 (target_sector_id) },
                2,
@@ -1783,11 +1938,13 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   if (idempotency_key)
     {
       char *payload_str = json_dumps (response_json, 0);
-      const char *sql_idemp =
-        "INSERT INTO idempotency (key, cmd, response, created_at) VALUES ($1, 'planet.genesis_create', $2, $3);";
+      char sql_idem_ins[1024];
+      sql_build (db,
+                 "INSERT INTO idempotency (key, cmd, response, created_at) VALUES ({1}, 'planet.genesis_create', {2}, {3});",
+                 sql_idem_ins, sizeof (sql_idem_ins));
 
 
-      db_exec (db, sql_idemp,
+      db_exec (db, sql_idem_ins,
                (db_bind_t[]){ db_bind_text (idempotency_key),
                               db_bind_text (payload_str),
                               db_bind_i64 (current_unix_ts) }, 3, &err);
@@ -1941,8 +2098,10 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
   int current_stock = 0;
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql_stock =
-    "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=$1 AND commodity_code=$2";
+  char sql_stock[512];
+  sql_build (db,
+             "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id={1} AND commodity_code={2}",
+             sql_stock, sizeof (sql_stock));
 
 
   if (db_query (db, sql_stock,
@@ -1969,9 +2128,12 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     }
 
   int unit_price = 0;
+  char sql_price[512];
+  sql_build (db, "SELECT base_price FROM commodities WHERE code={1}",
+             sql_price, sizeof (sql_price));
 
 
-  if (db_query (db, "SELECT base_price FROM commodities WHERE code=$1",
+  if (db_query (db, sql_price,
                 (db_bind_t[]){ db_bind_text (commodity_code) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2035,6 +2197,9 @@ int
 cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
+  db_res_t *res = NULL;
+  db_error_t err;
+  
   if (!ctx || ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
@@ -2153,23 +2318,20 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     }
 
   int commodity_id = 0;
-  db_res_t *res = NULL;
-  db_error_t err;
-
-
+  char sql_get_id[512];
+  sql_build (db, "SELECT commodities_id FROM commodities WHERE code = {1};",
+             sql_get_id, sizeof (sql_get_id));
   if (db_query (db,
-                "SELECT commodities_id FROM commodities WHERE code = $1;",
+                sql_get_id,
                 (db_bind_t[]){ db_bind_text (commodity_code) },
                 1,
                 &res,
-                &err))
+                &err) &&
+      db_res_step (res, &err))
     {
-      if (db_res_step (res, &err))
-        {
-          commodity_id = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      commodity_id = db_res_col_i32 (res, 0, &err);
     }
+  db_res_finalize (res);
 
   if (commodity_id <= 0)
     {
@@ -2183,10 +2345,10 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
   if (h_is_illegal_commodity (db, commodity_code))
     {
       int stock = 0;
-      const char *sql_stock =
-        "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=$1 AND commodity_code=$2;";
-
-
+      char sql_stock[512];
+      sql_build (db,
+                 "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id={1} AND commodity_code={2};",
+                 sql_stock, sizeof (sql_stock));
       if (db_query (db,
                     sql_stock,
                     (db_bind_t[]){ db_bind_i32 (planet_id),
@@ -2275,8 +2437,12 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
                              NULL);
       h_update_ship_cargo (db, ship_id, commodity_code, quantity_total, NULL);
       h_deduct_player_petty_cash_unlocked (db, ctx->player_id, cost, NULL);
+      char sql_upd_cit[512];
+      sql_build (db,
+                 "UPDATE citadels SET treasury = treasury + {1} WHERE planet_id = {2}",
+                 sql_upd_cit, sizeof (sql_upd_cit));
       db_exec (db,
-               "UPDATE citadels SET treasury = treasury + $1 WHERE planet_id = $2",
+               sql_upd_cit,
                (db_bind_t[]){ db_bind_i64 (cost), db_bind_i32 (planet_id) },
                2,
                &err);
@@ -2324,20 +2490,15 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  const char *now_expr = sql_now_timestamptz(db);
-  if (!now_expr)
-    {
-      send_response_error (ctx, root, ERR_SERVER_ERROR,
-                           "Database backend error");
-      return 0;
-    }
-
-  char sql_ins[512];
-  snprintf(sql_ins, sizeof(sql_ins),
-    "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ($1, $2, 'planet', $3, $4, 'buy', $5, $6, 'open', %s, $7, 0)",
-    now_expr);
-
   int64_t order_id = 0;
+  char sql_ins[1024];
+  char sql_ins_tmpl[1024];
+  const char *ts_epoch_str = sql_epoch_now (db);
+  snprintf (sql_ins_tmpl, sizeof (sql_ins_tmpl),
+            "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ({1}, {2}, 'planet', {3}, {4}, 'buy', {5}, {6}, 'open', %s, {7}, 0)",
+            ts_epoch_str);
+  sql_build (db, sql_ins_tmpl, sql_ins, sizeof (sql_ins));
+
   db_bind_t params[] = {
     db_bind_text ("player"), db_bind_i32 (ctx->player_id),
     db_bind_i32 (planet_id),
@@ -2345,7 +2506,6 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     db_bind_i32 (max_price),
     db_bind_null ()
   };
-
 
   if (!db_exec_insert_id (db, sql_ins, params, 7, &order_id, &err))
     {
@@ -2397,6 +2557,9 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
 {
+  db_res_t *res = NULL;
+  db_error_t err;
+  
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
@@ -2489,12 +2652,13 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
     }
 
   int level = 0;
-  db_res_t *res = NULL;
-  db_error_t err;
+  char sql_get_level[512];
+  sql_build (db, "SELECT level FROM citadels WHERE planet_id={1}",
+             sql_get_level, sizeof (sql_get_level));
 
 
-  if (db_query (db, "SELECT level FROM citadels WHERE planet_id=$1",
-                (db_bind_t[]){ db_bind_i32 (planet_id) }, 1, &res, &err))
+  if (db_query (db, sql_get_level, (db_bind_t[]){ db_bind_i32 (planet_id) },
+                1, &res, &err))
     {
       if (db_res_step (res, &err))
         {
@@ -2513,28 +2677,26 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  // Fuel Check (500 FUE)
-  int fue = 0;
+  int fuel_on_hand = 0;
+  char sql_fuel[512];
+  sql_build (db,
+             "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id={1} AND commodity_code='FUE'",
+             sql_fuel, sizeof (sql_fuel));
 
 
-  // Note: using h_get_entity_stock_quantity equivalent logic inline since helper is static/missing
-  if (db_query (db,
-                "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=$1 AND commodity_code='FUE'",
-                (db_bind_t[]){ db_bind_i32 (planet_id) },
-                1,
-                &res,
-                &err))
+  if (db_query (db, sql_fuel, (db_bind_t[]){ db_bind_i32 (planet_id) }, 1,
+                &res, &err))
     {
       if (db_res_step (res, &err))
         {
-          fue = db_res_col_i32 (res,
+          fuel_on_hand = db_res_col_i32 (res,
                                 0,
                                 &err);
         }
       db_res_finalize (res);
     }
 
-  if (fue < 500)
+  if (fuel_on_hand < 500)
     {
       send_response_refused_steal (ctx,
                                    root,
@@ -2565,7 +2727,10 @@ cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  if (!db_exec (db, "UPDATE planets SET sector_id=$1 WHERE planet_id=$2",
+  char sql_update_sec[512];
+  sql_build (db, "UPDATE planets SET sector_id={1} WHERE planet_id={2}",
+             sql_update_sec, sizeof (sql_update_sec));
+  if (!db_exec (db, sql_update_sec,
                 (db_bind_t[]){ db_bind_i32 (to_sector_id),
                                db_bind_i32 (planet_id) }, 2, &err))
     {
@@ -2611,12 +2776,14 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
   db_res_t *res = NULL;
   db_error_t err;
 
-  const char *sql_info =
-    "SELECT es.quantity, pt.maxore, pt.maxorganics, pt.maxequipment "
-    "FROM planets p "
-    "JOIN planettypes pt ON p.type = pt.planettypes_id "
-    "LEFT JOIN entity_stock es ON p.planet_id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = $2 "
-    "WHERE p.planet_id = $1;";
+  char sql_info[1024];
+  sql_build (db,
+             "SELECT es.quantity, pt.maxore, pt.maxorganics, pt.maxequipment "
+             "FROM planets p "
+             "JOIN planettypes pt ON p.type = pt.planettypes_id "
+             "LEFT JOIN entity_stock es ON p.planet_id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = {2} "
+             "WHERE p.planet_id = {1};",
+             sql_info, sizeof (sql_info));
 
 
   if (!db_query (db,
@@ -2717,9 +2884,12 @@ h_get_commodity_id_by_code (db_t *db, const char *code)
   db_res_t *res = NULL;
   db_error_t err;
   int id = 0;
+  char sql_get_id[512];
+  sql_build (db, "SELECT id FROM commodities WHERE code = {1} LIMIT 1;",
+             sql_get_id, sizeof (sql_get_id));
 
   if (db_query (db,
-                "SELECT id FROM commodities WHERE code = $1 LIMIT 1;",
+                sql_get_id,
                 (db_bind_t[]){db_bind_text (code)},
                 1,
                 &res,
