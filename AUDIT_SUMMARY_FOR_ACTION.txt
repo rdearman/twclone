@@ -1,0 +1,88 @@
+================================================================================
+                        AUDIT SUMMARY - READY FOR ACTION
+================================================================================
+
+SITUATION
+─────────────────────────────────────────────────────────────────────────────
+PostgreSQL is current database.
+SQLite needs removal.
+MySQL/Oracle are future requirements.
+Need to assess dialect-cleanliness for future support.
+
+FINDINGS
+─────────────────────────────────────────────────────────────────────────────
+
+1. DIALECT-CLEANLINESS STATUS: 75%
+
+   Good parts:
+     ✅ {N} placeholder abstraction
+     ✅ sql_build() conversion
+     ✅ Timestamp abstraction (sql_now_expr)
+     ✅ Epoch conversion (sql_ts_to_epoch_expr)
+     ✅ Clean architecture overall
+   
+   Problems:
+     ❌ 7 PostgreSQL type casts (::type)
+     ❌ 53 ON CONFLICT clauses (incomplete abstraction)
+     ❌ 24 FOR UPDATE SKIP LOCKED (incomplete abstraction)
+     ❌ 6 JSON functions (hardcoded PostgreSQL)
+     ❌ engine_consumer.c circumvents abstraction
+
+2. SQLITE REMOVAL: STRAIGHTFORWARD (1-2 days)
+   
+   Remove:
+     - DB_BACKEND_SQLITE from enum
+     - src/db/sqlite/ directory
+     - #ifdef DB_BACKEND_SQLITE from db_api.c
+
+3. DIALECT-CLEANLINESS FIX: DOABLE (5-8 days)
+   
+   Effort breakdown:
+     - Day 1: Fix engine_consumer.c and type casts (4 hours)
+     - Days 2-3: Complete ON CONFLICT abstraction (2 days)
+     - Days 4-5: Complete FOR UPDATE SKIP LOCKED (2 days)
+     - Day 6: Error handling and review (1 day)
+
+4. MYSQL SUPPORT TIMELINE: 10-16 WEEKS AFTER DIALECT-CLEANLINESS
+   
+   Only viable after code is 100% dialect-clean
+
+RECOMMENDATIONS
+─────────────────────────────────────────────────────────────────────────────
+
+IF MySQL NOT NEEDED WITHIN 6 MONTHS:
+  → Just remove SQLite (1-2 days)
+  → Keep PostgreSQL-only
+  → Revisit MySQL when actually needed
+
+IF MySQL NEEDED WITHIN 6 MONTHS:
+  → Remove SQLite (1-2 days)
+  → Make code dialect-clean (5-8 days)
+  → Then MySQL support becomes straightforward
+
+IF MySQL NEEDED IMMEDIATELY:
+  → Remove SQLite (1-2 days)
+  → Make dialect-clean (5-8 days)
+  → Implement MySQL (10-16 weeks)
+  → Total: ~4 months
+
+ACTION ITEMS
+─────────────────────────────────────────────────────────────────────────────
+
+IMMEDIATE (This week):
+  1. Remove SQLite support
+  2. Update documentation: "PostgreSQL required"
+  3. Decide on MySQL/Oracle timeline
+
+IF MAKING DIALECT-CLEAN (Next 2 weeks):
+  1. Fix engine_consumer.c (use sql_ts_to_epoch_expr)
+  2. Fix type casts (replace :: with CAST)
+  3. Complete ON CONFLICT abstraction
+  4. Complete FOR UPDATE SKIP LOCKED abstraction
+  5. Error handling in abstraction functions
+
+DETAILS IN:
+  - DIALECT_CLEANLINESS_REPORT.md (12KB, comprehensive)
+  - MULTI_DB_AUDIT_FINDINGS.txt (10KB, detailed findings)
+
+================================================================================

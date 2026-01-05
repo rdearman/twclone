@@ -6,6 +6,7 @@
 #include "database.h"           // Needed for db_get_handle()
 #include "server_log.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "game_db.h"
 
 // Forward declarations of internal helper functions
@@ -59,13 +60,15 @@ get_high_degree_sector (db_t *db)
 static int
 get_tunnel_end (db_t *db, int start_sector)
 {
-  const char *q = "SELECT to_sector FROM sector_warps WHERE from_sector = $1;";
+  const char *q = "SELECT to_sector FROM sector_warps WHERE from_sector = {1};";
   db_res_t *st = NULL;
   db_error_t err;
   int end_sector = -1;
   db_bind_t params[] = { db_bind_i32 (start_sector) };
+  char sql_converted[256];
+  sql_build(db, q, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, q, params, 1, &st, &err))
+  if (db_query (db, sql_converted, params, 1, &st, &err))
     {
       if (db_res_step (st, &err))
         {
@@ -135,26 +138,30 @@ create_complex_warps (db_t *db, int numSectors)
           && end_sector1 != end_sector2)
         {
           const char *sql_delete_warp =
-            "DELETE FROM sector_warps WHERE from_sector = $1 AND to_sector = $2;";
+            "DELETE FROM sector_warps WHERE from_sector = {1} AND to_sector = {2};";
 
           db_bind_t p_del[] = { db_bind_i32 (end_sector1),
                                 db_bind_i32 (start_sector1) };
 
+          char sql_delete_warp_converted[256];
+          sql_build(db, sql_delete_warp, sql_delete_warp_converted, sizeof(sql_delete_warp_converted));
 
-          if (!db_exec (db, sql_delete_warp, p_del, 2, &err))
+          if (!db_exec (db, sql_delete_warp_converted, p_del, 2, &err))
             {
               LOGE ("SQL error delete: %s\n", err.message);
               return -1;
             }
 
           const char *sql_insert_warp =
-            "INSERT INTO sector_warps (from_sector, to_sector) VALUES ($1, $2);";
+            "INSERT INTO sector_warps (from_sector, to_sector) VALUES ({1}, {2});";
 
           db_bind_t p_ins[] = { db_bind_i32 (end_sector1),
                                 db_bind_i32 (start_sector2) };
 
+          char sql_insert_warp_converted[256];
+          sql_build(db, sql_insert_warp, sql_insert_warp_converted, sizeof(sql_insert_warp_converted));
 
-          if (!db_exec (db, sql_insert_warp, p_ins, 2, &err))
+          if (!db_exec (db, sql_insert_warp_converted, p_ins, 2, &err))
             {
               LOGE ("SQL error insert: %s\n", err.message);
 
@@ -162,8 +169,10 @@ create_complex_warps (db_t *db, int numSectors)
               db_bind_t p_restore[] = { db_bind_i32 (end_sector1),
                                         db_bind_i32 (start_sector1) };
 
+              char sql_insert_warp_restore_converted[256];
+              sql_build(db, sql_insert_warp, sql_insert_warp_restore_converted, sizeof(sql_insert_warp_restore_converted));
 
-              if (!db_exec (db, sql_insert_warp, p_restore, 2, &err))
+              if (!db_exec (db, sql_insert_warp_restore_converted, p_restore, 2, &err))
                 {
                   LOGE ("CRITICAL SQL error during rollback: %s\n",
                         err.message);
@@ -183,7 +192,7 @@ create_complex_warps (db_t *db, int numSectors)
   const char *q_find_bidirectional =
     "SELECT a, b FROM v_bidirectional_warps ORDER BY RANDOM() LIMIT 1;";
   const char *sql_delete_return =
-    "DELETE FROM sector_warps WHERE from_sector = $1 AND to_sector = $2;";
+    "DELETE FROM sector_warps WHERE from_sector = {1} AND to_sector = {2};";
 
 
   for (int i = 0; i < num_one_way_warps; i++)
@@ -213,8 +222,10 @@ create_complex_warps (db_t *db, int numSectors)
           db_bind_t p_del[] = { db_bind_i32 (one_way_to),
                                 db_bind_i32 (one_way_from) };
 
+          char sql_delete_return_converted[256];
+          sql_build(db, sql_delete_return, sql_delete_return_converted, sizeof(sql_delete_return_converted));
 
-          if (!db_exec (db, sql_delete_return, p_del, 2, &err))
+          if (!db_exec (db, sql_delete_return_converted, p_del, 2, &err))
             {
               LOGE ("SQL error delete return: %s\n", err.message);
             }
@@ -233,9 +244,9 @@ create_complex_warps (db_t *db, int numSectors)
     "FROM sector_warps GROUP BY from_sector) AS t "
     "WHERE out_degree = 1 ORDER BY RANDOM() LIMIT 1;";
 
-  const char *sql_delete = "DELETE FROM sector_warps WHERE from_sector = $1;";
+  const char *sql_delete = "DELETE FROM sector_warps WHERE from_sector = {1};";
   const char *sql_insert =
-    "INSERT INTO sector_warps (from_sector, to_sector) VALUES ($1, $2);";
+    "INSERT INTO sector_warps (from_sector, to_sector) VALUES ({1}, {2});";
 
 
   for (int i = 0; i < num_dead_end_warps; i++)
@@ -268,8 +279,10 @@ create_complex_warps (db_t *db, int numSectors)
             {
               db_bind_t p_del[] = { db_bind_i32 (dead_end_sector) };
 
+              char sql_delete_converted[256];
+              sql_build(db, sql_delete, sql_delete_converted, sizeof(sql_delete_converted));
 
-              if (!db_exec (db, sql_delete, p_del, 1, &err))
+              if (!db_exec (db, sql_delete_converted, p_del, 1, &err))
                 {
                   LOGE ("SQL error delete dead end: %s\n", err.message);
                 }
@@ -277,8 +290,10 @@ create_complex_warps (db_t *db, int numSectors)
               db_bind_t p_ins[] = { db_bind_i32 (dead_end_sector),
                                     db_bind_i32 (exit_sector) };
 
+              char sql_insert_converted[256];
+              sql_build(db, sql_insert, sql_insert_converted, sizeof(sql_insert_converted));
 
-              if (!db_exec (db, sql_insert, p_ins, 2, &err))
+              if (!db_exec (db, sql_insert_converted, p_ins, 2, &err))
                 {
                   LOGE ("SQL error insert dead end: %s\n", err.message);
                 }

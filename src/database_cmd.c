@@ -54,8 +54,10 @@ h_get_port_commodity_quantity (db_t *db,
     db_bind_text (commodity_code)
   };
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, binds, 2, &res, &err))
+  if (!db_query (db, sql_converted, binds, 2, &res, &err))
     {
       /* keep behaviour: propagate as DB error */
       rc = err.code ? err.code : ERR_DB;
@@ -145,11 +147,13 @@ db_is_npc_player (db_t *db, int player_id)
   db_res_t *res = NULL;
   db_error_t err = {0};
   const char *sql = "SELECT is_npc FROM players WHERE player_id = {1};";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
   int is_npc = 0;
   int rc = 0;
 
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
                 &err))
     {
       if (db_res_step (res, &err))
@@ -231,8 +235,10 @@ column_exists_unlocked (db_t *db, const char *table, const char *col)
   db_bind_t params[] = { db_bind_text (table), db_bind_text (col) };
   int found = 0;
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, params, 2, &res, &err))
+  if (!db_query (db, sql_converted, params, 2, &res, &err))
     {
       rc = 0;  /* query failed, column doesn't exist */
       goto cleanup;
@@ -410,8 +416,10 @@ db_player_update_commission (db_t *db, int player_id)
         "SELECT alignment, experience FROM players WHERE player_id = {1} FOR UPDATE;";
       db_bind_t p_sel[] = { db_bind_i32 (player_id) };
 
+      char sql_sel_converted[256];
+      sql_build(db, sql_sel, sql_sel_converted, sizeof(sql_sel_converted));
 
-      if (!db_query (db, sql_sel, p_sel, 1, &res, &err))
+      if (!db_query (db, sql_sel_converted, p_sel, 1, &res, &err))
         {
           goto rollback;
         }
@@ -454,8 +462,10 @@ db_player_update_commission (db_t *db, int player_id)
       db_bind_t p_upd[] = { db_bind_i32 (new_comm_id),
                             db_bind_i32 (player_id) };
 
+      char sql_upd_converted[256];
+      sql_build(db, sql_upd, sql_upd_converted, sizeof(sql_upd_converted));
 
-      if (!db_exec (db, sql_upd, p_upd, 2, &err))
+      if (!db_exec (db, sql_upd_converted, p_upd, 2, &err))
         {
           goto rollback;
         }
@@ -498,8 +508,10 @@ db_commission_for_player (db_t *db,
   db_bind_t params[] = { db_bind_bool (is_evil_track ? true : false),
                          db_bind_i64 (xp) };
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, params, 2, &res, &err))
+  if (!db_query (db, sql_converted, params, 2, &res, &err))
     {
       rc = err.code;
       goto cleanup;
@@ -529,8 +541,10 @@ db_commission_for_player (db_t *db,
     "SELECT commission_id, description, is_evil FROM commission WHERE is_evil = {1} ORDER BY min_exp ASC LIMIT 1;";
   db_bind_t p_fall[] = { db_bind_bool (is_evil_track ? true : false) };
 
+  char sql_fall_converted[256];
+  sql_build(db, sql, sql_fall_converted, sizeof(sql_fall_converted));
 
-  if (!db_query (db, sql, p_fall, 1, &res, &err))
+  if (!db_query (db, sql_fall_converted, p_fall, 1, &res, &err))
     {
       rc = err.code;
       goto cleanup;
@@ -583,8 +597,10 @@ db_alignment_band_for_value (db_t *db,
     "SELECT alignment_band_id, code, name, is_good, is_evil, can_buy_iss, can_rob_ports FROM alignment_band WHERE {1} BETWEEN min_align AND max_align LIMIT 1;";
   db_bind_t params[] = { db_bind_i32 (align) };
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, params, 1, &res, &err))
+  if (!db_query (db, sql_converted, params, 1, &res, &err))
     {
       rc = -1;
       goto cleanup;
@@ -695,7 +711,9 @@ db_commodity_get_price (db_t *db, const char *code, int *out_price)
                 sizeof(sql),
                 "SELECT %s FROM commodities WHERE code = {1};",
                 cols[i]);
-      if (db_query (db, sql, (db_bind_t[]){db_bind_text (code)}, 1, &res, &err))
+      char sql_converted[256];
+      sql_build(db, sql, sql_converted, sizeof(sql_converted));
+      if (db_query (db, sql_converted, (db_bind_t[]){db_bind_text (code)}, 1, &res, &err))
         {
           if (db_res_step (res, &err))
             {
@@ -770,8 +788,10 @@ db_commodity_create_order (db_t *db,
     db_bind_text (side), db_bind_i32 (qty), db_bind_i32 (price)
   };
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, params, 6, &err))
+  if (!db_exec (db, sql_converted, params, 6, &err))
     {
       return err.code;
     }
@@ -798,10 +818,12 @@ db_commodity_fill_order (db_t *db, int order_id, int qty)
   // or assume caller handles logic.
   // Postgres version:
   const char *sql = "SELECT * FROM market_fill_order({1}, {2}, 0);";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
   db_bind_t params[] = { db_bind_i64 (order_id), db_bind_i64 (qty) };
 
 
-  if (db_query (db, sql, params, 2, &res, &err))
+  if (db_query (db, sql_converted, params, 2, &res, &err))
     {
       int code = 0;
 
@@ -842,9 +864,11 @@ db_commodity_get_orders (db_t *db,
   db_res_t *res = NULL;
   int rc = 0;
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
   if (!db_query (db,
-                 sql,
+                 sql_converted,
                  (db_bind_t[]){db_bind_text (code), db_bind_text (status)},
                  2,
                  &res,
@@ -877,9 +901,11 @@ db_commodity_get_trades (db_t *db, const char *code, int limit, json_t **out)
   db_res_t *res = NULL;
   int rc = 0;
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
   if (!db_query (db,
-                 sql,
+                 sql_converted,
                  (db_bind_t[]){db_bind_text (code), db_bind_i32 (limit)},
                  2,
                  &res,
@@ -923,8 +949,10 @@ db_planet_get_goods_on_hand (db_t *db,
     "SELECT quantity FROM planet_goods WHERE planet_id = {1} AND commodity = {2};";
   db_bind_t params[] = { db_bind_i32 (planet_id), db_bind_text (code) };
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, params, 2, &res, &err))
+  if (!db_query (db, sql_converted, params, 2, &res, &err))
     {
       rc = err.code;
       goto cleanup;
@@ -967,8 +995,10 @@ db_planet_update_goods_on_hand (db_t *db,
   db_bind_t params[] = { db_bind_i32 (planet_id), db_bind_text (code),
                          db_bind_i32 (delta) };
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, params, 3, &err))
+  if (!db_exec (db, sql_converted, params, 3, &err))
     {
       return err.code;
     }
@@ -997,9 +1027,11 @@ db_mark_ship_destroyed (db_t *db, int ship_id)
   int rc = ERR_DB;
   /* Use stored procedure */
   const char *sql = "SELECT * FROM ship_destroy({1});";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
 
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &res, &err))
     {
       rc = err.code;
       goto cleanup;
@@ -1057,8 +1089,10 @@ db_increment_player_stat (db_t *db, int pid, const char *stat)
   db_error_t err;
   db_bind_t params[] = { db_bind_i32 (pid) };
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, params, 1, &err))
+  if (!db_exec (db, sql_converted, params, 1, &err))
     {
       LOGE ("db_increment_player_stat: Failed for %s: %s", stat, err.message);
       return err.code;
@@ -1142,8 +1176,10 @@ db_shiptype_has_escape_pod (db_t *db, int ship_id)
   const char *sql =
     "SELECT st.shiptypes_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1} AND st.name LIKE '%Escape%';";
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       tid = -1;
       goto cleanup;
@@ -1477,10 +1513,12 @@ db_player_land_on_planet (db_t *db, int pid, int planet_id)
   int rc = ERR_DB;
   /* Use stored procedure: SELECT * FROM player_land(pid, planet_id) */
   const char *sql = "SELECT * FROM player_land({1}, {2});";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
 
   if (!db_query (db,
-                 sql,
+                 sql_converted,
                  (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (planet_id)},
                  2,
                  &res,
@@ -1516,9 +1554,11 @@ db_player_launch_from_planet (db_t *db, int pid, int *out_sid)
   db_error_t err = {0};
   int rc = ERR_DB;
   const char *sql = "SELECT * FROM player_launch({1});";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
 
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
     {
       rc = err.code;
       goto cleanup;
@@ -1606,8 +1646,10 @@ db_bounty_create (db_t *db,
   const char *sql =
     "INSERT INTO bounties (posted_by_type, posted_by_id, target_type, target_id, reward, status, posted_ts) VALUES ({1}, {2}, {3}, {4}, {5}, 'open', CURRENT_TIMESTAMP);";
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql,
+  if (!db_exec (db, sql_converted,
                 (db_bind_t[]){db_bind_text (pbt), db_bind_i32 (pbid),
                               db_bind_text (tt), db_bind_i32 (tid),
                               db_bind_i64 (r)}, 5, &err))
@@ -1672,8 +1714,10 @@ db_get_law_config_int (const char *key, int def)
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = {1} AND value_type = 'INTEGER';";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
     {
       rc = def;
       goto cleanup;
@@ -1709,8 +1753,10 @@ db_get_law_config_text (const char *key, const char *def)
   const char *sql =
     "SELECT value FROM law_enforcement_config WHERE key = {1} AND value_type = 'TEXT';";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){ db_bind_text (key) }, 1, &res, &err))
     {
       value = NULL;
       goto cleanup;
@@ -1788,7 +1834,9 @@ db_player_set_last_rob_attempt (int pid, int lpid, long long lts)
   db_error_t err;
   const char *sql =
     "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0) ON CONFLICT(player_id) DO UPDATE SET port_id = excluded.port_id, last_attempt_at = excluded.last_attempt_at;";
-  if (!db_exec (db, sql,
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_exec (db, sql_converted,
                 (db_bind_t[]){db_bind_i32 (pid), db_bind_i32 (lpid),
                               db_bind_i64 (lts)}, 3, &err))
     {
@@ -1808,7 +1856,9 @@ db_port_add_bust_record (int port_id, int pid, long long ts, const char *type)
   db_error_t err;
   const char *sql =
     "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type) VALUES ({1}, {2}, {3}, {4}) ON CONFLICT(port_id, player_id) DO UPDATE SET last_bust_at = excluded.last_bust_at;";
-  if (!db_exec (db, sql,
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_exec (db, sql_converted,
                 (db_bind_t[]){db_bind_i32 (port_id), db_bind_i32 (pid),
                               db_bind_i64 (ts), db_bind_text (type)}, 4, &err))
     {
@@ -1832,8 +1882,10 @@ db_port_get_active_busts (int port_id, json_t **out)
   const char *sql =
     "SELECT player_id, bust_type, last_bust_at FROM port_busts WHERE port_id = {1} AND active = 1;";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
     {
       rc = -1;
       goto cleanup;
@@ -1858,8 +1910,11 @@ db_port_is_busted (int port_id, int pid)
   db_res_t *res = NULL;
   db_error_t err = {0};
   int busted = 0;
-  if (!db_query (db,
-                 "SELECT 1 FROM port_busts WHERE port_id = {1} AND player_id = {2} LIMIT 1;",
+  const char *sql =
+    "SELECT 1 FROM port_busts WHERE port_id = {1} AND player_id = {2} LIMIT 1;";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_query (db, sql_converted,
                  (db_bind_t[]){db_bind_i32 (port_id), db_bind_i32 (pid)},
                  2,
                  &res,
@@ -1980,8 +2035,10 @@ db_log_engine_event (long long ts,
     }
   db_error_t err;
   const char *sql =
-    "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload) VALUES ({1}, {2}, {3}, {4}, {5});";
-  bool ok = db_exec (db, sql,
+    "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload) VALUES (to_timestamp({1}), {2}, {3}, {4}, {5});";
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  bool ok = db_exec (db, sql_converted,
                      (db_bind_t[]){db_bind_i64 (ts), db_bind_text (type),
                                    db_bind_i32 (pid), db_bind_i32 (sid),
                                    db_bind_text (pstr)}, 5, &err);
@@ -2002,7 +2059,9 @@ db_news_post (long long ts, long long exp, const char *cat, const char *txt)
   /* news_feed schema: published_ts, news_category, article_text */
   const char *sql =
     "INSERT INTO news_feed (published_ts, news_category, article_text) VALUES ({1}, {2}, {3});";
-  if (!db_exec (db, sql,
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_exec (db, sql_converted,
                 (db_bind_t[]){db_bind_i64 (ts), db_bind_text (cat),
                               db_bind_text (txt)}, 3, &err))
     {
@@ -2075,7 +2134,10 @@ db_get_sector_info (int sid,
                     "s.beacon "
                     "FROM sectors s WHERE s.sector_id = {1};";
 
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+
+  if (!db_query (db, sql_converted, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       rc = -1;
       goto cleanup;
@@ -2163,9 +2225,11 @@ db_port_get_goods_on_hand (db_t *db, int pid, const char *code, int *qty)
   const char *sql =
     "SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id={1} AND commodity_code={2};";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
   if (!db_query (db,
-                 sql,
+                 sql_converted,
                  (db_bind_t[]){db_bind_i32 (pid), db_bind_text (code)},
                  2,
                  &res,
@@ -2259,8 +2323,10 @@ db_path_exists (db_t *db, int from, int to)
       db_res_t *wres = NULL;
       db_bind_t params[] = { db_bind_i32 (current) };
 
+      char sql_warps_converted[256];
+      sql_build(db, sql_warps, sql_warps_converted, sizeof(sql_warps_converted));
 
-      if (db_query (db, sql_warps, params, 1, &wres, &err))
+      if (db_query (db, sql_warps_converted, params, 1, &wres, &err))
         {
           while (db_res_step (wres, &err))
             {
@@ -2300,8 +2366,10 @@ db_apply_lock_policy_for_pilot (db_t *db, int ship_id, int pilot_id)
       const char *sql =
         "UPDATE ships SET flags = COALESCE(flags,0) | {1} WHERE ship_id = {2};";
 
+      char sql_converted[256];
+      sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-      if (!db_exec (db, sql,
+      if (!db_exec (db, sql_converted,
                     (db_bind_t[]){ db_bind_i32 (SHIPF_LOCKED),
                                    db_bind_i32 (ship_id) }, 2, &err))
         {
@@ -2314,8 +2382,10 @@ db_apply_lock_policy_for_pilot (db_t *db, int ship_id, int pilot_id)
       const char *sql =
         "UPDATE ships SET flags = COALESCE(flags,0) & ~{1} WHERE ship_id = {2};";
 
+      char sql_converted[256];
+      sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-      if (!db_exec (db, sql,
+      if (!db_exec (db, sql_converted,
                     (db_bind_t[]){ db_bind_i32 (SHIPF_LOCKED),
                                    db_bind_i32 (ship_id) }, 2, &err))
         {
@@ -2337,9 +2407,11 @@ db_destroy_ship (db_t *db, int pid, int sid)
   db_error_t err = {0};
   int rc = 0;
   const char *sql = "SELECT * FROM ship_destroy({1});";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i64 (sid)}, 1, &res, &err))
+  if (db_query (db, sql_converted, (db_bind_t[]){db_bind_i64 (sid)}, 1, &res, &err))
     {
       (void)pid;
       rc = 0;
@@ -2379,8 +2451,11 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
   const char *sql_info =
     "SELECT name, beacon, 1 as safe_zone, 0 as security_level FROM sectors WHERE sector_id = {1};";
 
+  char sql_info_converted[256];
+  sql_build(db, sql_info, sql_info_converted, sizeof(sql_info_converted));
+
   if (db_query (db,
-                sql_info,
+                sql_info_converted,
                 (db_bind_t[]){ db_bind_i32 (sector_id) },
                 1,
                 &res,
@@ -2428,8 +2503,11 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
   const char *sql_adj =
     "SELECT to_sector FROM sector_warps FROM from_sector = {1};";
 
+  char sql_adj_converted[256];
+  sql_build(db, sql_adj, sql_adj_converted, sizeof(sql_adj_converted));
+
   if (db_query (db,
-                sql_adj,
+                sql_adj_converted,
                 (db_bind_t[]){ db_bind_i32 (sector_id) },
                 1,
                 &res,
@@ -2463,8 +2541,11 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
     "  (SELECT COUNT(*) FROM ships WHERE sector_id={1}) as sc, "
     "  (SELECT COUNT(*) FROM planets WHERE sector_id={1}) as plc;";
 
+  char sql_counts_converted[512];
+  sql_build(db, sql_counts, sql_counts_converted, sizeof(sql_counts_converted));
+
   if (db_query (db,
-                sql_counts,
+                sql_counts_converted,
                 (db_bind_t[]){ db_bind_i32 (sector_id) },
                 1,
                 &res,
@@ -2625,8 +2706,11 @@ db_port_info_json (int port_id, json_t **out)
   const char *sql_det =
     "SELECT port_id, name, type, sector_id FROM ports WHERE port_id = {1};";
 
+  char sql_det_converted[256];
+  sql_build(db, sql_det, sql_det_converted, sizeof(sql_det_converted));
+
   if (db_query (db,
-                sql_det,
+                sql_det_converted,
                 (db_bind_t[]){ db_bind_i32 (port_id) },
                 1,
                 &res,
@@ -2666,8 +2750,11 @@ db_port_info_json (int port_id, json_t **out)
   const char *sql_goods =
     "SELECT commodity_code, quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = {1};";
 
+  char sql_goods_converted[256];
+  sql_build(db, sql_goods, sql_goods_converted, sizeof(sql_goods_converted));
+
   if (db_query (db,
-                sql_goods,
+                sql_goods_converted,
                 (db_bind_t[]){ db_bind_i32 (port_id) },
                 1,
                 &res,
@@ -2837,9 +2924,11 @@ db_get_port_commodity_quantity (db_t *db, int pid, const char *code, int *qty)
   const char *sql =
     "SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id={1} AND commodity_code={2};";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
   if (db_query (db,
-                sql,
+                sql_converted,
                 (db_bind_t[]){db_bind_i32 (pid), db_bind_text (code)},
                 2,
                 &res,
@@ -3051,8 +3140,10 @@ db_fighters_at_sector_json (db_t *db, int sid, json_t **out)
   const char *sql =
     "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = {1} AND asset_type = 2;";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
       goto cleanup;
@@ -3079,8 +3170,10 @@ db_mines_at_sector_json (db_t *db, int sid, json_t **out)
   const char *sql =
     "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = {1} AND asset_type = 3;";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
       goto cleanup;
@@ -3107,8 +3200,10 @@ db_beacons_at_sector_json (db_t *db, int sid, json_t **out)
   const char *sql =
     "SELECT sector_assets_id, owner_id as player_id, quantity FROM sector_assets WHERE sector_id = {1} AND asset_type = 1;";
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (sid) }, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
       goto cleanup;
@@ -3155,8 +3250,10 @@ db_ship_flags_set (db_t *db, int ship_id, int flags)
   const char *sql = "UPDATE ships SET flags = flags | {1} WHERE ship_id = {2};";
   db_bind_t params[] = { db_bind_i32 (flags), db_bind_i32 (ship_id) };
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, params, 2, &err))
+  if (!db_exec (db, sql_converted, params, 2, &err))
     {
       return err.code;
     }
@@ -3175,8 +3272,10 @@ db_ship_flags_clear (db_t *db, int ship_id, int flags)
   const char *sql = "UPDATE ships SET flags = flags & ~{1} WHERE ship_id = {2};";
   db_bind_t params[] = { db_bind_i32 (flags), db_bind_i32 (ship_id) };
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, params, 2, &err))
+  if (!db_exec (db, sql_converted, params, 2, &err))
     {
       return err.code;
     }
@@ -3327,9 +3426,11 @@ db_idemp_store_response (db_t *db, const char *key, const char *response_json)
   const char *sql =
     "INSERT INTO idempotency (key, response) VALUES ({1}, {2}) ON CONFLICT(key) DO UPDATE SET response = excluded.response;";
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
   if (!db_exec (db,
-                sql,
+                sql_converted,
                 (db_bind_t[]){db_bind_text (key), db_bind_text (response_json)},
                 2,
                 &err))
@@ -3391,9 +3492,11 @@ db_ships_inspectable_at_sector_json (db_t *db,
     "              AND is_primary = TRUE "
     "              AND player_id = {2} )); ";
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
   if (db_query (db,
-                sql,
+                sql_converted,
                 (db_bind_t[]){db_bind_i32 (sector_id), db_bind_i32 (player_id)},
                 2,
                 &res,
@@ -3532,8 +3635,10 @@ db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
     "s.beacon as beacon_text "
     "FROM sectors s WHERE s.sector_id = {1};";
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
+  if (!db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
                  &err))
     {
       rc = -1;
@@ -3587,8 +3692,10 @@ db_create_initial_ship (db_t *db, int pid, const char *name, int sid)
   db_error_t err;
   db_res_t *res = NULL;
   const char *sql = "SELECT * FROM ship_create_initial({1}, {2});";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
   if (db_query (db,
-                sql,
+                sql_converted,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (sid)},
                 2,
                 &res,
@@ -3637,9 +3744,11 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
     "WHERE s.ship_id={1} AND s.sector_id={2} "
     "AND pil.player_id IS NULL;";
 
+  char sql_check_converted[512];
+  sql_build(db, sql_check, sql_check_converted, sizeof(sql_check_converted));
 
   if (!db_query (db,
-                 sql_check,
+                 sql_check_converted,
                  (db_bind_t[]){ db_bind_i32 (ship_id), db_bind_i32 (sid) },
                  2,
                  &res,
@@ -3719,9 +3828,11 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
     "LEFT JOIN ship_ownership own ON own.ship_id = s.ship_id "
     "WHERE s.ship_id={1};";
 
+  char sql_fetch_converted[1024];
+  sql_build(db, sql_fetch, sql_fetch_converted, sizeof(sql_fetch_converted));
 
   if (!db_query (db,
-                 sql_fetch,
+                 sql_fetch_converted,
                  (db_bind_t[]){ db_bind_i32 (ship_id) },
                  1,
                  &res,
@@ -3852,9 +3963,11 @@ db_ship_claim (db_t *db, int pid, int sid, int ship_id, json_t **out)
   db_error_t err;
   db_res_t *res = NULL;
   const char *sql = "SELECT * FROM ship_claim({1}, {2});";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
   int rc = -1;
   if (db_query (db,
-                sql,
+                sql_converted,
                 (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (ship_id)},
                 2,
                 &res,
@@ -3920,8 +4033,10 @@ db_news_insert_feed_item (long long ts,
     db_bind_text (article_text)
   };
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  bool ok = db_exec (db, sql, params, 3, &err);
+  bool ok = db_exec (db, sql_converted, params, 3, &err);
 
 
   free (article_text);
@@ -3947,8 +4062,10 @@ db_is_sector_fedspace (db_t *db, int sector_id)
     "SELECT 1 FROM sectors WHERE sector_id = {1} AND is_fedspace = 1;";
   int is_fed = 0;
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
                 &err))
     {
       if (db_res_step (res, &err))
@@ -3974,8 +4091,10 @@ db_sector_has_beacon (db_t *db, int sector_id)
     "SELECT 1 FROM sector_assets WHERE sector_id = {1} AND asset_type = 1 LIMIT 1;";
   int has_beacon = 0;
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res,
                 &err))
     {
       if (db_res_step (res, &err))
@@ -4001,8 +4120,10 @@ db_player_has_beacon_on_ship (db_t *db, int player_id)
     "SELECT 1 FROM entity_stock es JOIN players p ON es.entity_id = p.ship_id WHERE p.player_id = {1} AND es.entity_type = 'ship' AND es.commodity_code = 'BEACON' AND es.quantity > 0 LIMIT 1;";
   int has_beacon = 0;
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
                 &err))
     {
       if (db_res_step (res, &err))
@@ -4026,8 +4147,10 @@ db_player_decrement_beacon_count (db_t *db, int player_id)
   const char *sql =
     "UPDATE entity_stock SET quantity = quantity - 1 WHERE entity_type = 'ship' AND entity_id = (SELECT ship_id FROM players WHERE player_id = {1}) AND commodity_code = 'BEACON' AND quantity > 0;";
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &err))
+  if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &err))
     {
       return -1;
     }
@@ -4238,12 +4361,13 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
     "WHERE s.sector_id > {1} AND COALESCE(ow.c,0)=0 AND COALESCE(iw.c,0)=0 "
     "ORDER BY s.sector_id;";
 
-
   db_res_t *res_traps = NULL;
   db_bind_t params[] = { db_bind_i32 (fedspace_max) };
 
+  char sql_traps_converted[512];
+  sql_build(db, sql_traps, sql_traps_converted, sizeof(sql_traps_converted));
 
-  if (!db_query (db, sql_traps, params, 1, &res_traps, &err))
+  if (!db_query (db, sql_traps_converted, params, 1, &res_traps, &err))
     {
       return -1;
     }
@@ -4288,17 +4412,19 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
   const char *sql_ins =
     "INSERT INTO sector_warps(from_sector, to_sector) VALUES ({1}, {2}) ON CONFLICT DO NOTHING;";
 
+  char sql_ins_converted[256];
+  sql_build(db, sql_ins, sql_ins_converted, sizeof(sql_ins_converted));
 
   for (int i = 0; i + 1 < n; ++i)
     {
       db_exec (db,
-               sql_ins,
+               sql_ins_converted,
                (db_bind_t[]){ db_bind_i32 (traps[i]),
                               db_bind_i32 (traps[i + 1]) },
                2,
                &err);
       db_exec (db,
-               sql_ins,
+               sql_ins_converted,
                (db_bind_t[]){ db_bind_i32 (traps[i + 1]),
                               db_bind_i32 (traps[i]) },
                2,
@@ -4315,12 +4441,13 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
     "    WHERE w.from_sector = s.sector_id OR w.to_sector = s.sector_id"
     "  )" ") SELECT sector_id FROM x ORDER BY RANDOM() LIMIT 1;";
 
-
   int anchor = 0;
   db_res_t *res_anchor = NULL;
 
+  char sql_anchor_converted[512];
+  sql_build(db, sql_anchor, sql_anchor_converted, sizeof(sql_anchor_converted));
 
-  if (db_query (db, sql_anchor, params, 1, &res_anchor, &err))
+  if (db_query (db, sql_anchor_converted, params, 1, &res_anchor, &err))
     {
       if (db_res_step (res_anchor, &err))
         {
@@ -4335,14 +4462,16 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
       anchor = fedspace_max + 1;
     }
 
+  char sql_ins_converted2[256];
+  sql_build(db, sql_ins, sql_ins_converted2, sizeof(sql_ins_converted2));
 
   db_exec (db,
-           sql_ins,
+           sql_ins_converted2,
            (db_bind_t[]){ db_bind_i32 (anchor), db_bind_i32 (traps[0]) },
            2,
            &err);
   db_exec (db,
-           sql_ins,
+           sql_ins_converted2,
            (db_bind_t[]){ db_bind_i32 (traps[0]), db_bind_i32 (anchor) },
            2,
            &err);
@@ -4402,8 +4531,10 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
     "LEFT JOIN sectors sec ON p.sector_id = sec.sector_id "
     "WHERE p.player_id = {1};";
 
+  char sql_converted[1024];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res, &err))
+  if (!db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res, &err))
     {
       rc = err.code;
       goto cleanup;
@@ -4631,13 +4762,15 @@ db_session_create (int player_id, const char *token, long long expires_at)
       return -1;
     }
   const char *sql =
-    "INSERT INTO sessions (token, player_id, expires) VALUES ({1}, {2}, {3})";
+    "INSERT INTO sessions (token, player_id, expires) VALUES ({1}, {2}, to_timestamp({3}))";
   db_bind_t p[] = { db_bind_text (token), db_bind_i32 (player_id),
                     db_bind_i64 (expires_at) };
   db_error_t err;
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_exec (db, sql, p, 3, &err))
+  if (!db_exec (db, sql_converted, p, 3, &err))
     {
       return -1;
     }
@@ -4654,12 +4787,14 @@ db_session_lookup (const char *token, int *player_id, long long *expires_at)
       return -1;
     }
   const char *sql = "SELECT player_id, expires FROM sessions WHERE token = {1}";
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
   db_bind_t p[] = { db_bind_text (token) };
   db_res_t *res = NULL;
   db_error_t err;
 
 
-  if (db_query (db, sql, p, 1, &res, &err))
+  if (db_query (db, sql_converted, p, 1, &res, &err))
     {
       int rc = -1;
 
@@ -4704,8 +4839,10 @@ db_player_set_sector (int pid, int sid)
   const char *sql_player =
     "UPDATE players SET sector_id = {1} WHERE player_id = {2};";
 
+  char sql_player_converted[256];
+  sql_build(db, sql_player, sql_player_converted, sizeof(sql_player_converted));
 
-  if (!db_exec (db, sql_player,
+  if (!db_exec (db, sql_player_converted,
                 (db_bind_t[]){ db_bind_i32 (sid), db_bind_i32 (pid) }, 2, &err))
     {
       db_tx_rollback (db, NULL);
@@ -4719,9 +4856,11 @@ db_player_set_sector (int pid, int sid)
   db_res_t *res = NULL;
   int ship_id = 0;
 
+  char sql_ship_info_converted[256];
+  sql_build(db, sql_ship_info, sql_ship_info_converted, sizeof(sql_ship_info_converted));
 
   if (db_query (db,
-                sql_ship_info,
+                sql_ship_info_converted,
                 (db_bind_t[]){ db_bind_i32 (pid) },
                 1,
                 &res,
@@ -4740,9 +4879,11 @@ db_player_set_sector (int pid, int sid)
       const char *sql_ship =
         "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};";
 
+      char sql_ship_converted[256];
+      sql_build(db, sql_ship, sql_ship_converted, sizeof(sql_ship_converted));
 
       if (!db_exec (db,
-                    sql_ship,
+                    sql_ship_converted,
                     (db_bind_t[]){ db_bind_i32 (sid), db_bind_i32 (ship_id) },
                     2,
                     &err))
@@ -4817,7 +4958,10 @@ h_update_planet_stock (db_t *db, int planet_id, const char *commodity_code,
     db_bind_text (commodity_code)
   };
   
-  if (!db_exec(db, sql, params, 3, &err))
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+
+  if (!db_exec(db, sql_converted, params, 3, &err))
     {
       LOGE ("h_update_planet_stock: Failed to update: %s", err.message);
       return ERR_DB;
@@ -4833,7 +4977,9 @@ h_update_planet_stock (db_t *db, int planet_id, const char *commodity_code,
       };
       
       db_res_t *res = NULL;
-      if (db_query(db, qty_sql, qty_params, 2, &res, &err))
+      char qty_sql_converted[256];
+      sql_build(db, qty_sql, qty_sql_converted, sizeof(qty_sql_converted));
+      if (db_query(db, qty_sql_converted, qty_params, 2, &res, &err))
         {
           if (db_res_step(res, &err))
             {

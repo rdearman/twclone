@@ -24,6 +24,7 @@
 #include "server_universe.h"
 #include "database_cmd.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 /* --- Bounty Helpers --- */
 
@@ -42,11 +43,13 @@ is_black_market_port (db_t *db, int port_id)
 {
   db_res_t *res = NULL;
   db_error_t err;
-  const char *sql = "SELECT name FROM ports WHERE port_id = $1;";
+  const char *sql = "SELECT name FROM ports WHERE port_id = {1};";
   bool is_bm = false;
+  char sql_converted[256];
 
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
+  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
         {
@@ -202,12 +205,14 @@ play_login (const char *user, const char *pass, int *pid)
     }
   db_res_t *res = NULL; db_error_t err;
   const char *sql =
-    "SELECT player_id, passwd, is_npc FROM players WHERE name = $1;";
-
+    "SELECT player_id, passwd, is_npc FROM players WHERE name = {1};";
+  char sql_converted[256];
 
   LOGD ("[play_login] Executing query: %s for user: %s", sql, user);
 
-  if (db_query (db, sql, (db_bind_t[]){db_bind_text (user)}, 1, &res, &err))
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+
+  if (db_query (db, sql_converted, (db_bind_t[]){db_bind_text (user)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
         {
@@ -291,10 +296,13 @@ user_create (db_t *db,
       return AUTH_ERR_BAD_REQUEST;
     }
   db_error_t err; int64_t player_id = 0;
+  char sql_register[256];
+  const char *sql_reg = "SELECT register_player({1}, {2}, {3});";
 
+  sql_build(db, sql_reg, sql_register, sizeof(sql_register));
 
   if (!db_exec_insert_id (db,
-                          "SELECT register_player($1, $2, $3);",
+                          sql_register,
                           (db_bind_t[]){db_bind_text (user),
                                         db_bind_text (pass),
                                         db_bind_text (ship_name)},
@@ -311,15 +319,17 @@ user_create (db_t *db,
 
   const char *sql_turns =
     "INSERT INTO turns (player_id, turns_remaining, last_update) "
-    "SELECT $1, CAST(value AS INTEGER), CURRENT_TIMESTAMP "
+    "SELECT {1}, CAST(value AS INTEGER), CURRENT_TIMESTAMP "
     "FROM config "
     "WHERE key='turnsperday' "
     "ON CONFLICT(player_id) DO UPDATE SET "
     "  turns_remaining = excluded.turns_remaining, "
     "  last_update    = excluded.last_update;";
+  char sql_turns_converted[512];
 
+  sql_build(db, sql_turns, sql_turns_converted, sizeof(sql_turns_converted));
 
-  if (!db_exec (db, sql_turns, (db_bind_t[]){db_bind_i64 (player_id)}, 1, &err))
+  if (!db_exec (db, sql_turns_converted, (db_bind_t[]){db_bind_i64 (player_id)}, 1, &err))
     {
       LOGE ("user_create: turns upsert failed: %s", err.message);
     }
@@ -1019,11 +1029,13 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
 
   // 1. Planet Basic Info
   const char *sql_planet =
-    "SELECT planet_id, name, type, owner_id, owner_type FROM planets WHERE planet_id = $1;";
+    "SELECT planet_id, name, type, owner_id, owner_type FROM planets WHERE planet_id = {1};";
+  char sql_planet_converted[256];
 
+  sql_build(db, sql_planet, sql_planet_converted, sizeof(sql_planet_converted));
 
   if (db_query (db,
-                sql_planet,
+                sql_planet_converted,
                 (db_bind_t[]){db_bind_i32 (planet_id)},
                 1,
                 &res,
@@ -1075,11 +1087,13 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
     "SELECT es.commodity_code, c.commodities_id, es.quantity "
     "FROM entity_stock es "
     "JOIN commodities c ON es.commodity_code = c.code "
-    "WHERE es.entity_type = 'planet' AND es.entity_id = $1;";
+    "WHERE es.entity_type = 'planet' AND es.entity_id = {1};";
+  char sql_stock_converted[384];
 
+  sql_build(db, sql_stock, sql_stock_converted, sizeof(sql_stock_converted));
 
   if (db_query (db,
-                sql_stock,
+                sql_stock_converted,
                 (db_bind_t[]){db_bind_i32 (planet_id)},
                 1,
                 &res,
@@ -1164,11 +1178,13 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
   // 1. Port Basic Info
-  const char *sql_port = "SELECT port_id, name, size FROM ports WHERE port_id = $1;";
+  const char *sql_port = "SELECT port_id, name, size FROM ports WHERE port_id = {1};";
+  char sql_port_converted[256];
 
+  sql_build(db, sql_port, sql_port_converted, sizeof(sql_port_converted));
 
   if (db_query (db,
-                sql_port,
+                sql_port_converted,
                 (db_bind_t[]){db_bind_i32 (port_id)},
                 1,
                 &res,
@@ -1205,11 +1221,13 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
     "SELECT es.commodity_code, c.commodities_id, es.quantity "
     "FROM entity_stock es "
     "JOIN commodities c ON es.commodity_code = c.code "
-    "WHERE es.entity_type = 'port' AND es.entity_id = $1;";
+    "WHERE es.entity_type = 'port' AND es.entity_id = {1};";
+  char sql_stock_converted[384];
 
+  sql_build(db, sql_stock, sql_stock_converted, sizeof(sql_stock_converted));
 
   if (db_query (db,
-                sql_stock,
+                sql_stock_converted,
                 (db_bind_t[]){db_bind_i32 (port_id)},
                 1,
                 &res,

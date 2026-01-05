@@ -1,13 +1,21 @@
 #include "server_citadel.h"
+#include "db/sql_driver.h"
 #include "server_envelope.h"
+#include "db/sql_driver.h"
 #include "errors.h"
+#include "db/sql_driver.h"
 #include "config.h"
+#include "db/sql_driver.h"
 #include "server_players.h"
+#include "db/sql_driver.h"
 #include "server_log.h"
+#include "db/sql_driver.h"
 #include <jansson.h>
 #include <strings.h>
 #include "server_corporation.h"
+#include "db/sql_driver.h"
 #include "game_db.h"
+#include "db/sql_driver.h"
 
 
 // Helper to get the player's current planet_id from their active ship.
@@ -20,14 +28,16 @@ get_player_planet (db_t *db, int player_id)
     {
       return 0;
     }
-  const char *sql = "SELECT onplanet FROM ships WHERE ship_id = $1;";
+  const char *sql = "SELECT onplanet FROM ships WHERE ship_id = {1};";
   db_bind_t params[] = { db_bind_i32 (ship_id) };
   db_res_t *res = NULL;
   db_error_t err;
   int planet_id = 0;
 
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (db_query (db, sql, params, 1, &res, &err))
+  if (db_query (db, sql_converted, params, 1, &res, &err))
     {
       if (db_res_step (res, &err))
         {
@@ -94,7 +104,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
 
   const char *sql_planet =
-    "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE planet_id = $1;";
+    "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE planet_id = {1};";
   db_bind_t p_params[] = { db_bind_i32 (planet_id) };
   db_res_t *p_res = NULL;
   db_error_t err;
@@ -104,9 +114,11 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   char *owner_type = NULL;
   long long p_colonists = 0, p_ore = 0, p_org = 0, p_equip = 0;
 
+  char sql_planet_converted[512];
+  sql_build(db, sql_planet, sql_planet_converted, sizeof(sql_planet_converted));
 
   if (db_query (db,
-                sql_planet,
+                sql_planet_converted,
                 p_params,
                 1,
                 &p_res,
@@ -170,14 +182,16 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
   // 2. Get Citadel State
   const char *sql_citadel =
-    "SELECT level, construction_status FROM citadels WHERE planet_id = $1;";
+    "SELECT level, construction_status FROM citadels WHERE planet_id = {1};";
   int current_level = 0;
   const char *construction_status_db = NULL;
   char *construction_status = NULL;
   db_res_t *c_res = NULL;
 
+  char sql_citadel_converted[256];
+  sql_build(db, sql_citadel, sql_citadel_converted, sizeof(sql_citadel_converted));
 
-  if (db_query (db, sql_citadel, p_params, 1, &c_res, &err))
+  if (db_query (db, sql_citadel_converted, p_params, 1, &c_res, &err))
     {
       if (db_res_step (c_res, &err))
         {
@@ -216,7 +230,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   snprintf (sql_req,
             sizeof(sql_req),
             "SELECT citadelUpgradeColonist_lvl%d, citadelUpgradeOre_lvl%d, citadelUpgradeOrganics_lvl%d, "
-            "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE planettypes_id = $1;",
+            "citadelUpgradeEquipment_lvl%d, citadelUpgradeTime_lvl%d FROM planettypes WHERE planettypes_id = {1};",
             target_level,
             target_level,
             target_level,
@@ -227,8 +241,10 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
   int r_days = 0;
   db_res_t *r_res = NULL;
 
+  char sql_req_converted[512];
+  sql_build(db, sql_req, sql_req_converted, sizeof(sql_req_converted));
 
-  if (db_query (db, sql_req, p_params, 1, &r_res, &err))
+  if (db_query (db, sql_req_converted, p_params, 1, &r_res, &err))
     {
       if (db_res_step (r_res, &err))
         {
@@ -298,12 +314,14 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   // Deduct resources
   const char *sql_update_planet =
-    "UPDATE planets SET ore_on_hand = ore_on_hand - $1, organics_on_hand = organics_on_hand - $2, equipment_on_hand = equipment_on_hand - $3 WHERE planet_id = $4;";
+    "UPDATE planets SET ore_on_hand = ore_on_hand - {1}, organics_on_hand = organics_on_hand - {2}, equipment_on_hand = equipment_on_hand - {3} WHERE planet_id = {4};";
   db_bind_t upd_p_params[] = { db_bind_i64 (r_ore), db_bind_i64 (r_org),
                                db_bind_i64 (r_equip), db_bind_i32 (planet_id) };
 
+  char sql_update_planet_converted[512];
+  sql_build(db, sql_update_planet, sql_update_planet_converted, sizeof(sql_update_planet_converted));
 
-  if (!db_exec (db, sql_update_planet, upd_p_params, 4, &err))
+  if (!db_exec (db, sql_update_planet_converted, upd_p_params, 4, &err))
     {
       db_tx_rollback (db, NULL);
       send_response_error (ctx, root, err.code, "Failed to deduct resources.");
@@ -312,7 +330,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   // Start construction
   const char *sql_update_citadel =
-    "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ($1, $2, $3, 'upgrading', $4, $5, $6) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level=$4, construction_start_time=$5, construction_end_time=$6;";
+    "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ({1}, {2}, {3}, 'upgrading', {4}, {5}, {6}) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level={4}, construction_start_time={5}, construction_end_time={6};";
   long long start_time = time (NULL);
   long long end_time = start_time + (r_days * 86400);
 
@@ -325,8 +343,10 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     db_bind_i64 (end_time)
   };
 
+  char sql_update_citadel_converted[1024];
+  sql_build(db, sql_update_citadel, sql_update_citadel_converted, sizeof(sql_update_citadel_converted));
 
-  if (!db_exec (db, sql_update_citadel, upd_c_params, 6, &err))
+  if (!db_exec (db, sql_update_citadel_converted, upd_c_params, 6, &err))
     {
       db_tx_rollback (db, NULL);
       send_response_error (ctx,

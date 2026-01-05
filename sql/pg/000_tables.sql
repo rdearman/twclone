@@ -8,7 +8,7 @@ CREATE TABLE config (
 CREATE TABLE sessions (
     token text PRIMARY KEY,
     player_id bigint NOT NULL,
-    expires bigint NOT NULL,
+    expires timestamptz NOT NULL,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -401,7 +401,7 @@ CREATE TABLE tavern_loans (
     player_id bigserial PRIMARY KEY REFERENCES players (player_id),
     principal bigint NOT NULL,
     interest_rate bigint NOT NULL,
-    due_date bigint NOT NULL,
+    due_date timestamptz NOT NULL,
     is_defaulted bigint NOT NULL DEFAULT 0
 );
 
@@ -684,7 +684,7 @@ CREATE TABLE limpet_attached (
     limpet_attached_id bigserial PRIMARY KEY,
     ship_id bigint NOT NULL,
     owner_player_id bigint NOT NULL,
-    created_ts bigint NOT NULL,
+    created_ts timestamptz NOT NULL,
     UNIQUE (ship_id, owner_player_id),
     FOREIGN KEY (ship_id) REFERENCES ships (ship_id) ON DELETE CASCADE,
     FOREIGN KEY (owner_player_id) REFERENCES players (player_id) ON DELETE CASCADE
@@ -703,7 +703,7 @@ CREATE TABLE trade_log (
     units bigint NOT NULL,
     price_per_unit double precision NOT NULL,
     action text CHECK (action IN ('buy', 'sell')) NOT NULL,
-    timestamp bigint NOT NULL,
+    timestamp timestamptz NOT NULL,
     FOREIGN KEY (player_id) REFERENCES players (player_id),
     FOREIGN KEY (port_id) REFERENCES ports (port_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)
@@ -814,7 +814,7 @@ CREATE TABLE law_enforcement (
 CREATE TABLE port_busts (
     port_id bigint NOT NULL,
     player_id bigint NOT NULL,
-    last_bust_at bigint NOT NULL,
+    last_bust_at timestamptz NOT NULL,
     bust_type text NOT NULL,
     active bigint NOT NULL DEFAULT 1,
     PRIMARY KEY (port_id, player_id),
@@ -825,7 +825,7 @@ CREATE TABLE port_busts (
 CREATE TABLE player_last_rob (
     player_id bigserial PRIMARY KEY,
     port_id bigint NOT NULL,
-    last_attempt_at bigint NOT NULL,
+    last_attempt_at timestamptz NOT NULL,
     was_success bigint NOT NULL
 );
 
@@ -1441,7 +1441,7 @@ CREATE TABLE cron_tasks (
 
 CREATE TABLE engine_events (
     engine_events_id bigserial PRIMARY KEY,
-    ts bigint NOT NULL,
+    ts timestamptz NOT NULL,
     type TEXT NOT NULL,
     actor_player_id bigint,
     sector_id bigint,
@@ -1453,12 +1453,12 @@ CREATE TABLE engine_events (
 CREATE TABLE engine_offset (
     key TEXT PRIMARY KEY,
     last_event_id bigint NOT NULL,
-    last_event_ts bigint NOT NULL
+    last_event_ts timestamptz NOT NULL
 );
 
 CREATE TABLE engine_events_deadletter (
     engine_events_deadletter_id bigserial PRIMARY KEY,
-    ts bigint NOT NULL,
+    ts timestamptz NOT NULL,
     type TEXT NOT NULL,
     payload text NOT NULL,
     error text NOT NULL,

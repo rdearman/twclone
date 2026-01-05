@@ -34,6 +34,7 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_ports.h"
+#include "db/sql_driver.h"
 
 
 #define UUID_STR_LEN 37         // 36 chars + null terminator
@@ -108,8 +109,8 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
   const char *sql =
     "SELECT result_code "
     "FROM public.handle_ship_destruction("
-    "$1,$2,$3,$4,$5,"
-    "$6,$7,$8,$9,$10,$11"
+    "{1},{2},{3},{4},{5},"
+    "{6},{7},{8},{9},{10},{11}"
     ");";
 
   db_bind_t params[] = {
@@ -129,8 +130,10 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
   db_res_t *res = NULL;
   db_error_t err;
 
+  char sql_converted[1024];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, params, 11, &res, &err))
+  if (!db_query (db, sql_converted, params, 11, &res, &err))
     {
       LOGE ("handle_ship_destruction: SQL error: %s", err.message);
       return -1;
@@ -737,8 +740,10 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
             }
 
           // 3a. Clear player's towing field
+          char sql_tow1[256];
+          sql_build(db, "UPDATE ships SET towing_ship_id = 0 WHERE ship_id = {1};", sql_tow1, sizeof(sql_tow1));
           if (!db_exec (db,
-                        "UPDATE ships SET towing_ship_id = 0 WHERE ship_id = $1;",
+                        sql_tow1,
                         (db_bind_t[]){ db_bind_i32 (player_ship_id) },
                         1,
                         &err))
@@ -747,8 +752,10 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
             }
 
           // 3b. Clear target's "being towed" field
+          char sql_tow2[256];
+          sql_build(db, "UPDATE ships SET is_being_towed_by = 0 WHERE ship_id = {1};", sql_tow2, sizeof(sql_tow2));
           if (!db_exec (db,
-                        "UPDATE ships SET is_being_towed_by = 0 WHERE ship_id = $1;",
+                        sql_tow2,
                         (db_bind_t[]){ db_bind_i32 (current_towing_ship_id) },
                         1,
                         &err))
@@ -905,8 +912,10 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     }
 
   // 5b. Set target's is_being_towed_by -> player
+  char sql_tow3[256];
+  sql_build(db, "UPDATE ships SET is_being_towed_by = {1} WHERE ship_id = {2};", sql_tow3, sizeof(sql_tow3));
   if (!db_exec (db,
-                "UPDATE ships SET is_being_towed_by = $1 WHERE ship_id = $2;",
+                sql_tow3,
                 (db_bind_t[]){ db_bind_i32 (player_ship_id),
                                db_bind_i32 (target_ship_id) },
                 2,
@@ -1002,14 +1011,17 @@ h_update_ship_cargo (db_t *db,
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql_check =
-    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = $1;";
+    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = {1};";
+
+  char sql_check_converted[512];
+  sql_build(db, sql_check, sql_check_converted, sizeof(sql_check_converted));
 
   int ore = 0, org = 0, equ = 0, holds = 0, colonists = 0, slaves = 0,
       weapons = 0, drugs = 0;
 
 
   if (db_query (db,
-                sql_check,
+                sql_check_converted,
                 (db_bind_t[]){ db_bind_i32 (ship_id) },
                 1,
                 &res,
@@ -1098,11 +1110,14 @@ h_update_ship_cargo (db_t *db,
 
   snprintf (sql_up,
             sizeof(sql_up),
-            "UPDATE ships SET %s = $1 WHERE ship_id = $2;",
+            "UPDATE ships SET %s = {1} WHERE ship_id = {2};",
             col_name);
 
+  char sql_up_converted[512];
+  sql_build(db, sql_up, sql_up_converted, sizeof(sql_up_converted));
+
   if (!db_exec (db,
-                sql_up,
+                sql_up_converted,
                 (db_bind_t[]){ db_bind_i32 (new_qty), db_bind_i32 (ship_id) },
                 2,
                 &err))
@@ -1142,10 +1157,12 @@ h_get_ship_cargo_and_holds (db_t *db,
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = $1;";
+    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = {1};";
 
+  char sql_final[512];
+  sql_build(db, sql, sql_final, sizeof(sql_final));
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))
+  if (db_query (db, sql_final, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
         {

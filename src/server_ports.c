@@ -2913,7 +2913,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         }
 
       {
-        const char *now_epoch = sql_epoch_now(db);
+        const char *now_ts = sql_now_expr(db);
         char sql_bust[256], sql_last[256];
         
         snprintf(sql_bust, sizeof(sql_bust),
@@ -2921,14 +2921,14 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           "VALUES ({1}, {2}, %s, 'fake', 1) "
           "ON CONFLICT(port_id, player_id) DO UPDATE SET "
           "last_bust_at=%s, bust_type='fake', active=1",
-          now_epoch, now_epoch);
+          now_ts, now_ts);
 
         snprintf(sql_last, sizeof(sql_last),
           "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
           "VALUES ({1}, {2}, %s, 0) "
           "ON CONFLICT(player_id) DO UPDATE SET "
           "port_id=EXCLUDED.port_id, last_attempt_at=%s, was_success=0",
-          now_epoch, now_epoch);
+          now_ts, now_ts);
 
         db_bind_t params[2];
 
@@ -3239,7 +3239,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         }
 
       {
-        const char *now_epoch = sql_epoch_now(db);
+        const char *now_ts = sql_now_expr(db);
         char sql_last_success[256];
         
         snprintf(sql_last_success, sizeof(sql_last_success),
@@ -3247,7 +3247,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           "VALUES ({1}, {2}, %s, 1) "
           "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
           "last_attempt_at=%s, was_success=1",
-          now_epoch, now_epoch);
+          now_ts, now_ts);
         db_bind_t lparams[2];
 
 
@@ -3284,7 +3284,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
                                "port.rob.bust");
 
       {
-        const char *now_epoch = sql_epoch_now(db);
+        const char *now_ts = sql_now_expr(db);
         char sql_bust_real[256];
         
         snprintf(sql_bust_real, sizeof(sql_bust_real),
@@ -3292,7 +3292,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           "VALUES ({1}, {2}, %s, 'real', 1) "
           "ON CONFLICT(port_id, player_id) DO UPDATE SET "
           "last_bust_at=%s, bust_type='real', active=1",
-          now_epoch, now_epoch);
+          now_ts, now_ts);
         db_bind_t bparams[2];
 
 
@@ -3309,7 +3309,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 
       if (cluster_id > 0)
         {
-          const char *now_epoch = sql_epoch_now(db);
+          const char *now_ts = sql_now_expr(db);
           char sql_clust_upd[512];
           
           snprintf(sql_clust_upd, sizeof(sql_clust_upd),
@@ -3317,7 +3317,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
             "VALUES ({1}, {2}, {3}, 1, %s) "
             "ON CONFLICT(cluster_id, player_id) DO UPDATE SET "
             "suspicion = suspicion + {4}, bust_count = bust_count + 1, last_bust_at = %s",
-            now_epoch, now_epoch);
+            now_ts, now_ts);
           db_bind_t cparams[4];
 
 
@@ -3346,7 +3346,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         }
 
       {
-        const char *now_epoch = sql_epoch_now(db);
+        const char *now_ts = sql_now_expr(db);
         char sql_last_fail[256];
         
         snprintf(sql_last_fail, sizeof(sql_last_fail),
@@ -3354,7 +3354,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           "VALUES ({1}, {2}, %s, 0) "
           "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
           "last_attempt_at=%s, was_success=0",
-          now_epoch, now_epoch);
+          now_ts, now_ts);
         db_bind_t lparams[2];
 
 
@@ -5001,7 +5001,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       {
         static const char *LOG_SQL =
           "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-          "VALUES ({1},{2},{3},{4},{5},{6},'buy',{7});";
+          "VALUES ({1},{2},{3},{4},{5},{6},'buy',to_timestamp({7}))";
 
         db_error_t e;
 

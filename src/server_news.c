@@ -11,6 +11,7 @@
 #include "db_player_settings.h"
 #include "database.h"
 #include "game_db.h"
+#include "db/sql_driver.h"
 #include "server_log.h"
 #include "server_players.h"
 #include "db/db_api.h"
@@ -78,12 +79,14 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
     {                           // Unread
       const char *sql =
         "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE player_id = $1) "
+        "FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE player_id = {1}) "
         "ORDER BY published_ts DESC LIMIT 100;";
 
+      char sql_converted1[512];
+      sql_build(db, sql, sql_converted1, sizeof(sql_converted1));
 
       if (!db_query (db,
-                     sql,
+                     sql_converted1,
                      (db_bind_t[]){db_bind_i32 (ctx->player_id)},
                      1,
                      &res,
@@ -104,12 +107,15 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
       char sql[256];
       snprintf(sql, sizeof(sql),
         "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (%s - $1) "
+        "FROM news_feed WHERE published_ts > (%s - {1}) "
         "ORDER BY published_ts DESC LIMIT 100;",
         epoch_expr);
 
+      char sql_converted2[512];
+      sql_build(db, sql, sql_converted2, sizeof(sql_converted2));
+
       if (!db_query (db,
-                     sql,
+                     sql_converted2,
                      (db_bind_t[]){db_bind_i32 (fetch_mode * 86400)},
                      1,
                      &res,
@@ -214,10 +220,13 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 
   char sql_update[256];
   snprintf(sql_update, sizeof(sql_update),
-    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = $1;",
+    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = {1};",
     now_expr);
 
-  db_exec (db, sql_update,
+  char sql_converted3[512];
+  sql_build(db, sql_update, sql_converted3, sizeof(sql_converted3));
+
+  db_exec (db, sql_converted3,
            (db_bind_t[]){db_bind_i32 (ctx->player_id)}, 1, &err);
 
   // 5. Send response
@@ -266,10 +275,13 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
 
   char sql[256];
   snprintf(sql, sizeof(sql),
-    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = $1;",
+    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = {1};",
     now_expr);
 
-  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (ctx->player_id) }, 1,
+  char sql_converted4[512];
+  sql_build(db, sql, sql_converted4, sizeof(sql_converted4));
+
+  if (!db_exec (db, sql_converted4, (db_bind_t[]){ db_bind_i32 (ctx->player_id) }, 1,
                 &err))
     {
       LOGE ("cmd_news_mark_feed_read: Failed for player %d: %s",
@@ -312,7 +324,7 @@ news_post (const char *body, const char *cat, int aid)
 
   char sql[256];
   snprintf(sql, sizeof(sql),
-    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (%s, $1, $2, $3);",
+    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (%s, {1}, {2}, {3});",
     epoch_expr);
 
   db_bind_t params[] = {
@@ -321,8 +333,10 @@ news_post (const char *body, const char *cat, int aid)
     db_bind_i32 (aid)
   };
 
+  char sql_converted5[512];
+  sql_build(db, sql, sql_converted5, sizeof(sql_converted5));
 
-  if (!db_exec (db, sql, params, 3, &err))
+  if (!db_exec (db, sql_converted5, params, 3, &err))
     {
       LOGE ("news_post: Failed: %s", err.message);
       return -1;

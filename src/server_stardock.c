@@ -19,6 +19,7 @@
 #include "server_cron.h"        // For LOGE
 #include "server_communication.h"       // For server_broadcast_to_sector
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "game_db.h"
 #include "database.h"
 
@@ -63,6 +64,7 @@
 typedef struct db_stmt_s {
   db_t *db;
   const char *sql;
+  char converted_sql[512];  /* buffer for sql_build() output */
   db_bind_t binds[64];     /* adjust if needed */
   int nbinds;              /* number of bound params (max index) */
   bool started;            /* query has been executed */
@@ -376,8 +378,11 @@ db_stmt_step (db_stmt_t *st)
 
 
       db_error_clear (&err);
+      /* Convert {N} placeholders to backend-specific format */
+      sql_build(st->db, st->sql, st->converted_sql, sizeof(st->converted_sql));
+      
       if (!db_query (st->db,
-                     st->sql,
+                     st->converted_sql,
                      (st->nbinds > 0) ? st->binds : NULL,
                      st->nbinds,
                      &st->res,
@@ -521,7 +526,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   char location_type[16] = "OTHER";
   int port_id = 0;
   const char *sql_loc_check =
-    "SELECT port_id, type FROM ports WHERE sector_id = $1 AND (type = 9 OR type = 0);";
+    "SELECT port_id, type FROM ports WHERE sector_id = {1} AND (type = 9 OR type = 0);";
   // type 9 for Stardock, 0 for Class-0
   int rc = db_stmt_prepare_v2 (db, sql_loc_check, -1, &stmt, NULL);
 
@@ -570,7 +575,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   int can_transwarp = 0, can_planet_scan = 0, can_long_range_scan = 0;
   // Get ship current state
   const char *sql_ship_state =
-    "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1;";
+    "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1};";
 
 
   rc = db_stmt_prepare_v2 (db, sql_ship_state, -1, &stmt, NULL);
@@ -608,8 +613,8 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   stmt = NULL;
   json_t *items_array = json_array ();
   const char *sql_items =
-    "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND ($1 = '"
-    LOCATION_STARDOCK "' OR ($2 = '" LOCATION_CLASS0 "'));";
+    "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND ({1} = '"
+    LOCATION_STARDOCK "' OR ({2} = '" LOCATION_CLASS0 "'));";
 
 
   rc = db_stmt_prepare_v2 (db, sql_items, -1, &stmt, NULL);
@@ -810,7 +815,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
   db_stmt_t *stmt = NULL;
   int port_type = -1;
   const char *sql_port =
-    "SELECT type FROM ports WHERE sector_id = $1 AND (type = 9 OR type = 0);";
+    "SELECT type FROM ports WHERE sector_id = {1} AND (type = 9 OR type = 0);";
 
 
   if (db_stmt_prepare_v2 (db, sql_port, -1, &stmt, NULL) == DB_OK)
@@ -837,7 +842,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
   int max_per_ship = 0;
   char category[32] = { 0 };
   const char *sql_item =
-    "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = $1 AND enabled = 1;";
+    "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = {1} AND enabled = 1;";
   bool item_found = false;
 
 
@@ -1005,7 +1010,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       snprintf (sql_info,
                 sizeof (sql_info),
-                "SELECT s.%s, st.%s FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = $1;",
+                "SELECT s.%s, st.%s FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1};",
                 col_name,
                 limit_col);
     }
@@ -1013,7 +1018,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       snprintf (sql_info,
                 sizeof (sql_info),
-                "SELECT %s, 0 FROM ships WHERE ship_id = $1;", col_name);
+                "SELECT %s, 0 FROM ships WHERE ship_id = {1};", col_name);
     }
   if (db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL) == DB_OK)
     {
@@ -1114,7 +1119,7 @@ cmd_hardware_buy (client_ctx_t *ctx,
 
 /* Update ship hardware column: build SQL safely (still dynamic column name) */
   char *sql_upd =
-    st_asprintf ("UPDATE ships SET %s = %s + $1 WHERE ship_id = $2;",
+    st_asprintf ("UPDATE ships SET %s = %s + {1} WHERE ship_id = {2};",
                  col_name, col_name);
 
 
@@ -1206,7 +1211,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
   const char *sql_loc = "SELECT p.port_id FROM ports p "
                         "JOIN ships s ON s.ported = p.port_id "
                         "JOIN players pl ON pl.ship_id = s.ship_id "
-                        "WHERE p.sector_id = $1 AND pl.player_id = $2 AND (p.type = 9 OR p.type = 10);";
+                        "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (p.type = 9 OR p.type = 10);";
   int rc = db_stmt_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
 
 
@@ -1249,7 +1254,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
                          "s.colonists, s.ore, s.organics, s.equipment, "
                          "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner "
                          "FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id "
-                         "WHERE p.player_id = $1;";
+                         "WHERE p.player_id = {1};";
 
 
   rc = db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL);
@@ -1315,7 +1320,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
   const char *sql_inventory =
     "SELECT si.ship_type_id, st.name, st.basecost, st.required_alignment, st.required_commission, st.required_experience, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.max_cloaks, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.maxmines, st.maxlimpets "
     "FROM shipyard_inventory si JOIN shiptypes st ON si.ship_type_id = st.shiptypes_id "
-    "WHERE si.port_id = $1 AND si.enabled = 1 AND st.enabled = 1;";
+    "WHERE si.port_id = {1} AND si.enabled = 1 AND st.enabled = 1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_inventory, -1, &stmt, NULL);
@@ -1525,7 +1530,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   const char *sql_loc = "SELECT p.port_id FROM ports p "
                         "JOIN ships s ON s.ported = p.port_id "
                         "JOIN players pl ON pl.ship_id = s.ship_id "
-                        "WHERE p.sector_id = $1 AND pl.player_id = $2 AND (p.type = 9 OR p.type = 10);";
+                        "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (p.type = 9 OR p.type = 10);";
 
 
   // Begin transaction
@@ -1585,7 +1590,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                          "s.colonists, s.ore, s.organics, s.equipment, "
                          "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, s.ship_id, s.type_id, st.basecost "
                          "FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id "
-                         "WHERE p.player_id = $1;";
+                         "WHERE p.player_id = {1};";
 
 
   rc = db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL);
@@ -1633,7 +1638,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   db_stmt_finalize (stmt);
   stmt = NULL;
   const char *sql_target_type =
-    "SELECT basecost, required_alignment, required_commission, required_experience, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, max_cloaks, can_transwarp, can_planet_scan, can_long_range_scan, maxmines, maxlimpets, name FROM shiptypes WHERE shiptypes_id = $1 AND enabled = 1;";
+    "SELECT basecost, required_alignment, required_commission, required_experience, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, max_cloaks, can_transwarp, can_planet_scan, can_long_range_scan, maxmines, maxlimpets, name FROM shiptypes WHERE shiptypes_id = {1} AND enabled = 1;";
 
 
   rc = db_stmt_prepare_v2 (db, sql_target_type, -1, &stmt, NULL);
@@ -1792,7 +1797,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   const char *sql_update =
-    "UPDATE ships SET type_id = $1, name = $2, credits = credits - $3 WHERE ship_id = $4;";
+    "UPDATE ships SET type_id = {1}, name = {2}, credits = credits - {3} WHERE ship_id = {4};";
 
 
   rc = db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL);
@@ -1891,7 +1896,7 @@ is_player_in_tavern_sector (db_t *db, int sector_id)
 {
   db_stmt_t *stmt = NULL;
   const char *sql =
-    "SELECT 1 FROM taverns WHERE sector_id = $1 AND enabled = 1;";
+    "SELECT 1 FROM taverns WHERE sector_id = {1} AND enabled = 1;";
   bool in_tavern = false;
   if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) != DB_OK)
     {
@@ -1916,7 +1921,7 @@ get_player_loan (db_t *db, int player_id, long long *principal,
 {
   db_stmt_t *stmt = NULL;
   const char *sql =
-    "SELECT principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE player_id = $1;";
+    "SELECT principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE player_id = {1};";
   bool found = false;
   if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) != DB_OK)
     {
@@ -1996,7 +2001,7 @@ validate_bet_limits (db_t *db, int player_id, long long bet_amount)
       long long player_credits = 0;
       db_stmt_t *stmt = NULL;
       const char *sql_credits =
-        "SELECT credits FROM players WHERE player_id = $1;";
+        "SELECT credits FROM players WHERE player_id = {1};";
 
 
       if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == DB_OK)
@@ -2032,8 +2037,8 @@ update_player_credits_gambling (db_t *db, int player_id, long long amount,
                                 bool is_win)
 {
   const char *sql_update = is_win ?
-                           "UPDATE players SET credits = credits + $1 WHERE player_id = $2;"
-    : "UPDATE players SET credits = credits - $1 WHERE player_id = $2;";
+                           "UPDATE players SET credits = credits + {1} WHERE player_id = {2};"
+    : "UPDATE players SET credits = credits - {1} WHERE player_id = {2};";
   db_stmt_t *stmt = NULL;
   int rc = -1;
   if (db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL) == DB_OK)
@@ -2068,7 +2073,7 @@ has_sufficient_funds (db_t *db, int player_id, long long required_amount)
 {
   long long player_credits = 0;
   db_stmt_t *stmt = NULL;
-  const char *sql = "SELECT credits FROM players WHERE player_id = $1;";
+  const char *sql = "SELECT credits FROM players WHERE player_id = {1};";
   if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) == DB_OK)
     {
       db_stmt_bind_i32 (stmt, 1, player_id);
@@ -2103,7 +2108,7 @@ check_loan_default (db_t *db, int player_id, int current_time)
         {
           // Mark as defaulted
           const char *sql_default =
-            "UPDATE tavern_loans SET is_defaulted = 1 WHERE player_id = $1;";
+            "UPDATE tavern_loans SET is_defaulted = 1 WHERE player_id = {1};";
           db_stmt_t *stmt = NULL;
 
 
@@ -2145,7 +2150,7 @@ apply_loan_interest (db_t *db, int player_id, long long current_principal,
   long long new_principal = current_principal + interest_amount;
   db_stmt_t *stmt = NULL;
   const char *sql_update =
-    "UPDATE tavern_loans SET principal = $1 WHERE player_id = $2;";
+    "UPDATE tavern_loans SET principal = {1} WHERE player_id = {2};";
   int rc = db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL);
   if (rc != DB_OK)
     {
@@ -2267,7 +2272,7 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   const char *sql_insert_ticket =
-    "INSERT INTO tavern_lottery_tickets (draw_date, player_id, number, cost, purchased_at) VALUES ($1, $2, $3, $4, $5);";
+    "INSERT INTO tavern_lottery_tickets (draw_date, player_id, number, cost, purchased_at) VALUES ({1}, {2}, {3}, {4}, {5});";
   db_stmt_t *stmt = NULL;
 
 
@@ -2348,7 +2353,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   // Query current lottery state
   db_stmt_t *stmt = NULL;
   const char *sql_state =
-    "SELECT draw_date, winning_number, jackpot FROM tavern_lottery_state WHERE draw_date = $1;";
+    "SELECT draw_date, winning_number, jackpot FROM tavern_lottery_state WHERE draw_date = {1};";
   int rc = db_stmt_prepare_v2 (db, sql_state, -1, &stmt, NULL);
 
 
@@ -2378,7 +2383,7 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   // Query player's tickets for the current draw
   json_t *player_tickets_array = json_array ();
   const char *sql_player_tickets =
-    "SELECT number, cost, purchased_at FROM tavern_lottery_tickets WHERE player_id = $1 AND draw_date = $2;";
+    "SELECT number, cost, purchased_at FROM tavern_lottery_tickets WHERE player_id = {1} AND draw_date = {2};";
 
 
   rc = db_stmt_prepare_v2 (db, sql_player_tickets, -1, &stmt, NULL);
@@ -2464,7 +2469,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
     }
   // Check if target player exists
   db_stmt_t *stmt = NULL;
-  const char *sql_target_exists = "SELECT 1 FROM players WHERE player_id = $1;";
+  const char *sql_target_exists = "SELECT 1 FROM players WHERE player_id = {1};";
 
 
   if (db_stmt_prepare_v2 (db, sql_target_exists, -1, &stmt, NULL) !=
@@ -2534,7 +2539,7 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
   int odds_bp = get_random_int (5000, 15000);   // Example: 50%-150% odds
   // Insert bet into tavern_deadpool_bets
   const char *sql_insert_bet =
-    "INSERT INTO tavern_deadpool_bets (bettor_id, target_id, amount, odds_bp, placed_at, expires_at, resolved) VALUES ($1, $2, $3, $4, $5, $6, 0);";
+    "INSERT INTO tavern_deadpool_bets (bettor_id, target_id, amount, odds_bp, placed_at, expires_at, resolved) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, 0);";
 
 
   rc = db_stmt_prepare_v2 (db, sql_insert_bet, -1, &stmt, NULL);
@@ -2677,7 +2682,7 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
   // Get updated player credits for response
   long long current_credits = 0;
   db_stmt_t *stmt = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE player_id = $1;";
+  const char *sql_credits = "SELECT credits FROM players WHERE player_id = {1};";
 
 
   if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == DB_OK)
@@ -2835,7 +2840,7 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
   // Get updated player credits for response
   long long player_credits_after_game = 0;
   db_stmt_t *stmt_credits = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE player_id = $1;";
+  const char *sql_credits = "SELECT credits FROM players WHERE player_id = {1};";
 
 
   if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
@@ -2988,7 +2993,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
         }
       // Reset pot and record win
       sql_update_raffle =
-        "UPDATE tavern_raffle_state SET pot = 0, last_winner_id = $1, last_payout = $2, last_win_ts = $3 WHERE tavern_raffle_state_id = 1;";
+        "UPDATE tavern_raffle_state SET pot = 0, last_winner_id = {1}, last_payout = {2}, last_win_ts = {3} WHERE tavern_raffle_state_id = 1;";
       rc = db_stmt_prepare_v2 (db, sql_update_raffle, -1, &stmt, NULL);
       if (rc == DB_OK)
         {
@@ -3017,7 +3022,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
     {
       // Just update pot if no win
       sql_update_raffle =
-        "UPDATE tavern_raffle_state SET pot = $1 WHERE tavern_raffle_state_id = 1;";
+        "UPDATE tavern_raffle_state SET pot = {1} WHERE tavern_raffle_state_id = 1;";
       rc = db_stmt_prepare_v2 (db, sql_update_raffle, -1, &stmt, NULL);
       if (rc == DB_OK)
         {
@@ -3041,7 +3046,7 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   // Get updated player credits for response
   long long player_credits_after_game = 0;
   db_stmt_t *stmt_credits = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE player_id = $1;";
+  const char *sql_credits = "SELECT credits FROM players WHERE player_id = {1};";
 
 
   if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
@@ -3095,7 +3100,7 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
   // Check player alignment (example: must be < 0 for underground access)
   long long player_alignment = 0;
   db_stmt_t *stmt_align = NULL;
-  const char *sql_align = "SELECT alignment FROM players WHERE player_id = $1;";
+  const char *sql_align = "SELECT alignment FROM players WHERE player_id = {1};";
 
 
   if (db_stmt_prepare_v2 (db, sql_align, -1, &stmt_align, NULL) == DB_OK)
@@ -3249,7 +3254,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
   time_t now = time (NULL);
   // Insert new graffiti post
   const char *sql_insert =
-    "INSERT INTO tavern_graffiti (player_id, text, created_at) VALUES ($1, $2, $3);";
+    "INSERT INTO tavern_graffiti (player_id, text, created_at) VALUES ({1}, {2}, {3});";
   db_stmt_t *stmt = NULL;
   int rc = db_stmt_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
 
@@ -3287,7 +3292,7 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
   if (current_graffiti_count > g_tavern_cfg.graffiti_max_posts)
     {
       const char *sql_delete_oldest =
-        "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT $1);";
+        "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT {1});";
 
 
       if (db_stmt_prepare_v2 (db, sql_delete_oldest, -1, &stmt, NULL) ==
@@ -3391,7 +3396,7 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
     }
   // Increase player's alignment
   const char *sql_update_alignment =
-    "UPDATE players SET alignment = alignment + $1 WHERE player_id = $2;";
+    "UPDATE players SET alignment = alignment + {1} WHERE player_id = {2};";
   db_stmt_t *stmt = NULL;
 
 
@@ -3503,7 +3508,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
   time_t due_date = now + (7 * 24 * 60 * 60);   // Due in 7 days
   // Insert new loan
   const char *sql_insert_loan =
-    "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES ($1, $2, $3, $4, 0);";
+    "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES ({1}, {2}, {3}, to_timestamp({4}), 0);";
   db_stmt_t *stmt = NULL;
   int rc = db_stmt_prepare_v2 (db, sql_insert_loan, -1, &stmt, NULL);
 
@@ -3640,7 +3645,7 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
   if (new_principal == 0)
     {
       // Loan fully paid, delete it
-      sql_update_loan = "DELETE FROM tavern_loans WHERE player_id = $1;";
+      sql_update_loan = "DELETE FROM tavern_loans WHERE player_id = {1};";
       rc = db_stmt_prepare_v2 (db, sql_update_loan, -1, &stmt, NULL);
       if (rc != DB_OK)
         {
@@ -3655,7 +3660,7 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       // Update remaining principal and reset default status if paying
       sql_update_loan =
-        "UPDATE tavern_loans SET principal = $1, is_defaulted = 0 WHERE player_id = $2;";
+        "UPDATE tavern_loans SET principal = {1}, is_defaulted = 0 WHERE player_id = {2};";
       rc = db_stmt_prepare_v2 (db, sql_update_loan, -1, &stmt, NULL);
       if (rc != DB_OK)
         {

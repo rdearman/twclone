@@ -1272,7 +1272,7 @@ h_robbery_daily_cleanup (db_t *db, int64_t now_s)
   // Fake: Daily
   // Real: After TTL days (default 7)
   char sql_bust_clear[512];
-  sql_build(db, "UPDATE port_busts SET active = 0 WHERE active = 1 AND ( (bust_type = 'fake') OR (bust_type = 'real' AND last_bust_at < {1} - (SELECT robbery_real_bust_ttl_days * 86400 FROM law_enforcement WHERE law_enforcement_id=1)) );", sql_bust_clear, sizeof(sql_bust_clear));
+  sql_build(db, "UPDATE port_busts SET active = 0 WHERE active = 1 AND ( (bust_type = 'fake') OR (bust_type = 'real' AND last_bust_at < to_timestamp({1}) - (SELECT INTERVAL '1 second' * robbery_real_bust_ttl_days * 86400 FROM law_enforcement WHERE law_enforcement_id=1)) );", sql_bust_clear, sizeof(sql_bust_clear));
 
   db_bind_t params[1] = { db_bind_i64 (now_s) };
 
@@ -1376,15 +1376,20 @@ h_autouncloak_sweeper (db_t *db, int64_t now_s)
   int64_t max_duration_seconds = (int64_t) max_hours * SECONDS_IN_HOUR;
   int64_t uncloak_threshold_s = now_s - max_duration_seconds;
 
-  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
-  if (!ts_fmt)
+  char cloaked_epoch[256];
+  if (sql_ts_to_epoch_expr(db, "cloaked", cloaked_epoch, sizeof(cloaked_epoch)) != 0)
     {
       unlock (db, "autouncloak_sweeper");
       return -1;
     }
 
+  char sql_update_tmpl[256];
   char sql_update[256];
-  if (sql_build(db, "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND cloaked < to_timestamp({1});", sql_update, sizeof(sql_update)) != 0)
+  snprintf(sql_update_tmpl, sizeof(sql_update_tmpl),
+    "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND %s < {1};",
+    cloaked_epoch);
+
+  if (sql_build(db, sql_update_tmpl, sql_update, sizeof(sql_update)) != 0)
     {
       unlock (db, "autouncloak_sweeper");
       return -1;
@@ -1663,7 +1668,33 @@ h_planet_growth (db_t *db, int64_t now_s)
   // --- NEW: Update commodity quantities in entity_stock based on planet_production ---
   // Replaced SQLite time function with parameterized epoch value for backend neutrality
   char sql_update_commodities[2048];
-  sql_build(db, "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) SELECT 'planet', p.planet_id, pp.commodity_code, GREATEST(0, LEAST(CASE pp.commodity_code WHEN 'ORE' THEN pltype.maxore WHEN 'ORG' THEN pltype.maxorganics WHEN 'EQU' THEN pltype.maxequipment ELSE 999999 END, COALESCE(es.quantity, 0) + pp.base_prod_rate + (CASE pp.commodity_code WHEN 'ORE' THEN p.colonists_ore * 1 WHEN 'ORG' THEN p.colonists_org * pltype.organicsProduction WHEN 'EQU' THEN p.colonists_eq * pltype.equipmentProduction WHEN 'FUE' THEN p.colonists_unassigned * pltype.fuelProduction ELSE p.colonists_unassigned * 1 END) - pp.base_cons_rate)) AS new_quantity, 0, {1} FROM planets p JOIN planet_production pp ON p.type = pp.planet_type_id LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0)", sql_update_commodities, sizeof(sql_update_commodities));
+  
+  const char *sql_template = 
+    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+    "SELECT 'planet', p.planet_id, pp.commodity_code, "
+    "GREATEST(0, LEAST(CASE pp.commodity_code "
+    "  WHEN 'ORE' THEN pltype.maxore "
+    "  WHEN 'ORG' THEN pltype.maxorganics "
+    "  WHEN 'EQU' THEN pltype.maxequipment "
+    "  ELSE 999999 END, "
+    "COALESCE(es.quantity, 0) + pp.base_prod_rate + "
+    "(CASE pp.commodity_code "
+    "  WHEN 'ORE' THEN p.colonists_ore * 1 "
+    "  WHEN 'ORG' THEN p.colonists_org * pltype.organicsProduction "
+    "  WHEN 'EQU' THEN p.colonists_eq * pltype.equipmentProduction "
+    "  WHEN 'FUE' THEN p.colonists_unassigned * pltype.fuelProduction "
+    "  ELSE p.colonists_unassigned * 1 END) - pp.base_cons_rate)) AS new_quantity, 0, {1} "
+    "FROM planets p "
+    "JOIN planet_production pp ON p.type = pp.planet_type_id "
+    "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
+    "LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id "
+    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0)";
+  
+  if (sql_build(db, sql_template, sql_update_commodities, sizeof(sql_update_commodities)) != 0)
+    {
+      LOGE("planet_growth: sql_build failed for commodities query");
+      return -1;
+    }
 
   db_error_t err;
 
@@ -1978,15 +2009,22 @@ h_traps_process (db_t *db, int64_t now_s)
       return -1;
     }
 
+  char trigger_at_epoch[256];
+  if (sql_ts_to_epoch_expr(db, "trigger_at", trigger_at_epoch, sizeof(trigger_at_epoch)) != 0)
+    {
+      LOGE("traps_process: Failed to build epoch expression");
+      unlock (db, "traps_process");
+      return -1;
+    }
+
   char sql_insert_tmpl[512];
   char sql_insert[512];
   
-  /* Template with now_expr for current timestamp and {1} for parameter */
   snprintf(sql_insert_tmpl, sizeof(sql_insert_tmpl),
     "INSERT INTO engine_commands(type, payload, created_at, due_at) "
     "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
-    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp({1}::bigint);",
-    json_obj_fn, now_expr, now_expr);
+    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND %s <= {1};",
+    json_obj_fn, now_expr, now_expr, trigger_at_epoch);
   
   if (sql_build(db, sql_insert_tmpl, sql_insert, sizeof(sql_insert)) != 0)
     {
@@ -2004,11 +2042,12 @@ h_traps_process (db_t *db, int64_t now_s)
       return -1;
     }
 
-  char sql_delete_tmpl[256];
-  char sql_delete[256];
+  char sql_delete_tmpl[512];
+  char sql_delete[512];
   
   snprintf(sql_delete_tmpl, sizeof(sql_delete_tmpl),
-    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp({1}::bigint);");
+    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND %s <= {1};",
+    trigger_at_epoch);
   
   if (sql_build(db, sql_delete_tmpl, sql_delete, sizeof(sql_delete)) != 0)
     {
@@ -2605,7 +2644,7 @@ h_daily_news_compiler (db_t *db, int64_t now_s)
 
   int64_t yesterday_s = now_s - 86400;  // 24 hours ago
   char sql_select_events[512];
-  sql_build(db, "SELECT engine_events_id, ts, type, actor_player_id, sector_id, payload FROM engine_events WHERE ts >= {1} AND ts < {2} ORDER BY ts ASC;", sql_select_events, sizeof(sql_select_events));
+  sql_build(db, "SELECT engine_events_id, ts, type, actor_player_id, sector_id, payload FROM engine_events WHERE ts >= to_timestamp({1}) AND ts < to_timestamp({2}) ORDER BY ts ASC;", sql_select_events, sizeof(sql_select_events));
 
   db_bind_t params[2] = { db_bind_i64 (yesterday_s), db_bind_i64 (now_s) };
 

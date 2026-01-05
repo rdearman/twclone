@@ -1572,7 +1572,11 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
   db_error_t err;
 
   char sql_delete_expired[512];
-  sql_build(db, sql_delete_template, sql_delete_expired, sizeof sql_delete_expired);
+  if (sql_build(db, sql_delete_template, sql_delete_expired, sizeof sql_delete_expired) != 0)
+    {
+      LOGE("limpet_ttl_cleanup: Failed to build SQL");
+      return -1;
+    }
 
   db_error_clear (&err);
 

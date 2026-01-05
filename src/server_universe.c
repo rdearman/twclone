@@ -32,6 +32,7 @@
 #include "server_corporation.h"
 #include "database_market.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 /* ============ Ferengi Trader Globals ============ */
 static db_t *g_fer_db = NULL;
@@ -88,14 +89,16 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   db_error_clear (&err);
   
   const char *sql = "INSERT INTO engine_events(type, sector_id, payload, ts) "
-                    "VALUES ($1, $2, $3, NOW())";
+                    "VALUES ({1}, {2}, {3}, NOW())";
   db_bind_t params[] = {
     db_bind_text (type),
     db_bind_i32 (sector_id),
     db_bind_text (payload)
   };
 
-  if (!db_exec (g_fer_db, sql, params, 3, &err))
+  char sql_converted[512];
+  sql_build(g_fer_db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_exec (g_fer_db, sql_converted, params, 3, &err))
     {
       LOGE ("fer_event_json: Failed to insert event: %s", err.message);
     }
@@ -163,11 +166,13 @@ nav_next_hop (db_t *db, int start, int goal)
       int cur = q[head++ % MAX_Q];
 
       /* Query adjacent sectors from sector_warps table */
-      const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector=$1;";
+      const char *sql = "SELECT to_sector FROM sector_warps WHERE from_sector={1};";
       db_bind_t params[] = { db_bind_i32 (cur) };
       db_res_t *res = NULL;
 
-      if (!db_query (db, sql, params, 1, &res, &err))
+      char sql_converted[512];
+      sql_build(db, sql, sql_converted, sizeof(sql_converted));
+      if (!db_query (db, sql_converted, params, 1, &res, &err))
         {
           /* Query failed; return 0 to indicate no path */
           return 0;
@@ -237,11 +242,13 @@ nav_random_neighbor (db_t *db, int sector)
 
   db_error_t err;
   const char *sql =
-    "SELECT to_sector FROM sector_warps WHERE from_sector=$1 ORDER BY RANDOM() LIMIT 1;";
+    "SELECT to_sector FROM sector_warps WHERE from_sector={1} ORDER BY RANDOM() LIMIT 1;";
   db_bind_t params[] = { db_bind_i32 (sector) };
   db_res_t *res = NULL;
 
-  if (!db_query (db, sql, params, 1, &res, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_query (db, sql_converted, params, 1, &res, &err))
     {
       return 0;
     }
@@ -274,10 +281,12 @@ no_zero_ship (db_t *db, int set_sector, int ship_id)
 
   if (set_sector > 0 && ship_id > 0)
     {
-      const char *sql = "UPDATE ships SET sector_id = $1 WHERE ship_id = $2;";
+      const char *sql = "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};";
 
 
-      if (!db_exec (db, sql,
+      char sql_converted[512];
+      sql_build(db, sql, sql_converted, sizeof(sql_converted));
+      if (!db_exec (db, sql_converted,
                     (db_bind_t[]){db_bind_i32 (set_sector),
                                   db_bind_i32 (ship_id)}, 2, &err))
         {
@@ -318,12 +327,14 @@ ori_move_all_ships (void)
     "SELECT s.id, s.sector, s.target_sector "
     "FROM ships s "
     "JOIN ship_ownership so ON s.id = so.ship_id "
-    "WHERE so.player_id = $1;";
+    "WHERE so.player_id = {1};";
 
   db_bind_t params[] = { db_bind_i32 (ori_owner_id) };
   db_res_t *res = NULL;
 
-  if (!db_query (ori_db, sql_select_orion_ships, params, 1, &res, &err))
+  char sql_converted[1024];
+  sql_build(ori_db, sql_select_orion_ships, sql_converted, sizeof(sql_converted));
+  if (!db_query (ori_db, sql_converted, params, 1, &res, &err))
     {
       LOGE ("ORI_MOVE: Failed to query Orion ships: %s", err.message);
       return;
@@ -359,7 +370,7 @@ ori_move_all_ships (void)
 
       /* Update the target for the next tick */
       const char *sql_update_target =
-        "UPDATE ships SET target_sector = $1 WHERE id = $2;";
+        "UPDATE ships SET target_sector = {1} WHERE id = {2};";
 
       db_bind_t update_params[] = {
         db_bind_i32 (new_target),
@@ -367,7 +378,9 @@ ori_move_all_ships (void)
       };
 
       db_error_clear (&err);
-      if (!db_exec (ori_db, sql_update_target, update_params, 2, &err))
+      char sql_converted[512];
+      sql_build(ori_db, sql_update_target, sql_converted, sizeof(sql_converted));
+      if (!db_exec (ori_db, sql_converted, update_params, 2, &err))
         {
           LOGE ("ORI_MOVE: Failed to update target for ship %d: %s",
                 ship_id, err.message);
@@ -395,11 +408,13 @@ ori_init_once (void)
   db_error_clear (&err);
 
   /* Step 1: Find the Orion Syndicate owner ID from corporation tag */
-  const char *sql_find_owner = "SELECT owner_id FROM corporations WHERE tag=$1;";
+  const char *sql_find_owner = "SELECT owner_id FROM corporations WHERE tag={1};";
   db_bind_t params_owner[] = { db_bind_text ("ORION") };
   db_res_t *res = NULL;
 
-  if (!db_query (ori_db, sql_find_owner, params_owner, 1, &res, &err))
+  char sql_converted[512];
+  sql_build(ori_db, sql_find_owner, sql_converted, sizeof(sql_converted));
+  if (!db_query (ori_db, sql_converted, params_owner, 1, &res, &err))
     {
       LOGW ("ORI_INIT: Failed to find Orion Syndicate owner (query error: %s). Skipping.",
             err.message);
@@ -421,7 +436,7 @@ ori_init_once (void)
     }
 
   /* Step 2: Find the Black Market home sector ID (from Port ID 10) */
-  const char *sql_find_sector = "SELECT sector FROM ports WHERE id=$1 AND name=$2;";
+  const char *sql_find_sector = "SELECT sector FROM ports WHERE id={1} AND name={2};";
   db_bind_t params_sector[] = {
     db_bind_i32 (10),
     db_bind_text ("Orion Black Market Dock")
@@ -429,7 +444,9 @@ ori_init_once (void)
   res = NULL;
   db_error_clear (&err);
 
-  if (!db_query (ori_db, sql_find_sector, params_sector, 2, &res, &err))
+  char sql_converted2[512];
+  sql_build(ori_db, sql_find_sector, sql_converted2, sizeof(sql_converted2));
+  if (!db_query (ori_db, sql_converted2, params_sector, 2, &res, &err))
     {
       LOGW ("ORI_INIT: Failed to find Black Market sector (query error: %s). Movement will be random.",
             err.message);
@@ -618,25 +635,25 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   
   const char *base_sql = 
     "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index ";
-  const char *order_limit = " ORDER BY kind, name, id LIMIT $2 OFFSET $3";
+  const char *order_limit = " ORDER BY kind, name, id LIMIT {2} OFFSET {3}";
   
   /* Build WHERE clause */
   if (type_any)
     {
       snprintf (sql, sizeof(sql), 
-                "%s WHERE (($1 = '') OR (search_term_1 ILIKE $1)) %s",
+                "%s WHERE (({1} = '') OR (search_term_1 ILIKE {1})) %s",
                 base_sql, order_limit);
     }
   else if (type_sector)
     {
       snprintf (sql, sizeof(sql),
-                "%s WHERE kind = 'sector' AND (($1 = '') OR (search_term_1 ILIKE $1)) %s",
+                "%s WHERE kind = 'sector' AND (({1} = '') OR (search_term_1 ILIKE {1})) %s",
                 base_sql, order_limit);
     }
   else
     {  /* type_port */
       snprintf (sql, sizeof(sql),
-                "%s WHERE kind = 'port' AND (($1 = '') OR (search_term_1 ILIKE $1)) %s",
+                "%s WHERE kind = 'port' AND (({1} = '') OR (search_term_1 ILIKE {1})) %s",
                 base_sql, order_limit);
     }
   
@@ -648,7 +665,9 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   db_error_t err;
   db_res_t *res = NULL;
   
-  if (!db_query (db, sql, params, params_count, &res, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_query (db, sql_converted, params, params_count, &res, &err))
     {
       free (q);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "Search query failed");
@@ -810,13 +829,15 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   /* Build sector list: current + adjacent */
   const char *sql_sectors = 
     "WITH sector_list AS ("
-    "  SELECT $1::int as sector_id "
+    "  SELECT {1}::int as sector_id "
     "  UNION "
-    "  SELECT to_sector FROM sector_warps WHERE from_sector = $1 "
+    "  SELECT to_sector FROM sector_warps WHERE from_sector = {1} "
     ") "
     "SELECT DISTINCT sector_id FROM sector_list ORDER BY sector_id;";
   
-  if (!db_query(db, sql_sectors, (db_bind_t[]){db_bind_i32(target_sector)}, 1, &res, &err))
+  char sql_converted[1024];
+  sql_build(db, sql_sectors, sql_converted, sizeof(sql_converted));
+  if (!db_query(db, sql_converted, (db_bind_t[]){db_bind_i32(target_sector)}, 1, &res, &err))
     {
       send_response_error(ctx, root, ERR_DB, "Failed to get sector list");
       json_decref(payload);
@@ -838,15 +859,17 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
       */
       const char *density_sql = 
         "SELECT "
-        "  COALESCE((SELECT fighters FROM sector_assets WHERE sector_id = $1), 0) + "
-        "  COALESCE((SELECT mines FROM sector_assets WHERE sector_id = $1), 0) + "
-        "  CASE WHEN EXISTS(SELECT 1 FROM sectors WHERE sector_id = $1 AND beacon IS NOT NULL) THEN 1 ELSE 0 END + "
-        "  (SELECT COALESCE(COUNT(*), 0) * 10 FROM ships WHERE sector_id = $1) + "
-        "  (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = $1) "
+        "  COALESCE((SELECT fighters FROM sector_assets WHERE sector_id = {1}), 0) + "
+        "  COALESCE((SELECT mines FROM sector_assets WHERE sector_id = {1}), 0) + "
+        "  CASE WHEN EXISTS(SELECT 1 FROM sectors WHERE sector_id = {1} AND beacon IS NOT NULL) THEN 1 ELSE 0 END + "
+        "  (SELECT COALESCE(COUNT(*), 0) * 10 FROM ships WHERE sector_id = {1}) + "
+        "  (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = {1}) "
         "as total_density;";
       
       db_res_t *density_res = NULL;
-      if (db_query(db, density_sql, (db_bind_t[]){db_bind_i32(sector_id)}, 1, &density_res, &err))
+      char sql_converted2[1024];
+      sql_build(db, density_sql, sql_converted2, sizeof(sql_converted2));
+      if (db_query(db, sql_converted2, (db_bind_t[]){db_bind_i32(sector_id)}, 1, &density_res, &err))
         {
           int density = 0;
           if (db_res_step(density_res, &err))
@@ -881,8 +904,11 @@ h_warp_exists (db_t *db, int from, int to)
   db_res_t *res = NULL; db_error_t err; int has = 0;
 
 
+  const char *sql = "SELECT 1 FROM sector_warps WHERE from_sector = {1} AND to_sector = {2} LIMIT 1;";
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
   if (db_query (db,
-                "SELECT 1 FROM sector_warps WHERE from_sector = $1 AND to_sector = $2 LIMIT 1;",
+                sql_converted,
                 (db_bind_t[]){db_bind_i32 (from), db_bind_i32 (to)},
                 2,
                 &res,
@@ -913,11 +939,13 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
   const char *sql = "SELECT p.owner_id, p.owner_type "
     "FROM planets p "
     "JOIN citadels c ON p.planet_id = c.planet_id "
-    "WHERE p.sector_id = $1 AND c.level >= 6 AND c.interdictor > 0;";
+    "WHERE p.sector_id = {1} AND c.level >= 6 AND c.interdictor > 0;";
 
   db_bind_t params[] = { db_bind_i32 (sector_id) };
 
-  if (!db_query (db, sql, params, 1, &res, &err))
+  char sql_converted[1024];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_query (db, sql_converted, params, 1, &res, &err))
     {
       LOGE ("h_check_interdiction: query failed: %s", err.message);
       return 0; /* Fail open */
@@ -958,10 +986,12 @@ sector_has_port (db_t *db, int sector)
 
   db_error_t err;
   db_res_t *res = NULL;
-  const char *sql = "SELECT 1 FROM ports WHERE sector_id=$1 LIMIT 1;";
+  const char *sql = "SELECT 1 FROM ports WHERE sector_id={1} LIMIT 1;";
   db_bind_t params[] = { db_bind_i32 (sector) };
 
-  if (!db_query (db, sql, params, 1, &res, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_query (db, sql_converted, params, 1, &res, &err))
     {
       return 0;
     }
@@ -1383,8 +1413,10 @@ attach_sector_asset_counts (db_t *db, int sid, json_t *out)
   int ftrs = 0, armid = 0, limpet = 0;
   db_res_t *res = NULL; db_error_t err;
   const char *sql =
-    "SELECT asset_type, SUM(quantity) FROM sector_assets WHERE sector_id = $1 GROUP BY asset_type;";
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
+    "SELECT asset_type, SUM(quantity) FROM sector_assets WHERE sector_id = {1} GROUP BY asset_type;";
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (db_query (db, sql_converted, (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       while (db_res_step (res, &err))
         {
@@ -1545,14 +1577,16 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   /* Update beacon */
   db_error_t err;
-  const char *sql = "UPDATE sectors SET beacon_text = $1, beacon_owner_id = $2 WHERE sector_id = $3;";
+  const char *sql = "UPDATE sectors SET beacon_text = {1}, beacon_owner_id = {2} WHERE sector_id = {3};";
   db_bind_t binds[] = {
     db_bind_text(beacon_text),
     db_bind_i32(ctx->player_id),
     db_bind_i32(req_sector_id)
   };
   
-  if (!db_exec (db, sql, binds, 3, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_exec (db, sql_converted, binds, 3, &err))
     {
       send_response_error (ctx, root, ERR_DB, "Database error updating beacon.");
       return 1;
@@ -1618,10 +1652,12 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   /* Check transwarp capability */
   db_error_t err;
   db_res_t *res = NULL;
-  const char *sql = "SELECT 1 FROM ships WHERE ship_id = $1 AND transwarp_enabled = true LIMIT 1;";
+  const char *sql = "SELECT 1 FROM ships WHERE ship_id = {1} AND transwarp_enabled = true LIMIT 1;";
   
   int has_transwarp = 0;
-  if (db_query (db, sql, (db_bind_t[]){db_bind_i32(ship_id)}, 1, &res, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (db_query (db, sql_converted, (db_bind_t[]){db_bind_i32(ship_id)}, 1, &res, &err))
     {
       if (res && db_res_step(res, &err))
         {
@@ -1645,8 +1681,10 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
     }
 
   /* Update player sector */
-  sql = "UPDATE players SET sector_id = $1 WHERE player_id = $2;";
-  if (!db_exec (db, sql, (db_bind_t[]){db_bind_i32(to_sector_id), 
+  sql = "UPDATE players SET sector_id = {1} WHERE player_id = {2};";
+  char sql_converted2[512];
+  sql_build(db, sql, sql_converted2, sizeof(sql_converted2));
+  if (!db_exec (db, sql_converted2, (db_bind_t[]){db_bind_i32(to_sector_id), 
                                         db_bind_i32(ctx->player_id)}, 2, &err))
     {
       send_response_error (ctx, root, ERR_DB, "Database error during transwarp");
@@ -1991,9 +2029,11 @@ db_pick_adjacent (db_t *db, int sid)
 
   db_error_t err;
   db_res_t *res = NULL;
-  const char *sql = "SELECT to_sector_id FROM wormholes WHERE from_sector_id = $1 ORDER BY RANDOM() LIMIT 1;";
+  const char *sql = "SELECT to_sector_id FROM wormholes WHERE from_sector_id = {1} ORDER BY RANDOM() LIMIT 1;";
   
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32(sid)}, 1, &res, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (!db_query (db, sql_converted, (db_bind_t[]){db_bind_i32(sid)}, 1, &res, &err))
     {
       return 0;
     }

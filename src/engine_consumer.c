@@ -63,7 +63,7 @@ load_watermark (db_t *db, const char *key, long long *last_id,
 {
   char sql[512];
   sql_build (db,
-             "SELECT last_event_id, last_event_ts FROM engine_offset WHERE key={1};",
+             "SELECT last_event_id, EXTRACT(EPOCH FROM last_event_ts)::bigint FROM engine_offset WHERE key={1};",
              sql, sizeof (sql));
   db_res_t *res = NULL;
   db_error_t err;
@@ -101,7 +101,7 @@ save_watermark (db_t *db, const char *key, long long last_id,
   char up[512];
   sql_build (db,
              "INSERT INTO engine_offset(key,last_event_id,last_event_ts) "
-             "VALUES({1},{2},{3}) "
+             "VALUES({1},{2},to_timestamp({3})) "
              "ON CONFLICT(key) DO UPDATE SET last_event_id=excluded.last_event_id, last_event_ts=excluded.last_event_ts;",
              up, sizeof (up));
 

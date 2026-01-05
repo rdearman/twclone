@@ -960,7 +960,7 @@ db_limpet_attach (db_t *db, int ship_id, int owner_id, int64_t created_ts)
   char sql[256];
   sql_build(db,
     "INSERT INTO limpet_attached (ship_id, owner_player_id, created_ts) "
-    "VALUES ({1}, {2}, {3}) "
+    "VALUES ({1}, {2}, to_timestamp({3})) "
     "ON CONFLICT (ship_id, owner_player_id) DO NOTHING;",
     sql, sizeof(sql));
 

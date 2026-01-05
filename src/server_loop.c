@@ -53,9 +53,11 @@
 #include "server_combat.h"
 #include "database_cmd.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "server_combat.h"
 #include "game_db.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "database_cmd.h"
 #include "server_ships.h"
 #include "server_log.h"
@@ -786,7 +788,7 @@ broadcast_sweep_once (db_t *db, int max_rows)
     "    SELECT notice_id FROM notice_seen WHERE player_id = 0"
     ") "
     "ORDER BY created_at ASC, id ASC "
-    "LIMIT $1;";
+    "LIMIT {1};";
 
 
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
@@ -800,8 +802,10 @@ broadcast_sweep_once (db_t *db, int max_rows)
 
   db_bind_t params[] = { db_bind_i32 (max_rows) };
 
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
-  if (!db_query (db, sql, params, 1, &res, &err))
+  if (!db_query (db, sql_converted, params, 1, &res, &err))
     {
       db_tx_rollback (db, NULL);
       return -1;

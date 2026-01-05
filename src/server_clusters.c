@@ -6,6 +6,7 @@
 #include "server_log.h"
 #include "database.h"
 #include "game_db.h"
+#include "db/sql_driver.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 
@@ -37,8 +38,10 @@ _get_cluster_for_sector (db_t *db, int sector_id)
   int cluster_id = 0;
   db_bind_t params[] = { db_bind_i32 (sector_id) };
 
+  char sql_converted[256];
+  sql_build(db, "SELECT cluster_id FROM cluster_sectors WHERE sector_id = {1}", sql_converted, sizeof(sql_converted));
   if (db_query (db,
-                "SELECT cluster_id FROM cluster_sectors WHERE sector_id = $1",
+                sql_converted,
                 params, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -60,7 +63,7 @@ _create_cluster (db_t *db,
 {
   int cluster_id = -1;
   const char *sql =
-    "INSERT INTO clusters (name, role, kind, center_sector, alignment, law_severity) VALUES ($1, $2, $3, $4, $5, $6)";
+    "INSERT INTO clusters (name, role, kind, center_sector, alignment, law_severity) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
 
   db_bind_t params[] = {
     db_bind_text (name),
@@ -74,7 +77,9 @@ _create_cluster (db_t *db,
   db_error_t err;
   int64_t new_id = 0;
 
-  if (db_exec_insert_id (db, sql, params, 6, &new_id, &err))
+  char sql_converted[512];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  if (db_exec_insert_id (db, sql_converted, params, 6, &new_id, &err))
     {
       cluster_id = (int) new_id;
     }
@@ -97,12 +102,14 @@ _add_sector_to_cluster (db_t *db, int cluster_id, int sector_id)
   
   char sql[256];
   snprintf(sql, sizeof(sql),
-    "INSERT INTO cluster_sectors (cluster_id, sector_id) VALUES ($1, $2) %s",
+    "INSERT INTO cluster_sectors (cluster_id, sector_id) VALUES ({1}, {2}) %s",
     conflict_clause);
   
   db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (sector_id) };
   db_error_t err;
-  db_exec (db, sql, params, 2, &err);
+  char sql_converted[256];
+  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  db_exec (db, sql_converted, params, 2, &err);
 }
 
 
@@ -124,9 +131,9 @@ _bfs_expand_cluster (db_t *db,
   count++;
 
   const char *sql_warps =
-    "SELECT to_sector FROM sector_warps WHERE from_sector = $1";
+    "SELECT to_sector FROM sector_warps WHERE from_sector = {1}";
 
-  const char *sql_check = "SELECT 1 FROM cluster_sectors WHERE sector_id = $1";
+  const char *sql_check = "SELECT 1 FROM cluster_sectors WHERE sector_id = {1}";
 
 
   while (head < tail && count < target_size)
@@ -138,7 +145,9 @@ _bfs_expand_cluster (db_t *db,
       db_bind_t params_w[] = { db_bind_i32 (current) };
 
 
-      if (db_query (db, sql_warps, params_w, 1, &res_warps, &err))
+      char sql_converted_w[256];
+      sql_build(db, sql_warps, sql_converted_w, sizeof(sql_converted_w));
+      if (db_query (db, sql_converted_w, params_w, 1, &res_warps, &err))
         {
           while (db_res_step (res_warps, &err) && count < target_size)
             {
@@ -150,7 +159,9 @@ _bfs_expand_cluster (db_t *db,
               int exists = 0;
 
 
-              if (db_query (db, sql_check, params_c, 1, &res_check, &err))
+              char sql_converted_c[256];
+              sql_build(db, sql_check, sql_converted_c, sizeof(sql_converted_c));
+              if (db_query (db, sql_converted_c, params_c, 1, &res_check, &err))
                 {
                   if (db_res_step (res_check, &err))
                     {
@@ -423,13 +434,15 @@ cluster_economy_step (db_t *db, int64_t now_s)
                 "SELECT AVG(price) FROM port_trade pt "
                 "JOIN ports p ON p.port_id = pt.port_id "
                 "JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
-                "WHERE cs.cluster_id = $1 AND pt.commodity = $2";
+                "WHERE cs.cluster_id = {1} AND pt.commodity = {2}";
 
               db_bind_t params_avg[] = { db_bind_i32 (cluster_id),
                                          db_bind_text (comm) };
 
 
-              if (db_query (db, sql_avg_real, params_avg, 2, &res_avg, &err))
+              char sql_converted_avg[512];
+              sql_build(db, sql_avg_real, sql_converted_avg, sizeof(sql_converted_avg));
+              if (db_query (db, sql_converted_avg, params_avg, 2, &res_avg, &err))
                 {
                   if (db_res_step (res_avg, &err))
                     {
@@ -455,7 +468,7 @@ cluster_economy_step (db_t *db, int64_t now_s)
                 conflict_fmt, "cluster_id, commodity_code");
               
               snprintf(sql_idx, sizeof(sql_idx),
-                "INSERT INTO cluster_commodity_index (cluster_id, commodity_code, mid_price, last_updated) VALUES ($1, $2, $3, CURRENT_TIMESTAMP) "
+                "INSERT INTO cluster_commodity_index (cluster_id, commodity_code, mid_price, last_updated) VALUES ({1}, {2}, {3}, CURRENT_TIMESTAMP) "
                 "%s UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP",
                 conflict_clause);
 
@@ -464,24 +477,28 @@ cluster_economy_step (db_t *db, int64_t now_s)
                                          db_bind_i32 (mid_price) };
 
 
-              db_exec (db, sql_idx, params_idx, 3, &err);
+              char sql_converted_idx[512];
+              sql_build(db, sql_idx, sql_converted_idx, sizeof(sql_converted_idx));
+              db_exec (db, sql_converted_idx, params_idx, 3, &err);
 
               // Drift Ports
               // new_price = price + 0.1 * (mid - price)
               const char *sql_drift =
                 "UPDATE port_trade "
-                "SET price = CAST(price + 0.1 * ($1 - price) AS INTEGER) "
-                "WHERE commodity = $2 AND port_id IN ("
+                "SET price = CAST(price + 0.1 * ({1} - price) AS INTEGER) "
+                "WHERE commodity = {2} AND port_id IN ("
                 "  SELECT p.port_id FROM ports p "
                 "  JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
-                "  WHERE cs.cluster_id = $3" ")";
+                "  WHERE cs.cluster_id = {3}" ")";
 
               db_bind_t params_drift[] = { db_bind_i32 (mid_price),
                                            db_bind_text (comm),
                                            db_bind_i32 (cluster_id) };
 
 
-              db_exec (db, sql_drift, params_drift, 3, &err);
+              char sql_converted_drift[512];
+              sql_build(db, sql_drift, sql_converted_drift, sizeof(sql_converted_drift));
+              db_exec (db, sql_converted_drift, params_drift, 3, &err);
             }
         }
       db_res_finalize (res_clusters);
@@ -505,8 +522,11 @@ cluster_can_trade (db_t *db, int sector_id, int player_id)
   db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (player_id) };
 
 
+  const char *sql_ban = "SELECT banned FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+  char sql_converted_ban[256];
+  sql_build(db, sql_ban, sql_converted_ban, sizeof(sql_converted_ban));
   if (db_query (db,
-                "SELECT banned FROM cluster_player_status WHERE cluster_id = $1 AND player_id = $2",
+                sql_converted_ban,
                 params,
                 2,
                 &res,
@@ -537,8 +557,11 @@ cluster_get_bust_modifier (db_t *db, int sector_id, int player_id)
   db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (player_id) };
 
 
+  const char *sql_sus = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+  char sql_converted_sus[256];
+  sql_build(db, sql_sus, sql_converted_sus, sizeof(sql_converted_sus));
   if (db_query (db,
-                "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = $1 AND player_id = $2",
+                sql_converted_sus,
                 params,
                 2,
                 &res,
@@ -592,11 +615,11 @@ cluster_on_crime (db_t *db,
   char sql_upsert[512];
   snprintf(sql_upsert, sizeof(sql_upsert),
     "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
-    "VALUES ($1, $2, $3, $4, CASE WHEN $5=1 THEN CURRENT_TIMESTAMP ELSE NULL END) "
+    "VALUES ({1}, {2}, {3}, {4}, CASE WHEN {5}=1 THEN CURRENT_TIMESTAMP ELSE NULL END) "
     "%s UPDATE SET "
-    "suspicion = suspicion + $6, "
-    "bust_count = bust_count + $7, "
-    "last_bust_at = CASE WHEN $8=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;",
+    "suspicion = suspicion + {6}, "
+    "bust_count = bust_count + {7}, "
+    "last_bust_at = CASE WHEN {8}=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;",
     conflict_clause);
 
   db_bind_t params[] = {
@@ -613,7 +636,9 @@ cluster_on_crime (db_t *db,
   db_error_t err;
 
 
-  db_exec (db, sql_upsert, params, 8, &err);
+  char sql_converted_upsert[1024];
+  sql_build(db, sql_upsert, sql_converted_upsert, sizeof(sql_converted_upsert));
+  db_exec (db, sql_converted_upsert, params, 8, &err);
 }
 
 
@@ -643,11 +668,13 @@ clusters_seed_illegal_goods (db_t *db)
           // Get cluster alignment for the port's sector
           db_res_t *res_align = NULL;
           const char *sql_cluster_align =
-            "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id_id = $1 LIMIT 1";
+            "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id_id = {1} LIMIT 1";
           db_bind_t params_a[] = { db_bind_i32 (sector_id) };
 
 
-          if (db_query (db, sql_cluster_align, params_a, 1, &res_align, &err))
+          char sql_converted_align[512];
+          sql_build(db, sql_cluster_align, sql_converted_align, sizeof(sql_converted_align));
+          if (db_query (db, sql_converted_align, params_a, 1, &res_align, &err))
             {
               if (db_res_step (res_align, &err))
                 {
@@ -683,7 +710,7 @@ clusters_seed_illegal_goods (db_t *db)
               char sql_update_stock[512];
               snprintf(sql_update_stock, sizeof(sql_update_stock),
                 "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-                "VALUES ('port', $1, $2, $3, 0, $4) "
+                "VALUES ('port', {1}, {2}, {3}, 0, {4}) "
                 "%s UPDATE SET quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;",
                 conflict_clause);
 
@@ -695,7 +722,9 @@ clusters_seed_illegal_goods (db_t *db)
                                     db_bind_i64 (now_s) };
 
 
-              db_exec (db, sql_update_stock, p_slv, 4, &err);
+              char sql_converted_stock[512];
+              sql_build(db, sql_update_stock, sql_converted_stock, sizeof(sql_converted_stock));
+              db_exec (db, sql_converted_stock, p_slv, 4, &err);
 
               // Update WPN
               db_bind_t p_wpn[] = { db_bind_i32 (port_id), db_bind_text ("WPN"),
@@ -703,7 +732,7 @@ clusters_seed_illegal_goods (db_t *db)
                                     db_bind_i64 (now_s) };
 
 
-              db_exec (db, sql_update_stock, p_wpn, 4, &err);
+              db_exec (db, sql_converted_stock, p_wpn, 4, &err);
 
               // Update DRG
               db_bind_t p_drg[] = { db_bind_i32 (port_id), db_bind_text ("DRG"),
@@ -711,7 +740,7 @@ clusters_seed_illegal_goods (db_t *db)
                                     db_bind_i64 (now_s) };
 
 
-              db_exec (db, sql_update_stock, p_drg, 4, &err);
+              db_exec (db, sql_converted_stock, p_drg, 4, &err);
 
               LOGD
               (
