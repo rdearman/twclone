@@ -75,6 +75,39 @@ const char *sql_now_timestamptz(const db_t *db);
 const char *sql_epoch_now(const db_t *db);
 
 /**
+ * @brief Return SQL expression that evaluates to current UTC timestamp.
+ *
+ * PostgreSQL: timezone('UTC', CURRENT_TIMESTAMP)
+ * MySQL: UTC_TIMESTAMP()
+ * Oracle: SYS_EXTRACT_UTC(SYSTIMESTAMP)
+ *
+ * @param db Database handle.
+ * @return Static string with UTC timestamp expression; NULL for unsupported backends.
+ */
+const char *sql_now_expr(const db_t *db);
+
+/**
+ * @brief Convert a timestamp expression/column to epoch seconds.
+ *
+ * Writes a SQL expression that converts the given timestamp expression to Unix epoch seconds.
+ * Useful for comparisons and arithmetic with epoch-stored values.
+ *
+ * PostgreSQL: EXTRACT(EPOCH FROM <ts_expr>)
+ * MySQL: UNIX_TIMESTAMP(<ts_expr>)
+ * Oracle: ((CAST((<ts_expr> AT TIME ZONE 'UTC') AS DATE) - DATE '1970-01-01') * 86400)
+ *
+ * @param db Database handle.
+ * @param ts_expr The timestamp column or expression to convert (e.g., "created_at" or "NOW()").
+ * @param out_buf Buffer to write the result into.
+ * @param out_sz Size of out_buf.
+ * @return 0 on success, -1 on overflow/unsupported backend.
+ */
+int sql_ts_to_epoch_expr(const db_t *db,
+                         const char *ts_expr,
+                         char *out_buf,
+                         size_t out_sz);
+
+/**
  * @brief Return SQL for converting Unix epoch parameter to TIMESTAMPTZ.
  *
  * Used in WHERE clauses to compare epoch values with timestamp columns.
@@ -87,7 +120,7 @@ const char *sql_epoch_now(const db_t *db);
  * @return Static string suitable for comparison: "to_timestamp($X)" or "datetime($X, 'unixepoch')".
  *         Caller must format with snprintf to inject the parameter placeholder.
  */
-const char *sql_epoch_to_timestamptz_fmt(const db_t *db);
+// const char *sql_epoch_to_timestamptz_fmt(const db_t *db);
 
 /**
  * @brief Return ON CONFLICT clause for INSERT ... ON CONFLICT DO NOTHING.

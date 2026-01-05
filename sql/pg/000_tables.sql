@@ -349,7 +349,7 @@ CREATE TABLE tavern_deadpool_bets (
     placed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved bigint NOT NULL DEFAULT 0,
-    resolved_at bigint,
+    resolved_at timestamptz,
     result text
 );
 

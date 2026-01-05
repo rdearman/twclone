@@ -24,7 +24,8 @@ BEGIN
     SELECT COALESCE(MAX(sector_id), 10) INTO v_max_sector FROM sectors;
     
     -- Calculate how many sectors we'll need for tunnels
-    v_total_needed := (p_min_tunnels + 5) * (p_min_tunnel_len + 2);
+    -- Maximum: (min_tunnels + 5) tunnels * (min_tunnel_len + 5) sectors per tunnel
+    v_total_needed := (p_min_tunnels + 5) * (p_min_tunnel_len + 5);
     
     -- Insert missing sectors
     INSERT INTO sectors (sector_id, name, nebulae)

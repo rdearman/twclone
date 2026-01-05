@@ -1728,7 +1728,7 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
   // Check if player has enough turns
 
 
-  const char *sql_check =
+  const char *sql_template =
 
 
     "SELECT turns_remaining FROM turns WHERE player_id = {1};";
@@ -1739,6 +1739,8 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
 
   db_error_t err;
 
+  char sql_check[256];
+  sql_build(db, sql_template, sql_check, sizeof sql_check);
 
   db_error_clear (&err);
 

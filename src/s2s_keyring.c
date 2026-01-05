@@ -23,20 +23,25 @@ s2s_keyring_generate_key (db_t *db,
                           const char *key_id_in,
                           const char *key_b64_in)
 {
-  /* Postgres uses $1, $2 syntax.
-     'active' is boolean, 'created_ts' is timestamptz */
-  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
-  if (!conv_fmt)
+  const char *now_expr = sql_now_expr(db);
+  if (!now_expr)
     {
       LOGE ("S2S_GEN: Unsupported database backend\n");
       return -1;
     }
 
-  char SQL_INSERT[256];
-  snprintf(SQL_INSERT, sizeof(SQL_INSERT),
+  char sql_tmpl[512];
+  snprintf(sql_tmpl, sizeof(sql_tmpl),
     "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
-    "VALUES ($1, $2, true, %s, 0);",
-    conv_fmt);
+    "VALUES ({1}, {2}, true, %s, 0);",
+    now_expr);
+
+  char SQL_INSERT[512];
+  if (sql_build(db, sql_tmpl, SQL_INSERT, sizeof(SQL_INSERT)) != 0)
+    {
+      LOGE ("S2S_GEN: Failed to build SQL\n");
+      return -1;
+    }
 
   time_t now = time (NULL);
   db_bind_t params[] = {

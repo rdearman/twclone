@@ -2717,7 +2717,7 @@ h_daily_corp_tax (db_t *db, int64_t now_s)
       return ERR_INVALID_ARG;
     }
 
-  const char *sql_corps = "SELECT id, name FROM corporations;";
+  const char *sql_corps = "SELECT corporation_id, name FROM corporations;";
   db_res_t *res_corps = NULL;
   db_error_t err;
 

@@ -226,20 +226,19 @@ h_update_entity_stock (db_t *db,
       new_quantity = 0;
     }
 
-  const char *sql_template =
+  const char *sql_upsert =
     "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-    "VALUES ({1}, {2}, {3}, {4}, 0, {5}) "
-    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = {4}, last_updated_ts = {5};";
+    "VALUES ($1, $2, $3, $4, 0, $5) "
+    "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = $4, last_updated_ts = $5;";
 
   db_error_t err;
 
-  char sql_upsert[512];
-  sql_build(db, sql_template, sql_upsert, sizeof sql_upsert);
 
   memset (&err, 0, sizeof (err));
+  int64_t now = (int64_t) time (NULL);
   db_bind_t params[] = { db_bind_text (entity_type), db_bind_i32 (entity_id),
                          db_bind_text (commodity_code),
-                         db_bind_i32 (new_quantity), db_bind_i64 ((int64_t) time (NULL)) };
+                         db_bind_i32 (new_quantity), db_bind_i64 (now) };
 
 
   if (!db_exec (db, sql_upsert, params, 5, &err))
@@ -272,16 +271,14 @@ h_port_buys_commodity (db_t *db, int port_id, const char *commodity)
       return 0; /* Invalid or unsupported commodity */
     }
 
-  const char *sql_template =
+  const char *sql =
     "SELECT es.quantity, p.size * 1000 AS max_capacity "
     "FROM ports p JOIN entity_stock es ON p.port_id = es.entity_id "
-    "WHERE es.entity_type = 'port' AND es.commodity_code = {2} AND p.port_id = {1} LIMIT 1;";
+    "WHERE es.entity_type = 'port' AND es.commodity_code = $2 AND p.port_id = $1 LIMIT 1;";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[512];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -358,16 +355,14 @@ h_get_entity_stock_quantity (db_t *db,
       return ERR_DB_MISUSE;
     }
 
-  const char *sql_template =
+  const char *sql =
     "SELECT quantity "
     "FROM entity_stock "
-    "WHERE entity_type = {1} AND entity_id = {2} AND commodity_code = {3};";
+    "WHERE entity_type = $1 AND entity_id = $2 AND commodity_code = $3;";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[512];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -423,14 +418,12 @@ commodity_to_code (db_t *db, const char *commodity)
       return NULL;
     }
 
-  const char *sql_template =
-    "SELECT code FROM commodities WHERE UPPER(code) = UPPER({1}) LIMIT 1;";
+  const char *sql =
+    "SELECT code FROM commodities WHERE UPPER(code) = UPPER($1) LIMIT 1;";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[512];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -538,7 +531,7 @@ json_equal_strict (json_t *a, json_t *b)
 /* const char *sql = */
 
 
-/*   "SELECT ... WHERE a = {1} AND b = {2} AND c = {3};"; */
+/*   "SELECT ... WHERE a = $1 AND b = $2 AND c = $3;"; */
 
 
 /* db_bind_t binds[] = { */
@@ -606,7 +599,7 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
   /* Assume commodity is already canonical code */
   const char *canonical_commodity = commodity;
 
-  const char *sql_template =
+  const char *sql =
     "SELECT c.base_price, c.volatility, "
     "       es.quantity, "
     "       p.size * 1000 AS max_capacity, "
@@ -614,16 +607,14 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
     "       ec.price_elasticity, "
     "       ec.volatility_factor "
     "FROM commodities c "
-    "JOIN ports p ON p.port_id = {1} "
+    "JOIN ports p ON p.port_id = $1 "
     "JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code "
     "JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id "
-    "WHERE c.code = {2} LIMIT 1;";
+    "WHERE c.code = $2 LIMIT 1;";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[1024];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -778,13 +769,11 @@ h_is_illegal_commodity (db_t *db, const char *commodity_code)
       return false;
     }
 
-  const char *sql_template = "SELECT illegal FROM commodities WHERE code = {1} LIMIT 1";
+  const char *sql = "SELECT illegal FROM commodities WHERE code = $1 LIMIT 1";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[256];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -892,12 +881,10 @@ h_can_trade_commodity (db_t *db,
     db_res_t *res = NULL;
     db_error_t err;
 
-    const char *sql_template = "SELECT sector_id FROM ports WHERE port_id = {1} LIMIT 1";
-
-    char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
 
     db_error_clear (&err);
+
+    const char *sql = "SELECT sector_id FROM ports WHERE port_id = $1 LIMIT 1";
 
     db_bind_t params[] = {
       db_bind_i32 (port_id)
@@ -1086,19 +1073,17 @@ h_market_move_port_stock (db_t *db,
   db_res_t *res = NULL;
   db_error_t err;
 
-  const char *sql_info_template =
+
+  db_error_clear (&err);
+
+  const char *sql_info =
     "SELECT es.quantity, p.size * 1000 AS max_capacity "
     "FROM ports p "
     "LEFT JOIN entity_stock es "
     "  ON p.port_id = es.entity_id "
     " AND es.entity_type = 'port' "
-    " AND es.commodity_code = {2} "
-    "WHERE p.port_id = {1};";
-
-  char sql_info[512];
-  sql_build(db, sql_info_template, sql_info, sizeof sql_info);
-
-  db_error_clear (&err);
+    " AND es.commodity_code = $2 "
+    "WHERE p.port_id = $1;";
 
   db_bind_t params[] = {
     db_bind_i32 (port_id),
@@ -1363,25 +1348,23 @@ cmd_trade_history (client_ctx_t *ctx, json_t *root)
         }
     }
 
-  const char *sql_no_cursor_template =
+  const char *sql_no_cursor =
     "SELECT timestamp, trade_log_id as id, port_id, commodity, units, price_per_unit, action "
-    "FROM trade_log WHERE player_id = {1} "
-    "ORDER BY timestamp DESC, trade_log_id DESC LIMIT {2};";
+    "FROM trade_log WHERE player_id = $1 "
+    "ORDER BY timestamp DESC, trade_log_id DESC LIMIT $2;";
 
-  const char *sql_with_cursor_template =
+  const char *sql_with_cursor =
     "SELECT timestamp, trade_log_id as id, port_id, commodity, units, price_per_unit, action "
-    "FROM trade_log WHERE player_id = {1} "
-    "AND (timestamp < {3} OR (timestamp = {3} AND trade_log_id < {4})) "
-    "ORDER BY timestamp DESC, trade_log_id DESC LIMIT {2};";
+    "FROM trade_log WHERE player_id = $1 "
+    "AND (timestamp < $3 OR (timestamp = $3 AND trade_log_id < $4)) "
+    "ORDER BY timestamp DESC, trade_log_id DESC LIMIT $2;";
 
   const bool use_cursor = (cursor_ts > 0 && cursor_id > 0);
-  const char *sql_template = use_cursor ? sql_with_cursor_template : sql_no_cursor_template;
+  const char *sql = use_cursor ? sql_with_cursor : sql_no_cursor;
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[512];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -1619,13 +1602,11 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       {
         db_error_t err;
 
-        const char *sql_update_ported_template =
-          "UPDATE ships SET ported = {1}, onplanet = 0 WHERE ship_id = {2};";
-
-        char sql_update_ported[256];
-        sql_build(db, sql_update_ported_template, sql_update_ported, sizeof sql_update_ported);
 
         db_error_clear (&err);
+
+        const char *sql_update_ported =
+          "UPDATE ships SET ported = $1, onplanet = 0 WHERE ship_id = $2;";
 
         db_bind_t params[] = {
           db_bind_i32 (new_ported_status),
@@ -1678,12 +1659,10 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       db_res_t *res = NULL;
       db_error_t err;
 
-      const char *sql_check_template = "SELECT ported FROM ships WHERE ship_id = {1}";
-
-      char sql_check[256];
-      sql_build(db, sql_check_template, sql_check, sizeof sql_check);
 
       db_error_clear (&err);
+
+      const char *sql_check = "SELECT ported FROM ships WHERE ship_id = $1";
 
       db_bind_t params[] = {
         db_bind_i32 (player_ship_id)
@@ -1763,7 +1742,7 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
   // Assume commodity is already canonical code
   const char *canonical_commodity = commodity;
 
-  const char *sql_template =
+  const char *sql =
     "SELECT c.base_price, c.volatility, "
     "       es.quantity, "
     "       p.size * 1000 AS max_capacity, "
@@ -1771,16 +1750,14 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
     "       ec.price_elasticity, "
     "       ec.volatility_factor "
     "FROM commodities c "
-    "JOIN ports p ON p.port_id = {1} "
+    "JOIN ports p ON p.port_id = $1 "
     "JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code "
     "JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id "
-    "WHERE c.code = {2} LIMIT 1;";
+    "WHERE c.code = $2 LIMIT 1;";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[1024];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 
@@ -1956,23 +1933,23 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
     }
 
   /* Resolve by port_id if supplied */
-  const char *sql_port_info_template = NULL;
+  const char *sql_port_info = NULL;
   bool by_port_id = false;
 
 
   if (requested_port_id > 0)
     {
-      sql_port_info_template =
+      sql_port_info =
         "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type "
-        "FROM ports WHERE port_id = {1} LIMIT 1;";
+        "FROM ports WHERE port_id = $1 LIMIT 1;";
       port_id_val = requested_port_id;
       by_port_id = true;
     }
   else if (sector_id > 0)
     {
-      sql_port_info_template =
+      sql_port_info =
         "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type "
-        "FROM ports WHERE sector_id = {1} LIMIT 1;";
+        "FROM ports WHERE sector_id = $1 LIMIT 1;";
       by_port_id = false;
     }
   else
@@ -1989,8 +1966,6 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
     db_res_t *res = NULL;
     db_error_t err;
 
-    char sql_port_info[512];
-    sql_build(db, sql_port_info_template, sql_port_info, sizeof sql_port_info);
 
     db_error_clear (&err);
 
@@ -2083,13 +2058,11 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
 
   /* --- Retrieve commodities from entity_stock --- */
   {
-    const char *sql_commodities_template =
+    const char *sql_commodities =
       "SELECT es.commodity_code, es.quantity, es.price, c.illegal "
       "FROM entity_stock es JOIN commodities c ON es.commodity_code = c.code "
-      "WHERE es.entity_type = 'port' AND es.entity_id = {1};";
+      "WHERE es.entity_type = 'port' AND es.entity_id = $1;";
 
-    char sql_commodities[512];
-    sql_build(db, sql_commodities_template, sql_commodities, sizeof sql_commodities);
 
     LOGD
       ("cmd_trade_port_info: Executing SQL_COMMODITIES for port_id_val=%d: %s",
@@ -2659,13 +2632,11 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
     }
   /* Active Bust Check */
   {
-    static const char *SQL_TEMPLATE =
-      "SELECT 1 FROM port_busts WHERE port_id={1} AND player_id={2} AND active=1";
+    static const char *SQL =
+      "SELECT 1 FROM port_busts WHERE port_id=$1 AND player_id=$2 AND active=1";
     db_res_t *res = NULL;
     db_error_t dberr;
 
-    char SQL[256];
-    sql_build(db, SQL_TEMPLATE, SQL, sizeof SQL);
 
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[2];
@@ -2692,13 +2663,11 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   /* Cluster Ban Check */
   int cluster_id = 0;
   {
-    static const char *SQL_TEMPLATE =
-      "SELECT cluster_id FROM cluster_sectors WHERE sector_id={1}";
+    static const char *SQL =
+      "SELECT cluster_id FROM cluster_sectors WHERE sector_id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
 
-    char SQL[256];
-    sql_build(db, SQL_TEMPLATE, SQL, sizeof SQL);
 
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[1];
@@ -2719,13 +2688,11 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 
   if (cluster_id > 0)
     {
-      static const char *SQL_TEMPLATE =
-        "SELECT banned FROM cluster_player_status WHERE cluster_id={1} AND player_id={2}";
+      static const char *SQL =
+        "SELECT banned FROM cluster_player_status WHERE cluster_id=$1 AND player_id=$2";
       db_res_t *res = NULL;
       db_error_t dberr;
 
-      char SQL[256];
-      sql_build(db, SQL_TEMPLATE, SQL, sizeof SQL);
 
       memset (&dberr, 0, sizeof (dberr));
       db_bind_t params[2];
@@ -2803,12 +2770,10 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 
   db_player_get_alignment (db, ctx->player_id, &p_align);
   {
-    static const char *SQL_TEMPLATE = "SELECT experience FROM players WHERE player_id={1}";
+    static const char *SQL = "SELECT experience FROM players WHERE player_id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
 
-    char SQL[256];
-    sql_build(db, SQL_TEMPLATE, SQL, sizeof SQL);
 
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[1];
@@ -2865,13 +2830,11 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   /* 5. Fake Bust Check */
   int fake_bust = 0;
   {
-    static const char *SQL_TEMPLATE =
-      "SELECT port_id, last_attempt_at, was_success FROM player_last_rob WHERE player_id={1}";
+    static const char *SQL =
+      "SELECT port_id, last_attempt_at, was_success FROM player_last_rob WHERE player_id=$1";
     db_res_t *res = NULL;
     db_error_t dberr;
 
-    char SQL[256];
-    sql_build(db, SQL_TEMPLATE, SQL, sizeof SQL);
 
     memset (&dberr, 0, sizeof (dberr));
     db_bind_t params[1];
@@ -2918,14 +2881,14 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         
         snprintf(sql_bust, sizeof(sql_bust),
           "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
-          "VALUES ({1}, {2}, %s, 'fake', 1) "
+          "VALUES ($1, $2, %s, 'fake', 1) "
           "ON CONFLICT(port_id, player_id) DO UPDATE SET "
           "last_bust_at=%s, bust_type='fake', active=1",
           now_epoch, now_epoch);
 
         snprintf(sql_last, sizeof(sql_last),
           "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-          "VALUES ({1}, {2}, %s, 0) "
+          "VALUES ($1, $2, %s, 0) "
           "ON CONFLICT(player_id) DO UPDATE SET "
           "port_id=EXCLUDED.port_id, last_attempt_at=%s, was_success=0",
           now_epoch, now_epoch);
@@ -3022,13 +2985,11 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           long long max_xp = (long long) p_xp * cfg_cred_xp;
           long long port_cash = 0;
 
-          static const char *SQL_GET_CASH_TEMPLATE =
-            "SELECT petty_cash FROM ports WHERE port_id={1}";
+          static const char *SQL_GET_CASH =
+            "SELECT petty_cash FROM ports WHERE port_id=$1";
           db_res_t *res = NULL;
           db_bind_t params[1];
 
-          char SQL_GET_CASH[256];
-          sql_build(db, SQL_GET_CASH_TEMPLATE, SQL_GET_CASH, sizeof SQL_GET_CASH);
 
           params[0] = db_bind_i64 (port_id);
 
@@ -3044,12 +3005,10 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           loot_credits = (max_xp < port_cash) ? max_xp : port_cash;
           if (loot_credits > 0)
             {
-              static const char *SQL_UPD_PORT_TEMPLATE =
-                "UPDATE ports SET petty_cash = petty_cash - {1} WHERE port_id={2}";
+              static const char *SQL_UPD_PORT =
+                "UPDATE ports SET petty_cash = petty_cash - $1 WHERE port_id=$2";
               db_bind_t uparams[2];
 
-              char SQL_UPD_PORT[256];
-              sql_build(db, SQL_UPD_PORT_TEMPLATE, SQL_UPD_PORT, sizeof SQL_UPD_PORT);
 
               uparams[0] = db_bind_i64 (loot_credits);
               uparams[1] = db_bind_i64 (port_id);
@@ -3220,13 +3179,11 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 
       if (cluster_id > 0)
         {
-          static const char *SQL_SUSP_TEMPLATE =
-            "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion) VALUES ({1}, {2}, {3}) "
-            "ON CONFLICT(cluster_id, player_id) DO UPDATE SET suspicion = suspicion + {4}";
+          static const char *SQL_SUSP =
+            "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion) VALUES ($1, $2, $3) "
+            "ON CONFLICT(cluster_id, player_id) DO UPDATE SET suspicion = suspicion + $4";
           db_bind_t params[4];
 
-          char SQL_SUSP[512];
-          sql_build(db, SQL_SUSP_TEMPLATE, SQL_SUSP, sizeof SQL_SUSP);
 
           params[0] = db_bind_i64 (cluster_id);
           params[1] = db_bind_i64 (ctx->player_id);
@@ -3244,7 +3201,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         
         snprintf(sql_last_success, sizeof(sql_last_success),
           "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-          "VALUES ({1}, {2}, %s, 1) "
+          "VALUES ($1, $2, %s, 1) "
           "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
           "last_attempt_at=%s, was_success=1",
           now_epoch, now_epoch);
@@ -3289,7 +3246,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         
         snprintf(sql_bust_real, sizeof(sql_bust_real),
           "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) "
-          "VALUES ({1}, {2}, %s, 'real', 1) "
+          "VALUES ($1, $2, %s, 'real', 1) "
           "ON CONFLICT(port_id, player_id) DO UPDATE SET "
           "last_bust_at=%s, bust_type='real', active=1",
           now_epoch, now_epoch);
@@ -3314,9 +3271,9 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
           
           snprintf(sql_clust_upd, sizeof(sql_clust_upd),
             "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
-            "VALUES ({1}, {2}, {3}, 1, %s) "
+            "VALUES ($1, $2, $3, 1, %s) "
             "ON CONFLICT(cluster_id, player_id) DO UPDATE SET "
-            "suspicion = suspicion + {4}, bust_count = bust_count + 1, last_bust_at = %s",
+            "suspicion = suspicion + $4, bust_count = bust_count + 1, last_bust_at = %s",
             now_epoch, now_epoch);
           db_bind_t cparams[4];
 
@@ -3330,12 +3287,10 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
               goto fail_tx;
             }
 
-          static const char *SQL_BAN_TEMPLATE =
-            "UPDATE cluster_player_status SET banned=1 WHERE cluster_id={1} AND player_id={2} AND wanted_level >= 3";
+          static const char *SQL_BAN =
+            "UPDATE cluster_player_status SET banned=1 WHERE cluster_id=$1 AND player_id=$2 AND wanted_level >= 3";
           db_bind_t banparams[2];
 
-          char SQL_BAN[256];
-          sql_build(db, SQL_BAN_TEMPLATE, SQL_BAN, sizeof SQL_BAN);
 
           banparams[0] = db_bind_i64 (cluster_id);
           banparams[1] = db_bind_i64 (ctx->player_id);
@@ -3351,7 +3306,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
         
         snprintf(sql_last_fail, sizeof(sql_last_fail),
           "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) "
-          "VALUES ({1}, {2}, %s, 0) "
+          "VALUES ($1, $2, %s, 0) "
           "ON CONFLICT(player_id) DO UPDATE SET port_id=EXCLUDED.port_id, "
           "last_attempt_at=%s, was_success=0",
           now_epoch, now_epoch);
@@ -3584,7 +3539,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     static const char *SQL_GET =
       "SELECT request_json, response_json "
       "FROM trade_idempotency "
-      "WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
+      "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
     db_res_t *res = NULL;
     db_error_t dberr;
@@ -3672,14 +3627,11 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
         sector_id);                                                                                     // ADDED
   if (requested_port_id > 0)
     {
-      static const char *SQL_BY_ID_TEMPLATE =
-        "SELECT port_id FROM ports WHERE port_id = {1} LIMIT 1;";
+      static const char *SQL_BY_ID =
+        "SELECT port_id FROM ports WHERE port_id = $1 LIMIT 1;";
 
       db_res_t *res = NULL;
       db_error_t dberr;
-
-      char SQL_BY_ID[256];
-      sql_build(db, SQL_BY_ID_TEMPLATE, SQL_BY_ID, sizeof SQL_BY_ID);
 
 
       memset (&dberr, 0, sizeof (dberr));
@@ -3711,14 +3663,11 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      static const char *SQL_BY_SECTOR_TEMPLATE =
-        "SELECT port_id FROM ports WHERE sector_id = {1} LIMIT 1;";
+      static const char *SQL_BY_SECTOR =
+        "SELECT port_id FROM ports WHERE sector_id = $1 LIMIT 1;";
 
       db_res_t *res = NULL;
       db_error_t dberr;
-
-      char SQL_BY_SECTOR[256];
-      sql_build(db, SQL_BY_SECTOR_TEMPLATE, SQL_BY_SECTOR, sizeof SQL_BY_SECTOR);
 
 
       memset (&dberr, 0, sizeof (dberr));
@@ -4049,7 +3998,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
         static const char *LOG_SQL =
           "INSERT INTO trade_log "
           "(player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-          "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, 'sell', {7});";
+          "VALUES ($1, $2, $3, $4, $5, $6, 'sell', $7);";
 
         db_bind_t log_params[] = {
           db_bind_i32 (ctx->player_id),
@@ -4264,7 +4213,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     static const char *SQL_PUT =
       "INSERT INTO trade_idempotency "
       "(key, player_id, sector_id, request_json, response_json, created_at) "
-      "VALUES ({1}, {2}, {3}, {4}, {5}, {6});";
+      "VALUES ($1, $2, $3, $4, $5, $6);";
 
     db_error_t dberr;
 
@@ -4342,7 +4291,7 @@ idempotency_race:
     static const char *SQL_GET2 =
       "SELECT request_json, response_json "
       "FROM trade_idempotency "
-      "WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
+      "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
     db_res_t *res = NULL;
     db_error_t dberr;
@@ -4575,7 +4524,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       static const char *SQL_GET =
         "SELECT request_json, response_json "
         "FROM trade_idempotency "
-        "WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
+        "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
       db_res_t *res = NULL;
 
@@ -4654,12 +4603,9 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   /* resolve port_id (if requested_port_id provided) */
   if (requested_port_id > 0)
     {
-      static const char *SQL_BY_ID_TEMPLATE =
-        "SELECT port_id FROM ports WHERE port_id = {1} LIMIT 1;";
+      static const char *SQL_BY_ID =
+        "SELECT port_id FROM ports WHERE port_id = $1 LIMIT 1;";
       db_res_t *res = NULL;
-
-      char SQL_BY_ID[256];
-      sql_build(db, SQL_BY_ID_TEMPLATE, SQL_BY_ID, sizeof SQL_BY_ID);
 
 
       db_error_clear (&dberr);
@@ -4703,12 +4649,9 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      static const char *SQL_BY_SECTOR_TEMPLATE =
-        "SELECT port_id FROM ports WHERE sector_id = {1} LIMIT 1;";
+      static const char *SQL_BY_SECTOR =
+        "SELECT port_id FROM ports WHERE sector_id = $1 LIMIT 1;";
       db_res_t *res = NULL;
-
-      char SQL_BY_SECTOR[256];
-      sql_build(db, SQL_BY_SECTOR_TEMPLATE, SQL_BY_SECTOR, sizeof SQL_BY_SECTOR);
 
 
       db_error_clear (&dberr);
@@ -5001,7 +4944,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       {
         static const char *LOG_SQL =
           "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) "
-          "VALUES ({1},{2},{3},{4},{5},{6},'buy',{7});";
+          "VALUES ($1,$2,$3,$4,$5,$6,'buy',$7);";
 
         db_error_t e;
 
@@ -5093,13 +5036,11 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
     if (any_illegal)
       {
-        static const char *SQL_ALIGN_TEMPLATE =
-          "UPDATE players SET alignment = alignment - 10 WHERE player_id = {1};";
+        static const char *SQL_ALIGN =
+          "UPDATE players SET alignment = alignment - 10 WHERE player_id = $1;";
 
         db_error_t e;
 
-        char SQL_ALIGN[256];
-        sql_build(db, SQL_ALIGN_TEMPLATE, SQL_ALIGN, sizeof SQL_ALIGN);
 
         db_error_clear (&e);
 
@@ -5125,7 +5066,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     {
       static const char *SQL_PUT =
         "INSERT INTO trade_idempotency (key, player_id, sector_id, request_json, response_json, created_at) "
-        "VALUES ({1},{2},{3},{4},{5},{6});";
+        "VALUES ($1,$2,$3,$4,$5,$6);";
 
 
       req_s = json_dumps (data, JSON_SORT_KEYS);
@@ -5163,7 +5104,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
               static const char *SQL_GET2 =
                 "SELECT request_json, response_json "
                 "FROM trade_idempotency "
-                "WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
+                "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
               db_res_t *res = NULL;
               db_error_t qerr;
@@ -5294,7 +5235,7 @@ replay_after_race:
   {
     static const char *SQL_GET3 =
       "SELECT response_json FROM trade_idempotency "
-      "WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
+      "WHERE key = $1 AND player_id = $2 AND sector_id = $3;";
 
     db_res_t *res = NULL;
     db_error_t qerr;
@@ -5422,7 +5363,7 @@ h_get_port_commodity_details (db_t *db,
       return ERR_DB_MISUSE;
     }
 
-  const char *sql_template =
+  const char *sql =
     "SELECT es.quantity, p.size * 1000 AS max_capacity, "
     "       (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS buys_commodity, "
     "       (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS sells_commodity "
@@ -5430,15 +5371,13 @@ h_get_port_commodity_details (db_t *db,
     "LEFT JOIN entity_stock es "
     "  ON p.port_id = es.entity_id "
     " AND es.entity_type = 'port' "
-    " AND es.commodity_code = {2} "
-    "JOIN commodities c ON c.code = {2} "
-    "WHERE p.port_id = {1};";
+    " AND es.commodity_code = $2 "
+    "JOIN commodities c ON c.code = $2 "
+    "WHERE p.port_id = $1;";
 
   db_res_t *res = NULL;
   db_error_t err;
 
-  char sql[1024];
-  sql_build(db, sql_template, sql, sizeof sql);
 
   db_error_clear (&err);
 

@@ -155,8 +155,9 @@ typedef enum
 {
   DB_BACKEND_UNKNOWN = 0,
   DB_BACKEND_SQLITE,
-  DB_BACKEND_POSTGRES
-  // Future: DB_BACKEND_MYSQL, etc.
+  DB_BACKEND_POSTGRES,
+  DB_BACKEND_MYSQL,
+  DB_BACKEND_ORACLE
 } db_backend_t;
 
 // -----------------------------------------------------------------------------

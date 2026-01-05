@@ -294,7 +294,11 @@ h_get_active_ship_id (db_t *db, int player_id)
   db_res_t *res = NULL;
   db_error_t err;
 
-  if (db_query (db, "SELECT ship_id FROM players WHERE player_id = $1;",
+  const char *sql_template = "SELECT ship_id FROM players WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
+  if (db_query (db, sql,
                 (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -686,8 +690,11 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
   db_error_t err;
 
+  const char *sql_template = "SELECT towing_ship_id FROM ships WHERE ship_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT towing_ship_id FROM ships WHERE ship_id = $1;",
+  if (db_query (db, sql,
                 (db_bind_t[]){ db_bind_i32 (player_ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -853,8 +860,11 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
   // Already Towed Check
   int is_being_towed = 0;
 
+  const char *sql_template2 = "SELECT is_being_towed_by FROM ships WHERE ship_id = {1};";
+  char sql2[256];
+  sql_build(db, sql_template2, sql2, sizeof sql2);
 
-  if (db_query (db, "SELECT is_being_towed_by FROM ships WHERE ship_id = $1;",
+  if (db_query (db, sql2,
                 (db_bind_t[]){ db_bind_i32 (target_ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -883,7 +893,11 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     }
 
   // 5a. Set player's towing_ship_id -> target
-  if (!db_exec (db, "UPDATE ships SET towing_ship_id = $1 WHERE ship_id = $2;",
+  const char *sql_template3 = "UPDATE ships SET towing_ship_id = {1} WHERE ship_id = {2};";
+  char sql3[256];
+  sql_build(db, sql_template3, sql3, sizeof sql3);
+
+  if (!db_exec (db, sql3,
                 (db_bind_t[]){ db_bind_i32 (target_ship_id),
                                db_bind_i32 (player_ship_id) }, 2, &err))
     {

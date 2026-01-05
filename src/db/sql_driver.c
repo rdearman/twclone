@@ -76,6 +76,61 @@ sql_epoch_now(const db_t *db)
 }
 
 /**
+ * @brief Return SQL expression that evaluates to current UTC timestamp.
+ *
+ * PostgreSQL: timezone('UTC', CURRENT_TIMESTAMP)
+ * MySQL: UTC_TIMESTAMP()
+ * Oracle: SYS_EXTRACT_UTC(SYSTIMESTAMP)
+ */
+const char *
+sql_now_expr(const db_t *db)
+{
+  db_backend_t b = db ? db_backend(db) : DB_BACKEND_POSTGRES;
+
+  switch (b)
+    {
+    case DB_BACKEND_POSTGRES:
+      return "timezone('UTC', CURRENT_TIMESTAMP)";
+    case DB_BACKEND_MYSQL:
+      return "UTC_TIMESTAMP()";
+    case DB_BACKEND_ORACLE:
+      return "SYS_EXTRACT_UTC(SYSTIMESTAMP)";
+    default:
+      return NULL;
+    }
+}
+
+/**
+ * @brief Convert a timestamp expression/column to epoch seconds.
+ *
+ * Writes a SQL expression that converts the given timestamp expression to Unix epoch seconds.
+ */
+int
+sql_ts_to_epoch_expr(const db_t *db,
+                     const char *ts_expr,
+                     char *out_buf,
+                     size_t out_sz)
+{
+  db_backend_t b = db ? db_backend(db) : DB_BACKEND_POSTGRES;
+
+  if (!ts_expr || !out_buf || out_sz == 0) return -1;
+
+  switch (b)
+    {
+    case DB_BACKEND_POSTGRES:
+      return (snprintf(out_buf, out_sz, "EXTRACT(EPOCH FROM %s)", ts_expr) < (int)out_sz) ? 0 : -1;
+    case DB_BACKEND_MYSQL:
+      return (snprintf(out_buf, out_sz, "UNIX_TIMESTAMP(%s)", ts_expr) < (int)out_sz) ? 0 : -1;
+    case DB_BACKEND_ORACLE:
+      return (snprintf(out_buf, out_sz,
+                       "((CAST((%s AT TIME ZONE 'UTC') AS DATE) - DATE '1970-01-01') * 86400)",
+                       ts_expr) < (int)out_sz) ? 0 : -1;
+    default:
+      return -1;
+    }
+}
+
+/**
  * @brief Return ON CONFLICT clause for INSERT ... ON CONFLICT DO NOTHING.
  *
  * PostgreSQL appends this after VALUES clause.
@@ -145,26 +200,26 @@ sql_conflict_target_fmt(const db_t *db)
  *
  * Use in WHERE clauses: WHERE timestamp_col <= <this_function>
  */
-const char *
-sql_epoch_to_timestamptz_fmt(const db_t *db)
-{
-  if (!db)
-    return "to_timestamp($%d)";  // Default to PostgreSQL
+/* const char * */
+/* sql_epoch_to_timestamptz_fmt(const db_t *db) */
+/* { */
+/*   if (!db) */
+/*     return "to_timestamp($%d)";  // Default to PostgreSQL */
 
-  db_backend_t backend = db_backend(db);
+/*   db_backend_t backend = db_backend(db); */
   
-  switch (backend)
-    {
-    case DB_BACKEND_POSTGRES:
-      return "to_timestamp($%d)";
+/*   switch (backend) */
+/*     { */
+/*     case DB_BACKEND_POSTGRES: */
+/*       return "to_timestamp($%d)"; */
     
-    case DB_BACKEND_SQLITE:
-      return "datetime($%d, 'unixepoch')";
+/*     case DB_BACKEND_SQLITE: */
+/*       return "datetime($%d, 'unixepoch')"; */
     
-    default:
-      return "to_timestamp($%d)";
-    }
-}
+/*     default: */
+/*       return "to_timestamp($%d)"; */
+/*     } */
+/* } */
 
 /**
  * @brief Return format string for entity_stock upsert with epoch timestamp.

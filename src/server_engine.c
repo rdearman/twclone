@@ -1555,15 +1555,24 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
   long long expiry_threshold_s =
     now_s - ((long long) g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
   
-  const char *epoch_expr = sql_epoch_to_timestamptz_fmt(db);
-  char sql_delete_expired[256];
+  char deployed_as_epoch[256];
+  if (sql_ts_to_epoch_expr(db, "deployed_at", deployed_as_epoch, sizeof deployed_as_epoch) != 0)
+    {
+      LOGE("limpet_ttl_cleanup: Failed to build epoch expression");
+      return -1;
+    }
+
+  char sql_delete_template[512];
   
-  snprintf(sql_delete_expired, sizeof(sql_delete_expired),
+  snprintf(sql_delete_template, sizeof(sql_delete_template),
     "DELETE FROM sector_assets "
-    "WHERE asset_type = {1} AND deployed_at <= %s",
-    epoch_expr);
+    "WHERE asset_type = {1} AND %s <= {2}",
+    deployed_as_epoch);
 
   db_error_t err;
+
+  char sql_delete_expired[512];
+  sql_build(db, sql_delete_template, sql_delete_expired, sizeof sql_delete_expired);
 
   db_error_clear (&err);
 

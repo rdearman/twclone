@@ -1477,8 +1477,11 @@ cmd_deploy_assets_list_internal (client_ctx_t *ctx,
 
   db_error_clear (&err);
 
+  char sql_built[2048];
+  sql_build(db, sql_query, sql_built, sizeof sql_built);
+
   if (!db_query (db,
-                 sql_query,
+                 sql_built,
                  (db_bind_t[]){
     db_bind_i32 (self_player_id),
     db_bind_i32 (self_player_id)
@@ -2325,14 +2328,17 @@ insert_sector_mines (db_t *db,
 
   db_error_clear (&err);
 
-  char sql[512];
-  sql_build(db,
+  char sql_with_time[512];
+  snprintf(sql_with_time, sizeof sql_with_time,
     "INSERT INTO sector_assets ("
     "  sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at"
     ") VALUES ("
-    "  {1}, {2}, {3}, {4}, {5}, {6}, EXTRACT(EPOCH FROM NOW())::bigint"
+    "  {1}, {2}, {3}, {4}, {5}, {6}, %s"
     ");",
-    sql, sizeof(sql));
+    sql_now_expr(db));
+
+  char sql[512];
+  sql_build(db, sql_with_time, sql, sizeof(sql));
 
 
   if (!db_exec (db,
@@ -2384,14 +2390,17 @@ insert_sector_fighters (db_t *db,
   db_error_clear (&err);
 
   /* asset_type = 2 for fighters (as per your comment) */
-  char sql[512];
-  sql_build(db,
+  char sql_with_time[512];
+  snprintf(sql_with_time, sizeof sql_with_time,
     "INSERT INTO sector_assets ("
     "  sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at"
     ") VALUES ("
-    "  {1}, {2}, {3}, 2, {4}, {5}, EXTRACT(EPOCH FROM NOW())::bigint"
+    "  {1}, {2}, {3}, 2, {4}, {5}, %s"
     ");",
-    sql, sizeof(sql));
+    sql_now_expr(db));
+
+  char sql[512];
+  sql_build(db, sql_with_time, sql, sizeof(sql));
 
 
   if (!db_exec (db,
@@ -3897,13 +3906,16 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
 
   int64_t asset_id = -1;
   {
-    char sql[512];
-    sql_build(db,
+    char sql_with_time[512];
+    snprintf(sql_with_time, sizeof sql_with_time,
       "INSERT INTO sector_assets "
       "(sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at) "
-      "VALUES ({1},{2},{3},{4},{5},{6},EXTRACT(EPOCH FROM NOW())) "
+      "VALUES ({1},{2},{3},{4},{5},{6},%s) "
       "RETURNING sector_assets_id",
-      sql, sizeof(sql));
+      sql_now_expr(db));
+
+    char sql[512];
+    sql_build(db, sql_with_time, sql, sizeof(sql));
 
 
     if (!db_exec_insert_id (db,

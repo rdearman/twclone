@@ -30,15 +30,7 @@ db_insert_commodity_order (db_t *db,
   db_error_t err;
   db_error_clear (&err);
 
-  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
-  if (!conv_fmt)
-    {
-      LOGE ("db_insert_commodity_order: Unsupported database backend");
-      return -1;
-    }
-
   db_bind_t params[10];
-
 
   params[0] = db_bind_text (actor_type);
   params[1] = db_bind_i32 (actor_id);
@@ -53,6 +45,12 @@ db_insert_commodity_order (db_t *db,
     ? db_bind_i64 (expires_at)
     : db_bind_null ();
 
+  const char *now_expr = sql_now_expr(db);
+  if (!now_expr)
+    {
+      LOGE ("db_insert_commodity_order: Unsupported database backend");
+      return -1;
+    }
 
   const char *sql_tmpl =
     "INSERT INTO commodity_orders ("
@@ -63,7 +61,7 @@ db_insert_commodity_order (db_t *db,
 
   char sql_with_conv[512];
 
-  if (snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, conv_fmt, conv_fmt) >= (int)sizeof(sql_with_conv))
+  if (snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, now_expr, now_expr) >= (int)sizeof(sql_with_conv))
     return ERR_DB;
 
   char sql_final[512];
@@ -505,7 +503,13 @@ db_insert_commodity_trade (db_t *db,
   db_error_t err;
   db_error_clear(&err);
 
-  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
+  const char *now_expr = sql_now_expr(db);
+  if (!now_expr)
+    {
+      LOGE ("db_insert_commodity_trade: Unsupported database backend");
+      return -1;
+    }
+
   int64_t now = time(NULL);
   db_bind_t params[11];
 
@@ -529,7 +533,7 @@ db_insert_commodity_trade (db_t *db,
     "VALUES ({1}, {2}, {3}, {4}, %s, {6}, {7}, {8}, {9}, {10}, {11});";
 
   char sql_with_conv[512];
-  int n = snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, conv_fmt);
+  int n = snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, now_expr);
   if (n < 0 || (size_t)n >= sizeof(sql_with_conv))
     return -1;
 

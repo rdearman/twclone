@@ -428,10 +428,14 @@ _insert_path_sectors (db_t *db, int start_sector,
       return;
     }
 
-  char sql[512];
-  snprintf(sql, sizeof(sql),
-    "INSERT INTO %s (sector_id) VALUES ({1})",
+  char sql_template[512];
+  snprintf(sql_template, sizeof(sql_template),
+    "INSERT INTO %s (sector_id) VALUES ({1}) ON CONFLICT(sector_id) DO NOTHING",
     MSL_TABLE_NAME);
+  
+  char sql[512];
+  sql_build(db, sql_template, sql, sizeof(sql));
+  
   db_error_t err;
 
 
@@ -1031,9 +1035,6 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
 
   /* 4. Logout Timeout (New Transaction) */
 
-  /* Note: Original code used a transaction here implicitly? No, separate statement.
-     db_exec is atomic. */
-  
   // Compute cutoff epoch in C to avoid arithmetic in SQL
   int64_t logout_cutoff = now_s - LOGOUT_TIMEOUT_S;
   
@@ -1101,6 +1102,16 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
   db_exec (db, sql_insert_eligible, eligible_params, 4, &err);
 
   usleep (10000); // Yield
+
+  /* Get random sector for confiscated ships */
+  int confiscation_sector = get_random_sector(db);
+  if (confiscation_sector <= 0)
+    {
+      LOGE("fedspace_cleanup: Could not get random sector");
+      unlock (db, "fedspace_cleanup");
+      return -1;
+    }
+
 
   /* Towing Logic */
 
@@ -1204,7 +1215,7 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
 
               tow_ship (db,
                         ship_id,
-                        CONFISCATION_SECTOR,
+                        confiscation_sector,
                         fedadmin,
                         REASON_NO_OWNER);
               tows++;
@@ -1651,8 +1662,8 @@ h_planet_growth (db_t *db, int64_t now_s)
 
   // --- NEW: Update commodity quantities in entity_stock based on planet_production ---
   // Replaced SQLite time function with parameterized epoch value for backend neutrality
-  char sql_update_commodities[512];
-  sql_build(db, "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) SELECT 'planet', p.planet_id, pp.commodity_code, GREATEST(0, LEAST(CASE pp.commodity_code WHEN 'ORE' THEN pltype.maxore WHEN 'ORG' THEN pltype.maxorganics WHEN 'EQU' THEN pltype.maxequipment ELSE 999999 END, COALESCE(es.quantity, 0) + pp.base_prod_rate + (CASE pp.commodity_code WHEN 'ORE' THEN p.colonists_ore * 1 WHEN 'ORG' THEN p.colonists_org * pltype.organicsProduction WHEN 'EQU' THEN p.colonists_eq * pltype.equipmentProduction WHEN 'FUE' THEN p.colonists_unassigned * pltype.fuelProduction ELSE p.colonists_unassigned * 1 END) - pp.base_cons_rate)) AS new_quantity, 0, {1} FROM planets p JOIN planet_production pp ON p.type = pp.planet_type_id LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0);", sql_update_commodities, sizeof(sql_update_commodities));
+  char sql_update_commodities[2048];
+  sql_build(db, "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) SELECT 'planet', p.planet_id, pp.commodity_code, GREATEST(0, LEAST(CASE pp.commodity_code WHEN 'ORE' THEN pltype.maxore WHEN 'ORG' THEN pltype.maxorganics WHEN 'EQU' THEN pltype.maxequipment ELSE 999999 END, COALESCE(es.quantity, 0) + pp.base_prod_rate + (CASE pp.commodity_code WHEN 'ORE' THEN p.colonists_ore * 1 WHEN 'ORG' THEN p.colonists_org * pltype.organicsProduction WHEN 'EQU' THEN p.colonists_eq * pltype.equipmentProduction WHEN 'FUE' THEN p.colonists_unassigned * pltype.fuelProduction ELSE p.colonists_unassigned * 1 END) - pp.base_cons_rate)) AS new_quantity, 0, {1} FROM planets p JOIN planet_production pp ON p.type = pp.planet_type_id LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0)", sql_update_commodities, sizeof(sql_update_commodities));
 
   db_error_t err;
 
@@ -1951,11 +1962,10 @@ h_traps_process (db_t *db, int64_t now_s)
 
   db_error_t err;
 
-
   db_error_clear (&err);
 
-  const char *conv_fmt = sql_epoch_to_timestamptz_fmt(db);
-  if (!conv_fmt)
+  const char *now_expr = sql_now_expr(db);
+  if (!now_expr)
     {
       unlock (db, "traps_process");
       return -1;
@@ -1969,29 +1979,14 @@ h_traps_process (db_t *db, int64_t now_s)
     }
 
   char sql_insert_tmpl[512];
-  char sql_insert_with_conv[512];
   char sql_insert[512];
   
-  /* Template with %s for timestamps and {1} for parameters */
-  const char *sql_tmpl =
-    "INSERT INTO engine_commands(type, payload, created_at, due_at) "
-    "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
-    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;";
-  
-  /* Substitute json_obj_fn and conv_fmt */
-  if (snprintf(sql_insert_with_conv, sizeof(sql_insert_with_conv),
-    sql_tmpl, json_obj_fn, conv_fmt, conv_fmt, conv_fmt) >= (int)sizeof(sql_insert_with_conv))
-    {
-      unlock (db, "traps_process");
-      return -1;
-    }
-  
-  /* Now build with {1} parameter */
+  /* Template with now_expr for current timestamp and {1} for parameter */
   snprintf(sql_insert_tmpl, sizeof(sql_insert_tmpl),
     "INSERT INTO engine_commands(type, payload, created_at, due_at) "
     "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
-    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;",
-    json_obj_fn, "{1}", "{1}", "{1}");
+    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp({1}::bigint);",
+    json_obj_fn, now_expr, now_expr);
   
   if (sql_build(db, sql_insert_tmpl, sql_insert, sizeof(sql_insert)) != 0)
     {
@@ -2012,13 +2007,8 @@ h_traps_process (db_t *db, int64_t now_s)
   char sql_delete_tmpl[256];
   char sql_delete[256];
   
-  if (snprintf(sql_delete_tmpl, sizeof(sql_delete_tmpl),
-    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= %s;",
-    "{1}") >= (int)sizeof(sql_delete_tmpl))
-    {
-      unlock (db, "traps_process");
-      return -1;
-    }
+  snprintf(sql_delete_tmpl, sizeof(sql_delete_tmpl),
+    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND trigger_at <= to_timestamp({1}::bigint);");
   
   if (sql_build(db, sql_delete_tmpl, sql_delete, sizeof(sql_delete)) != 0)
     {
@@ -4253,7 +4243,7 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
     }
 
   char sql_expire[320];
-  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = to_timestamp({1}) WHERE resolved = 0 AND expires_at <= to_timestamp({2})", sql_expire, sizeof(sql_expire)) != 0)
+  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = to_timestamp({1}::bigint) WHERE resolved = 0 AND expires_at <= to_timestamp({2}::bigint)", sql_expire, sizeof(sql_expire)) != 0)
     {
       unlock (db, "deadpool_resolution_cron");
       return -1;
@@ -4274,7 +4264,7 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
   // 2. Process ship.destroyed events
   // Fetch events into a list to avoid nested query issues
   const char *sql_events =
-    "SELECT payload FROM engine_events WHERE type = 'ship.destroyed' AND ts > (SELECT COALESCE(MAX(resolved_at), 0) FROM tavern_deadpool_bets WHERE result IS NOT NULL AND result != 'expired');";
+    "SELECT payload FROM engine_events WHERE type = 'ship.destroyed' AND ts > (SELECT COALESCE(MAX(resolved_at), CURRENT_TIMESTAMP - INTERVAL '1 day') FROM tavern_deadpool_bets WHERE result IS NOT NULL AND result != 'expired');";
 
   db_res_t *res_events = NULL;
 

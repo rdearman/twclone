@@ -1023,10 +1023,13 @@ db_clear_player_active_ship (db_t *db, int player_id)
     }
   db_error_t err;
 
+  const char *sql_template = "UPDATE players SET ship_id = NULL WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
   /* Players table doesn't have active_ship_id in sqlite schema, but postgres schema has it?
      Actually schema in 000_tables.sql has 'ship_id' column. */
-  if (!db_exec (db, "UPDATE players SET ship_id = NULL WHERE player_id = {1};",
+  if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i32 (player_id)}, 1, &err))
     {
       return err.code;
@@ -1075,8 +1078,11 @@ db_get_player_xp (db_t *db, int pid)
   db_error_t err = {0};
   int xp = 0;
 
+  const char *sql_template = "SELECT experience FROM players WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_query (db, "SELECT experience FROM players WHERE player_id = {1};",
+  if (!db_query (db, sql,
                  (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       xp = 0;
@@ -1109,8 +1115,11 @@ db_update_player_xp (db_t *db, int pid, int xp)
     }
   db_error_t err;
 
+  const char *sql_template = "UPDATE players SET experience = {1} WHERE player_id = {2};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_exec (db, "UPDATE players SET experience = {1} WHERE player_id = {2};",
+  if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i32 (xp), db_bind_i32 (pid)}, 2, &err))
     {
       return err.code;
@@ -1163,9 +1172,14 @@ db_create_podded_status_entry (db_t *db, int pid)
       return ERR_DB_CLOSED;
     }
   db_error_t err;
-  const char *sql =
-    "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, EXTRACT(EPOCH FROM now())) ON CONFLICT DO NOTHING;";
+  
+  char sql_with_time[512];
+  snprintf(sql_with_time, sizeof sql_with_time,
+    "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, %s) ON CONFLICT DO NOTHING;",
+    sql_now_expr(db));
 
+  char sql[512];
+  sql_build(db, sql_with_time, sql, sizeof sql);
 
   if (!db_exec (db, sql, (db_bind_t[]){db_bind_i32 (pid)}, 1, &err))
     {
@@ -1362,8 +1376,11 @@ h_get_cluster_alignment (db_t *db, int cid, int *out_align)
   db_error_t err = {0};
   int rc = ERR_DB_NOT_FOUND;
 
+  const char *sql_template = "SELECT alignment FROM clusters WHERE clusters_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT alignment FROM clusters WHERE clusters_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (cid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -1544,8 +1561,11 @@ db_get_port_sector (db_t *db, int port_id)
   db_error_t err = {0};
   int sid = 0;
 
+  const char *sql_template = "SELECT sector_id FROM ports WHERE port_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_query (db, "SELECT sector_id FROM ports WHERE port_id = {1};",
+  if (!db_query (db, sql,
                  (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
     {
       sid = 0;
@@ -1875,8 +1895,11 @@ db_get_ship_name (db_t *db, int ship_id, char **out)
   db_error_t err = {0};
   int rc = ERR_NOT_FOUND;
 
+  const char *sql_template = "SELECT name FROM ships WHERE ship_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_query (db, "SELECT name FROM ships WHERE ship_id = {1};",
+  if (!db_query (db, sql,
                  (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       rc = err.code;
@@ -1910,8 +1933,11 @@ db_get_port_name (db_t *db, int port_id, char **out)
   db_error_t err = {0};
   int rc = ERR_NOT_FOUND;
 
+  const char *sql_template = "SELECT name FROM ports WHERE port_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_query (db, "SELECT name FROM ports WHERE port_id = {1};",
+  if (!db_query (db, sql,
                  (db_bind_t[]){db_bind_i32 (port_id)}, 1, &res, &err))
     {
       rc = err.code;
@@ -1998,8 +2024,11 @@ db_get_port_id_by_sector (db_t *db, int sid)
   db_error_t err = {0};
   int pid = 0;
 
+  const char *sql_template = "SELECT port_id FROM ports WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_query (db, "SELECT port_id FROM ports WHERE sector_id = {1};",
+  if (!db_query (db, sql,
                  (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       pid = 0;
@@ -2505,8 +2534,11 @@ db_sector_beacon_text (db_t *db, int sid, char **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT beacon FROM sectors WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT beacon FROM sectors WHERE sector_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2533,8 +2565,11 @@ db_sector_set_beacon (db_t *db, int sid, const char *txt, int pid)
     }
   db_error_t err;
 
+  const char *sql_template = "UPDATE sectors SET beacon = {1} WHERE sector_id = {2};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_exec (db, "UPDATE sectors SET beacon = {1} WHERE sector_id = {2};",
+  if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_text (txt), db_bind_i32 (sid)}, 2, &err))
     {
       return -1;
@@ -2552,8 +2587,11 @@ db_player_set_alignment (db_t *db, int pid, int align)
     }
   db_error_t err;
 
+  const char *sql_template = "UPDATE players SET alignment = {1} WHERE player_id = {2};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_exec (db, "UPDATE players SET alignment = {1} WHERE player_id = {2};",
+  if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i32 (align), db_bind_i32 (pid)}, 2, &err))
     {
       return -1;
@@ -2703,7 +2741,11 @@ db_get_player_id_by_name (const char *nm)
   db_error_t err = {0};
   int pid = 0;
 
-  if (db_query (db, "SELECT player_id FROM players WHERE name = {1};",
+  const char *sql_template = "SELECT player_id FROM players WHERE name = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_text (nm)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2729,8 +2771,11 @@ db_player_name (db_t *db, int64_t pid, char **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT name FROM players WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT name FROM players WHERE player_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -2916,8 +2961,11 @@ db_ships_at_sector_json (db_t *db, int pid, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT ship_id, name FROM ships WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT ship_id, name FROM ships WHERE sector_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
@@ -2943,8 +2991,11 @@ db_planets_at_sector_json (db_t *db, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT planet_id, name FROM planets WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT planet_id, name FROM planets WHERE sector_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
@@ -2969,8 +3020,11 @@ db_players_at_sector_json (db_t *db, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT player_id, name FROM players WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT player_id, name FROM players WHERE sector_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
@@ -3077,8 +3131,11 @@ db_update_player_sector (db_t *db, int pid, int sid)
     }
   db_error_t err;
 
+  const char *sql_template = "UPDATE players SET sector_id = {1} WHERE player_id = {2};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (!db_exec (db, "UPDATE players SET sector_id = {1} WHERE player_id = {2};",
+  if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i32 (sid), db_bind_i32 (pid)}, 2, &err))
     {
       return -1;
@@ -3152,8 +3209,11 @@ db_get_port_details_json (db_t *db, int pid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT * FROM ports WHERE port_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT * FROM ports WHERE port_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
@@ -3209,8 +3269,11 @@ db_planet_get_details_json (db_t *db, int pid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT * FROM planets WHERE planet_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT * FROM planets WHERE planet_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
@@ -3235,8 +3298,11 @@ db_planet_get_goods_json (db_t *db, int pid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
+  const char *sql_template = "SELECT * FROM planet_goods WHERE planet_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT * FROM planet_goods WHERE planet_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       rc = stmt_to_json_array (res, out, &err);
@@ -3283,8 +3349,11 @@ db_player_get_sector (db_t *db, int pid, int *out_sector)
     }
   db_res_t *res = NULL; db_error_t err;
 
+  const char *sql_template = "SELECT sector_id FROM players WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT sector_id FROM players WHERE player_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (pid)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -3379,9 +3448,14 @@ db_notice_list_unseen_for_player (db_t *db, int player_id)
       return json_array ();
     }
   db_res_t *res = NULL; db_error_t err;
-  const char *sql =
-    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = {1} WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > EXTRACT(EPOCH FROM NOW()));";
+  
+  char sql_with_time[1024];
+  snprintf(sql_with_time, sizeof sql_with_time,
+    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = {1} WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > %s);",
+    sql_now_expr(db));
 
+  char sql[1024];
+  sql_build(db, sql_with_time, sql, sizeof sql);
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1, &res, &err))
     {
@@ -3402,9 +3476,14 @@ db_notice_mark_seen (db_t *db, int notice_id, int player_id)
       return ERR_DB_CLOSED;
     }
   db_error_t err;
-  const char *sql =
-    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, EXTRACT(EPOCH FROM NOW())) ON CONFLICT DO NOTHING;";
+  
+  char sql_with_time[512];
+  snprintf(sql_with_time, sizeof sql_with_time,
+    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s) ON CONFLICT DO NOTHING;",
+    sql_now_expr(db));
 
+  char sql[512];
+  sql_build(db, sql_with_time, sql, sizeof sql);
 
   if (!db_exec (db,
                 sql,
@@ -3590,15 +3669,29 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
 
 
   /* 3. Grant ownership and mark as primary */
-  db_exec (db, "UPDATE ship_ownership SET is_primary=FALSE WHERE player_id={1};",
+  const char *sql_template1 = "UPDATE ship_ownership SET is_primary=FALSE WHERE player_id={1};";
+  char sql1[256];
+  sql_build(db, sql_template1, sql1, sizeof sql1);
+  db_exec (db, sql1,
            (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
 
-  db_exec (db, "DELETE FROM ship_ownership WHERE ship_id={1} AND role_id=1;",
+  const char *sql_template2 = "DELETE FROM ship_ownership WHERE ship_id={1} AND role_id=1;";
+  char sql2[256];
+  sql_build(db, sql_template2, sql2, sizeof sql2);
+  db_exec (db, sql2,
            (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &err);
 
 
+  char sql_with_time[512];
+  snprintf(sql_with_time, sizeof sql_with_time,
+    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) VALUES ({1}, {2}, 1, TRUE, %s);",
+    sql_now_expr(db));
+
+  char sql[512];
+  sql_build(db, sql_with_time, sql, sizeof sql);
+
   if (!db_exec (db,
-                "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) VALUES ({1}, {2}, 1, TRUE, EXTRACT(EPOCH FROM now()));",
+                sql,
                 (db_bind_t[]){ db_bind_i32 (ship_id), db_bind_i32 (pid) },
                 2,
                 &err))
@@ -3951,8 +4044,11 @@ db_get_ship_sector_id (db_t *db, int ship_id)
     }
   db_res_t *res = NULL; db_error_t err; int sid = 0;
 
+  const char *sql_template = "SELECT sector_id FROM ships WHERE ship_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT sector_id FROM ships WHERE ship_id = {1};",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
@@ -4009,8 +4105,11 @@ db_is_ship_piloted (db_t *db, int ship_id)
     }
   db_res_t *res = NULL; db_error_t err; bool piloted = false;
 
+  const char *sql_template = "SELECT 1 FROM players WHERE ship_id = {1} LIMIT 1;";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, "SELECT 1 FROM players WHERE ship_id = {1} LIMIT 1;",
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, &err))
     {
       if (db_res_step (res, &err))
