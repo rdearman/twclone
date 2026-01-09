@@ -1,0 +1,33 @@
+{
+  "name": "Port Rob Suite",
+  "tests": [
+    {
+      "name": "Setup: combat_ace",
+      "setup": "macro_auth_user",
+      "username": "combat_ace",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Position combat_ace at Port 2",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM ports WHERE port_id = 2) WHERE name = 'combat_ace' RETURNING sector_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Rob Port Credits",
+      "command": "port.rob",
+      "data": { "sector_id": 1, "port_id": 2, "mode": "credits" },
+      "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Rob Port Missing Auth",
+      "command": "port.rob",
+      "data": { "sector_id": 1, "port_id": 2, "mode": "credits" },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

@@ -6,8 +6,7 @@
 *   **Strings**: UTF-8.
 *   **Booleans**: `true` / `false`.
 *   **Decimals/Currency**: String-encoded decimals to avoid floating-point errors (e.g., `"12345.67"`).
-    *   *Alternative*: Minor units (integers) where specified (e.g., banking internal storage), but API often prefers string-decimal for display. **Protocol V2 spec uses String-encoded decimals (`"1000.00"`) or Minor Units (Integers) depending on the context.**
-    *   *Convention*: Use String-encoded decimals for currency in Client RPCs unless "minor units" is explicitly stated.
+    *   *Convention*: **MUST** use String-encoded decimals for all currency fields in Client RPC responses (e.g., `total_cost`, `credits_remaining`) to ensure precision and consistent parsing.
 
 ## 2. Units
 
@@ -40,4 +39,4 @@ Clients download catalogs (maps of Key -> Template) via `client.hello` negotiati
 
 *   **`weapon_code`**: `["laser_mk1", "plasma_cannon", ...]`
 *   **`notice_severity`**: `["info", "warn", "error"]`
-*   **`commodity`**: `["ore", "organics", "equipment", "fuel"]`
+*   **`commodity`**: `["ORE", "ORG", "EQU", "COL"]`

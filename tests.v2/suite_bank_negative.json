@@ -1,0 +1,10 @@
+{
+  "name": "Bucket 2 Negative Bank Suite",
+  "tests": [
+    { "name": "bank.balance - Missing Auth", "command": "bank.balance", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "bank.deposit - Missing Auth", "command": "bank.deposit", "data": { "amount": 100 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "bank.history - Missing Auth", "command": "bank.history", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "bank.transfer - Missing Auth", "command": "bank.transfer", "data": { "to_player_id": 1, "amount": 100 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "bank.withdraw - Missing Auth", "command": "bank.withdraw", "data": { "amount": 100 }, "expect": { "status": "error", "error_code": 401 } }
+  ]
+}

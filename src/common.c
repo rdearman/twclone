@@ -541,6 +541,17 @@ get_tow_reason_string (int reason_code)
 }
 
 
+void
+h_format_credits (char *dst, size_t dst_sz, long long credits)
+{
+  if (!dst || dst_sz == 0)
+    {
+      return;
+    }
+  snprintf (dst, dst_sz, "%lld.00", credits);
+}
+
+
 // Implementation of json_get_int_flexible
 bool
 json_get_int_flexible (json_t *data_obj, const char *key, int *out_val)

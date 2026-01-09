@@ -1,0 +1,30 @@
+Test File,Command,Category,One-line reason,Suggested fix location (tests/rig/server)
+suite_auth_and_settings.json,player.get_prefs,SERVER DEFECT,Settings not persisted after player.set_prefs returns ok,server
+suite_auth_session.json,system.schema_list,SERVER DEFECT,Unknown command error (Returns 1300),server
+suite_auth_session.json,system.describe_schema,SERVER DEFECT,Unknown command error (Returns 1300),server
+suite_auth_session.json,session.ping,SERVER DEFECT,Returns 401 instead of expected 1700 after logout,server/tests
+suite_bounty.json,bounty.post_federation,SERVER DEFECT,Returns 1700 (Insufficient turns) instead of 401 when unauth,server
+suite_chat_mail_news.json,mail.send,SERVER DEFECT,Missing required field validation error (schema mismatch),server
+suite_chat_mail_news.json,mail.inbox,SERVER DEFECT,Database error (404),server
+suite_chat_mail_news.json,mail.read,SERVER DEFECT,Missing field id (schema uses different key),server
+suite_chat_mail_news.json,mail.delete,SERVER DEFECT,Database error (404),server
+suite_combat_advanced.json,fighters.recall,SERVER DEFECT,Asset ID type/key mismatch in schema,server
+suite_combat_advanced.json,combat.attack_planet,SERVER DEFECT,Planet not found (403),server/rig
+suite_combat_advanced.json,port.rob,SERVER DEFECT,Sector check failed (Returns 1454) despite rig,server
+suite_combat_citadel.json,citadel.build,SERVER DEFECT,Landed check failed (Returns 1701) despite rig,server
+suite_combat_citadel.json,citadel.upgrade,SERVER DEFECT,Landed check failed (Returns 1701) despite rig,server
+suite_combat_complete.json,auth.login,SERVER DEFECT,Invalid request schema (Unknown command 1300),server
+suite_combat_mines.json,combat.lay_mines,SERVER DEFECT,Missing or invalid amount/offense (schema mismatch),server
+suite_combat_planet_genesis.json,planet.genesis,SERVER DEFECT,Insufficient torpedoes (Returns 1505) (rig/query bug),server/rig
+suite_combat_planet_ops.json,planet.harvest,SERVER DEFECT,Not implemented (502),server
+suite_combat_planet_ops.json,planet.transfer_ownership,SERVER DEFECT,Missing or invalid target_id (Returns 400),server/tests
+suite_movement_move_transwarp.json,move.transwarp,SERVER DEFECT,Column transwarp_enabled does not exist (schema mismatch),server
+suite_movement_move_warp.json,move.warp,SERVER DEFECT,No link error (1453) despite adjacent sectors,server
+suite_navigation.json,move.pathfind,SERVER DEFECT,Unknown command (routing bug),server
+suite_ship_operations.json,ship.rename,SERVER DEFECT,Missing ship_id/new_name (schema mismatch),server
+suite_ship_repair.json,ship.repair,SERVER DEFECT,Unknown command (routing bug),server
+suite_shipyard_and_ships.json,shipyard.list,SERVER DEFECT,Auth required error (routing/gate bug),server
+suite_sys_admin_boundaries.json,admin.notice,SERVER DEFECT,Permission denied (402) for admin user,server
+suite_tavern_economy.json,tavern.dice.play,SERVER DEFECT,Auth required error (Returns 401),server
+suite_tavern_economy.json,tavern.loan.take,SERVER DEFECT,Not in tavern sector (1820) (logic bug),server
+suite_movement_move_pathfind.json,move.pathfind (Neg),SERVER DEFECT,Returns ok (unauth access) instead of 401,server

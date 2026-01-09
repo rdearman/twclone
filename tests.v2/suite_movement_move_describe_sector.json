@@ -1,0 +1,25 @@
+{
+  "name": "Move Describe Sector Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_describe",
+      "setup": "macro_auth_user",
+      "username": "mover_describe",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Describe Current Sector",
+      "command": "move.describe_sector",
+      "user": "mover_describe",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Negative: Describe Sector Missing Auth",
+      "command": "move.describe_sector",
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

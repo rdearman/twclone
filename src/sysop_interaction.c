@@ -199,9 +199,13 @@ h_level (const char *lvl)
 }
 
 
+#include <poll.h>
+#include <errno.h>
+
 /* ================== parser & REPL ================== */
 static pthread_t g_thr;
-static int g_run = 0;
+static volatile int g_run = 0;
+static volatile sig_atomic_t *g_running_ptr = NULL;
 
 
 void
@@ -247,6 +251,10 @@ sysop_dispatch_line (char *line)
   if (!strcmp (line, "q") || !strcmp (line, ":q") || !strcmp (line, "quit"))
     {
       g_run = 0;
+      if (g_running_ptr)
+        {
+          *g_running_ptr = 0;
+        }
       return;
     }
   /* Palette verbs */
@@ -305,20 +313,37 @@ repl (void *arg)
   (void) arg;
   char *line = NULL;
   size_t cap = 0;
+  struct pollfd pfd = { .fd = STDIN_FILENO, .events = POLLIN };
 
+  fputs ("sysop +> ", stdout);
+  fflush (stdout);
 
-  while (g_run)
+  while (g_run && (!g_running_ptr || *g_running_ptr))
     {
-      fputs ("sysop +> ", stdout);
-      fflush (stdout);
-      ssize_t n = getline (&line, &cap, stdin);
+      /* Wait for input with timeout so we can check shutdown flags */
+      int prc = poll(&pfd, 1, 500); 
+      if (prc < 0) {
+        if (errno == EINTR) continue;
+        break;
+      }
+      if (prc == 0) {
+        /* Timeout, just loop around and check g_run / g_running_ptr */
+        continue;
+      }
 
-
-      if (n < 0)
-        {
-          break;
-        }
-      sysop_dispatch_line (line);
+      if (pfd.revents & POLLIN) {
+        ssize_t n = getline (&line, &cap, stdin);
+        if (n < 0)
+          {
+            break;
+          }
+        sysop_dispatch_line (line);
+        if (g_run && (!g_running_ptr || *g_running_ptr))
+          {
+            fputs ("sysop +> ", stdout);
+            fflush (stdout);
+          }
+      }
     }
   free (line);
   return NULL;
@@ -326,17 +351,20 @@ repl (void *arg)
 
 
 void
-sysop_start (void)
+sysop_start (volatile sig_atomic_t *running_flag)
 {
   g_run = 1;
+  g_running_ptr = running_flag;
   pthread_create (&g_thr, NULL, repl, NULL);
-  pthread_detach (g_thr);
 }
 
 
 void
 sysop_stop (void)
 {
-  g_run = 0;
+  if (g_run) {
+    g_run = 0;
+    pthread_join (g_thr, NULL);
+  }
 }
 

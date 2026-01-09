@@ -1,0 +1,728 @@
+{
+  "id": "srv-ok",
+  "reply_to": "cli-0001",
+  "ts": "2026-01-09T09:18:01Z",
+  "status": "ok",
+  "type": "system.cmd_list",
+  "data": {
+    "commands": [
+      {
+        "cmd": "admin.notice",
+        "summary": "Admin notice"
+      },
+      {
+        "cmd": "admin.shutdown_warning",
+        "summary": "Admin shutdown warning"
+      },
+      {
+        "cmd": "auth.login",
+        "summary": "Authenticate"
+      },
+      {
+        "cmd": "auth.logout",
+        "summary": "Log out"
+      },
+      {
+        "cmd": "auth.mfa.totp.verify",
+        "summary": "Second-factor code"
+      },
+      {
+        "cmd": "auth.register",
+        "summary": "Create a new player"
+      },
+      {
+        "cmd": "auth.refresh",
+        "summary": "Refresh session token"
+      },
+      {
+        "cmd": "bank.balance",
+        "summary": "Get player bank balance"
+      },
+      {
+        "cmd": "bank.deposit",
+        "summary": "Deposit credits to bank"
+      },
+      {
+        "cmd": "bank.history",
+        "summary": "Get bank history"
+      },
+      {
+        "cmd": "bank.leaderboard",
+        "summary": "Get bank leaderboard"
+      },
+      {
+        "cmd": "bank.transfer",
+        "summary": "Transfer credits between players"
+      },
+      {
+        "cmd": "bank.withdraw",
+        "summary": "Withdraw credits from bank"
+      },
+      {
+        "cmd": "bounty.list",
+        "summary": "List bounties"
+      },
+      {
+        "cmd": "bounty.post_federation",
+        "summary": "Post a Federation bounty"
+      },
+      {
+        "cmd": "bounty.post_hitlist",
+        "summary": "Post a Hit List contract"
+      },
+      {
+        "cmd": "bulk.execute",
+        "summary": "Execute a bulk command"
+      },
+      {
+        "cmd": "fine.list",
+        "summary": "List player outstanding fines"
+      },
+      {
+        "cmd": "fine.pay",
+        "summary": "Pay an outstanding fine"
+      },
+      {
+        "cmd": "insurance.policies.list",
+        "summary": "List player insurance policies"
+      },
+      {
+        "cmd": "insurance.policies.buy",
+        "summary": "Buy an insurance policy"
+      },
+      {
+        "cmd": "insurance.claim.file",
+        "summary": "File an insurance claim"
+      },
+      {
+        "cmd": "chat.broadcast",
+        "summary": "Broadcast a chat message"
+      },
+      {
+        "cmd": "chat.history",
+        "summary": "Chat history"
+      },
+      {
+        "cmd": "chat.send",
+        "summary": "Send a chat message"
+      },
+      {
+        "cmd": "citadel.build",
+        "summary": "Build a citadel"
+      },
+      {
+        "cmd": "citadel.upgrade",
+        "summary": "Upgrade a citadel"
+      },
+      {
+        "cmd": "combat.attack",
+        "summary": "Attack a target"
+      },
+      {
+        "cmd": "combat.attack_planet",
+        "summary": "Attack a planet"
+      },
+      {
+        "cmd": "combat.deploy_fighters",
+        "summary": "Deploy fighters"
+      },
+      {
+        "cmd": "combat.deploy_mines",
+        "summary": "Deploy mines"
+      },
+      {
+        "cmd": "combat.lay_mines",
+        "summary": "Lay mines"
+      },
+      {
+        "cmd": "combat.status",
+        "summary": "Combat status"
+      },
+      {
+        "cmd": "combat.sweep_mines",
+        "summary": "Sweep for mines"
+      },
+      {
+        "cmd": "deploy.fighters.list",
+        "summary": "List deployed fighters"
+      },
+      {
+        "cmd": "deploy.mines.list",
+        "summary": "List deployed mines"
+      },
+      {
+        "cmd": "fighters.recall",
+        "summary": "Recall deployed fighters"
+      },
+      {
+        "cmd": "mines.recall",
+        "summary": "Recall deployed mines"
+      },
+      {
+        "cmd": "corp.balance",
+        "summary": "Get corporation balance"
+      },
+      {
+        "cmd": "corp.create",
+        "summary": "Create a new corporation"
+      },
+      {
+        "cmd": "corp.deposit",
+        "summary": "Deposit to corporation"
+      },
+      {
+        "cmd": "corp.dissolve",
+        "summary": "Dissolve a corporation"
+      },
+      {
+        "cmd": "corp.invite",
+        "summary": "Invite player to corporation"
+      },
+      {
+        "cmd": "corp.join",
+        "summary": "Join a corporation via invite"
+      },
+      {
+        "cmd": "corp.kick",
+        "summary": "Kick member from corporation"
+      },
+      {
+        "cmd": "corp.leave",
+        "summary": "Leave current corporation"
+      },
+      {
+        "cmd": "corp.list",
+        "summary": "List all corporations"
+      },
+      {
+        "cmd": "corp.roster",
+        "summary": "List corporation members"
+      },
+      {
+        "cmd": "corp.statement",
+        "summary": "Get corporation statement"
+      },
+      {
+        "cmd": "corp.status",
+        "summary": "Get corporation status"
+      },
+      {
+        "cmd": "corp.transfer_ceo",
+        "summary": "Transfer corporation CEO role"
+      },
+      {
+        "cmd": "corp.withdraw",
+        "summary": "Withdraw from corporation"
+      },
+      {
+        "cmd": "dock.status",
+        "summary": "Check/set player docked status at current port"
+      },
+      {
+        "cmd": "hardware.buy",
+        "summary": "Buy ship hardware"
+      },
+      {
+        "cmd": "hardware.list",
+        "summary": "List available ship hardware"
+      },
+      {
+        "cmd": "mail.delete",
+        "summary": "Delete mail"
+      },
+      {
+        "cmd": "mail.inbox",
+        "summary": "Mail inbox"
+      },
+      {
+        "cmd": "mail.read",
+        "summary": "Read mail"
+      },
+      {
+        "cmd": "mail.send",
+        "summary": "Send mail"
+      },
+      {
+        "cmd": "move.autopilot.start",
+        "summary": "Start autopilot"
+      },
+      {
+        "cmd": "move.autopilot.status",
+        "summary": "Autopilot status"
+      },
+      {
+        "cmd": "move.autopilot.stop",
+        "summary": "Stop autopilot"
+      },
+      {
+        "cmd": "move.describe_sector",
+        "summary": "Describe a sector"
+      },
+      {
+        "cmd": "move.pathfind",
+        "summary": "Find path between sectors"
+      },
+      {
+        "cmd": "move.scan",
+        "summary": "Scan adjacent sectors"
+      },
+      {
+        "cmd": "move.transwarp",
+        "summary": "Transwarp to a sector"
+      },
+      {
+        "cmd": "move.warp",
+        "summary": "Warp to sector"
+      },
+      {
+        "cmd": "nav.avoid.add",
+        "summary": "Add a sector to the avoid list"
+      },
+      {
+        "cmd": "nav.avoid.list",
+        "summary": "List avoided sectors"
+      },
+      {
+        "cmd": "nav.avoid.remove",
+        "summary": "Remove sector from avoid list"
+      },
+      {
+        "cmd": "nav.avoid.set",
+        "summary": "Set a sector to the avoid list"
+      },
+      {
+        "cmd": "nav.bookmark.add",
+        "summary": "Add a bookmark"
+      },
+      {
+        "cmd": "nav.bookmark.list",
+        "summary": "List bookmarks"
+      },
+      {
+        "cmd": "nav.bookmark.remove",
+        "summary": "Remove a bookmark"
+      },
+      {
+        "cmd": "nav.bookmark.set",
+        "summary": "Set a bookmark"
+      },
+      {
+        "cmd": "news.get_feed",
+        "summary": "Get the daily news feed"
+      },
+      {
+        "cmd": "news.mark_feed_read",
+        "summary": "Mark news feed as read"
+      },
+      {
+        "cmd": "news.read",
+        "summary": "Read news feed"
+      },
+      {
+        "cmd": "notes.list",
+        "summary": "List notes"
+      },
+      {
+        "cmd": "notice.ack",
+        "summary": "Acknowledge a notice"
+      },
+      {
+        "cmd": "notice.list",
+        "summary": "List notices"
+      },
+      {
+        "cmd": "planet.create",
+        "summary": "Create a planet"
+      },
+      {
+        "cmd": "planet.deposit",
+        "summary": "Deposit to a planet"
+      },
+      {
+        "cmd": "planet.genesis",
+        "summary": "Create a planet"
+      },
+      {
+        "cmd": "planet.genesis_create",
+        "summary": "Create a genesis planet"
+      },
+      {
+        "cmd": "planet.harvest",
+        "summary": "Harvest from a planet"
+      },
+      {
+        "cmd": "planet.info",
+        "summary": "Planet information"
+      },
+      {
+        "cmd": "planet.land",
+        "summary": "Land on a planet"
+      },
+      {
+        "cmd": "planet.launch",
+        "summary": "Launch from a planet"
+      },
+      {
+        "cmd": "planet.market.buy_order",
+        "summary": "Create planet market buy order"
+      },
+      {
+        "cmd": "planet.market.sell",
+        "summary": "Sell to planet market"
+      },
+      {
+        "cmd": "planet.rename",
+        "summary": "Rename a planet"
+      },
+      {
+        "cmd": "planet.transfer_ownership",
+        "summary": "Transfer planet ownership"
+      },
+      {
+        "cmd": "planet.withdraw",
+        "summary": "Withdraw from a planet"
+      },
+      {
+        "cmd": "player.get_avoids",
+        "summary": "Get player avoids"
+      },
+      {
+        "cmd": "player.get_bookmarks",
+        "summary": "Get player bookmarks"
+      },
+      {
+        "cmd": "player.get_notes",
+        "summary": "Get player notes"
+      },
+      {
+        "cmd": "player.get_prefs",
+        "summary": "Get player preferences"
+      },
+      {
+        "cmd": "player.get_settings",
+        "summary": "Get player settings"
+      },
+      {
+        "cmd": "player.get_subscriptions",
+        "summary": "Get player subscriptions"
+      },
+      {
+        "cmd": "player.get_topics",
+        "summary": "Get player topics"
+      },
+      {
+        "cmd": "player.list_online",
+        "summary": "List online players"
+      },
+      {
+        "cmd": "player.my_info",
+        "summary": "Current player info"
+      },
+      {
+        "cmd": "player.rankings",
+        "summary": "Player rankings"
+      },
+      {
+        "cmd": "player.set_avoids",
+        "summary": "Set player avoids"
+      },
+      {
+        "cmd": "player.set_bookmarks",
+        "summary": "Set player bookmarks"
+      },
+      {
+        "cmd": "player.set_prefs",
+        "summary": "Set player preferences"
+      },
+      {
+        "cmd": "player.set_settings",
+        "summary": "Set player settings"
+      },
+      {
+        "cmd": "player.set_subscriptions",
+        "summary": "Set player subscriptions"
+      },
+      {
+        "cmd": "player.set_topics",
+        "summary": "Set player topics"
+      },
+      {
+        "cmd": "player.set_trade_account_preference",
+        "summary": "Set trade account preference"
+      },
+      {
+        "cmd": "port.describe",
+        "summary": "Describe a port"
+      },
+      {
+        "cmd": "port.info",
+        "summary": "Port prices/stock in sector"
+      },
+      {
+        "cmd": "port.rob",
+        "summary": "Attempt to rob a port"
+      },
+      {
+        "cmd": "port.status",
+        "summary": "Port status"
+      },
+      {
+        "cmd": "sector.info",
+        "summary": "Describe current sector"
+      },
+      {
+        "cmd": "sector.scan",
+        "summary": "Scan a sector"
+      },
+      {
+        "cmd": "sector.scan.density",
+        "summary": "Scan sector density"
+      },
+      {
+        "cmd": "sector.search",
+        "summary": "Search a sector"
+      },
+      {
+        "cmd": "sector.set_beacon",
+        "summary": "Set or clear sector beacon"
+      },
+      {
+        "cmd": "session.disconnect",
+        "summary": "Disconnect"
+      },
+      {
+        "cmd": "session.hello",
+        "summary": "Handshake / hello"
+      },
+      {
+        "cmd": "session.ping",
+        "summary": "Ping"
+      },
+      {
+        "cmd": "player.ping",
+        "summary": "Ping"
+      },
+      {
+        "cmd": "sys.notice.create",
+        "summary": "Sysop command to create a notice"
+      },
+      {
+        "cmd": "system.capabilities",
+        "summary": "Feature flags, schemas, counts"
+      },
+      {
+        "cmd": "system.cmd_list",
+        "summary": "Flat list of all commands"
+      },
+      {
+        "cmd": "system.describe_schema",
+        "summary": "Describe commands in a schema"
+      },
+      {
+        "cmd": "system.disconnect",
+        "summary": "Disconnect"
+      },
+      {
+        "cmd": "system.hello",
+        "summary": "Handshake / hello"
+      },
+      {
+        "cmd": "system.schema_list",
+        "summary": "List all schema namespaces"
+      },
+      {
+        "cmd": "ship.claim",
+        "summary": "Claim a ship"
+      },
+      {
+        "cmd": "ship.info",
+        "summary": "Ship information"
+      },
+      {
+        "cmd": "ship.inspect",
+        "summary": "Inspect a ship"
+      },
+      {
+        "cmd": "ship.jettison",
+        "summary": "Jettison cargo"
+      },
+      {
+        "cmd": "ship.rename",
+        "summary": "Rename a ship"
+      },
+      {
+        "cmd": "ship.repair",
+        "summary": "Repair a ship"
+      },
+      {
+        "cmd": "ship.reregister",
+        "summary": "Re-register a ship"
+      },
+      {
+        "cmd": "ship.self_destruct",
+        "summary": "Self-destruct a ship"
+      },
+      {
+        "cmd": "ship.status",
+        "summary": "Ship status"
+      },
+      {
+        "cmd": "ship.transfer_cargo",
+        "summary": "Transfer cargo"
+      },
+      {
+        "cmd": "ship.upgrade",
+        "summary": "Upgrade a ship"
+      },
+      {
+        "cmd": "shipyard.list",
+        "summary": "List available ship hulls"
+      },
+      {
+        "cmd": "shipyard.upgrade",
+        "summary": "Upgrade to a new ship hull"
+      },
+      {
+        "cmd": "stock.buy",
+        "summary": "Buy shares in a corporation"
+      },
+      {
+        "cmd": "stock.dividend.set",
+        "summary": "Declare a dividend"
+      },
+      {
+        "cmd": "stock.exchange.list_stocks",
+        "summary": "List stocks on the exchange"
+      },
+      {
+        "cmd": "stock.exchange.orders.cancel",
+        "summary": "Cancel a stock order"
+      },
+      {
+        "cmd": "stock.exchange.orders.create",
+        "summary": "Create a stock order"
+      },
+      {
+        "cmd": "stock.ipo.register",
+        "summary": "Register corporation for IPO"
+      },
+      {
+        "cmd": "stock.portfolio.list",
+        "summary": "List stock portfolio"
+      },
+      {
+        "cmd": "subscribe.add",
+        "summary": "Add a subscription"
+      },
+      {
+        "cmd": "subscribe.catalog",
+        "summary": "Subscription catalog"
+      },
+      {
+        "cmd": "subscribe.list",
+        "summary": "List subscriptions"
+      },
+      {
+        "cmd": "subscribe.remove",
+        "summary": "Remove a subscription"
+      },
+      {
+        "cmd": "tavern.barcharts.get_prices_summary",
+        "summary": "Get a summary of commodity prices"
+      },
+      {
+        "cmd": "tavern.deadpool.place_bet",
+        "summary": "Place a bet on a player's destruction"
+      },
+      {
+        "cmd": "tavern.dice.play",
+        "summary": "Play bar dice"
+      },
+      {
+        "cmd": "tavern.graffiti.post",
+        "summary": "Post a message on the graffiti wall"
+      },
+      {
+        "cmd": "tavern.highstakes.play",
+        "summary": "Play at the high-stakes table"
+      },
+      {
+        "cmd": "tavern.loan.pay",
+        "summary": "Repay a loan from the loan shark"
+      },
+      {
+        "cmd": "tavern.loan.take",
+        "summary": "Take a loan from the loan shark"
+      },
+      {
+        "cmd": "tavern.lottery.buy_ticket",
+        "summary": "Buy a lottery ticket"
+      },
+      {
+        "cmd": "tavern.lottery.status",
+        "summary": "Check lottery status"
+      },
+      {
+        "cmd": "tavern.raffle.buy_ticket",
+        "summary": "Buy a raffle ticket"
+      },
+      {
+        "cmd": "tavern.round.buy",
+        "summary": "Buy a round for the tavern"
+      },
+      {
+        "cmd": "tavern.rumour.get_hint",
+        "summary": "Get a hint from the rumour mill"
+      },
+      {
+        "cmd": "tavern.trader.buy_password",
+        "summary": "Buy an underground password from the grimy trader"
+      },
+      {
+        "cmd": "trade.accept",
+        "summary": "Accept a trade offer"
+      },
+      {
+        "cmd": "trade.buy",
+        "summary": "Buy commodity from port"
+      },
+      {
+        "cmd": "trade.cancel",
+        "summary": "Cancel a trade offer"
+      },
+      {
+        "cmd": "trade.history",
+        "summary": "View recent trade transactions"
+      },
+      {
+        "cmd": "trade.jettison",
+        "summary": "Dump cargo into space"
+      },
+      {
+        "cmd": "trade.offer",
+        "summary": "Create a trade offer to another player"
+      },
+      {
+        "cmd": "trade.port_info",
+        "summary": "Port prices/stock in sector"
+      },
+      {
+        "cmd": "trade.quote",
+        "summary": "Get a price quote from a port"
+      },
+      {
+        "cmd": "trade.sell",
+        "summary": "Sell commodity to port"
+      }
+    ],
+    "count": 177
+  },
+  "error": null,
+  "meta": {
+    "rate_limit": {
+      "limit": 60,
+      "remaining": 60,
+      "reset": 60
+    }
+  }
+}

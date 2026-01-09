@@ -1,0 +1,22 @@
+{
+  "ships": [
+    {
+      "ship_id": 1014,
+      "owner_username": "combat_ace",
+      "name": "AceShip",
+      "type_id": 1,
+      "sector_id": 1,
+      "fighters": 100,
+      "mines": 50,
+      "holds": 100
+    }
+  ],
+  "player_prefs": [
+    {
+      "username": "auth_test_user",
+      "key": "theme",
+      "value": "dark",
+      "type": "string"
+    }
+  ]
+}

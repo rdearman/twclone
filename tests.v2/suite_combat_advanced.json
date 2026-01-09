@@ -31,13 +31,13 @@
       "user": "combat_ace",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.items.*.quantity", "op": "==", "value": 10 }
+        { "path": "data.entries.0.count", "op": "==", "value": 10 }
       ]
     },
     {
       "name": "Recall Fighters",
       "command": "fighters.recall",
-      "data": { "asset_id": "@fighter_asset_id" },
+      "data": { "sector_id": 1, "asset_id": "@fighter_asset_id" },
       "user": "combat_ace",
       "expect": { "status": "ok" }
     },
@@ -46,14 +46,18 @@
       "command": "deploy.fighters.list",
       "data": { "sector_id": 1 },
       "user": "combat_ace",
-      "expect": { "status": "ok", "items": [] }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": 0 }
+      ]
     },
     {
       "name": "Deploy Mines",
       "command": "combat.deploy_mines",
-      "data": { "amount": 5 },
+      "data": { "amount": 5, "type": "armid" },
       "user": "combat_ace",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "save": { "mine_asset_id": "data.asset_id" }
     },
     {
       "name": "List Deployed Mines (Verify Deploy)",
@@ -62,13 +66,13 @@
       "user": "combat_ace",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.items.*.quantity", "op": "==", "value": 5 }
+        { "path": "data.entries.0.count", "op": "==", "value": 5 }
       ]
     },
     {
       "name": "Recall Mines",
       "command": "mines.recall",
-      "data": { "sector_id": 1 },
+      "data": { "sector_id": 1, "asset_id": "@mine_asset_id" },
       "user": "combat_ace",
       "expect": { "status": "ok" }
     },
@@ -77,7 +81,10 @@
       "command": "deploy.mines.list",
       "data": { "sector_id": 1 },
       "user": "combat_ace",
-      "expect": { "status": "ok", "items": [] }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": 0 }
+      ]
     },
     {
       "name": "Attack Planet",
@@ -89,7 +96,7 @@
     {
       "name": "Port Rob (Success)",
       "command": "port.rob",
-      "data": { "port_id": 1 },
+      "data": { "sector_id": 1, "port_id": 1, "mode": "credits" },
       "user": "combat_ace",
       "expect": { "status": "ok" }
     }

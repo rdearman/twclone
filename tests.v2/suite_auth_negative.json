@@ -1,0 +1,48 @@
+{
+  "name": "Bucket 2 Negative Auth Suite",
+  "tests": [
+    {
+      "name": "auth.login - Invalid Credentials",
+      "command": "auth.login",
+      "data": { "username": "nonexistent", "passwd": "wrong" },
+      "expect": { "status": "error", "error_code": 1101 }
+    },
+    {
+      "name": "auth.logout - Omit Auth (Observed: ok)",
+      "command": "auth.logout",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "auth.refresh - Missing Auth (Observed: 1301)",
+      "command": "auth.refresh",
+      "expect": { "status": "error", "error_code": 1301 }
+    },
+    {
+      "name": "session.hello - Invalid Payload (Observed: ok)",
+      "command": "session.hello",
+      "data": { "invalid": "payload" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "session.ping - Missing Auth (Observed: ok)",
+      "command": "session.ping",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "system.capabilities - Missing Auth (Observed: ok)",
+      "command": "system.capabilities",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "system.cmd_list - Missing Auth (Observed: ok)",
+      "command": "system.cmd_list",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "system.hello - Invalid Payload (Observed: ok)",
+      "command": "system.hello",
+      "data": 123,
+      "expect": { "status": "ok" }
+    }
+  ]
+}

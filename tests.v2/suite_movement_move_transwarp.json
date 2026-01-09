@@ -1,0 +1,24 @@
+{
+  "name": "Move Transwarp Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_transwarp",
+      "setup": "macro_auth_user",
+      "username": "mover_transwarp",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Transwarp to Sector",
+      "command": "move.transwarp",
+      "data": { "to_sector_id": 10 },
+      "user": "mover_transwarp",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Transwarp Missing Auth",
+      "command": "move.transwarp",
+      "data": { "to_sector_id": 10 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

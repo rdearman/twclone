@@ -524,9 +524,9 @@ $$;
 -- after planets are created during BigBang topology generation
 
 -- Bank Interest Policy
-INSERT INTO bank_interest_policy (id, apr_bps, compounding, last_run_at, currency)
+INSERT INTO bank_interest_policy (bank_interest_policy_id, apr_bps, compounding, last_run_at, currency)
 VALUES (1, 0, 'none', NULL, 'CRD')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (bank_interest_policy_id) DO NOTHING;
 
 -- Corporation Interest Policy
 INSERT INTO corp_interest_policy (id, apr_bps, compounding, last_run_at, currency)
@@ -534,7 +534,7 @@ VALUES (1, 0, 'none', CURRENT_TIMESTAMP, 'CRD')
 ON CONFLICT (id) DO NOTHING;
 
 -- Engine Offset
-INSERT INTO engine_offset(key, last_event_id, last_event_ts) VALUES ('events', 0, 0)
+INSERT INTO engine_offset(key, last_event_id, last_event_ts) VALUES ('events', 0, to_timestamp(0))
 ON CONFLICT (key) DO NOTHING;
 
 -- S2S Keys

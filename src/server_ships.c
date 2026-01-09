@@ -28,6 +28,7 @@
 #include "database_cmd.h"
 #include "errors.h"
 #include "config.h"
+#include "db/sql_driver.h"
 #include "common.h"
 #include "server_envelope.h"
 #include "server_rules.h"
@@ -959,8 +960,11 @@ h_update_ship_cargo (db_t *db,
                      int delta,
                      int *new_quantity_out)
 {
+  LOGI("h_update_ship_cargo: entered for ship_id=%d, commodity=%s, delta=%d", ship_id, commodity_code, delta);
   if (!db || ship_id <= 0 || !commodity_code)
     {
+      LOGE ("h_update_ship_cargo: invalid params: db=%p, ship_id=%d, commodity_code=%s",
+            (void*)db, ship_id, commodity_code ? commodity_code : "NULL");
       if (new_quantity_out)
         {
           *new_quantity_out = 0;
@@ -1001,6 +1005,7 @@ h_update_ship_cargo (db_t *db,
     }
   else
     {
+      LOGE ("h_update_ship_cargo: unknown commodity_code: '%s'", commodity_code);
       if (new_quantity_out)
         {
           *new_quantity_out = 0;
@@ -1012,6 +1017,11 @@ h_update_ship_cargo (db_t *db,
   db_error_t err;
   const char *sql_check =
     "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = {1};";
+
+  /* 
+   * WAIT! I must ensure the indices in db_res_col_i32 below match this SELECT list.
+   * ore=0, organics=1, equipment=2, colonists=3, slaves=4, weapons=5, drugs=6, holds=7.
+   */
 
   char sql_check_converted[512];
   sql_build(db, sql_check, sql_check_converted, sizeof(sql_check_converted));
@@ -1096,7 +1106,7 @@ h_update_ship_cargo (db_t *db,
       return ERR_INSUFFICIENT_FUNDS; // Or generic constraint violation
     }
 
-  if (new_total > holds)
+  if (new_total > holds && delta > 0)
     {
       if (new_quantity_out)
         {

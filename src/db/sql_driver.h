@@ -268,6 +268,30 @@ int sql_upsert_do_update(const db_t *db,
                          char *out_buf,
                          size_t buf_size);
 
+/**
+ * @brief Generate SQL expression for expanding a JSON array into rows.
+ *
+ * Used to convert a JSON array parameter into a set of rows that can be
+ * used in IN () or other set operations.
+ *
+ * PostgreSQL: json_array_elements_text(json_param)
+ * MySQL: JSON_EXTRACT(json_param, '$[*]') with UNION ALL (not yet implemented)
+ * Oracle: Similar pattern (not yet implemented)
+ *
+ * This writes a SQL expression suitable for use in a subquery:
+ *   WHERE col IN (SELECT <expression>)
+ *
+ * @param db Database handle.
+ * @param json_param_idx The parameter placeholder index (e.g., 3 for {3}).
+ * @param out_buf Buffer to write the result into.
+ * @param out_sz Size of out_buf.
+ * @return 0 on success, -1 on overflow or unsupported backend.
+ */
+int sql_json_array_to_rows(const db_t *db,
+                           int json_param_idx,
+                           char *out_buf,
+                           size_t out_sz);
+
 #ifdef __cplusplus
 }
 #endif

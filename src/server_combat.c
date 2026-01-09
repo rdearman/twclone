@@ -310,7 +310,7 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
 
         /* Remove the fighter asset (one-time attack) */
         char sql_del[256];
-        sql_build(db, "DELETE FROM sector_assets WHERE id = {1};",
+        sql_build(db, "DELETE FROM sector_assets WHERE sector_assets_id = {1};",
           sql_del, sizeof(sql_del));
         db_bind_t params_del[] = { db_bind_i32 (asset_id) };
         db_exec (db, sql_del, params_del, 1, &upd_err);
@@ -917,7 +917,7 @@ db_sector_asset_decrement_or_delete (db_t *db, int asset_id, int quantity)
       sql_build(db,
         "UPDATE sector_assets "
         "SET quantity = quantity - 1 "
-        "WHERE id = {1};",
+        "WHERE sector_assets_id = {1};",
         sql, sizeof(sql));
 
 
@@ -2195,7 +2195,7 @@ ship_consume_fighters (db_t *db, int ship_id, int amount)
   sql_build(db,
     "UPDATE ships "
     "SET fighters = fighters - {1} "
-    "WHERE id = {2} "
+    "WHERE ship_id = {2} "
     "  AND fighters >= {1} "
     "RETURNING fighters;",
     sql, sizeof(sql));

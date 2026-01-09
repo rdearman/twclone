@@ -1,0 +1,275 @@
+/**
+ * @file sql_driver.h
+ * @brief SQL generation abstraction layer for database-agnostic code.
+ *
+ * Centralizes database-specific SQL fragments (timestamps, conflict handling, etc.)
+ * to prevent scattered SQLite vs PostgreSQL compatibility issues.
+ *
+ * All functions return pointers to static strings. Caller must NOT free.
+ * Caller MUST use the returned string before making another call to sql_driver functions.
+ * (Single-threaded use; if threading is needed, switch to malloc'd returns.)
+ *
+ * Usage:
+ *   const char *sql_ts = sql_now_timestamptz(db);
+ *   // Use sql_ts immediately in query construction
+ *
+ * Design:
+ *   - Functions take db_t* to allow backend detection via db_backend(db).
+ *   - No business logic; only SQL string generation.
+ *   - Strings are literal/static; no dynamic allocation.
+ */
+
+#ifndef SQL_DRIVER_H
+#define SQL_DRIVER_H
+
+#include "db_api.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+
+/**
+ * @brief Builds a dialect-specific SQL string from a template.
+ *
+ * Placeholders:
+ *   - "{N}" where N is a positive integer.
+ *
+ * Escapes:
+ *   - "{{" -> "{"
+ *   - "}}" -> "}"
+ *
+ * Dialects:
+ *   - PostgreSQL: "{1}" -> "$1"
+ *   - SQLite:     "{1}" -> "?1"  (preserves index; allows reuse like "... {1} ... {1} ...")
+ *   - Others:     "{1}" -> "?"   (typical)
+ *
+ * @return 0 on success, -1 on overflow/parse error.
+ */
+  int sql_build(const db_t *db, const char *template, char *out_buf, size_t buf_size); 
+
+  
+/**
+ * @brief Return SQL for current timestamp in TIMESTAMP/TIMESTAMPTZ fields.
+ *
+ * PostgreSQL: NOW()
+ * For non-PostgreSQL: FAILS (returns NULL).
+ *
+ * @param db Database handle (used to detect backend).
+ * @return Static string suitable for INSERT/UPDATE ... VALUES(..., NOW(), ...).
+ *         Returns NULL for unsupported backends.
+ */
+  const char *sql_now_timestamptz(const db_t *db);
+
+/**
+ * @brief Return SQL for current Unix epoch (seconds since 1970) as integer.
+ *
+ * PostgreSQL: EXTRACT(EPOCH FROM NOW())::bigint
+ * For non-PostgreSQL: FAILS (returns NULL).
+ *
+ * @param db Database handle.
+ * @return Static string suitable for INSERT/UPDATE ... VALUES(..., <epoch>, ...).
+ *         Returns NULL for unsupported backends.
+ */
+  const char *sql_epoch_now(const db_t *db);
+
+/**
+ * @brief Return SQL expression that evaluates to current UTC timestamp.
+ *
+ * PostgreSQL: timezone('UTC', CURRENT_TIMESTAMP)
+ * MySQL: UTC_TIMESTAMP()
+ * Oracle: SYS_EXTRACT_UTC(SYSTIMESTAMP)
+ *
+ * @param db Database handle.
+ * @return Static string with UTC timestamp expression; NULL for unsupported backends.
+ */
+const char *sql_now_expr(const db_t *db);
+
+/**
+ * @brief Convert a timestamp expression/column to epoch seconds.
+ *
+ * Writes a SQL expression that converts the given timestamp expression to Unix epoch seconds.
+ * Useful for comparisons and arithmetic with epoch-stored values.
+ *
+ * PostgreSQL: EXTRACT(EPOCH FROM <ts_expr>)
+ * MySQL: UNIX_TIMESTAMP(<ts_expr>)
+ * Oracle: ((CAST((<ts_expr> AT TIME ZONE 'UTC') AS DATE) - DATE '1970-01-01') * 86400)
+ *
+ * @param db Database handle.
+ * @param ts_expr The timestamp column or expression to convert (e.g., "created_at" or "NOW()").
+ * @param out_buf Buffer to write the result into.
+ * @param out_sz Size of out_buf.
+ * @return 0 on success, -1 on overflow/unsupported backend.
+ */
+  int sql_ts_to_epoch_expr(const db_t *db,
+                         const char *ts_expr,
+                         char *out_buf,
+                         size_t out_sz);
+
+/**
+ * @brief Return SQL for converting Unix epoch parameter to TIMESTAMPTZ.
+ *
+ * Used in WHERE clauses to compare epoch values with timestamp columns.
+ * Example: WHERE deployed_at <= <sql_epoch_to_timestamptz(db)>
+ *
+ * PostgreSQL: to_timestamp($param)
+ * SQLite:     datetime($param, 'unixepoch')
+ *
+ * @param db Database handle.
+ * @return Static string suitable for comparison: "to_timestamp($X)" or "datetime($X, 'unixepoch')".
+ *         Caller must format with snprintf to inject the parameter placeholder.
+ */
+// const char *sql_epoch_to_timestamptz_fmt(const db_t *db);
+
+/**
+ * @brief Return ON CONFLICT clause for INSERT ... ON CONFLICT DO NOTHING.
+ *
+ * PostgreSQL: ON CONFLICT DO NOTHING
+ * For non-PostgreSQL: FAILS (returns NULL; caller must check).
+ *
+ * This is for PostgreSQL-only code paths. Other backends must implement
+ * their own insert-if-not-exists via driver helpers.
+ *
+ * @param db Database handle.
+ * @return "ON CONFLICT DO NOTHING" on PostgreSQL; NULL on unsupported backend.
+ */
+const char *sql_insert_ignore_clause(const db_t *db);
+
+/**
+ * @brief Return ON CONFLICT clause prefix with conflict target.
+ *
+ * PostgreSQL: "ON CONFLICT(target) DO"
+ * For non-PostgreSQL: FAILS (returns NULL; caller must check).
+ *
+ * Used when the full clause is: "ON CONFLICT(col1, col2) DO UPDATE SET ..."
+ * Caller provides the target and the DO UPDATE SET portion.
+ *
+ * @param db Database handle.
+ * @param conflict_target The column list (e.g. "cluster_id, commodity_code") to include in parentheses.
+ * @return Format string "ON CONFLICT(%s) DO" on PostgreSQL; NULL on unsupported backend.
+ *         Caller fills in the target using snprintf.
+ */
+const char *sql_conflict_target_fmt(const db_t *db);
+
+/**
+ * @brief Return SQL fragment for entity_stock upsert (epoch timestamp version).
+ *
+ * Combines INSERT...VALUES with ON CONFLICT DO UPDATE.
+ * Uses epoch (bigint) for last_updated_ts.
+ *
+ * PostgreSQL: full INSERT...ON CONFLICT clause
+ * For non-PostgreSQL: FAILS (returns NULL).
+ *
+ * @param db Database handle.
+ * @return Static format string for snprintf injection of epoch expression.
+ *         Returns NULL for unsupported backends.
+ */
+const char *sql_entity_stock_upsert_epoch_fmt(const db_t *db);
+
+/**
+ * @brief Convert epoch parameter expression to PostgreSQL timestamptz.
+ *
+ * Returns a SQL fragment that wraps a parameter (e.g., "$1") with to_timestamp().
+ * Used in WHERE clauses to compare epoch values with timestamptz columns.
+ *
+ * Example: WHERE expires_at <= to_timestamp($1)
+ *
+ * PostgreSQL: to_timestamp(%s)  [caller fills in param with snprintf]
+ * For non-PostgreSQL: FAILS (returns NULL).
+ *
+ * @param db Database handle.
+ * @return Static format string "to_timestamp(%s)" on PostgreSQL; NULL on unsupported backend.
+ */
+const char *sql_epoch_param_to_timestamptz(const db_t *db);
+
+/**
+ * @brief Return SQL clause for SELECT ... FOR UPDATE SKIP LOCKED.
+ *
+ * Used for pessimistic locking with skip behavior on locked rows.
+ * Append this to a SELECT query to lock selected rows.
+ *
+ * PostgreSQL: " FOR UPDATE SKIP LOCKED"
+ * MySQL 9.5+: " FOR UPDATE SKIP LOCKED" (same syntax)
+ * For unsupported backends: FAILS (returns NULL).
+ *
+ * @param db Database handle.
+ * @return Static string " FOR UPDATE SKIP LOCKED" (note leading space);
+ *         NULL on unsupported backend.
+ */
+const char *sql_for_update_skip_locked(const db_t *db);
+
+/**
+ * @brief Return the SQL function name for building JSON objects.
+ *
+ * PostgreSQL: "json_build_object"
+ * MySQL 8.0+: "JSON_OBJECT"
+ * For unsupported backends: FAILS (returns NULL).
+ *
+ * Usage: snprintf(sql, size, "SELECT %s('key1', val1, 'key2', val2)", sql_json_object_fn(db));
+ *
+ * @param db Database handle.
+ * @return Static string with JSON object function name; NULL on unsupported backend.
+ */
+const char *sql_json_object_fn(const db_t *db);
+
+/**
+ * @brief Return the SQL function name for aggregating values into a JSON array.
+ *
+ * PostgreSQL: "json_agg"
+ * MySQL 8.0+: "JSON_ARRAYAGG"
+ * For unsupported backends: FAILS (returns NULL).
+ *
+ * Usage: snprintf(sql, size, "SELECT %s(column) FROM ...", sql_json_arrayagg_fn(db));
+ *
+ * @param db Database handle.
+ * @return Static string with JSON array aggregate function name; NULL on unsupported backend.
+ */
+const char *sql_json_arrayagg_fn(const db_t *db);
+
+/**
+ * @brief Return SQL upsert clause for INSERT ... ON CONFLICT ... DO UPDATE.
+ *
+ * Builds the conflict/update portion of an upsert statement based on
+ * a symbolic conflict intent and an update clause.
+ *
+ * PostgreSQL: "ON CONFLICT(columns) DO UPDATE SET update_clause"
+ * MySQL (future): "ON DUPLICATE KEY UPDATE update_clause"
+ *
+ * The conflict_intent is a symbolic name that maps to actual columns:
+ *   - The driver maintains the mapping from intent to column list
+ *   - Business logic uses symbolic names, not raw column lists
+ *   - This allows different backends to handle conflicts differently
+ *
+ * For MySQL, conflict_intent is ignored (MySQL uses unique index implicitly).
+ * For PostgreSQL, conflict_intent maps to the ON CONFLICT target.
+ *
+ * Known intents (extend as needed):
+ *   "player_id"              -> (player_id)
+ *   "player_id,key"          -> (player_id, key)
+ *   "player_id,event_type"   -> (player_id, event_type)
+ *   "entity_stock"           -> (entity_type, entity_id, commodity_code)
+ *   "port_player"            -> (port_id, player_id)
+ *   "cluster_player"         -> (cluster_id, player_id)
+ *   "planet_id"              -> (planet_id)
+ *   "key"                    -> (key)
+ *
+ * @param db Database handle.
+ * @param conflict_intent Symbolic conflict target (see above).
+ * @param update_clause The SET clause content (without "SET" keyword).
+ * @param out_buf Buffer to write the result into.
+ * @param buf_size Size of out_buf.
+ * @return Number of characters written (excluding null), or -1 on error.
+ *         Returns -1 for unsupported backends or unknown intents.
+ */
+int sql_upsert_do_update(const db_t *db,
+                         const char *conflict_intent,
+                         const char *update_clause,
+                         char *out_buf,
+                         size_t buf_size);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SQL_DRIVER_H */

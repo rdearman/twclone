@@ -36,6 +36,12 @@ Response: `subscribe.ack_v1`
 ```
 Response: `subscribe.list_v1` containing `{"topics": [...]}`.
 
+**Subscription Catalog**
+```json
+{ "command": "subscribe.catalog" }
+```
+Response: `subscribe.catalog_v1` containing `{"topics": [...]}` where each topic has `pattern`, `kind`, and optional `desc`.
+
 ### 2.3 Locked Topics
 Some topics (like `system.notice`) are **locked**. Attempts to unsubscribe will fail with `1405 Topic is locked`.
 

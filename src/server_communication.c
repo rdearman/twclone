@@ -1854,7 +1854,7 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_object ();
 
 
-  json_object_set_new (resp, "items", items);
+  json_object_set_new (resp, "topics", items);
   send_response_ok_take (ctx, root, "subscribe.list", &resp);
   return 0;
 }

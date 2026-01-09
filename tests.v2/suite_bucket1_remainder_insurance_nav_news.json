@@ -1,0 +1,74 @@
+{
+  "name": "Bucket 1 Remainder - Insurance, Nav, and News",
+  "tests": [
+    {
+      "name": "Setup: trader_player_1",
+      "setup": "macro_auth_user",
+      "username": "trader_player_1",
+      "password": "password"
+    },
+    {
+      "name": "insurance.policies.list - Positive",
+      "command": "insurance.policies.list",
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "insurance.policies.list - Negative (No Auth)",
+      "command": "insurance.policies.list",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "nav.avoid.set - Positive",
+      "command": "nav.avoid.set",
+      "data": { "sectors": [10, 20] },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "nav.avoid.set - Negative (No Auth)",
+      "command": "nav.avoid.set",
+      "data": { "sectors": [10, 20] },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "nav.bookmark.set - Positive",
+      "command": "nav.bookmark.set",
+      "data": { "bookmarks": [ { "sector_id": 1, "note": "Home" } ] },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "nav.bookmark.set - Negative (No Auth)",
+      "command": "nav.bookmark.set",
+      "data": { "bookmarks": [ { "sector_id": 1, "note": "Home" } ] },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "sector.set_beacon - Positive",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": 1, "text": "Fedspace" },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "sector.set_beacon - Negative (No Auth)",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": 1, "text": "Fedspace" },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "news.mark_feed_read - Positive",
+      "command": "news.mark_feed_read",
+      "data": { "timestamp": 123456789 },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "news.mark_feed_read - Negative (No Auth)",
+      "command": "news.mark_feed_read",
+      "data": { "timestamp": 123456789 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

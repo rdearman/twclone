@@ -1,0 +1,24 @@
+{
+  "name": "Planet Genesis Suite",
+  "tests": [
+    {
+      "name": "Setup: planet_tester_1",
+      "setup": "macro_auth_user",
+      "username": "planet_tester_1",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Planet Genesis",
+      "command": "planet.genesis",
+      "data": { "sector_id": 500, "name": "NewWorld", "owner_entity_type": "player" },
+      "user": "planet_tester_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Planet Genesis Missing Auth",
+      "command": "planet.genesis",
+      "data": { "sector_id": 500, "name": "FailWorld", "owner_entity_type": "player" },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

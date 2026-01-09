@@ -155,8 +155,8 @@ def make_bot_config(base_cfg, idx, username, password, out_path: Path):
     else:
         cfg["state_file"] = f"{state_file}{suffix}"
 
-    if "bug_report_path" in base_cfg:
-        cfg["bug_report_path"] = str(base_cfg["bug_report_path"]) + suffix
+    bug_report_path = base_cfg.get("bug_report_path", "bug_reports")
+    cfg["bug_report_path"] = str(bug_report_path) + suffix
 
     out_path.write_text(json.dumps(cfg, indent=2))
     return cfg
@@ -165,9 +165,9 @@ def make_bot_config(base_cfg, idx, username, password, out_path: Path):
 def main():
     p = argparse.ArgumentParser(description="Spawn many AI QA bot processes for twclone.")
     p.add_argument("--bot-dir", required=True,
-                   help="Directory containing main.py and the bot code.")
-    p.add_argument("--config-template", default="config.json",
-                   help="Path to base config.json (relative to --bot-dir by default).")
+                   help="Directory where bot configs, logs, and state files will be stored.")
+    p.add_argument("--config-template", default=None,
+                   help="Path to base config.json (defaults to ai_player/config.json).")
     p.add_argument("--host", default=None,
                    help="Game host (overrides game_host in template if set).")
     p.add_argument("--port", type=int, default=None,
@@ -184,13 +184,22 @@ def main():
                    help="Only create accounts & configs; do not start bot processes.")
     args = p.parse_args()
 
+    # Bot dir is where we store configs and data files
     bot_dir = Path(args.bot_dir).resolve()
-    if not (bot_dir / "main.py").exists():
-        raise SystemExit(f"main.py not found in {bot_dir}")
+    bot_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Code dir is where main.py lives (ai_player directory)
+    code_dir = Path(__file__).parent.resolve()
+    if not (code_dir / "main.py").exists():
+        raise SystemExit(f"main.py not found in {code_dir}")
 
-    cfg_path = Path(args.config_template)
-    if not cfg_path.is_absolute():
-        cfg_path = bot_dir / cfg_path
+    # Config template defaults to config.json in code directory
+    if args.config_template:
+        cfg_path = Path(args.config_template)
+        if not cfg_path.is_absolute():
+            cfg_path = code_dir / cfg_path
+    else:
+        cfg_path = code_dir / "config.json"
 
     if not cfg_path.exists():
         raise SystemExit(f"Base config not found at {cfg_path}")
@@ -216,8 +225,9 @@ def main():
             continue
 
         # Launch a bot process using the per-bot config
-        cmd = [args.python, "main.py", cfg_out.name]
-        print(f"  launching: {' '.join(cmd)} (cwd={bot_dir})")
+        # Config path is absolute, so main.py can find it regardless of cwd
+        cmd = [args.python, str(code_dir / "main.py"), str(cfg_out)]
+        print(f"  launching: {' '.join(cmd)}")
         procs.append(
             subprocess.Popen(
                 cmd,

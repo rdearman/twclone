@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 # You might want to move these to your config.json eventually
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 DEFAULT_MODEL = "llama3.1"
-REQUEST_TIMEOUT = 600  # 2 minutes
+REQUEST_TIMEOUT = 300  # 5 minutes
 
 def parse_llm_json(response_text):
     """
@@ -102,6 +102,9 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
             logger.error("Ollama response received, but 'response' key was empty.")
             return None
 
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout calling Ollama after {REQUEST_TIMEOUT}s: {e}")
+        return None
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error calling Ollama: {e.response.status_code} - {e.response.text}")
         return None

@@ -1,10 +1,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "../errors.h" // Force include at the top
 #include "db_api.h"
 #include "db_int.h" // Internal header for shared struct definitions
+#include "sql_driver.h" // For sql_build
 
 // Include specific backend open functions
 #include "pg/db_pg.h"
@@ -27,6 +29,75 @@ db_error_set(db_error_t *err, int code, db_error_category_t category, const char
     err->message[0] = '\0';
 }
 
+/**
+ * @brief Detect if SQL contains {N} placeholders that need rendering.
+ * 
+ * Returns 1 if SQL contains {digits}, 0 otherwise.
+ * This check is necessary to avoid redundant sql_build() calls for
+ * plain SQL strings that use $N placeholders (already PostgreSQL-ready).
+ */
+static int
+sql_needs_build(const char *sql)
+{
+  if (!sql) return 0;
+  
+  for (const char *p = sql; *p; ++p) {
+    if (*p == '{') {
+      /* Check if next char is a digit */
+      if (p[1] && isdigit((unsigned char)p[1])) {
+        /* Simple check: {digit exists, assume {N} pattern */
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+/**
+ * @brief Render SQL placeholders from {N} to backend-specific format.
+ * 
+ * Returns allocated SQL string if rendering was needed and successful,
+ * NULL otherwise. Caller must free the returned string when done.
+ * 
+ * On error, sets err and returns NULL.
+ */
+static char *
+db_render_sql(db_t *db, const char *sql, db_error_t *err)
+{
+  if (!sql || !sql_needs_build(sql)) {
+    return NULL;  /* No rendering needed */
+  }
+  
+  if (!db) {
+    if (err) {
+      err->code = ERR_DB_INTERNAL;
+      snprintf(err->message, sizeof(err->message), "db_render_sql: NULL db handle");
+    }
+    return NULL;
+  }
+  
+  /* Allocate buffer for rendered SQL */
+  char *rendered = malloc(4096);
+  if (!rendered) {
+    if (err) {
+      err->code = ERR_DB_NOMEM;
+      snprintf(err->message, sizeof(err->message), "db_render_sql: malloc failed");
+    }
+    return NULL;
+  }
+  
+  /* Render {N} to backend-specific placeholders */
+  if (sql_build(db, sql, rendered, 4096) != 0) {
+    free(rendered);
+    if (err) {
+      err->code = ERR_DB_INTERNAL;
+      snprintf(err->message, sizeof(err->message), "db_render_sql: sql_build failed");
+    }
+    return NULL;
+  }
+  
+  return rendered;
+}
 
 bool
 db_exec_insert_id(db_t *db,
@@ -45,7 +116,10 @@ db_exec_insert_id(db_t *db,
         return false;
     }
 
-    return db->vt->exec_insert_id(db, sql, params, n_params, out_id, err);
+    char *rendered = db_render_sql(db, sql, err);
+    bool result = db->vt->exec_insert_id(db, rendered ? rendered : sql, params, n_params, out_id, err);
+    free(rendered);
+    return result;
 }
 
 
@@ -174,45 +248,70 @@ bool db_tx_rollback(db_t *db, db_error_t *err) {
 
 bool db_exec(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_error_t *err) {
     if (!db || !db->vt || !db->vt->exec) {
-        err->code = ERR_DB_CLOSED;
-        strncpy(err->message, "db_exec: Invalid DB handle or vtable", sizeof(err->message));
+        if (err) {
+            err->code = ERR_DB_CLOSED;
+            strncpy(err->message, "db_exec: Invalid DB handle or vtable", sizeof(err->message));
+        }
         return false;
     }
-    return db->vt->exec(db, sql, params, n_params, err);
+    
+    char *rendered = db_render_sql(db, sql, err);
+    bool result = db->vt->exec(db, rendered ? rendered : sql, params, n_params, err);
+    free(rendered);
+    return result;
 }
 
 bool db_exec_rows_affected(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_rows, db_error_t *err) {
     if (!db || !db->vt || !db->vt->exec_rows_affected) {
-        err->code = ERR_DB_CLOSED;
-        strncpy(err->message, "db_exec_rows_affected: Invalid DB handle or vtable", sizeof(err->message));
+        if (err) {
+            err->code = ERR_DB_CLOSED;
+            strncpy(err->message, "db_exec_rows_affected: Invalid DB handle or vtable", sizeof(err->message));
+        }
         return false;
     }
-    return db->vt->exec_rows_affected(db, sql, params, n_params, out_rows, err);
+    
+    char *rendered = db_render_sql(db, sql, err);
+    bool result = db->vt->exec_rows_affected(db, rendered ? rendered : sql, params, n_params, out_rows, err);
+    free(rendered);
+    return result;
 }
 
 bool db_query(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
     if (!db || !db->vt || !db->vt->query) {
-        err->code = ERR_DB_CLOSED;
-        strncpy(err->message, "db_query: Invalid DB handle or vtable", sizeof(err->message));
+        if (err) {
+            err->code = ERR_DB_CLOSED;
+            strncpy(err->message, "db_query: Invalid DB handle or vtable", sizeof(err->message));
+        }
         return false;
     }
-    return db->vt->query(db, sql, params, n_params, out_res, err);
+    
+    char *rendered = db_render_sql(db, sql, err);
+    bool result = db->vt->query(db, rendered ? rendered : sql, params, n_params, out_res, err);
+    free(rendered);
+    return result;
 }
 
 bool db_exec_returning(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
     if (!db || !db->vt) {
-        err->code = ERR_DB_CLOSED;
-        strncpy(err->message, "db_exec_returning: Invalid DB handle or vtable", sizeof(err->message));
+        if (err) {
+            err->code = ERR_DB_CLOSED;
+            strncpy(err->message, "db_exec_returning: Invalid DB handle or vtable", sizeof(err->message));
+        }
         return false;
     }
     
     if (!db->vt->exec_returning) {
-        err->code = ERR_DB_INTERNAL;
-        strncpy(err->message, "db_exec_returning: Not implemented for this backend", sizeof(err->message));
+        if (err) {
+            err->code = ERR_DB_INTERNAL;
+            strncpy(err->message, "db_exec_returning: Not implemented for this backend", sizeof(err->message));
+        }
         return false;
     }
     
-    return db->vt->exec_returning(db, sql, params, n_params, out_res, err);
+    char *rendered = db_render_sql(db, sql, err);
+    bool result = db->vt->exec_returning(db, rendered ? rendered : sql, params, n_params, out_res, err);
+    free(rendered);
+    return result;
 }
 
 bool db_res_step(db_res_t *res, db_error_t *err) {

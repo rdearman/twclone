@@ -1,0 +1,17 @@
+{
+  "name": "Bucket 2 Negative Comm Suite",
+  "tests": [
+    { "name": "mail.send - Missing Auth", "command": "mail.send", "data": { "to_player_id": 1, "body": "test" }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "mail.inbox - Missing Auth", "command": "mail.inbox", "expect": { "status": "error", "error_code": 404 } },
+    { "name": "mail.read - Missing Auth", "command": "mail.read", "data": { "mail_id": 1 }, "expect": { "status": "error", "error_code": 1301 } },
+    { "name": "mail.delete - Missing Auth", "command": "mail.delete", "data": { "mail_id": 1 }, "expect": { "status": "error", "error_code": 1300 } },
+    { "name": "chat.send - Missing Auth", "command": "chat.send", "data": { "to_player_id": 1, "body": "test" }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "chat.broadcast - Missing Auth", "command": "chat.broadcast", "data": { "body": "test" }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "chat.history - Missing Auth", "command": "chat.history", "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "news.get_feed - Missing Auth", "command": "news.get_feed", "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "news.read - Missing Auth", "command": "news.read", "data": { "article_id": 1 }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "notes.list - Missing Auth", "command": "notes.list", "expect": { "status": "ok" } },
+    { "name": "notice.list - Missing Auth", "command": "notice.list", "expect": { "status": "ok" } },
+    { "name": "notice.ack - Missing Auth", "command": "notice.ack", "data": { "notice_id": 1 }, "expect": { "status": "error", "error_code": 405 } }
+  ]
+}

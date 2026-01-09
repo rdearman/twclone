@@ -37,15 +37,14 @@ class JsonSuiteRunner:
                     context = test.copy()
                     del context["setup"]
                     
-                    # Don't mangle usernames - use them as-is from the test database
-                    # This allows tests to reference pre-created users without modification
-
                     macro_steps = []
                     for step in self.macros[macro_name]:
                         # Resolved step inherits context from the call
                         resolved_step = json.loads(json.dumps(step))
-                        # Expand macro steps with the context provided in the 'setup' call
-                        resolved_step = self._expand_vars_with_context(resolved_step, context)
+                        # Merge call context (like username/password) into the step WITHOUT expanding
+                        for k, v in context.items():
+                            if k not in resolved_step:
+                                resolved_step[k] = v
                         macro_steps.append(resolved_step)
 
                     # Macros can be nested
@@ -62,38 +61,61 @@ class JsonSuiteRunner:
                 expanded_tests.append(test)
         return expanded_tests
 
-    def _expand_vars_with_context(self, obj: Any, context: Dict[str, Any]) -> Any:
+    def _expand_vars_with_context(self, obj: Any, context: Dict[str, Any], use_globals: bool = True) -> Any:
         if isinstance(obj, str):
             val = obj
             if "*uuid*" in val:
                 val = val.replace("*uuid*", str(uuid.uuid4()))
             
-            def repl(m):
-                full_match = m.group(0)
+            # 1. Pattern-based expansion for macro arguments (local context)
+            # We ONLY want to replace things that look like @name
+            def context_repl(m):
                 k = m.group(1)
-                
-                # 1. Check verbatim in context or vars
-                v = context.get(k)
-                if v is None: v = self.vars.get(k)
-                if v is not None: return str(v)
-                
-                # 2. Return unresolved for late binding
-                return full_match
+                # If k is in context, replace it. Macro args like @username are strings here.
+                if k in context:
+                    return str(context[k])
+                return m.group(0)
+            
+            val = re.sub(r"@([a-zA-Z0-9_-]+)", context_repl, val)
 
-            val = re.sub(r"@([a-zA-Z0-9_-]+)", repl, val)
-            if val.startswith("@") and val[1:].isdigit() and len(val.split()) == 1:
-                 return int(val[1:])
+            # 2. Pattern-based expansion for global variables
+            if use_globals:
+                limit = 5
+                while "@" in val and limit > 0:
+                    limit -= 1
+                    new_val = val
+                    def global_repl(m):
+                        k = m.group(1)
+                        if k in self.vars:
+                            return str(self.vars[k])
+                        return m.group(0)
+                    
+                    new_val = re.sub(r"@([a-zA-Z0-9_-]+)", global_repl, val)
+                    if new_val == val: break
+                    val = new_val
+
+            # Handle integer conversion for resolved values
+            if isinstance(val, str):
+                # If it's a pure numeric string (resolved from a var), return as int
+                if val.isdigit() and (len(val) == 1 or val[0] != '0'):
+                    return int(val)
+
             return val
         
         if isinstance(obj, list):
-            return [self._expand_vars_with_context(x, context) for x in obj]
+            return [self._expand_vars_with_context(x, context, use_globals) for x in obj]
         if isinstance(obj, dict):
             # Expand both keys and values
-            return {self._expand_vars_with_context(k, context): self._expand_vars_with_context(v, context) for k, v in obj.items()}
+            new_obj = {}
+            for k, v in obj.items():
+                new_k = self._expand_vars_with_context(k, context, use_globals)
+                new_v = self._expand_vars_with_context(v, context, use_globals)
+                new_obj[str(new_k)] = new_v
+            return new_obj
         return obj
 
     def _expand_vars(self, obj: Any) -> Any:
-        return self._expand_vars_with_context(obj, {})
+        return self._expand_vars_with_context(obj, {}, use_globals=True)
 
     def _get_user_client(self, username: str) -> TWClient:
         if username not in self.user_clients:
@@ -139,7 +161,10 @@ class JsonSuiteRunner:
         name = test.get("name", "Unnamed")
         print(f"  Test: {name}...", end=" ", flush=True)
 
-        # Expand global variables (@var)
+        # Expand variables in two passes
+        # Pass 1: Resolve local macro context (no globals)
+        test = self._expand_vars_with_context(test, test, use_globals=False)
+        # Pass 2: Resolve remaining globals
         test = self._expand_vars(test)
         
         if test.get("command") == "delay":
@@ -151,7 +176,6 @@ class JsonSuiteRunner:
         if user == "admin":
             client = self._get_admin_client()
         elif user:
-            # Use user directly without mangling
             client = self._get_user_client(user)
         else:
             client = TWClient(self.host, self.port)
@@ -191,7 +215,6 @@ class JsonSuiteRunner:
         actual_type = resp.get("type")
         expected_status = expect.get("status", "ok")
         
-        # If error_code is provided without explicit status, assume 'error' or 'refused'
         if "error_code" in expect and expected_status == "ok":
             expected_status = "error"
 
@@ -200,7 +223,6 @@ class JsonSuiteRunner:
             if actual_type == expected_status:
                 passed_status = True
         
-        # Flexible error matching: allow 'error' to match 'refused' if requested
         if not passed_status and expected_status == "error" and actual_status == "refused":
             passed_status = True
 
@@ -209,7 +231,6 @@ class JsonSuiteRunner:
             print(f"  Response: {json.dumps(resp, indent=2)}")
             return False
         
-        # Check error code if specified
         if "error_code" in expect:
             actual_err = resp.get("error") or {}
             actual_code = actual_err.get("code")
@@ -219,19 +240,21 @@ class JsonSuiteRunner:
         
         # Save vars
         if "save" in test:
-            for var_name, path in test["save"].items():
+            for raw_var_name, path in test["save"].items():
+                var_name = self._expand_vars_with_context(raw_var_name, test, use_globals=False)
+                var_name = self._expand_vars(var_name)
                 val = self._get_path(resp, path)
-                if var_name.startswith("@"):
+                if isinstance(var_name, str) and var_name.startswith("@"):
                     var_name = var_name[1:]
+                var_name = str(var_name)
                 self.vars[var_name] = val
-                
-                # Update client session if we just saved one
-                if var_name == "session" or path == "data.session":
+                print(f"DEBUG: saved var {var_name}={val}")
+                if var_name == "session" or path == "data.session_token":
                     client.session_token = val
         
         # Auto-update session on login even if not explicitly saved
         if cmd_json.get("command") == "auth.login" and actual_status == "ok":
-            session = self._get_path(resp, "data.session")
+            session = self._get_path(resp, "data.session_token")
             if session:
                 client.session_token = session
 
@@ -240,7 +263,6 @@ class JsonSuiteRunner:
             for assertion in test["asserts"]:
                 actual = self._get_path(resp, assertion["path"])
                 expected = assertion.get("value")
-                # Handle sql_int in asserts
                 if isinstance(expected, dict) and "sql_int" in expected:
                     sql = self._expand_vars(expected["sql_int"])
                     admin = self._get_admin_client()
@@ -255,7 +277,6 @@ class JsonSuiteRunner:
                         print(f"FAIL (Assert: {actual} != {expected})")
                         return False
                 elif op == "contains":
-                    # If actual is a list, check if expected is in it
                     if isinstance(actual, list):
                         found = False
                         for item in actual:
@@ -271,7 +292,6 @@ class JsonSuiteRunner:
                             return False
 
         print("PASS")
-        # Auto-refresh all sessions after admin SQL
         if cmd_json.get("command") == "sys.raw_sql_exec" and user == "admin":
             for c in self.user_clients.values():
                 if c.session_token:
@@ -284,7 +304,7 @@ class JsonSuiteRunner:
 
     def _get_path(self, obj: Any, path: str) -> Any:
         if not path: return obj
-        parts = path.split(".")
+        parts = re.split(r'\.(?![^\[]*\])', path)
         curr = obj
         for p in parts:
             if isinstance(curr, dict):
@@ -294,7 +314,6 @@ class JsonSuiteRunner:
                     idx = int(p)
                     curr = curr[idx] if idx < len(curr) else None
                 elif p.startswith("*[") and p.endswith("]"):
-                    # Filter syntax: *[key=val]
                     inner = p[2:-1]
                     if "=" in inner:
                         fk, fv = inner.split("=", 1)

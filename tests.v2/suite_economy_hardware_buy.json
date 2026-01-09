@@ -1,0 +1,31 @@
+{
+  "name": "Hardware Buy Suite",
+  "tests": [
+    {
+      "name": "Setup: shipyard_tester",
+      "setup": "macro_auth_user",
+      "username": "shipyard_tester",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Buy 1 Hold",
+      "command": "hardware.buy",
+      "data": { "code": "HOLDS", "quantity": 1 },
+      "user": "shipyard_tester",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Buy Invalid Code",
+      "command": "hardware.buy",
+      "data": { "code": "INVALID", "quantity": 1 },
+      "user": "shipyard_tester",
+      "expect": { "status": "error", "error_code": 1802 }
+    },
+    {
+      "name": "Negative: Hardware Buy Missing Auth",
+      "command": "hardware.buy",
+      "data": { "code": "HOLDS", "quantity": 1 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

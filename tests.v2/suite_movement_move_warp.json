@@ -1,0 +1,25 @@
+{
+  "name": "Move Warp Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_warp",
+      "setup": "macro_auth_user",
+      "username": "mover_warp",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Warp to Adjacent Sector",
+      "command": "move.warp",
+      "data": { "to_sector_id": 2 },
+      "user": "mover_warp",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Warp to Non-Adjacent Sector",
+      "command": "move.warp",
+      "data": { "to_sector_id": 999 },
+      "user": "mover_warp",
+      "expect": { "status": "error", "error_code": 1453 }
+    }
+  ]
+}

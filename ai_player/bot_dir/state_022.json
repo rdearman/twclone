@@ -1,0 +1,3792 @@
+{
+    "session_id": "9c2bb24337162b58dd7ae292b9f66670",
+    "player_info": {
+        "player": {
+            "id": 154,
+            "username": "ai_qa_bot_022",
+            "credits": "5000.00",
+            "turns_remaining": 500,
+            "sector": 7,
+            "ship_id": 70,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0
+        }
+    },
+    "ship_info": {
+        "id": 70,
+        "name": "ai_qa_bot_022's ship",
+        "type_id": 2,
+        "holds": 10,
+        "fighters": 1,
+        "shields": 1,
+        "onplanet": 0,
+        "ported": 0,
+        "cargo": [
+            {
+                "commodity": "ORG",
+                "quantity": 1,
+                "purchase_price": 147
+            }
+        ]
+    },
+    "player_location_sector": 1955,
+    "sector_data": {
+        "7": {
+            "server_tick": 27709,
+            "sector_id": 7,
+            "name": "Fedspace 7",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 8
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 37,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 39,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 47,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 53,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 55,
+                    "name": "ai_qa_bot_007's ship"
+                },
+                {
+                    "ship_id": 61,
+                    "name": "ai_qa_bot_013's ship"
+                },
+                {
+                    "ship_id": 66,
+                    "name": "ai_qa_bot_018's ship"
+                },
+                {
+                    "ship_id": 69,
+                    "name": "ai_qa_bot_021's ship"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 71,
+                    "name": "ai_qa_bot_023's ship"
+                },
+                {
+                    "ship_id": 73,
+                    "name": "ai_qa_bot_025's ship"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                },
+                {
+                    "ship_id": 83,
+                    "name": "ai_qa_bot_035's ship"
+                },
+                {
+                    "ship_id": 93,
+                    "name": "ai_qa_bot_045's ship"
+                },
+                {
+                    "ship_id": 76,
+                    "name": "ai_qa_bot_028's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767914896.5964606,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 8
+                }
+            ]
+        },
+        "8": {
+            "server_tick": 30747,
+            "sector_id": 8,
+            "name": "Fedspace 8",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 7
+                },
+                {
+                    "to_sector": 9
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 18,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 23,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 71,
+                    "name": "ai_qa_bot_023's ship"
+                },
+                {
+                    "ship_id": 66,
+                    "name": "ai_qa_bot_018's ship"
+                },
+                {
+                    "ship_id": 88,
+                    "name": "ai_qa_bot_040's ship"
+                },
+                {
+                    "ship_id": 89,
+                    "name": "ai_qa_bot_041's ship"
+                },
+                {
+                    "ship_id": 94,
+                    "name": "ai_qa_bot_046's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767915200.8008409,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 7
+                },
+                {
+                    "to_sector": 9
+                }
+            ]
+        },
+        "2": {
+            "server_tick": 45934,
+            "sector_id": 2,
+            "name": "Fedspace 2",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 7
+                },
+                {
+                    "to_sector": 8
+                },
+                {
+                    "to_sector": 9
+                },
+                {
+                    "to_sector": 10
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 1001,
+                    "name": "TollCollectorShip"
+                },
+                {
+                    "ship_id": 1020,
+                    "name": "ActorShip"
+                },
+                {
+                    "ship_id": 34,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 36,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 41,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 43,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 49,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                },
+                {
+                    "ship_id": 69,
+                    "name": "ai_qa_bot_021's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767916721.8226337,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 7
+                },
+                {
+                    "to_sector": 8
+                },
+                {
+                    "to_sector": 9
+                },
+                {
+                    "to_sector": 10
+                }
+            ]
+        },
+        "10": {
+            "server_tick": 42896,
+            "sector_id": 10,
+            "name": "Fedspace 10",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 9
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 21,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 27,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 28,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 33,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 44,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 97,
+                    "name": "ai_qa_bot_049's ship"
+                },
+                {
+                    "ship_id": 69,
+                    "name": "ai_qa_bot_021's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767916417.607386,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 9
+                }
+            ]
+        },
+        "9": {
+            "server_tick": 39859,
+            "sector_id": 9,
+            "name": "Fedspace 9",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 8
+                },
+                {
+                    "to_sector": 10
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 11,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 15,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 19,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 31,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 42,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 51,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 52,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 85,
+                    "name": "ai_qa_bot_037's ship"
+                },
+                {
+                    "ship_id": 69,
+                    "name": "ai_qa_bot_021's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767916113.4097917,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 8
+                },
+                {
+                    "to_sector": 10
+                }
+            ]
+        },
+        "3": {
+            "server_tick": 48972,
+            "sector_id": 3,
+            "name": "Fedspace 3",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 4
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 10,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 12,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 32,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 38,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                },
+                {
+                    "ship_id": 69,
+                    "name": "ai_qa_bot_021's ship"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [
+                {
+                    "planet_id": 8001,
+                    "name": "Quasar Test Planet",
+                    "type": 0
+                }
+            ],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767917026.0295658,
+            "has_port": false,
+            "has_planet": true,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 4
+                }
+            ]
+        },
+        "4": {
+            "server_tick": 52010,
+            "sector_id": 4,
+            "name": "Fedspace 4",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 70
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 25,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                },
+                {
+                    "ship_id": 85,
+                    "name": "ai_qa_bot_037's ship"
+                },
+                {
+                    "ship_id": 90,
+                    "name": "ai_qa_bot_042's ship"
+                },
+                {
+                    "ship_id": 69,
+                    "name": "ai_qa_bot_021's ship"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767917330.2364168,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 70
+                }
+            ]
+        },
+        "1": {
+            "server_tick": 55046,
+            "sector_id": 1,
+            "name": "Fedspace 1",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 4
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 6
+                },
+                {
+                    "to_sector": 7
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 1,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 2,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 4,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 1006,
+                    "name": "StatusShip"
+                },
+                {
+                    "ship_id": 1009,
+                    "name": "QuasarTargetShip"
+                },
+                {
+                    "ship_id": 1011,
+                    "name": "CaptainShip"
+                },
+                {
+                    "ship_id": 1014,
+                    "name": "AceShip"
+                },
+                {
+                    "ship_id": 1016,
+                    "name": "VictimShipV2"
+                },
+                {
+                    "ship_id": 1002,
+                    "name": "VictimShip"
+                },
+                {
+                    "ship_id": 1003,
+                    "name": "USS Upgrade Me"
+                },
+                {
+                    "ship_id": 1004,
+                    "name": "USS Genesis"
+                },
+                {
+                    "ship_id": 1005,
+                    "name": "TraderShip"
+                },
+                {
+                    "ship_id": 1017,
+                    "name": "QuasarVictimShip"
+                },
+                {
+                    "ship_id": 1018,
+                    "name": "MoverShip"
+                },
+                {
+                    "ship_id": 1019,
+                    "name": "ObserverShip"
+                },
+                {
+                    "ship_id": 20,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 22,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 29,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 30,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 40,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 46,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 48,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 50,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [
+                {
+                    "planet_id": 1,
+                    "name": "Terra",
+                    "type": 1
+                },
+                {
+                    "planet_id": 900,
+                    "name": "Target",
+                    "type": 0
+                },
+                {
+                    "planet_id": 700,
+                    "name": "MyWorld",
+                    "type": 0
+                },
+                {
+                    "planet_id": 200,
+                    "name": "Dune",
+                    "type": 0
+                }
+            ],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767917634.4446404,
+            "has_port": false,
+            "has_planet": true,
+            "adjacent": [
+                {
+                    "to_sector": 2
+                },
+                {
+                    "to_sector": 3
+                },
+                {
+                    "to_sector": 4
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 6
+                },
+                {
+                    "to_sector": 7
+                }
+            ]
+        },
+        "6": {
+            "server_tick": 58085,
+            "sector_id": 6,
+            "name": "Fedspace 6",
+            "beacon": "The Federation -- Do Not Dump!",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 1640
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 16,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 26,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 45,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                },
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767917938.647035,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1
+                },
+                {
+                    "to_sector": 5
+                },
+                {
+                    "to_sector": 1640
+                }
+            ]
+        },
+        "1640": {
+            "server_tick": 61123,
+            "sector_id": 1640,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 6
+                },
+                {
+                    "to_sector": 643
+                },
+                {
+                    "to_sector": 1019
+                },
+                {
+                    "to_sector": 2000
+                },
+                {
+                    "to_sector": 2282
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                },
+                {
+                    "ship_id": 78,
+                    "name": "ai_qa_bot_030's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767918242.857405,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 6
+                },
+                {
+                    "to_sector": 643
+                },
+                {
+                    "to_sector": 1019
+                },
+                {
+                    "to_sector": 2000
+                },
+                {
+                    "to_sector": 2282
+                }
+            ]
+        },
+        "2000": {
+            "server_tick": 64161,
+            "sector_id": 2000,
+            "name": "Uncharted Space",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 395
+                },
+                {
+                    "to_sector": 723
+                },
+                {
+                    "to_sector": 767
+                },
+                {
+                    "to_sector": 1480
+                },
+                {
+                    "to_sector": 1584
+                },
+                {
+                    "to_sector": 1640
+                },
+                {
+                    "to_sector": 1712
+                },
+                {
+                    "to_sector": 1854
+                },
+                {
+                    "to_sector": 2439
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767918547.0614336,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 395
+                },
+                {
+                    "to_sector": 723
+                },
+                {
+                    "to_sector": 767
+                },
+                {
+                    "to_sector": 1480
+                },
+                {
+                    "to_sector": 1584
+                },
+                {
+                    "to_sector": 1640
+                },
+                {
+                    "to_sector": 1712
+                },
+                {
+                    "to_sector": 1854
+                },
+                {
+                    "to_sector": 2439
+                }
+            ]
+        },
+        "1584": {
+            "server_tick": 67199,
+            "sector_id": 1584,
+            "name": "Saiph",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1021
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 2000
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767918851.2665572,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1021
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 2000
+                }
+            ]
+        },
+        "1310": {
+            "server_tick": 70237,
+            "sector_id": 1310,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 676
+                },
+                {
+                    "to_sector": 1210
+                },
+                {
+                    "to_sector": 1584
+                },
+                {
+                    "to_sector": 1872
+                },
+                {
+                    "to_sector": 2031
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767919155.4774046,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 676
+                },
+                {
+                    "to_sector": 1210
+                },
+                {
+                    "to_sector": 1584
+                },
+                {
+                    "to_sector": 1872
+                },
+                {
+                    "to_sector": 2031
+                }
+            ]
+        },
+        "1872": {
+            "server_tick": 73275,
+            "sector_id": 1872,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 320
+                },
+                {
+                    "to_sector": 330
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 1762
+                },
+                {
+                    "to_sector": 2194
+                },
+                {
+                    "to_sector": 2326
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767919459.6977618,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 320
+                },
+                {
+                    "to_sector": 330
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 1762
+                },
+                {
+                    "to_sector": 2194
+                },
+                {
+                    "to_sector": 2326
+                }
+            ]
+        },
+        "2326": {
+            "server_tick": 76314,
+            "sector_id": 2326,
+            "name": "Uncharted Space",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 414
+                },
+                {
+                    "to_sector": 852
+                },
+                {
+                    "to_sector": 1250
+                },
+                {
+                    "to_sector": 1356
+                },
+                {
+                    "to_sector": 1753
+                },
+                {
+                    "to_sector": 1872
+                },
+                {
+                    "to_sector": 2007
+                },
+                {
+                    "to_sector": 2013
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767919763.9128692,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 414
+                },
+                {
+                    "to_sector": 852
+                },
+                {
+                    "to_sector": 1250
+                },
+                {
+                    "to_sector": 1356
+                },
+                {
+                    "to_sector": 1753
+                },
+                {
+                    "to_sector": 1872
+                },
+                {
+                    "to_sector": 2007
+                },
+                {
+                    "to_sector": 2013
+                }
+            ]
+        },
+        "1250": {
+            "server_tick": 79352,
+            "sector_id": 1250,
+            "name": "Cepheus",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 250
+                },
+                {
+                    "to_sector": 1288
+                },
+                {
+                    "to_sector": 2158
+                },
+                {
+                    "to_sector": 2174
+                },
+                {
+                    "to_sector": 2326
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767920068.1360757,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 250
+                },
+                {
+                    "to_sector": 1288
+                },
+                {
+                    "to_sector": 2158
+                },
+                {
+                    "to_sector": 2174
+                },
+                {
+                    "to_sector": 2326
+                }
+            ]
+        },
+        "2158": {
+            "server_tick": 82391,
+            "sector_id": 2158,
+            "name": "Uncharted Space",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 514
+                },
+                {
+                    "to_sector": 583
+                },
+                {
+                    "to_sector": 1250
+                },
+                {
+                    "to_sector": 2037
+                },
+                {
+                    "to_sector": 2318
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767920372.3678775,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 514
+                },
+                {
+                    "to_sector": 583
+                },
+                {
+                    "to_sector": 1250
+                },
+                {
+                    "to_sector": 2037
+                },
+                {
+                    "to_sector": 2318
+                }
+            ]
+        },
+        "514": {
+            "server_tick": 85429,
+            "sector_id": 514,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1339
+                },
+                {
+                    "to_sector": 1522
+                },
+                {
+                    "to_sector": 2158
+                },
+                {
+                    "to_sector": 2320
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767920676.6084316,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1339
+                },
+                {
+                    "to_sector": 1522
+                },
+                {
+                    "to_sector": 2158
+                },
+                {
+                    "to_sector": 2320
+                }
+            ]
+        },
+        "2320": {
+            "server_tick": 88468,
+            "sector_id": 2320,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 247
+                },
+                {
+                    "to_sector": 361
+                },
+                {
+                    "to_sector": 380
+                },
+                {
+                    "to_sector": 446
+                },
+                {
+                    "to_sector": 514
+                },
+                {
+                    "to_sector": 1464
+                },
+                {
+                    "to_sector": 1955
+                },
+                {
+                    "to_sector": 2111
+                },
+                {
+                    "to_sector": 2476
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767920980.839945,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 247
+                },
+                {
+                    "to_sector": 361
+                },
+                {
+                    "to_sector": 380
+                },
+                {
+                    "to_sector": 446
+                },
+                {
+                    "to_sector": 514
+                },
+                {
+                    "to_sector": 1464
+                },
+                {
+                    "to_sector": 1955
+                },
+                {
+                    "to_sector": 2111
+                },
+                {
+                    "to_sector": 2476
+                }
+            ]
+        },
+        "1955": {
+            "server_tick": 35,
+            "sector_id": 1955,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 223
+                },
+                {
+                    "to_sector": 527
+                },
+                {
+                    "to_sector": 1254
+                },
+                {
+                    "to_sector": 2193
+                },
+                {
+                    "to_sector": 2320
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 70,
+                    "name": "ai_qa_bot_022's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 769,
+                    "name": "Trealath",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1767976682.2681339,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 223
+                },
+                {
+                    "to_sector": 527
+                },
+                {
+                    "to_sector": 1254
+                },
+                {
+                    "to_sector": 2193
+                },
+                {
+                    "to_sector": 2320
+                }
+            ]
+        }
+    },
+    "universe_map": {
+        "7": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "8": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "10": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "9": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "3": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "4": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "6": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1640": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2000": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1584": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1310": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1872": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2326": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1250": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2158": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "514": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2320": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1955": {
+            "is_explored": true,
+            "has_port": true
+        }
+    },
+    "port_info_by_sector": {
+        "1955": {
+            "port_id": 769,
+            "name": "Trealath",
+            "class": null,
+            "commodities": [
+                {
+                    "code": "EQU",
+                    "quantity": 989,
+                    "price": 200,
+                    "illegal": false,
+                    "commodity": "EQU"
+                },
+                {
+                    "code": "ORE",
+                    "quantity": 507,
+                    "price": 100,
+                    "illegal": false,
+                    "commodity": "ORE"
+                },
+                {
+                    "code": "ORG",
+                    "quantity": 8026,
+                    "price": 150,
+                    "illegal": false,
+                    "commodity": "ORG"
+                }
+            ]
+        }
+    },
+    "price_cache": {
+        "769": {
+            "buy": {
+                "EQU": 238.0,
+                "ORE": 120.0,
+                "ORG": 147.0
+            },
+            "sell": {
+                "EQU": 198.0,
+                "ORE": 100.0,
+                "ORG": 0.0
+            }
+        }
+    },
+    "bank_balance": 0,
+    "command_retry_info": {
+        "player.my_info": {
+            "next_retry_time": 1767914595.7913759
+        },
+        "ship.info": {
+            "next_retry_time": 1767914596.8736186
+        },
+        "sector.info": {
+            "next_retry_time": 1767976686.2336807
+        },
+        "move.warp": {
+            "next_retry_time": 1767920985.8635268
+        },
+        "trade.port_info": {
+            "next_retry_time": 1767920987.442769
+        },
+        "trade.quote": {
+            "next_retry_time": 1767920989.555148
+        },
+        "trade.sell": {
+            "next_retry_time": 1767923269.5483773,
+            "failures": 5
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": true,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {
+        "admin.notice": {
+            "$id": "ge://schema/admin.notice.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object"
+        },
+        "admin.shutdown_warning": {
+            "$id": "ge://schema/admin.shutdown_warning.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object"
+        },
+        "auth.login": {
+            "$id": "ge://schema/auth.login.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": false
+        },
+        "auth.logout": {
+            "$id": "ge://schema/auth.logout.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "auth.mfa.totp.verify": {
+            "$id": "ge://schema/auth.mfa.totp.verify.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
+                }
+            },
+            "required": [
+                "code"
+            ],
+            "additionalProperties": false
+        },
+        "auth.register": {
+            "$id": "ge://schema/auth.register.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "username",
+                "passwd"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "username": {
+                    "type": "string"
+                },
+                "passwd": {
+                    "type": "string"
+                },
+                "ship_name": {
+                    "type": "string"
+                },
+                "ui_locale": {
+                    "type": "string"
+                },
+                "ui_timezone": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth.refresh": {
+            "$id": "ge://schema/auth.refresh.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "bank.balance": {
+            "$id": "ge://schema/bank.balance.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "bank.deposit": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bank.history": {
+            "$id": "ge://schema/bank.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [],
+            "additionalProperties": false,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                },
+                "tx_type": {
+                    "type": "string",
+                    "enum": [
+                        "DEPOSIT",
+                        "WITHDRAWAL",
+                        "TRANSFER",
+                        "INTEREST",
+                        "FEE",
+                        "WIRE",
+                        "TAX",
+                        "TRADE_BUY_FEE",
+                        "TRADE_SELL_FEE",
+                        "WITHDRAWAL_FEE",
+                        "ADJUSTMENT"
+                    ]
+                },
+                "start_date": {
+                    "type": "integer"
+                },
+                "end_date": {
+                    "type": "integer"
+                },
+                "min_amount": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "max_amount": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "bank.leaderboard": {
+            "$id": "ge://schema/bank.leaderboard.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "bank.transfer": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bank.withdraw": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bounty.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bounty.post_federation": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bounty.post_hitlist": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "bulk.execute": {
+            "$id": "ge://schema/bulk.execute.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commands": {
+                    "type": "array",
+                    "minItems": 1
+                }
+            },
+            "required": [
+                "commands"
+            ],
+            "additionalProperties": false
+        },
+        "fine.list": {
+            "$id": "ge://schema/fine.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "fine.pay": {
+            "$id": "ge://schema/fine.pay.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "fine_id": {
+                    "type": "integer"
+                },
+                "amount": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "fine_id"
+            ],
+            "additionalProperties": false
+        },
+        "insurance.policies.list": {
+            "$id": "ge://schema/insurance.policies.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "insurance.policies.buy": {
+            "$id": "ge://schema/insurance.policies.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "subject_type": {
+                    "type": "string",
+                    "enum": [
+                        "ship",
+                        "cargo",
+                        "planet"
+                    ]
+                },
+                "subject_id": {
+                    "type": "integer"
+                },
+                "duration": {
+                    "type": "integer"
+                },
+                "premium": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "subject_type",
+                "subject_id",
+                "duration",
+                "premium"
+            ],
+            "additionalProperties": false
+        },
+        "insurance.claim.file": {
+            "$id": "ge://schema/insurance.claim.file.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "policy_id": {
+                    "type": "integer"
+                },
+                "incident_description": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "policy_id",
+                "incident_description"
+            ],
+            "additionalProperties": false
+        },
+        "chat.broadcast": {
+            "$id": "ge://schema/chat.broadcast.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "message"
+            ],
+            "additionalProperties": false
+        },
+        "chat.history": {
+            "$id": "ge://schema/chat.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                }
+            },
+            "additionalProperties": false
+        },
+        "chat.send": {
+            "$id": "ge://schema/chat.send.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "channel",
+                "message"
+            ],
+            "additionalProperties": false
+        },
+        "citadel.build": {
+            "$id": "ge://schema/citadel.build.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "sector_id"
+            ],
+            "additionalProperties": false
+        },
+        "citadel.upgrade": {
+            "$id": "ge://schema/citadel.upgrade.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "citadel_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "citadel_id"
+            ],
+            "additionalProperties": false
+        },
+        "combat.attack": {
+            "$id": "ge://schema/combat.attack.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "target_ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "target_ship_id"
+            ],
+            "additionalProperties": false
+        },
+        "combat.attack_planet": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "combat.deploy_fighters": {
+            "$id": "ge://schema/combat.deploy_fighters.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "amount",
+                "offense"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "offense": {
+                    "type": "integer"
+                },
+                "corporation_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "combat.deploy_mines": {
+            "$id": "ge://schema/combat.deploy_mines.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "amount",
+                "offense"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "offense": {
+                    "type": "integer"
+                },
+                "corporation_id": {
+                    "type": "integer"
+                },
+                "mine_type": {
+                    "type": "integer"
+                }
+            }
+        },
+        "combat.lay_mines": {
+            "$id": "ge://schema/combat.lay_mines.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "combat.status": {
+            "$id": "ge://schema/combat.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "combat.sweep_mines": {
+            "$id": "ge://schema/combat.sweep_mines.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "deploy.fighters.list": {
+            "$id": "ge://schema/deploy.fighters.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "deploy.mines.list": {
+            "$id": "ge://schema/deploy.mines.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "fighters.recall": {
+            "$id": "ge://schema/fighters.recall.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "sector_id",
+                "asset_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "asset_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "mines.recall": {
+            "$id": "ge://schema/mines.recall.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "sector_id",
+                "asset_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "asset_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "corp.balance": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.create": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.deposit": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.dissolve": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.invite": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.join": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.kick": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.leave": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.roster": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.statement": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.status": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.transfer_ceo": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "corp.withdraw": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "dock.status": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "hardware.buy": {
+            "$id": "ge://schema/hardware.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "code",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "hardware.list": {
+            "$id": "ge://schema/hardware.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "mail.delete": {
+            "$id": "ge://schema/mail.delete.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "mail_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "mail_id"
+            ],
+            "additionalProperties": false
+        },
+        "mail.inbox": {
+            "$id": "ge://schema/mail.inbox.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "mail.read": {
+            "$id": "ge://schema/mail.read.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "mail_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "mail_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "mail.send": {
+            "$id": "ge://schema/mail.send.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_player_name": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "to_player_name",
+                "subject",
+                "body"
+            ],
+            "additionalProperties": false
+        },
+        "move.autopilot.start": {
+            "$id": "ge://schema/move.autopilot.start.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": false
+        },
+        "move.autopilot.status": {
+            "$id": "ge://schema/move.autopilot.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "move.autopilot.stop": {
+            "$id": "ge://schema/move.autopilot.stop.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "move.describe_sector": {
+            "$id": "ge://schema/move.describe_sector.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "sector_id"
+            ],
+            "additionalProperties": false
+        },
+        "move.pathfind": {
+            "$id": "ge://schema/move.pathfind.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "from_sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "to_sector_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "from_sector_id",
+                "to_sector_id"
+            ],
+            "additionalProperties": false
+        },
+        "move.scan": {
+            "$id": "ge://schema/move.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {}
+        },
+        "move.transwarp": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "move.warp": {
+            "$id": "ge://schema/move_warp.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "to_sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "to_sector_id"
+            ],
+            "additionalProperties": false
+        },
+        "nav.avoid.add": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.avoid.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.avoid.remove": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.avoid.set": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.add": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.remove": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "nav.bookmark.set": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "news.get_feed": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "news.mark_feed_read": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "news.read": {
+            "$id": "ge://schema/news.read.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "notes.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "notice.ack": {
+            "$id": "ge://schema/notice.ack.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "notice_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "notice_id"
+            ],
+            "additionalProperties": false
+        },
+        "notice.list": {
+            "$id": "ge://schema/notice.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "planet.create": {
+            "$id": "ge://schema/planet.genesis_create.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "corporation"
+                    ]
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "name",
+                "owner_entity_type"
+            ],
+            "additionalProperties": false
+        },
+        "planet.deposit": {
+            "$id": "ge://schema/planet.deposit.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "planet.genesis": {
+            "$id": "ge://schema/planet.genesis.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
+        },
+        "planet.genesis_create": {
+            "$id": "ge://schema/planet.genesis_create.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner_entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "player",
+                        "corporation"
+                    ]
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "name",
+                "owner_entity_type"
+            ],
+            "additionalProperties": false
+        },
+        "planet.harvest": {
+            "$id": "ge://schema/planet.harvest.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id"
+            ],
+            "additionalProperties": false
+        },
+        "planet.info": {
+            "$id": "ge://schema/planet.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id"
+            ],
+            "additionalProperties": false
+        },
+        "planet.land": {
+            "$id": "ge://schema/planet.land.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id"
+            ],
+            "additionalProperties": false
+        },
+        "planet.launch": {
+            "$id": "ge://schema/planet.launch.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "planet.market.buy_order": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "planet.market.sell": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "planet.rename": {
+            "$id": "ge://schema/planet.rename.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "name"
+            ],
+            "additionalProperties": false
+        },
+        "planet.transfer_ownership": {
+            "$id": "ge://schema/planet.transfer_ownership.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "new_owner_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "new_owner_id"
+            ],
+            "additionalProperties": false
+        },
+        "planet.withdraw": {
+            "$id": "ge://schema/planet.withdraw.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "planet_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "planet_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "player.get_avoids": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_bookmarks": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_notes": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_prefs": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_settings": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_subscriptions": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.get_topics": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.my_info": {
+            "$id": "ge://schema/player.my_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "player.rankings": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_avoids": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_bookmarks": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_prefs": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_settings": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_subscriptions": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_topics": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "player.set_trade_account_preference": {
+            "$id": "ge://schema/player.set_trade_account_preference.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "preference": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                }
+            },
+            "required": [
+                "preference"
+            ],
+            "additionalProperties": false
+        },
+        "port.describe": {
+            "$id": "ge://schema/port.describe.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "anyOf": [
+                {
+                    "required": [
+                        "port_id"
+                    ]
+                },
+                {
+                    "required": [
+                        "sector_id"
+                    ]
+                }
+            ],
+            "additionalProperties": false
+        },
+        "port.info": {
+            "$id": "ge://schema/port.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "port.rob": {
+            "$id": "ge://schema/port.rob.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "credits",
+                        "goods"
+                    ]
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "amount": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "idempotency_key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "port_id",
+                "mode",
+                "idempotency_key"
+            ],
+            "additionalProperties": false
+        },
+        "port.status": {
+            "$id": "ge://schema/port.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "anyOf": [
+                {
+                    "required": [
+                        "port_id"
+                    ]
+                },
+                {
+                    "required": [
+                        "sector_id"
+                    ]
+                }
+            ],
+            "additionalProperties": false
+        },
+        "sector.info": {
+            "$id": "ge://schema/sector.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                }
+            },
+            "required": [],
+            "additionalProperties": false
+        },
+        "sector.scan": {
+            "$id": "ge://schema/sector.scan.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "sector.scan.density": {
+            "$id": "ge://schema/sector.scan.density.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "sector.search": {
+            "$id": "ge://schema/sector.search.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "query"
+            ],
+            "additionalProperties": false
+        },
+        "sector.set_beacon": {
+            "$id": "ge://schema/sector.set_beacon.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "sector_id",
+                "text"
+            ],
+            "additionalProperties": false
+        },
+        "session.disconnect": {
+            "$id": "ge://schema/session.disconnect.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "session.hello": {
+            "$id": "ge://schema/session.hello.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "session.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "player.ping": {
+            "$id": "ge://schema/session.ping.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "sys.notice.create": {
+            "$id": "ge://schema/sys.notice.create.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "title",
+                "body"
+            ],
+            "additionalProperties": false
+        },
+        "system.disconnect": {
+            "$id": "ge://schema/system.disconnect.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "ship.claim": {
+            "$id": "ge://schema/ship.claim.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "ship_id"
+            ],
+            "additionalProperties": false
+        },
+        "ship.info": {
+            "$id": "ge://schema/ship.info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "integer"
+                        },
+                        "number": {
+                            "type": "integer"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "ship"
+            ]
+        },
+        "ship.inspect": {
+            "$id": "ge://schema/ship.inspect.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "ship_id"
+            ],
+            "additionalProperties": false
+        },
+        "ship.jettison": {
+            "$id": "ge://schema/ship.jettison.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "commodity_id",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "ship.rename": {
+            "$id": "ge://schema/ship.rename.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
+        },
+        "ship.repair": {
+            "$id": "ge://schema/ship.repair.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "ship.reregister": {
+            "$id": "ge://schema/ship.reregister.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "additionalProperties": false
+        },
+        "ship.self_destruct": {
+            "$id": "ge://schema/ship.self_destruct.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "ship.status": {
+            "$id": "ge://schema/ship.status.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "ship": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "integer"
+                        },
+                        "number": {
+                            "type": "integer"
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "ship"
+            ]
+        },
+        "ship.transfer_cargo": {
+            "$id": "ge://schema/ship.transfer_cargo.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "target_ship_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "commodity_id",
+                "quantity",
+                "target_ship_id"
+            ],
+            "additionalProperties": false
+        },
+        "ship.upgrade": {
+            "$id": "ge://schema/ship.upgrade.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "upgrade_type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "upgrade_type"
+            ],
+            "additionalProperties": false
+        },
+        "shipyard.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "shipyard.upgrade": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.buy": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.dividend.set": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.exchange.list_stocks": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.exchange.orders.cancel": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.exchange.orders.create": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.ipo.register": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "stock.portfolio.list": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "subscribe.add": {
+            "$id": "ge://schema/subscribe.add.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "event_type"
+            ],
+            "additionalProperties": false
+        },
+        "subscribe.catalog": {
+            "$id": "ge://schema/subscribe.catalog.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+        },
+        "subscribe.list": {
+            "$id": "ge://schema/subscribe.list.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "subscribe.remove": {
+            "$id": "ge://schema/subscribe.remove.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "event_type"
+            ],
+            "additionalProperties": false
+        },
+        "tavern.barcharts.get_prices_summary": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.deadpool.place_bet": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.dice.play": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.graffiti.post": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.highstakes.play": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.loan.pay": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.loan.take": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.lottery.buy_ticket": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.lottery.status": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.raffle.buy_ticket": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.round.buy": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.rumour.get_hint": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "tavern.trader.buy_password": {
+            "$id": "ge://schema/placeholder.json",
+            "$comment": "Not yet implemented",
+            "type": "object"
+        },
+        "trade.accept": {
+            "$id": "ge://schema/trade.accept.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "trade_id"
+            ],
+            "additionalProperties": false
+        },
+        "trade.buy": {
+            "$id": "ge://schema/trade.buy.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account",
+                "sector_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "sector_id": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "trade.cancel": {
+            "$id": "ge://schema/trade.cancel.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "trade_id"
+            ],
+            "additionalProperties": false
+        },
+        "trade.history": {
+            "$id": "ge://schema/trade.history.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [],
+            "additionalProperties": false,
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                },
+                "cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "trade.jettison": {
+            "$id": "ge://schema/trade.jettison.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "trade.offer": {
+            "$id": "ge://schema/trade.offer.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "trade_id": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "trade_id"
+            ],
+            "additionalProperties": false
+        },
+        "trade.port_info": {
+            "$id": "ge://schema/trade.port_info.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        },
+        "trade.quote": {
+            "$id": "ge://schema/trade.quote.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "port_id": {
+                    "type": "integer"
+                },
+                "commodity": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "port_id",
+                "commodity",
+                "quantity"
+            ],
+            "additionalProperties": false
+        },
+        "trade.sell": {
+            "$id": "ge://schema/trade.sell.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "sector_id",
+                "port_id",
+                "items",
+                "idempotency_key",
+                "account"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "sector_id": {
+                    "type": "integer"
+                },
+                "port_id": {
+                    "type": "integer"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "account": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ]
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "commodity",
+                            "quantity"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "commodity": {
+                                "type": "string"
+                            },
+                            "quantity": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "schema_blacklist": [],
+    "pending_schema_requests": {
+        "system.cmd_list": "c-e1242b85",
+        "admin.notice": "c-55e36431",
+        "admin.shutdown_warning": "c-62f72e72",
+        "auth.login": "c-5459dff2",
+        "auth.logout": "c-36feb70e",
+        "auth.mfa.totp.verify": "c-d466deba",
+        "auth.register": "c-1be5204f",
+        "auth.refresh": "c-3e1dacaa",
+        "bank.balance": "c-60cca306",
+        "bank.deposit": "c-2f3b3c1e",
+        "bank.history": "c-50380178",
+        "bank.leaderboard": "c-3a10b48c",
+        "bank.transfer": "c-e285e2d6",
+        "bank.withdraw": "c-1f6d74af",
+        "bounty.list": "c-d562c8a0",
+        "bounty.post_federation": "c-fee08c24",
+        "bounty.post_hitlist": "c-913cfc27",
+        "bulk.execute": "c-19b5d45a",
+        "fine.list": "c-5250b549",
+        "fine.pay": "c-b9167681",
+        "insurance.policies.list": "c-dce2cb04",
+        "insurance.policies.buy": "c-a56dfd65",
+        "insurance.claim.file": "c-b5d5cf3b",
+        "chat.broadcast": "c-5b77d1dd",
+        "chat.history": "c-344ffd62",
+        "chat.send": "c-03182e2c",
+        "citadel.build": "c-4e129f7a",
+        "citadel.upgrade": "c-2b803715",
+        "combat.attack": "c-10026c13",
+        "combat.attack_planet": "c-ba2d59f4",
+        "combat.deploy_fighters": "c-c77aea72",
+        "combat.deploy_mines": "c-038585b9",
+        "combat.lay_mines": "c-507e810c",
+        "combat.status": "c-445795a9",
+        "combat.sweep_mines": "c-b59b927b",
+        "deploy.fighters.list": "c-4c67e2b0",
+        "deploy.mines.list": "c-026f7dd4",
+        "fighters.recall": "c-df562502",
+        "mines.recall": "c-e3cd87da",
+        "corp.balance": "c-a7b49d96",
+        "corp.create": "c-d74bb6fc",
+        "corp.deposit": "c-6af2eba1",
+        "corp.dissolve": "c-8abc483d",
+        "corp.invite": "c-eb19369f",
+        "corp.join": "c-e8633b7f",
+        "corp.kick": "c-42271d58",
+        "corp.leave": "c-dd43efda",
+        "corp.list": "c-6ead2338",
+        "corp.roster": "c-84ea7ec4",
+        "corp.statement": "c-7402356b",
+        "corp.status": "c-0a56ffc8",
+        "corp.transfer_ceo": "c-b4047dd5",
+        "corp.withdraw": "c-4660718f",
+        "dock.status": "c-0d35dc98",
+        "hardware.buy": "c-1b549dab",
+        "hardware.list": "c-e2b8c09f",
+        "mail.delete": "c-6c4e486d",
+        "mail.inbox": "c-eb05f157",
+        "mail.read": "c-808764f3",
+        "mail.send": "c-6c330770",
+        "move.autopilot.start": "c-6425626c",
+        "move.autopilot.status": "c-b7e3c0ba",
+        "move.autopilot.stop": "c-327d48ff",
+        "move.describe_sector": "c-9597c0a1",
+        "move.pathfind": "c-f36a0254",
+        "move.scan": "c-b62ce8e4",
+        "move.transwarp": "c-6cb6740a",
+        "move.warp": "c-0ed42558",
+        "nav.avoid.add": "c-c40f1d79",
+        "nav.avoid.list": "c-25aefac3",
+        "nav.avoid.remove": "c-c53dc625",
+        "nav.avoid.set": "c-0a2bad56",
+        "nav.bookmark.add": "c-4d44f160",
+        "nav.bookmark.list": "c-3d74e4c1",
+        "nav.bookmark.remove": "c-f9f4bfab",
+        "nav.bookmark.set": "c-26f2bd62",
+        "news.get_feed": "c-727db9fd",
+        "news.mark_feed_read": "c-b3222841",
+        "news.read": "c-d3302733",
+        "notes.list": "c-424f6f0c",
+        "notice.ack": "c-07ec029a",
+        "notice.list": "c-bf6e3492",
+        "planet.create": "c-1b366ece",
+        "planet.deposit": "c-d712a2f9",
+        "planet.genesis": "c-d3eb69c4",
+        "planet.genesis_create": "c-c6528b84",
+        "planet.harvest": "c-63a4fcef",
+        "planet.info": "c-b47d3260",
+        "planet.land": "c-b520dbaa",
+        "planet.launch": "c-ea267494",
+        "planet.market.buy_order": "c-f2a93a26",
+        "planet.market.sell": "c-bf427f3d",
+        "planet.rename": "c-d4c8a3ec",
+        "planet.transfer_ownership": "c-2b564ea3",
+        "planet.withdraw": "c-3b8dafe3",
+        "player.get_avoids": "c-e97f74f3",
+        "player.get_bookmarks": "c-ddbdaada",
+        "player.get_notes": "c-e60f67ac",
+        "player.get_prefs": "c-1688577e",
+        "player.get_settings": "c-a56cbcc9",
+        "player.get_subscriptions": "c-a61777b9",
+        "player.get_topics": "c-0a5a9fb9",
+        "player.my_info": "c-89cda429",
+        "player.rankings": "c-5e5f0b83",
+        "player.set_avoids": "c-40693a4d",
+        "player.set_bookmarks": "c-ff65288a",
+        "player.set_prefs": "c-2028a901",
+        "player.set_settings": "c-cb6bea07",
+        "player.set_subscriptions": "c-4b6b4e01",
+        "player.set_topics": "c-c2dda8e5",
+        "player.set_trade_account_preference": "c-ae24f8b4",
+        "port.describe": "c-087aa9cc",
+        "port.info": "c-0a5a6a9b",
+        "port.rob": "c-4a5f7314",
+        "port.status": "c-eafe660f",
+        "sector.info": "c-16989554",
+        "sector.scan": "c-c9058c33",
+        "sector.scan.density": "c-ae56c185",
+        "sector.search": "c-7e3bcab4",
+        "sector.set_beacon": "c-c9f6f1d3",
+        "session.disconnect": "c-38958d1d",
+        "session.hello": "c-f3c53457",
+        "session.ping": "c-c40bfd6a",
+        "player.ping": "c-4f6db4ce",
+        "sys.notice.create": "c-875831d4",
+        "system.disconnect": "c-cdde2cb5",
+        "ship.claim": "c-09e5da03",
+        "ship.info": "c-4506d750",
+        "ship.inspect": "c-2a3372cb",
+        "ship.jettison": "c-a6e6e4fb",
+        "ship.rename": "c-0ef98d3e",
+        "ship.repair": "c-58ad1662",
+        "ship.reregister": "c-cb3e693d",
+        "ship.self_destruct": "c-97dfda92",
+        "ship.status": "c-8f86919d",
+        "ship.transfer_cargo": "c-43ea2184",
+        "ship.upgrade": "c-d53c2b8b",
+        "shipyard.list": "c-ed0a988c",
+        "shipyard.upgrade": "c-22a5e1c2",
+        "stock.buy": "c-8bd9a1d7",
+        "stock.dividend.set": "c-f6cf9258",
+        "stock.exchange.list_stocks": "c-d55691e7",
+        "stock.exchange.orders.cancel": "c-8ba0c279",
+        "stock.exchange.orders.create": "c-72ac2599",
+        "stock.ipo.register": "c-09dfab91",
+        "stock.portfolio.list": "c-07b4e0b4",
+        "subscribe.add": "c-97598603",
+        "subscribe.catalog": "c-ce1c2c5d",
+        "subscribe.list": "c-cb813f6e",
+        "subscribe.remove": "c-1f9fffc4",
+        "tavern.barcharts.get_prices_summary": "c-884c73a8",
+        "tavern.deadpool.place_bet": "c-3d361a73",
+        "tavern.dice.play": "c-869b5ec3",
+        "tavern.graffiti.post": "c-640e7d23",
+        "tavern.highstakes.play": "c-87bf3132",
+        "tavern.loan.pay": "c-326923ee",
+        "tavern.loan.take": "c-40f0e62a",
+        "tavern.lottery.buy_ticket": "c-0b0b2f8a",
+        "tavern.lottery.status": "c-9d4fc9ce",
+        "tavern.raffle.buy_ticket": "c-e680f12d",
+        "tavern.round.buy": "c-fa86e325",
+        "tavern.rumour.get_hint": "c-7e8407e4",
+        "tavern.trader.buy_password": "c-39d4c686",
+        "trade.accept": "c-49a9ecd9",
+        "trade.buy": "c-e16abb26",
+        "trade.cancel": "c-46fed6ae",
+        "trade.history": "c-8108fe95",
+        "trade.jettison": "c-7bc92458",
+        "trade.offer": "c-7cffc474",
+        "trade.port_info": "c-d1207032",
+        "trade.quote": "c-f68a1118",
+        "trade.sell": "c-eb372aa1"
+    },
+    "recent_sectors": [
+        2000,
+        1584,
+        1310,
+        1872,
+        2326,
+        1250,
+        2158,
+        514,
+        2320,
+        1955
+    ],
+    "pending_commands": {
+        "c-be14d6c7": {
+            "id": "c-be14d6c7",
+            "command": "sector.info",
+            "data": {
+                "sector_id": 1955
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "be14d6c7-4ca5-4125-bae0-dd0b4738afad"
+            }
+        }
+    },
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": {
+        "status": "ok",
+        "command": "sector.info",
+        "request_id": "c-736abd4c",
+        "response_type": "sector.info",
+        "ts": "2026-01-09T16:38:01Z"
+    },
+    "last_quotes": {
+        "769_EQU": {
+            "port_id": 769,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-09T01:09:43Z"
+        },
+        "769_ORE": {
+            "port_id": 769,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-09T01:09:44Z"
+        },
+        "769_ORG": {
+            "port_id": 769,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-09T01:09:44Z"
+        }
+    },
+    "current_qa_objective": null,
+    "needs_bootstrap": false
+}

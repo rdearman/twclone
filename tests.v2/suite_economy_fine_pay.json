@@ -1,0 +1,41 @@
+{
+  "name": "Fine Pay Suite",
+  "tests": [
+    {
+      "name": "Setup: wanted_criminal",
+      "setup": "macro_auth_user",
+      "username": "wanted_criminal",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Create Fine",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO fines (issued_by, recipient_type, recipient_id, reason, amount, status) VALUES ('federation', 'player', (SELECT player_id FROM players WHERE name='wanted_criminal'), 'Speeding', 500, 'unpaid') RETURNING fines_id;"
+      },
+      "save": { "test_fine_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Pay Fine",
+      "command": "fine.pay",
+      "data": { "fine_id": "@test_fine_id", "amount": 500 },
+      "user": "wanted_criminal",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Pay Non-Existent Fine",
+      "command": "fine.pay",
+      "data": { "fine_id": 999999, "amount": 500 },
+      "user": "wanted_criminal",
+      "expect": { "status": "error", "error_code": 405 }
+    },
+    {
+      "name": "Negative: Fine Pay Missing Auth",
+      "command": "fine.pay",
+      "data": { "fine_id": "@test_fine_id", "amount": 500 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

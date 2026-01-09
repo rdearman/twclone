@@ -351,7 +351,7 @@ main (void)
   g_running = 1;
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
   LOGI ("starting up");
-  sysop_start ();
+  sysop_start (&g_running);
 
   /* 0.0) Bootstrap Config (DB Connection) */
   if (load_bootstrap_config ("bigbang.json") != 0)

@@ -1,0 +1,12 @@
+{
+  "name": "Bucket 2 Negative Ship Suite",
+  "tests": [
+    { "name": "ship.status - Missing Auth", "command": "ship.status", "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "ship.inspect - Missing Auth", "command": "ship.inspect", "data": { "ship_id": 1 }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "ship.rename - Missing Auth", "command": "ship.rename", "data": { "name": "newname" }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "ship.repair - Missing Auth", "command": "ship.repair", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "hardware.list - Missing Auth", "command": "hardware.list", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "shipyard.list - Missing Auth", "command": "shipyard.list", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "shipyard.upgrade - Missing Auth", "command": "shipyard.upgrade", "data": { "ship_type_id": 1 }, "expect": { "status": "error", "error_code": 401 } }
+  ]
+}

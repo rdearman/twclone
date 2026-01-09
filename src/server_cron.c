@@ -4281,8 +4281,13 @@ h_deadpool_resolution_cron (db_t *db, int64_t now_s)
       return -1;
     }
 
+  char sql_expire_tmpl[512];
+  snprintf(sql_expire_tmpl, sizeof(sql_expire_tmpl),
+           "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = %s WHERE resolved = 0 AND expires_at <= %s",
+           ts_fmt3, ts_fmt3);
+
   char sql_expire[320];
-  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = to_timestamp({1}::bigint) WHERE resolved = 0 AND expires_at <= to_timestamp({2}::bigint)", sql_expire, sizeof(sql_expire)) != 0)
+  if (sql_build(db, sql_expire_tmpl, sql_expire, sizeof(sql_expire)) != 0)
     {
       unlock (db, "deadpool_resolution_cron");
       return -1;

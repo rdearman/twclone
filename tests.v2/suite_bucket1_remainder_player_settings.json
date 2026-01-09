@@ -1,0 +1,37 @@
+{
+  "name": "Bucket 1 Remainder - Player and Settings",
+  "tests": [
+    {
+      "name": "Setup: trader_player_1",
+      "setup": "macro_auth_user",
+      "username": "trader_player_1",
+      "password": "password"
+    },
+    { "name": "player.get_avoids - Positive", "command": "player.get_avoids", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.get_avoids - Negative (No Auth)", "command": "player.get_avoids", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.get_bookmarks - Positive", "command": "player.get_bookmarks", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.get_bookmarks - Negative (No Auth)", "command": "player.get_bookmarks", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.get_notes - Positive", "command": "player.get_notes", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.get_notes - Negative (No Auth)", "command": "player.get_notes", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.get_subscriptions - Positive", "command": "player.get_subscriptions", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.get_subscriptions - Negative (No Auth)", "command": "player.get_subscriptions", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.get_topics - Positive", "command": "player.get_topics", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.get_topics - Negative (No Auth)", "command": "player.get_topics", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.ping - Positive", "command": "player.ping", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.ping - Negative (No Auth)", "command": "player.ping", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.rankings - Positive", "command": "player.rankings", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.rankings - Negative (No Auth)", "command": "player.rankings", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_avoids - Positive", "command": "player.set_avoids", "data": { "avoids": [1, 2] }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.set_avoids - Negative (No Auth)", "command": "player.set_avoids", "data": { "avoids": [1, 2] }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_bookmarks - Positive", "command": "player.set_bookmarks", "data": { "bookmarks": [] }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.set_bookmarks - Negative (No Auth)", "command": "player.set_bookmarks", "data": { "bookmarks": [] }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_settings - Positive", "command": "player.set_settings", "data": { "settings": {} }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.set_settings - Negative (No Auth)", "command": "player.set_settings", "data": { "settings": {} }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_subscriptions - Positive", "command": "player.set_subscriptions", "data": { "subscriptions": [] }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.set_subscriptions - Negative (No Auth)", "command": "player.set_subscriptions", "data": { "subscriptions": [] }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_topics - Positive", "command": "player.set_topics", "data": { "topics": [] }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.set_topics - Negative (No Auth)", "command": "player.set_topics", "data": { "topics": [] }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_trade_account_preference - Positive", "command": "player.set_trade_account_preference", "data": { "preference": "bank" }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "player.set_trade_account_preference - Negative (No Auth)", "command": "player.set_trade_account_preference", "data": { "preference": "bank" }, "expect": { "status": "error", "error_code": 401 } }
+  ]
+}

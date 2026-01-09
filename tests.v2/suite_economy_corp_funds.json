@@ -1,0 +1,43 @@
+{
+  "name": "Corp Funds Suite",
+  "tests": [
+    {
+      "name": "Setup: wall_street_wolf",
+      "setup": "macro_auth_user",
+      "username": "wall_street_wolf",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Create Bank Account (Player)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('player', (SELECT player_id FROM players WHERE name='wall_street_wolf'), 'CRD', 1000000, 1) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 1000000 RETURNING bank_accounts_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Create Bank Account (Corp)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('corp', 100, 'CRD', 1000000, 1) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 1000000 RETURNING bank_accounts_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Corp Deposit",
+      "command": "corp.deposit",
+      "data": { "amount": 100 },
+      "user": "wall_street_wolf",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Corp Withdraw",
+      "command": "corp.withdraw",
+      "data": { "amount": 50 },
+      "user": "wall_street_wolf",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

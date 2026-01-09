@@ -4,19 +4,19 @@
   "tests": [
     {
       "name": "Setup: Auth Bounty Hunter",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "bounty_hunter",
       "password": "password"
     },
     {
       "name": "Setup: Auth Criminal",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "wanted_criminal",
       "password": "password"
     },
     {
       "name": "Setup: Auth Neutral",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "neutral_citizen",
       "password": "password"
     },

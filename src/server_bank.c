@@ -326,7 +326,7 @@ h_get_account_id_unlocked (db_t *db,
     }
 
   const char *sql =
-    "SELECT id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}";
+    "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}";
   db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id) };
   db_res_t *res = NULL;
   db_error_t err = {0};
@@ -493,7 +493,7 @@ h_add_credits_unlocked (db_t *db,
     }
   db_error_t err;
   const char *sql_upd =
-    "UPDATE bank_accounts SET balance = balance + {1} WHERE id = {2} RETURNING balance;";
+    "UPDATE bank_accounts SET balance = balance + {1} WHERE bank_accounts_id = {2} RETURNING balance;";
   db_bind_t params[] = { db_bind_i64 (amount), db_bind_i32 (account_id) };
   db_res_t *res = NULL;
 
@@ -532,21 +532,22 @@ h_add_credits_unlocked (db_t *db,
       return ERR_DB_QUERY_FAILED;  /* Unsupported backend */
     }
   
-  char sql_tx[512];
-  snprintf(sql_tx, sizeof(sql_tx),
+  const char *sql_tx_template =
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
-    "VALUES ({1}, {2}, 'CREDIT', {3}, 'CRD', {4}, {5}, %s);",
-    now_epoch);
+    "VALUES ({1}, {2}, 'CREDIT', {3}, 'CRD', {4}, {5}, %s);";
+  
+  char sql_tx_dialect[512];
+  sql_build (db, sql_tx_template, sql_tx_dialect, sizeof (sql_tx_dialect));
+
+  char sql_tx[512];
+  snprintf (sql_tx, sizeof (sql_tx), sql_tx_dialect, now_epoch);
   
   db_bind_t tx_params[] = {
     db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
     db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
   };
 
-  char sql_tx_converted[512];
-  sql_build(db, sql_tx, sql_tx_converted, sizeof(sql_tx_converted));
-
-  if (!db_exec (db, sql_tx_converted, tx_params, 5, &err))
+  if (!db_exec (db, sql_tx, tx_params, 5, &err))
     {
       return err.code;
     }
@@ -574,7 +575,7 @@ h_deduct_credits_unlocked (db_t *db,
     }
   db_error_t err;
   const char *sql_upd =
-    "UPDATE bank_accounts SET balance = balance - {1} WHERE id = {2} AND balance >= {1} RETURNING balance;";
+    "UPDATE bank_accounts SET balance = balance - {1} WHERE bank_accounts_id = {2} AND balance >= {1} RETURNING balance;";
   db_bind_t params[] = { db_bind_i64 (amount), db_bind_i32 (account_id) };
   db_res_t *res = NULL;
 
@@ -606,21 +607,22 @@ h_deduct_credits_unlocked (db_t *db,
       return ERR_DB_QUERY_FAILED;  /* Unsupported backend */
     }
   
-  char sql_tx[512];
-  snprintf(sql_tx, sizeof(sql_tx),
+  const char *sql_tx_template =
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
-    "VALUES ({1}, {2}, 'DEBIT', {3}, 'CRD', {4}, {5}, %s);",
-    now_epoch);
+    "VALUES ({1}, {2}, 'DEBIT', {3}, 'CRD', {4}, {5}, %s);";
+  
+  char sql_tx_dialect[512];
+  sql_build(db, sql_tx_template, sql_tx_dialect, sizeof(sql_tx_dialect));
+
+  char sql_tx[512];
+  snprintf(sql_tx, sizeof(sql_tx), sql_tx_dialect, now_epoch);
   
   db_bind_t tx_params[] = {
     db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
     db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
   };
 
-  char sql_tx_converted[512];
-  sql_build(db, sql_tx, sql_tx_converted, sizeof(sql_tx_converted));
-
-  if (!db_exec (db, sql_tx_converted, tx_params, 5, &err))
+  if (!db_exec (db, sql_tx, tx_params, 5, &err))
     {
       return err.code;
     }
@@ -938,7 +940,7 @@ db_bank_get_transactions (db_t *db,
   snprintf (sql,
             sizeof(sql),
             "SELECT ts, account_id, tx_type, amount, balance_after, description, tx_group_id FROM bank_transactions "
-            "WHERE account_id = (SELECT id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}) ");
+            "WHERE account_id = (SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}) ");
 
   db_bind_t params[12]; int idx = 0;
 

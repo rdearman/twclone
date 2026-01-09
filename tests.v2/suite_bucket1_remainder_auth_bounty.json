@@ -1,0 +1,61 @@
+{
+  "name": "Bucket 1 Remainder - Auth and Bounty",
+  "tests": [
+    {
+      "name": "Setup: trader_player_1",
+      "setup": "macro_auth_user",
+      "username": "trader_player_1",
+      "password": "password"
+    },
+    {
+      "name": "auth.mfa.totp.verify - Positive (Rigged)",
+      "command": "auth.mfa.totp.verify",
+      "data": { "code": "123456" },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "auth.mfa.totp.verify - Negative (No Auth)",
+      "command": "auth.mfa.totp.verify",
+      "data": { "code": "123456" },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "bounty.list - Positive",
+      "command": "bounty.list",
+      "user": "trader_player_1",
+      "expect": { "status": "ok", "type": "bounty.list" }
+    },
+    {
+      "name": "bounty.list - Negative (No Auth)",
+      "command": "bounty.list",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "bounty.post_federation - Positive",
+      "command": "bounty.post_federation",
+      "data": { "target_player_id": 1, "amount": 1000 },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "bounty.post_federation - Negative (No Auth)",
+      "command": "bounty.post_federation",
+      "data": { "target_player_id": 1, "amount": 1000 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "bounty.post_hitlist - Positive",
+      "command": "bounty.post_hitlist",
+      "data": { "target_player_id": 1, "amount": 1000 },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "bounty.post_hitlist - Negative (No Auth)",
+      "command": "bounty.post_hitlist",
+      "data": { "target_player_id": 1, "amount": 1000 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

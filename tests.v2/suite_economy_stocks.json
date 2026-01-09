@@ -1,0 +1,38 @@
+{
+  "name": "Stocks Suite",
+  "tests": [
+    {
+      "name": "Setup: wall_street_wolf",
+      "setup": "macro_auth_user",
+      "username": "wall_street_wolf",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Stock IPO Register",
+      "command": "stock.ipo.register",
+      "data": { "subcommand": "ipo.register", "ticker": "WOLF", "total_shares": 10000, "par_value": 10 },
+      "user": "wall_street_wolf",
+      "expect": { "status": "ok" },
+      "save": { "test_stock_id": "data.stock_id" }
+    },
+    {
+      "name": "Negative: Stock IPO Missing Auth",
+      "command": "stock.ipo.register",
+      "data": { "subcommand": "ipo.register", "ticker": "WOLF2", "total_shares": 10000, "par_value": 10 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Positive: Stock Buy",
+      "command": "stock.buy",
+      "data": { "subcommand": "buy", "stock_id": "@test_stock_id", "quantity": 10 },
+      "user": "wall_street_wolf",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Stock Buy Missing Auth",
+      "command": "stock.buy",
+      "data": { "subcommand": "buy", "stock_id": "@test_stock_id", "quantity": 10 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

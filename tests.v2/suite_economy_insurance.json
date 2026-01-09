@@ -1,0 +1,37 @@
+{
+  "name": "Insurance Suite",
+  "tests": [
+    {
+      "name": "Setup: econ_trader",
+      "setup": "macro_auth_user",
+      "username": "econ_trader",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Buy Policy",
+      "command": "insurance.policies.buy",
+      "data": { "policy_type": "standard", "ship_id": 1005 },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Buy Policy Missing Auth",
+      "command": "insurance.policies.buy",
+      "data": { "policy_type": "standard", "ship_id": 1005 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Positive: File Claim",
+      "command": "insurance.claim.file",
+      "data": { "policy_id": 1 },
+      "user": "econ_trader",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: File Claim Missing Auth",
+      "command": "insurance.claim.file",
+      "data": { "policy_id": 1 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

@@ -370,7 +370,7 @@ ori_move_all_ships (void)
 
       /* Update the target for the next tick */
       const char *sql_update_target =
-        "UPDATE ships SET target_sector = {1} WHERE id = {2};";
+        "UPDATE ships SET target_sector = {1} WHERE ship_id = {2};";
 
       db_bind_t update_params[] = {
         db_bind_i32 (new_target),
@@ -738,7 +738,8 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
   if (db_sector_basic_json (db, sector_id, &basic) == 0 && basic)
     {
       json_object_set_new (root, "sector_id", json_integer (sector_id));
-      json_object_set_new (root, "name", json_object_get (basic, "name"));
+      json_object_set (root, "name", json_object_get (basic, "name"));
+      json_object_set (root, "beacon", json_object_get (basic, "beacon"));
       json_decref (basic);
     }
   json_t *adj = NULL;
@@ -746,14 +747,14 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
 
   if (db_adjacent_sectors_json (db, sector_id, &adj) == 0 && adj)
     {
-      json_object_set_new (root, "adjacent", adj);
+      json_object_set_new (root, "adjacent_sectors", adj);
     }
   json_t *ships = NULL; if (db_ships_at_sector_json (db,
                                                      player_id,
                                                      sector_id,
                                                      &ships) == 0)
     {
-      json_object_set_new (root, "ships", ships ?: json_array ());
+      json_object_set_new (root, "ships_present", ships ?: json_array ());
     }
   json_t *ports = NULL;
 
@@ -767,7 +768,7 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
 
   if (db_planets_at_sector_json (db, sector_id, &planets) == 0)
     {
-      json_object_set_new (root, "planets", planets ?: json_array ());
+      json_object_set_new (root, "celestial_objects", planets ?: json_array ());
     }
 
 
@@ -856,14 +857,16 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
          Beacons: 1
          Ships: 10 per
          Planets: 100 per
+         Ports: 100 per
       */
       const char *density_sql = 
         "SELECT "
-        "  COALESCE((SELECT fighters FROM sector_assets WHERE sector_id = {1}), 0) + "
-        "  COALESCE((SELECT mines FROM sector_assets WHERE sector_id = {1}), 0) + "
+        "  COALESCE((SELECT SUM(quantity) FROM sector_assets WHERE sector_id = {1} AND asset_type = 2), 0) + "
+        "  COALESCE((SELECT SUM(quantity) FROM sector_assets WHERE sector_id = {1} AND (asset_type = 1 OR asset_type = 4)), 0) + "
         "  CASE WHEN EXISTS(SELECT 1 FROM sectors WHERE sector_id = {1} AND beacon IS NOT NULL) THEN 1 ELSE 0 END + "
         "  (SELECT COALESCE(COUNT(*), 0) * 10 FROM ships WHERE sector_id = {1}) + "
-        "  (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = {1}) "
+        "  (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = {1}) + "
+        "  (SELECT COALESCE(COUNT(*), 0) * 100 FROM ports WHERE sector_id = {1}) "
         "as total_density;";
       
       db_res_t *density_res = NULL;
@@ -878,12 +881,9 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
             }
           db_res_finalize(density_res);
           
-          /* Only include sectors with non-zero density */
-          if (density > 0)
-            {
-              json_array_append_new(sectors, json_integer(sector_id));
-              json_array_append_new(sectors, json_integer(density));
-            }
+          /* Include all sectors found, even with 0 density */
+          json_array_append_new (sectors, json_integer (sector_id));
+          json_array_append_new (sectors, json_integer (density));
         }
     }
   db_res_finalize(res);
@@ -1577,16 +1577,15 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   /* Update beacon */
   db_error_t err;
-  const char *sql = "UPDATE sectors SET beacon_text = {1}, beacon_owner_id = {2} WHERE sector_id = {3};";
+  const char *sql = "UPDATE sectors SET beacon = {1} WHERE sector_id = {2};";
   db_bind_t binds[] = {
     db_bind_text(beacon_text),
-    db_bind_i32(ctx->player_id),
     db_bind_i32(req_sector_id)
   };
   
   char sql_converted[512];
   sql_build(db, sql, sql_converted, sizeof(sql_converted));
-  if (!db_exec (db, sql_converted, binds, 3, &err))
+  if (!db_exec (db, sql_converted, binds, 2, &err))
     {
       send_response_error (ctx, root, ERR_DB, "Database error updating beacon.");
       return 1;

@@ -840,8 +840,16 @@ make_session_hello_payload (int is_authed, int player_id, int sector_id)
 int
 cmd_system_hello (client_ctx_t *ctx, json_t *root)
 {
-  // alias to session.hello
-  return cmd_session_hello (ctx, root);
+  json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
+                                                ctx->player_id,
+                                                ctx->sector_id);
+  if (payload)
+    {
+      json_object_set (payload, "capabilities", g_capabilities);
+      json_object_set_new (payload, "server_version", json_string("tw-server/3.0.0"));
+      send_response_ok_take (ctx, root, "system.welcome", &payload);
+    }
+  return 0;
 }
 
 

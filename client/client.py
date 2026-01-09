@@ -1,72 +1,6 @@
 from __future__ import annotations # <--- MUST be here
 
 
-# === HOTFIX: ctx-based menu visibility + on-enter hook + Stardock context (placed at top) ===
-def _option_visible_with_ctx(ctx, opt: dict) -> bool:
-    if not isinstance(opt, dict):
-        return True
-    cond = opt.get("show_if_ctx")
-    if not cond:
-        return True
-    if isinstance(cond, str):
-        cond = [cond]
-    st = getattr(ctx, "state", {}) or {}
-    for flag in cond:
-        if not st.get(flag):
-            return False
-    return True
-
-def menu_on_enter(ctx, menu_def: dict):
-    if not isinstance(menu_def, dict):
-        return
-    on_enter = menu_def.get("on_enter")
-    if isinstance(on_enter, dict) and on_enter.get("pycall"):
-        fn = globals().get(on_enter["pycall"])
-        if callable(fn):
-            try:
-                fn(ctx)
-            except Exception:
-                pass
-
-def _infer_is_stardock(data: dict) -> bool:
-    if not isinstance(data, dict):
-        return False
-    port = data.get('port') if isinstance(data.get('port'), dict) else data
-    name = str((port or {}).get('name') or data.get('port_name') or "").lower()
-    pclass = str((port or {}).get('class') or (port or {}).get('type') or "").lower()
-    if "stardock" in name:
-        return True
-    if pclass in ("stardock", "star dock"):
-        return True
-    sid = (port or {}).get('sector_id') or data.get('sector_id')
-    if sid in (0, 1) and ("dock" in name or "dock" in pclass):
-        return True
-    return False
-
-def ctx_refresh_port_context(ctx):
-    ctx.state.setdefault('is_stardock', False)
-    conn = getattr(ctx, 'conn', None)
-    if conn is None:
-        return
-    def _try(cmd, payload=None):
-        try:
-            r = conn.rpc(cmd, payload or {})
-            if isinstance(r, dict) and r.get('status') in ('ok','srv-ok','success', None):
-                d = r.get('data') or {}
-                if isinstance(d, dict) and d:
-                    ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
-                    return True
-        except Exception:
-            pass
-        return False
-    for cmd in ("port.status","dock.status","port.info","sector.port.status","sector.current","whereami"):
-        if _try(cmd):
-            break
-# === /HOTFIX ===
-
-
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -606,9 +540,15 @@ def ctx_refresh_port_context(ctx):
                         ctx.state['has_insurance_access'] = True # Example: Insurance at Stardock
                     elif port_class == 7: # Tavern (arbitrary, adjust as per game rules)
                         ctx.state['has_tavern_access'] = True
-                    # Add other port types and their associated access flags as needed
-
-                    ctx.last_sector_desc = normalize_sector(d)
+                    # Update only non-empty fields to avoid clearing known sector info (ships, adj, etc)
+                    normalized = normalize_sector(d)
+                    if not ctx.last_sector_desc:
+                        ctx.last_sector_desc = normalized
+                    else:
+                        for k, v in normalized.items():
+                            if v is not None: # Only overwrite if we have new data
+                                ctx.last_sector_desc[k] = v
+                    
                     if 'port' in d and isinstance(d['port'], dict) and 'id' in d['port']:
                         if 'port' not in ctx.last_sector_desc:
                             ctx.last_sector_desc['port'] = {}
@@ -789,6 +729,7 @@ class Context:
     last_sector_desc: Dict[str, Any] = field(default_factory=dict)
     player_info: Dict[str, Any] = field(default_factory=dict)
     state: Dict[str, Any] = field(default_factory=dict)
+    capabilities: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def current_menu(self) -> str:
@@ -864,6 +805,10 @@ def sector_density_scan_flow(ctx: Context):
 
     print("\n=== Density Scan ===")
     data = resp.get("data") if isinstance(resp, dict) else None
+
+    # Fix: Unwrap "sectors" list if present
+    if isinstance(data, dict) and "sectors" in data:
+        data = data["sectors"]
 
     # Case A: {"sector_id": X, "density": Y}
     if isinstance(data, dict) and "density" in data:
@@ -1223,9 +1168,10 @@ def extract_current_sector(resp: Dict[str, Any]) -> Optional[int]:
 
 def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
     """Convert server sector data to the simplified shape used by v3 flags/menus."""
-    sid = d.get("sector_id") or (d.get("sector") or {}).get("id") or d.get("id")
+    sid = d.get("sector_id") or (d.get("sector") or {}).get("id") or d.get("id") \
+          or (d.get("port") or {}).get("sector_id") or (d.get("port") or {}).get("sector")
     name = d.get("name") or (d.get("sector") or {}).get("name") or (f"Sector {sid}" if sid else "Unknown")
-    adj = d.get("adjacent") or d.get("adjacent_sectors") or d.get("neighbors") or []
+    adj = d.get("adjacent_sectors") or d.get("adjacent") or d.get("adjacent_sectors_info") or d.get("neighbors") or []
     # Port/class synthesis
     port_obj = {}
     ports = d.get("ports") or []
@@ -1247,8 +1193,8 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
         if "class" not in port_obj and isinstance(port_obj.get("type"), int):
             port_obj["class"] = port_obj["type"]
     # ships/planets/beacon
-    planets = d.get("planets") or []
-    ships = d.get("ships") or d.get("entities", {}).get("ships") or []
+    planets = d.get("celestial_objects") or d.get("planets") or []
+    ships = d.get("ships_present") or d.get("ships") or d.get("entities", {}).get("ships") or []
     beacon = d.get("beacon") or d.get("beacon_text") or ""
     return {
         "id": sid, "name": name,
@@ -1286,10 +1232,10 @@ def get_my_ship_id(conn: Conn) -> Optional[int]:
     for k in ("ship_id","current_ship_id"):
         if isinstance(d.get(k), int):
             return d[k]
-    for objk in ("ship","current_ship","vessel","active_ship"):
+    for objk in ("player", "ship","current_ship","vessel","active_ship"):
         obj = d.get(objk)
         if isinstance(obj, dict):
-            sid = obj.get("id") or obj.get("ship_id")
+            sid = obj.get("ship_id") or obj.get("id")
             if isinstance(sid, int):
                 return sid
     ship = d.get("ship") or {}
@@ -1498,7 +1444,7 @@ def pretty_print_trade_receipt(ctx):
             quantity = item.get("quantity")
             unit_price = item.get("unit_price")
             value = item.get("value")
-            print(f"    - {quantity} x {commodity.capitalize()} @ {unit_price} cr/unit = {value} credits")
+            print(f"    - {quantity} x {commodity} @ {unit_price} cr/unit = {value} credits")
     else:
         print("    (No items listed)")
 
@@ -1523,7 +1469,7 @@ def pretty_print_sell_receipt(ctx):
     sector_id = data.get("sector_id")
     port_id = data.get("port_id")
     player_id = data.get("player_id")
-    total_credits = data.get("total_credits")
+    total_credits = data.get("total_cost")
     credits_remaining = data.get("credits_remaining")
     lines = data.get("lines", [])
 
@@ -1540,7 +1486,7 @@ def pretty_print_sell_receipt(ctx):
             quantity = item.get("quantity")
             unit_price = item.get("unit_price")
             value = item.get("value")
-            print(f"    - {quantity} x {commodity.capitalize()} @ {unit_price} cr/unit = {value} credits")
+            print(f"    - {quantity} x {commodity} @ {unit_price} cr/unit = {value} credits")
     else:
         print("    (No items listed)")
 @register("pretty_print_shipyard_list")
@@ -1970,6 +1916,42 @@ def pretty_print_stock_dividend_set(ctx):
     print(f"  Total Payout: {data.get('total_payout')}")
     print(f"  Message: {data.get('message')}")
     print("-------------------------")
+
+@register("pretty_print_news_feed")
+def pretty_print_news_feed(ctx):
+    resp = ctx.state.get("last_rpc")
+    if not resp or resp.get("status") != "ok":
+        _pp(resp)
+        return
+    data = resp.get("data") or {}
+    articles = data.get("articles") or []
+    if not articles:
+        print("(No news available)")
+        return
+    for art in articles:
+        # Format timestamp if possible
+        ts_val = art.get("timestamp")
+        ts_str = str(ts_val)
+        if isinstance(ts_val, (int, float)):
+            try:
+                import datetime
+                dt = datetime.datetime.fromtimestamp(ts_val, tz=datetime.timezone.utc)
+                ts_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+            except Exception:
+                pass
+        
+        print(f"\n--- {art.get('headline', 'News')} ---")
+        print(f"Time: {ts_str}  Category: {art.get('category')}  ID: {art.get('id')}")
+        print(f"Body: {art.get('body')}")
+    print("-" * 20)
+
+@register("pretty_print_news_marked_read")
+def pretty_print_news_marked_read(ctx):
+    resp = ctx.state.get("last_rpc")
+    if not resp or resp.get("status") != "ok":
+        _pp(resp)
+        return
+    print("All news marked as read.")
 
 @register("corp_create_flow")
 def corp_create_flow(ctx: Context):
@@ -2502,11 +2484,11 @@ def resolve_value(val: Any, ctx: Context) -> Any:
                 if isinstance(val, str):
                     v = val.strip().lower()
                     if v in ('ore', 'o'):
-                        return 'ore'
+                        return 'ORE'
                     if v in ('org', 'orgs', 'organ', 'organics', 'organi'):
-                        return 'organics'
+                        return 'ORG'
                     if v in ('equ', 'equip', 'equipment', 'e'):
-                        return 'equipment'
+                        return 'EQU'
             return val
         c = CTX_RE.match(val)
         if c:
@@ -3093,9 +3075,19 @@ def _bool_flags(d: dict) -> str:
     return ", ".join(on) if on else "none"
 
 def _render_cargo(cargo) -> str:
-    # Server sometimes returns "" or {} or dict of commodities
+    # Server sometimes returns "" or {} or dict of commodities, or Protocol v3 list of objects
     if cargo in ("", None):
         return "none"
+    if isinstance(cargo, list):
+        # Protocol v3: [{"commodity": "ore", "quantity": 10}, ...]
+        parts = []
+        for item in cargo:
+            if isinstance(item, dict):
+                c = item.get("commodity")
+                q = item.get("quantity")
+                if c and q is not None:
+                    parts.append(f"{c}: {_fmt_int(q)}")
+        return ", ".join(parts) if parts else "none"
     if isinstance(cargo, dict) and cargo:
         parts = []
         for k, v in cargo.items():
@@ -3104,33 +3096,54 @@ def _render_cargo(cargo) -> str:
     return str(cargo)
 
 def render_ship_card(ship: dict) -> str:
-    """Return a pretty printable card for a ship dict from ship.inspect."""
+    """Return a pretty printable card for a ship dict from ship.inspect or ship.status."""
     sid   = ship.get("id") or ship.get("ship_id") or "?"
     name  = ship.get("name") or ship.get("ship_name") or "Unnamed"
-    stype = (ship.get("type") or {}).get("name") or ship.get("ship_type") or "?"
-    sector_id = (ship.get("location") or {}).get("sector_id") or "?"
+    
+    # Type handling
+    stype = (ship.get("type") or {}).get("name") or ship.get("ship_type")
+    if not stype:
+        tid = ship.get("type_id")
+        stype = f"Type {tid}" if tid is not None else "?"
+        
+    sector_id = (ship.get("location") or {}).get("sector_id") or ship.get("sector_id") or "?"
+    
     owner = (ship.get("owner") or {}).get("name") if isinstance(ship.get("owner"), dict) else ship.get("owner")
     owner = owner or "unknown"
-    flags = _bool_flags(ship.get("flags") or {})
-    shields = _fmt_int((ship.get("defence") or {}).get("shields") or 0)
-    fighters = _fmt_int((ship.get("defence") or {}).get("fighters") or 0)
-    holds_val = ship.get("holds")
-    cargo_items = ship.get("cargo") or {}
     
-    holds_used = sum(cargo_items.values()) # Sum of all cargo items
+    flags = _bool_flags(ship.get("flags") or {})
+    
+    # Defence handling (nested or flat)
+    defence = ship.get("defence") or {}
+    shields = defence.get("shields") if isinstance(defence, dict) else None
+    if shields is None:
+        shields = ship.get("shields") or 0
+        
+    fighters = defence.get("fighters") if isinstance(defence, dict) else None
+    if fighters is None:
+        fighters = ship.get("fighters") or 0
+
+    # Holds and Cargo handling
+    holds_val = ship.get("holds")
+    cargo_data = ship.get("cargo")
+    
+    holds_used = 0
+    if isinstance(cargo_data, list):
+        for item in cargo_data:
+            if isinstance(item, dict):
+                holds_used += item.get("quantity") or 0
+    elif isinstance(cargo_data, dict):
+        holds_used = sum(cargo_data.values())
     
     if isinstance(holds_val, dict):
         holds_total = holds_val.get("total") or 0
-        holds_free  = max(0, int(holds_total) - int(holds_used))
     elif isinstance(holds_val, int):
         holds_total = holds_val # This is max_holds
-        holds_free  = max(0, int(holds_total) - int(holds_used))
     else:
         holds_total = 0
-        holds_free = 0
     
     holds_line  = f"{_fmt_int(holds_used)} used / {_fmt_int(holds_total)} total"
-    cargo = _render_cargo(ship.get("cargo"))
+    cargo_str = _render_cargo(cargo_data)
 
     lines = []
     lines.append(f"\n┌─ Ship: {name}  (ID {sid})")
@@ -3139,7 +3152,7 @@ def render_ship_card(ship: dict) -> str:
     lines.append(f"│   Flags: {flags}")
     lines.append(f"│   Defence: Shields {_fmt_int(shields)}, Fighters {_fmt_int(fighters)}")
     lines.append(f"│   Holds:   {holds_line}")
-    lines.append(f"│   Cargo:   {cargo}")
+    lines.append(f"│   Cargo:   {cargo_str}")
     lines.append("└────────────────────────────────────────────")
     return "\n".join(lines)
 
@@ -3158,9 +3171,14 @@ def print_inspect_response_pretty(ctx):
 
     ships = data.get("ships") or []
     if not isinstance(ships, list) or not ships:
-        # Some servers return a single 'ship' object
+        # Some servers return a single 'ship' object (e.g. ship.status)
         ship = data.get("ship")
         if isinstance(ship, dict):
+            # Inject context if missing
+            if "location" not in ship and "location" in data:
+                ship["location"] = data["location"]
+            if "owner" not in ship and "name" in data:
+                ship["owner"] = data["name"]
             print(render_ship_card(ship))
             return
         raise ValueError("No ships found in response.")
@@ -3350,21 +3368,23 @@ def simple_buy_handler(ctx: Context):
         print("Cannot determine current port ID. Please ensure you are docked.")
         return
 
-    commodity_input = input("Product Code (ORE, ORGANICS, EQUIPMENT): ").strip().upper()
+    commodity_input = input("Product Code (ORE, ORG, EQU): ").strip().upper()
     
     code_map = {
-        "ORE": "ore",
-        "ORGANICS": "organics",
-        "EQUIPMENT": "equipment"
+        "ORE": "ORE",
+        "ORG": "ORG",
+        "EQU": "EQU",
+        "ORGANICS": "ORG",
+        "EQUIPMENT": "EQU"
     }
     commodity = code_map.get(commodity_input)
 
     if not commodity:
-        print("Invalid commodity. Please use ORE, ORGANICS, or EQUIPMENT.")
+        print("Invalid commodity. Please use ORE, ORG, or EQU.")
         return
 
     try:
-        quantity = int(input(f"Quantity of {commodity_input.capitalize()}: ").strip())
+        quantity = int(input(f"Quantity of {commodity}: ").strip())
         if quantity <= 0:
             print("Quantity must be positive.")
             return
@@ -3375,7 +3395,7 @@ def simple_buy_handler(ctx: Context):
     # Generate a unique idempotency key
     idempotency_key = str(uuid.uuid4())
 
-    print(f"Attempting to buy {quantity} units of {commodity.capitalize()} (Port ID: {port_id})...")
+    print(f"Attempting to buy {quantity} units of {commodity} (Port ID: {port_id})...")
 
     payload = {
         "port_id": port_id,
@@ -3404,21 +3424,23 @@ def simple_sell_handler(ctx: Context):
         print("Cannot determine current port ID. Please ensure you are docked.")
         return
 
-    commodity_input = input("Product Code (ORE, ORGANICS, EQUIPMENT): ").strip().upper()
+    commodity_input = input("Product Code (ORE, ORG, EQU): ").strip().upper()
     
     code_map = {
-        "ORE": "ore",
-        "ORGANICS": "organics",
-        "EQUIPMENT": "equipment"
+        "ORE": "ORE",
+        "ORG": "ORG",
+        "EQU": "EQU",
+        "ORGANICS": "ORG",
+        "EQUIPMENT": "EQU"
     }
     commodity = code_map.get(commodity_input)
 
     if not commodity:
-        print("Invalid commodity. Please use ORE, ORGANICS, or EQUIPMENT.")
+        print("Invalid commodity. Please use ORE, ORG, or EQU.")
         return
 
     try:
-        quantity = int(input(f"Quantity of {commodity_input.capitalize()}: ").strip())
+        quantity = int(input(f"Quantity of {commodity}: ").strip())
         if quantity <= 0:
             print("Quantity must be positive.")
             return
@@ -3428,7 +3450,7 @@ def simple_sell_handler(ctx: Context):
 
     idempotency_key = str(uuid.uuid4())
 
-    print(f"Attempting to sell {quantity} units of {commodity.capitalize()} (Port ID: {port_id})...")
+    print(f"Attempting to sell {quantity} units of {commodity} (Port ID: {port_id})...")
 
     payload = {
         "port_id": port_id,
@@ -3566,12 +3588,71 @@ def start_autopilot(ctx: Context):
 # ---------------------------
 @register("land_flow")
 def land_flow(ctx: Context):
-    try:
-        pid = int(input("Planet ID: ").strip())
-    except ValueError:
-        print("Invalid planet id."); return
-    r = ctx.conn.rpc("planet.land", {"planet_id": pid})
-    print(json.dumps(r, ensure_ascii=False, indent=2))
+    # Check current sector data for planets
+    planets = ctx.last_sector_desc.get("planets") or []
+    
+    if not planets:
+        print("No planets in this sector.")
+        return
+
+    selected_pid = None
+
+    if len(planets) == 1:
+        p = planets[0]
+        # Auto-select if only one
+        selected_pid = p.get("id") or p.get("planet_id") or p.get("planet_id")
+        print(f"Landing on {p.get('name')} (ID: {selected_pid})...")
+    else:
+        print("\nPlanets in this sector:")
+        for i, p in enumerate(planets):
+            pid = p.get("id") or p.get("planet_id")
+            name = p.get("name") or "Unnamed"
+            print(f"  {i+1}) {name} [ID: {pid}]")
+        
+        raw = input("Land on (number or ID): ").strip()
+        if not raw: return
+        
+        # Try as index first
+        try:
+            idx = int(raw)
+            if 1 <= idx <= len(planets):
+                selected_pid = (planets[idx-1].get("id") or planets[idx-1].get("planet_id"))
+            else:
+                # Treat as ID
+                selected_pid = idx
+        except ValueError:
+            print("Invalid input.")
+            return
+
+    if selected_pid is None:
+        print("Could not determine planet ID.")
+        return
+
+    r = ctx.conn.rpc("planet.land", {"planet_id": selected_pid})
+    
+    if r.get("status") == "ok":
+        print(f"Landed on planet {selected_pid}.")
+        ctx.state["on_planet"] = True
+        # Transition to SURFACE menu
+        ctx.menu_stack.append("SURFACE")
+    else:
+        err = r.get("error", {}).get("message", "Unknown error")
+        print(f"Landing failed: {err}")
+
+@register("launch_flow")
+def launch_flow(ctx: Context):
+    r = ctx.conn.rpc("planet.launch", {})
+    if r.get("status") == "ok":
+        print("Launched from planet.")
+        ctx.state["on_planet"] = False
+        # Pop SURFACE menu
+        if ctx.menu_stack[-1] == "SURFACE":
+            ctx.menu_stack.pop()
+        # Refresh sector info after launch
+        call_handler("redisplay_sector", ctx)
+    else:
+        err = r.get("error", {}).get("message", "Unknown error")
+        print(f"Launch failed: {err}")
 
 @register("planet_info_flow")
 def planet_info_flow(ctx: Context):
@@ -3740,7 +3821,16 @@ def sell_ship_flow(ctx: Context):
 
 @register("jettison_cargo_flow")
 def jettison_cargo_flow(ctx: Context):
-    commodities = (ctx.player_info.get("ship") or {}).get("cargo") or []
+    # Fetch fresh ship info to ensure cargo is up-to-date
+    r = ctx.conn.rpc("ship.info", {})
+    if r.get("status") != "ok":
+        print("Could not fetch ship info.")
+        _pp(r)
+        return
+    
+    ship_data = (r.get("data") or {}).get("ship") or {}
+    commodities = ship_data.get("cargo") or []
+
     if not commodities:
         print("Your ship has no cargo to jettison.")
         return
@@ -3750,13 +3840,28 @@ def jettison_cargo_flow(ctx: Context):
         print(f"  {item.get('commodity').capitalize()}: {item.get('quantity')}")
     print("---------------------")
 
-    commodity_to_jettison = input("Enter commodity to jettison: ").strip().lower()
-    if not commodity_to_jettison:
+    commodity_input = input("Enter commodity code to jettison (ORE, ORG, EQU, COL): ").strip().upper()
+    if not commodity_input:
         print("Cancelled.")
         return
 
+    code_map = {
+        "ORE": "ORE",
+        "ORG": "ORG",
+        "EQU": "EQU",
+        "ORGANICS": "ORG",
+        "EQUIPMENT": "EQU",
+        "COLONISTS": "COLONISTS",
+        "COL": "COLONISTS"
+    }
+    commodity = code_map.get(commodity_input)
+
+    if not commodity:
+        print("Invalid commodity. Please use ORE, ORG, EQU, or COL.")
+        return
+
     try:
-        quantity_to_jettison = int(input(f"Quantity of {commodity_to_jettison.capitalize()} to jettison: ").strip())
+        quantity_to_jettison = int(input(f"Quantity of {commodity} to jettison: ").strip())
         if quantity_to_jettison <= 0:
             print("Quantity must be positive.")
             return
@@ -3765,14 +3870,14 @@ def jettison_cargo_flow(ctx: Context):
         return
 
     payload = {
-        "commodity": commodity_to_jettison,
+        "commodity": commodity,
         "quantity": quantity_to_jettison
     }
 
     resp = ctx.conn.rpc("ship.jettison", payload)
     ctx.state["last_rpc"] = resp
     if resp.get("status") == "ok":
-        print(f"Successfully jettisoned {quantity_to_jettison} units of {commodity_to_jettison}.")
+        print(f"Successfully jettisoned {quantity_to_jettison} units of {commodity}.")
         # Refresh player info to update cargo display
         my_info_resp = ctx.conn.rpc("player.my_info", {})
         if my_info_resp.get("status") == "ok":
@@ -3781,6 +3886,52 @@ def jettison_cargo_flow(ctx: Context):
             print("[Warning] Could not refresh player info after jettison.")
     else:
         print(f"[Error] Failed to jettison cargo: {resp.get('error', {}).get('message', 'Unknown error')}")
+        _pp(resp)
+
+@register("genesis_torpedo_flow")
+def genesis_torpedo_flow(ctx: Context):
+    # Check if we have a genesis torpedo? 
+    # Protocol doesn't explicitly check item ownership in client usually, server handles it.
+    # But we can check ctx.player_info or ship info if we want to be nice.
+    # For now, let's just try to fire it.
+
+    sector_id = ctx.current_sector_id
+    if not sector_id:
+        print("Cannot determine current sector.")
+        return
+
+    print(f"\n--- Genesis Torpedo Sequence ---")
+    print(f"Target Sector: {sector_id}")
+    
+    planet_name = input("Enter name for the new planet: ").strip()
+    if not planet_name:
+        print("Aborted.")
+        return
+
+    # Check for confirmation
+    confirm = input(f"Create planet '{planet_name}' in sector {sector_id}? [y/N] ").strip().lower()
+    if confirm != 'y':
+        print("Aborted.")
+        return
+
+    payload = {
+        "sector_id": sector_id,
+        "name": planet_name,
+        "owner_entity_type": "player" 
+    }
+
+    print("Firing Genesis Torpedo...")
+    resp = ctx.conn.rpc("planet.genesis_create", payload)
+    ctx.state["last_rpc"] = resp
+
+    if resp.get("status") == "ok":
+        print(f"Genesis Torpedo successful! Planet '{planet_name}' created.")
+        _pp(resp)
+        # Refresh sector info to show the new planet
+        new_sector = ctx.conn.rpc("move.describe_sector", {"sector_id": sector_id})
+        ctx.last_sector_desc = normalize_sector(get_data(new_sector))
+    else:
+        print(f"[Error] Genesis failed: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)
 
 
@@ -3861,7 +4012,15 @@ def interactive_buy_handler(ctx: Context) -> None:
         qty = int(input("Quantity: ").strip())
     except ValueError:
         print("Port ID and quantity must be integers."); return
-    commodity = input("Commodity: ").strip()
+    commodity_input = input("Commodity (ORE, ORG, EQU): ").strip().upper()
+    code_map = {
+        "ORE": "ORE",
+        "ORG": "ORG",
+        "EQU": "EQU",
+        "ORGANICS": "ORG",
+        "EQUIPMENT": "EQU"
+    }
+    commodity = code_map.get(commodity_input, commodity_input)
     env = {"id": ctx.conn._next_id(), "command": "trade.buy",
             "data": {"port_id": port_id, "commodity": commodity, "quantity": qty}}
     if idem:
@@ -3931,8 +4090,11 @@ def main():
             passwd = args.passwd if args.passwd else getpass.getpass("Password: ")
 
             # optional hello
+            capabilities = {}
             try:
-                _ = conn.rpc("system.hello", {"client": "twclone-cli", "version": "3.x"})
+                hello_resp = conn.rpc("system.hello", {"client": "twclone-cli", "version": "3.x"})
+                if hello_resp.get("status") == "ok":
+                    capabilities = hello_resp.get("data", {}).get("capabilities") or {}
             except Exception:
                 pass
 
@@ -3941,6 +4103,15 @@ def main():
             if login.get("status") in ("error","refused"):
                 print("Login failed.");
                 return 2
+
+            # If hello failed or didn't have caps, try explicit capabilities command
+            if not capabilities:
+                try:
+                    cap_resp = conn.rpc("system.capabilities", {})
+                    if cap_resp.get("status") == "ok":
+                        capabilities = cap_resp.get("data") or {}
+                except Exception:
+                    pass
 
             current = extract_current_sector(login)
             if not isinstance(current, int):
@@ -3951,7 +4122,7 @@ def main():
             desc = conn.rpc("move.describe_sector", {"sector_id": int(current)})
             norm = normalize_sector(get_data(desc))
 
-            ctx = Context(conn=conn, menus=menus, last_sector_desc=norm)
+            ctx = Context(conn=conn, menus=menus, last_sector_desc=norm, capabilities=capabilities)
             ctx.state["cli"] = {"host": args.host, "port": args.port, "user": user, "debug": bool(args.debug)}
 
             # Initial update of corporation context after login

@@ -1,12 +1,12 @@
 {
-    "session_id": "495a253b675f9d04eed50b777c6148c8",
+    "session_id": "e79463f2326323df74b1ea935f9cf88d",
     "player_info": {
         "player": {
             "id": 11,
             "username": "ai_qa_bot_001",
-            "credits": "5000.00",
-            "turns_remaining": 500,
-            "sector": 8,
+            "credits": "4149.00",
+            "turns_remaining": 99999999,
+            "sector": 1849,
             "ship_id": 5,
             "corp_id": 0,
             "alignment": 1,
@@ -22,184 +22,98 @@
         "shields": 1,
         "onplanet": 0,
         "ported": 0,
-        "cargo": []
+        "cargo": [
+            {
+                "commodity": "equipment",
+                "quantity": 3
+            },
+            {
+                "commodity": "organics",
+                "quantity": 1
+            },
+            {
+                "commodity": "EQU",
+                "quantity": 1,
+                "purchase_price": 209
+            },
+            {
+                "commodity": "ORE",
+                "quantity": 1,
+                "purchase_price": 119
+            }
+        ]
     },
-    "player_location_sector": 1,
+    "player_location_sector": 1849,
     "sector_data": {
-        "8": {
-            "server_tick": 2748,
-            "sector_id": 8,
-            "adjacent": [
+        "1849": {
+            "server_tick": 21772,
+            "sector_id": 1849,
+            "name": "",
+            "beacon": "",
+            "adjacent_sectors": [
                 {
-                    "to_sector": 2
+                    "to_sector": 820
                 },
                 {
-                    "to_sector": 7
+                    "to_sector": 847
                 },
                 {
-                    "to_sector": 9
+                    "to_sector": 1246
+                },
+                {
+                    "to_sector": 1907
                 }
             ],
-            "ships": [
-                {
-                    "ship_id": 5,
-                    "name": "ai_qa_bot_001's ship"
-                },
-                {
-                    "ship_id": 8,
-                    "name": "ai_qa_bot_004's ship"
-                }
-            ],
-            "ports": [],
-            "planets": [],
-            "counts": {
-                "fighters": 0,
-                "mines": 0
-            },
-            "_last_refreshed": 1767442856.4144902,
-            "has_port": false
-        },
-        "2": {
-            "server_tick": 19908,
-            "sector_id": 2,
-            "adjacent": [
-                {
-                    "to_sector": 1
-                },
-                {
-                    "to_sector": 3
-                },
-                {
-                    "to_sector": 7
-                },
-                {
-                    "to_sector": 8
-                },
-                {
-                    "to_sector": 9
-                },
-                {
-                    "to_sector": 10
-                }
-            ],
-            "ships": [
-                {
-                    "ship_id": 6,
-                    "name": "ai_qa_bot_002's ship"
-                },
-                {
-                    "ship_id": 5,
-                    "name": "ai_qa_bot_001's ship"
-                },
-                {
-                    "ship_id": 8,
-                    "name": "ai_qa_bot_004's ship"
-                },
-                {
-                    "ship_id": 7,
-                    "name": "ai_qa_bot_003's ship"
-                }
-            ],
-            "ports": [],
-            "planets": [],
-            "counts": {
-                "fighters": 0,
-                "mines": 0
-            },
-            "_last_refreshed": 1767444574.7866304,
-            "has_port": false
-        },
-        "3": {
-            "server_tick": 13012,
-            "sector_id": 3,
-            "adjacent": [
-                {
-                    "to_sector": 1
-                },
-                {
-                    "to_sector": 2
-                },
-                {
-                    "to_sector": 4
-                }
-            ],
-            "ships": [
+            "ships_present": [
                 {
                     "ship_id": 5,
                     "name": "ai_qa_bot_001's ship"
                 }
             ],
-            "ports": [],
-            "planets": [],
+            "ports": [
+                {
+                    "port_id": 720,
+                    "name": "Gottetem",
+                    "type": 3
+                }
+            ],
+            "celestial_objects": [],
             "counts": {
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767443884.251025,
-            "has_port": false
-        },
-        "1": {
-            "server_tick": 19919,
-            "sector_id": 1,
+            "_last_refreshed": 1767902957.6871529,
+            "has_port": true,
             "adjacent": [
                 {
-                    "to_sector": 2
+                    "to_sector": 820
                 },
                 {
-                    "to_sector": 3
+                    "to_sector": 847
                 },
                 {
-                    "to_sector": 4
+                    "to_sector": 1246
                 },
                 {
-                    "to_sector": 5
-                },
-                {
-                    "to_sector": 6
-                },
-                {
-                    "to_sector": 7
+                    "to_sector": 1907
                 }
-            ],
-            "ships": [
-                {
-                    "ship_id": 1,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 2,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 4,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 9,
-                    "name": "ai_qa_bot_005's ship"
-                },
-                {
-                    "ship_id": 5,
-                    "name": "ai_qa_bot_001's ship"
-                }
-            ],
-            "ports": [],
-            "planets": [
-                {
-                    "planet_id": 1,
-                    "name": "Terra"
-                }
-            ],
-            "counts": {
-                "fighters": 0,
-                "mines": 0
-            },
-            "_last_refreshed": 1767444576.327026,
-            "has_port": false
+            ]
         }
     },
     "universe_map": {
-        "3": {
+        "7": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "8": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "9": {
             "is_explored": true,
             "has_port": false
         },
@@ -207,7 +121,7 @@
             "is_explored": true,
             "has_port": false
         },
-        "2": {
+        "3": {
             "is_explored": true,
             "has_port": false
         },
@@ -215,43 +129,1971 @@
             "is_explored": true,
             "has_port": false
         },
-        "8": {
+        "70": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1188": {
             "is_explored": true,
             "has_port": false
+        },
+        "2312": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1289": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "65": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1555": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2213": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1431": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1588": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1379": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1911": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "62": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "816": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1000": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "791": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "444": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "57": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1477": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "494": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "552": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "647": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "591": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1031": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "885": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2159": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "713": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2003": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1745": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "469": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "978": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2327": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1860": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1818": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1422": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1378": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "714": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1887": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2034": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1213": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2199": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2152": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2226": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1084": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "581": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1870": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1612": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1152": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2088": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1645": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1264": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1620": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "263": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "889": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1910": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2356": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1156": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2258": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2401": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2322": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2129": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "717": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2089": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1165": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2496": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1883": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1301": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2300": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1326": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2079": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1481": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "218": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "395": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "189": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2172": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1261": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1550": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1054": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1231": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1087": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1630": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1189": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2384": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1854": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "544": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "584": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "929": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "754": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1476": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1352": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1808": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "944": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "59": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "11": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "151": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "842": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1451": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1979": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "817": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "485": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "575": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2062": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1558": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "773": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2210": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1480": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2314": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1117": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2030": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1662": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1177": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "372": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1905": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2310": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "504": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "312": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1984": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1714": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "488": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "633": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1068": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2037": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1930": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "511": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2367": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1826": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "541": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2239": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1485": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "295": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1690": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1092": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1718": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1850": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1410": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1616": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1100": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1139": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "88": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "457": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1572": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "92": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "15": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "55": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1191": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "663": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1099": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1795": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2193": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "519": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "474": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "161": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1809": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "543": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "497": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "491": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1170": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2200": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2229": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "333": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2257": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "398": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "871": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1940": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "358": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "594": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2234": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "980": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2165": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1685": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "184": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2048": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "144": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1697": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "723": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "169": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2265": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "366": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1972": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "749": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2402": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1436": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1768": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "779": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1716": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1999": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "23": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2149": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2102": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2008": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "902": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1135": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "949": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "356": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "632": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "64": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "992": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1518": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "595": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "928": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "901": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "899": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "844": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "834": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1682": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2101": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1848": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2170": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1145": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "113": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1154": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "209": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1876": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1462": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1263": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "281": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2463": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "268": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1240": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1061": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2027": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "297": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1305": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1409": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2188": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1355": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1292": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1069": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "695": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1051": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2409": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2209": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1648": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "192": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1494": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1903": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1677": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1074": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "535": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "252": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1951": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1559": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1143": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "994": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "820": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "245": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1782": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "785": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "993": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1490": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1316": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2299": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1894": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1621": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1902": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1080": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2045": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1073": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "656": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2156": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "684": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "588": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1366": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1607": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "606": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "396": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "389": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "770": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "722": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1238": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "244": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "329": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1642": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1686": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "654": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1664": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1206": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1085": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1916": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2318": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2128": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "850": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "124": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1593": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1346": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "137": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "194": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "670": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1253": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1019": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1198": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1113": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1950": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "191": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1670": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "950": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2094": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1239": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "719": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2204": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1171": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "586": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2346": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "327": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2051": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1050": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "528": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1482": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1209": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "868": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "839": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2212": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "551": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1565": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1044": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "514": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1522": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2331": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "637": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "522": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "550": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1736": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2178": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2285": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2282": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2279": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1397": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1500": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "109": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1895": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "266": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1517": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "735": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1971": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1639": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "837": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2459": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2361": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "378": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1203": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "123": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1242": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "691": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "918": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "208": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "529": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1925": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1923": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "14": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1134": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "66": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "934": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "573": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "742": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1669": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1211": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "187": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1578": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "662": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1966": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1192": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2057": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1452": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1549": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "789": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1812": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "173": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1580": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "569": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1761": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1959": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1719": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "454": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1528": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1006": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1585": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1535": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "160": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1336": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1699": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "590": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1600": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1322": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1975": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1079": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1141": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1968": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1602": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1502": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "579": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1945": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2103": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1260": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2238": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "726": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "753": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1888": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "259": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1659": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "222": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1430": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "661": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1753": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2195": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1438": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1851": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1318": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2355": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "12": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1266": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2136": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1088": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1885": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1254": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1576": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2302": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1723": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2040": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "610": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "664": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "806": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1770": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1283": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "845": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2473": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1797": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "802": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1781": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "93": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1746": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2286": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2456": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "308": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1941": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1785": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "414": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "502": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "2169": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1009": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "180": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "382": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1259": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "973": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1668": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1267": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1076": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1401": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2121": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "984": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "761": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2177": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "211": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2069": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "128": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1776": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1912": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1889": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "103": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1877": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "150": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "331": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1556": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "823": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "35": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "325": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2305": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2373": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "807": {
+            "is_explored": true,
+            "has_port": true
+        },
+        "1994": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "2306": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "1849": {
+            "is_explored": true,
+            "has_port": true
         }
     },
-    "port_info_by_sector": {},
-    "price_cache": {},
+    "port_info_by_sector": {
+        "1849": {
+            "port_id": 720,
+            "name": "Gottetem",
+            "class": null,
+            "commodities": [
+                {
+                    "code": "EQU",
+                    "quantity": 5000,
+                    "price": 200,
+                    "illegal": false,
+                    "commodity": "EQU"
+                },
+                {
+                    "code": "ORE",
+                    "quantity": 977,
+                    "price": 100,
+                    "illegal": false,
+                    "commodity": "ORE"
+                },
+                {
+                    "code": "ORG",
+                    "quantity": 8032,
+                    "price": 150,
+                    "illegal": false,
+                    "commodity": "ORG"
+                }
+            ]
+        }
+    },
+    "price_cache": {
+        "720": {
+            "buy": {
+                "EQU": 209.0,
+                "ORE": 119.0,
+                "ORG": 147.0
+            },
+            "sell": {
+                "EQU": 0.0,
+                "ORE": 99.0,
+                "ORG": 0.0
+            }
+        }
+    },
     "bank_balance": 0,
     "command_retry_info": {
         "player.my_info": {
-            "next_retry_time": 1767442662.5543046
+            "next_retry_time": 1767902959.4157627
         },
         "ship.info": {
-            "next_retry_time": 1767442663.6672246
+            "next_retry_time": 1767902960.6538649
         },
         "sector.info": {
-            "next_retry_time": 1767444580.322673
+            "next_retry_time": 1767902961.677055
         },
-        "move.warp": {
-            "next_retry_time": 1767444579.806233
+        "trade.port_info": {
+            "next_retry_time": 1767902962.7491357
         },
-        "sector.scan.density": {
-            "next_retry_time": 1767443538.4152455
+        "trade.quote": {
+            "next_retry_time": 1767902964.9674702
         }
     },
     "strategy_plan": [],
-    "trade_successful": false,
+    "trade_successful": true,
     "q_table": {
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
-            "move.warp": 0.0,
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-holds_full:full-credits:low-qa_mode:False-can_sell_any:can_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 0.09735576923076937,
             "bank.balance": 0.1
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:full-credits:low-qa_mode:False-can_sell_any:can_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": -0.43283058575938255,
+            "bank.balance": 0.1,
+            "sector.info": 0.1
         }
     },
     "n_table": {
-        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
-            "move.warp": 0,
-            "bank.balance": 397
+        "stage:bootstrap-sector_class:unknown_class-port_type:port_present-holds_full:full-credits:low-qa_mode:False-can_sell_any:can_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 832,
+            "bank.balance": 138
+        },
+        "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:full-credits:low-qa_mode:False-can_sell_any:can_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
+            "move.warp": 2851,
+            "bank.balance": 318,
+            "sector.info": 272
         }
     },
     "command_schemas": {
@@ -2184,202 +4026,3459 @@
     },
     "schema_blacklist": [],
     "pending_schema_requests": {
-        "system.cmd_list": "c-94f0a0e8",
-        "admin.notice": "c-6974fbfe",
-        "admin.shutdown_warning": "c-3192f606",
-        "auth.login": "c-f79c3d95",
-        "auth.logout": "c-3684023c",
-        "auth.mfa.totp.verify": "c-f5b0e23c",
-        "auth.register": "c-7617b843",
-        "auth.refresh": "c-f5452919",
-        "bank.balance": "c-577ed6eb",
-        "bank.deposit": "c-da54ae92",
-        "bank.history": "c-c365c44b",
-        "bank.leaderboard": "c-4b623729",
-        "bank.transfer": "c-c93d21c1",
-        "bank.withdraw": "c-cd45f9ea",
-        "bounty.list": "c-6fba13ea",
-        "bounty.post_federation": "c-9113231e",
-        "bounty.post_hitlist": "c-0e9ddacf",
-        "bulk.execute": "c-9ceeec24",
-        "fine.list": "c-d494ce56",
-        "fine.pay": "c-8049c5d4",
-        "insurance.policies.list": "c-293173d5",
-        "insurance.policies.buy": "c-53d60fa6",
-        "insurance.claim.file": "c-ae83a026",
-        "chat.broadcast": "c-04b92c44",
-        "chat.history": "c-24218485",
-        "chat.send": "c-dd3468ac",
-        "citadel.build": "c-1f55f2ba",
-        "citadel.upgrade": "c-fa52e4d0",
-        "combat.attack": "c-43a57ac9",
-        "combat.attack_planet": "c-a851b40b",
-        "combat.deploy_fighters": "c-55c74ee2",
-        "combat.deploy_mines": "c-69568f68",
-        "combat.lay_mines": "c-1d841a96",
-        "combat.status": "c-34a65f5f",
-        "combat.sweep_mines": "c-a5a7446d",
-        "deploy.fighters.list": "c-07cbc132",
-        "deploy.mines.list": "c-f94a782f",
-        "fighters.recall": "c-014bb135",
-        "mines.recall": "c-692d8ef9",
-        "corp.balance": "c-9fbc50b8",
-        "corp.create": "c-439e6439",
-        "corp.deposit": "c-12d545d5",
-        "corp.dissolve": "c-7c75a1d5",
-        "corp.invite": "c-9fc4d927",
-        "corp.join": "c-8a1915f6",
-        "corp.kick": "c-34b5b5e4",
-        "corp.leave": "c-724ea216",
-        "corp.list": "c-a10269d8",
-        "corp.roster": "c-a52da5d1",
-        "corp.statement": "c-92ee3b55",
-        "corp.status": "c-6cb7cf02",
-        "corp.transfer_ceo": "c-c152fc95",
-        "corp.withdraw": "c-82489da6",
-        "dock.status": "c-7b78b14e",
-        "hardware.buy": "c-88c3a471",
-        "hardware.list": "c-96aef98e",
-        "mail.delete": "c-7c26f5ce",
-        "mail.inbox": "c-ec7bc333",
-        "mail.read": "c-b33f629e",
-        "mail.send": "c-1a2b0772",
-        "move.autopilot.start": "c-9b65c348",
-        "move.autopilot.status": "c-1a5b0842",
-        "move.autopilot.stop": "c-fa6c8e1d",
-        "move.describe_sector": "c-2d42b46a",
-        "move.pathfind": "c-bc8c49d0",
-        "move.scan": "c-efe73ad8",
-        "move.transwarp": "c-693b55dd",
-        "move.warp": "c-fb0d273f",
-        "nav.avoid.add": "c-d85dad7d",
-        "nav.avoid.list": "c-ddef0245",
-        "nav.avoid.remove": "c-e4fe010a",
-        "nav.avoid.set": "c-1c30aa2f",
-        "nav.bookmark.add": "c-c309e242",
-        "nav.bookmark.list": "c-7a0994fa",
-        "nav.bookmark.remove": "c-b96af077",
-        "nav.bookmark.set": "c-37615c09",
-        "news.get_feed": "c-19870b8d",
-        "news.mark_feed_read": "c-7f90e014",
-        "news.read": "c-5f322377",
-        "notes.list": "c-97e3d45b",
-        "notice.ack": "c-165468b3",
-        "notice.list": "c-49289cdc",
-        "planet.create": "c-32be5f0c",
-        "planet.deposit": "c-ac52892d",
-        "planet.genesis": "c-5391a471",
-        "planet.genesis_create": "c-f9eb179a",
-        "planet.harvest": "c-d96b91cb",
-        "planet.info": "c-664a2eb5",
-        "planet.land": "c-6171b908",
-        "planet.launch": "c-fb2eb8e1",
-        "planet.market.buy_order": "c-f8ddd37e",
-        "planet.market.sell": "c-63312719",
-        "planet.rename": "c-b3569d34",
-        "planet.transfer_ownership": "c-5cfd4ae6",
-        "planet.withdraw": "c-57b1a303",
-        "player.get_avoids": "c-6b2d9b06",
-        "player.get_bookmarks": "c-521d2e82",
-        "player.get_notes": "c-fb080095",
-        "player.get_prefs": "c-1a11a248",
-        "player.get_settings": "c-8008a4bf",
-        "player.get_subscriptions": "c-3650c951",
-        "player.get_topics": "c-ecbf8e1f",
-        "player.my_info": "c-0e358214",
-        "player.rankings": "c-0b5e9667",
-        "player.set_avoids": "c-a46504c4",
-        "player.set_bookmarks": "c-1ea4d288",
-        "player.set_prefs": "c-76f4b3da",
-        "player.set_settings": "c-a62debf0",
-        "player.set_subscriptions": "c-01eae97e",
-        "player.set_topics": "c-9b221719",
-        "player.set_trade_account_preference": "c-34b9e2df",
-        "port.describe": "c-c6b95e1a",
-        "port.info": "c-851adc7b",
-        "port.rob": "c-cb8c99f0",
-        "port.status": "c-260d6b79",
-        "sector.info": "c-aaa44747",
-        "sector.scan": "c-fa1cda5b",
-        "sector.scan.density": "c-525f69ef",
-        "sector.search": "c-3a004fc1",
-        "sector.set_beacon": "c-68840d4f",
-        "session.disconnect": "c-db9e958c",
-        "session.hello": "c-3306b150",
-        "session.ping": "c-5695f00d",
-        "player.ping": "c-24ffcd06",
-        "sys.notice.create": "c-79d0ba46",
-        "system.disconnect": "c-5514bde1",
-        "ship.claim": "c-adee9e97",
-        "ship.info": "c-6635fde5",
-        "ship.inspect": "c-bf5a2535",
-        "ship.jettison": "c-99cabfaa",
-        "ship.rename": "c-d14e4420",
-        "ship.repair": "c-93adff69",
-        "ship.reregister": "c-f4cf0776",
-        "ship.self_destruct": "c-00b8750b",
-        "ship.status": "c-6f3b141f",
-        "ship.transfer_cargo": "c-3b159319",
-        "ship.upgrade": "c-242f6cf1",
-        "shipyard.list": "c-bc091ddd",
-        "shipyard.upgrade": "c-674dc903",
-        "stock.buy": "c-308c7362",
-        "stock.dividend.set": "c-8ac12c58",
-        "stock.exchange.list_stocks": "c-2501f7a2",
-        "stock.exchange.orders.cancel": "c-2159a71d",
-        "stock.exchange.orders.create": "c-75c9a8fc",
-        "stock.ipo.register": "c-2c99830c",
-        "stock.portfolio.list": "c-087c1338",
-        "subscribe.add": "c-28b73972",
-        "subscribe.catalog": "c-40e247a6",
-        "subscribe.list": "c-97fcc80c",
-        "subscribe.remove": "c-8e351ca8",
-        "tavern.barcharts.get_prices_summary": "c-ef106da8",
-        "tavern.deadpool.place_bet": "c-eb5c557e",
-        "tavern.dice.play": "c-553f291b",
-        "tavern.graffiti.post": "c-da3fdd7c",
-        "tavern.highstakes.play": "c-e39e3e48",
-        "tavern.loan.pay": "c-cc92c144",
-        "tavern.loan.take": "c-6132e138",
-        "tavern.lottery.buy_ticket": "c-303cb78c",
-        "tavern.lottery.status": "c-c3113adb",
-        "tavern.raffle.buy_ticket": "c-9d234333",
-        "tavern.round.buy": "c-12a3f4f2",
-        "tavern.rumour.get_hint": "c-3fb94d60",
-        "tavern.trader.buy_password": "c-9d592d60",
-        "trade.accept": "c-86d779c2",
-        "trade.buy": "c-8db761ad",
-        "trade.cancel": "c-7862999f",
-        "trade.history": "c-39d29520",
-        "trade.jettison": "c-52b468da",
-        "trade.offer": "c-98eda585",
-        "trade.port_info": "c-275f4f1b",
-        "trade.quote": "c-e5cfe823",
-        "trade.sell": "c-670e1e1b"
+        "system.cmd_list": "c-b5b99e7c",
+        "admin.notice": "c-4846f80c",
+        "admin.shutdown_warning": "c-513747f1",
+        "auth.login": "c-96fd5ccc",
+        "auth.logout": "c-3f784472",
+        "auth.mfa.totp.verify": "c-c07025ca",
+        "auth.register": "c-26980f38",
+        "auth.refresh": "c-30f8ebf7",
+        "bank.balance": "c-73ff3c89",
+        "bank.deposit": "c-6f9033f1",
+        "bank.history": "c-fbe96f55",
+        "bank.leaderboard": "c-8e5ffe6c",
+        "bank.transfer": "c-1a93ffc8",
+        "bank.withdraw": "c-761a461a",
+        "bounty.list": "c-939e5795",
+        "bounty.post_federation": "c-8100c73d",
+        "bounty.post_hitlist": "c-84975375",
+        "bulk.execute": "c-0699fdc6",
+        "fine.list": "c-c077fa6f",
+        "fine.pay": "c-fa998c1f",
+        "insurance.policies.list": "c-a1e80793",
+        "insurance.policies.buy": "c-7088f389",
+        "insurance.claim.file": "c-bdeb4ddd",
+        "chat.broadcast": "c-4fe1c859",
+        "chat.history": "c-b6eac538",
+        "chat.send": "c-4caf419b",
+        "citadel.build": "c-09947f0b",
+        "citadel.upgrade": "c-0bfc3a5b",
+        "combat.attack": "c-628dba6d",
+        "combat.attack_planet": "c-b13f2284",
+        "combat.deploy_fighters": "c-4fce4588",
+        "combat.deploy_mines": "c-2e0beaca",
+        "combat.lay_mines": "c-a0678d20",
+        "combat.status": "c-902914a9",
+        "combat.sweep_mines": "c-a11daa0c",
+        "deploy.fighters.list": "c-615f7de3",
+        "deploy.mines.list": "c-bcfb9a2c",
+        "fighters.recall": "c-deac68b4",
+        "mines.recall": "c-07831f74",
+        "corp.balance": "c-d6d6de08",
+        "corp.create": "c-f45ac378",
+        "corp.deposit": "c-b10837c8",
+        "corp.dissolve": "c-c19a2570",
+        "corp.invite": "c-6a773455",
+        "corp.join": "c-e988e30a",
+        "corp.kick": "c-33b971d5",
+        "corp.leave": "c-95ed33f2",
+        "corp.list": "c-b0e40650",
+        "corp.roster": "c-0314f877",
+        "corp.statement": "c-12b7a88c",
+        "corp.status": "c-85201ce4",
+        "corp.transfer_ceo": "c-2a1d8392",
+        "corp.withdraw": "c-88c9ac77",
+        "dock.status": "c-8a1ca3cf",
+        "hardware.buy": "c-913763fb",
+        "hardware.list": "c-dbd13974",
+        "mail.delete": "c-ec052a7f",
+        "mail.inbox": "c-d6b62339",
+        "mail.read": "c-2608a320",
+        "mail.send": "c-2de942f7",
+        "move.autopilot.start": "c-b9106bda",
+        "move.autopilot.status": "c-84275cab",
+        "move.autopilot.stop": "c-0bfb112b",
+        "move.describe_sector": "c-716f63aa",
+        "move.pathfind": "c-34a91c41",
+        "move.scan": "c-e4912b58",
+        "move.transwarp": "c-bc812907",
+        "move.warp": "c-f63b5715",
+        "nav.avoid.add": "c-4ff112e0",
+        "nav.avoid.list": "c-db1e4da1",
+        "nav.avoid.remove": "c-6fa7e0aa",
+        "nav.avoid.set": "c-281d8c08",
+        "nav.bookmark.add": "c-76aa84b6",
+        "nav.bookmark.list": "c-cb654479",
+        "nav.bookmark.remove": "c-21b2356a",
+        "nav.bookmark.set": "c-b0860565",
+        "news.get_feed": "c-467512b7",
+        "news.mark_feed_read": "c-a018a680",
+        "news.read": "c-ff855bc6",
+        "notes.list": "c-7343edcc",
+        "notice.ack": "c-96a51040",
+        "notice.list": "c-76bb4888",
+        "planet.create": "c-6fe316ec",
+        "planet.deposit": "c-f9a77b71",
+        "planet.genesis": "c-7f5b56f8",
+        "planet.genesis_create": "c-20ab5cef",
+        "planet.harvest": "c-31afd96b",
+        "planet.info": "c-427442e0",
+        "planet.land": "c-dec9cf4d",
+        "planet.launch": "c-13561ecd",
+        "planet.market.buy_order": "c-982a7f2c",
+        "planet.market.sell": "c-3b787da8",
+        "planet.rename": "c-9409ac76",
+        "planet.transfer_ownership": "c-b15a02e5",
+        "planet.withdraw": "c-3e81fb90",
+        "player.get_avoids": "c-59c04ced",
+        "player.get_bookmarks": "c-eff2968c",
+        "player.get_notes": "c-e338bd3a",
+        "player.get_prefs": "c-5bb83b20",
+        "player.get_settings": "c-e45e5e70",
+        "player.get_subscriptions": "c-317a3376",
+        "player.get_topics": "c-73aebb0a",
+        "player.my_info": "c-c372ba3b",
+        "player.rankings": "c-ba92b411",
+        "player.set_avoids": "c-ae21670f",
+        "player.set_bookmarks": "c-ca0b4cb5",
+        "player.set_prefs": "c-45c096c4",
+        "player.set_settings": "c-070f4dca",
+        "player.set_subscriptions": "c-cd218252",
+        "player.set_topics": "c-e5f286a3",
+        "player.set_trade_account_preference": "c-f5abd196",
+        "port.describe": "c-f89cfe76",
+        "port.info": "c-42a5f61f",
+        "port.rob": "c-b9dba09f",
+        "port.status": "c-bc16fb42",
+        "sector.info": "c-bd2ca510",
+        "sector.scan": "c-a45463c2",
+        "sector.scan.density": "c-4577be27",
+        "sector.search": "c-2e2374b8",
+        "sector.set_beacon": "c-c633b41d",
+        "session.disconnect": "c-d7e6d032",
+        "session.hello": "c-d16ae01c",
+        "session.ping": "c-b5932bd3",
+        "player.ping": "c-d594d8b7",
+        "sys.notice.create": "c-50210c88",
+        "system.disconnect": "c-30784e6a",
+        "ship.claim": "c-1f03c030",
+        "ship.info": "c-635c335d",
+        "ship.inspect": "c-5d5eeb6b",
+        "ship.jettison": "c-052c13f5",
+        "ship.rename": "c-92f94d8e",
+        "ship.repair": "c-9a7f70ee",
+        "ship.reregister": "c-ae12546b",
+        "ship.self_destruct": "c-f9c5e6b5",
+        "ship.status": "c-49a4c75d",
+        "ship.transfer_cargo": "c-c45bc2eb",
+        "ship.upgrade": "c-71096f1f",
+        "shipyard.list": "c-22f1e560",
+        "shipyard.upgrade": "c-88f71bf1",
+        "stock.buy": "c-2113702b",
+        "stock.dividend.set": "c-e280611b",
+        "stock.exchange.list_stocks": "c-40ede5ac",
+        "stock.exchange.orders.cancel": "c-c30c55d7",
+        "stock.exchange.orders.create": "c-7c5e929b",
+        "stock.ipo.register": "c-561e31e5",
+        "stock.portfolio.list": "c-be910fa4",
+        "subscribe.add": "c-12f7e90e",
+        "subscribe.catalog": "c-08093cca",
+        "subscribe.list": "c-f80c7ade",
+        "subscribe.remove": "c-2b6f629d",
+        "tavern.barcharts.get_prices_summary": "c-30aee4ba",
+        "tavern.deadpool.place_bet": "c-89fca793",
+        "tavern.dice.play": "c-ebf2c926",
+        "tavern.graffiti.post": "c-61d3caea",
+        "tavern.highstakes.play": "c-1c0daddc",
+        "tavern.loan.pay": "c-fcc19da1",
+        "tavern.loan.take": "c-0adbb973",
+        "tavern.lottery.buy_ticket": "c-e3fa8945",
+        "tavern.lottery.status": "c-070119a7",
+        "tavern.raffle.buy_ticket": "c-3d1adda8",
+        "tavern.round.buy": "c-2f72a177",
+        "tavern.rumour.get_hint": "c-40dab1f6",
+        "tavern.trader.buy_password": "c-3c292d4f",
+        "trade.accept": "c-42fc53cb",
+        "trade.buy": "c-8c444e09",
+        "trade.cancel": "c-31aafd67",
+        "trade.history": "c-cee82e20",
+        "trade.jettison": "c-152189e8",
+        "trade.offer": "c-e4c7adf9",
+        "trade.port_info": "c-8dfa22e4",
+        "trade.quote": "c-ff034c8d",
+        "trade.sell": "c-c96308ea"
     },
     "recent_sectors": [
-        8,
-        2,
-        3,
-        1,
-        2,
-        1
+        1849
     ],
-    "pending_commands": {},
+    "pending_commands": {
+        "c-d23d1e40": {
+            "id": "c-d23d1e40",
+            "command": "trade.buy",
+            "data": {
+                "port_id": 720,
+                "sector_id": 1849,
+                "account": 0,
+                "items": [
+                    {
+                        "commodity": "ORG",
+                        "quantity": 1
+                    }
+                ],
+                "idempotency_key": "d23d1e40-98ba-493b-8ff8-f2cce7d089b9"
+            },
+            "meta": {
+                "client_version": "AI_QA_Bot/1.1",
+                "idempotency_key": "d23d1e40-98ba-493b-8ff8-f2cce7d089b9"
+            }
+        }
+    },
     "port_trade_blacklist": [],
     "warp_blacklist": [],
     "current_path": [],
     "last_action_result": {
         "status": "ok",
-        "command": "sector.info",
-        "request_id": "c-7f34721d",
-        "response_type": "sector.info",
-        "ts": "2026-01-03T12:49:35Z"
+        "command": "trade.quote",
+        "request_id": "c-e07303bc",
+        "response_type": "trade.quote",
+        "ts": "2026-01-08T20:09:19Z"
     },
-    "last_quotes": {},
+    "last_quotes": {
+        "25_EQU": {
+            "port_id": 25,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:01:33Z"
+        },
+        "25_ORE": {
+            "port_id": 25,
+            "commodity": "ORE",
+            "unit_price": 95.0,
+            "timestamp": "2026-01-07T21:01:33Z"
+        },
+        "25_ORG": {
+            "port_id": 25,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:01:34Z"
+        },
+        "907_EQU": {
+            "port_id": 907,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:10:48Z"
+        },
+        "907_ORE": {
+            "port_id": 907,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:10:48Z"
+        },
+        "907_ORG": {
+            "port_id": 907,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:10:49Z"
+        },
+        "504_EQU": {
+            "port_id": 504,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:11:32Z"
+        },
+        "504_ORE": {
+            "port_id": 504,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:11:33Z"
+        },
+        "504_ORG": {
+            "port_id": 504,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:11:33Z"
+        },
+        "23_EQU": {
+            "port_id": 23,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:11:37Z"
+        },
+        "23_ORE": {
+            "port_id": 23,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:11:37Z"
+        },
+        "23_ORG": {
+            "port_id": 23,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:11:38Z"
+        },
+        "537_EQU": {
+            "port_id": 537,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:11:48Z"
+        },
+        "537_ORE": {
+            "port_id": 537,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:11:48Z"
+        },
+        "537_ORG": {
+            "port_id": 537,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:11:49Z"
+        },
+        "748_EQU": {
+            "port_id": 748,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:11:52Z"
+        },
+        "748_ORE": {
+            "port_id": 748,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:11:53Z"
+        },
+        "748_ORG": {
+            "port_id": 748,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:11:53Z"
+        },
+        "320_EQU": {
+            "port_id": 320,
+            "commodity": "EQU",
+            "unit_price": 190.0,
+            "timestamp": "2026-01-07T21:11:58Z"
+        },
+        "320_ORE": {
+            "port_id": 320,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:11:58Z"
+        },
+        "320_ORG": {
+            "port_id": 320,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:11:59Z"
+        },
+        "578_EQU": {
+            "port_id": 578,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:12:09Z"
+        },
+        "578_ORE": {
+            "port_id": 578,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:12:09Z"
+        },
+        "578_ORG": {
+            "port_id": 578,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:12:10Z"
+        },
+        "256_EQU": {
+            "port_id": 256,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-07T21:12:16Z"
+        },
+        "256_ORE": {
+            "port_id": 256,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:12:17Z"
+        },
+        "256_ORG": {
+            "port_id": 256,
+            "commodity": "ORG",
+            "unit_price": 151.0,
+            "timestamp": "2026-01-07T21:12:17Z"
+        },
+        "232_EQU": {
+            "port_id": 232,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:12:20Z"
+        },
+        "232_ORE": {
+            "port_id": 232,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:12:21Z"
+        },
+        "232_ORG": {
+            "port_id": 232,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:12:21Z"
+        },
+        "281_EQU": {
+            "port_id": 281,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:12:30Z"
+        },
+        "281_ORE": {
+            "port_id": 281,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:12:30Z"
+        },
+        "281_ORG": {
+            "port_id": 281,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:12:31Z"
+        },
+        "682_EQU": {
+            "port_id": 682,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-07T21:12:36Z"
+        },
+        "682_ORE": {
+            "port_id": 682,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:12:37Z"
+        },
+        "682_ORG": {
+            "port_id": 682,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:12:37Z"
+        },
+        "386_EQU": {
+            "port_id": 386,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:12:42Z"
+        },
+        "386_ORE": {
+            "port_id": 386,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:12:43Z"
+        },
+        "386_ORG": {
+            "port_id": 386,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:12:43Z"
+        },
+        "708_EQU": {
+            "port_id": 708,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:12:50Z"
+        },
+        "708_ORE": {
+            "port_id": 708,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:12:51Z"
+        },
+        "708_ORG": {
+            "port_id": 708,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:12:51Z"
+        },
+        "551_EQU": {
+            "port_id": 551,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:12:55Z"
+        },
+        "551_ORE": {
+            "port_id": 551,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:12:55Z"
+        },
+        "551_ORG": {
+            "port_id": 551,
+            "commodity": "ORG",
+            "unit_price": 149.0,
+            "timestamp": "2026-01-07T21:12:56Z"
+        },
+        "536_EQU": {
+            "port_id": 536,
+            "commodity": "EQU",
+            "unit_price": 200.0,
+            "timestamp": "2026-01-07T21:12:59Z"
+        },
+        "536_ORE": {
+            "port_id": 536,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:13:00Z"
+        },
+        "536_ORG": {
+            "port_id": 536,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:13:00Z"
+        },
+        "282_EQU": {
+            "port_id": 282,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:13:04Z"
+        },
+        "282_ORE": {
+            "port_id": 282,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:13:04Z"
+        },
+        "282_ORG": {
+            "port_id": 282,
+            "commodity": "ORG",
+            "unit_price": 144.0,
+            "timestamp": "2026-01-07T21:13:05Z"
+        },
+        "736_EQU": {
+            "port_id": 736,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:13:08Z"
+        },
+        "736_ORE": {
+            "port_id": 736,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:13:09Z"
+        },
+        "736_ORG": {
+            "port_id": 736,
+            "commodity": "ORG",
+            "unit_price": 153.0,
+            "timestamp": "2026-01-07T21:13:09Z"
+        },
+        "800_EQU": {
+            "port_id": 800,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:13:13Z"
+        },
+        "800_ORE": {
+            "port_id": 800,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:13:13Z"
+        },
+        "800_ORG": {
+            "port_id": 800,
+            "commodity": "ORG",
+            "unit_price": 149.0,
+            "timestamp": "2026-01-07T21:13:14Z"
+        },
+        "470_EQU": {
+            "port_id": 470,
+            "commodity": "EQU",
+            "unit_price": 200.0,
+            "timestamp": "2026-01-07T21:13:17Z"
+        },
+        "470_ORE": {
+            "port_id": 470,
+            "commodity": "ORE",
+            "unit_price": 95.0,
+            "timestamp": "2026-01-07T21:13:17Z"
+        },
+        "470_ORG": {
+            "port_id": 470,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:13:18Z"
+        },
+        "427_EQU": {
+            "port_id": 427,
+            "commodity": "EQU",
+            "unit_price": 202.0,
+            "timestamp": "2026-01-07T21:13:27Z"
+        },
+        "427_ORE": {
+            "port_id": 427,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:13:27Z"
+        },
+        "427_ORG": {
+            "port_id": 427,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:13:28Z"
+        },
+        "229_EQU": {
+            "port_id": 229,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:13:31Z"
+        },
+        "229_ORE": {
+            "port_id": 229,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:13:32Z"
+        },
+        "229_ORG": {
+            "port_id": 229,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:13:32Z"
+        },
+        "827_EQU": {
+            "port_id": 827,
+            "commodity": "EQU",
+            "unit_price": 196.0,
+            "timestamp": "2026-01-07T21:13:41Z"
+        },
+        "827_ORE": {
+            "port_id": 827,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:13:41Z"
+        },
+        "827_ORG": {
+            "port_id": 827,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:13:42Z"
+        },
+        "747_EQU": {
+            "port_id": 747,
+            "commodity": "EQU",
+            "unit_price": 196.0,
+            "timestamp": "2026-01-07T21:13:54Z"
+        },
+        "747_ORE": {
+            "port_id": 747,
+            "commodity": "ORE",
+            "unit_price": 103.0,
+            "timestamp": "2026-01-07T21:13:54Z"
+        },
+        "747_ORG": {
+            "port_id": 747,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:13:55Z"
+        },
+        "889_EQU": {
+            "port_id": 889,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:14:02Z"
+        },
+        "889_ORE": {
+            "port_id": 889,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:14:03Z"
+        },
+        "889_ORG": {
+            "port_id": 889,
+            "commodity": "ORG",
+            "unit_price": 144.0,
+            "timestamp": "2026-01-07T21:14:03Z"
+        },
+        "910_EQU": {
+            "port_id": 910,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:14:08Z"
+        },
+        "910_ORE": {
+            "port_id": 910,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:14:09Z"
+        },
+        "910_ORG": {
+            "port_id": 910,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:14:09Z"
+        },
+        "971_EQU": {
+            "port_id": 971,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:14:20Z"
+        },
+        "971_ORE": {
+            "port_id": 971,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:14:20Z"
+        },
+        "971_ORG": {
+            "port_id": 971,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:14:21Z"
+        },
+        "505_EQU": {
+            "port_id": 505,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:14:26Z"
+        },
+        "505_ORE": {
+            "port_id": 505,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:14:26Z"
+        },
+        "505_ORG": {
+            "port_id": 505,
+            "commodity": "ORG",
+            "unit_price": 150.0,
+            "timestamp": "2026-01-07T21:14:27Z"
+        },
+        "514_EQU": {
+            "port_id": 514,
+            "commodity": "EQU",
+            "unit_price": 196.0,
+            "timestamp": "2026-01-07T21:14:32Z"
+        },
+        "514_ORE": {
+            "port_id": 514,
+            "commodity": "ORE",
+            "unit_price": 119.0,
+            "timestamp": "2026-01-07T21:14:33Z"
+        },
+        "514_ORG": {
+            "port_id": 514,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:14:34Z"
+        },
+        "581_EQU": {
+            "port_id": 581,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:14:39Z"
+        },
+        "581_ORE": {
+            "port_id": 581,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:14:40Z"
+        },
+        "581_ORG": {
+            "port_id": 581,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:14:40Z"
+        },
+        "79_EQU": {
+            "port_id": 79,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:14:43Z"
+        },
+        "79_ORE": {
+            "port_id": 79,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:14:44Z"
+        },
+        "79_ORG": {
+            "port_id": 79,
+            "commodity": "ORG",
+            "unit_price": 153.0,
+            "timestamp": "2026-01-07T21:14:44Z"
+        },
+        "151_EQU": {
+            "port_id": 151,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:14:48Z"
+        },
+        "151_ORE": {
+            "port_id": 151,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:14:49Z"
+        },
+        "151_ORG": {
+            "port_id": 151,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:14:49Z"
+        },
+        "72_EQU": {
+            "port_id": 72,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:14:53Z"
+        },
+        "72_ORE": {
+            "port_id": 72,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:14:53Z"
+        },
+        "72_ORG": {
+            "port_id": 72,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:14:54Z"
+        },
+        "489_EQU": {
+            "port_id": 489,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-07T21:14:59Z"
+        },
+        "489_ORE": {
+            "port_id": 489,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:15:00Z"
+        },
+        "489_ORG": {
+            "port_id": 489,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:15:00Z"
+        },
+        "607_EQU": {
+            "port_id": 607,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:15:04Z"
+        },
+        "607_ORE": {
+            "port_id": 607,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:15:05Z"
+        },
+        "607_ORG": {
+            "port_id": 607,
+            "commodity": "ORG",
+            "unit_price": 151.0,
+            "timestamp": "2026-01-07T21:15:05Z"
+        },
+        "412_EQU": {
+            "port_id": 412,
+            "commodity": "EQU",
+            "unit_price": 193.0,
+            "timestamp": "2026-01-07T21:15:09Z"
+        },
+        "412_ORE": {
+            "port_id": 412,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:15:09Z"
+        },
+        "412_ORG": {
+            "port_id": 412,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:15:10Z"
+        },
+        "479_EQU": {
+            "port_id": 479,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:15:14Z"
+        },
+        "479_ORE": {
+            "port_id": 479,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:15:14Z"
+        },
+        "479_ORG": {
+            "port_id": 479,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:15:15Z"
+        },
+        "724_EQU": {
+            "port_id": 724,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:15:26Z"
+        },
+        "724_ORE": {
+            "port_id": 724,
+            "commodity": "ORE",
+            "unit_price": 119.0,
+            "timestamp": "2026-01-07T21:15:27Z"
+        },
+        "724_ORG": {
+            "port_id": 724,
+            "commodity": "ORG",
+            "unit_price": 144.0,
+            "timestamp": "2026-01-07T21:15:27Z"
+        },
+        "214_EQU": {
+            "port_id": 214,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:15:30Z"
+        },
+        "214_ORE": {
+            "port_id": 214,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:15:31Z"
+        },
+        "214_ORG": {
+            "port_id": 214,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:15:32Z"
+        },
+        "366_EQU": {
+            "port_id": 366,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:15:37Z"
+        },
+        "366_ORE": {
+            "port_id": 366,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:15:38Z"
+        },
+        "366_ORG": {
+            "port_id": 366,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:15:38Z"
+        },
+        "296_EQU": {
+            "port_id": 296,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:15:42Z"
+        },
+        "296_ORE": {
+            "port_id": 296,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:15:43Z"
+        },
+        "296_ORG": {
+            "port_id": 296,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:15:43Z"
+        },
+        "525_EQU": {
+            "port_id": 525,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:15:48Z"
+        },
+        "525_ORE": {
+            "port_id": 525,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:15:49Z"
+        },
+        "525_ORG": {
+            "port_id": 525,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:15:50Z"
+        },
+        "191_EQU": {
+            "port_id": 191,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:16:09Z"
+        },
+        "191_ORE": {
+            "port_id": 191,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:16:09Z"
+        },
+        "191_ORG": {
+            "port_id": 191,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:16:10Z"
+        },
+        "612_EQU": {
+            "port_id": 612,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:16:17Z"
+        },
+        "612_ORE": {
+            "port_id": 612,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:16:18Z"
+        },
+        "612_ORG": {
+            "port_id": 612,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:16:18Z"
+        },
+        "303_EQU": {
+            "port_id": 303,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:16:22Z"
+        },
+        "303_ORE": {
+            "port_id": 303,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:16:23Z"
+        },
+        "303_ORG": {
+            "port_id": 303,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:16:23Z"
+        },
+        "580_EQU": {
+            "port_id": 580,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:16:29Z"
+        },
+        "580_ORE": {
+            "port_id": 580,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:16:29Z"
+        },
+        "580_ORG": {
+            "port_id": 580,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:16:30Z"
+        },
+        "908_EQU": {
+            "port_id": 908,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:16:34Z"
+        },
+        "908_ORE": {
+            "port_id": 908,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:16:35Z"
+        },
+        "908_ORG": {
+            "port_id": 908,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:16:35Z"
+        },
+        "443_EQU": {
+            "port_id": 443,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:16:39Z"
+        },
+        "443_ORE": {
+            "port_id": 443,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:16:40Z"
+        },
+        "443_ORG": {
+            "port_id": 443,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:16:40Z"
+        },
+        "142_EQU": {
+            "port_id": 142,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:16:49Z"
+        },
+        "142_ORE": {
+            "port_id": 142,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:16:50Z"
+        },
+        "142_ORG": {
+            "port_id": 142,
+            "commodity": "ORG",
+            "unit_price": 151.0,
+            "timestamp": "2026-01-07T21:16:50Z"
+        },
+        "745_EQU": {
+            "port_id": 745,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:16:54Z"
+        },
+        "745_ORE": {
+            "port_id": 745,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:16:55Z"
+        },
+        "745_ORG": {
+            "port_id": 745,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:16:55Z"
+        },
+        "781_EQU": {
+            "port_id": 781,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:17:04Z"
+        },
+        "781_ORE": {
+            "port_id": 781,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:17:05Z"
+        },
+        "781_ORG": {
+            "port_id": 781,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:17:06Z"
+        },
+        "670_EQU": {
+            "port_id": 670,
+            "commodity": "EQU",
+            "unit_price": 193.0,
+            "timestamp": "2026-01-07T21:17:10Z"
+        },
+        "670_ORE": {
+            "port_id": 670,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:17:10Z"
+        },
+        "670_ORG": {
+            "port_id": 670,
+            "commodity": "ORG",
+            "unit_price": 153.0,
+            "timestamp": "2026-01-07T21:17:11Z"
+        },
+        "192_EQU": {
+            "port_id": 192,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:17:14Z"
+        },
+        "192_ORE": {
+            "port_id": 192,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:17:15Z"
+        },
+        "192_ORG": {
+            "port_id": 192,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:17:15Z"
+        },
+        "803_EQU": {
+            "port_id": 803,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:17:23Z"
+        },
+        "803_ORE": {
+            "port_id": 803,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:17:23Z"
+        },
+        "803_ORG": {
+            "port_id": 803,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:17:24Z"
+        },
+        "757_EQU": {
+            "port_id": 757,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:17:28Z"
+        },
+        "757_ORE": {
+            "port_id": 757,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:17:28Z"
+        },
+        "757_ORG": {
+            "port_id": 757,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:17:29Z"
+        },
+        "201_EQU": {
+            "port_id": 201,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:17:33Z"
+        },
+        "201_ORE": {
+            "port_id": 201,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:17:33Z"
+        },
+        "201_ORG": {
+            "port_id": 201,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:17:34Z"
+        },
+        "882_EQU": {
+            "port_id": 882,
+            "commodity": "EQU",
+            "unit_price": 193.0,
+            "timestamp": "2026-01-07T21:17:44Z"
+        },
+        "882_ORE": {
+            "port_id": 882,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:17:44Z"
+        },
+        "882_ORG": {
+            "port_id": 882,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:17:45Z"
+        },
+        "429_EQU": {
+            "port_id": 429,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:17:55Z"
+        },
+        "429_ORE": {
+            "port_id": 429,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:17:55Z"
+        },
+        "429_ORG": {
+            "port_id": 429,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:17:56Z"
+        },
+        "672_EQU": {
+            "port_id": 672,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:18:00Z"
+        },
+        "672_ORE": {
+            "port_id": 672,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:18:00Z"
+        },
+        "672_ORG": {
+            "port_id": 672,
+            "commodity": "ORG",
+            "unit_price": 150.0,
+            "timestamp": "2026-01-07T21:18:01Z"
+        },
+        "721_EQU": {
+            "port_id": 721,
+            "commodity": "EQU",
+            "unit_price": 204.0,
+            "timestamp": "2026-01-07T21:18:05Z"
+        },
+        "721_ORE": {
+            "port_id": 721,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:18:06Z"
+        },
+        "721_ORG": {
+            "port_id": 721,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:18:06Z"
+        },
+        "637_EQU": {
+            "port_id": 637,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:18:12Z"
+        },
+        "637_ORE": {
+            "port_id": 637,
+            "commodity": "ORE",
+            "unit_price": 103.0,
+            "timestamp": "2026-01-07T21:18:12Z"
+        },
+        "637_ORG": {
+            "port_id": 637,
+            "commodity": "ORG",
+            "unit_price": 144.0,
+            "timestamp": "2026-01-07T21:18:13Z"
+        },
+        "31_EQU": {
+            "port_id": 31,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:18:20Z"
+        },
+        "31_ORE": {
+            "port_id": 31,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:18:21Z"
+        },
+        "31_ORG": {
+            "port_id": 31,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:18:22Z"
+        },
+        "2_EQU": {
+            "port_id": 2,
+            "commodity": "EQU",
+            "unit_price": 197.0,
+            "timestamp": "2026-01-07T21:18:31Z"
+        },
+        "2_ORE": {
+            "port_id": 2,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:18:31Z"
+        },
+        "2_ORG": {
+            "port_id": 2,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:18:32Z"
+        },
+        "434_EQU": {
+            "port_id": 434,
+            "commodity": "EQU",
+            "unit_price": 196.0,
+            "timestamp": "2026-01-07T21:18:41Z"
+        },
+        "434_ORE": {
+            "port_id": 434,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:18:42Z"
+        },
+        "434_ORG": {
+            "port_id": 434,
+            "commodity": "ORG",
+            "unit_price": 149.0,
+            "timestamp": "2026-01-07T21:18:42Z"
+        },
+        "866_EQU": {
+            "port_id": 866,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:18:48Z"
+        },
+        "866_ORE": {
+            "port_id": 866,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:18:49Z"
+        },
+        "866_ORG": {
+            "port_id": 866,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:18:49Z"
+        },
+        "204_EQU": {
+            "port_id": 204,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:18:53Z"
+        },
+        "204_ORE": {
+            "port_id": 204,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:18:54Z"
+        },
+        "204_ORG": {
+            "port_id": 204,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:18:54Z"
+        },
+        "60_EQU": {
+            "port_id": 60,
+            "commodity": "EQU",
+            "unit_price": 190.0,
+            "timestamp": "2026-01-07T21:19:00Z"
+        },
+        "60_ORE": {
+            "port_id": 60,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:19:01Z"
+        },
+        "60_ORG": {
+            "port_id": 60,
+            "commodity": "ORG",
+            "unit_price": 150.0,
+            "timestamp": "2026-01-07T21:19:01Z"
+        },
+        "213_EQU": {
+            "port_id": 213,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:19:07Z"
+        },
+        "213_ORE": {
+            "port_id": 213,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:19:08Z"
+        },
+        "213_ORG": {
+            "port_id": 213,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:19:08Z"
+        },
+        "194_EQU": {
+            "port_id": 194,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:19:12Z"
+        },
+        "194_ORE": {
+            "port_id": 194,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:19:13Z"
+        },
+        "194_ORG": {
+            "port_id": 194,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:19:14Z"
+        },
+        "123_EQU": {
+            "port_id": 123,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:19:25Z"
+        },
+        "123_ORE": {
+            "port_id": 123,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:19:26Z"
+        },
+        "123_ORG": {
+            "port_id": 123,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:19:26Z"
+        },
+        "888_EQU": {
+            "port_id": 888,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:19:30Z"
+        },
+        "888_ORE": {
+            "port_id": 888,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:19:31Z"
+        },
+        "888_ORG": {
+            "port_id": 888,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:19:32Z"
+        },
+        "345_EQU": {
+            "port_id": 345,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:19:37Z"
+        },
+        "345_ORE": {
+            "port_id": 345,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:19:38Z"
+        },
+        "345_ORG": {
+            "port_id": 345,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:19:39Z"
+        },
+        "762_EQU": {
+            "port_id": 762,
+            "commodity": "EQU",
+            "unit_price": 196.0,
+            "timestamp": "2026-01-07T21:19:43Z"
+        },
+        "762_ORE": {
+            "port_id": 762,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:19:43Z"
+        },
+        "762_ORG": {
+            "port_id": 762,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:19:44Z"
+        },
+        "132_EQU": {
+            "port_id": 132,
+            "commodity": "EQU",
+            "unit_price": 199.0,
+            "timestamp": "2026-01-07T21:19:48Z"
+        },
+        "132_ORE": {
+            "port_id": 132,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:19:49Z"
+        },
+        "132_ORG": {
+            "port_id": 132,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:19:49Z"
+        },
+        "54_EQU": {
+            "port_id": 54,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:20:07Z"
+        },
+        "54_ORE": {
+            "port_id": 54,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:20:07Z"
+        },
+        "54_ORG": {
+            "port_id": 54,
+            "commodity": "ORG",
+            "unit_price": 144.0,
+            "timestamp": "2026-01-07T21:20:08Z"
+        },
+        "63_EQU": {
+            "port_id": 63,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:20:16Z"
+        },
+        "63_ORE": {
+            "port_id": 63,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:20:16Z"
+        },
+        "63_ORG": {
+            "port_id": 63,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:20:17Z"
+        },
+        "937_EQU": {
+            "port_id": 937,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:20:28Z"
+        },
+        "937_ORE": {
+            "port_id": 937,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:20:28Z"
+        },
+        "937_ORG": {
+            "port_id": 937,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:20:29Z"
+        },
+        "691_EQU": {
+            "port_id": 691,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:20:35Z"
+        },
+        "691_ORE": {
+            "port_id": 691,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:20:36Z"
+        },
+        "691_ORG": {
+            "port_id": 691,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:20:36Z"
+        },
+        "849_EQU": {
+            "port_id": 849,
+            "commodity": "EQU",
+            "unit_price": 205.0,
+            "timestamp": "2026-01-07T21:20:48Z"
+        },
+        "849_ORE": {
+            "port_id": 849,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:20:48Z"
+        },
+        "849_ORG": {
+            "port_id": 849,
+            "commodity": "ORG",
+            "unit_price": 151.0,
+            "timestamp": "2026-01-07T21:20:49Z"
+        },
+        "446_EQU": {
+            "port_id": 446,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:20:59Z"
+        },
+        "446_ORE": {
+            "port_id": 446,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:21:00Z"
+        },
+        "446_ORG": {
+            "port_id": 446,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:21:00Z"
+        },
+        "365_EQU": {
+            "port_id": 365,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:21:18Z"
+        },
+        "365_ORE": {
+            "port_id": 365,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:21:18Z"
+        },
+        "365_ORG": {
+            "port_id": 365,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:21:19Z"
+        },
+        "354_EQU": {
+            "port_id": 354,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:21:23Z"
+        },
+        "354_ORE": {
+            "port_id": 354,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:21:24Z"
+        },
+        "354_ORG": {
+            "port_id": 354,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:21:24Z"
+        },
+        "331_EQU": {
+            "port_id": 331,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:21:30Z"
+        },
+        "331_ORE": {
+            "port_id": 331,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:21:31Z"
+        },
+        "331_ORG": {
+            "port_id": 331,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:21:31Z"
+        },
+        "658_EQU": {
+            "port_id": 658,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:21:37Z"
+        },
+        "658_ORE": {
+            "port_id": 658,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:21:38Z"
+        },
+        "658_ORG": {
+            "port_id": 658,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:21:39Z"
+        },
+        "829_EQU": {
+            "port_id": 829,
+            "commodity": "EQU",
+            "unit_price": 199.0,
+            "timestamp": "2026-01-07T21:21:43Z"
+        },
+        "829_ORE": {
+            "port_id": 829,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:21:43Z"
+        },
+        "829_ORG": {
+            "port_id": 829,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:21:44Z"
+        },
+        "451_EQU": {
+            "port_id": 451,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:21:55Z"
+        },
+        "451_ORE": {
+            "port_id": 451,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:21:56Z"
+        },
+        "451_ORG": {
+            "port_id": 451,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:21:56Z"
+        },
+        "78_EQU": {
+            "port_id": 78,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:22:01Z"
+        },
+        "78_ORE": {
+            "port_id": 78,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:22:01Z"
+        },
+        "78_ORG": {
+            "port_id": 78,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:22:02Z"
+        },
+        "731_EQU": {
+            "port_id": 731,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:22:05Z"
+        },
+        "731_ORE": {
+            "port_id": 731,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:22:06Z"
+        },
+        "731_ORG": {
+            "port_id": 731,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:22:07Z"
+        },
+        "417_EQU": {
+            "port_id": 417,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:22:22Z"
+        },
+        "417_ORE": {
+            "port_id": 417,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:22:23Z"
+        },
+        "417_ORG": {
+            "port_id": 417,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:22:23Z"
+        },
+        "547_EQU": {
+            "port_id": 547,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:22:33Z"
+        },
+        "547_ORE": {
+            "port_id": 547,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:22:34Z"
+        },
+        "547_ORG": {
+            "port_id": 547,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:22:34Z"
+        },
+        "420_EQU": {
+            "port_id": 420,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:22:44Z"
+        },
+        "420_ORE": {
+            "port_id": 420,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:22:45Z"
+        },
+        "420_ORG": {
+            "port_id": 420,
+            "commodity": "ORG",
+            "unit_price": 149.0,
+            "timestamp": "2026-01-07T21:22:45Z"
+        },
+        "939_EQU": {
+            "port_id": 939,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:22:53Z"
+        },
+        "939_ORE": {
+            "port_id": 939,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:22:54Z"
+        },
+        "939_ORG": {
+            "port_id": 939,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:22:54Z"
+        },
+        "872_EQU": {
+            "port_id": 872,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:22:58Z"
+        },
+        "872_ORE": {
+            "port_id": 872,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:22:59Z"
+        },
+        "872_ORG": {
+            "port_id": 872,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:23:00Z"
+        },
+        "744_EQU": {
+            "port_id": 744,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:23:11Z"
+        },
+        "744_ORE": {
+            "port_id": 744,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:23:11Z"
+        },
+        "744_ORG": {
+            "port_id": 744,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:23:12Z"
+        },
+        "422_EQU": {
+            "port_id": 422,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:23:18Z"
+        },
+        "422_ORE": {
+            "port_id": 422,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:23:19Z"
+        },
+        "422_ORG": {
+            "port_id": 422,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:23:19Z"
+        },
+        "613_EQU": {
+            "port_id": 613,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:23:30Z"
+        },
+        "613_ORE": {
+            "port_id": 613,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:23:30Z"
+        },
+        "613_ORG": {
+            "port_id": 613,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:23:31Z"
+        },
+        "93_EQU": {
+            "port_id": 93,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:23:41Z"
+        },
+        "93_ORE": {
+            "port_id": 93,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:23:41Z"
+        },
+        "93_ORG": {
+            "port_id": 93,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:23:42Z"
+        },
+        "697_EQU": {
+            "port_id": 697,
+            "commodity": "EQU",
+            "unit_price": 205.0,
+            "timestamp": "2026-01-07T21:23:46Z"
+        },
+        "697_ORE": {
+            "port_id": 697,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:23:47Z"
+        },
+        "697_ORG": {
+            "port_id": 697,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:23:47Z"
+        },
+        "306_EQU": {
+            "port_id": 306,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:23:52Z"
+        },
+        "306_ORE": {
+            "port_id": 306,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:23:52Z"
+        },
+        "306_ORG": {
+            "port_id": 306,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:23:53Z"
+        },
+        "511_EQU": {
+            "port_id": 511,
+            "commodity": "EQU",
+            "unit_price": 283.0,
+            "timestamp": "2026-01-07T21:24:01Z"
+        },
+        "511_ORE": {
+            "port_id": 511,
+            "commodity": "ORE",
+            "unit_price": 159.0,
+            "timestamp": "2026-01-07T21:24:01Z"
+        },
+        "511_ORG": {
+            "port_id": 511,
+            "commodity": "ORG",
+            "unit_price": 212.0,
+            "timestamp": "2026-01-07T21:24:02Z"
+        },
+        "903_EQU": {
+            "port_id": 903,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:24:06Z"
+        },
+        "903_ORE": {
+            "port_id": 903,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:24:07Z"
+        },
+        "903_ORG": {
+            "port_id": 903,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:24:08Z"
+        },
+        "743_EQU": {
+            "port_id": 743,
+            "commodity": "EQU",
+            "unit_price": 197.0,
+            "timestamp": "2026-01-07T21:24:15Z"
+        },
+        "743_ORE": {
+            "port_id": 743,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:24:16Z"
+        },
+        "743_ORG": {
+            "port_id": 743,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:24:17Z"
+        },
+        "260_EQU": {
+            "port_id": 260,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:24:27Z"
+        },
+        "260_ORE": {
+            "port_id": 260,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:24:28Z"
+        },
+        "260_ORG": {
+            "port_id": 260,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:24:28Z"
+        },
+        "851_EQU": {
+            "port_id": 851,
+            "commodity": "EQU",
+            "unit_price": 202.0,
+            "timestamp": "2026-01-07T21:24:33Z"
+        },
+        "851_ORE": {
+            "port_id": 851,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:24:33Z"
+        },
+        "851_ORG": {
+            "port_id": 851,
+            "commodity": "ORG",
+            "unit_price": 151.0,
+            "timestamp": "2026-01-07T21:24:34Z"
+        },
+        "238_EQU": {
+            "port_id": 238,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:24:46Z"
+        },
+        "238_ORE": {
+            "port_id": 238,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:24:46Z"
+        },
+        "238_ORG": {
+            "port_id": 238,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:24:47Z"
+        },
+        "645_EQU": {
+            "port_id": 645,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:25:05Z"
+        },
+        "645_ORE": {
+            "port_id": 645,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:25:05Z"
+        },
+        "645_ORG": {
+            "port_id": 645,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:25:06Z"
+        },
+        "259_EQU": {
+            "port_id": 259,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:25:12Z"
+        },
+        "259_ORE": {
+            "port_id": 259,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:25:13Z"
+        },
+        "259_ORG": {
+            "port_id": 259,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:25:13Z"
+        },
+        "652_EQU": {
+            "port_id": 652,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:25:18Z"
+        },
+        "652_ORE": {
+            "port_id": 652,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:25:18Z"
+        },
+        "652_ORG": {
+            "port_id": 652,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:25:19Z"
+        },
+        "467_EQU": {
+            "port_id": 467,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:25:23Z"
+        },
+        "467_ORE": {
+            "port_id": 467,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:25:24Z"
+        },
+        "467_ORG": {
+            "port_id": 467,
+            "commodity": "ORG",
+            "unit_price": 153.0,
+            "timestamp": "2026-01-07T21:25:25Z"
+        },
+        "334_EQU": {
+            "port_id": 334,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:25:36Z"
+        },
+        "334_ORE": {
+            "port_id": 334,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:25:37Z"
+        },
+        "334_ORG": {
+            "port_id": 334,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:25:38Z"
+        },
+        "628_EQU": {
+            "port_id": 628,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:25:44Z"
+        },
+        "628_ORE": {
+            "port_id": 628,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:25:45Z"
+        },
+        "628_ORG": {
+            "port_id": 628,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:25:45Z"
+        },
+        "524_EQU": {
+            "port_id": 524,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:25:50Z"
+        },
+        "524_ORE": {
+            "port_id": 524,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:25:50Z"
+        },
+        "524_ORG": {
+            "port_id": 524,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:25:51Z"
+        },
+        "49_EQU": {
+            "port_id": 49,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:25:55Z"
+        },
+        "49_ORE": {
+            "port_id": 49,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:25:56Z"
+        },
+        "49_ORG": {
+            "port_id": 49,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:25:56Z"
+        },
+        "74_EQU": {
+            "port_id": 74,
+            "commodity": "EQU",
+            "unit_price": 204.0,
+            "timestamp": "2026-01-07T21:26:01Z"
+        },
+        "74_ORE": {
+            "port_id": 74,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:26:01Z"
+        },
+        "74_ORG": {
+            "port_id": 74,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:26:02Z"
+        },
+        "398_EQU": {
+            "port_id": 398,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:26:10Z"
+        },
+        "398_ORE": {
+            "port_id": 398,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:26:11Z"
+        },
+        "398_ORG": {
+            "port_id": 398,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:26:11Z"
+        },
+        "373_EQU": {
+            "port_id": 373,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:26:26Z"
+        },
+        "373_ORE": {
+            "port_id": 373,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:26:27Z"
+        },
+        "373_ORG": {
+            "port_id": 373,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:26:27Z"
+        },
+        "482_EQU": {
+            "port_id": 482,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:26:33Z"
+        },
+        "482_ORE": {
+            "port_id": 482,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:26:34Z"
+        },
+        "482_ORG": {
+            "port_id": 482,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:26:35Z"
+        },
+        "870_EQU": {
+            "port_id": 870,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:26:41Z"
+        },
+        "870_ORE": {
+            "port_id": 870,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:26:42Z"
+        },
+        "870_ORG": {
+            "port_id": 870,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:26:42Z"
+        },
+        "457_EQU": {
+            "port_id": 457,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:26:47Z"
+        },
+        "457_ORE": {
+            "port_id": 457,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:26:47Z"
+        },
+        "457_ORG": {
+            "port_id": 457,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:26:48Z"
+        },
+        "121_EQU": {
+            "port_id": 121,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:26:56Z"
+        },
+        "121_ORE": {
+            "port_id": 121,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:26:57Z"
+        },
+        "121_ORG": {
+            "port_id": 121,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:26:58Z"
+        },
+        "809_EQU": {
+            "port_id": 809,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:27:02Z"
+        },
+        "809_ORE": {
+            "port_id": 809,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:27:03Z"
+        },
+        "809_ORG": {
+            "port_id": 809,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:27:03Z"
+        },
+        "208_EQU": {
+            "port_id": 208,
+            "commodity": "EQU",
+            "unit_price": 193.0,
+            "timestamp": "2026-01-07T21:27:10Z"
+        },
+        "208_ORE": {
+            "port_id": 208,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:27:10Z"
+        },
+        "208_ORG": {
+            "port_id": 208,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:27:11Z"
+        },
+        "342_EQU": {
+            "port_id": 342,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:27:19Z"
+        },
+        "342_ORE": {
+            "port_id": 342,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:27:20Z"
+        },
+        "342_ORG": {
+            "port_id": 342,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:27:20Z"
+        },
+        "218_EQU": {
+            "port_id": 218,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:27:28Z"
+        },
+        "218_ORE": {
+            "port_id": 218,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:27:29Z"
+        },
+        "218_ORG": {
+            "port_id": 218,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:27:30Z"
+        },
+        "618_EQU": {
+            "port_id": 618,
+            "commodity": "EQU",
+            "unit_price": 192.0,
+            "timestamp": "2026-01-07T21:27:34Z"
+        },
+        "618_ORE": {
+            "port_id": 618,
+            "commodity": "ORE",
+            "unit_price": 103.0,
+            "timestamp": "2026-01-07T21:27:35Z"
+        },
+        "618_ORG": {
+            "port_id": 618,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:27:36Z"
+        },
+        "406_EQU": {
+            "port_id": 406,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:27:40Z"
+        },
+        "406_ORE": {
+            "port_id": 406,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:27:41Z"
+        },
+        "406_ORG": {
+            "port_id": 406,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:27:41Z"
+        },
+        "251_EQU": {
+            "port_id": 251,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:27:51Z"
+        },
+        "251_ORE": {
+            "port_id": 251,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:27:52Z"
+        },
+        "251_ORG": {
+            "port_id": 251,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:27:53Z"
+        },
+        "680_EQU": {
+            "port_id": 680,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:28:01Z"
+        },
+        "680_ORE": {
+            "port_id": 680,
+            "commodity": "ORE",
+            "unit_price": 119.0,
+            "timestamp": "2026-01-07T21:28:02Z"
+        },
+        "680_ORG": {
+            "port_id": 680,
+            "commodity": "ORG",
+            "unit_price": 153.0,
+            "timestamp": "2026-01-07T21:28:02Z"
+        },
+        "859_EQU": {
+            "port_id": 859,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:28:07Z"
+        },
+        "859_ORE": {
+            "port_id": 859,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:28:08Z"
+        },
+        "859_ORG": {
+            "port_id": 859,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:28:08Z"
+        },
+        "900_EQU": {
+            "port_id": 900,
+            "commodity": "EQU",
+            "unit_price": 193.0,
+            "timestamp": "2026-01-07T21:28:13Z"
+        },
+        "900_ORE": {
+            "port_id": 900,
+            "commodity": "ORE",
+            "unit_price": 119.0,
+            "timestamp": "2026-01-07T21:28:13Z"
+        },
+        "900_ORG": {
+            "port_id": 900,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:28:14Z"
+        },
+        "544_EQU": {
+            "port_id": 544,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-07T21:28:22Z"
+        },
+        "544_ORE": {
+            "port_id": 544,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:28:23Z"
+        },
+        "544_ORG": {
+            "port_id": 544,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:28:24Z"
+        },
+        "644_EQU": {
+            "port_id": 644,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:28:45Z"
+        },
+        "644_ORE": {
+            "port_id": 644,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:28:46Z"
+        },
+        "644_ORG": {
+            "port_id": 644,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:28:46Z"
+        },
+        "1_EQU": {
+            "port_id": 1,
+            "commodity": "EQU",
+            "unit_price": 197.0,
+            "timestamp": "2026-01-07T21:29:19Z"
+        },
+        "1_ORE": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:29:20Z"
+        },
+        "1_ORG": {
+            "port_id": 1,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:29:20Z"
+        },
+        "290_EQU": {
+            "port_id": 290,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:29:33Z"
+        },
+        "290_ORE": {
+            "port_id": 290,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:29:34Z"
+        },
+        "290_ORG": {
+            "port_id": 290,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:29:34Z"
+        },
+        "468_EQU": {
+            "port_id": 468,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:29:41Z"
+        },
+        "468_ORE": {
+            "port_id": 468,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:29:42Z"
+        },
+        "468_ORG": {
+            "port_id": 468,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:29:42Z"
+        },
+        "773_EQU": {
+            "port_id": 773,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:29:53Z"
+        },
+        "773_ORE": {
+            "port_id": 773,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:29:54Z"
+        },
+        "773_ORG": {
+            "port_id": 773,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:29:55Z"
+        },
+        "812_EQU": {
+            "port_id": 812,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:30:01Z"
+        },
+        "812_ORE": {
+            "port_id": 812,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:30:02Z"
+        },
+        "812_ORG": {
+            "port_id": 812,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:30:02Z"
+        },
+        "563_EQU": {
+            "port_id": 563,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:30:06Z"
+        },
+        "563_ORE": {
+            "port_id": 563,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:30:07Z"
+        },
+        "563_ORG": {
+            "port_id": 563,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:30:08Z"
+        },
+        "308_EQU": {
+            "port_id": 308,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:30:14Z"
+        },
+        "308_ORE": {
+            "port_id": 308,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:30:15Z"
+        },
+        "308_ORG": {
+            "port_id": 308,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:30:16Z"
+        },
+        "705_EQU": {
+            "port_id": 705,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:30:20Z"
+        },
+        "705_ORE": {
+            "port_id": 705,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:30:21Z"
+        },
+        "705_ORG": {
+            "port_id": 705,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:30:21Z"
+        },
+        "65_EQU": {
+            "port_id": 65,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:30:26Z"
+        },
+        "65_ORE": {
+            "port_id": 65,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:30:27Z"
+        },
+        "65_ORG": {
+            "port_id": 65,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:30:27Z"
+        },
+        "624_EQU": {
+            "port_id": 624,
+            "commodity": "EQU",
+            "unit_price": 197.0,
+            "timestamp": "2026-01-07T21:30:32Z"
+        },
+        "624_ORE": {
+            "port_id": 624,
+            "commodity": "ORE",
+            "unit_price": 119.0,
+            "timestamp": "2026-01-07T21:30:33Z"
+        },
+        "624_ORG": {
+            "port_id": 624,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:30:33Z"
+        },
+        "223_EQU": {
+            "port_id": 223,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:30:38Z"
+        },
+        "223_ORE": {
+            "port_id": 223,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:30:38Z"
+        },
+        "223_ORG": {
+            "port_id": 223,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:30:39Z"
+        },
+        "689_EQU": {
+            "port_id": 689,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:30:44Z"
+        },
+        "689_ORE": {
+            "port_id": 689,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:30:44Z"
+        },
+        "689_ORG": {
+            "port_id": 689,
+            "commodity": "ORG",
+            "unit_price": 154.0,
+            "timestamp": "2026-01-07T21:30:45Z"
+        },
+        "599_EQU": {
+            "port_id": 599,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:31:03Z"
+        },
+        "599_ORE": {
+            "port_id": 599,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:31:03Z"
+        },
+        "599_ORG": {
+            "port_id": 599,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:31:04Z"
+        },
+        "59_EQU": {
+            "port_id": 59,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:31:09Z"
+        },
+        "59_ORE": {
+            "port_id": 59,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:31:09Z"
+        },
+        "59_ORG": {
+            "port_id": 59,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:31:10Z"
+        },
+        "519_EQU": {
+            "port_id": 519,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:31:15Z"
+        },
+        "519_ORE": {
+            "port_id": 519,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:31:15Z"
+        },
+        "519_ORG": {
+            "port_id": 519,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:31:16Z"
+        },
+        "632_EQU": {
+            "port_id": 632,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:31:24Z"
+        },
+        "632_ORE": {
+            "port_id": 632,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:31:25Z"
+        },
+        "632_ORG": {
+            "port_id": 632,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:31:26Z"
+        },
+        "633_EQU": {
+            "port_id": 633,
+            "commodity": "EQU",
+            "unit_price": 191.0,
+            "timestamp": "2026-01-07T21:31:41Z"
+        },
+        "633_ORE": {
+            "port_id": 633,
+            "commodity": "ORE",
+            "unit_price": 95.0,
+            "timestamp": "2026-01-07T21:31:41Z"
+        },
+        "633_ORG": {
+            "port_id": 633,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:31:42Z"
+        },
+        "585_EQU": {
+            "port_id": 585,
+            "commodity": "EQU",
+            "unit_price": 200.0,
+            "timestamp": "2026-01-07T21:31:47Z"
+        },
+        "585_ORE": {
+            "port_id": 585,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:31:47Z"
+        },
+        "585_ORG": {
+            "port_id": 585,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:31:48Z"
+        },
+        "227_EQU": {
+            "port_id": 227,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:31:53Z"
+        },
+        "227_ORE": {
+            "port_id": 227,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:31:53Z"
+        },
+        "227_ORG": {
+            "port_id": 227,
+            "commodity": "ORG",
+            "unit_price": 144.0,
+            "timestamp": "2026-01-07T21:31:54Z"
+        },
+        "881_EQU": {
+            "port_id": 881,
+            "commodity": "EQU",
+            "unit_price": 190.0,
+            "timestamp": "2026-01-07T21:32:05Z"
+        },
+        "881_ORE": {
+            "port_id": 881,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:32:05Z"
+        },
+        "881_ORG": {
+            "port_id": 881,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:32:06Z"
+        },
+        "99_EQU": {
+            "port_id": 99,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:32:16Z"
+        },
+        "99_ORE": {
+            "port_id": 99,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:32:17Z"
+        },
+        "99_ORG": {
+            "port_id": 99,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:32:18Z"
+        },
+        "81_EQU": {
+            "port_id": 81,
+            "commodity": "EQU",
+            "unit_price": 201.0,
+            "timestamp": "2026-01-07T21:32:24Z"
+        },
+        "81_ORE": {
+            "port_id": 81,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:32:25Z"
+        },
+        "81_ORG": {
+            "port_id": 81,
+            "commodity": "ORG",
+            "unit_price": 152.0,
+            "timestamp": "2026-01-07T21:32:26Z"
+        },
+        "555_EQU": {
+            "port_id": 555,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:32:30Z"
+        },
+        "555_ORE": {
+            "port_id": 555,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:32:31Z"
+        },
+        "555_ORG": {
+            "port_id": 555,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:32:32Z"
+        },
+        "867_EQU": {
+            "port_id": 867,
+            "commodity": "EQU",
+            "unit_price": 203.0,
+            "timestamp": "2026-01-07T21:32:40Z"
+        },
+        "867_ORE": {
+            "port_id": 867,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:32:41Z"
+        },
+        "867_ORG": {
+            "port_id": 867,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:32:42Z"
+        },
+        "559_EQU": {
+            "port_id": 559,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:32:46Z"
+        },
+        "559_ORE": {
+            "port_id": 559,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:32:47Z"
+        },
+        "559_ORG": {
+            "port_id": 559,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:32:48Z"
+        },
+        "734_EQU": {
+            "port_id": 734,
+            "commodity": "EQU",
+            "unit_price": 204.0,
+            "timestamp": "2026-01-07T21:33:07Z"
+        },
+        "734_ORE": {
+            "port_id": 734,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:33:08Z"
+        },
+        "734_ORG": {
+            "port_id": 734,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:33:08Z"
+        },
+        "622_EQU": {
+            "port_id": 622,
+            "commodity": "EQU",
+            "unit_price": 205.0,
+            "timestamp": "2026-01-07T21:33:15Z"
+        },
+        "622_ORE": {
+            "port_id": 622,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:33:16Z"
+        },
+        "622_ORG": {
+            "port_id": 622,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:33:16Z"
+        },
+        "904_EQU": {
+            "port_id": 904,
+            "commodity": "EQU",
+            "unit_price": 193.0,
+            "timestamp": "2026-01-07T21:33:21Z"
+        },
+        "904_ORE": {
+            "port_id": 904,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:33:22Z"
+        },
+        "904_ORG": {
+            "port_id": 904,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:33:22Z"
+        },
+        "674_EQU": {
+            "port_id": 674,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-07T21:33:27Z"
+        },
+        "674_ORE": {
+            "port_id": 674,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:33:28Z"
+        },
+        "674_ORG": {
+            "port_id": 674,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:33:28Z"
+        },
+        "804_EQU": {
+            "port_id": 804,
+            "commodity": "EQU",
+            "unit_price": 195.0,
+            "timestamp": "2026-01-07T21:33:33Z"
+        },
+        "804_ORE": {
+            "port_id": 804,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:33:34Z"
+        },
+        "804_ORG": {
+            "port_id": 804,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:33:34Z"
+        },
+        "241_EQU": {
+            "port_id": 241,
+            "commodity": "EQU",
+            "unit_price": 242.0,
+            "timestamp": "2026-01-07T21:33:39Z"
+        },
+        "241_ORE": {
+            "port_id": 241,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:33:40Z"
+        },
+        "241_ORG": {
+            "port_id": 241,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-07T21:33:41Z"
+        },
+        "693_EQU": {
+            "port_id": 693,
+            "commodity": "EQU",
+            "unit_price": 194.0,
+            "timestamp": "2026-01-07T21:33:49Z"
+        },
+        "693_ORE": {
+            "port_id": 693,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:33:50Z"
+        },
+        "693_ORG": {
+            "port_id": 693,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:33:51Z"
+        },
+        "315_EQU": {
+            "port_id": 315,
+            "commodity": "EQU",
+            "unit_price": 205.0,
+            "timestamp": "2026-01-07T21:34:05Z"
+        },
+        "315_ORE": {
+            "port_id": 315,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:34:06Z"
+        },
+        "315_ORG": {
+            "port_id": 315,
+            "commodity": "ORG",
+            "unit_price": 180.0,
+            "timestamp": "2026-01-07T21:34:07Z"
+        },
+        "683_EQU": {
+            "port_id": 683,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:34:15Z"
+        },
+        "683_ORE": {
+            "port_id": 683,
+            "commodity": "ORE",
+            "unit_price": 99.0,
+            "timestamp": "2026-01-07T21:34:16Z"
+        },
+        "683_ORG": {
+            "port_id": 683,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:34:17Z"
+        },
+        "763_EQU": {
+            "port_id": 763,
+            "commodity": "EQU",
+            "unit_price": 240.0,
+            "timestamp": "2026-01-07T21:34:27Z"
+        },
+        "763_ORE": {
+            "port_id": 763,
+            "commodity": "ORE",
+            "unit_price": 101.0,
+            "timestamp": "2026-01-07T21:34:28Z"
+        },
+        "763_ORG": {
+            "port_id": 763,
+            "commodity": "ORG",
+            "unit_price": 182.0,
+            "timestamp": "2026-01-07T21:34:29Z"
+        },
+        "197_EQU": {
+            "port_id": 197,
+            "commodity": "EQU",
+            "unit_price": 202.0,
+            "timestamp": "2026-01-07T21:34:38Z"
+        },
+        "197_ORE": {
+            "port_id": 197,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:34:38Z"
+        },
+        "197_ORG": {
+            "port_id": 197,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:34:39Z"
+        },
+        "395_EQU": {
+            "port_id": 395,
+            "commodity": "EQU",
+            "unit_price": 200.0,
+            "timestamp": "2026-01-07T21:34:46Z"
+        },
+        "395_ORE": {
+            "port_id": 395,
+            "commodity": "ORE",
+            "unit_price": 98.0,
+            "timestamp": "2026-01-07T21:34:47Z"
+        },
+        "395_ORG": {
+            "port_id": 395,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:34:47Z"
+        },
+        "70_EQU": {
+            "port_id": 70,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:34:52Z"
+        },
+        "70_ORE": {
+            "port_id": 70,
+            "commodity": "ORE",
+            "unit_price": 120.0,
+            "timestamp": "2026-01-07T21:34:53Z"
+        },
+        "70_ORG": {
+            "port_id": 70,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:34:53Z"
+        },
+        "488_EQU": {
+            "port_id": 488,
+            "commodity": "EQU",
+            "unit_price": 202.0,
+            "timestamp": "2026-01-07T21:35:00Z"
+        },
+        "488_ORE": {
+            "port_id": 488,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:35:01Z"
+        },
+        "488_ORG": {
+            "port_id": 488,
+            "commodity": "ORG",
+            "unit_price": 143.0,
+            "timestamp": "2026-01-07T21:35:02Z"
+        },
+        "491_EQU": {
+            "port_id": 491,
+            "commodity": "EQU",
+            "unit_price": 199.0,
+            "timestamp": "2026-01-07T21:35:10Z"
+        },
+        "491_ORE": {
+            "port_id": 491,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:35:11Z"
+        },
+        "491_ORG": {
+            "port_id": 491,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:35:12Z"
+        },
+        "424_EQU": {
+            "port_id": 424,
+            "commodity": "EQU",
+            "unit_price": 238.0,
+            "timestamp": "2026-01-07T21:35:17Z"
+        },
+        "424_ORE": {
+            "port_id": 424,
+            "commodity": "ORE",
+            "unit_price": 121.0,
+            "timestamp": "2026-01-07T21:35:17Z"
+        },
+        "424_ORG": {
+            "port_id": 424,
+            "commodity": "ORG",
+            "unit_price": 151.0,
+            "timestamp": "2026-01-07T21:35:18Z"
+        },
+        "858_EQU": {
+            "port_id": 858,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:35:32Z"
+        },
+        "858_ORE": {
+            "port_id": 858,
+            "commodity": "ORE",
+            "unit_price": 102.0,
+            "timestamp": "2026-01-07T21:35:33Z"
+        },
+        "858_ORG": {
+            "port_id": 858,
+            "commodity": "ORG",
+            "unit_price": 148.0,
+            "timestamp": "2026-01-07T21:35:33Z"
+        },
+        "696_EQU": {
+            "port_id": 696,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:35:44Z"
+        },
+        "696_ORE": {
+            "port_id": 696,
+            "commodity": "ORE",
+            "unit_price": 97.0,
+            "timestamp": "2026-01-07T21:35:45Z"
+        },
+        "696_ORG": {
+            "port_id": 696,
+            "commodity": "ORG",
+            "unit_price": 145.0,
+            "timestamp": "2026-01-07T21:35:46Z"
+        },
+        "749_EQU": {
+            "port_id": 749,
+            "commodity": "EQU",
+            "unit_price": 241.0,
+            "timestamp": "2026-01-07T21:35:50Z"
+        },
+        "749_ORE": {
+            "port_id": 749,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:35:51Z"
+        },
+        "749_ORG": {
+            "port_id": 749,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:35:52Z"
+        },
+        "37_EQU": {
+            "port_id": 37,
+            "commodity": "EQU",
+            "unit_price": 202.0,
+            "timestamp": "2026-01-07T21:35:59Z"
+        },
+        "37_ORE": {
+            "port_id": 37,
+            "commodity": "ORE",
+            "unit_price": 95.0,
+            "timestamp": "2026-01-07T21:35:59Z"
+        },
+        "37_ORG": {
+            "port_id": 37,
+            "commodity": "ORG",
+            "unit_price": 179.0,
+            "timestamp": "2026-01-07T21:36:00Z"
+        },
+        "610_EQU": {
+            "port_id": 610,
+            "commodity": "EQU",
+            "unit_price": 239.0,
+            "timestamp": "2026-01-07T21:36:14Z"
+        },
+        "610_ORE": {
+            "port_id": 610,
+            "commodity": "ORE",
+            "unit_price": 100.0,
+            "timestamp": "2026-01-07T21:36:15Z"
+        },
+        "610_ORG": {
+            "port_id": 610,
+            "commodity": "ORG",
+            "unit_price": 181.0,
+            "timestamp": "2026-01-07T21:36:15Z"
+        },
+        "316_EQU": {
+            "port_id": 316,
+            "commodity": "EQU",
+            "unit_price": 198.0,
+            "timestamp": "2026-01-07T21:36:30Z"
+        },
+        "316_ORE": {
+            "port_id": 316,
+            "commodity": "ORE",
+            "unit_price": 96.0,
+            "timestamp": "2026-01-07T21:36:31Z"
+        },
+        "316_ORG": {
+            "port_id": 316,
+            "commodity": "ORG",
+            "unit_price": 146.0,
+            "timestamp": "2026-01-07T21:36:32Z"
+        },
+        "720_EQU": {
+            "port_id": 720,
+            "commodity": "EQU",
+            "unit_price": 209.0,
+            "timestamp": "2026-01-08T20:09:18Z"
+        },
+        "720_ORE": {
+            "port_id": 720,
+            "commodity": "ORE",
+            "unit_price": 119.0,
+            "timestamp": "2026-01-08T20:09:19Z"
+        },
+        "720_ORG": {
+            "port_id": 720,
+            "commodity": "ORG",
+            "unit_price": 147.0,
+            "timestamp": "2026-01-08T20:09:19Z"
+        }
+    },
     "current_qa_objective": null,
     "needs_bootstrap": false,
-    "last_action": "bank.balance",
-    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_action": "move.warp",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:full-credits:low-qa_mode:False-can_sell_any:can_sell-can_buy_any:cannot_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
     "last_stage": "explore"
 }

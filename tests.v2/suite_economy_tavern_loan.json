@@ -1,0 +1,31 @@
+{
+  "name": "Tavern Loan Suite",
+  "tests": [
+    {
+      "name": "Setup: tavern_gambler",
+      "setup": "macro_auth_user",
+      "username": "tavern_gambler",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Take Loan",
+      "command": "tavern.loan.take",
+      "data": { "amount": 1000 },
+      "user": "tavern_gambler",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Take Second Loan (Refused)",
+      "command": "tavern.loan.take",
+      "data": { "amount": 1000 },
+      "user": "tavern_gambler",
+      "expect": { "status": "error", "error_code": 1832 }
+    },
+    {
+      "name": "Negative: Tavern Loan Missing Auth",
+      "command": "tavern.loan.take",
+      "data": { "amount": 1000 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

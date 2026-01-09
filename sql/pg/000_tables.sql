@@ -634,7 +634,8 @@ CREATE TABLE player_prefs (
     key TEXT NOT NULL,
     type TEXT NOT NULL CHECK (type IN ('bool', 'int', 'string', 'json')),
     value text NOT NULL,
-    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (player_prefs_id, key)
 );
 
 CREATE TABLE player_bookmarks (
@@ -904,7 +905,7 @@ CREATE TABLE traps (
 );
 
 CREATE TABLE bank_accounts (
-    id bigserial PRIMARY KEY,
+    bank_accounts_id bigserial PRIMARY KEY,
     owner_type text NOT NULL,
     owner_id bigint NOT NULL,
     currency text NOT NULL DEFAULT 'CRD' REFERENCES currencies (code),
@@ -916,8 +917,8 @@ CREATE TABLE bank_accounts (
 );
 
 CREATE TABLE bank_transactions (
-    id bigserial PRIMARY KEY,
-    account_id bigint NOT NULL REFERENCES bank_accounts (id),
+    bank_transactions_id bigserial PRIMARY KEY,
+    account_id bigint NOT NULL REFERENCES bank_accounts (bank_accounts_id),
     tx_type text NOT NULL CHECK (tx_type IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'INTEREST', 'FEE', 'WIRE', 'TAX', 'TRADE_BUY', 'TRADE_SELL', 'TRADE_BUY_FEE', 'TRADE_SELL_FEE', 'WITHDRAWAL_FEE', 'ADJUSTMENT')),
     direction text NOT NULL CHECK (direction IN ('CREDIT', 'DEBIT')),
     amount bigint NOT NULL CHECK (amount > 0),
@@ -932,7 +933,7 @@ CREATE TABLE bank_transactions (
 );
 
 CREATE TABLE bank_fee_schedules (
-    id bigserial PRIMARY KEY,
+    bank_fee_schedules_id bigserial PRIMARY KEY,
     tx_type text NOT NULL,
     fee_code text NOT NULL,
     owner_type text,
@@ -946,7 +947,7 @@ CREATE TABLE bank_fee_schedules (
 );
 
 CREATE TABLE bank_interest_policy (
-    id bigserial PRIMARY KEY CHECK (id = 1),
+    bank_interest_policy_id bigserial PRIMARY KEY CHECK (bank_interest_policy_id = 1),
     apr_bps bigint NOT NULL DEFAULT 0 CHECK (apr_bps >= 0),
     min_balance bigint NOT NULL DEFAULT 0 CHECK (min_balance >= 0),
     max_balance bigint NOT NULL DEFAULT 9223372036854775807,
@@ -956,7 +957,7 @@ CREATE TABLE bank_interest_policy (
 );
 
 CREATE TABLE bank_orders (
-    id bigserial PRIMARY KEY,
+    bank_orders_id bigserial PRIMARY KEY,
     player_id bigint NOT NULL REFERENCES players (player_id) ON DELETE CASCADE,
     kind text NOT NULL CHECK (kind IN ('recurring', 'once')),
     schedule text NOT NULL,
@@ -983,7 +984,7 @@ CREATE TABLE corp_accounts (
 );
 
 CREATE TABLE corp_tx (
-    id bigserial PRIMARY KEY,
+    corp_tx_id bigserial PRIMARY KEY,
     corp_id bigint NOT NULL REFERENCES corporations (corporation_id) ON DELETE CASCADE,
     ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     kind text NOT NULL CHECK (kind IN ('deposit', 'withdraw', 'transfer_in', 'transfer_out', 'interest', 'dividend', 'salary', 'adjustment')),

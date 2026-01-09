@@ -278,8 +278,17 @@ class Planner:
                     return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
 
                 if not self._at_port(current_state):
-                    logger.warning(f"Goal 'sell' failed: no port detected in sector {current_sector}.")
-                    return None 
+                    logger.warning(f"Goal 'sell' active but not at a port. Searching for nearest known port.")
+                    # Find any known port from state
+                    known_ports = current_state.get("port_info_by_sector", {}).keys()
+                    if known_ports:
+                        # Simple logic: pick the first one. TODO: Nearest.
+                        target_sector = list(known_ports)[0]
+                        logger.info(f"Redirecting to known port at sector {target_sector} to sell.")
+                        return self._achieve_goal(current_state, f"goto: {target_sector}")
+                    else:
+                        logger.warning(f"Goal 'sell' failed: no port detected and no known ports in memory.")
+                        return None 
 
                 port_id = self._find_port_in_sector(current_state, current_sector)
                 if port_id in current_state.get("port_trade_blacklist", []):
@@ -313,7 +322,7 @@ class Planner:
                 cargo = current_state.get("ship_info", {}).get("cargo", {})
                 # Cargo is a list of dicts: [{"commodity": "ORE", "quantity": 10, "purchase_price": 50}]
                 # Need to iterate to find quantity
-                quantity = sum(item.get("quantity", 0) for item in cargo if item.get("commodity") == commodity_to_sell)
+                quantity = sum(item.get("quantity", 0) for item in cargo if canon_commodity(item.get("commodity")) == commodity_to_sell)
                 
                 if not quantity:
                     logger.warning(f"Goal 'sell' failed: no '{commodity_to_sell}' in cargo.")
@@ -442,7 +451,7 @@ class Planner:
                 # Check if there are targets
                 sector_id = str(current_state.get("player_location_sector"))
                 sector_data = current_state.get("sector_data", {}).get(sector_id, {})
-                ships = sector_data.get("ships", [])
+                ships = sector_data.get("ships_present") or sector_data.get("ships", [])
                 
                 # Filter out our own ship
                 my_ship_id = current_state.get("ship_info", {}).get("id")
@@ -526,9 +535,16 @@ class Planner:
             sector_data = current_state.get("sector_data", {}).get(str(current_sector))
             
             # If we are blind (no data), we MUST look.
-            # But if adjacent is an empty list [], that's valid data meaning no warp links exist.
-            if not sector_data or "adjacent" not in sector_data:
+            if not sector_data:
                 logger.info(f"Bootstrap: Blind in sector {current_sector}. Fetching sector info.")
+                return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
+
+            # But if adjacent is an empty list [], that's valid data meaning no warp links exist.
+            # FIX: Check for 'adjacent_sectors' (v2 protocol) OR 'adjacent' (internal/v1)
+            has_adjacency = "adjacent" in sector_data or "adjacent_sectors" in sector_data
+            
+            if not has_adjacency:
+                logger.info(f"Bootstrap: Adjacency missing for sector {current_sector}. Fetching sector info.")
                 return {"command": "sector.info", "data": {"sector_id": int(current_sector)}}
             
             # NEW: If we have no port info for this sector, fetch it
@@ -573,6 +589,25 @@ class Planner:
         if invariant_command:
             # Invariant commands are simple and don't need the full payload builder
             return invariant_command
+
+        # --- 1.6 Tactical Override: Mandatory Survey & Sell ---
+        # Prioritize local port interactions over long-distance travel goals.
+        if self._at_port(current_state):
+            # A. Ensure Survey is Complete
+            if not self._survey_complete(current_state):
+                if self._is_command_ready("trade.quote", current_state.get("command_retry_info", {})):
+                    logger.info("Tactical Override: Survey incomplete at port. Overriding goal to quote.")
+                    payload = self._build_payload("trade.quote", current_state)
+                    if payload:
+                         return {"command": "trade.quote", "data": payload}
+            
+            # B. Sell if possible (Opportunistic Trade)
+            if self._can_sell(current_state):
+                if self._is_command_ready("trade.sell", current_state.get("command_retry_info", {})):
+                    logger.info("Tactical Override: Sell opportunity detected. Overriding goal.")
+                    payload = self._build_payload("trade.sell", current_state)
+                    if payload:
+                        return {"command": "trade.sell", "data": payload}
 
         # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
         # If we're at a port and have completed survey, always try to trade 1 unit.
@@ -818,7 +853,8 @@ class Planner:
             sector_id = str(current_state.get("player_location_sector"))
             sector_data = current_state.get("sector_data", {}).get(sector_id, {})
             ship_info = current_state.get("ship_info") or {}
-            if sector_data.get("ships") and len(sector_data.get("ships")) > 1: # More than just our own ship
+            ships = sector_data.get("ships_present") or sector_data.get("ships")
+            if ships and len(ships) > 1: # More than just our own ship
                 actions.append("combat.attack")
                 if ship_info.get("fighters", 0) > 0:
                     actions.append("combat.deploy_fighters")
@@ -860,8 +896,8 @@ class Planner:
     
     def _is_command_ready(self, command_name, retry_info):
         """Checks if a single command is on cooldown or has failed too many times."""
-        # TEMP FIX: Always allow move.warp
-        if command_name == "move.warp":
+        # TEMP FIX: Always allow trade.quote (needed for surveys)
+        if command_name in ["trade.quote"]:
             return True
 
         info = retry_info.get(command_name, {})
@@ -1151,7 +1187,8 @@ class Planner:
                 return "aggressive" # TODO: Fuzz this later
             if field_name == "target_id":
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
-                other_ships = [s for s in sector_data.get("ships", []) if s.get("id") != ship_id]
+                ships = sector_data.get("ships_present") or sector_data.get("ships", [])
+                other_ships = [s for s in ships if s.get("id") != ship_id]
                 if other_ships:
                     target_ship = random.choice(other_ships)
                     logger.info(f"Selected target ship: {target_ship.get('id')}")
@@ -1163,13 +1200,31 @@ class Planner:
                 
         if field_name == "commodity":
             if command_name == "trade.quote":
-                # Cycle through commodities to get quotes for all
+                # Smart selection: pick a commodity we don't have a price for yet
+                current_sector = current_state.get("player_location_sector")
+                port_id = self._find_port_in_sector(current_state, current_sector)
+                if port_id:
+                    port_id_str = str(port_id)
+                    price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
+                    buy_cache = price_cache.get("buy", {})
+                    sell_cache = price_cache.get("sell", {})
+                    
+                    # Try to get actual port commodities, fallback to defaults
+                    port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                    if port_info and port_info.get("commodities"):
+                         candidates = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
+                         candidates = [c for c in candidates if c] # filter Nones
+                    else:
+                         candidates = ["ORE", "ORG", "EQU"]
+                    
+                    for c in candidates:
+                        # If missing EITHER buy OR sell price, quote it
+                        if buy_cache.get(c) is None or sell_cache.get(c) is None:
+                            return c
+                
+                # Fallback: Random
                 all_commodities = ["ORE", "EQU", "ORG"]
-                # A simple way to cycle: use the current turn number
-                turns = current_state.get("player_info", {}).get("player", {}).get("turns_remaining", 0)
-                if turns is None:
-                    turns = 0
-                return all_commodities[turns % len(all_commodities)]
+                return random.choice(all_commodities)
         
         if field_name == "quantity":
             if command_name == "trade.quote":
@@ -1279,8 +1334,16 @@ class Planner:
 
         warp_blacklist = self.state_manager.get("warp_blacklist", [])
         
+        # Extract sector IDs from adjacent list (server returns [{"to_sector": N}, ...])
+        adjacent_ids = []
+        for adj in adjacent_sectors:
+            if isinstance(adj, dict) and "to_sector" in adj:
+                adjacent_ids.append(adj["to_sector"])
+            elif isinstance(adj, int):
+                adjacent_ids.append(adj)
+        
         # Strictly exclude current_sector to prevent self-warps
-        possible_targets = [s for s in adjacent_sectors if s != current_sector and s not in warp_blacklist]
+        possible_targets = [s for s in adjacent_ids if s != current_sector and s not in warp_blacklist]
         
         logger.debug(f"Warp candidates from {current_sector}: {possible_targets} (Raw adj: {adjacent_sectors})")
 
@@ -1323,22 +1386,39 @@ class Planner:
 
         best_commodity = None
         highest_profit_margin = 0
+        best_sell_price = 0
 
         for item in cargo_list:
-            commodity = item.get("commodity")
+            commodity_raw = item.get("commodity")
+            commodity = canon_commodity(commodity_raw)
+            if not commodity:
+                continue
+
             quantity = item.get("quantity", 0)
             purchase_price = item.get("purchase_price")
 
-            if quantity > 0 and purchase_price is not None:
+            if quantity > 0:
                 sell_price = port_sell_prices.get(commodity)
-                if sell_price is not None and sell_price > purchase_price:
-                    profit_margin = sell_price - purchase_price
-                    if profit_margin > highest_profit_margin:
-                        highest_profit_margin = profit_margin
+                if sell_price is not None and sell_price > 0:
+                    # If we know the purchase price, calculate profit margin
+                    if purchase_price is not None:
+                        profit_margin = sell_price - purchase_price
+                        # ALLOW SELLING AT ZERO PROFIT OR BETTER
+                        if profit_margin >= highest_profit_margin:
+                            highest_profit_margin = profit_margin
+                            best_commodity = commodity
+                            best_sell_price = sell_price
+                    # If we don't know purchase price, just sell at the highest price
+                    elif sell_price > best_sell_price:
+                        best_sell_price = sell_price
                         best_commodity = commodity
+                        highest_profit_margin = 0
         
         if best_commodity:
-            logger.info(f"Found profitable trade: sell {best_commodity} for {highest_profit_margin} profit per unit.")
+            if highest_profit_margin > 0:
+                logger.info(f"Found profitable trade: sell {best_commodity} for {highest_profit_margin} profit per unit.")
+            else:
+                logger.info(f"Found commodity to sell: {best_commodity} at price {best_sell_price} (purchase price unknown).")
         
         return best_commodity
 

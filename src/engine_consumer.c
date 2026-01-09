@@ -4,6 +4,7 @@
 #include <time.h>
 #include <jansson.h>
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 #include "game_db.h"
 #include "database_cmd.h"
 #include "database.h"
@@ -61,10 +62,19 @@ static int
 load_watermark (db_t *db, const char *key, long long *last_id,
                 long long *last_ts)
 {
+  char epoch_expr[256];
+  if (sql_ts_to_epoch_expr(db, "last_event_ts", epoch_expr, sizeof(epoch_expr)) != 0)
+    {
+      return -1;
+    }
+
+  char sql_template[512];
+  snprintf(sql_template, sizeof(sql_template),
+           "SELECT last_event_id, %s FROM engine_offset WHERE key={1};",
+           epoch_expr);
+
   char sql[512];
-  sql_build (db,
-             "SELECT last_event_id, EXTRACT(EPOCH FROM last_event_ts)::bigint FROM engine_offset WHERE key={1};",
-             sql, sizeof (sql));
+  sql_build (db, sql_template, sql, sizeof (sql));
   db_res_t *res = NULL;
   db_error_t err;
   int rc = 0;
@@ -195,7 +205,7 @@ static const char *BASE_SELECT_PG =
   "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
   "FROM engine_events "
   "WHERE engine_events_id > {1} "
-  "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text({3}::json))) "
+  "  AND ({2} = 0 OR type IN (SELECT trim(json_array_elements_text({3})))) "
   "ORDER BY engine_events_id ASC " "LIMIT {4};";
 
 
@@ -438,7 +448,7 @@ engine_consume_tick (db_t *db,
                 "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                 "FROM engine_events "
                 "WHERE engine_events_id > {1} "
-                "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_array_elements_text({3}::json))) "
+                "  AND ({2} = 0 OR type IN (SELECT trim(json_array_elements_text({3})))) "
                 "ORDER BY engine_events_id ASC LIMIT {4};");
       sql_build (db, expanded_sql_tmpl, expanded_sql, sizeof (expanded_sql));
     }

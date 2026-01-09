@@ -344,7 +344,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
     {
       char sql_def[512];
       sql_build (db,
-                 "UPDATE planets SET fighters = fighters - {1} WHERE id = {2};",
+                 "UPDATE planets SET fighters = fighters - {1} WHERE planet_id = {2};",
                  sql_def, sizeof (sql_def));
       db_bind_t params_def[] = { db_bind_i32 (planet_loss), db_bind_i32 (planet_id) };
       db_exec (db, sql_def, params_def, 2, &err);
@@ -1528,12 +1528,27 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
                                     ERR_BAD_REQUEST,
                                     "Missing data payload.");
     }
-  if (player_id <= 0 || ship_id <= 0)
+
+  if (player_id <= 0)
+    {
+      return send_error_and_return (ctx, root, ERR_NOT_AUTHENTICATED, "Not authenticated.");
+    }
+
+  if (ship_id <= 0)
+    {
+      ship_id = h_get_active_ship_id (db, player_id);
+      if (ship_id > 0)
+        {
+          ctx->ship_id = ship_id;
+        }
+    }
+
+  if (ship_id <= 0)
     {
       return send_error_and_return (ctx,
                                     root,
                                     ERR_NOT_AUTHENTICATED,
-                                    "Player or ship not found in context.");
+                                    "No active ship found.");
     }
   if (!json_get_int_flexible (data, "sector_id",
                               &target_sector_id) || target_sector_id <= 0)
@@ -1875,7 +1890,7 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   char sql_ins[1024];
   sql_build (db,
              "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
-             "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, 1) RETURNING planet_id;",
+             "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, to_timestamp({7}), {8}, TRUE) RETURNING planet_id;",
              sql_ins, sizeof (sql_ins));
   db_bind_t p_ins[] = {
     db_bind_i32 (target_sector_id), db_bind_text (planet_name),
@@ -1891,8 +1906,8 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
       free (planet_name);
       return send_error_and_return (ctx,
                                     root,
-                                    ERR_DB,
-                                    "Failed to create planet.");
+                                    err.code ? err.code : ERR_DB,
+                                    err.message[0] ? err.message : "Failed to create planet.");
     }
 
   char sql_update_genesis[512];

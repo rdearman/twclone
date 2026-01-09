@@ -1,0 +1,18 @@
+{
+  "users": [
+    {"username": "mover_warp", "password": "password", "type": 2, "sector_id": 1},
+    {"username": "mover_transwarp", "password": "password", "type": 2, "sector_id": 1},
+    {"username": "mover_scan", "password": "password", "type": 2, "sector_id": 1},
+    {"username": "mover_describe", "password": "password", "type": 2, "sector_id": 1},
+    {"username": "mover_pathfind", "password": "password", "type": 2, "sector_id": 1},
+    {"username": "mover_autopilot", "password": "password", "type": 2, "sector_id": 1}
+  ],
+  "ships": [
+    {"ship_id": 2001, "name": "WarpShip", "type_id": 1, "owner_username": "mover_warp", "sector_id": 1},
+    {"ship_id": 2002, "name": "TranswarpShip", "type_id": 1, "owner_username": "mover_transwarp", "sector_id": 1, "has_transwarp": 1},
+    {"ship_id": 2003, "name": "ScanShip", "type_id": 1, "owner_username": "mover_scan", "sector_id": 1},
+    {"ship_id": 2004, "name": "DescribeShip", "type_id": 1, "owner_username": "mover_describe", "sector_id": 1},
+    {"ship_id": 2005, "name": "PathfindShip", "type_id": 1, "owner_username": "mover_pathfind", "sector_id": 1},
+    {"ship_id": 2006, "name": "AutopilotShip", "type_id": 1, "owner_username": "mover_autopilot", "sector_id": 1}
+  ]
+}

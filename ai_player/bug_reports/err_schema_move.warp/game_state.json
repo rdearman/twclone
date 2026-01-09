@@ -1,21 +1,21 @@
 {
-    "session_id": "6c4fade54892362a2940ddf4d1f6402a",
+    "session_id": "0117939163da74cac5d0b8b220e8d78d",
     "player_info": {
         "player": {
-            "id": 1300,
-            "username": "ai_qa_bot_005",
+            "id": 11,
+            "username": "ai_qa_bot_001",
             "credits": "5000.00",
-            "turns_remaining": 500,
-            "sector": 6,
-            "ship_id": 192,
+            "turns_remaining": 482,
+            "sector": 1,
+            "ship_id": 5,
             "corp_id": 0,
             "alignment": 1,
             "experience": 0
         }
     },
     "ship_info": {
-        "id": 192,
-        "name": "ai_qa_bot_005's ship",
+        "id": 5,
+        "name": "ai_qa_bot_001's ship",
         "type_id": 2,
         "holds": 10,
         "fighters": 1,
@@ -24,119 +24,10 @@
         "ported": 0,
         "cargo": []
     },
-    "player_location_sector": 3,
+    "player_location_sector": 1,
     "sector_data": {
-        "6": {
-            "server_tick": 7407,
-            "sector_id": 6,
-            "adjacent": [
-                {
-                    "to_sector": 1
-                },
-                {
-                    "to_sector": 5
-                },
-                {
-                    "to_sector": 378
-                }
-            ],
-            "ships": [
-                {
-                    "ship_id": 34,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 35,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 36,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 10,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 12,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 16,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 19,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 42,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 44,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 82,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 100,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 102,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 106,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 115,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 117,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 145,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 146,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 147,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 148,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 180,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 192,
-                    "name": "ai_qa_bot_005's ship"
-                }
-            ],
-            "ports": [],
-            "planets": [],
-            "counts": {
-                "fighters": 0,
-                "mines": 0
-            },
-            "_last_refreshed": 1767392606.5158458,
-            "has_port": false
-        },
         "1": {
-            "server_tick": 11030,
+            "server_tick": 30447,
             "sector_id": 1,
             "adjacent": [
                 {
@@ -168,23 +59,15 @@
                     "name": "Used Scout Marauder"
                 },
                 {
+                    "ship_id": 3,
+                    "name": "Bit Banger"
+                },
+                {
                     "ship_id": 4,
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 30,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 7,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 18,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 22,
+                    "ship_id": 33,
                     "name": "Used Scout Marauder"
                 },
                 {
@@ -192,116 +75,24 @@
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 52,
+                    "ship_id": 47,
                     "name": "Used Scout Marauder"
                 },
                 {
-                    "ship_id": 65,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 71,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 75,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 84,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 86,
-                    "name": "VictimShip"
-                },
-                {
-                    "ship_id": 87,
-                    "name": "QuasarTargetShip"
-                },
-                {
-                    "ship_id": 107,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 1011,
-                    "name": "CaptainShip"
-                },
-                {
-                    "ship_id": 1014,
-                    "name": "AceShip"
-                },
-                {
-                    "ship_id": 1002,
-                    "name": "VictimShip"
-                },
-                {
-                    "ship_id": 1003,
-                    "name": "USS Upgrade Me"
-                },
-                {
-                    "ship_id": 1016,
-                    "name": "VictimShipV2"
-                },
-                {
-                    "ship_id": 1017,
-                    "name": "QuasarVictimShip"
-                },
-                {
-                    "ship_id": 1018,
-                    "name": "MoverShip"
-                },
-                {
-                    "ship_id": 1019,
-                    "name": "ObserverShip"
-                },
-                {
-                    "ship_id": 1004,
-                    "name": "USS Genesis"
-                },
-                {
-                    "ship_id": 1005,
-                    "name": "TraderShip"
-                },
-                {
-                    "ship_id": 1006,
-                    "name": "StatusShip"
-                },
-                {
-                    "ship_id": 1009,
-                    "name": "QuasarTargetShip"
-                },
-                {
-                    "ship_id": 171,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 162,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 165,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 1012,
-                    "name": "AttackerShipV2"
-                },
-                {
-                    "ship_id": 1013,
-                    "name": "DefenderShipV2"
-                },
-                {
-                    "ship_id": 192,
-                    "name": "ai_qa_bot_005's ship"
-                },
-                {
-                    "ship_id": 188,
+                    "ship_id": 5,
                     "name": "ai_qa_bot_001's ship"
                 },
                 {
-                    "ship_id": 189,
-                    "name": "ai_qa_bot_002's ship"
+                    "ship_id": 56,
+                    "name": "ai_qa_bot_004's ship"
+                },
+                {
+                    "ship_id": 59,
+                    "name": "Used Scout Marauder"
+                },
+                {
+                    "ship_id": 62,
+                    "name": "Used Scout Marauder"
                 }
             ],
             "ports": [],
@@ -309,293 +100,18 @@
                 {
                     "planet_id": 1,
                     "name": "Terra"
-                },
-                {
-                    "planet_id": 900,
-                    "name": "Target"
-                },
-                {
-                    "planet_id": 700,
-                    "name": "MyWorld"
-                },
-                {
-                    "planet_id": 200,
-                    "name": "Dune"
                 }
             ],
             "counts": {
                 "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1767392969.306176,
-            "has_port": false
-        },
-        "2": {
-            "server_tick": 14538,
-            "sector_id": 2,
-            "adjacent": [
-                {
-                    "to_sector": 1
-                },
-                {
-                    "to_sector": 3
-                },
-                {
-                    "to_sector": 7
-                },
-                {
-                    "to_sector": 8
-                },
-                {
-                    "to_sector": 9
-                },
-                {
-                    "to_sector": 10
-                }
-            ],
-            "ships": [
-                {
-                    "ship_id": 33,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 3,
-                    "name": "Bit Banger"
-                },
-                {
-                    "ship_id": 9,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 13,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 15,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 17,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 40,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 43,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 50,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 59,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 77,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 85,
-                    "name": "TollCollectorShip"
-                },
-                {
-                    "ship_id": 101,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 108,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 109,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 118,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 126,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 128,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 130,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 131,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 1020,
-                    "name": "ActorShip"
-                },
-                {
-                    "ship_id": 1001,
-                    "name": "TollCollectorShip"
-                },
-                {
-                    "ship_id": 133,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 149,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 150,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 157,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 160,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 161,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 173,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 179,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 184,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 192,
-                    "name": "ai_qa_bot_005's ship"
-                },
-                {
-                    "ship_id": 188,
-                    "name": "ai_qa_bot_001's ship"
-                }
-            ],
-            "ports": [],
-            "planets": [],
-            "counts": {
-                "fighters": 210,
-                "mines": 0
-            },
-            "_last_refreshed": 1767393320.6357512,
-            "has_port": false
-        },
-        "3": {
-            "server_tick": 21365,
-            "sector_id": 3,
-            "adjacent": [
-                {
-                    "to_sector": 1
-                },
-                {
-                    "to_sector": 2
-                },
-                {
-                    "to_sector": 4
-                },
-                {
-                    "to_sector": 1311
-                }
-            ],
-            "ships": [
-                {
-                    "ship_id": 27,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 37,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 41,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 51,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 70,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 92,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 96,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 105,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 110,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 120,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 129,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 137,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 182,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 192,
-                    "name": "ai_qa_bot_005's ship"
-                },
-                {
-                    "ship_id": 188,
-                    "name": "ai_qa_bot_001's ship"
-                }
-            ],
-            "ports": [],
-            "planets": [
-                {
-                    "planet_id": 8001,
-                    "name": "Quasar Test Planet"
-                }
-            ],
-            "counts": {
-                "fighters": 0,
-                "mines": 0
-            },
-            "_last_refreshed": 1767394004.2025928,
+            "_last_refreshed": 1767634648.5273798,
             "has_port": false
         }
     },
     "universe_map": {
-        "9": {
-            "is_explored": true,
-            "has_port": false
-        },
-        "6": {
+        "3": {
             "is_explored": true,
             "has_port": false
         },
@@ -607,7 +123,15 @@
             "is_explored": true,
             "has_port": false
         },
-        "3": {
+        "4": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "8": {
+            "is_explored": true,
+            "has_port": false
+        },
+        "7": {
             "is_explored": true,
             "has_port": false
         }
@@ -617,35 +141,34 @@
     "bank_balance": 0,
     "command_retry_info": {
         "player.my_info": {
-            "next_retry_time": 1767391963.5437248
+            "next_retry_time": 1767634650.4092789
         },
         "ship.info": {
-            "next_retry_time": 1767391964.6554008
+            "next_retry_time": 1767634651.5044286
         },
         "sector.info": {
-            "next_retry_time": 1767394008.697554
+            "next_retry_time": 1767634652.5210803
         },
         "sector.scan.density": {
-            "next_retry_time": 1767393670.6278903
-        },
-        "move.warp": {
-            "next_retry_time": 1767393325.6522796
+            "next_retry_time": 1767634685.005583
         }
     },
     "strategy_plan": [
-        "goto: {'to_sector': 4}"
+        "goto: {'to_sector': 7}"
     ],
     "trade_successful": false,
     "q_table": {
         "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "move.warp": 0.0,
-            "bank.balance": 0.0
+            "bank.balance": -0.8344748567791179,
+            "sector.info": 0.0
         }
     },
     "n_table": {
         "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds": {
             "move.warp": 0,
-            "bank.balance": 0
+            "bank.balance": 7855,
+            "sector.info": 0
         }
     },
     "command_schemas": {
@@ -2578,184 +2101,181 @@
     },
     "schema_blacklist": [],
     "pending_schema_requests": {
-        "system.cmd_list": "c-3b5c6a6c",
-        "admin.notice": "c-7f6d2395",
-        "admin.shutdown_warning": "c-1888cbe3",
-        "auth.login": "c-d8a871bc",
-        "auth.logout": "c-23cf2d91",
-        "auth.mfa.totp.verify": "c-313b96f2",
-        "auth.register": "c-1bfc396b",
-        "auth.refresh": "c-8a6156bb",
-        "bank.balance": "c-002197bd",
-        "bank.deposit": "c-5d047bbc",
-        "bank.history": "c-753d667b",
-        "bank.leaderboard": "c-40a50c0a",
-        "bank.transfer": "c-c30591d2",
-        "bank.withdraw": "c-413221d7",
-        "bounty.list": "c-f5eebac3",
-        "bounty.post_federation": "c-8e0bf0a9",
-        "bounty.post_hitlist": "c-4a7cf270",
-        "bulk.execute": "c-a551df45",
-        "fine.list": "c-6637e677",
-        "fine.pay": "c-6e7f405f",
-        "insurance.policies.list": "c-26aa2583",
-        "insurance.policies.buy": "c-811e91de",
-        "insurance.claim.file": "c-02f07f14",
-        "chat.broadcast": "c-64c80944",
-        "chat.history": "c-2eb225ea",
-        "chat.send": "c-78fd43bf",
-        "citadel.build": "c-fc1e4ac8",
-        "citadel.upgrade": "c-30d05700",
-        "combat.attack": "c-fd60aff3",
-        "combat.attack_planet": "c-fff886d8",
-        "combat.deploy_fighters": "c-6d5a2c9a",
-        "combat.deploy_mines": "c-183c905b",
-        "combat.lay_mines": "c-296d1bd4",
-        "combat.status": "c-756413f0",
-        "combat.sweep_mines": "c-1b44881f",
-        "deploy.fighters.list": "c-ec32485d",
-        "deploy.mines.list": "c-9bfbff83",
-        "fighters.recall": "c-55353aa9",
-        "mines.recall": "c-b90d16ff",
-        "corp.balance": "c-8da818a4",
-        "corp.create": "c-7f3f3c84",
-        "corp.deposit": "c-015f827b",
-        "corp.dissolve": "c-31f1bc42",
-        "corp.invite": "c-684f9414",
-        "corp.join": "c-2112aba8",
-        "corp.kick": "c-b1fbe81e",
-        "corp.leave": "c-bd68fa88",
-        "corp.list": "c-e4d61693",
-        "corp.roster": "c-a064ffef",
-        "corp.statement": "c-f87b7742",
-        "corp.status": "c-f00b895a",
-        "corp.transfer_ceo": "c-424fd187",
-        "corp.withdraw": "c-753ca1f5",
-        "dock.status": "c-a9f23a53",
-        "hardware.buy": "c-44476fba",
-        "hardware.list": "c-c8c30d15",
-        "mail.delete": "c-8669ccd3",
-        "mail.inbox": "c-d5611e6c",
-        "mail.read": "c-8e891afe",
-        "mail.send": "c-a8e2d772",
-        "move.autopilot.start": "c-051730bc",
-        "move.autopilot.status": "c-cda22770",
-        "move.autopilot.stop": "c-0992283a",
-        "move.describe_sector": "c-5fec1550",
-        "move.pathfind": "c-99e1964e",
-        "move.scan": "c-60c1e7fa",
-        "move.transwarp": "c-d8064cf5",
-        "move.warp": "c-6997f117",
-        "nav.avoid.add": "c-b48e926c",
-        "nav.avoid.list": "c-321ba81d",
-        "nav.avoid.remove": "c-bdd1b9fe",
-        "nav.avoid.set": "c-d2f17f1a",
-        "nav.bookmark.add": "c-60964c40",
-        "nav.bookmark.list": "c-903ed935",
-        "nav.bookmark.remove": "c-dbdd530d",
-        "nav.bookmark.set": "c-f44a0870",
-        "news.get_feed": "c-abe620d2",
-        "news.mark_feed_read": "c-c29ccb79",
-        "news.read": "c-bc547e5e",
-        "notes.list": "c-7a3df996",
-        "notice.ack": "c-99942d79",
-        "notice.list": "c-98f46183",
-        "planet.create": "c-1effab05",
-        "planet.deposit": "c-635c226c",
-        "planet.genesis": "c-81fbb470",
-        "planet.genesis_create": "c-fa458aa0",
-        "planet.harvest": "c-5c3f4531",
-        "planet.info": "c-5c62aec2",
-        "planet.land": "c-1ed814fe",
-        "planet.launch": "c-7046c65f",
-        "planet.market.buy_order": "c-4fd1676f",
-        "planet.market.sell": "c-433d768f",
-        "planet.rename": "c-c440afb4",
-        "planet.transfer_ownership": "c-8d261012",
-        "planet.withdraw": "c-b628702b",
-        "player.get_avoids": "c-63d507b0",
-        "player.get_bookmarks": "c-b44636ea",
-        "player.get_notes": "c-dcaf5aac",
-        "player.get_prefs": "c-ebbf5a9e",
-        "player.get_settings": "c-21e09b75",
-        "player.get_subscriptions": "c-292bde87",
-        "player.get_topics": "c-26e4ccf7",
-        "player.my_info": "c-58f5d166",
-        "player.rankings": "c-a1a5e6fe",
-        "player.set_avoids": "c-fc118376",
-        "player.set_bookmarks": "c-c955c413",
-        "player.set_prefs": "c-721e72e5",
-        "player.set_settings": "c-d6b41668",
-        "player.set_subscriptions": "c-e4e1303f",
-        "player.set_topics": "c-6b8a986d",
-        "player.set_trade_account_preference": "c-9d55929d",
-        "port.describe": "c-964a2f98",
-        "port.info": "c-f11205ce",
-        "port.rob": "c-7527b3bf",
-        "port.status": "c-8685b977",
-        "sector.info": "c-ee759e43",
-        "sector.scan": "c-5f39d1c5",
-        "sector.scan.density": "c-2059a9b0",
-        "sector.search": "c-3061f626",
-        "sector.set_beacon": "c-e93cc7ea",
-        "session.disconnect": "c-553e7e29",
-        "session.hello": "c-444e00f3",
-        "session.ping": "c-8d322ba7",
-        "player.ping": "c-a5299035",
-        "sys.notice.create": "c-7f3a593d",
-        "system.disconnect": "c-666f466b",
-        "ship.claim": "c-fef682fb",
-        "ship.info": "c-c6ac5f37",
-        "ship.inspect": "c-1542b974",
-        "ship.jettison": "c-1f3bce89",
-        "ship.rename": "c-b4c40bc4",
-        "ship.repair": "c-e4ba068b",
-        "ship.reregister": "c-2f349b7f",
-        "ship.self_destruct": "c-99ef6fd6",
-        "ship.status": "c-2f1566d6",
-        "ship.transfer_cargo": "c-ab827e92",
-        "ship.upgrade": "c-43758d23",
-        "shipyard.list": "c-896a46d7",
-        "shipyard.upgrade": "c-e03650c7",
-        "stock.buy": "c-9fded6ef",
-        "stock.dividend.set": "c-7e31b503",
-        "stock.exchange.list_stocks": "c-095bdc3b",
-        "stock.exchange.orders.cancel": "c-76f5aef9",
-        "stock.exchange.orders.create": "c-f0bbbffe",
-        "stock.ipo.register": "c-9727b2b1",
-        "stock.portfolio.list": "c-b927c03f",
-        "subscribe.add": "c-525640c4",
-        "subscribe.catalog": "c-9fe3a261",
-        "subscribe.list": "c-a3820481",
-        "subscribe.remove": "c-ee62a6af",
-        "tavern.barcharts.get_prices_summary": "c-2a596a8a",
-        "tavern.deadpool.place_bet": "c-0c437362",
-        "tavern.dice.play": "c-01bf552e",
-        "tavern.graffiti.post": "c-db21b38e",
-        "tavern.highstakes.play": "c-2e6288cf",
-        "tavern.loan.pay": "c-03c08ee2",
-        "tavern.loan.take": "c-830ab16d",
-        "tavern.lottery.buy_ticket": "c-5447fd44",
-        "tavern.lottery.status": "c-2bc77f79",
-        "tavern.raffle.buy_ticket": "c-90549001",
-        "tavern.round.buy": "c-b620913c",
-        "tavern.rumour.get_hint": "c-8aec0a25",
-        "tavern.trader.buy_password": "c-8ab25f88",
-        "trade.accept": "c-87ce7b22",
-        "trade.buy": "c-636cb382",
-        "trade.cancel": "c-dbe9ec0d",
-        "trade.history": "c-5cb04cac",
-        "trade.jettison": "c-80b756ef",
-        "trade.offer": "c-ed8a93d6",
-        "trade.port_info": "c-f185988d",
-        "trade.quote": "c-56db59dc",
-        "trade.sell": "c-dce78e4a"
+        "system.cmd_list": "c-c814ae51",
+        "admin.notice": "c-47682c26",
+        "admin.shutdown_warning": "c-05616fa5",
+        "auth.login": "c-391e4a6e",
+        "auth.logout": "c-9d6568a5",
+        "auth.mfa.totp.verify": "c-62e53bfb",
+        "auth.register": "c-07a0235b",
+        "auth.refresh": "c-6c495fba",
+        "bank.balance": "c-67386c79",
+        "bank.deposit": "c-03ef0abe",
+        "bank.history": "c-af1b9774",
+        "bank.leaderboard": "c-19866300",
+        "bank.transfer": "c-1e171dd3",
+        "bank.withdraw": "c-7ec2e96d",
+        "bounty.list": "c-f37fe091",
+        "bounty.post_federation": "c-3f594003",
+        "bounty.post_hitlist": "c-5c18067f",
+        "bulk.execute": "c-40357586",
+        "fine.list": "c-7996c555",
+        "fine.pay": "c-945a2531",
+        "insurance.policies.list": "c-5a5d81e4",
+        "insurance.policies.buy": "c-75121823",
+        "insurance.claim.file": "c-eab9359b",
+        "chat.broadcast": "c-43a5e8f7",
+        "chat.history": "c-e3c5fc85",
+        "chat.send": "c-1bda01d3",
+        "citadel.build": "c-2774ac3d",
+        "citadel.upgrade": "c-01594563",
+        "combat.attack": "c-22ba41e0",
+        "combat.attack_planet": "c-aaf80245",
+        "combat.deploy_fighters": "c-63be216a",
+        "combat.deploy_mines": "c-19468b45",
+        "combat.lay_mines": "c-5117f7be",
+        "combat.status": "c-62a67737",
+        "combat.sweep_mines": "c-9fb12918",
+        "deploy.fighters.list": "c-901a3269",
+        "deploy.mines.list": "c-b6108537",
+        "fighters.recall": "c-ea2d9e62",
+        "mines.recall": "c-dd12378f",
+        "corp.balance": "c-1abda059",
+        "corp.create": "c-c969eddb",
+        "corp.deposit": "c-a3723338",
+        "corp.dissolve": "c-25a35f35",
+        "corp.invite": "c-5de50e2b",
+        "corp.join": "c-a68f9817",
+        "corp.kick": "c-d4a638cb",
+        "corp.leave": "c-e399a768",
+        "corp.list": "c-3c8adfb1",
+        "corp.roster": "c-d9528eb6",
+        "corp.statement": "c-eaf12d91",
+        "corp.status": "c-012bb010",
+        "corp.transfer_ceo": "c-a23ecc1d",
+        "corp.withdraw": "c-1acead4a",
+        "dock.status": "c-083a1312",
+        "hardware.buy": "c-9edbc496",
+        "hardware.list": "c-2e7c2429",
+        "mail.delete": "c-bb789f56",
+        "mail.inbox": "c-2cc73135",
+        "mail.read": "c-2828fc50",
+        "mail.send": "c-e423d55b",
+        "move.autopilot.start": "c-ccf4ac8e",
+        "move.autopilot.status": "c-5693533b",
+        "move.autopilot.stop": "c-08abf38d",
+        "move.describe_sector": "c-9e94c96d",
+        "move.pathfind": "c-ef0844b2",
+        "move.scan": "c-8c45f8b4",
+        "move.transwarp": "c-bf92384d",
+        "move.warp": "c-7b100ad6",
+        "nav.avoid.add": "c-bf1c5fbf",
+        "nav.avoid.list": "c-6232d9e3",
+        "nav.avoid.remove": "c-f07e0052",
+        "nav.avoid.set": "c-7e07a639",
+        "nav.bookmark.add": "c-f27c97a2",
+        "nav.bookmark.list": "c-0e045264",
+        "nav.bookmark.remove": "c-265f8782",
+        "nav.bookmark.set": "c-567d9dc0",
+        "news.get_feed": "c-6ead5c0e",
+        "news.mark_feed_read": "c-2642ca14",
+        "news.read": "c-1b4613f2",
+        "notes.list": "c-c3b9b6f9",
+        "notice.ack": "c-d9bff03b",
+        "notice.list": "c-1b2a9c84",
+        "planet.create": "c-d17e1ff8",
+        "planet.deposit": "c-61ed3feb",
+        "planet.genesis": "c-b2c2de9c",
+        "planet.genesis_create": "c-ed08474a",
+        "planet.harvest": "c-c8bc7a5c",
+        "planet.info": "c-13e7f40b",
+        "planet.land": "c-c2c02e11",
+        "planet.launch": "c-0383fb75",
+        "planet.market.buy_order": "c-7745c470",
+        "planet.market.sell": "c-072520c4",
+        "planet.rename": "c-4aad3a69",
+        "planet.transfer_ownership": "c-53f760bc",
+        "planet.withdraw": "c-bfdf4e4e",
+        "player.get_avoids": "c-d513f499",
+        "player.get_bookmarks": "c-0e7a21c7",
+        "player.get_notes": "c-9a384b2a",
+        "player.get_prefs": "c-620ed2ce",
+        "player.get_settings": "c-d0ba1881",
+        "player.get_subscriptions": "c-d9b1823d",
+        "player.get_topics": "c-a2a5b659",
+        "player.my_info": "c-e2b047ef",
+        "player.rankings": "c-8ca2ad21",
+        "player.set_avoids": "c-48428087",
+        "player.set_bookmarks": "c-1fb4ea82",
+        "player.set_prefs": "c-595e68cf",
+        "player.set_settings": "c-09484add",
+        "player.set_subscriptions": "c-706e28de",
+        "player.set_topics": "c-5872af56",
+        "player.set_trade_account_preference": "c-028eee95",
+        "port.describe": "c-0434ee16",
+        "port.info": "c-501703d2",
+        "port.rob": "c-1dea5708",
+        "port.status": "c-dfd6b29d",
+        "sector.info": "c-a7216791",
+        "sector.scan": "c-17b83ad8",
+        "sector.scan.density": "c-0ea6fbba",
+        "sector.search": "c-198ac47e",
+        "sector.set_beacon": "c-cc0d5110",
+        "session.disconnect": "c-1553afd1",
+        "session.hello": "c-e685cbcc",
+        "session.ping": "c-08a05a0e",
+        "player.ping": "c-e48a0d64",
+        "sys.notice.create": "c-e53e3b00",
+        "system.disconnect": "c-d8039ceb",
+        "ship.claim": "c-576820ad",
+        "ship.info": "c-984e837c",
+        "ship.inspect": "c-99f88e5e",
+        "ship.jettison": "c-81f8012f",
+        "ship.rename": "c-32603bdf",
+        "ship.repair": "c-c4dfd668",
+        "ship.reregister": "c-26802e24",
+        "ship.self_destruct": "c-736e3d00",
+        "ship.status": "c-8b0d1bc1",
+        "ship.transfer_cargo": "c-fb5a2673",
+        "ship.upgrade": "c-b9393351",
+        "shipyard.list": "c-6f00acdc",
+        "shipyard.upgrade": "c-f952fa11",
+        "stock.buy": "c-d259807f",
+        "stock.dividend.set": "c-694719d4",
+        "stock.exchange.list_stocks": "c-4081e9c8",
+        "stock.exchange.orders.cancel": "c-27ab7828",
+        "stock.exchange.orders.create": "c-cfb2735a",
+        "stock.ipo.register": "c-b2a66c90",
+        "stock.portfolio.list": "c-0ab10fde",
+        "subscribe.add": "c-b39c9628",
+        "subscribe.catalog": "c-640377eb",
+        "subscribe.list": "c-b2c70fd1",
+        "subscribe.remove": "c-05520115",
+        "tavern.barcharts.get_prices_summary": "c-89914af7",
+        "tavern.deadpool.place_bet": "c-f01f8444",
+        "tavern.dice.play": "c-fb93d831",
+        "tavern.graffiti.post": "c-3dfe1664",
+        "tavern.highstakes.play": "c-3b620394",
+        "tavern.loan.pay": "c-502828d7",
+        "tavern.loan.take": "c-76b08b8d",
+        "tavern.lottery.buy_ticket": "c-797ccf1e",
+        "tavern.lottery.status": "c-2eded86e",
+        "tavern.raffle.buy_ticket": "c-399914c5",
+        "tavern.round.buy": "c-d9f7e201",
+        "tavern.rumour.get_hint": "c-9db36577",
+        "tavern.trader.buy_password": "c-8c36d2cd",
+        "trade.accept": "c-1c804859",
+        "trade.buy": "c-a5f15599",
+        "trade.cancel": "c-be8200e8",
+        "trade.history": "c-75bf6ca2",
+        "trade.jettison": "c-85598c7c",
+        "trade.offer": "c-2312a1a2",
+        "trade.port_info": "c-f1e67804",
+        "trade.quote": "c-133d25ec",
+        "trade.sell": "c-c932710d"
     },
     "recent_sectors": [
-        6,
-        1,
-        2,
-        3
+        1
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
@@ -2763,12 +2283,15 @@
     "current_path": [],
     "last_action_result": {
         "status": "ok",
-        "command": "sector.info",
-        "request_id": "c-4073641a",
-        "response_type": "sector.info",
-        "ts": "2026-01-02T22:46:43Z"
+        "command": "sector.scan.density",
+        "request_id": "c-3324c8f1",
+        "response_type": "sector.density.scan",
+        "ts": "2026-01-05T17:38:00Z"
     },
     "last_quotes": {},
     "current_qa_objective": null,
-    "needs_bootstrap": false
+    "needs_bootstrap": false,
+    "last_action": "bank.balance",
+    "last_context_key": "stage:bootstrap-sector_class:unknown_class-port_type:no_port-holds_full:not_full-credits:low-qa_mode:False-can_sell_any:cannot_sell-can_buy_any:can_buy-has_bank_balance:no_bank_balance-has_pending_commands:no_pending_cmds",
+    "last_stage": "explore"
 }

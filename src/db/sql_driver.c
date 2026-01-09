@@ -617,3 +617,34 @@ parse_error:
   out_buf[0] = '\0';
   return -1;
 }
+
+/**
+ * @brief Generate SQL expression for expanding a JSON array into rows.
+ *
+ * Writes a SQL expression suitable for use in a subquery to expand a JSON
+ * array into individual elements.
+ */
+int
+sql_json_array_to_rows(const db_t *db,
+                       int json_param_idx,
+                       char *out_buf,
+                       size_t out_sz)
+{
+  db_backend_t b = db ? db_backend(db) : DB_BACKEND_POSTGRES;
+
+  if (!out_buf || out_sz == 0) return -1;
+
+  switch (b)
+    {
+    case DB_BACKEND_POSTGRES:
+      /* PostgreSQL: json_array_elements_text({N}) returns text values */
+      return (snprintf(out_buf, out_sz, "json_array_elements_text({%d})", json_param_idx) < (int)out_sz) ? 0 : -1;
+
+    case DB_BACKEND_MYSQL:
+      /* MySQL: JSON_EXTRACT with $[*] pattern - returns multiple rows */
+      return (snprintf(out_buf, out_sz, "JSON_EXTRACT({%d}, '$[*]')", json_param_idx) < (int)out_sz) ? 0 : -1;
+
+    default:
+      return -1;
+    }
+}

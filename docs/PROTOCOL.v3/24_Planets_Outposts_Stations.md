@@ -64,6 +64,18 @@ View detailed planet information after landing (includes colonists, production, 
 Transfer cargo/colonists between ship and planet.
 **Events**: Emits `player.planet_transfer.v1`.
 
+### `planet.genesis_create`
+Create a new planet using a Genesis Torpedo. Requires a Genesis Torpedo on the player's ship.
+**Args**:
+```json
+{
+  "sector_id": 123,
+  "name": "New Earth",
+  "owner_entity_type": "player"
+}
+```
+**Response**: `planet.genesis_created_v1` with planet details.
+
 ### `planet.resource_growth.v1` (Engine)
 Engine command handling production and growth.
 

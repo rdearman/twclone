@@ -1,0 +1,9 @@
+{
+  "name": "Bucket 2 Negative Player Suite",
+  "tests": [
+    { "name": "player.my_info - Missing Auth", "command": "player.my_info", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.get_prefs - Missing Auth", "command": "player.get_prefs", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.set_prefs - Missing Auth", "command": "player.set_prefs", "data": { "theme": "dark" }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "player.list_online - Missing Auth", "command": "player.list_online", "expect": { "status": "error", "error_code": 502 } }
+  ]
+}

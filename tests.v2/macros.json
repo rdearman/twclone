@@ -5,7 +5,7 @@
       "command": "auth.login",
       "data": { "username": "System", "passwd": "BOT" },
       "user": "admin",
-      "save": { "session": "data.session", "admin_player_id": "data.player_id" },
+      "save": { "session": "data.session_token", "admin_player_id": "data.player_id" },
       "stop_on_fail": true
     }
   ],
@@ -24,7 +24,7 @@
       "command": "auth.login",
       "data": { "username": "@username", "passwd": "@password" },
       "user": "@username",
-      "save": { "session": "data.session", "@username_player_id": "data.player_id" },
+      "save": { "session": "data.session_token", "@username_player_id": "data.player_id" },
       "stop_on_fail": true
     }
   ]

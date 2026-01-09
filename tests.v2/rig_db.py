@@ -68,7 +68,14 @@ def main():
     if "ports" in rig:
         print("Rigging Ports...")
         for p in rig["ports"]:
-            sql = f"INSERT INTO ports (port_id, sector_id, type, name) VALUES ({p['port_id']}, {p['sector_id']}, {p['type']}, '{p['name']}') ON CONFLICT (port_id) DO NOTHING;"
+            sql = f"""
+            INSERT INTO ports (port_id, sector_id, type, name) 
+            VALUES ({p['port_id']}, {p['sector_id']}, {p['type']}, '{p['name']}') 
+            ON CONFLICT (port_id) DO UPDATE SET 
+                sector_id = {p['sector_id']}, 
+                type = {p['type']}, 
+                name = '{p['name']}';
+            """
             execute_sql(sql, **db_config)
 
     # 4. Users
@@ -90,6 +97,12 @@ def main():
                 alignment = {align};
             """
             execute_sql(sql, **db_config)
+
+            # Seed turns
+            pid = get_player_id(u['username'], **db_config)
+            if pid:
+                sql = f"INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ({pid}, 1000, now()) ON CONFLICT (player_id) DO UPDATE SET turns_remaining = 1000;"
+                execute_sql(sql, **db_config)
 
     # 5. Corporations
     if "corporations" in rig:
@@ -137,6 +150,9 @@ def main():
                 if "mines" in s:
                     cols.append("mines")
                     vals.append(str(s["mines"]))
+                if "has_transwarp" in s:
+                    cols.append("has_transwarp")
+                    vals.append(str(s["has_transwarp"]))
 
                 sql = f"INSERT INTO ships ({','.join(cols)}) VALUES ({','.join(vals)}) ON CONFLICT (ship_id) DO UPDATE SET sector_id={s['sector_id']};"
                 execute_sql(sql, **db_config)
@@ -192,6 +208,15 @@ def main():
         for i in rig["shipyard_inventory"]:
             sql = f"INSERT INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES ({i['port_id']}, {i['ship_type_id']}, {i['enabled']}) ON CONFLICT (port_id, ship_type_id) DO NOTHING;"
             execute_sql(sql, **db_config)
+
+    # 11. Player Prefs
+    if "player_prefs" in rig:
+        print("Rigging Player Prefs...")
+        for p in rig["player_prefs"]:
+            owner_id = get_player_id(p["username"], **db_config)
+            if owner_id:
+                sql = f"INSERT INTO player_prefs (player_prefs_id, key, type, value) VALUES ({owner_id}, '{p['key']}', '{p['type']}', '{p['value']}') ON CONFLICT (player_prefs_id, key) DO UPDATE SET value = '{p['value']}';"
+                execute_sql(sql, **db_config)
 
     print("Rigging Complete.")
 

@@ -1699,7 +1699,7 @@ h_daily_bank_interest_tick (db_t *db, int64_t now_s)
             }
         }
       char sql_update_tick[512];
-      sql_build(db, "UPDATE bank_accounts SET last_interest_tick = {1} WHERE id = {2};", sql_update_tick, sizeof(sql_update_tick));
+      sql_build(db, "UPDATE bank_accounts SET last_interest_tick = {1} WHERE bank_accounts_id = {2};", sql_update_tick, sizeof(sql_update_tick));
 
       db_bind_t up_params[2];
 

@@ -1,0 +1,63 @@
+{
+  "name": "Planet Ops Suite",
+  "tests": [
+    {
+      "name": "Setup: planet_heir",
+      "setup": "macro_auth_user",
+      "username": "planet_heir",
+      "password": "password"
+    },
+    {
+      "name": "Setup: planet_lord",
+      "setup": "macro_auth_user",
+      "username": "planet_lord",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Land planet_lord on Planet 200",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM planets WHERE planet_id = 200), lastplanet = 200 WHERE name = 'planet_lord' RETURNING sector_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Planet Launch",
+      "command": "planet.launch",
+      "user": "planet_lord",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Planet Launch Missing Auth",
+      "command": "planet.launch",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Positive: Planet Harvest",
+      "command": "planet.harvest",
+      "data": { "planet_id": 200 },
+      "user": "planet_lord",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Planet Harvest Missing Auth",
+      "command": "planet.harvest",
+      "data": { "planet_id": 200 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Positive: Planet Transfer Ownership",
+      "command": "planet.transfer_ownership",
+      "data": { "planet_id": 200, "target_id": "@planet_heir_player_id", "target_type": "player" },
+      "user": "planet_lord",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Planet Transfer Missing Auth",
+      "command": "planet.transfer_ownership",
+      "data": { "planet_id": 200, "target_id": "@planet_heir_player_id", "target_type": "player" },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

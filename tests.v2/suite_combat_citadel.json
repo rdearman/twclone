@@ -1,0 +1,50 @@
+{
+  "name": "Citadel Suite",
+  "tests": [
+    {
+      "name": "Setup: planet_gov",
+      "setup": "macro_auth_user",
+      "username": "planet_gov",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Land planet_gov on Planet 700",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM planets WHERE planet_id = 700), lastplanet = 700 WHERE name = 'planet_gov' RETURNING sector_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set Ship on Planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET onplanet = 700, sector_id = (SELECT sector_id FROM planets WHERE planet_id = 700) WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'planet_gov') RETURNING onplanet;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Give Resources for Citadel",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE planets SET colonist = 1000, ore_on_hand = 1000, organics_on_hand = 1000, equipment_on_hand = 1000 WHERE planet_id = 700 RETURNING planet_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Citadel Build",
+      "command": "citadel.build",
+      "user": "planet_gov",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Citadel Upgrade",
+      "command": "citadel.upgrade",
+      "user": "planet_gov",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

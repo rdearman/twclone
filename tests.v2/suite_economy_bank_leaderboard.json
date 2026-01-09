@@ -1,0 +1,25 @@
+{
+  "name": "Bank Leaderboard Suite",
+  "tests": [
+    {
+      "name": "Setup: econ_trader",
+      "setup": "macro_auth_user",
+      "username": "econ_trader",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Get Leaderboard",
+      "command": "bank.leaderboard",
+      "user": "econ_trader",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.leaderboard", "op": "contains", "value": "econ_trader" }
+      ]
+    },
+    {
+      "name": "Negative: Leaderboard Missing Auth",
+      "command": "bank.leaderboard",
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

@@ -131,6 +131,7 @@ h_db_prefs_set_one (int player_id,
                     const char *type,
                     const char *value)
 {
+  LOGD ("h_db_prefs_set_one: pid=%d key=%s val=%s", player_id, key, value);
   db_t *db = game_db_get_handle ();
   const char *sql =
     "INSERT INTO player_prefs (player_id, key, type, value) VALUES ({1}, {2}, {3}, {4}) "
@@ -138,7 +139,11 @@ h_db_prefs_set_one (int player_id,
   db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (key),
                     db_bind_text (type), db_bind_text (value) };
   db_error_t err;
-  return db_exec (db, sql, p, 4, &err) ? 0 : -1;
+  if (!db_exec (db, sql, p, 4, &err)) {
+    LOGE("h_db_prefs_set_one: DB EXEC FAILED for pid=%d key=%s: %s", player_id, key, err.message);
+    return -1;
+  }
+  return 0;
 }
 
 
@@ -232,6 +237,32 @@ h_db_subscribe_upsert (int player_id,
 
 
 /* --- Logic Helpers --- */
+
+
+static json_t *
+prefs_as_object (int64_t pid)
+{
+  db_t *db = game_db_get_handle ();
+  const char *sql =
+    "SELECT key, value FROM player_prefs WHERE player_id = {1}";
+  db_bind_t params[] = { db_bind_i64 (pid) };
+  db_res_t *res = NULL;
+  db_error_t err;
+
+  json_t *obj = json_object ();
+  if (db_query (db, sql, params, 1, &res, &err))
+    {
+      while (db_res_step (res, &err))
+        {
+          const char *k = db_res_col_text (res, 0, &err);
+          const char *v = db_res_col_text (res, 1, &err);
+          LOGD ("prefs_as_object: found key=%s val=%s", k ? k : "NULL", v ? v : "NULL");
+          json_object_set_new (obj, k ? k : "unknown", json_string (v ? v : ""));
+        }
+      db_res_finalize (res);
+    }
+  return obj;
+}
 
 
 static json_t *
@@ -370,16 +401,44 @@ subscriptions_as_array (int64_t pid)
 static int
 h_set_prefs (client_ctx_t *ctx, json_t *prefs)
 {
+  LOGD ("h_set_prefs: start");
   if (!json_is_object (prefs))
     {
+      LOGD ("h_set_prefs: not an object");
       return -1;
     }
+
+  /* Handle V3 "items": [...] array if present */
+  json_t *items = json_object_get (prefs, "items");
+  if (json_is_array (items))
+    {
+      LOGD ("h_set_prefs: found items array");
+      size_t idx; json_t *item;
+      json_array_foreach (items, idx, item) {
+        const char *key = json_string_value (json_object_get (item, "key"));
+        json_t *val = json_object_get (item, "value");
+        if (key && val) {
+           LOGD ("h_set_prefs: item key=%s", key);
+           char buf[512] = {0};
+           const char *sval = "";
+           if (json_is_string (val)) { sval = json_string_value (val); }
+           else if (json_is_integer (val)) { snprintf(buf, sizeof(buf), "%lld", (long long)json_integer_value(val)); sval = buf; }
+           else if (json_is_boolean (val)) { sval = json_is_true(val) ? "1" : "0"; }
+           else continue;
+           h_db_prefs_set_one (ctx->player_id, key, "string", sval);
+        }
+      }
+      return 0;
+    }
+
   const char *key; json_t *val;
 
 
   json_object_foreach (prefs, key, val) {
+    LOGD ("h_set_prefs: foreach key=%s", key);
     if (!is_valid_key (key, 64))
       {
+        LOGD ("h_set_prefs: invalid key %s", key);
         continue;
       }
     char buf[512] = {0};
@@ -567,8 +626,8 @@ cmd_player_get_prefs (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object ();
 
 
-  json_object_set_new (data, "prefs", prefs_as_array (ctx->player_id));
-  send_response_ok_take (ctx, root, "player.prefs_v1", &data);
+  json_object_set_new (data, "prefs", prefs_as_object (ctx->player_id));
+  send_response_ok_take (ctx, root, "player.prefs", &data);
   return 0;
 }
 
@@ -1466,7 +1525,7 @@ h_get_player_petty_cash (db_t *db, int player_id, long long *bal)
     }
 
 
-  const char *sql = "SELECT credits FROM players WHERE player_id = {1};";
+  const char *sql_template = "SELECT credits FROM players WHERE player_id = {1};";
 
 
   db_res_t *res = NULL;
@@ -1480,6 +1539,8 @@ h_get_player_petty_cash (db_t *db, int player_id, long long *bal)
 
   db_bind_t params[] = { db_bind_i32 (player_id) };
 
+  char sql[256];
+  sql_build (db, sql_template, sql, sizeof sql);
 
   if (!db_query (db, sql, params, 1, &res, &err))
 
@@ -1561,7 +1622,7 @@ h_deduct_player_petty_cash_unlocked (db_t *db,
     }
 
 
-  const char *sql =
+  const char *sql_template =
 
 
     "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1} RETURNING credits;";
@@ -1583,6 +1644,8 @@ h_deduct_player_petty_cash_unlocked (db_t *db,
 
   db_error_clear (&err);
 
+  char sql[256];
+  sql_build (db, sql_template, sql, sizeof sql);
 
   if (!db_query (db, sql, params, 2, &res, &err))
 
@@ -1650,9 +1713,7 @@ h_add_player_petty_cash (db_t *db,
     }
 
 
-  const char *sql =
-
-
+  const char *sql_template =
     "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
 
 
@@ -1672,6 +1733,8 @@ h_add_player_petty_cash (db_t *db,
 
   db_error_clear (&err);
 
+  char sql[256];
+  sql_build (db, sql_template, sql, sizeof sql);
 
   if (!db_query (db, sql, params, 2, &res, &err))
 
@@ -2112,8 +2175,10 @@ h_get_player_sector (db_t *db, int player_id)
     }
 
 
-  const char *sql =
+  const char *sql_template =
     "SELECT COALESCE(sector_id, 0) FROM players WHERE player_id = {1};";
+  char sql[256];
+  sql_build (db, sql_template, sql, sizeof sql);
 
 
   db_res_t *res = NULL;
@@ -2178,11 +2243,17 @@ h_add_player_petty_cash_unlocked (db_t *db,
 
 
 {
+
+
   if (!db || amount < 0)
 
 
     {
+
+
       return -1;
+
+
     }
 
 
@@ -2190,21 +2261,29 @@ h_add_player_petty_cash_unlocked (db_t *db,
 
 
     {
+
+
       *new_balance_out = 0;
+
+
     }
 
 
-  const char *sql =
+  const char *sql_template =
 
 
     "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
 
 
   db_bind_t params[] = {
+
+
     db_bind_i64 (amount),
 
 
     db_bind_i32 (player_id)
+
+
   };
 
 
@@ -2215,6 +2294,18 @@ h_add_player_petty_cash_unlocked (db_t *db,
 
 
   db_error_clear (&err);
+
+
+
+
+
+  char sql[256];
+
+
+  sql_build(db, sql_template, sql, sizeof sql);
+
+
+
 
 
   if (!db_query (db, sql, params, 2, &res, &err))

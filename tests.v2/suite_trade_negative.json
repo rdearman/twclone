@@ -1,0 +1,9 @@
+{
+  "name": "Bucket 2 Negative Trade Suite",
+  "tests": [
+    { "name": "port.status - Missing Auth", "command": "port.status", "data": { "port_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "port.describe - Missing Auth", "command": "port.describe", "data": { "port_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.quote - Missing Auth", "command": "trade.quote", "data": { "port_id": 1, "commodity": "ORE", "quantity": 1, "mode": "buy" }, "expect": { "status": "error", "error_code": 1700 } },
+    { "name": "trade.jettison - Missing Auth", "command": "trade.jettison", "data": { "commodity": "ORE", "quantity": 1 }, "expect": { "status": "error", "error_code": 1700 } }
+  ]
+}

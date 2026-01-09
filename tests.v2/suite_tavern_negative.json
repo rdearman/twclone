@@ -1,0 +1,8 @@
+{
+  "name": "Bucket 2 Negative Tavern Suite",
+  "tests": [
+    { "name": "tavern.dice.play - Missing Auth", "command": "tavern.dice.play", "data": { "bet": 10 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.round.buy - Missing Auth", "command": "tavern.round.buy", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.barcharts.get_prices_summary - Missing Auth", "command": "tavern.barcharts.get_prices_summary", "expect": { "status": "error", "error_code": 401 } }
+  ]
+}

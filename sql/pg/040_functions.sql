@@ -79,195 +79,251 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 2) Ports
 -- ---------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION generate_ports (target_sectors int DEFAULT NULL)
     RETURNS bigint
     LANGUAGE plpgsql
-    AS $$
+AS $$
 DECLARE
     v_added bigint := 0;
     v_lock_key bigint := 72002002;
     v_target int;
     v_port_ratio int;
     v_port_rec record;
-    v_commodity_id int;
-    v_base_price int;
-    v_code text;
-    v_cluster_alignment int;
+
+    v_size int;
+    v_cap int;
+
+    v_code_ore text;
+    v_code_org text;
+    v_code_equ text;
+
+    v_base_ore int;
+    v_base_org int;
+    v_base_equ int;
+
 BEGIN
-    PERFORM
-        bigbang_lock (v_lock_key);
-    -- Get config value for port_ratio, default to 40 if not set
-    SELECT
-        value::int INTO v_port_ratio
-    FROM
-        config
-    WHERE
-        key = 'port_ratio';
+    PERFORM bigbang_lock(v_lock_key);
+
+    /* Get config value for port_ratio, default to 40 if not set */
+    SELECT value::int INTO v_port_ratio
+      FROM config
+     WHERE key = 'port_ratio';
+
     IF v_port_ratio IS NULL OR v_port_ratio > 100 OR v_port_ratio < 0 THEN
         v_port_ratio := 40;
     END IF;
+
     IF target_sectors IS NULL THEN
-        SELECT
-            COALESCE(MAX(sector_id), 0)::int INTO v_target
-        FROM
-            sectors;
+        SELECT COALESCE(MAX(sector_id), 0)::int INTO v_target
+          FROM sectors;
     ELSE
         v_target := target_sectors;
     END IF;
+
     IF v_target < 0 THEN
         RAISE EXCEPTION 'target_sectors must be >= 0';
     END IF;
-    PERFORM
-        generate_sectors (v_target);
-    -- Create a temporary table to hold newly created port IDs and types
+
+    PERFORM generate_sectors(v_target);
+
+    /* Temporary table to hold newly created port IDs and types */
     CREATE TEMP TABLE new_ports (
-        port_id int,
-        type int,
+        port_id  int,
+        type     int,
         sector_id int
     ) ON COMMIT DROP;
-    -- Insert ports respecting the port_ratio, and capture their IDs and types
+
+    /* Insert ports respecting port_ratio, and capture their IDs and types */
     WITH inserted_ports AS (
-INSERT INTO ports (number, name, sector_id, type)
+        INSERT INTO ports (number, name, sector_id, type)
         SELECT
             s.sector_id AS number,
-            randomname () AS name,
+            randomname() AS name,
             s.sector_id AS sector_id,
             floor(random() * 8 + 1)::int AS type
-        FROM
-            sectors s
-        WHERE
-            s.sector_id > 10 -- Don't create ports in Fedspace core
-            AND s.sector_id <= v_target
-            AND NOT EXISTS (
-                SELECT
-                    1
-                FROM
-                    ports p
-                WHERE
-                    p.sector_id = s.sector_id)
-                AND random() <= (v_port_ratio / 100.0)
-            RETURNING
-                port_id,
-                type,
-                sector_id)
+        FROM sectors s
+        WHERE s.sector_id > 10                       /* Don't create ports in Fedspace core */
+          AND s.sector_id <= v_target
+          AND NOT EXISTS (
+                SELECT 1
+                  FROM ports p
+                 WHERE p.sector_id = s.sector_id
+          )
+          AND random() <= (v_port_ratio / 100.0)
+        RETURNING port_id, type, sector_id
+    )
     INSERT INTO new_ports
-    SELECT
-        port_id,
-        type,
-        sector_id
-    FROM
-        inserted_ports;
+    SELECT port_id, type, sector_id
+      FROM inserted_ports;
+
     GET DIAGNOSTICS v_added = ROW_COUNT;
-    -- Now, seed commodities for the new ports
+
+    /*
+     * Resolve commodity codes + base prices once.
+     * Supports either short codes (ORE/ORG/EQU) or long codes (ore/organics/equipment).
+     */
+    SELECT c.code, c.base_price INTO v_code_ore, v_base_ore
+      FROM commodities c
+     WHERE c.illegal = 0
+       AND (upper(c.code) = 'ORE' OR lower(c.code) = 'ore')
+     ORDER BY (upper(c.code) = 'ORE') DESC
+     LIMIT 1;
+
+    SELECT c.code, c.base_price INTO v_code_org, v_base_org
+      FROM commodities c
+     WHERE c.illegal = 0
+       AND (upper(c.code) = 'ORG' OR lower(c.code) = 'organics')
+     ORDER BY (upper(c.code) = 'ORG') DESC
+     LIMIT 1;
+
+    SELECT c.code, c.base_price INTO v_code_equ, v_base_equ
+      FROM commodities c
+     WHERE c.illegal = 0
+       AND (upper(c.code) = 'EQU' OR lower(c.code) = 'equipment')
+     ORDER BY (upper(c.code) = 'EQU') DESC
+     LIMIT 1;
+
+    IF v_code_ore IS NULL OR v_code_org IS NULL OR v_code_equ IS NULL THEN
+        RAISE EXCEPTION
+            'generate_ports: missing required commodities. Need ORE/ORG/EQU (or ore/organics/equipment) in commodities table.';
+    END IF;
+
+    /* Seed trade modes + stock for the new ports */
     FOR v_port_rec IN
-    SELECT
-        port_id,
-        type,
-        sector_id
-    FROM
-        new_ports LOOP
-            -- SBB (Sell Ore, Buy Organics/Equipment)
-            IF v_port_rec.type = 1 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'organics', 'buy'),
-                    (v_port_rec.port_id, 'equipment', 'buy'),
-                    (v_port_rec.port_id, 'ore', 'sell');
-                -- SSB
-            ELSIF v_port_rec.type = 2 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'sell'),
-                    (v_port_rec.port_id, 'organics', 'sell'),
-                    (v_port_rec.port_id, 'equipment', 'buy');
-                -- BSS
-            ELSIF v_port_rec.type = 3 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'buy'),
-                    (v_port_rec.port_id, 'organics', 'sell'),
-                    (v_port_rec.port_id, 'equipment', 'sell');
-                -- BSB
-            ELSIF v_port_rec.type = 4 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'buy'),
-                    (v_port_rec.port_id, 'organics', 'sell'),
-                    (v_port_rec.port_id, 'equipment', 'buy');
-                -- BBS
-            ELSIF v_port_rec.type = 5 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'buy'),
-                    (v_port_rec.port_id, 'organics', 'buy'),
-                    (v_port_rec.port_id, 'equipment', 'sell');
-                -- SBS
-            ELSIF v_port_rec.type = 6 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'sell'),
-                    (v_port_rec.port_id, 'organics', 'buy'),
-                    (v_port_rec.port_id, 'equipment', 'sell');
-                -- BBB (Specialty Port)
-            ELSIF v_port_rec.type = 7 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'buy'),
-                    (v_port_rec.port_id, 'organics', 'buy'),
-                    (v_port_rec.port_id, 'equipment', 'buy');
-                -- SSS (Specialty Port)
-            ELSIF v_port_rec.type = 8 THEN
-                INSERT INTO port_trade (port_id, commodity, mode)
-                    VALUES (v_port_rec.port_id, 'ore', 'sell'),
-                    (v_port_rec.port_id, 'organics', 'sell'),
-                    (v_port_rec.port_id, 'equipment', 'sell');
-            END IF;
-            -- Seed initial stock for all commodities at the new port
-            FOR v_commodity_id,
-            v_code,
-            v_base_price IN
-            SELECT
-                commodities_id,
-                code,
-                base_price
-            FROM
-                commodities
-            WHERE
-                illegal = 0 LOOP
-                    INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
-                        VALUES ('port', v_port_rec.port_id, v_code, 10000, v_base_price)
-                    ON CONFLICT
-                        DO NOTHING;
-                END LOOP;
-            -- Check cluster alignment for illegal goods
-            v_cluster_alignment := 0;
-            -- Default to neutral
-            SELECT
-                cl.alignment INTO v_cluster_alignment
-            FROM
-                clusters cl
-                JOIN cluster_sectors cs ON cs.cluster_id = cl.clusters_id
-            WHERE
-                cs.sector_id = v_port_rec.sector_id
-            LIMIT 1;
-            IF v_cluster_alignment < 0 THEN
-                -- Seed illegal goods for evil clusters
-                FOR v_commodity_id,
-                v_code,
-                v_base_price IN
-                SELECT
-                    commodities_id,
-                    code,
-                    base_price
-                FROM
-                    commodities
-                WHERE
-                    illegal = 1 LOOP
-                        INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
-                            VALUES ('port', v_port_rec.port_id, v_code, 500, v_base_price)
-                        ON CONFLICT
-                            DO NOTHING;
-                    END LOOP;
-            END IF;
-        END LOOP;
-    PERFORM
-        bigbang_unlock (v_lock_key);
+        SELECT port_id, type, sector_id
+          FROM new_ports
+    LOOP
+        /* Populate port_trade based on type (unchanged behaviour) */
+        IF v_port_rec.type = 1 THEN
+            /* SBB (Sell Ore, Buy Organics/Equipment) */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'organics', 'buy'),
+                (v_port_rec.port_id, 'equipment', 'buy'),
+                (v_port_rec.port_id, 'ore',       'sell');
+
+        ELSIF v_port_rec.type = 2 THEN
+            /* SSB */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'sell'),
+                (v_port_rec.port_id, 'organics',  'sell'),
+                (v_port_rec.port_id, 'equipment', 'buy');
+
+        ELSIF v_port_rec.type = 3 THEN
+            /* BSS */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'buy'),
+                (v_port_rec.port_id, 'organics',  'sell'),
+                (v_port_rec.port_id, 'equipment', 'sell');
+
+        ELSIF v_port_rec.type = 4 THEN
+            /* BSB */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'buy'),
+                (v_port_rec.port_id, 'organics',  'sell'),
+                (v_port_rec.port_id, 'equipment', 'buy');
+
+        ELSIF v_port_rec.type = 5 THEN
+            /* BBS */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'buy'),
+                (v_port_rec.port_id, 'organics',  'buy'),
+                (v_port_rec.port_id, 'equipment', 'sell');
+
+        ELSIF v_port_rec.type = 6 THEN
+            /* SBS */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'sell'),
+                (v_port_rec.port_id, 'organics',  'buy'),
+                (v_port_rec.port_id, 'equipment', 'sell');
+
+        ELSIF v_port_rec.type = 7 THEN
+            /* BBB (Specialty Port) */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'buy'),
+                (v_port_rec.port_id, 'organics',  'buy'),
+                (v_port_rec.port_id, 'equipment', 'buy');
+
+        ELSIF v_port_rec.type = 8 THEN
+            /* SSS (Specialty Port) */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ore',       'sell'),
+                (v_port_rec.port_id, 'organics',  'sell'),
+                (v_port_rec.port_id, 'equipment', 'sell');
+        END IF;
+
+        /*
+         * Capacity model used by server_ports.c:
+         * max_capacity = ports.size * 1000
+         * If size is NULL, default to 10 (matches your observed 10000 caps).
+         */
+        SELECT COALESCE(p.size, 10) INTO v_size
+          FROM ports p
+         WHERE p.port_id = v_port_rec.port_id;
+
+        v_cap := v_size * 1000;
+
+        /*
+         * Seed initial stock:
+         * - If port mode is 'buy'  => low stock (0..10% of cap)
+         * - If port mode is 'sell' => high stock (60..95% of cap)
+         *
+         * Prices seeded to base_price (runtime code adjusts as needed).
+         */
+        INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
+        VALUES
+            ('port', v_port_rec.port_id, v_code_ore,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity='ore' AND pt.mode='buy')
+                        THEN GREATEST(0, (v_cap * (random() * 0.10))::int)
+                    ELSE GREATEST(1, (v_cap * (0.60 + random() * 0.35))::int)
+                END,
+                v_base_ore
+            ),
+            ('port', v_port_rec.port_id, v_code_org,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity='organics'  AND pt.mode='buy')
+                        THEN GREATEST(0, (v_cap * (random() * 0.10))::int)
+                    ELSE GREATEST(1, (v_cap * (0.60 + random() * 0.35))::int)
+                END,
+                v_base_org
+            ),
+            ('port', v_port_rec.port_id, v_code_equ,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity='equipment' AND pt.mode='buy')
+                        THEN GREATEST(0, (v_cap * (random() * 0.10))::int)
+                    ELSE GREATEST(1, (v_cap * (0.60 + random() * 0.35))::int)
+                END,
+                v_base_equ
+            )
+        ON CONFLICT DO NOTHING;
+
+        /*
+         * Illegal goods are intentionally NOT seeded here.
+         * clusters aren't populated yet, so this generator stays “legal-only”.
+         */
+    END LOOP;
+
+    /* Create bank accounts for the new ports */
+    INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
+    SELECT 'port', np.port_id, 'CRD', 50000, 0, 1
+    FROM new_ports np;
+
+    PERFORM bigbang_unlock(v_lock_key);
     RETURN v_added;
 END;
 $$;
+
+
+
 -- ---------------------------------------------------------------------------
 -- 2.5) Stardock
 -- ---------------------------------------------------------------------------
@@ -312,6 +368,12 @@ BEGIN
             name = EXCLUDED.name, type = EXCLUDED.type, size = EXCLUDED.size, techlevel = EXCLUDED.techlevel, petty_cash = EXCLUDED.petty_cash
         RETURNING
             port_id INTO v_port_id;
+    -- Create bank account for Stardock
+    IF v_port_id IS NOT NULL THEN
+        INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
+        VALUES ('port', v_port_id, 'CRD', 1000000, 0, 1)
+        ON CONFLICT DO NOTHING;
+    END IF;
     -- Seed Stardock Assets
     IF v_port_id IS NOT NULL THEN
         INSERT INTO stardock_assets (sector_id, owner_id, fighters, defenses, ship_capacity)
@@ -751,8 +813,20 @@ BEGIN
     
     -- Create Orion Black Market port (type 10 = blackmarket stardock)
     INSERT INTO ports (sector_id, name, type)
-    SELECT v_orion_sector, 'Orion Black Market', 10
-    ON CONFLICT DO NOTHING;
+    VALUES (v_orion_sector, 'Orion Black Market', 10)
+    ON CONFLICT DO NOTHING
+    RETURNING port_id INTO v_port_id;
+
+    -- Ensure bank account exists (even if port already existed)
+    IF v_port_id IS NULL THEN
+         SELECT port_id INTO v_port_id FROM ports WHERE sector_id = v_orion_sector AND type = 10;
+    END IF;
+
+    IF v_port_id IS NOT NULL THEN
+         INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
+         VALUES ('port', v_port_id, 'CRD', 1000000, 0, 1)
+         ON CONFLICT DO NOTHING;
+    END IF;
 END;
 $$;
 CREATE OR REPLACE FUNCTION spawn_initial_fleet ()

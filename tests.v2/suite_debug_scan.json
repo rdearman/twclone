@@ -1,0 +1,20 @@
+{
+  "name": "Move Scan Debug Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_user",
+      "setup": "macro_auth_user",
+      "username": "mover_user",
+      "password": "password"
+    },
+    {
+      "name": "Debug: Move Scan",
+      "command": "move.scan",
+      "user": "mover_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.adjacent_sectors.0", "op": "==", "value": -1 }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 {
     "bug_id": "err_schema_move.warp",
-    "first_seen": "20260102_224644_230",
+    "first_seen": "20260105_173821_292",
     "command": "move.warp",
-    "error_message": "{'to_sector': 2} is not of type 'integer'",
+    "error_message": "{'to_sector': 6} is not of type 'integer'",
     "error_path": [
         "to_sector_id"
     ],

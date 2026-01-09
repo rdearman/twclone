@@ -117,6 +117,13 @@ class StateManager:
         self.state["last_action_result"] = result_dict
         self.save_state()
 
+    def set_turns(self, turns):
+        """Updates the turns_remaining in player_info."""
+        if self.state["player_info"] and "player" in self.state["player_info"]:
+            self.state["player_info"]["player"]["turns_remaining"] = turns
+            logger.info(f"Updated turns_remaining to {turns}.")
+            self.save_state()
+
     def update_last_quote(self, port_id, commodity, price, timestamp):
         """Stores the most recent successful quote details."""
         if "last_quotes" not in self.state:
@@ -167,7 +174,7 @@ class StateManager:
             return []
             
         sector_data = self.state.get("sector_data", {}).get(str(current_sector), {})
-        adj = sector_data.get("adjacent", []) or []
+        adj = sector_data.get("adjacent_sectors") or sector_data.get("adjacent") or []
         warp_blacklist = set(self.state.get("warp_blacklist", []))
         
         # adj contains dicts like {"to_sector": 2}, extract the sector IDs
@@ -191,19 +198,21 @@ class StateManager:
         while queue:
             current, path = queue.pop(0)
             sector_data = self.state.get("sector_data", {}).get(current, {})
-            adjacent = sector_data.get("adjacent", [])
+            adjacent = sector_data.get("adjacent_sectors") or sector_data.get("adjacent") or []
             
             for neighbor in adjacent:
-                neighbor_str = str(neighbor)
+                # Extract sector ID from dict or use directly if int
+                neighbor_id = neighbor["to_sector"] if isinstance(neighbor, dict) else neighbor
+                neighbor_str = str(neighbor_id)
                 if neighbor_str == goal:
-                    return path + [neighbor]
+                    return path + [neighbor_id]
                 
                 if neighbor_str not in visited:
                     visited.add(neighbor_str)
                     # Only traverse if we have data for the neighbor? 
                     # Actually, for navigation, we assume adjacency is bidirectional/valid 
                     # even if we haven't visited the neighbor yet.
-                    queue.append((neighbor_str, path + [neighbor]))
+                    queue.append((neighbor_str, path + [neighbor_id]))
                     
         return None
 
@@ -215,11 +224,23 @@ class StateManager:
             self.state['sector_data'] = {}
         
         enriched_data = dict(data)
-        if 'has_port' not in enriched_data and 'ports' in enriched_data:
-            enriched_data['has_port'] = len(enriched_data['ports']) > 0
         
-        self.state['sector_data'][str(sector_id)] = enriched_data
+        # Fallback for has_port check
+        ports = enriched_data.get('ports')
+        if 'has_port' not in enriched_data and ports is not None:
+            enriched_data['has_port'] = len(ports) > 0
+            
+        # Fallback for has_planet check
+        planets = enriched_data.get('celestial_objects') or enriched_data.get('planets')
+        if 'has_planet' not in enriched_data and planets is not None:
+            enriched_data['has_planet'] = len(planets) > 0
+        
+        # Normalize adjacent_sectors to adjacent (Unconditional)
+        if 'adjacent_sectors' in enriched_data:
+            enriched_data['adjacent'] = enriched_data['adjacent_sectors']
+            logger.info(f"Normalized adjacent_sectors for sector {sector_id}. Keys: {enriched_data.keys()}")
 
+        self.state['sector_data'][str(sector_id)] = enriched_data
         if 'universe_map' not in self.state:
             self.state['universe_map'] = {}
         
@@ -308,8 +329,10 @@ class StateManager:
         
         for item in items_bought:
             commodity = canon_commodity(item.get("commodity"))
-            quantity = item.get("quantity")
-            purchase_price = item.get("unit_price") # GET UNIT_PRICE FROM THE RECEIPT ITEM DIRECTLY!
+            # Note: trade.buy_receipt_v1 uses "units" not "quantity"!
+            quantity = item.get("units") or item.get("quantity")
+            # Note: trade.buy_receipt_v1 uses "price_per_unit" not "unit_price"!
+            purchase_price = item.get("price_per_unit") or item.get("unit_price")
 
             if not all([commodity, quantity, purchase_price is not None]):
                 logger.warning(f"Could not log purchase for {item}, missing data (commodity, quantity, or unit_price).")

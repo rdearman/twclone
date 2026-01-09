@@ -15,6 +15,7 @@
 #include "server_cron.h"
 #include "errors.h"
 #include "db/db_api.h"
+#include "db/sql_driver.h"
 
 
 /* ==================================================================== */
@@ -1209,13 +1210,14 @@ db_create_podded_status_entry (db_t *db, int pid)
     }
   db_error_t err;
   
-  char sql_with_time[512];
-  snprintf(sql_with_time, sizeof sql_with_time,
-    "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, %s) ON CONFLICT DO NOTHING;",
-    sql_now_expr(db));
+  const char *sql_template =
+    "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, %s) ON CONFLICT DO NOTHING;";
+
+  char sql_dialect[512];
+  sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
 
   char sql[512];
-  sql_build(db, sql_with_time, sql, sizeof sql);
+  snprintf(sql, sizeof sql, sql_dialect, sql_now_expr(db));
 
   if (!db_exec (db, sql, (db_bind_t[]){db_bind_i32 (pid)}, 1, &err))
     {
@@ -1237,8 +1239,12 @@ db_get_player_podded_count_today (db_t *db, int pid)
   int cnt = 0;
 
 
+  const char *sql_template = "SELECT podded_count_today FROM podded_status WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
   if (!db_query (db,
-                 "SELECT podded_count_today FROM podded_status WHERE player_id = {1};",
+                 sql,
                  (db_bind_t[]){db_bind_i32 (pid)},
                  1,
                  &res,
@@ -1276,8 +1282,12 @@ db_get_player_podded_last_reset (db_t *db, int pid)
   long long ts = 0;
 
 
+  const char *sql_template = "SELECT podded_last_reset FROM podded_status WHERE player_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
   if (!db_query (db,
-                 "SELECT podded_last_reset FROM podded_status WHERE player_id = {1};",
+                 sql,
                  (db_bind_t[]){db_bind_i32 (pid)},
                  1,
                  &res,
@@ -1338,11 +1348,14 @@ db_update_player_podded_status (db_t *db,
   db_error_t err;
 
 
+  const char *sql_template = "UPDATE podded_status SET status = {1}, last_updated = CURRENT_TIMESTAMP WHERE player_id = {2};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
   if (!db_exec (db,
-                "UPDATE podded_status SET status = {1}, big_sleep_until = {2} WHERE player_id = {3};",
-                (db_bind_t[]){db_bind_text (status), db_bind_i64 (until),
-                              db_bind_i32 (pid)},
-                3,
+                sql,
+                (db_bind_t[]){db_bind_text (status), db_bind_i32 (pid)},
+                2,
                 &err))
     {
       return err.code;
@@ -2961,14 +2974,27 @@ db_sector_basic_json (db_t *db, int sid, json_t **out)
   int rc = -1;
 
 
+  const char *sql_template = "SELECT sector_id, name, beacon FROM sectors WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
   if (db_query (db,
-                "SELECT sector_id, name FROM sectors WHERE sector_id = {1};",
+                sql,
                 (db_bind_t[]){db_bind_i32 (sid)},
                 1,
                 &res,
                 &err))
     {
-      rc = stmt_to_json_array (res, out, &err);
+      json_t *arr = NULL;
+      rc = stmt_to_json_array (res, &arr, &err);
+      if (rc == 0 && arr) {
+        if (json_array_size(arr) > 0) {
+          *out = json_incref(json_array_get(arr, 0));
+        } else {
+          rc = -1;
+        }
+        json_decref(arr);
+      }
       goto cleanup;
     }
 
@@ -2991,8 +3017,12 @@ db_adjacent_sectors_json (db_t *db, int sid, json_t **out)
   int rc = -1;
 
 
+  const char *sql_template = "SELECT to_sector FROM sector_warps WHERE from_sector = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
   if (db_query (db,
-                "SELECT to_sector FROM sector_warps WHERE from_sector = {1};",
+                sql,
                 (db_bind_t[]){db_bind_i32 (sid)},
                 1,
                 &res,
@@ -3021,8 +3051,12 @@ db_ports_at_sector_json (db_t *db, int sid, json_t **out)
   int rc = -1;
 
 
+  const char *sql_template = "SELECT port_id, name, type FROM ports WHERE sector_id = {1};";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof sql);
+
   if (db_query (db,
-                "SELECT port_id, name, type FROM ports WHERE sector_id = {1};",
+                sql,
                 (db_bind_t[]){db_bind_i32 (sid)},
                 1,
                 &res,
@@ -3080,12 +3114,16 @@ db_planets_at_sector_json (db_t *db, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
-  const char *sql_template = "SELECT planet_id, name FROM planets WHERE sector_id = {1};";
+  const char *sql_template = "SELECT planet_id, name, type FROM planets WHERE sector_id = {1};";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
-  if (db_query (db, sql,
-                (db_bind_t[]){db_bind_i32 (sid)}, 1, &res, &err))
+  if (db_query (db,
+                sql,
+                (db_bind_t[]){db_bind_i32 (sid)},
+                1,
+                &res,
+                &err))
     {
       rc = stmt_to_json_array (res, out, &err);
       goto cleanup;
@@ -3552,13 +3590,14 @@ db_notice_list_unseen_for_player (db_t *db, int player_id)
     }
   db_res_t *res = NULL; db_error_t err;
   
-  char sql_with_time[1024];
-  snprintf(sql_with_time, sizeof sql_with_time,
-    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = {1} WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > %s);",
-    sql_now_expr(db));
+  const char *sql_template =
+    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = {1} WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > %s);";
+
+  char sql_dialect[1024];
+  sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
 
   char sql[1024];
-  sql_build(db, sql_with_time, sql, sizeof sql);
+  snprintf(sql, sizeof sql, sql_dialect, sql_now_expr(db));
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1, &res, &err))
     {
@@ -3580,13 +3619,14 @@ db_notice_mark_seen (db_t *db, int notice_id, int player_id)
     }
   db_error_t err;
   
-  char sql_with_time[512];
-  snprintf(sql_with_time, sizeof sql_with_time,
-    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s) ON CONFLICT DO NOTHING;",
-    sql_now_expr(db));
+  const char *sql_template =
+    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s) ON CONFLICT DO NOTHING;";
+
+  char sql_dialect[512];
+  sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
 
   char sql[512];
-  sql_build(db, sql_with_time, sql, sizeof sql);
+  snprintf(sql, sizeof sql, sql_dialect, sql_now_expr(db));
 
   if (!db_exec (db,
                 sql,
@@ -3791,13 +3831,14 @@ h_ship_claim_unlocked (db_t *db, int pid, int sid, int ship_id, json_t **out)
            (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &err);
 
 
-  char sql_with_time[512];
-  snprintf(sql_with_time, sizeof sql_with_time,
-    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) VALUES ({1}, {2}, 1, TRUE, %s);",
-    sql_now_expr(db));
+  const char *sql_template =
+    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary, acquired_at) VALUES ({1}, {2}, 1, TRUE, %s);";
+
+  char sql_dialect[512];
+  sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
 
   char sql[512];
-  sql_build(db, sql_with_time, sql, sizeof sql);
+  snprintf(sql, sizeof sql, sql_dialect, sql_now_expr(db));
 
   if (!db_exec (db,
                 sql,
@@ -4525,7 +4566,8 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
     "SELECT p.player_id, p.name, p.experience, p.alignment, p.credits, p.sector_id, "
     "       s.ship_id, s.name as ship_name, s.type_id as ship_type, "
     "       s.holds, s.fighters, s.shields, s.onplanet, s.ported, "
-    "       sec.name as sector_name "
+    "       sec.name as sector_name, "
+    "       s.ore, s.equipment, s.organics, s.slaves, s.drugs, s.weapons, s.colonists "
     "FROM players p "
     "LEFT JOIN ships s ON p.ship_id = s.ship_id "
     "LEFT JOIN sectors sec ON p.sector_id = sec.sector_id "
@@ -4586,6 +4628,36 @@ db_player_info_json (db_t *db, int player_id, json_t **out_json)
       json_object_set_new (ship, "shields", json_integer (db_res_col_i32 (res, 11, &err)));
       json_object_set_new (ship, "onplanet", json_integer (db_res_col_i32 (res, 12, &err)));
       json_object_set_new (ship, "ported", json_integer (db_res_col_i32 (res, 13, &err)));
+      
+      /* Build cargo array from commodity columns (columns 15-20) */
+      json_t *cargo = json_array ();
+      if (!cargo)
+        {
+          rc = ERR_NOMEM;
+          goto cleanup;
+        }
+      
+      /* Add commodities with non-zero quantities */
+      const char *commodities[] = {"ore", "equipment", "organics", "slaves", "drugs", "weapons", "colonists"};
+      for (int i = 0; i < 7; i++)
+        {
+          int qty = db_res_col_i32 (res, 15 + i, &err);
+          if (qty > 0)
+            {
+              json_t *item = json_object ();
+              if (!item)
+                {
+                  json_decref (cargo);
+                  rc = ERR_NOMEM;
+                  goto cleanup;
+                }
+              json_object_set_new (item, "commodity", json_string (commodities[i]));
+              json_object_set_new (item, "quantity", json_integer (qty));
+              json_array_append_new (cargo, item);
+            }
+        }
+      
+      json_object_set_new (ship, "cargo", cargo);
       json_object_set_new (root, "ship", ship);
       ship = NULL;  /* Stolen by root */
     }
@@ -4907,7 +4979,12 @@ db_player_set_sector (int pid, int sid)
 int
 db_session_revoke (const char *token)
 {
-  return 0;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return -1;
+  db_error_t err;
+  return db_exec (db, "DELETE FROM sessions WHERE token = {1}",
+                  (db_bind_t[]){ db_bind_text (token) }, 1, &err) ? 0 : -1;
 }
 
 
@@ -5081,8 +5158,11 @@ h_is_black_market_port (db_t *db, int port_id)
   db_error_t err;
   bool is_bm = false;
   
-  if (db_query (db, 
-                "SELECT name FROM ports WHERE id = {1} LIMIT 1;",
+  const char *sql_template = "SELECT name FROM ports WHERE port_id = {1} LIMIT 1;";
+  char sql[256];
+  sql_build(db, sql_template, sql, sizeof(sql));
+
+  if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i32 (port_id)},
                 1,
                 &res,

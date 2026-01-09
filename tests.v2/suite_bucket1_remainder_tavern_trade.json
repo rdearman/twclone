@@ -1,0 +1,43 @@
+{
+  "name": "Bucket 1 Remainder - Tavern and Trade",
+  "tests": [
+    {
+      "name": "Setup: trader_player_1",
+      "setup": "macro_auth_user",
+      "username": "trader_player_1",
+      "password": "password"
+    },
+    { "name": "tavern.deadpool.place_bet - Positive", "command": "tavern.deadpool.place_bet", "data": { "target_id": 1, "amount": 100 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.deadpool.place_bet - Negative (No Auth)", "command": "tavern.deadpool.place_bet", "data": { "target_id": 1, "amount": 100 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.graffiti.post - Positive", "command": "tavern.graffiti.post", "data": { "text": "Hello" }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.graffiti.post - Negative (No Auth)", "command": "tavern.graffiti.post", "data": { "text": "Hello" }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.highstakes.play - Positive", "command": "tavern.highstakes.play", "data": { "bet": 100 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.highstakes.play - Negative (No Auth)", "command": "tavern.highstakes.play", "data": { "bet": 100 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.loan.pay - Positive", "command": "tavern.loan.pay", "data": { "amount": 100 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.loan.pay - Negative (No Auth)", "command": "tavern.loan.pay", "data": { "amount": 100 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.lottery.buy_ticket - Positive", "command": "tavern.lottery.buy_ticket", "data": { "count": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.lottery.buy_ticket - Negative (No Auth)", "command": "tavern.lottery.buy_ticket", "data": { "count": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.lottery.status - Positive", "command": "tavern.lottery.status", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.lottery.status - Negative (No Auth)", "command": "tavern.lottery.status", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.raffle.buy_ticket - Positive", "command": "tavern.raffle.buy_ticket", "data": { "count": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.raffle.buy_ticket - Negative (No Auth)", "command": "tavern.raffle.buy_ticket", "data": { "count": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.rumour.get_hint - Positive", "command": "tavern.rumour.get_hint", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.rumour.get_hint - Negative (No Auth)", "command": "tavern.rumour.get_hint", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "tavern.trader.buy_password - Positive", "command": "tavern.trader.buy_password", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "tavern.trader.buy_password - Negative (No Auth)", "command": "tavern.trader.buy_password", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.accept - Positive", "command": "trade.accept", "data": { "offer_id": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "trade.accept - Negative (No Auth)", "command": "trade.accept", "data": { "offer_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.cancel - Positive", "command": "trade.cancel", "data": { "offer_id": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "trade.cancel - Negative (No Auth)", "command": "trade.cancel", "data": { "offer_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.history - Positive", "command": "trade.history", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "trade.history - Negative (No Auth)", "command": "trade.history", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.offer - Positive", "command": "trade.offer", "data": { "to_player_id": 2, "commodity": "ORE", "quantity": 1, "price": 100, "mode": "sell" }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "trade.offer - Negative (No Auth)", "command": "trade.offer", "data": { "to_player_id": 2, "commodity": "ORE", "quantity": 1, "price": 100, "mode": "sell" }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.port_info - Positive", "command": "trade.port_info", "data": { "port_id": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "trade.port_info - Negative (No Auth)", "command": "trade.port_info", "data": { "port_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "trade.sell - Positive", "command": "trade.sell", "data": { "port_id": 1, "commodity": "ORE", "quantity": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "trade.sell - Negative (No Auth)", "command": "trade.sell", "data": { "port_id": 1, "commodity": "ORE", "quantity": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "port.info - Positive", "command": "port.info", "user": "trader_player_1", "expect": { "status": "ok" } },
+    { "name": "port.info - Negative (No Auth)", "command": "port.info", "expect": { "status": "error", "error_code": 401 } }
+  ]
+}

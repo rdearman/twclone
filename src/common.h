@@ -282,6 +282,7 @@ extern atomic_int_fast64_t g_server_tick;
 
 
 void h_copy_cstr (char *dst, size_t dst_sz, const char *src);
+void h_format_credits (char *dst, size_t dst_sz, long long credits);
 
 
 #endif // COMMON_H

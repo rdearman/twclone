@@ -23,13 +23,13 @@
     },
     {
       "name": "System Schema List",
-      "command": "system.schemas",
+      "command": "system.schema_list",
       "expect": { "status": "ok" }
     },
     {
       "name": "System Describe Schema",
-      "command": "system.schema_describe",
-      "data": { "schema": "auth.login" },
+      "command": "system.describe_schema",
+      "data": { "name": "auth.login" },
       "expect": { "status": "ok" }
     },
     {
@@ -55,7 +55,7 @@
       "name": "Verify Logout (Ping Fail)",
       "command": "player.my_info",
       "user": "session_user",
-      "expect": { "status": "refused", "error_code": 1700 }
+      "expect": { "status": "refused", "error_code": 401 }
     }
   ]
 }

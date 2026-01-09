@@ -120,7 +120,7 @@ int
 h_get_corp_bank_account_id (db_t *db, int corp_id)
 {
   char sql[512];
-  sql_build (db, "SELECT id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};", sql, sizeof(sql));
+  sql_build (db, "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};", sql, sizeof(sql));
   db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;

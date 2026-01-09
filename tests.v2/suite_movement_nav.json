@@ -36,9 +36,16 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Move to Sector 1646",
+      "command": "move.warp",
+      "data": { "to_sector_id": 1646 },
+      "user": "nav_user",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Sector Set Beacon",
       "command": "sector.set_beacon",
-      "data": { "beacon": "Hello World" },
+      "data": { "sector_id": 1646, "text": "Hello World" },
       "user": "nav_user",
       "expect": { "status": "ok" }
     },
@@ -87,7 +94,7 @@
       "command": "move.transwarp",
       "data": { "sector_id": 2 },
       "user": "nav_user",
-      "expect": { "error_code": 1458 }
+      "expect": { "error_code": 400 }
     }
   ]
 }

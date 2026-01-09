@@ -239,6 +239,44 @@
         }
       ]
     },
+    "SURFACE": {
+      "title": "--- Planet Surface ---",
+      "options": [
+        {
+          "key": "l",
+          "label": "(L) Launch from Planet",
+          "action": {
+            "pycall": "launch_flow"
+          }
+        },
+        {
+          "key": "c",
+          "label": "(C) Citadel",
+          "action": {
+            "submenu": "CITADEL"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
+    "CITADEL": {
+      "title": "--- Citadel Menu ---",
+      "options": [
+        {
+          "key": "q",
+          "label": "(Q) Back to Surface",
+          "action": {
+            "back": true
+          }
+        }
+      ]
+    },
     "COMPUTER": {
       "title": "--- Ship's Computer ---",
       "options": [
@@ -304,6 +342,13 @@
           }
         },
         {
+          "key": "t",
+          "label": "(T) Genesis Torpedo",
+          "action": {
+            "pycall": "genesis_torpedo_flow"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {
@@ -346,7 +391,7 @@
               "command": "trade.quote",
               "data": {
                 "port_id": "<ctx:last_sector_desc.port.id>",
-                "commodity": "<prompt:str:Commodity (ore, organics, equipment)>",
+                "commodity": "<prompt:str:Commodity (ORE, ORG, EQU)>",
                 "quantity": "<prompt:int:Quantity>"
               }
             },
@@ -1509,7 +1554,7 @@
               "command": "news.get_feed",
               "data": {}
             },
-            "post": "print_last_rpc"
+            "post": "pretty_print_news_feed"
           }
         },
         {
@@ -1520,7 +1565,7 @@
               "command": "news.mark_feed_read",
               "data": {}
             },
-            "post": "print_last_rpc"
+            "post": "pretty_print_news_marked_read"
           }
         },
         {

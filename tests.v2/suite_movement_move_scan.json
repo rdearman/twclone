@@ -1,0 +1,25 @@
+{
+  "name": "Move Scan Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_scan",
+      "setup": "macro_auth_user",
+      "username": "mover_scan",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Move Scan",
+      "command": "move.scan",
+      "user": "mover_scan",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Negative: Move Scan Missing Auth",
+      "command": "move.scan",
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

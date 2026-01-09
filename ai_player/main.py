@@ -18,7 +18,7 @@ from helpers import canon_commodity
 
 # --- Standard Logging Setup ---
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 #logger.setLevel(logging.DEBUG)
 
 # Console Handler
@@ -189,9 +189,10 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     if current_sector_id is not None and str(current_sector_id) in all_sector_data:
         relevant_sector_ids.add(str(current_sector_id))
         current_sector_details = all_sector_data[str(current_sector_id)]
-        if "adjacent" in current_sector_details:
-            for adj_sector_id in current_sector_details["adjacent"]:
-                relevant_sector_ids.add(str(adj_sector_id))
+        adj = current_sector_details.get("adjacent_sectors") or current_sector_details.get("adjacent") or []
+        for adj_sector_id in adj:
+            sid = adj_sector_id["to_sector"] if isinstance(adj_sector_id, dict) else adj_sector_id
+            relevant_sector_ids.add(str(sid))
     
     filtered_state["current_sector_info"] = {}
     filtered_state["adjacent_sectors_info"] = []
@@ -280,11 +281,22 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
         # NEW: Explicit flag for trading capability
         filtered_state["can_trade_at_current_location"] = filtered_state["has_port_in_current_sector"]
     
-    if current_sector_details and "adjacent" in current_sector_details:
-        for adj_sector_id in current_sector_details["adjacent"]:
-            # filtered_state["valid_goto_sectors"].append(adj_sector_id) # Removed manual loop
-            if str(adj_sector_id) in all_sector_data:
-                sector_details = all_sector_data[str(adj_sector_id)]
+    if current_sector_details:
+        adj = current_sector_details.get("adjacent_sectors") or current_sector_details.get("adjacent") or []
+        for item in adj:
+            # Robust extraction of sector ID
+            logger.debug(f"Processing adj item: {repr(item)} (type: {type(item)})")
+            if isinstance(item, dict):
+                sid = item.get("to_sector")
+            else:
+                sid = item
+            
+            if sid is None:
+                continue
+                
+            sid_str = str(sid)
+            if sid_str in all_sector_data:
+                sector_details = all_sector_data[sid_str]
                 adj_sector_info = {
                     "sector_id": sector_details.get("sector_id"),
                     "name": sector_details.get("name"),
@@ -398,6 +410,78 @@ QA_OBJECTIVES = [
     "test mining operations",
     "test bounty hunting"
 ]
+
+def _get_fallback_plan(game_state, state_manager):
+    """
+    Provides a simple fallback plan when the LLM fails to respond.
+    Prioritizes selling cargo, then buying if empty, then exploration.
+    """
+    import random
+    
+    logger.info("Generating fallback plan (LLM unavailable)")
+
+    # 1. Sell Logic: If we have cargo, try to sell it
+    ship_info = game_state.get("ship_info", {})
+    cargo = ship_info.get("cargo", [])
+    
+    # Filter for sellable items (quantity > 0)
+    sellable_items = [item for item in cargo if item.get("quantity", 0) > 0]
+    
+    if sellable_items:
+        # Pick the first sellable item
+        item = sellable_items[0]
+        commodity = canon_commodity(item.get("commodity"))
+        if commodity:
+            logger.info(f"Fallback: Cargo detected ({commodity}). Setting goal to SELL.")
+            return [f"sell: {commodity}"]
+
+    # 2. Buy Logic: If we have space and credits, try to buy something (e.g. ORE)
+    # Only if we are at a port to avoid infinite loop of trying to buy in space
+    current_sector = game_state.get("player_location_sector")
+    sector_data = game_state.get("sector_data", {}).get(str(current_sector), {})
+    
+    if sector_data.get("has_port"):
+        credits = float(game_state.get("player_info", {}).get("player", {}).get("credits", 0))
+        # Simple check: > 100 credits and some space
+        # We don't check space explicitly here, planner will fail if full, which is fine
+        if credits > 100:
+             logger.info("Fallback: At port with credits. Setting goal to BUY ORE.")
+             return ["buy: ORE"]
+
+    # 3. Exploration Logic (Existing)
+    adj = sector_data.get("adjacent_sectors") or sector_data.get("adjacent") or []
+    
+    # Extract adjacent sector IDs
+    adjacent_ids = []
+    for item in adj:
+        if isinstance(item, dict) and "to_sector" in item:
+            adjacent_ids.append(item["to_sector"])
+        elif isinstance(item, int):
+            adjacent_ids.append(item)
+    
+    # Prioritize unexplored adjacent sectors
+    universe_map = game_state.get("universe_map", {})
+    unexplored = [s for s in adjacent_ids if not universe_map.get(str(s), {}).get('is_explored')]
+    
+    if unexplored:
+        target = random.choice(unexplored)
+        logger.info(f"Fallback: Exploring unexplored sector {target}")
+        return [f"goto: {target}"]
+    elif adjacent_ids:
+        # All adjacent explored, pick random one
+        target = random.choice(adjacent_ids)
+        logger.info(f"Fallback: Moving to sector {target}")
+        return [f"goto: {target}"]
+    else:
+        # No adjacent data, explore blindly
+        valid_gotos = state_manager.get_valid_goto_sectors()
+        if valid_gotos:
+            target = random.choice(valid_gotos)
+            logger.info(f"Fallback: Trying known sector {target}")
+            return [f"goto: {target}"]
+        else:
+            logger.warning("Fallback: No navigation options, scanning")
+            return ["scan: density"]
 
 def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective: Optional[str] = None):
     """
@@ -571,19 +655,38 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
             if final_plan[0] == "scan: density" and just_scanned:
                 logger.warning("BOREDOM FILTER: LLM tried to scan twice. Forcing a move!")
                 
-                # 3. Pick a random neighbor to warp to
-                current_sector_id = str(game_state.get("player_location_sector"))
-                sector_data = game_state.get("sector_data", {}).get(current_sector_id, {})
+                # 3. Pick an UNEXPLORED neighbor to warp to (prioritize exploration)
+                current_sector_id = game_state.get("player_location_sector")
+                sector_data = game_state.get("sector_data", {}).get(str(current_sector_id), {})
                 adjacent = sector_data.get("adjacent", [])
                 
                 if adjacent:
-                    # Pick a random neighbor
-                    random_dest = random.choice(adjacent)
-                    return [f"goto: {random_dest}"]
-                else:
-                    # If no map data, warp blindly to a random sector (Emergency Jump)
-                    random_dest = random.randint(1, 1000) # Assuming 1000 sectors
-                    return [f"goto: {random_dest}"]
+                    # Extract sector IDs from adjacent list
+                    adjacent_ids = []
+                    for adj in adjacent:
+                        if isinstance(adj, dict) and "to_sector" in adj:
+                            adjacent_ids.append(adj["to_sector"])
+                        elif isinstance(adj, int):
+                            adjacent_ids.append(adj)
+                    
+                    if adjacent_ids:
+                        # Prioritize unexplored sectors
+                        universe_map = game_state.get("universe_map", {})
+                        unexplored = [s for s in adjacent_ids if not universe_map.get(str(s), {}).get('is_explored')]
+                        
+                        if unexplored:
+                            random_dest = random.choice(unexplored)
+                            logger.info(f"Boredom filter: Moving to unexplored sector {random_dest}")
+                        else:
+                            random_dest = random.choice(adjacent_ids)
+                            logger.info(f"Boredom filter: All adjacent explored, picking random {random_dest}")
+                        
+                        return [f"goto: {random_dest}"]
+                
+                # If no map data, warp blindly to a random sector (Emergency Jump)
+                random_dest = random.randint(1, 1000) # Assuming 1000 sectors
+                logger.warning(f"Boredom filter: Emergency jump to sector {random_dest}")
+                return [f"goto: {random_dest}"]
             # ---------------------------------------------------------------
 
             logger.info(f"LLM provided valid plan: {final_plan}")
@@ -620,12 +723,12 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
         elif goal_type == "sell":
             if response_type != "trade.sell_receipt_v1": return False
             # Check if what we just sold matches the goal
-            return any(l.get("commodity", "").lower() == goal_target for l in response_data.get("lines", []))
+            return any(canon_commodity(l.get("commodity", "")).lower() == goal_target for l in response_data.get("lines", []))
         
         elif goal_type == "buy":
             if response_type != "trade.buy_receipt_v1": return False
             # Check if what we just bought matches the goal
-            return any(l.get("commodity", "").lower() == goal_target for l in response_data.get("lines", []))
+            return any(canon_commodity(l.get("commodity", "")).lower() == goal_target for l in response_data.get("lines", []))
 
         elif goal_type == "survey" and goal_target == "port":
             # Check if survey is STRICTLY complete (all commodities quoted)
@@ -902,9 +1005,12 @@ def main(config_path="config.json"):
                                 state_manager.set("strategy_plan", new_plan)
                                 strategy_plan = new_plan
                             else:
-                                logger.warning(f"LLM provided an invalid plan: {new_plan}. Retrying.")
-                                time.sleep(2) # Wait a moment before retrying
-                                continue
+                                logger.warning(f"LLM provided an invalid plan: {new_plan}. Using fallback plan.")
+                                # Fallback: Create a simple exploration plan
+                                fallback_plan = _get_fallback_plan(game_state, state_manager)
+                                state_manager.set("strategy_plan", fallback_plan)
+                                strategy_plan = fallback_plan
+                                time.sleep(2) # Wait a moment before continuing
             
             # 6. Get the current goal
             if strategy_plan:
@@ -1160,7 +1266,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             # AUTO-REQUEST sector.info for the new location
                             logger.info(f"Auto-requesting sector.info for sector {new_sector}")
                             next_cmd = {"command": "sector.info", "data": {"sector_id": int(new_sector)}}
-                            send_command(game_server, next_cmd, state_manager)
+                            game_conn.send_command(next_cmd)
                 
                 # --- NEW: Handle Pathfind Response ---
                 sent_cmd = state_manager.get_pending_command(request_id)
@@ -1271,6 +1377,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
 
                 # -----------------------------------------------------
+
+                if error_code == 1489:
+                    logger.warning("Received 1489 Insufficient Turns. Setting turns to 0.")
+                    state_manager.set_turns(0)
 
                 if sent_command and command_name == "move.warp" and error_code == 1402:
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")

@@ -1,0 +1,22 @@
+{
+  "name": "Move Autopilot Status Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_autopilot",
+      "setup": "macro_auth_user",
+      "username": "mover_autopilot",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Autopilot Status",
+      "command": "move.autopilot.status",
+      "user": "mover_autopilot",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Autopilot Status Missing Auth",
+      "command": "move.autopilot.status",
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

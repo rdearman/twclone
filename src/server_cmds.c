@@ -618,7 +618,7 @@ cmd_bounty_post_federation (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx,
                            root,
-                           ERR_SECTOR_NOT_FOUND, "Authentication required.");
+                           ERR_NOT_AUTHENTICATED, "Authentication required.");
       return 0;
     }
   db_t *db = game_db_get_handle ();
@@ -753,7 +753,7 @@ cmd_bounty_post_hitlist (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx,
                            root,
-                           ERR_SECTOR_NOT_FOUND, "Authentication required.");
+                           ERR_NOT_AUTHENTICATED, "Authentication required.");
       return 0;
     }
   db_t *db = game_db_get_handle ();
@@ -891,7 +891,7 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx,
                            root,
-                           ERR_SECTOR_NOT_FOUND, "Authentication required.");
+                           ERR_NOT_AUTHENTICATED, "Authentication required.");
       return 0;
     }
   db_t *db = game_db_get_handle ();

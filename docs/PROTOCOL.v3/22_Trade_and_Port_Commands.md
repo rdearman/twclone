@@ -9,10 +9,38 @@ Dock at a port in the current sector.
 
 ### `trade.buy` / `trade.sell`
 Trade commodities.
+
 **Args**:
 *   `port_id`: ID of the port.
-*   `commodity`: "ore", "organics", etc.
-*   `quantity`: Amount.
+*   `items`: Array of objects containing:
+    *   `commodity`: Canonical 3-character code (e.g., "ORE", "ORG", "EQU").
+    *   `quantity`: Integer amount.
+*   `account`: 0 for Petty Cash (default), 1 for Bank.
+*   `idempotency_key`: Optional UUID.
+
+**Response type**: `trade.buy_receipt_v1` / `trade.sell_receipt_v1`
+
+**Response data**:
+```json
+{
+  "port_id": 501,
+  "sector_id": 42,
+  "player_id": 14,
+  "total_item_value": "4500.00",
+  "fees": "45.00",
+  "total_cost": "4545.00",
+  "credits_remaining": "5455.00",
+  "lines": [
+    {
+      "commodity": "ORE",
+      "quantity": 100,
+      "unit_price": 45,
+      "value": "4500.00"
+    }
+  ]
+}
+```
+
 **Events**: Emits `player.trade.v1` and `trade.deal.matched`.
 
 ## 2. Hardware & Services (Stardock)

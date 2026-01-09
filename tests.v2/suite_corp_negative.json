@@ -1,0 +1,14 @@
+{
+  "name": "Bucket 2 Negative Corp Suite",
+  "tests": [
+    { "name": "corp.create - Missing Auth", "command": "corp.create", "data": { "name": "test" }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "corp.invite - Missing Auth", "command": "corp.invite", "data": { "player_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "corp.join - Missing Auth", "command": "corp.join", "data": { "corp_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "corp.leave - Missing Auth", "command": "corp.leave", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "corp.list - Missing Auth (Observed: ok)", "command": "corp.list", "expect": { "status": "ok" } },
+    { "name": "corp.roster - Missing Auth (Observed: ok)", "command": "corp.roster", "data": { "corp_id": 1 }, "expect": { "status": "ok" } },
+    { "name": "corp.dissolve - Missing Auth", "command": "corp.dissolve", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "corp.deposit - Missing Auth", "command": "corp.deposit", "data": { "amount": 100 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "corp.withdraw - Missing Auth", "command": "corp.withdraw", "data": { "amount": 100 }, "expect": { "status": "error", "error_code": 401 } }
+  ]
+}

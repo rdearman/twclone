@@ -629,7 +629,9 @@ int
 cmd_auth_logout (client_ctx_t *ctx, json_t *root)
 {
   json_t *jdata = json_object_get (root, "data");
+  json_t *jauth = json_object_get (root, "auth");
   const char *tok = NULL;
+
   if (json_is_object (jdata))
     {
       json_t *jt = json_object_get (jdata, "session_token");
@@ -640,6 +642,16 @@ cmd_auth_logout (client_ctx_t *ctx, json_t *root)
           tok = json_string_value (jt);
         }
     }
+  
+  if (!tok && json_is_object (jauth))
+    {
+      json_t *jt = json_object_get (jauth, "session");
+      if (json_is_string (jt))
+        {
+          tok = json_string_value (jt);
+        }
+    }
+
   if (tok)
     {
       db_session_revoke (tok);

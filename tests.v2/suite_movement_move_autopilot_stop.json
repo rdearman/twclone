@@ -1,0 +1,22 @@
+{
+  "name": "Move Autopilot Stop Suite",
+  "tests": [
+    {
+      "name": "Setup: mover_autopilot",
+      "setup": "macro_auth_user",
+      "username": "mover_autopilot",
+      "password": "password"
+    },
+    {
+      "name": "Positive: Stop Autopilot",
+      "command": "move.autopilot.stop",
+      "user": "mover_autopilot",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: Autopilot Stop Missing Auth",
+      "command": "move.autopilot.stop",
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}

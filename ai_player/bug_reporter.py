@@ -133,10 +133,14 @@ class BugReporter:
         """
         Saves a detailed report when a state inconsistency is detected.
         """
-        bug_id = f"err_state_inconsistent_{self._get_timestamp()}"
+        bug_id = "err_state_inconsistent"
         bug_dir = os.path.join(self.report_path, bug_id)
 
         try:
+            if os.path.exists(bug_dir):
+                logger.debug(f"State inconsistency already reported: {message}")
+                return
+            
             os.makedirs(bug_dir)
             logger.critical(f"State inconsistency detected: {message}. Saving report to {bug_dir}")
 
