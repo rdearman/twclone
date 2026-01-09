@@ -65,12 +65,30 @@
 #include "server_envelope.h"
 
 
+typedef int (*command_handler_fn)(client_ctx_t *ctx, json_t *root);
+#define CMD_FLAG_DEBUG_ONLY 1
+#define CMD_FLAG_HIDDEN     2
+#define CMD_FLAG_AUTH_FREE  4
+
+
+typedef struct {
+  const char *name;
+  command_handler_fn handler;
+  const char *summary;
+  schema_generator_fn schema;
+  int flags;
+} command_entry_t;
+
+
 #ifndef streq
 #define streq(a,b) (strcasecmp (json_string_value ((a)), (b)) == 0)
 #endif
 #define BUF_SIZE    8192
 
 __thread client_ctx_t *g_ctx_for_send = NULL;
+
+
+
 
 
 /* forward declaration to avoid implicit extern */
@@ -152,19 +170,6 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
    Command Registry & Dispatch
    -------------------------------------------------------------------------- */
 
-typedef int (*command_handler_fn)(client_ctx_t *ctx, json_t *root);
-
-#define CMD_FLAG_DEBUG_ONLY 1
-#define CMD_FLAG_HIDDEN 2
-
-typedef struct {
-  const char *name;
-  command_handler_fn handler;
-  const char *summary;
-  schema_generator_fn schema;
-  int flags;
-} command_entry_t;
-
 
 /* Wrappers for void or mismatched handlers */
 static int
@@ -231,12 +236,12 @@ static const command_entry_t k_command_registry[] = {
    "Admin shutdown warning", schema_admin_shutdown_warning, 0},
 
   /* Auth */
-  {"auth.login", w_auth_login, "Authenticate", schema_auth_login, 0},
+  {"auth.login", w_auth_login, "Authenticate", schema_auth_login, CMD_FLAG_AUTH_FREE},
   {"auth.logout", cmd_auth_logout, "Log out", schema_auth_logout, 0},
   {"auth.mfa.totp.verify", cmd_auth_mfa_totp_verify, "Second-factor code",
    schema_auth_mfa_totp_verify, 0},
   {"auth.register", cmd_auth_register, "Create a new player",
-   schema_auth_register, 0},
+   schema_auth_register, CMD_FLAG_AUTH_FREE},
   {"auth.refresh", cmd_auth_refresh, "Refresh session token",
    schema_auth_refresh, 0},
 
@@ -507,7 +512,7 @@ static const command_entry_t k_command_registry[] = {
   {"session.disconnect", cmd_session_disconnect, "Disconnect",
    schema_session_disconnect, 0},
   {"session.hello", cmd_system_hello, "Handshake / hello", schema_session_hello,
-   0},
+   CMD_FLAG_AUTH_FREE},
   {"session.ping", cmd_system_hello, "Ping", schema_session_ping, 0},
   {"player.ping", cmd_system_hello, "Ping", schema_session_ping, 0},
   {"sys.cluster.init", cmd_sys_cluster_init, "Cluster init", schema_placeholder,
@@ -534,6 +539,7 @@ static const command_entry_t k_command_registry[] = {
    "Sysop command to test news cron", schema_placeholder, CMD_FLAG_HIDDEN},
   {"system.capabilities", cmd_system_capabilities,
    "Feature flags, schemas, counts", schema_system_capabilities, 0},
+  //dispatcher 
   {"system.cmd_list", cmd_system_cmd_list, "Flat list of all commands",
    schema_placeholder, 0},
   {"system.describe_schema", cmd_system_describe_schema,
@@ -541,7 +547,7 @@ static const command_entry_t k_command_registry[] = {
   {"system.disconnect", cmd_session_disconnect, "Disconnect",
    schema_system_disconnect, 0},
   {"system.hello", cmd_system_hello, "Handshake / hello", schema_system_hello,
-   0},
+   CMD_FLAG_AUTH_FREE},
   {"system.schema_list", cmd_system_schema_list, "List all schema namespaces",
    schema_placeholder, 0},
 
@@ -1087,7 +1093,6 @@ attach_rate_limit_meta (json_t *env, client_ctx_t *ctx)
   json_object_set_new (meta, "rate_limit", rl);
 }
 
-
 int
 server_dispatch_command (client_ctx_t *ctx, json_t *root)
 {
@@ -1096,8 +1101,8 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
     {
       return -1;
     }
-  const char *c = json_string_value (cmd);
 
+  const char *c = json_string_value (cmd);
 
   for (int i = 0; k_command_registry[i].name != NULL; i++)
     {
@@ -1109,9 +1114,22 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
               return -1;
             }
 #endif
+
+          /* Central auth gate */
+          if (!(k_command_registry[i].flags & CMD_FLAG_AUTH_FREE)
+              && ctx->player_id <= 0)
+            {
+              send_response_error (ctx,
+                                   root,
+                                   ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated");
+              return -1;
+            }
+
           return k_command_registry[i].handler (ctx, root);
         }
     }
+
   return -1;
 }
 

@@ -160,6 +160,8 @@ class JsonSuiteRunner:
     def _run_test(self, test: Dict[str, Any]) -> bool:
         name = test.get("name", "Unnamed")
         print(f"  Test: {name}...", end=" ", flush=True)
+        xfail = bool(test.get("xfail", False))
+
 
         # Expand variables in two passes
         # Pass 1: Resolve local macro context (no globals)
@@ -227,15 +229,23 @@ class JsonSuiteRunner:
             passed_status = True
 
         if not passed_status:
-            print(f"FAIL (Status: {actual_status} != {expected_status})")
+            msg = f"Status: {actual_status} != {expected_status}"
+            if xfail:
+                print(f"XFAIL ({msg})")
+                return True
+            print(f"FAIL ({msg})")
             print(f"  Response: {json.dumps(resp, indent=2)}")
             return False
-        
+
         if "error_code" in expect:
             actual_err = resp.get("error") or {}
             actual_code = actual_err.get("code")
             if actual_code != expect["error_code"]:
-                print(f"FAIL (Error Code: {actual_code} != {expect['error_code']})")
+                msg = f"Error Code: {actual_code} != {expect['error_code']}"
+                if xfail:
+                    print(f"XFAIL ({msg})")
+                    return True
+                print(f"FAIL ({msg})")
                 return False
         
         # Save vars
@@ -291,7 +301,11 @@ class JsonSuiteRunner:
                             print(f"FAIL (Assert: {actual} does not contain {expected})")
                             return False
 
-        print("PASS")
+        if xfail:
+            print("XPASS (unexpected pass)")
+        else:
+            print("PASS")
+
         if cmd_json.get("command") == "sys.raw_sql_exec" and user == "admin":
             for c in self.user_clients.values():
                 if c.session_token:
