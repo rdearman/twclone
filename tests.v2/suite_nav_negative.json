@@ -1,11 +1,11 @@
 {
   "name": "Bucket 2 Negative Nav Suite",
   "tests": [
-    { "name": "sector.info - Missing Auth (Observed: ok)", "command": "sector.info", "data": { "sector_id": 1 }, "expect": { "status": "ok" } },
-    { "name": "sector.scan.density - Missing Auth (Observed: ok)", "command": "sector.scan.density", "expect": { "status": "ok" } },
-    { "name": "sector.set_beacon - Missing Auth", "command": "sector.set_beacon", "data": { "sector_id": 1, "text": "test" }, "expect": { "status": "error", "error_code": 1454 } },
+    { "name": "sector.info - Missing Auth (Observed: ok)", "command": "sector.info", "data": { "sector_id": 1 }, "expect": {  "status": "error", "error_code": 401  } },
+    { "name": "sector.scan.density - Missing Auth (Observed: ok)", "command": "sector.scan.density", "expect": {  "status": "error", "error_code": 401  } },
+    { "name": "sector.set_beacon - Missing Auth", "command": "sector.set_beacon", "data": { "sector_id": 1, "text": "test" }, "expect": { "status": "error", "error_code": 401 } },
     { "name": "nav.bookmark.add - Missing Auth", "command": "nav.bookmark.add", "data": { "sector_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
-    { "name": "nav.bookmark.list - Missing Auth", "command": "nav.bookmark.list", "expect": { "status": "error", "error_code": 500 } },
+    { "name": "nav.bookmark.list - Missing Auth", "command": "nav.bookmark.list", "expect": { "status": "error", "error_code": 401 } },
     { "name": "nav.bookmark.remove - Missing Auth", "command": "nav.bookmark.remove", "data": { "sector_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
     { "name": "nav.avoid.add - Missing Auth", "command": "nav.avoid.add", "data": { "sector_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
     { "name": "nav.avoid.list - Missing Auth", "command": "nav.avoid.list", "expect": { "status": "error", "error_code": 401 } },

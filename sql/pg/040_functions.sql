@@ -833,7 +833,52 @@ CREATE OR REPLACE FUNCTION spawn_initial_fleet ()
     RETURNS void
     LANGUAGE plpgsql
     AS $$
+DECLARE
+    v_sector_count bigint;
+    v_st_rec record;
+    v_sector_id bigint;
+    v_name text;
+    v_ship_id bigint;
+    v_exists boolean;
 BEGIN
+    -- 1. Seed npc_shipnames if empty
+    SELECT EXISTS (SELECT 1 FROM npc_shipnames) INTO v_exists;
+    IF NOT v_exists THEN
+        INSERT INTO npc_shipnames (name) VALUES
+        ('Kobayashi Maru'), ('Botany Bay'), ('Reliant'), ('Enterprise'), ('Heart of Gold'),
+        ('Millennium Falcon'), ('Nostromo'), ('Sulaco'), ('Event Horizon'), ('Icarus'),
+        ('Prometheus'), ('Serenity'), ('Galactica'), ('Pegasus'), ('Normandy'),
+        ('Pillar of Autumn'), ('In Amber Clad'), ('Forward Unto Dawn'), ('Spirit of Fire'),
+        ('Infinity'), ('Defiant'), ('Voyager'), ('Discovery'), ('Protostar'),
+        ('Daedalus'), ('Odyssey'), ('Equinox'), ('Thunderchild'), ('Yamato'), ('Arcadia');
+    END IF;
+
+    -- 2. Get Sector Count
+    SELECT count(*) INTO v_sector_count FROM sectors;
+    IF v_sector_count < 11 THEN
+        RETURN; -- Not enough sectors
+    END IF;
+
+    -- 3. Iterate Ship Types and Create Derelicts
+    FOR v_st_rec IN
+        SELECT shiptypes_id, name FROM shiptypes WHERE enabled = TRUE
+    LOOP
+        -- Pick random name
+        SELECT name INTO v_name FROM npc_shipnames ORDER BY random() LIMIT 1;
+        IF v_name IS NULL THEN
+            v_name := 'Derelict ' || v_st_rec.name;
+        END IF;
+
+        -- Pick random sector > 10 (avoid FedSpace)
+        v_sector_id := 11 + floor(random() * (v_sector_count - 10));
+
+        -- Insert Ship (Ownerless by default as we don't insert into ship_ownership)
+        INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
+        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id, 10, 1, 1, 0)
+        RETURNING ship_id INTO v_ship_id;
+
+        -- Optional: Add random cargo? (Old code didn't, but we could)
+    END LOOP;
 END;
 $$;
 CREATE OR REPLACE FUNCTION apply_game_defaults ()

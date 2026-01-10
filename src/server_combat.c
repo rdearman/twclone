@@ -1994,6 +1994,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
     (void) db_log_engine_event ((long long) time (NULL),
                                 "combat.fighters.deployed", NULL,
                                 ctx->player_id, sector_id, evt, NULL);
+    json_decref (evt);
   }
 
   /* Recompute total for response convenience (outside tx ok) */
@@ -3399,6 +3400,7 @@ cmd_fighters_recall (client_ctx_t *ctx, json_t *root)
                        ctx->player_id,
                        sector_id,
                        evt, NULL);
+  json_decref (evt);
 
   /* ---------- 8. Response ---------- */
   json_t *out = json_object ();
@@ -3701,6 +3703,7 @@ cmd_combat_scrub_mines (client_ctx_t *ctx, json_t *root)
                               ctx->player_id,
                               sector_id,
                               evt, NULL);
+  json_decref (evt);
 
   /* 7. Response */
   json_t *out = json_object ();
@@ -4005,6 +4008,7 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
                          sector_id,
                          evt,
                          NULL);
+    json_decref (evt);
   }
 
   /* ---------- Response ---------- */

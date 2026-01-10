@@ -1,7 +1,7 @@
 {
   "name": "Bucket 2 Negative Planet Suite",
   "tests": [
-    { "name": "planet.info - Missing Auth (Observed: ok)", "command": "planet.info", "data": { "planet_id": 1 }, "expect": { "status": "ok" } },
+    { "name": "planet.info - Missing Auth (Observed: ok)", "command": "planet.info", "data": { "planet_id": 1 }, "expect": {  "status": "error", "error_code": 401  } },
     { "name": "planet.land - Missing Auth", "command": "planet.land", "data": { "planet_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
     { "name": "planet.deposit - Missing Auth", "command": "planet.deposit", "data": { "planet_id": 1, "amount": 100 }, "expect": { "status": "error", "error_code": 401 } }
   ]

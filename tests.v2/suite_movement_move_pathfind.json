@@ -21,7 +21,7 @@
       "name": "Negative: Pathfind Missing Auth (Observed: ok)",
       "command": "move.pathfind",
       "data": { "from": 1, "to": 10 },
-      "expect": { "status": "ok" }
+      "expect": { "status": "error", "error_code": 401  }
     }
   ]
 }

@@ -1,15 +1,15 @@
 {
   "name": "Bucket 2 Negative Combat Suite",
   "tests": [
-    { "name": "combat.status - Missing Auth", "command": "combat.status", "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "combat.attack - Missing Auth", "command": "combat.attack", "data": { "target_id": 1, "target_type": "ship" }, "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "combat.attack_planet - Missing Auth", "command": "combat.attack_planet", "data": { "planet_id": 1 }, "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "combat.deploy_fighters - Missing Auth", "command": "combat.deploy_fighters", "data": { "amount": 1 }, "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "combat.deploy_mines - Missing Auth", "command": "combat.deploy_mines", "data": { "amount": 1, "type": "armid" }, "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "combat.sweep_mines - Missing Auth", "command": "combat.sweep_mines", "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "deploy.fighters.list - Missing Auth (Observed: ok)", "command": "deploy.fighters.list", "expect": { "status": "ok" } },
-    { "name": "deploy.mines.list - Missing Auth (Observed: ok)", "command": "deploy.mines.list", "expect": { "status": "ok" } },
-    { "name": "fighters.recall - Missing Auth", "command": "fighters.recall", "data": { "sector_id": 1, "asset_id": 1 }, "expect": { "status": "error", "error_code": 1700 } },
-    { "name": "mines.recall - Missing Auth", "command": "mines.recall", "data": { "sector_id": 1, "asset_id": 1 }, "expect": { "status": "error", "error_code": 1700 } }
+    { "name": "combat.status - Missing Auth", "command": "combat.status", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "combat.attack - Missing Auth", "command": "combat.attack", "data": { "target_id": 1, "target_type": "ship" }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "combat.attack_planet - Missing Auth", "command": "combat.attack_planet", "data": { "planet_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "combat.deploy_fighters - Missing Auth", "command": "combat.deploy_fighters", "data": { "amount": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "combat.deploy_mines - Missing Auth", "command": "combat.deploy_mines", "data": { "amount": 1, "type": "armid" }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "combat.sweep_mines - Missing Auth", "command": "combat.sweep_mines", "expect": { "status": "error", "error_code": 401 } },
+    { "name": "deploy.fighters.list - Missing Auth (Observed: ok)", "command": "deploy.fighters.list", "expect": {  "status": "error", "error_code": 401  } },
+    { "name": "deploy.mines.list - Missing Auth (Observed: ok)", "command": "deploy.mines.list", "expect": { "status": "error", "error_code": 401  } },
+    { "name": "fighters.recall - Missing Auth", "command": "fighters.recall", "data": { "sector_id": 1, "asset_id": 1 }, "expect": { "status": "error", "error_code": 401 } },
+    { "name": "mines.recall - Missing Auth", "command": "mines.recall", "data": { "sector_id": 1, "asset_id": 1 }, "expect": { "status": "error", "error_code": 401 } }
   ]
 }

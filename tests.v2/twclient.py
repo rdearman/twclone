@@ -105,7 +105,7 @@ class TWClient:
         resp = self.recv_next_non_notice()
         
         if resp.get("status") == "ok":
-            self.session_token = resp.get("data", {}).get("session")
+            self.session_token = resp.get("data", {}).get("session_token")
             self.player_id = resp.get("data", {}).get("player_id")
             return True
         return False

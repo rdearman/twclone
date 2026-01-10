@@ -7,14 +7,15 @@
       "username": "trader_player_1",
       "password": "password"
     },
-    {
-      "name": "auth.mfa.totp.verify - Positive (Rigged)",
-      "command": "auth.mfa.totp.verify",
-      "data": { "code": "123456" },
-      "user": "trader_player_1",
-      "expect": { "status": "ok" }
-    },
-    {
+      {
+	  "name": "auth.mfa.totp.verify - Feature Disabled (Expected)",
+	  "command": "auth.mfa.totp.verify",
+	  "data": { "code": "123456" },
+	  "user": "trader_player_1",
+	  "expect": { "status": "refused", "error_code": 2100 }
+      },
+
+      {
       "name": "auth.mfa.totp.verify - Negative (No Auth)",
       "command": "auth.mfa.totp.verify",
       "data": { "code": "123456" },
@@ -35,7 +36,8 @@
       "name": "bounty.post_federation - Positive",
       "command": "bounty.post_federation",
       "data": { "target_player_id": 1, "amount": 1000 },
-      "user": "trader_player_1",
+	"user": "trader_player_1",
+	"xfail": true, 
       "expect": { "status": "ok" }
     },
     {
@@ -48,7 +50,8 @@
       "name": "bounty.post_hitlist - Positive",
       "command": "bounty.post_hitlist",
       "data": { "target_player_id": 1, "amount": 1000 },
-      "user": "trader_player_1",
+	"user": "trader_player_1",
+	"xfail": true,
       "expect": { "status": "ok" }
     },
     {

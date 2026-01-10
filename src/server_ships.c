@@ -576,7 +576,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
   int rc = db_ship_claim (db_handle, ctx->player_id, sector_id, ship_id, &ship);
 
 
-  if (!rc || !ship)
+  if (rc != 0 || !ship)
     {
       send_response_refused_steal (ctx,
                                    root,
@@ -588,7 +588,7 @@ cmd_ship_claim (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_object ();
 
 
-  json_object_set (payload, "ship", ship);
+  json_object_set_new (payload, "ship", ship);
 
 
   send_response_ok_take (ctx, root, "ship.claimed", &payload);
@@ -949,6 +949,39 @@ rollback:
                        root,
                        ERR_DB_QUERY_FAILED,
                        "Database transaction error");
+  return 0;
+}
+
+
+int
+cmd_ship_list (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: ship.list");
+  return 0;
+}
+
+
+int
+cmd_ship_sell (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: ship.sell");
+  return 0;
+}
+
+
+int
+cmd_ship_transfer (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: ship.transfer");
   return 0;
 }
 

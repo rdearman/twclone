@@ -1,178 +1,182 @@
-Test File Name,Command,Positive Test (Y/N),Negative Test (Y/N),Error Code,Status,Rationale
-suite_sys_admin_boundaries.json,admin.notice,Y,Y,402,COVERED,
-suite_sys_admin_boundaries.json,admin.shutdown_warning,N,Y,402,MISSING,High priority gap
-suite_combat_toll_fighters_v2.json,auth.login,Y,Y,1101,COVERED,
-suite_auth_session.json,auth.logout,Y,N,,MISSING,High priority gap
-NONE,auth.mfa.totp.verify,N,N,,MISSING,High priority gap
-suite_auth_session.json,auth.refresh,Y,Y,1301,COVERED,
-suite_combat_toll_fighters_v2.json,auth.register,Y,Y,1105,COVERED,
-suite_economy_and_bank.json,bank.balance,Y,Y,401,COVERED,
-suite_economy_and_bank.json,bank.deposit,Y,Y,401,COVERED,
-suite_economy_and_bank.json,bank.history,Y,Y,401,COVERED,
-suite_economy_bank_leaderboard.json,bank.leaderboard,Y,Y,401,COVERED,
-suite_economy_and_bank.json,bank.transfer,Y,Y,401,COVERED,
-suite_economy_and_bank.json,bank.withdraw,Y,Y,401,COVERED,
-NONE,bounty.list,N,N,,MISSING,High priority gap
-suite_bounty.json,bounty.post_federation,N,N,,MISSING,High priority gap
-NONE,bounty.post_hitlist,N,N,,MISSING,High priority gap
-NONE,bulk.execute,N,N,,MISSING,High priority gap
-suite_communication.json,chat.broadcast,Y,Y,1700,COVERED,
-suite_communication.json,chat.history,Y,Y,1700,COVERED,
-suite_communication.json,chat.send,Y,Y,1700,COVERED,
-suite_combat_citadel.json,citadel.build,Y,N,,MISSING,High priority gap
-suite_combat_citadel.json,citadel.upgrade,Y,N,,MISSING,High priority gap
-suite_combat_and_crime.json,combat.attack,Y,Y,1700,COVERED,
-suite_combat_advanced.json,combat.attack_planet,Y,Y,1700,COVERED,
-suite_combat_advanced.json,combat.deploy_fighters,Y,Y,1700,COVERED,
-suite_combat_advanced.json,combat.deploy_mines,Y,Y,1700,COVERED,
-suite_combat_mines.json,combat.lay_mines,Y,Y,,COVERED,
-suite_combat_sector_hazards.json,combat.status,Y,Y,1700,COVERED,
-suite_combat_mines.json,combat.sweep_mines,Y,Y,1700,COVERED,
-NONE,corp.balance,N,N,,MISSING,High priority gap
-suite_corp_advanced.json,corp.create,Y,Y,401,COVERED,
-suite_economy_corp_funds.json,corp.deposit,Y,N,,MISSING,High priority gap
-suite_corp_advanced.json,corp.dissolve,Y,Y,401,COVERED,
-suite_corp_advanced.json,corp.invite,Y,Y,401,COVERED,
-suite_corp_advanced.json,corp.join,Y,Y,401,COVERED,
-suite_corp_perms.json,corp.kick,Y,Y,,COVERED,
-suite_corp_advanced.json,corp.leave,Y,Y,401,COVERED,
-suite_corp_advanced.json,corp.list,Y,N,,MISSING,High priority gap
-suite_corp_advanced.json,corp.roster,Y,N,,MISSING,High priority gap
-NONE,corp.statement,N,N,,MISSING,High priority gap
-suite_corporations.json,corp.status,Y,Y,400,COVERED,
-suite_corp_perms.json,corp.transfer_ceo,N,Y,,MISSING,High priority gap
-suite_economy_corp_funds.json,corp.withdraw,Y,N,,MISSING,High priority gap
-suite_combat_advanced.json,deploy.fighters.list,Y,N,,MISSING,High priority gap
-suite_combat_advanced.json,deploy.mines.list,Y,N,,MISSING,High priority gap
-suite_port_operations.json,dock.status,Y,N,,MISSING,High priority gap
-suite_combat_advanced.json,fighters.recall,Y,Y,1700,COVERED,
-NONE,fine.list,N,N,,MISSING,High priority gap
-suite_economy_fine_pay.json,fine.pay,Y,Y,401,COVERED,
-suite_economy_hardware_buy.json,hardware.buy,Y,Y,401,COVERED,
-suite_ship_operations.json,hardware.list,Y,Y,401,COVERED,
-suite_economy_insurance.json,insurance.claim.file,Y,Y,401,COVERED,
-suite_economy_insurance.json,insurance.policies.buy,Y,Y,401,COVERED,
-NONE,insurance.policies.list,N,N,,MISSING,High priority gap
-suite_chat_mail_news.json,mail.delete,Y,Y,1300,COVERED,
-suite_chat_mail_news.json,mail.inbox,Y,Y,404,COVERED,
-suite_chat_mail_news.json,mail.read,Y,Y,1301,COVERED,
-suite_chat_mail_news.json,mail.send,Y,Y,1700,COVERED,
-suite_combat_advanced.json,mines.recall,Y,Y,1700,COVERED,
-suite_movement_move_autopilot_start.json,move.autopilot.start,Y,Y,401,COVERED,
-suite_movement_move_autopilot_status.json,move.autopilot.status,Y,Y,401,COVERED,
-suite_movement_move_autopilot_stop.json,move.autopilot.stop,Y,Y,401,COVERED,
-suite_movement_nav.json,move.describe_sector,Y,Y,401,COVERED,
-suite_navigation.json,move.pathfind,Y,Y,401,COVERED,
-suite_movement_nav.json,move.scan,Y,Y,401,COVERED,
-suite_movement_nav.json,move.transwarp,Y,Y,401,COVERED,
-suite_movement_nav.json,move.warp,Y,Y,1453,COVERED,
-suite_movement_nav.json,nav.avoid.add,Y,Y,401,COVERED,
-suite_movement_nav.json,nav.avoid.list,Y,Y,401,COVERED,
-suite_movement_nav.json,nav.avoid.remove,Y,Y,401,COVERED,
-NONE,nav.avoid.set,N,N,,MISSING,High priority gap
-suite_movement_nav.json,nav.bookmark.add,Y,Y,401,COVERED,
-suite_movement_nav.json,nav.bookmark.list,Y,Y,500,COVERED,
-suite_movement_nav.json,nav.bookmark.remove,Y,Y,401,COVERED,
-NONE,nav.bookmark.set,N,N,,MISSING,High priority gap
-suite_chat_mail_news.json,news.get_feed,Y,Y,1700,COVERED,
-NONE,news.mark_feed_read,N,N,,MISSING,High priority gap
-suite_chat_mail_news.json,news.read,Y,Y,1700,COVERED,
-suite_chat_mail_news.json,notes.list,Y,N,,MISSING,High priority gap
-suite_chat_mail_news.json,notice.ack,Y,Y,405,COVERED,
-suite_chat_mail_news.json,notice.list,Y,N,,MISSING,High priority gap
-NONE,planet.create,Y,Y,,EXCLUDED,Alias of planet.genesis_create
-suite_planets.json,planet.deposit,Y,Y,401,COVERED,
-NONE,planet.genesis,Y,Y,,EXCLUDED,Alias of planet.genesis_create
-suite_planets.json,planet.genesis_create,Y,Y,401,COVERED,
-suite_combat_planet_ops.json,planet.harvest,Y,Y,401,COVERED,
-suite_planet_advanced.json,planet.info,Y,N,,MISSING,High priority gap
-suite_planet_advanced.json,planet.land,Y,Y,401,COVERED,
-suite_combat_planet_ops.json,planet.launch,Y,Y,401,COVERED,
-NONE,planet.market.buy_order,N,N,,MISSING,High priority gap
-NONE,planet.market.sell,N,N,,MISSING,High priority gap
-suite_planet_ops.json,planet.rename,N,N,,MISSING,High priority gap
-suite_planet_ops.json,planet.transfer_ownership,Y,Y,401,COVERED,
-NONE,planet.withdraw,N,N,,MISSING,High priority gap
-NONE,player.get_avoids,N,N,,MISSING,High priority gap
-NONE,player.get_bookmarks,N,N,,MISSING,High priority gap
-NONE,player.get_notes,N,N,,MISSING,High priority gap
-suite_auth_and_settings.json,player.get_prefs,Y,Y,401,COVERED,
-NONE,player.get_settings,N,N,,MISSING,High priority gap
-NONE,player.get_subscriptions,N,N,,MISSING,High priority gap
-NONE,player.get_topics,N,N,,MISSING,High priority gap
-suite_player_status.json,player.list_online,Y,Y,502,COVERED,
-suite_smoke.json,player.my_info,Y,Y,401,COVERED,
-NONE,player.ping,N,N,,MISSING,High priority gap
-NONE,player.rankings,N,N,,MISSING,High priority gap
-NONE,player.set_avoids,N,N,,MISSING,High priority gap
-NONE,player.set_bookmarks,N,N,,MISSING,High priority gap
-suite_auth_and_settings.json,player.set_prefs,Y,Y,401,COVERED,
-NONE,player.set_settings,N,N,,MISSING,High priority gap
-NONE,player.set_subscriptions,N,N,,MISSING,High priority gap
-NONE,player.set_topics,N,N,,MISSING,High priority gap
-NONE,player.set_trade_account_preference,N,N,,MISSING,High priority gap
-suite_port_operations.json,port.describe,Y,Y,401,COVERED,
-NONE,port.info,N,N,,MISSING,High priority gap
-suite_combat_advanced.json,port.rob,Y,Y,401,COVERED,
-suite_port_operations.json,port.status,Y,Y,401,COVERED,
-suite_movement_nav.json,sector.info,Y,N,,MISSING,High priority gap
-NONE,sector.scan,N,N,,MISSING,High priority gap
-suite_movement_nav.json,sector.scan.density,Y,N,,MISSING,High priority gap
-NONE,sector.search,N,N,,MISSING,High priority gap
-suite_movement_nav.json,sector.set_beacon,Y,Y,1454,COVERED,
-NONE,session.disconnect,N,N,,MISSING,High priority gap
-suite_smoke.json,session.hello,Y,N,,MISSING,High priority gap
-suite_auth_session.json,session.ping,Y,N,,MISSING,High priority gap
-NONE,ship.claim,N,N,,MISSING,High priority gap
-NONE,ship.info,N,N,,MISSING,High priority gap
-suite_ship_operations.json,ship.inspect,Y,Y,1700,COVERED,
-NONE,ship.jettison,N,N,,MISSING,High priority gap
-suite_ship_operations.json,ship.rename,Y,Y,1700,COVERED,
-suite_ship_repair.json,ship.repair,Y,Y,401,COVERED,
-NONE,ship.reregister,Y,Y,,EXCLUDED,Alias of ship.rename
-NONE,ship.self_destruct,N,N,,MISSING,High priority gap
-suite_player_status.json,ship.status,Y,Y,1700,COVERED,
-NONE,ship.transfer_cargo,N,N,,MISSING,High priority gap
-NONE,ship.upgrade,N,N,,MISSING,High priority gap
-suite_shipyard_and_ships.json,shipyard.list,Y,Y,401,COVERED,
-suite_shipyard_and_ships.json,shipyard.upgrade,Y,Y,401,COVERED,
-suite_economy_stocks.json,stock.buy,Y,Y,401,COVERED,
-NONE,stock.dividend.set,N,N,,MISSING,High priority gap
-NONE,stock.exchange.list_stocks,N,N,,MISSING,High priority gap
-NONE,stock.exchange.orders.cancel,N,N,,MISSING,High priority gap
-NONE,stock.exchange.orders.create,N,N,,MISSING,High priority gap
-suite_economy_stocks.json,stock.ipo.register,Y,Y,401,COVERED,
-NONE,stock.portfolio.list,N,N,,MISSING,High priority gap
-NONE,subscribe.add,N,N,,MISSING,High priority gap
-NONE,subscribe.catalog,N,N,,MISSING,High priority gap
-NONE,subscribe.list,N,N,,MISSING,High priority gap
-NONE,subscribe.remove,N,N,,MISSING,High priority gap
-suite_sys_admin_boundaries.json,sys.notice.create,N,Y,402,MISSING,High priority gap
-suite_auth_session.json,system.capabilities,Y,N,,MISSING,High priority gap
-suite_auth_session.json,system.cmd_list,Y,N,,MISSING,High priority gap
-NONE,system.describe_schema,N,N,,MISSING,High priority gap
-NONE,system.disconnect,N,N,,MISSING,High priority gap
-suite_system_admin.json,system.hello,Y,N,,MISSING,High priority gap
-NONE,system.schema_list,N,N,,MISSING,High priority gap
-suite_tavern_extras.json,tavern.barcharts.get_prices_summary,Y,Y,401,COVERED,
-NONE,tavern.deadpool.place_bet,N,N,,MISSING,High priority gap
-suite_tavern_economy.json,tavern.dice.play,Y,Y,401,COVERED,
-NONE,tavern.graffiti.post,N,N,,MISSING,High priority gap
-NONE,tavern.highstakes.play,N,N,,MISSING,High priority gap
-NONE,tavern.loan.pay,N,N,,MISSING,High priority gap
-suite_economy_tavern_loan.json,tavern.loan.take,Y,Y,401,COVERED,
-NONE,tavern.lottery.buy_ticket,N,N,,MISSING,High priority gap
-NONE,tavern.lottery.status,N,N,,MISSING,High priority gap
-NONE,tavern.raffle.buy_ticket,N,N,,MISSING,High priority gap
-suite_tavern_extras.json,tavern.round.buy,Y,Y,401,COVERED,
-NONE,tavern.rumour.get_hint,N,N,,MISSING,High priority gap
-NONE,tavern.trader.buy_password,N,N,,MISSING,High priority gap
-NONE,trade.accept,N,N,,MISSING,High priority gap
-suite_trade_market.json,trade.buy,N,Y,,MISSING,High priority gap
-NONE,trade.cancel,N,N,,MISSING,High priority gap
-NONE,trade.history,N,N,,MISSING,High priority gap
-suite_economy_misc.json,trade.jettison,Y,Y,1700,COVERED,
-NONE,trade.offer,N,N,,MISSING,High priority gap
-NONE,trade.port_info,N,N,,MISSING,High priority gap
-suite_economy_misc.json,trade.quote,Y,Y,1700,COVERED,
-NONE,trade.sell,N,N,,MISSING,High priority gap
+command,positive,negative
+admin.notice,Y,Y
+admin.shutdown_warning,N,Y
+auth.login,Y,Y
+auth.logout,Y,Y
+auth.mfa.totp.verify,N,Y
+auth.refresh,Y,Y
+auth.register,Y,Y
+bank.balance,Y,Y
+bank.deposit,Y,Y
+bank.history,Y,Y
+bank.leaderboard,Y,Y
+bank.transfer,Y,Y
+bank.withdraw,Y,Y
+bounty.list,Y,Y
+bounty.post_federation,Y,Y
+bounty.post_hitlist,Y,Y
+bulk.execute,Y,Y
+chat.broadcast,Y,Y
+chat.history,Y,Y
+chat.send,Y,Y
+citadel.build,Y,N
+citadel.upgrade,Y,N
+combat.attack,Y,Y
+combat.attack_planet,Y,Y
+combat.deploy_fighters,Y,Y
+combat.deploy_mines,Y,Y
+combat.lay_mines,Y,Y
+combat.status,Y,Y
+combat.sweep_mines,Y,Y
+corp.balance,Y,Y
+corp.create,Y,Y
+corp.deposit,Y,Y
+corp.dissolve,Y,Y
+corp.invite,Y,Y
+corp.join,Y,Y
+corp.kick,Y,Y
+corp.leave,Y,Y
+corp.list,Y,Y
+corp.roster,Y,Y
+corp.statement,Y,Y
+corp.status,Y,Y
+corp.transfer_ceo,N,Y
+corp.withdraw,Y,Y
+deploy.fighters.list,Y,Y
+deploy.mines.list,Y,Y
+dock.status,Y,N
+fighters.recall,Y,Y
+fine.list,Y,Y
+fine.pay,Y,Y
+hardware.buy,Y,Y
+hardware.list,Y,Y
+insurance.claim.file,Y,Y
+insurance.policies.buy,Y,Y
+insurance.policies.list,Y,Y
+mail.delete,Y,Y
+mail.inbox,Y,Y
+mail.read,Y,Y
+mail.send,Y,Y
+mines.recall,Y,Y
+move.autopilot.start,Y,Y
+move.autopilot.status,Y,Y
+move.autopilot.stop,Y,Y
+move.describe_sector,Y,Y
+move.pathfind,Y,Y
+move.scan,Y,Y
+move.transwarp,Y,Y
+move.warp,Y,Y
+nav.avoid.add,Y,Y
+nav.avoid.list,Y,Y
+nav.avoid.remove,Y,Y
+nav.avoid.set,Y,Y
+nav.bookmark.add,Y,Y
+nav.bookmark.list,Y,Y
+nav.bookmark.remove,Y,Y
+nav.bookmark.set,Y,Y
+news.get_feed,Y,Y
+news.mark_feed_read,Y,Y
+news.read,Y,Y
+notes.list,Y,Y
+notice.ack,Y,Y
+notice.list,Y,Y
+planet.create,Y,Y
+planet.deposit,Y,Y
+planet.genesis,Y,Y
+planet.genesis_create,Y,N
+planet.harvest,Y,Y
+planet.info,Y,Y
+planet.land,Y,Y
+planet.launch,Y,Y
+planet.market.buy_order,Y,Y
+planet.market.sell,Y,Y
+planet.rename,Y,Y
+planet.transfer_ownership,Y,Y
+planet.withdraw,Y,Y
+player.get_avoids,Y,Y
+player.get_bookmarks,Y,Y
+player.get_notes,Y,Y
+player.get_prefs,Y,Y
+player.get_settings,N,N
+player.get_subscriptions,Y,Y
+player.get_topics,Y,Y
+player.list_online,Y,Y
+player.my_info,Y,Y
+player.ping,Y,Y
+player.rankings,Y,Y
+player.set_avoids,Y,Y
+player.set_bookmarks,Y,Y
+player.set_prefs,Y,Y
+player.set_settings,Y,Y
+player.set_subscriptions,Y,Y
+player.set_topics,Y,Y
+player.set_trade_account_preference,Y,Y
+port.describe,Y,Y
+port.info,Y,Y
+port.rob,Y,Y
+port.status,Y,Y
+sector.info,Y,Y
+sector.scan,N,N
+sector.scan.density,Y,Y
+sector.search,N,N
+sector.set_beacon,Y,Y
+session.disconnect,N,N
+session.hello,Y,N
+session.ping,Y,Y
+ship.claim,Y,Y
+ship.info,Y,Y
+ship.inspect,Y,Y
+ship.jettison,Y,Y
+ship.list,N,Y
+ship.rename,Y,Y
+ship.repair,Y,Y
+ship.reregister,N,N
+ship.self_destruct,N,Y
+ship.sell,N,Y
+ship.status,Y,Y
+ship.transfer,N,Y
+ship.transfer_cargo,N,Y
+ship.upgrade,N,Y
+shipyard.list,Y,Y
+shipyard.sell,N,Y
+shipyard.upgrade,Y,Y
+stock.buy,Y,Y
+stock.dividend.set,N,Y
+stock.exchange.list_stocks,N,Y
+stock.exchange.orders.cancel,N,Y
+stock.exchange.orders.create,N,Y
+stock.ipo.register,Y,Y
+stock.portfolio.list,N,Y
+subscribe.add,N,N
+subscribe.catalog,N,N
+subscribe.list,N,N
+subscribe.remove,N,N
+sys.notice.create,N,Y
+system.capabilities,Y,Y
+system.cmd_list,Y,Y
+system.describe_schema,Y,Y
+system.disconnect,Y,Y
+system.hello,Y,N
+system.schema_list,Y,Y
+tavern.barcharts.get_prices_summary,Y,Y
+tavern.deadpool.place_bet,Y,Y
+tavern.dice.play,Y,Y
+tavern.graffiti.post,Y,Y
+tavern.highstakes.play,Y,Y
+tavern.loan.pay,Y,Y
+tavern.loan.take,Y,Y
+tavern.lottery.buy_ticket,Y,Y
+tavern.lottery.status,Y,Y
+tavern.raffle.buy_ticket,Y,Y
+tavern.round.buy,Y,Y
+tavern.rumour.get_hint,Y,Y
+tavern.trader.buy_password,Y,Y
+trade.accept,Y,Y
+trade.buy,N,Y
+trade.cancel,Y,Y
+trade.history,Y,Y
+trade.jettison,Y,Y
+trade.offer,Y,Y
+trade.port_info,Y,Y
+trade.quote,Y,Y
+trade.sell,Y,Y

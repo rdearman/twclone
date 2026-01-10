@@ -1193,6 +1193,17 @@ cmd_hardware_buy (client_ctx_t *ctx,
 }
 
 
+int
+cmd_shipyard_sell (client_ctx_t *ctx, json_t *root)
+{
+  send_response_error (ctx,
+                       root,
+                       ERR_NOT_IMPLEMENTED,
+                       "Not implemented: shipyard.sell");
+  return 0;
+}
+
+
 // Implementation for shipyard.list RPC
 int
 cmd_shipyard_list (client_ctx_t *ctx, json_t *root)

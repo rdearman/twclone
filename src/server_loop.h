@@ -3,13 +3,16 @@
 #pragma once
 #include <signal.h>
 #include "database.h"           /* for db_handle, etc. */
-// #include "universe.h"                /* for sector/planet structures if needed */
-//#include "player_interaction.h"
 #include "common.h"
+
+
+
 /* Single, canonical declaration */
 int server_loop (volatile sig_atomic_t *running);
 void attach_rate_limit_meta (json_t *env, client_ctx_t *ctx);
 void rl_tick (client_ctx_t *ctx);
+
+
 /* ---- client registry / delivery (used by broadcast path) ---- */
 void server_register_client (client_ctx_t *ctx);
 void server_unregister_client (client_ctx_t *ctx);
@@ -18,9 +21,9 @@ typedef struct client_node_s
   client_ctx_t *ctx;
   struct client_node_s *next;
 } client_node_t;
+
 extern client_node_t *g_clients;
 extern pthread_mutex_t g_clients_mu;
-
 
 /* Returns 0 if delivered/handled, -1 if command not found. */
 int server_dispatch_command (client_ctx_t *ctx, json_t *root);

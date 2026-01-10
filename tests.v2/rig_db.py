@@ -128,8 +128,12 @@ def main():
     if "ships" in rig:
         print("Rigging Ships...")
         for s in rig["ships"]:
-            owner_id = get_player_id(s["owner_username"], **db_config)
-            if owner_id:
+            owner_id = None
+            if s.get("owner_username"):
+                owner_id = get_player_id(s["owner_username"], **db_config)
+            
+            # Allow creation if owner found OR no owner specified (derelict)
+            if owner_id or not s.get("owner_username"):
                 cols = ["ship_id", "type_id", "name", "holds", "sector_id", "fighters", "shields", "hull"]
                 vals = [str(s["ship_id"]), str(s["type_id"]), f"'{s['name']}'", "100", str(s["sector_id"]), "1", "1", "100"]
                 
@@ -154,19 +158,21 @@ def main():
                     cols.append("has_transwarp")
                     vals.append(str(s["has_transwarp"]))
 
-                sql = f"INSERT INTO ships ({','.join(cols)}) VALUES ({','.join(vals)}) ON CONFLICT (ship_id) DO UPDATE SET sector_id={s['sector_id']};"
+                update_set = ", ".join([f"{col}=EXCLUDED.{col}" for col in cols if col != "ship_id"])
+                sql = f"INSERT INTO ships ({','.join(cols)}) VALUES ({','.join(vals)}) ON CONFLICT (ship_id) DO UPDATE SET {update_set};"
                 execute_sql(sql, **db_config)
 
-                sql = f"UPDATE players SET ship_id = {s['ship_id']} WHERE player_id = {owner_id};"
-                execute_sql(sql, **db_config)
-                
-                # Use subquery to avoid conflict issues if no unique index exists on (ship_id, player_id)
-                sql = f"""
-                INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) 
-                SELECT {s['ship_id']}, {owner_id}, 1, TRUE
-                WHERE NOT EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = {s['ship_id']} AND player_id = {owner_id});
-                """
-                execute_sql(sql, **db_config)
+                if owner_id:
+                    sql = f"UPDATE players SET ship_id = {s['ship_id']} WHERE player_id = {owner_id};"
+                    execute_sql(sql, **db_config)
+                    
+                    # Use subquery to avoid conflict issues if no unique index exists on (ship_id, player_id)
+                    sql = f"""
+                    INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) 
+                    SELECT {s['ship_id']}, {owner_id}, 1, TRUE
+                    WHERE NOT EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = {s['ship_id']} AND player_id = {owner_id});
+                    """
+                    execute_sql(sql, **db_config)
 
     # 8. Planets
     if "planets" in rig:

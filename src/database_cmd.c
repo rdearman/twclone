@@ -4022,6 +4022,22 @@ db_ship_claim (db_t *db, int pid, int sid, int ship_id, json_t **out)
         }
       db_res_finalize (res);
     }
+
+  if (rc == 0 && out)
+    {
+      json_t *player_info = NULL;
+      if (db_player_info_json (db, pid, &player_info) == 0 && player_info)
+        {
+          json_t *ship = json_object_get (player_info, "ship");
+          if (ship)
+            {
+              *out = json_incref (ship);
+            }
+          json_decref (player_info);
+        }
+    }
+
+  (void) sid;
   return (rc == 0) ? 0 : rc;
 }
 

@@ -14,22 +14,26 @@
     {
       "name": "System Capabilities",
       "command": "system.capabilities",
+      "user": "session_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "System Command List",
       "command": "system.cmd_list",
+      "user": "session_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "System Schema List",
       "command": "system.schema_list",
+      "user": "session_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "System Describe Schema",
       "command": "system.describe_schema",
       "data": { "name": "auth.login" },
+      "user": "session_user",
       "expect": { "status": "ok" }
     },
     {
@@ -55,7 +59,7 @@
       "name": "Verify Logout (Ping Fail)",
       "command": "player.my_info",
       "user": "session_user",
-      "expect": { "status": "refused", "error_code": 401 }
+      "expect": { "status": "error", "error_code": 401 }
     }
   ]
 }

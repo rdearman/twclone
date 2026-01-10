@@ -8,14 +8,14 @@
       "expect": { "status": "error", "error_code": 1101 }
     },
     {
-      "name": "auth.logout - Omit Auth (Observed: ok)",
+      "name": "auth.logout - Omit Auth (Observed: 401)",
       "command": "auth.logout",
-      "expect": { "status": "ok" }
+      "expect": { "status": "error", "error_code": 401 }
     },
     {
-      "name": "auth.refresh - Missing Auth (Observed: 1301)",
+      "name": "auth.refresh - Missing Auth (Observed: 401)",
       "command": "auth.refresh",
-      "expect": { "status": "error", "error_code": 1301 }
+      "expect": {  "status": "error", "error_code": 401  }
     },
     {
       "name": "session.hello - Invalid Payload (Observed: ok)",
@@ -26,17 +26,17 @@
     {
       "name": "session.ping - Missing Auth (Observed: ok)",
       "command": "session.ping",
-      "expect": { "status": "ok" }
+      "expect": {  "status": "error", "error_code": 401  }
     },
     {
       "name": "system.capabilities - Missing Auth (Observed: ok)",
       "command": "system.capabilities",
-      "expect": { "status": "ok" }
+      "expect": {  "status": "error", "error_code": 401  }
     },
     {
       "name": "system.cmd_list - Missing Auth (Observed: ok)",
       "command": "system.cmd_list",
-      "expect": { "status": "ok" }
+      "expect": {  "status": "error", "error_code": 401  }
     },
     {
       "name": "system.hello - Invalid Payload (Observed: ok)",

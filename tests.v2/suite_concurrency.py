@@ -44,9 +44,15 @@ def client_worker(client_id: int):
             # 1. My Info
             client.send_json({"command": "player.my_info"})
             resp = client.recv_next_non_notice()
-            
+
+            if not isinstance(resp, dict) or resp.get("status") != "ok":
+                log.append({"status": "FAIL", "msg": f"player.my_info bad response: {resp!r}"})
+                return            
             # 2. Sector Info
-            sector = resp.get("data", {}).get("ship", {}).get("location", {}).get("sector_id", 1)
+            # sector = resp.get("data", {}).get("ship", {}).get("location", {}).get("sector_id", 1)
+            data = resp.get("data") or {}
+            sector = (((data.get("ship") or {}).get("location") or {}).get("sector_id")) or 1
+
             client.send_json({"command": "move.describe_sector", "data": {"sector_id": sector}})
             client.recv_next_non_notice()
             

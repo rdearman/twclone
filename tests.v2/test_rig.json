@@ -40,7 +40,7 @@
     {"username": "captain_crunch", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
     {"username": "planet_tester_1", "password": "password", "type": 2, "credits": 1000000, "sector_id": 1},
     {"username": "econ_trader", "password": "password", "type": 1, "credits": 1000000, "sector_id": 1},
-    {"username": "trader_player_1", "password": "password", "type": 2, "credits": 1000000, "sector_id": 1},
+    {"username": "trader_player_1", "password": "password", "type": 2, "credits": 1000000, "sector_id": 2},
     {"username": "status_player", "password": "password", "type": 2, "credits": 100000, "sector_id": 1},
     {"username": "attacker", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
     {"username": "defender", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
@@ -88,7 +88,8 @@
     {"ship_id": 1017, "name": "QuasarVictimShip", "type_id": 1, "owner_username": "victim_user", "sector_id": 1, "fighters": 100, "shields": 100, "hull": 100},
     {"ship_id": 1018, "name": "MoverShip", "type_id": 1, "owner_username": "mover_user", "sector_id": 1},
     {"ship_id": 1019, "name": "ObserverShip", "type_id": 1, "owner_username": "observer_user", "sector_id": 1},
-    {"ship_id": 1020, "name": "ActorShip", "type_id": 1, "owner_username": "actor_user", "sector_id": 2}
+      {"ship_id": 1020, "name": "ActorShip", "type_id": 1, "owner_username": "actor_user", "sector_id": 2},
+      {"ship_id": 9001, "name": "CLAIMShip", "type_id": 1, "owner_username": "", "sector_id": 2, "ore": 5}
   ],
   "deployed_assets": [
     {"sector_id": 2, "owner_username": "toll_collector", "asset_type": 2, "quantity": 30, "offensive_setting": 3},

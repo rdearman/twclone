@@ -12,6 +12,7 @@
 #define ERR_BAD_REQUEST         405
 #define ERR_RATE_LIMITED        406
 #define ERR_BAD_STATE           407
+#define ERR_NO_RESPONSE		500
 #define ERR_UNKNOWN             501
 #define ERR_NOT_IMPLEMENTED     502
 #define ERR_SERVICE_UNAVAILABLE 503
