@@ -1,0 +1,18 @@
+{
+    "id": "srv-err",
+    "ts": "2026-01-11T13:08:28Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 401,
+        "message": "Not authenticated"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

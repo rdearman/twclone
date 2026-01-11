@@ -435,7 +435,7 @@ def _get_fallback_plan(game_state, state_manager):
             logger.info(f"Fallback: Cargo detected ({commodity}). Setting goal to SELL.")
             return [f"sell: {commodity}"]
 
-    # 2. Buy Logic: If we have space and credits, try to buy something (e.g. ORE)
+    # 2. Buy Logic: If we have space and credits, try to buy something 
     # Only if we are at a port to avoid infinite loop of trying to buy in space
     current_sector = game_state.get("player_location_sector")
     sector_data = game_state.get("sector_data", {}).get(str(current_sector), {})
@@ -443,9 +443,18 @@ def _get_fallback_plan(game_state, state_manager):
     if sector_data.get("has_port"):
         credits = float(game_state.get("player_info", {}).get("player", {}).get("credits", 0))
         # Simple check: > 100 credits and some space
-        # We don't check space explicitly here, planner will fail if full, which is fine
         if credits > 100:
-             logger.info("Fallback: At port with credits. Setting goal to BUY ORE.")
+             port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector))
+             if port_info and port_info.get("commodities"):
+                 # Pick a random commodity traded at this port
+                 comm_list = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
+                 comm_list = [c for c in comm_list if c]
+                 if comm_list:
+                     target_comm = random.choice(comm_list)
+                     logger.info(f"Fallback: At port with credits. Setting goal to BUY {target_comm}.")
+                     return [f"buy: {target_comm}"]
+             
+             logger.info("Fallback: At port with credits. Setting goal to BUY ORE (default).")
              return ["buy: ORE"]
 
     # 3. Exploration Logic (Existing)
@@ -785,7 +794,8 @@ def bootstrap_schemas(game_conn, state_manager, config):
         "data": {},
         "meta": {
             "client_version": config.get("client_version"),
-            "idempotency_key": idempotency_key
+            "idempotency_key": idempotency_key,
+            "session_token": state_manager.get("session_id")
         }
     }
 
@@ -856,59 +866,51 @@ def main(config_path="config.json"):
     # --- Main Loop ---
     while not shutdown_flag:
         try:
+            # 0. Always process server responses first
+            responses = game_conn.receive_responses()
+            if responses:
+                process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config, planner)
+                last_heartbeat = time.time()
+
             game_state = state_manager.get_all() # Always get the freshest state here
-            # 1. Handle Connection
+
+            # 1. Handle Connection & Authentication
             if not game_conn.sock:
                 if not game_conn.connect():
                     logger.info("Attempting to reconnect in 5 seconds...")
                     time.sleep(5)
                     continue
-                else:
-                    # Connection successful, send login
-                    idempotency_key = str(uuid.uuid4())
-                    
-                    # --- THE REAL FIX: Use 'password' not 'token' ---
-                    login_cmd = {
-                        "id": f"c-{idempotency_key[:8]}",
-                        "command": "auth.login",
-                        "data": {
-                            "passwd": config.get("player_password"),
-                            "username": config.get("player_username") 
-                        },
-                        "meta": {
-                            "client_version": config.get("client_version"),
-                            "idempotency_key": idempotency_key
-                        }
-                    }
-                    
-                    if not config.get("player_username") or not config.get("player_password"):
-                        logger.critical("player_username or player_password not found in config.json. Exiting.")
-                        shutdown_flag = True
-                        continue
-
-                    logger.info("Sending command: %s", login_cmd)
-                    game_conn.send_command(login_cmd)
-
-            # 2. Process Server Responses
-            responses = game_conn.receive_responses()
-            if responses:
-                # --- FIX: Pass config object to fix NameError ---
-                process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config, planner)
-                game_state = state_manager.get_all() # Re-fetch state after processing responses
-                last_heartbeat = time.time()
             
-            # 3. Handle Heartbeat (Ping)
-            if time.time() - last_heartbeat > 20:
-                logger.debug("Sending ping to keep connection alive.")
-                game_conn.send_command({"command": "player.ping"})
-                last_heartbeat = time.time()
-
             # --- Check if we are authenticated BEFORE planning ---
             game_state = state_manager.get_all()
             if not game_state.get("session_id"):
-                logger.debug("Not authenticated yet, waiting for login response...")
-                time.sleep(0.5) # Wait a bit
-                continue # Skip the rest of the loop
+                # Always send login if we have no session_id
+                idempotency_key = str(uuid.uuid4())
+                login_cmd = {
+                    "id": f"c-{idempotency_key[:8]}",
+                    "command": "auth.login",
+                    "data": {
+                        "passwd": config.get("player_password"),
+                        "username": config.get("player_username") 
+                    },
+                    "meta": {
+                        "client_version": config.get("client_version"),
+                        "idempotency_key": idempotency_key
+                    }
+                }
+                
+                if not config.get("player_username") or not config.get("player_password"):
+                    logger.critical("player_username or player_password not found in config.json. Exiting.")
+                    shutdown_flag = True
+                    continue
+
+                logger.info("No session detected. Sending login command: %s", login_cmd)
+                game_conn.send_command(login_cmd)
+                
+                # Wait for login response to avoid spamming login requests
+                # We'll re-loop and process responses in the next iteration
+                time.sleep(1) 
+                continue
             
             # --- If we are here, we are authenticated ---
 
@@ -951,10 +953,12 @@ def main(config_path="config.json"):
                     "data": bootstrap_cmd.get("data", {}),
                     "meta": {
                         "client_version": config.get("client_version"),
-                        "idempotency_key": idempotency_key
+                        "idempotency_key": idempotency_key,
+                        "session_token": game_state.get("session_id")
                     }
                 }
                 logger.info(f"Bootstrap: Sending {bootstrap_cmd['command']}")
+                logger.info("Bootstrap command full: %s", full_command)
                 if game_conn.send_command(full_command):
                     state_manager.record_command_sent(bootstrap_cmd["command"])
                     # Don't add to pending_commands if we don't need to track specific reply ID for logic
@@ -1041,7 +1045,8 @@ def main(config_path="config.json"):
                         "client_version": config.get("client_version"),
                         # --- THIS IS THE FIX for 1306 ERROR ---
                         # Always include the idempotency_key in meta
-                        "idempotency_key": idempotency_key 
+                        "idempotency_key": idempotency_key,
+                        "session_token": game_state.get("session_id")
                     }
                 }
 
@@ -1228,7 +1233,11 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         schema_request = {
                             "id": request_id_new, "command": "system.describe_schema",
                             "data": {"type": "command", "name": command_name_to_fetch},
-                            "meta": {"client_version": config.get("client_version"), "idempotency_key": idempotency_key}
+                            "meta": {
+                                "client_version": config.get("client_version"),
+                                "idempotency_key": idempotency_key,
+                                "session_token": state_manager.get("session_id")
+                            }
                         }
                         logger.debug(f"Requesting schema for command: {command_name_to_fetch}")
                         game_conn.send_command(schema_request)
@@ -1240,17 +1249,28 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     # Fix: Use session_token, not session (server returns session_token)
                     session_token = response_data.get("session_token") or response_data.get("session")
                     state_manager.set("session_id", session_token)
-                    state_manager.update_player_info(response_data)
+                    
+                    # Wrap in 'player' key if it looks like player info but is missing the wrapper
+                    p_info = response_data if "player" in response_data else {"player": response_data}
+                    
+                    # Ensure player_id is present in the player object for downstream logic
+                    if "player_id" in response_data and "id" not in p_info["player"]:
+                        p_info["player"]["id"] = response_data["player_id"]
+
+                    state_manager.update_player_info(p_info)
                 
                 elif response_type == "player.info" or response_type == "player.my_info":
+                    if "player" not in response_data:
+                        # Server might return flat data, wrap it if so
+                        response_data = {"player": response_data}
                     state_manager.update_player_info(response_data)
                 
-                elif response_type == "ship.info" or response_type == "ship.status" or response_type == "ship.claimed":
-                    ship_data = response_data.get("ship", response_data)
-                    # Use update_player_info to preserve cargo structure (list vs dict)
-                    state_manager.update_player_info({"ship": ship_data})
+                elif response_type in ("ship.info", "ship.status", "ship.claimed"):
+                    ship_obj = response_data.get("ship", response_data)
+                    # update_player_info expects {"ship": {...}} 
+                    state_manager.update_player_info({"ship": ship_obj})
                     if response_type == "ship.claimed":
-                        logger.info(f"Bootstrap: Successfully claimed ship {ship_data.get('id', '?')}")
+                        logger.info(f"Bootstrap: Successfully claimed ship {ship_obj.get('id', '?')}")
                 
                 if response_type == "move.result":
                     if response.get("status") == "ok":
@@ -1382,6 +1402,12 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     logger.warning("Received 1489 Insufficient Turns. Setting turns to 0.")
                     state_manager.set_turns(0)
 
+                if error_code in (401, 1401):
+                    logger.warning(f"Received {error_code} Not Authenticated. Clearing session_id to force re-login.")
+                    state_manager.set("session_id", None)
+                    time.sleep(1) # Cool down to avoid tight loop
+                    break # Stop processing further responses in this batch
+
                 if sent_command and command_name == "move.warp" and error_code == 1402:
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")
                     if to_sector_id is not None:
@@ -1390,8 +1416,20 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         
                         # FORCE RE-SYNC: Clear cached location and fetch fresh info
                         state_manager.set("player_location_sector", None)
-                        game_conn.send_command("player.my_info", {})
-                        game_conn.send_command("ship.info", {})
+                        
+                        for cmd_name in ["player.my_info", "ship.info"]:
+                            idemp = str(uuid.uuid4())
+                            re_sync_cmd = {
+                                "id": f"c-resync-{idemp[:8]}",
+                                "command": cmd_name,
+                                "data": {},
+                                "meta": {
+                                    "client_version": config.get("client_version"),
+                                    "idempotency_key": idemp,
+                                    "session_token": state_manager.get("session_id")
+                                }
+                            }
+                            game_conn.send_command(re_sync_cmd)
 
                 if sent_command and command_name == "move.warp":
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")

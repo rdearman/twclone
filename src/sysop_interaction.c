@@ -321,7 +321,7 @@ repl (void *arg)
   while (g_run && (!g_running_ptr || *g_running_ptr))
     {
       /* Wait for input with timeout so we can check shutdown flags */
-      int prc = poll(&pfd, 1, 500); 
+      int prc = poll(&pfd, 1, 100); 
       if (prc < 0) {
         if (errno == EINTR) continue;
         break;
@@ -362,9 +362,8 @@ sysop_start (volatile sig_atomic_t *running_flag)
 void
 sysop_stop (void)
 {
-  if (g_run) {
-    g_run = 0;
-    pthread_join (g_thr, NULL);
-  }
+  /* Always try to join if we ever started */
+  g_run = 0;
+  pthread_join (g_thr, NULL);
 }
 

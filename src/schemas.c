@@ -4213,6 +4213,12 @@ schema_player_info (void)
   json_object_set_new (score_prop, "type", json_string ("integer"));
   json_object_set_new (p_props, "score", score_prop);
 
+  json_t *turns_prop = json_object ();
+
+
+  json_object_set_new (turns_prop, "type", json_string ("integer"));
+  json_object_set_new (p_props, "turns_remaining", turns_prop);
+
   /* Ships Array */
   json_t *ships = json_object ();
 

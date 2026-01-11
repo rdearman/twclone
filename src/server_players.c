@@ -975,24 +975,66 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0)
     {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
       return 0;
     }
-  json_t *data = json_object_get (root, "data");
-  json_t *pref = json_object_get (data, "prefer_bank");
 
+  json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA, "data object required");
+      return 0;
+    }
+
+  json_t *pref = json_object_get (data, "prefer_bank");
+  if (!pref)
+    {
+      pref = json_object_get (data, "preference");
+    }
+
+  bool prefer_bank = false;
+  bool valid = false;
 
   if (json_is_boolean (pref))
+    {
+      prefer_bank = json_is_true (pref);
+      valid = true;
+    }
+  else if (json_is_integer (pref))
+    {
+      prefer_bank = (json_integer_value (pref) != 0);
+      valid = true;
+    }
+  else if (json_is_string (pref))
+    {
+      const char *s = json_string_value (pref);
+      if (strcasecmp (s, "bank") == 0 || strcasecmp (s, "1") == 0 || strcasecmp (s, "true") == 0)
+        {
+          prefer_bank = true;
+          valid = true;
+        }
+      else if (strcasecmp (s, "petty_cash") == 0 || strcasecmp (s, "0") == 0 || strcasecmp (s, "false") == 0)
+        {
+          prefer_bank = false;
+          valid = true;
+        }
+    }
+
+  if (valid)
     {
       h_db_prefs_set_one (ctx->player_id,
                           "trade.prefer_bank",
                           "bool",
-                          json_is_true (pref) ? "1" : "0");
+                          prefer_bank ? "1" : "0");
       json_t *resp = json_object ();
-
-
       json_object_set_new (resp, "ok", json_true ());
       send_response_ok_take (ctx, root, "player.prefs.updated", &resp);
     }
+  else
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid preference value. Expected boolean, 0/1, or 'bank'/'petty_cash'");
+    }
+
   return 0;
 }
 

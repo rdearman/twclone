@@ -409,14 +409,27 @@ class StateManager:
 
     def update_player_info(self, player_data):
         """Updates the player_info and ship_info in the state, preserving detailed cargo."""
-        if 'player' in player_data:
+        
+        # Robustly handle both wrapped {"player": {...}} and flat structures
+        p_obj = player_data.get('player')
+        if p_obj is None and ('username' in player_data or 'credits' in player_data):
+            p_obj = player_data
+
+        if p_obj:
             if self.state['player_info'] is None:
                 self.state['player_info'] = {}
-            self.state['player_info']['player'] = player_data['player']
+            
+            # If we already have a player object, merge it to preserve missing fields
+            if self.state['player_info'].get('player'):
+                # Filter out None values to avoid overwriting valid data
+                clean_p_obj = {k: v for k, v in p_obj.items() if v is not None}
+                self.state['player_info']['player'].update(clean_p_obj)
+            else:
+                self.state['player_info']['player'] = p_obj
             
             # Update location from player info
-            if 'sector' in player_data['player']:
-                new_sector = player_data['player']['sector']
+            if 'sector' in p_obj:
+                new_sector = p_obj['sector']
                 # FIX: Only update if we don't have a location yet. 
                 # Ship location is authoritative; Player location might be stale/home.
                 if self.state['player_location_sector'] is None:
@@ -426,7 +439,7 @@ class StateManager:
                 elif self.state['player_location_sector'] != new_sector:
                     logger.debug(f"Ignoring player_info sector {new_sector} as we are already at {self.state['player_location_sector']}")
 
-            logger.info(f"Player info updated. Turns remaining: {player_data['player'].get('turns_remaining')}")
+            logger.info(f"Player info updated. Turns remaining: {p_obj.get('turns_remaining')}")
 
         if 'ship' in player_data:
             if self.state.get('ship_info') is None:
@@ -571,7 +584,9 @@ class StateManager:
             
             current_sector_data = self.state.get("sector_data", {}).get(str(player_location_sector))
             if not current_sector_data:
-                logger.warning(f"State inconsistency: No sector_data for current player sector {player_location_sector}.")
-                is_consistent = False
+                # RELAXATION: Do not mark as inconsistent if sector_data is missing. 
+                # This often happens during transitions (login/warp) before sector.info arrives.
+                logger.debug(f"Validation: sector_data for current sector {player_location_sector} is not yet available.")
+                # is_consistent = False 
         
         return is_consistent

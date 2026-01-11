@@ -40,6 +40,11 @@ static void
 on_signal (int sig)
 {
   (void) sig;
+  if (g_saw_signal > 0)
+    {
+      /* Second signal: force immediate exit */
+      _exit (1);
+    }
   g_saw_signal = 1;
   g_running = 0;                // tell server_loop to exit
 }
@@ -349,6 +354,7 @@ main (void)
 
 
   g_running = 1;
+  install_signal_handlers ();   /* Handle signals early */
   server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
   LOGI ("starting up");
   sysop_start (&g_running);
@@ -406,8 +412,6 @@ main (void)
   cron_register_builtins ();
   /* 0.1) Capabilities (restored) */
   build_capabilities ();        /* rebuilds g_capabilities */
-  /* 0.2) Signals (restored) */
-  install_signal_handlers ();   /* restores Ctrl-C / SIGTERM behavior */
   atexit (schema_shutdown);
   /* 1) S2S keyring (must be before we bring up TCP) */
   LOGI ("loading s2s key ...\n");

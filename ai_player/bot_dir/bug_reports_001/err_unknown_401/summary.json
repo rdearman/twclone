@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_unknown_401",
+    "first_seen": "20260111_133448_806",
+    "command": "unknown",
+    "error_code": 401,
+    "error_message": "Not authenticated"
+}

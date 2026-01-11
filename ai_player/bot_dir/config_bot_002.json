@@ -1,7 +1,7 @@
 {
   "game_host": "127.0.0.1",
   "game_port": 1234,
-  "ollama_model": "phi3:latest",
+  "ollama_model": "qwen2.5-coder:latest",
   "log_file": "ai_player_002.log",
   "state_file": "state_002.json",
   "player_username": "ai_qa_bot_002",
@@ -10,7 +10,7 @@
   "protocol_doc_path": "../docs/PROTOCOL.v2.md",
   "cooldown_seconds": 15,
   "max_port_info_failures": 3,
-  "qa_mode": false,
+  "qa_mode": true,
   "max_retries_per_command": 5,
   "command_cooldown_duration": 150,
   "initial_credits": 10000,

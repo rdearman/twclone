@@ -1,186 +1,184 @@
 {
-    "session_id": "8f953f1df1ca54d22de1ba3ab75c16b9",
+    "session_id": null,
     "player_info": {
         "player": {
-            "player_id": 1818,
-            "current_sector": 2,
+            "player_id": 1820,
+            "current_sector": 965,
             "unread_news_count": 0,
-            "session_token": "8f953f1df1ca54d22de1ba3ab75c16b9",
-            "id": 1818,
-            "username": "ai_qa_bot_002",
-            "credits": "4800.00",
-            "turns_remaining": 99998,
-            "sector": 2,
-            "ship_id": 136,
+            "session_token": "05b93c882c3289036948913c23d04124",
+            "id": 1820,
+            "username": "ai_qa_bot_004",
+            "credits": "4490.00",
+            "turns_remaining": 99999,
+            "sector": 965,
+            "ship_id": 138,
             "corp_id": 0,
             "alignment": 1,
             "experience": 0
         }
     },
     "ship_info": {
-        "id": 136,
-        "name": "ai_qa_bot_002's ship",
+        "id": 138,
+        "name": "ai_qa_bot_004's ship",
         "type_id": 2,
         "holds": 10,
         "fighters": 1,
         "shields": 1,
         "onplanet": 0,
         "ported": 0,
-        "cargo": []
+        "cargo": [
+            {
+                "commodity": "ore",
+                "quantity": 5
+            }
+        ]
     },
-    "player_location_sector": 2,
+    "player_location_sector": 837,
     "sector_data": {
-        "2": {
-            "server_tick": 497,
-            "sector_id": 2,
-            "name": "Fedspace 2",
-            "beacon": "The Federation -- Do Not Dump!",
+        "965": {
+            "server_tick": 1720,
+            "sector_id": 965,
+            "name": "",
+            "beacon": "",
             "adjacent_sectors": [
                 {
-                    "to_sector": 1
+                    "to_sector": 837
                 },
                 {
-                    "to_sector": 3
+                    "to_sector": 994
                 },
                 {
-                    "to_sector": 7
+                    "to_sector": 1327
                 },
                 {
-                    "to_sector": 8
+                    "to_sector": 1591
                 },
                 {
-                    "to_sector": 9
+                    "to_sector": 1914
                 },
                 {
-                    "to_sector": 10
-                },
-                {
-                    "to_sector": 654
-                },
-                {
-                    "to_sector": 1016
+                    "to_sector": 2381
                 }
             ],
             "ships_present": [
                 {
-                    "ship_id": 1020,
-                    "name": "ActorShip"
-                },
-                {
-                    "ship_id": 11,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 20,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 24,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 27,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 28,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 31,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 38,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 86,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 79,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 1001,
-                    "name": "TollCollectorShip"
-                },
-                {
-                    "ship_id": 105,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 124,
-                    "name": "Used Scout Marauder"
-                },
-                {
-                    "ship_id": 9001,
-                    "name": "CLAIMShip"
-                },
-                {
-                    "ship_id": 136,
-                    "name": "ai_qa_bot_002's ship"
+                    "ship_id": 138,
+                    "name": "ai_qa_bot_004's ship"
                 }
             ],
-            "ports": [],
+            "ports": [
+                {
+                    "port_id": 369,
+                    "name": "Elirewoli",
+                    "type": 1
+                }
+            ],
             "celestial_objects": [],
             "counts": {
-                "fighters": 30,
+                "fighters": 0,
                 "mines": 0
             },
-            "_last_refreshed": 1768139908.2967772,
-            "has_port": false,
+            "_last_refreshed": 1768136530.7751665,
+            "has_port": true,
             "adjacent": [
                 {
-                    "to_sector": 1
+                    "to_sector": 837
                 },
                 {
-                    "to_sector": 3
+                    "to_sector": 994
                 },
                 {
-                    "to_sector": 7
+                    "to_sector": 1327
                 },
                 {
-                    "to_sector": 8
+                    "to_sector": 1591
                 },
                 {
-                    "to_sector": 9
+                    "to_sector": 1914
                 },
                 {
-                    "to_sector": 10
-                },
-                {
-                    "to_sector": 654
-                },
-                {
-                    "to_sector": 1016
+                    "to_sector": 2381
                 }
             ]
         }
     },
     "universe_map": {
-        "1": {
+        "965": {
             "is_explored": true,
             "has_port": true
-        },
-        "2": {
-            "is_explored": true,
-            "has_port": false
         }
     },
-    "port_info_by_sector": {},
-    "price_cache": {},
+    "port_info_by_sector": {
+        "965": {
+            "port_id": 369,
+            "name": "Elirewoli",
+            "class": null,
+            "commodities": [
+                {
+                    "code": "EQU",
+                    "quantity": 939,
+                    "price": 200,
+                    "illegal": false,
+                    "commodity": "EQU"
+                },
+                {
+                    "code": "ORE",
+                    "quantity": 5000,
+                    "price": 100,
+                    "illegal": false,
+                    "commodity": "ORE"
+                },
+                {
+                    "code": "ORG",
+                    "quantity": 14,
+                    "price": 150,
+                    "illegal": false,
+                    "commodity": "ORG"
+                }
+            ]
+        }
+    },
+    "price_cache": {
+        "369": {
+            "buy": {
+                "EQU": 238.0,
+                "ORE": 105.0,
+                "ORG": 182.0
+            },
+            "sell": {
+                "EQU": 198.0,
+                "ORE": 0.0,
+                "ORG": 152.0
+            }
+        }
+    },
     "bank_balance": 0,
     "command_retry_info": {
         "player.my_info": {
-            "next_retry_time": 1768139910.157141
+            "next_retry_time": 1768136409.5758636
         },
         "ship.info": {
-            "next_retry_time": 1768139911.2818608
+            "next_retry_time": 1768136410.6721046
         },
         "sector.info": {
-            "next_retry_time": 1768139912.2924237
+            "next_retry_time": 1768136535.270842
+        },
+        "trade.port_info": {
+            "next_retry_time": 1768136535.7911935
+        },
+        "trade.quote": {
+            "next_retry_time": 1768136540.9289856
+        },
+        "trade.buy": {
+            "failures": 3,
+            "next_retry_time": 1768136576.9605386
+        },
+        "move.warp": {
+            "next_retry_time": 1768136541.4559517
+        },
+        "unknown": {
+            "failures": 1,
+            "next_retry_time": 1768136548.9942195
         }
     },
     "strategy_plan": [],
@@ -2137,185 +2135,186 @@
     },
     "schema_blacklist": [],
     "pending_schema_requests": {
-        "system.cmd_list": "c-35be017e",
-        "admin.notice": "c-235be808",
-        "admin.shutdown_warning": "c-7d94e1ab",
-        "auth.login": "c-23570e57",
-        "auth.logout": "c-b487d117",
-        "auth.mfa.totp.verify": "c-77ddea4d",
-        "auth.register": "c-af6ee618",
-        "auth.refresh": "c-33fa2906",
-        "bank.balance": "c-d141cd66",
-        "bank.deposit": "c-e53d1d82",
-        "bank.history": "c-581e885d",
-        "bank.leaderboard": "c-b9353e26",
-        "bank.transfer": "c-80498e96",
-        "bank.withdraw": "c-dbc023dc",
-        "bounty.list": "c-f8c43df9",
-        "bounty.post_federation": "c-8472d3ff",
-        "bounty.post_hitlist": "c-835600bf",
-        "bulk.execute": "c-2bc7e381",
-        "fine.list": "c-315cc436",
-        "fine.pay": "c-5c0d790e",
-        "insurance.policies.list": "c-53458c49",
-        "insurance.policies.buy": "c-3580d4db",
-        "insurance.claim.file": "c-6e9b27ff",
-        "chat.broadcast": "c-f00ac7db",
-        "chat.history": "c-577568d4",
-        "chat.send": "c-ae82a33c",
-        "citadel.build": "c-9ef68444",
-        "citadel.upgrade": "c-405acc8b",
-        "combat.attack": "c-d794a54e",
-        "combat.attack_planet": "c-6de81280",
-        "combat.deploy_fighters": "c-e93e9e03",
-        "combat.deploy_mines": "c-8f257d15",
-        "combat.lay_mines": "c-0ffa2675",
-        "combat.status": "c-16883017",
-        "combat.sweep_mines": "c-ffc37bd4",
-        "deploy.fighters.list": "c-eceb95cb",
-        "deploy.mines.list": "c-4acbf184",
-        "fighters.recall": "c-704bdffc",
-        "mines.recall": "c-f8b01015",
-        "corp.balance": "c-c475a076",
-        "corp.create": "c-c744e924",
-        "corp.deposit": "c-b58cba1c",
-        "corp.dissolve": "c-f167cd4d",
-        "corp.invite": "c-a0eae928",
-        "corp.join": "c-c6dda8d7",
-        "corp.kick": "c-10d978ac",
-        "corp.leave": "c-7883c9cd",
-        "corp.list": "c-1d4cb789",
-        "corp.roster": "c-5964305d",
-        "corp.statement": "c-43f4ea49",
-        "corp.status": "c-83efa7fc",
-        "corp.transfer_ceo": "c-affecf53",
-        "corp.withdraw": "c-abf06480",
-        "dock.status": "c-80147e66",
-        "hardware.buy": "c-cbed590f",
-        "hardware.list": "c-3c1b2709",
-        "mail.delete": "c-6cff2b73",
-        "mail.inbox": "c-14d25f84",
-        "mail.read": "c-ccaf2222",
-        "mail.send": "c-2fb1154c",
-        "move.autopilot.start": "c-689ad2d6",
-        "move.autopilot.status": "c-859a78a8",
-        "move.autopilot.stop": "c-27e9bc84",
-        "move.describe_sector": "c-67c843c4",
-        "move.pathfind": "c-d6f60a11",
-        "move.scan": "c-bf86cf53",
-        "move.transwarp": "c-8122c2b2",
-        "move.warp": "c-565371bf",
-        "nav.avoid.add": "c-d18949b4",
-        "nav.avoid.list": "c-970b6118",
-        "nav.avoid.remove": "c-f4e2f063",
-        "nav.avoid.set": "c-72b256ce",
-        "nav.bookmark.add": "c-c1d3b9fe",
-        "nav.bookmark.list": "c-400a97f8",
-        "nav.bookmark.remove": "c-6db2e8da",
-        "nav.bookmark.set": "c-dfeeaf64",
-        "news.get_feed": "c-cf086ab0",
-        "news.mark_feed_read": "c-8a361a46",
-        "news.read": "c-8fc15613",
-        "notes.list": "c-5a95f2b3",
-        "notice.ack": "c-d804795d",
-        "notice.list": "c-d3a7d767",
-        "planet.create": "c-cfb360fd",
-        "planet.deposit": "c-ecff4b75",
-        "planet.genesis": "c-c9a46541",
-        "planet.genesis_create": "c-09f221d2",
-        "planet.harvest": "c-90bd6193",
-        "planet.info": "c-afdf6954",
-        "planet.land": "c-7758f57b",
-        "planet.launch": "c-68847fa4",
-        "planet.market.buy_order": "c-3ba0d94d",
-        "planet.market.sell": "c-26a81f1c",
-        "planet.rename": "c-a6aabef0",
-        "planet.transfer_ownership": "c-a2955424",
-        "planet.withdraw": "c-d82aeca1",
-        "player.get_avoids": "c-249e43ad",
-        "player.get_bookmarks": "c-ced05c8b",
-        "player.get_notes": "c-89a7fa84",
-        "player.get_prefs": "c-86acc5eb",
-        "player.get_settings": "c-ea39b9bd",
-        "player.get_subscriptions": "c-3fd6bab8",
-        "player.get_topics": "c-7101b823",
-        "player.my_info": "c-d13891d4",
-        "player.rankings": "c-de1261d8",
-        "player.set_avoids": "c-3ebec8fa",
-        "player.set_bookmarks": "c-9c26f954",
-        "player.set_prefs": "c-2686a906",
-        "player.set_settings": "c-52ce7741",
-        "player.set_subscriptions": "c-ff920f57",
-        "player.set_topics": "c-c9f3e663",
-        "player.set_trade_account_preference": "c-b4beed80",
-        "port.describe": "c-8234a072",
-        "port.info": "c-26e917e6",
-        "port.rob": "c-4097760a",
-        "port.status": "c-d4ebcb69",
-        "sector.info": "c-d3d4281e",
-        "sector.scan": "c-0bd943e3",
-        "sector.scan.density": "c-933871f2",
-        "sector.search": "c-750ba3dd",
-        "sector.set_beacon": "c-3b76fdb5",
-        "session.disconnect": "c-b828e3f8",
-        "session.hello": "c-fe609b13",
-        "session.ping": "c-2d157f2a",
-        "player.ping": "c-51b37e2c",
-        "sys.notice.create": "c-a12ace36",
-        "system.disconnect": "c-14e6cd1c",
-        "ship.claim": "c-42545fc1",
-        "ship.info": "c-a0621cbf",
-        "ship.inspect": "c-0e508d17",
-        "ship.jettison": "c-88d0530d",
-        "ship.list": "c-fa49f931",
-        "ship.rename": "c-5c991345",
-        "ship.repair": "c-24746817",
-        "ship.reregister": "c-16cd78ac",
-        "ship.self_destruct": "c-3c17acaf",
-        "ship.sell": "c-03ce7a4f",
-        "ship.status": "c-4e928477",
-        "ship.transfer": "c-7d6f4f0e",
-        "ship.transfer_cargo": "c-640f7fb6",
-        "ship.upgrade": "c-0333a459",
-        "shipyard.list": "c-59b5989f",
-        "shipyard.sell": "c-bccc4e82",
-        "shipyard.upgrade": "c-2580b1ce",
-        "stock.buy": "c-d2deb33f",
-        "stock.dividend.set": "c-76e84eee",
-        "stock.exchange.list_stocks": "c-08362c8c",
-        "stock.exchange.orders.cancel": "c-51e337ba",
-        "stock.exchange.orders.create": "c-d66e4bb2",
-        "stock.ipo.register": "c-0ed9e7b7",
-        "stock.portfolio.list": "c-14c3e786",
-        "subscribe.add": "c-af44cd12",
-        "subscribe.catalog": "c-d0af7781",
-        "subscribe.list": "c-95f1c32b",
-        "subscribe.remove": "c-66d17113",
-        "tavern.barcharts.get_prices_summary": "c-a9dac6f0",
-        "tavern.deadpool.place_bet": "c-6440f94b",
-        "tavern.dice.play": "c-9f689e59",
-        "tavern.graffiti.post": "c-948db5ed",
-        "tavern.highstakes.play": "c-bf14cd3f",
-        "tavern.loan.pay": "c-4eaaa2ad",
-        "tavern.loan.take": "c-444c3b3a",
-        "tavern.lottery.buy_ticket": "c-77ce02e8",
-        "tavern.lottery.status": "c-b34f4a28",
-        "tavern.raffle.buy_ticket": "c-6695a66e",
-        "tavern.round.buy": "c-36ae6bf2",
-        "tavern.rumour.get_hint": "c-a1f4bf6a",
-        "tavern.trader.buy_password": "c-07cb4742",
-        "trade.accept": "c-07bbfb60",
-        "trade.buy": "c-fe32b639",
-        "trade.cancel": "c-5a370d9a",
-        "trade.history": "c-6d6019eb",
-        "trade.jettison": "c-4e048add",
-        "trade.offer": "c-f6ec4ca0",
-        "trade.port_info": "c-a195254d",
-        "trade.quote": "c-69be229b",
-        "trade.sell": "c-1b7536b4"
+        "system.cmd_list": "c-138dfaf1",
+        "admin.notice": "c-a4178b59",
+        "admin.shutdown_warning": "c-bea5adcb",
+        "auth.login": "c-25ec3112",
+        "auth.logout": "c-80b412b3",
+        "auth.mfa.totp.verify": "c-de80288b",
+        "auth.register": "c-c8ecc701",
+        "auth.refresh": "c-932e09c2",
+        "bank.balance": "c-b8279786",
+        "bank.deposit": "c-5c3d7c94",
+        "bank.history": "c-4202b2fa",
+        "bank.leaderboard": "c-a20bac3c",
+        "bank.transfer": "c-d5b79902",
+        "bank.withdraw": "c-c5f4a9f4",
+        "bounty.list": "c-fe8da2d0",
+        "bounty.post_federation": "c-a7d38f7a",
+        "bounty.post_hitlist": "c-9e03d3db",
+        "bulk.execute": "c-61feec4c",
+        "fine.list": "c-32d6f424",
+        "fine.pay": "c-dce638fb",
+        "insurance.policies.list": "c-7683e7b8",
+        "insurance.policies.buy": "c-fd153420",
+        "insurance.claim.file": "c-49b2d22c",
+        "chat.broadcast": "c-38dcbce1",
+        "chat.history": "c-9fdfb0da",
+        "chat.send": "c-abb928f7",
+        "citadel.build": "c-a33f2584",
+        "citadel.upgrade": "c-a247944e",
+        "combat.attack": "c-983624d7",
+        "combat.attack_planet": "c-e4563251",
+        "combat.deploy_fighters": "c-96bd8867",
+        "combat.deploy_mines": "c-6da36054",
+        "combat.lay_mines": "c-b536a568",
+        "combat.status": "c-71c553ec",
+        "combat.sweep_mines": "c-f2e8515a",
+        "deploy.fighters.list": "c-574a2837",
+        "deploy.mines.list": "c-edfc28a1",
+        "fighters.recall": "c-cbe8d200",
+        "mines.recall": "c-da06194b",
+        "corp.balance": "c-d04f569f",
+        "corp.create": "c-65c72199",
+        "corp.deposit": "c-020ef6fa",
+        "corp.dissolve": "c-c6a01350",
+        "corp.invite": "c-ce7f19ee",
+        "corp.join": "c-75ad935b",
+        "corp.kick": "c-e0517365",
+        "corp.leave": "c-4de28ee6",
+        "corp.list": "c-1ec2e061",
+        "corp.roster": "c-7f1a082e",
+        "corp.statement": "c-02ad7893",
+        "corp.status": "c-196630cc",
+        "corp.transfer_ceo": "c-4d8627b6",
+        "corp.withdraw": "c-d9240f20",
+        "dock.status": "c-1be51440",
+        "hardware.buy": "c-8bb7a215",
+        "hardware.list": "c-7986d462",
+        "mail.delete": "c-a7142111",
+        "mail.inbox": "c-283d90d5",
+        "mail.read": "c-7bc4ba4e",
+        "mail.send": "c-45136e87",
+        "move.autopilot.start": "c-a35d2585",
+        "move.autopilot.status": "c-927f18b3",
+        "move.autopilot.stop": "c-ae6e04f7",
+        "move.describe_sector": "c-98e9134b",
+        "move.pathfind": "c-4de69adb",
+        "move.scan": "c-3173d1d3",
+        "move.transwarp": "c-48da0eb9",
+        "move.warp": "c-cff3274b",
+        "nav.avoid.add": "c-5882cc7f",
+        "nav.avoid.list": "c-b58e3dbc",
+        "nav.avoid.remove": "c-c3665849",
+        "nav.avoid.set": "c-73baf48f",
+        "nav.bookmark.add": "c-10efcdda",
+        "nav.bookmark.list": "c-e137ef0e",
+        "nav.bookmark.remove": "c-504e3149",
+        "nav.bookmark.set": "c-2c42894f",
+        "news.get_feed": "c-57b68dcd",
+        "news.mark_feed_read": "c-e39ea6eb",
+        "news.read": "c-c85e8045",
+        "notes.list": "c-304091cd",
+        "notice.ack": "c-1e00b083",
+        "notice.list": "c-ff9a8a8d",
+        "planet.create": "c-acdfcf36",
+        "planet.deposit": "c-1f52de04",
+        "planet.genesis": "c-f1b8d836",
+        "planet.genesis_create": "c-a38a2c60",
+        "planet.harvest": "c-404d90da",
+        "planet.info": "c-984e5dd5",
+        "planet.land": "c-29e9b11c",
+        "planet.launch": "c-4d8b0fc1",
+        "planet.market.buy_order": "c-ea1c0a93",
+        "planet.market.sell": "c-e702352a",
+        "planet.rename": "c-a1f7c1f1",
+        "planet.transfer_ownership": "c-54b94015",
+        "planet.withdraw": "c-3af298cc",
+        "player.get_avoids": "c-77cec764",
+        "player.get_bookmarks": "c-948fd1a5",
+        "player.get_notes": "c-4c3366f5",
+        "player.get_prefs": "c-2532e783",
+        "player.get_settings": "c-e86044e9",
+        "player.get_subscriptions": "c-cf96866d",
+        "player.get_topics": "c-dd8cfa50",
+        "player.my_info": "c-3f1e1603",
+        "player.rankings": "c-d8ba9e0e",
+        "player.set_avoids": "c-3c466692",
+        "player.set_bookmarks": "c-44570542",
+        "player.set_prefs": "c-11f4798f",
+        "player.set_settings": "c-3f575594",
+        "player.set_subscriptions": "c-78434ad7",
+        "player.set_topics": "c-4c28dae2",
+        "player.set_trade_account_preference": "c-009efea1",
+        "port.describe": "c-27d5ac8e",
+        "port.info": "c-7e2014ae",
+        "port.rob": "c-c642323e",
+        "port.status": "c-c6dd4816",
+        "sector.info": "c-3842c8d9",
+        "sector.scan": "c-003b5a97",
+        "sector.scan.density": "c-1a9826c6",
+        "sector.search": "c-cf69ca0b",
+        "sector.set_beacon": "c-dd5e9ad7",
+        "session.disconnect": "c-db87d698",
+        "session.hello": "c-1839c469",
+        "session.ping": "c-064a8cb7",
+        "player.ping": "c-095958b4",
+        "sys.notice.create": "c-222db21d",
+        "system.disconnect": "c-001bb6d1",
+        "ship.claim": "c-783ccaae",
+        "ship.info": "c-cc1c07d7",
+        "ship.inspect": "c-7af408d6",
+        "ship.jettison": "c-55d14d83",
+        "ship.list": "c-4258f7a8",
+        "ship.rename": "c-af85f499",
+        "ship.repair": "c-2ac45043",
+        "ship.reregister": "c-c83c0ee1",
+        "ship.self_destruct": "c-0017e03d",
+        "ship.sell": "c-8bbbdc62",
+        "ship.status": "c-cec6b25d",
+        "ship.transfer": "c-4b8ddb2e",
+        "ship.transfer_cargo": "c-1f95e07f",
+        "ship.upgrade": "c-e13fd8e4",
+        "shipyard.list": "c-234658a8",
+        "shipyard.sell": "c-e37f0cca",
+        "shipyard.upgrade": "c-c5dd7df3",
+        "stock.buy": "c-62ea30f9",
+        "stock.dividend.set": "c-88cde100",
+        "stock.exchange.list_stocks": "c-338e5f89",
+        "stock.exchange.orders.cancel": "c-ad5b9e62",
+        "stock.exchange.orders.create": "c-8c78dcee",
+        "stock.ipo.register": "c-ea1bde0c",
+        "stock.portfolio.list": "c-8fe67feb",
+        "subscribe.add": "c-22a25e5d",
+        "subscribe.catalog": "c-6d81d90c",
+        "subscribe.list": "c-8df170a3",
+        "subscribe.remove": "c-b0466904",
+        "tavern.barcharts.get_prices_summary": "c-eb6558fc",
+        "tavern.deadpool.place_bet": "c-0ec03182",
+        "tavern.dice.play": "c-bd0044cf",
+        "tavern.graffiti.post": "c-d9ca2510",
+        "tavern.highstakes.play": "c-251142dc",
+        "tavern.loan.pay": "c-e2951a31",
+        "tavern.loan.take": "c-130bd16e",
+        "tavern.lottery.buy_ticket": "c-9e71b981",
+        "tavern.lottery.status": "c-2052cad9",
+        "tavern.raffle.buy_ticket": "c-34176149",
+        "tavern.round.buy": "c-f445fad0",
+        "tavern.rumour.get_hint": "c-2b76aac0",
+        "tavern.trader.buy_password": "c-3d7361e8",
+        "trade.accept": "c-2753caab",
+        "trade.buy": "c-303e06c2",
+        "trade.cancel": "c-0e0a7917",
+        "trade.history": "c-41e7d551",
+        "trade.jettison": "c-6e6bc647",
+        "trade.offer": "c-cc7e6d0a",
+        "trade.port_info": "c-6dec687b",
+        "trade.quote": "c-4555cda3",
+        "trade.sell": "c-37673364"
     },
     "recent_sectors": [
-        2
+        965,
+        837
     ],
     "pending_commands": {},
     "port_trade_blacklist": [],
@@ -2323,31 +2322,31 @@
     "current_path": [],
     "last_action_result": {
         "status": "ok",
-        "command": "sector.info",
-        "request_id": "c-be52ccb7",
-        "response_type": "sector.info",
-        "ts": "2026-01-11T13:58:27Z"
+        "command": "move.warp",
+        "request_id": "c-1fb909ff",
+        "response_type": "move.result",
+        "ts": "2026-01-11T13:02:16Z"
     },
     "last_quotes": {
-        "1_EQU": {
-            "port_id": 1,
+        "369_EQU": {
+            "port_id": 369,
             "commodity": "EQU",
-            "unit_price": 240.0,
-            "timestamp": "2026-01-11T13:03:25Z"
+            "unit_price": 238.0,
+            "timestamp": "2026-01-11T13:02:11Z"
         },
-        "1_ORE": {
-            "port_id": 1,
+        "369_ORE": {
+            "port_id": 369,
             "commodity": "ORE",
-            "unit_price": 121.0,
-            "timestamp": "2026-01-11T13:03:25Z"
+            "unit_price": 105.0,
+            "timestamp": "2026-01-11T13:02:12Z"
         },
-        "1_ORG": {
-            "port_id": 1,
+        "369_ORG": {
+            "port_id": 369,
             "commodity": "ORG",
-            "unit_price": 144.0,
-            "timestamp": "2026-01-11T13:03:29Z"
+            "unit_price": 182.0,
+            "timestamp": "2026-01-11T13:02:15Z"
         }
     },
-    "current_qa_objective": "test planet landing",
+    "current_qa_objective": "test mining operations",
     "needs_bootstrap": false
 }

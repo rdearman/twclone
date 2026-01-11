@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_trade.buy_401",
+    "first_seen": "20260111_130327_347",
+    "command": "trade.buy",
+    "error_code": 401,
+    "error_message": "Not authenticated"
+}

@@ -51,9 +51,6 @@
 #include "db/sql_driver.h"
 
 typedef int (*command_handler_fn)(client_ctx_t *ctx, json_t *root);
-#define CMD_FLAG_DEBUG_ONLY 1
-#define CMD_FLAG_HIDDEN     2
-#define CMD_FLAG_AUTH_FREE  4
 
 typedef struct {
   const char *name;
@@ -837,15 +834,17 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
             }
 #endif
 
-          /* Central auth gate */
-          if (!(k_command_registry[i].flags & CMD_FLAG_AUTH_FREE)
-              && ctx->player_id <= 0)
+          /* AUTH GATE — SINGLE SOURCE OF TRUTH */
+          if (!(k_command_registry[i].flags & CMD_FLAG_AUTH_FREE))
             {
-              send_response_error (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   "Not authenticated");
-              return -1;
+              if (ctx->player_id <= 0)
+                {
+                  send_response_error (ctx,
+                                       root,
+                                       ERR_NOT_AUTHENTICATED,
+                                       "Not authenticated");
+                  return -1;
+                }
             }
 
           return k_command_registry[i].handler (ctx, root);
@@ -867,6 +866,7 @@ process_message (client_ctx_t *ctx, json_t *root)
                            "Database connection error"); return;
     }
   g_ctx_for_send = ctx;
+  ctx->responses_sent = 0;
   json_t *cmd = json_object_get (root, "command");
   json_t *evt = json_object_get (root, "event");
   json_t *jmeta = json_object_get (root, "meta");

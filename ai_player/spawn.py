@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from datetime import datetime, timezone
-DEFAULT_TIMEOUT = 10.0
+DEFAULT_TIMEOUT = 30.0
 
 
 def send_command(sock, cmd):

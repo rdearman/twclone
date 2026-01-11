@@ -28,6 +28,11 @@ extern pthread_mutex_t g_clients_mu;
 /* Returns 0 if delivered/handled, -1 if command not found. */
 int server_dispatch_command (client_ctx_t *ctx, json_t *root);
 
+#define CMD_FLAG_DEBUG_ONLY     (1 << 0)
+#define CMD_FLAG_HIDDEN         (1 << 1)
+#define CMD_FLAG_AUTH_REQUIRED   (1 << 2)
+#define CMD_FLAG_AUTH_FREE       (1 << 3)
+
 /* Returns 0 if something was delivered; -1 if no online client for player_id.
    Does NOT steal 'data'. */
 int server_deliver_to_player (int player_id, const char *event_type,

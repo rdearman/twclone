@@ -428,16 +428,18 @@ class Planner:
                     return None
                 
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
-                # port_commodities = [c.get("symbol") for c in port_info.get("commodities", [])]
-                port_commodities = [c.get("commodity") for c in port_info.get("commodities", [])]
                 
                 price_cache = current_state.get("price_cache", {}).get(str(port_id), {"buy": {}, "sell": {}})
 
-                for commodity_symbol in port_commodities:
-                    if not (price_cache["buy"].get(commodity_symbol) is not None and
-                            price_cache["sell"].get(commodity_symbol) is not None):
-                        logger.info(f"Calling trade.quote for unquoted commodity: {commodity_symbol}")
-                        return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_symbol, "quantity": 1}}
+                for c in port_info.get("commodities", []):
+                    c_code = canon_commodity(c.get("commodity"))
+                    if not c_code: continue
+
+                    # Smart selection: quote if missing EITHER buy OR sell price
+                    if price_cache["buy"].get(c_code) is None or \
+                       price_cache["sell"].get(c_code) is None:
+                        logger.info(f"Calling trade.quote for unquoted commodity: {c_code}")
+                        return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": c_code, "quantity": 1}}
                 
                 # If we reach here, all commodities are quoted, but _survey_complete returned False
                 # This should ideally not happen if _survey_complete is correct.
@@ -504,13 +506,14 @@ class Planner:
         
         # 1. Check Player Info - CRITICAL: Must fetch before anything else
         player_info = current_state.get("player_info")
-        if not player_info or "player" not in player_info:
-            logger.info("Bootstrap: Fetching player info (missing).")
+        player_data = player_info.get("player", {}) if player_info else {}
+        
+        # If player info is missing or incomplete (missing ship_id), fetch it.
+        if not player_info or "player" not in player_info or "ship_id" not in player_data:
+            logger.info("Bootstrap: Fetching player info (missing or incomplete).")
             return {"command": "player.my_info", "data": {}}
         
         # 1b. Check if player has a ship - if not, let LLM handle acquiring one
-        # (Skip bootstrap ship claiming - too complex without being docked)
-        player_data = player_info.get("player", {})
         ship_id = player_data.get("ship_id", 0)
         if ship_id > 0:
             # 2. Check Ship Info - FIX: Check for 'id' to ensure it's not missing or placeholder
@@ -980,13 +983,14 @@ class Planner:
             if not c_code: continue
             
             # Check if we have EITHER a buy OR sell price (quotes usually give both)
+            # Use 'is not None' because 0.0 is a valid (though unlikely) float price.
             has_buy = price_cache.get("buy", {}).get(c_code) is not None
             has_sell = price_cache.get("sell", {}).get(c_code) is not None
             
-            if not (has_buy or has_sell):
-                return False # Found a commodity with no price data
+            if not (has_buy and has_sell): # Requirement: MUST have both prices for a complete survey
+                return False # Found a commodity with incomplete price data
 
-        return True # All commodities have at least one price
+        return True # All commodities have both prices
 
     def _can_sell(self, current_state):
         """Checks if there is any profitable commodity to sell."""
@@ -1218,8 +1222,10 @@ class Planner:
                          candidates = ["ORE", "ORG", "EQU"]
                     
                     for c in candidates:
-                        # If missing EITHER buy OR sell price, quote it
+                        # Smart selection: quote if missing EITHER buy OR sell price
+                        # Use 'is None' to correctly handle float prices
                         if buy_cache.get(c) is None or sell_cache.get(c) is None:
+                            logger.info(f"Generated quote commodity candidate: {c}")
                             return c
                 
                 # Fallback: Random
