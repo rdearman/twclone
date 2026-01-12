@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 # You might want to move these to your config.json eventually
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "llama3.1"
-REQUEST_TIMEOUT = 300  # 5 minutes
+DEFAULT_MODEL = "phi3:latest"
+REQUEST_TIMEOUT = 600  # 10 minutes
 
 def parse_llm_json(response_text):
     """

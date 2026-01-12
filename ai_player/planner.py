@@ -46,90 +46,6 @@ class Planner:
 
     # --- Deterministic Trade Rules (NEW) ---
 
-    def on_quote_ok(self, resp):
-        """
-        Deterministic rule: If quote is good and we have space/credits, buy 1 unit immediately.
-        """
-        data = resp.get("data", {})
-        port_id = data.get("port_id")
-        commodity = canon_commodity(data.get("commodity"))
-        buy_price = data.get("buy_price")
-        
-        if not all([port_id, commodity, buy_price]):
-            return None
-
-        # Store quote in state
-        self.state_manager.update_last_quote(port_id, commodity, buy_price, resp.get("ts"))
-
-        # Check conditions for immediate buy
-        current_state = self.state_manager.get_all()
-        free_holds = self._get_free_holds(current_state)
-        
-        player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
-        try:
-            credits = float(player_credits_str)
-        except (ValueError, TypeError):
-            credits = 0.0
-
-        # Conservative check: Price + 10% buffer for fees? (Though fees are usually on sell)
-        # Just check if we can afford 1 unit.
-        if free_holds >= 1 and credits >= buy_price:
-            logger.info(f"Deterministic Rule: Quote OK for {commodity} @ {buy_price}. Triggering immediate BUY 1.")
-            
-            # Construct minimal valid trade.buy payload
-            cmd = {
-                "command": "trade.buy",
-                "data": {
-                    "port_id": port_id,
-                    "sector_id": current_state.get("player_location_sector"),
-                    "account": 0,
-                    "items": [{"commodity": commodity, "quantity": 1}],
-                    "idempotency_key": generate_idempotency_key()
-                }
-            }
-            return cmd
-        
-        return None
-
-    def on_buy_ok(self, resp):
-        """
-        Deterministic rule: After successful buy, immediate sell is gated by 'trade_smoketest'.
-        Default: Do NOT sell immediately to avoid guaranteed loss.
-        """
-        if not self.config.get("trade_smoketest", False):
-            return None
-
-        # Extract what we bought
-        data = resp.get("data", {})
-        port_id = data.get("port_id")
-        lines = data.get("lines", [])
-        
-        if not port_id or not lines:
-            return None
-            
-        # Just take the first item to sell back
-        item = lines[0]
-        commodity = canon_commodity(item.get("commodity"))
-        
-        if not commodity:
-            return None
-
-        current_state = self.state_manager.get_all()
-        
-        logger.info(f"Deterministic Rule (Smoketest): Buy OK for {commodity}. Triggering immediate SELL 1.")
-        
-        cmd = {
-            "command": "trade.sell",
-            "data": {
-                "port_id": port_id,
-                "sector_id": current_state.get("player_location_sector"),
-                "account": 0,
-                "items": [{"commodity": commodity, "quantity": 1}],
-                "idempotency_key": generate_idempotency_key()
-            }
-        }
-        return cmd
-
     # --- Tactical (Goal) Layer (NEW/FIXED) ---
 
     def _find_port_in_sector(self, current_state, sector_id):
@@ -146,7 +62,7 @@ class Planner:
         sector_data = current_state.get("sector_data", {}).get(str(sector_id), {})
         ports = sector_data.get("ports", [])
         if ports:
-            return ports[0].get("id") # Return first port ID
+            return ports[0].get("port_id") or ports[0].get("id")
 
         logger.warning(f"Could not find port_id in sector {sector_id}")
         return None
@@ -245,7 +161,8 @@ class Planner:
                     return {
                         "command": "move.pathfind", 
                         "data": {
-                            "to": target_sector
+                            "from_sector_id": current_sector,
+                            "to_sector_id": target_sector
                         }
                     }
 
@@ -306,11 +223,21 @@ class Planner:
                 
                 # Validation: Check if port actually trades this commodity
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
-                traded_commodities = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
+                commodities_info = port_info.get("commodities", [])
+                traded_commodities = [canon_commodity(c.get("commodity")) for c in commodities_info]
 
                 if traded_commodities and commodity_to_sell not in traded_commodities:
                      logger.warning(f"Goal 'sell' failed: Port {port_id} does not trade {commodity_to_sell}.")
                      return None
+                
+                # Check if port is full
+                target_comm_info = next((c for c in commodities_info if canon_commodity(c.get("commodity")) == commodity_to_sell), None)
+                if target_comm_info:
+                    current_qty = target_comm_info.get("quantity", 0)
+                    max_qty = target_comm_info.get("max_quantity", 0)
+                    if current_qty >= max_qty and max_qty > 0:
+                        logger.warning(f"Goal 'sell' failed: Port {port_id} is FULL of {commodity_to_sell} ({current_qty}/{max_qty}).")
+                        return None
 
                 port_id_str = str(port_id)
                 sell_price = current_state.get("price_cache", {}).get(port_id_str, {}).get("sell", {}).get(commodity_to_sell)
@@ -578,7 +505,11 @@ class Planner:
         # --- 0. Bootstrap Check ---
         bootstrap_cmd = self.ensure_minimum_world_state(current_state)
         if bootstrap_cmd:
-            return bootstrap_cmd
+            if self._is_command_ready(bootstrap_cmd["command"], current_state.get("command_retry_info", {})):
+                return bootstrap_cmd
+            else:
+                logger.debug(f"Bootstrap command '{bootstrap_cmd['command']}' is on cooldown. Waiting.")
+                return None
         
         # --- Check for turns remaining ---
         player_turns_remaining = (current_state.get("player_info") or {}).get("player", {}).get("turns_remaining")
@@ -590,8 +521,12 @@ class Planner:
 
         invariant_command = self._check_invariants(current_state)
         if invariant_command:
-            # Invariant commands are simple and don't need the full payload builder
-            return invariant_command
+            if self._is_command_ready(invariant_command["command"], current_state.get("command_retry_info", {})):
+                # Invariant commands are simple and don't need the full payload builder
+                return invariant_command
+            else:
+                logger.debug(f"Invariant command '{invariant_command['command']}' is on cooldown. Waiting.")
+                return None
 
         # --- 1.6 Tactical Override: Mandatory Survey & Sell ---
         # Prioritize local port interactions over long-distance travel goals.
@@ -759,8 +694,12 @@ class Planner:
             if current_sector_data.get("has_port"):
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector_id))
                 if not port_info:
-                    logger.info(f"Invariant check: At port in sector {current_sector_id} but missing port info. Fetching.")
-                    return {"command": "trade.port_info", "data": {}, "is_invariant": True}
+                    retry_info = current_state.get("command_retry_info", {})
+                    if self._is_command_ready("trade.port_info", retry_info):
+                        logger.info(f"Invariant check: At port in sector {current_sector_id} but missing port info. Fetching.")
+                        return {"command": "trade.port_info", "data": {}, "is_invariant": True}
+                    else:
+                        logger.debug("trade.port_info is on cooldown, skipping invariant.")
 
             # Check for missing schema for sector.scan.density if we have the scanner
             if (current_state.get("has_density_scanner") and 
@@ -904,12 +843,7 @@ class Planner:
             return True
 
         info = retry_info.get(command_name, {})
-        failures = info.get("failures", 0)
         
-        if failures >= self.state_manager.config.get("max_retries_per_command", 3):
-            logger.debug("Command '%s' is blacklisted (failed %d times).", command_name, failures)
-            return False
-            
         next_retry_time = info.get("next_retry_time", 0)
         if time.time() < next_retry_time:
             logger.debug("Command '%s' is on cooldown.", command_name)
@@ -1391,8 +1325,14 @@ class Planner:
         port_sell_prices = current_state.get("price_cache", {}).get(port_id, {}).get("sell", {})
 
         best_commodity = None
-        highest_profit_margin = 0
+        highest_profit_margin = -999999 # Allow for negative profit (loss)
         best_sell_price = 0
+        
+        # Calculate holds full ratio
+        capacity = max(1, current_state.get("ship_cargo_capacity", 1))
+        current_vol = current_state.get("ship_current_cargo_volume", 0)
+        holds_full_ratio = current_vol / capacity
+        allow_loss = holds_full_ratio > 0.8
 
         for item in cargo_list:
             commodity_raw = item.get("commodity")
@@ -1409,7 +1349,11 @@ class Planner:
                     # If we know the purchase price, calculate profit margin
                     if purchase_price is not None:
                         profit_margin = sell_price - purchase_price
-                        # ALLOW SELLING AT ZERO PROFIT OR BETTER
+                        
+                        # Only allow loss if holds are full
+                        if profit_margin < 0 and not allow_loss:
+                            continue
+
                         if profit_margin >= highest_profit_margin:
                             highest_profit_margin = profit_margin
                             best_commodity = commodity
@@ -1423,6 +1367,8 @@ class Planner:
         if best_commodity:
             if highest_profit_margin > 0:
                 logger.info(f"Found profitable trade: sell {best_commodity} for {highest_profit_margin} profit per unit.")
+            elif highest_profit_margin < 0 and highest_profit_margin > -999999:
+                logger.warning(f"Holds full ({holds_full_ratio:.1%}). Selling {best_commodity} at a LOSS of {abs(highest_profit_margin)} per unit to clear space.")
             else:
                 logger.info(f"Found commodity to sell: {best_commodity} at price {best_sell_price} (purchase price unknown).")
         

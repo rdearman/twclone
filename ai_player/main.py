@@ -220,10 +220,44 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
 
     # Create a list of "Interesting Locations" to help the LLM navigate
     known_ports = []
+    known_planets = [] # NEW: Track known planets
+    
     for sector_id, port_data in all_port_info.items():
         known_ports.append(int(sector_id))
     
+    # Scan all sector data for planets
+    for sector_id, data in all_sector_data.items():
+        if data.get("has_planet"):
+            known_planets.append(int(sector_id))
+    
     filtered_state["known_port_sectors"] = sorted(known_ports)
+    filtered_state["known_planet_sectors"] = sorted(list(set(known_planets))) # NEW: Expose to LLM
+
+    # --- NEW: Market Intelligence (Best Prices Globally) ---
+    market_intel = {}
+    price_cache = game_state.get("price_cache", {})
+    
+    for sector_id_str, port_data in all_port_info.items():
+        p_id_str = str(port_data.get("port_id"))
+        if p_id_str not in price_cache: continue
+        
+        prices = price_cache[p_id_str]
+        for comm in ["ORE", "ORG", "EQU"]:
+            if comm not in market_intel:
+                market_intel[comm] = {"min_buy": None, "max_sell": None}
+            
+            bp = prices.get("buy", {}).get(comm)
+            if bp is not None:
+                if market_intel[comm]["min_buy"] is None or bp < market_intel[comm]["min_buy"]["price"]:
+                    market_intel[comm]["min_buy"] = {"price": bp, "sector": int(sector_id_str)}
+            
+            sp = prices.get("sell", {}).get(comm)
+            if sp is not None:
+                if market_intel[comm]["max_sell"] is None or sp > market_intel[comm]["max_sell"]["price"]:
+                    market_intel[comm]["max_sell"] = {"price": sp, "sector": int(sector_id_str)}
+    
+    filtered_state["market_intelligence"] = market_intel
+    # ------------------------------------------------------
 
     # Bootstrap check
     if not all_known_sectors:
@@ -247,10 +281,16 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     # -------------------------------------------------
 
     if current_sector_details:
+        ships = current_sector_details.get("ships_present") or current_sector_details.get("ships") or []
+        my_ship_id = state_manager.get("ship_info", {}).get("id")
+        has_other_ships = any(s.get("ship_id") != my_ship_id and s.get("id") != my_ship_id for s in ships)
+
         filtered_state["current_sector_info"] = {
             "sector_id": current_sector_details.get("sector_id"),
             "name": current_sector_details.get("name"),
-            "has_port": current_sector_details.get("has_port", False)
+            "has_port": current_sector_details.get("has_port", False),
+            "has_planet": current_sector_details.get("has_planet", False),
+            "has_other_ships": has_other_ships
         }
         if current_sector_details.get("has_port"):
             filtered_state["has_port_in_current_sector"] = True
@@ -338,6 +378,7 @@ You may output a plan consisting only of the following goal types:
 ## HARD RULES (MUST FOLLOW)
 
 - If `scanned_current_sector` is true, you MUST NOT propose "scan: density". You MUST propose "goto:".
+- If `has_port`, `has_planet`, and `has_other_ships` are all FALSE for the current sector, you MUST NOT propose "buy:", "sell:", "planet:", or "combat:" actions. You MUST propose "goto: <sector_id>" to find a more interesting sector.
 - You may select ANY known sector for "goto:", not just adjacent ones.
 - You MUST select commodities ONLY from `valid_commodity_names`.
 - Do NOT trade SLAVES, WEAPONS, or DRUGS unless your alignment is Evil (check player_info).
@@ -395,7 +436,15 @@ NOW OUTPUT YOUR PLAN AS A JSON OBJECT AND NOTHING ELSE.
 PROMPT_EXPLORE = """You are a master space explorer. Your goal is to find new sectors and ports.
 """ + PROMPT_CONTRACT_BLOCK
 
-PROMPT_STRATEGY = """You are a master space trader. Your goal is to make profit.
+PROMPT_STRATEGY = """You are a master space trader. Your goal is to maximize profit by "flipping" commodities.
+The most effective strategy is:
+1. Identify a port selling a commodity at a LOW price and another port buying it at a HIGH price.
+2. Travel to the low-price port and fill your holds.
+3. Travel to the high-price port and sell everything.
+4. Repeat this "flip" between the two ports as long as it remains profitable.
+
+Analyze the `profit_loss` in `last_action_result`. A negative value doesn't mean you should avoid the port; it means you need to find a DIFFERENT port that pays more for that commodity.
+Use your knowledge of `known_port_sectors` and `market_intelligence` to find the best buy/sell pairs.
 """ + PROMPT_CONTRACT_BLOCK
 
 PROMPT_QA_OBJECTIVE = """You are a QA testing bot for a space game. Your current high-level objective is to "{qa_objective}".
@@ -414,36 +463,59 @@ QA_OBJECTIVES = [
 def _get_fallback_plan(game_state, state_manager):
     """
     Provides a simple fallback plan when the LLM fails to respond.
-    Prioritizes selling cargo, then buying if empty, then exploration.
+    Prioritizes surveying, then selling cargo, then buying if empty, then exploration.
     """
     import random
     
     logger.info("Generating fallback plan (LLM unavailable)")
 
-    # 1. Sell Logic: If we have cargo, try to sell it
+    current_sector = game_state.get("player_location_sector")
+    sector_data = game_state.get("sector_data", {}).get(str(current_sector), {})
+    
+    # 0. Survey Logic: If we are at a port and haven't surveyed it, DO IT.
+    if sector_data.get("has_port"):
+        port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector))
+        if not port_info or not port_info.get("commodities"):
+            logger.info("Fallback: At an unsurveyed port. Setting goal to SURVEY.")
+            return ["survey: port"]
+
     ship_info = game_state.get("ship_info", {})
     cargo = ship_info.get("cargo", [])
     
     # Filter for sellable items (quantity > 0)
     sellable_items = [item for item in cargo if item.get("quantity", 0) > 0]
     
+    # 1. Sell Logic: If we have cargo, find where to sell it
     if sellable_items:
-        # Pick the first sellable item
-        item = sellable_items[0]
-        commodity = canon_commodity(item.get("commodity"))
-        if commodity:
-            logger.info(f"Fallback: Cargo detected ({commodity}). Setting goal to SELL.")
-            return [f"sell: {commodity}"]
+        # Check if current port buys it
+        if sector_data.get("has_port"):
+            port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+            for item in sellable_items:
+                commodity = canon_commodity(item.get("commodity"))
+                traded_comms = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
+                if commodity in traded_comms:
+                    logger.info(f"Fallback: At a port that buys {commodity}. Setting goal to SELL.")
+                    return [f"sell: {commodity}"]
+        
+        # Current port doesn't buy it or no port here. Find nearest port that DOES buy it.
+        best_dest = None
+        for item in sellable_items:
+            commodity = canon_commodity(item.get("commodity"))
+            for s_id, p_info in game_state.get("port_info_by_sector", {}).items():
+                traded = [canon_commodity(c.get("commodity")) for c in p_info.get("commodities", [])]
+                if commodity in traded:
+                    # Found a port that buys it! 
+                    # For now, just pick the first one found. TODO: Actual distance check.
+                    best_dest = int(s_id)
+                    logger.info(f"Fallback: Found port that buys {commodity} in sector {best_dest}. Going there.")
+                    return [f"goto: {best_dest}", f"sell: {commodity}"]
 
-    # 2. Buy Logic: If we have space and credits, try to buy something 
-    # Only if we are at a port to avoid infinite loop of trying to buy in space
-    current_sector = game_state.get("player_location_sector")
-    sector_data = game_state.get("sector_data", {}).get(str(current_sector), {})
-    
+    # 2. Buy Logic: If we have space and credits, and are at a port, buy something
     if sector_data.get("has_port"):
         credits = float(game_state.get("player_info", {}).get("player", {}).get("credits", 0))
-        # Simple check: > 100 credits and some space
-        if credits > 100:
+        holds_free = ship_info.get("holds", 0) - sum(i.get("quantity", 0) for i in cargo)
+        
+        if credits > 100 and holds_free > 0:
              port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector))
              if port_info and port_info.get("commodities"):
                  # Pick a random commodity traded at this port
@@ -457,7 +529,21 @@ def _get_fallback_plan(game_state, state_manager):
              logger.info("Fallback: At port with credits. Setting goal to BUY ORE (default).")
              return ["buy: ORE"]
 
-    # 3. Exploration Logic (Existing)
+    # 3. Intelligence Logic: If empty, go to the nearest unsurveyed port
+    unsurveyed_ports = []
+    for s_id, p_info in game_state.get("port_info_by_sector", {}).items():
+        # Check if we have prices for all commodities at this port
+        p_id_str = str(p_info.get("port_id"))
+        prices = game_state.get("price_cache", {}).get(p_id_str, {}).get("buy", {})
+        if not prices: # Simplified: if no buy prices, it's unsurveyed
+            unsurveyed_ports.append(int(s_id))
+    
+    if unsurveyed_ports:
+        target = random.choice(unsurveyed_ports)
+        logger.info(f"Fallback: Moving to unsurveyed port in sector {target}")
+        return [f"goto: {target}"]
+
+    # 4. Exploration Logic (Existing)
     adj = sector_data.get("adjacent_sectors") or sector_data.get("adjacent") or []
     
     # Extract adjacent sector IDs
@@ -599,7 +685,7 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
         valid_comms = set(c.upper() for c in filtered_game_state.get("valid_commodity_names", []))
         can_trade = filtered_game_state.get("can_trade_at_current_location", False)
         
-        goal_pattern = re.compile(r'^(goto|buy|sell|scan)\s*:\s*(.+)$', re.IGNORECASE)
+        goal_pattern = re.compile(r'^(goto|buy|sell|scan|planet|combat)\s*:\s*(.+)$', re.IGNORECASE)
 
         for goal in raw_plan:
             if not isinstance(goal, str): continue
@@ -643,6 +729,14 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
             elif verb == "scan":
                 if "density" in arg.lower():
                     validated_plan.append("scan: density")
+
+            elif verb == "planet":
+                if arg.lower() in ("land", "info"):
+                    validated_plan.append(f"planet: {arg.lower()}")
+            
+            elif verb == "combat":
+                if arg.lower() == "attack":
+                     validated_plan.append("combat: attack")
             
             else:
                 logger.debug(f"Skipping unknown verb: {verb}")
@@ -828,7 +922,7 @@ def main(config_path="config.json"):
     # --- Setup Logging from Config ---
     setup_logging(config)
 
-    delay = random.uniform(0, 30)
+    delay = random.uniform(0, 180)
     print(f"Staggering start: waiting {delay:.2f}s...")
     time.sleep(delay)    
     
@@ -873,6 +967,31 @@ def main(config_path="config.json"):
                 last_heartbeat = time.time()
 
             game_state = state_manager.get_all() # Always get the freshest state here
+
+            # --- NEW: Check if a deterministic rule already sent a command ---
+            if state_manager.get("command_sent_in_response_loop"):
+                state_manager.set("command_sent_in_response_loop", False)
+                logger.info("Skipping planner turn because a deterministic rule already sent a command.")
+                time.sleep(0.5)
+                continue
+            # -----------------------------------------------------------------
+
+            # 3. Handle Heartbeat (Ping)
+            if time.time() - last_heartbeat > 20:
+                logger.debug("Sending ping to keep connection alive.")
+                idemp = str(uuid.uuid4())
+                ping_cmd = {
+                    "id": f"c-ping-{idemp[:8]}",
+                    "command": "player.ping",
+                    "data": {},
+                    "meta": {
+                        "client_version": config.get("client_version"),
+                        "idempotency_key": idemp,
+                        "session_token": game_state.get("session_id")
+                    }
+                }
+                game_conn.send_command(ping_cmd)
+                last_heartbeat = time.time()
 
             # 1. Handle Connection & Authentication
             if not game_conn.sock:
@@ -991,11 +1110,13 @@ def main(config_path="config.json"):
                         state_manager.set("strategy_plan", new_plan)
                         strategy_plan = new_plan
                     else:
-                        logger.warning(f"LLM failed to provide a valid plan for QA Objective '{current_qa_objective}'. Clearing objective and plan.")
-                        state_manager.set("current_qa_objective", None) # Clear objective to pick a new one
-                        state_manager.set("strategy_plan", []) # Clear plan
-                        time.sleep(2) # Wait a moment before retrying
-                        continue
+                        logger.warning(f"LLM failed to provide a valid plan for QA Objective '{current_qa_objective}'. Using fallback plan.")
+                        fallback_plan = _get_fallback_plan(game_state, state_manager)
+                        state_manager.set("strategy_plan", fallback_plan)
+                        strategy_plan = fallback_plan
+                        # Do not clear the objective yet, let the fallback help achieve it or progress
+                        time.sleep(2) 
+                        # Removed 'continue' so we proceed to execute the fallback plan immediately
                 else: # Not in QA mode, revert to old strategy logic
                     if survey_needed:
                         logger.info("At a port, but survey is incomplete. Setting goal to survey.")
@@ -1083,7 +1204,11 @@ def main(config_path="config.json"):
                             "id": f"c-fallback-{uuid.uuid4().hex[:8]}",
                             "command": "move.warp",
                             "data": {"to_sector_id": random_sector},
-                            "meta": {"client_version": config.get("client_version"), "idempotency_key": str(uuid.uuid4())}
+                            "meta": {
+                                "client_version": config.get("client_version"), 
+                                "idempotency_key": str(uuid.uuid4()),
+                                "session_token": game_state.get("session_id")
+                            }
                         }
                         game_conn.send_command(fallback_cmd)
                         state_manager.add_pending_command(fallback_cmd['id'], fallback_cmd)
@@ -1153,6 +1278,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         try:
             if response.get("status") == "ok":
                 # --- Feedback Loop: Record Success ---
+                state_manager.record_command_success(command_name)
+                
                 state_manager.set_last_action_result({
                     "status": "ok",
                     "command": command_name,
@@ -1169,11 +1296,23 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if response_type == "trade.sell_receipt_v1":
                     sold_items = response_data.get("lines", [])
                     port_id = sent_command.get("data", {}).get("port_id") if sent_command else None
+                    profit = 0
                     if port_id:
                         profit = state_manager.update_cargo_after_sell(sold_items, port_id)
                         reward = profit / 1000.0 # Normalize profit for the reward
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.sell.")
+                    
+                    # --- Feedback Loop: Record Success with Profit ---
+                    state_manager.set_last_action_result({
+                        "status": "ok",
+                        "command": command_name,
+                        "request_id": request_id,
+                        "response_type": response_type,
+                        "ts": response.get("ts"),
+                        "profit_loss": profit
+                    })
+                    # -------------------------------------
                 
                 elif response_type == "trade.buy_receipt_v1":
                     bought_items = response_data.get("lines", [])
@@ -1182,24 +1321,6 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         state_manager.update_cargo_after_buy(bought_items, port_id)
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.buy.")
-                    
-                    # --- Deterministic Rule: Immediate Sell ---
-                    if planner:
-                        next_cmd = planner.on_buy_ok(response)
-                        if next_cmd:
-                            idempotency_key = next_cmd["data"]["idempotency_key"]
-                            full_command = {
-                                "id": f"c-{idempotency_key[:8]}",
-                                "command": next_cmd["command"],
-                                "data": next_cmd["data"],
-                                "meta": {
-                                    "client_version": config.get("client_version"),
-                                    "idempotency_key": idempotency_key
-                                }
-                            }
-                            logger.info(f"Deterministic Rule Trigger: Sending {next_cmd['command']}")
-                            if game_conn.send_command(full_command):
-                                state_manager.add_pending_command(full_command['id'], full_command)
                 
                 # Give feedback for the last action that led to this success
                 if last_action and last_context:
@@ -1285,7 +1406,17 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             
                             # AUTO-REQUEST sector.info for the new location
                             logger.info(f"Auto-requesting sector.info for sector {new_sector}")
-                            next_cmd = {"command": "sector.info", "data": {"sector_id": int(new_sector)}}
+                            idemp = str(uuid.uuid4())
+                            next_cmd = {
+                                "id": f"c-auto-{idemp[:8]}",
+                                "command": "sector.info", 
+                                "data": {"sector_id": int(new_sector)},
+                                "meta": {
+                                    "client_version": config.get("client_version"),
+                                    "idempotency_key": idemp,
+                                    "session_token": state_manager.get("session_id")
+                                }
+                            }
                             game_conn.send_command(next_cmd)
                 
                 # --- NEW: Handle Pathfind Response ---
@@ -1332,24 +1463,6 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 
                 elif response_type == "trade.quote":
                     state_manager.update_price_cache(response_data)
-                    
-                    # --- Deterministic Rule: Immediate Buy ---
-                    if planner:
-                        next_cmd = planner.on_quote_ok(response)
-                        if next_cmd:
-                            idempotency_key = next_cmd["data"]["idempotency_key"]
-                            full_command = {
-                                "id": f"c-{idempotency_key[:8]}",
-                                "command": next_cmd["command"],
-                                "data": next_cmd["data"],
-                                "meta": {
-                                    "client_version": config.get("client_version"),
-                                    "idempotency_key": idempotency_key
-                                }
-                            }
-                            logger.info(f"Deterministic Rule Trigger: Sending {next_cmd['command']}")
-                            if game_conn.send_command(full_command):
-                                state_manager.add_pending_command(full_command['id'], full_command)
                 
                 elif response_type == "bank.balance":
                     state_manager.set("bank_balance", response_data.get("balance", 0))
@@ -1437,6 +1550,17 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. Blacklisting for future attempts.")
                         state_manager.add_to_warp_blacklist(to_sector_id)
                 
+                if sent_command and command_name == "trade.port_info" and error_code == 1800:
+                    current_sector = game_state_before.get("player_location_sector")
+                    if current_sector is not None:
+                        logger.warning(f"trade.port_info failed for sector {current_sector}. Marking has_port=False.")
+                        state_manager.update_sector_data(str(current_sector), {"has_port": False})
+                        # Also clear it from port_info_by_sector
+                        port_info_by_sector = state_manager.get("port_info_by_sector", {})
+                        if str(current_sector) in port_info_by_sector:
+                            del port_info_by_sector[str(current_sector)]
+                            state_manager.set("port_info_by_sector", port_info_by_sector)
+
                 if config.get("qa_mode"):
                     bug_reporter.triage_protocol_error(command_name, response, game_state_before, error_code, error_msg)
 

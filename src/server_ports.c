@@ -5142,6 +5142,36 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     json_object_set_new (receipt, "credits_remaining", json_string (bal_buf));
   }
 
+  /* 2.5) Credit port's bank account (IMPORTANT: Fixes liquidity drain) */
+  {
+    long long new_port_balance = 0;
+    int port_bank_account_id = -1;
+    int get_account_rc = h_get_account_id_unlocked (db, "port", port_id, &port_bank_account_id);
+
+    if (get_account_rc != 0)
+      {
+        LOGE ("cmd_trade_buy: Failed to get port bank account ID for port %d (rc=%d)",
+              port_id, get_account_rc);
+        /* Non-fatal for the player, but we log it. In a strict system, we might fail_tx. */
+      }
+    else
+      {
+        int credit_rc = h_add_credits_unlocked (db, port_bank_account_id,
+                                               total_item_cost, "TRADE_BUY",
+                                               tx_group_id, &new_port_balance);
+        if (credit_rc != 0)
+          {
+            LOGE ("cmd_trade_buy: Failed to credit port %d bank account: rc=%d",
+                  port_id, credit_rc);
+          }
+        else
+          {
+            LOGD ("cmd_trade_buy: Credited %lld to port %d bank account. New balance: %lld",
+                  total_item_cost, port_id, new_port_balance);
+          }
+      }
+  }
+
   /* 3) Optional alignment hit if buying illegal */
   {
     int any_illegal = 0;

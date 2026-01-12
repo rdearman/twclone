@@ -1,7 +1,7 @@
 {
       "game_host": "127.0.0.1",
       "game_port": 1234,
-      "ollama_model": "qwen2.5-coder:latest",
+      "ollama_model": "qwen2.5-coder-14b-ctx16k:latest",
     "log_file": "ai_player.log",
     "state_file": "state.json",
     "player_username": "ai_qa_bot",

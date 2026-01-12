@@ -821,7 +821,7 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
     }
 
   const char *c = json_string_value (cmd);
-  LOGD ("Dispatching command: '%s'", c);
+  // LOGD ("Dispatching command: '%s'", c);
 
   for (int i = 0; k_command_registry[i].name != NULL; i++)
     {

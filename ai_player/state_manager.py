@@ -36,6 +36,7 @@ class StateManager:
             "current_path": [],         # NEW: Stores the server-provided path for navigation
             "last_action_result": None, # NEW: Feedback loop for LLM
             "last_quotes": {},          # NEW: Deterministic trade rule support
+            "command_sent_in_response_loop": False, # NEW: To prevent double-sending
         }
         self.load_state()
 
@@ -148,6 +149,12 @@ class StateManager:
         info["next_retry_time"] = time.time() + cooldown_sec
         self.state["command_retry_info"][command_name] = info
         # No need to save state here, it'll be saved on response
+
+    def record_command_success(self, command_name):
+        """Resets failure count for a command that succeeded."""
+        if command_name in self.state["command_retry_info"]:
+            self.state["command_retry_info"][command_name]["failures"] = 0
+            self.save_state()
 
     def record_command_failure(self, command_name):
         """Increments failure count and sets a longer cooldown."""
@@ -439,7 +446,8 @@ class StateManager:
                 elif self.state['player_location_sector'] != new_sector:
                     logger.debug(f"Ignoring player_info sector {new_sector} as we are already at {self.state['player_location_sector']}")
 
-            logger.info(f"Player info updated. Turns remaining: {p_obj.get('turns_remaining')}")
+            turns_str = f" Turns remaining: {p_obj.get('turns_remaining')}" if p_obj.get('turns_remaining') is not None else ""
+            logger.info(f"Player info updated.{turns_str}")
 
         if 'ship' in player_data:
             if self.state.get('ship_info') is None:
