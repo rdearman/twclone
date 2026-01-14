@@ -1,9 +1,10 @@
+#include "db_legacy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include "server_config.h"
 //#include "server_bigbang.h"
-#include "database.h"           // Needed for db_get_handle()
+#include "db/repo/repo_database.h"           // Needed for db_get_handle()
 #include "server_log.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"

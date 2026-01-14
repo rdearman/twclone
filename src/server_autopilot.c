@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -6,7 +7,7 @@
 #include "server_config.h"
 #include "server_envelope.h"
 #include "server_universe.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "db/db_api.h"
 #include "common.h"
 #include "server_log.h"

@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -21,7 +22,7 @@
 #include "server_s2s.h"
 
 #include "game_db.h"  // Include the new game_db header
-#include "db_player_settings.h"
+#include "repo_player_settings.h"
 #include "server_log.h" // Explicitly include server_log.h
 #include "sysop_interaction.h" // Explicitly include sysop_interaction.h
 #include "server_cron.h"

@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -5,7 +6,7 @@
 #include <jansson.h>
 #include "db/db_api.h"
 #include "game_db.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "server_bigbang.h"
 #include "server_log.h"
 

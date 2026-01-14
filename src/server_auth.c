@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_auth.c */
 #include <string.h>
 #include <jansson.h>
@@ -13,9 +14,9 @@
 #include "server_envelope.h"
 #include "server_players.h"
 #include "server_config.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
-#include "db_player_settings.h"
+#include "repo_player_settings.h"
 #include "server_log.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"

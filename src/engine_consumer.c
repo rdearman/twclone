@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -6,8 +7,8 @@
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 #include "game_db.h"
-#include "database_cmd.h"
-#include "database.h"
+#include "repo_cmd.h"
+#include "db/repo/repo_database.h"
 #include "server_communication.h"       // (optional if you want to also emit immediately)
 #include "engine_consumer.h"
 #include "server_engine.h"      // For h_player_progress_from_event_payload

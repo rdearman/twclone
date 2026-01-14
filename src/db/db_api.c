@@ -1,3 +1,4 @@
+#define TW_DB_INTERNAL 1
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

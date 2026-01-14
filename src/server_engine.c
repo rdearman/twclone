@@ -1,13 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdbool.h>
+#include "db_legacy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <math.h> // For floor and fabs
-#include "database_cmd.h" // For h_player_apply_progress
+#include "repo_cmd.h" // For h_player_apply_progress
 #include "server_players.h" // For h_player_apply_progress
 #include "game_db.h"
 #include <poll.h>
@@ -27,7 +24,7 @@
 /* local includes */
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "db/sql_driver.h"
 
 
@@ -42,7 +39,7 @@ get_utc_epoch_day (int64_t ts)
 #include "s2s_transport.h"
 #include "engine_consumer.h"
 #include "server_engine.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "server_loop.h"        // Assuming this contains functions to communicate with clients
 #include "server_universe.h"
 #include "server_log.h"
@@ -53,7 +50,7 @@ get_utc_epoch_day (int64_t ts)
 #include "server_clusters.h"
 #include "server_corporation.h"
 #include "globals.h"        // For g_xp_align config
-#include "database_cmd.h"   // For h_player_apply_progress, db_player_get_alignment, h_get_cluster_alignment_band
+#include "repo_cmd.h"   // For h_player_apply_progress, db_player_get_alignment, h_get_cluster_alignment_band
 #include "server_stardock.h"
 
 

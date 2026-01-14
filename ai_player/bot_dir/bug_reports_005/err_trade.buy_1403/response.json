@@ -1,0 +1,19 @@
+{
+    "id": "srv-refuse",
+    "reply_to": "c-407de0d1",
+    "ts": "2026-01-13T10:09:47Z",
+    "status": "refused",
+    "type": "error",
+    "error": {
+        "code": 1403,
+        "message": "Insufficient funds."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

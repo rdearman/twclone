@@ -23,3 +23,6 @@
 AUTOMAKE_OPTIONS = subdir-objects
 
 SUBDIRS = bin
+
+db-gates:
+	@$(top_srcdir)/tools/db_gates.sh

@@ -249,7 +249,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-01-01
+ISODATE = 2026-01-13
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -802,6 +802,9 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
+
+db-gates:
+	@$(top_srcdir)/tools/db_gates.sh
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

@@ -1321,7 +1321,12 @@ class Planner:
         if not isinstance(cargo_list, list):
             return None
 
-        port_id = str(self._find_port_in_sector(current_state, current_state.get("player_location_sector")))
+        # Get port info to check capacity
+        current_sector = current_state.get("player_location_sector")
+        port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+        commodities_info = port_info.get("commodities", [])
+
+        port_id = str(self._find_port_in_sector(current_state, current_sector))
         port_sell_prices = current_state.get("price_cache", {}).get(port_id, {}).get("sell", {})
 
         best_commodity = None
@@ -1344,6 +1349,15 @@ class Planner:
             purchase_price = item.get("purchase_price")
 
             if quantity > 0:
+                # Check if port is full
+                comm_info = next((c for c in commodities_info if canon_commodity(c.get("commodity")) == commodity), None)
+                if comm_info:
+                    port_qty = comm_info.get("quantity", 0)
+                    max_qty = comm_info.get("max_quantity", 0)
+                    if max_qty > 0 and port_qty >= max_qty:
+                        logger.debug(f"Skipping sell of {commodity}: Port full ({port_qty}/{max_qty})")
+                        continue
+
                 sell_price = port_sell_prices.get(commodity)
                 if sell_price is not None and sell_price > 0:
                     # If we know the purchase price, calculate profit margin

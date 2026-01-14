@@ -3,7 +3,7 @@
 #include <jansson.h>
 #include "common.h"             // client_ctx_t
 #include "server_envelope.h"    // send_enveloped_* prototypes
-#include "database.h"           // play_login, user_create, db_session_*, etc. (when you paste bodies)
+#include "db/repo/repo_database.h"           // play_login, user_create, db_session_*, etc. (when you paste bodies)
 #ifdef __cplusplus
 extern "C"
 {

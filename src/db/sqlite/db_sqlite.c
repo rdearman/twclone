@@ -1,3 +1,4 @@
+#define TW_DB_INTERNAL 1
 #include "db_sqlite.h"
 #include "../db_api.h"
 #include "../db_int.h"

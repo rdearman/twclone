@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_communication.c */
 #include <jansson.h>
 #include <string.h>
@@ -14,11 +15,11 @@
 #include "config.h"
 #include "game_db.h"
 #include "server_cmds.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "server_loop.h"
-#include "db_player_settings.h"
+#include "repo_player_settings.h"
 #include "server_log.h"
-#include "database_cmd.h"
+#include "repo_cmd.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 

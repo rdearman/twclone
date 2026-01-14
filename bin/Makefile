@@ -116,9 +116,13 @@ bigbang_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bigbang_LDFLAGS) \
 	$(LDFLAGS) -o $@
 am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/sql_driver.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
-	../src/game_db.$(OBJEXT) ../src/database_cmd.$(OBJEXT) \
-	../src/database_market.$(OBJEXT) \
-	../src/db_player_settings.$(OBJEXT) \
+	../src/game_db.$(OBJEXT) ../src/db/repo/repo_cmd.$(OBJEXT) \
+	../src/db/repo/repo_database.$(OBJEXT) \
+	../src/db/repo/repo_market.$(OBJEXT) \
+	../src/db/repo/repo_player_settings.$(OBJEXT) \
+	../src/db/repo/repo_cron.$(OBJEXT) \
+	../src/db/repo/repo_combat.$(OBJEXT) \
+	../src/db/repo/repo_planets.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/s2s_keyring.$(OBJEXT) ../src/s2s_transport.$(OBJEXT) \
 	../src/schemas.$(OBJEXT) ../src/server_auth.$(OBJEXT) \
@@ -157,10 +161,7 @@ DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
-	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/database_cmd.Po \
-	../src/$(DEPDIR)/database_market.Po \
-	../src/$(DEPDIR)/db_player_settings.Po \
-	../src/$(DEPDIR)/engine_consumer.Po \
+	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/engine_consumer.Po \
 	../src/$(DEPDIR)/game_db.Po ../src/$(DEPDIR)/globals.Po \
 	../src/$(DEPDIR)/s2s_keyring.Po \
 	../src/$(DEPDIR)/s2s_transport.Po ../src/$(DEPDIR)/schemas.Po \
@@ -192,7 +193,14 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
 	../src/db/$(DEPDIR)/db_api.Po \
 	../src/db/$(DEPDIR)/sql_driver.Po \
-	../src/db/pg/$(DEPDIR)/db_pg.Po
+	../src/db/pg/$(DEPDIR)/db_pg.Po \
+	../src/db/repo/$(DEPDIR)/repo_cmd.Po \
+	../src/db/repo/$(DEPDIR)/repo_combat.Po \
+	../src/db/repo/$(DEPDIR)/repo_cron.Po \
+	../src/db/repo/$(DEPDIR)/repo_database.Po \
+	../src/db/repo/$(DEPDIR)/repo_market.Po \
+	../src/db/repo/$(DEPDIR)/repo_planets.Po \
+	../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -258,7 +266,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-01-01
+ISODATE = 2026-01-13
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lpthread -lm 
@@ -340,7 +348,7 @@ PG_INC = -I/usr/include/postgresql
 
 # 3. Update AM_CFLAGS
 # added $(PG_INC) here
-AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
@@ -366,9 +374,13 @@ server_SOURCES = \
 	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
 	../src/game_db.c \
-	../src/database_cmd.c \
-	../src/database_market.c \
-	../src/db_player_settings.c \
+	../src/db/repo/repo_cmd.c \
+	../src/db/repo/repo_database.c \
+	../src/db/repo/repo_market.c \
+	../src/db/repo/repo_player_settings.c \
+	../src/db/repo/repo_cron.c \
+	../src/db/repo/repo_combat.c \
+	../src/db/repo/repo_planets.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
 	../src/s2s_keyring.c \
@@ -513,12 +525,28 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	$(AM_V_CCLD)$(bigbang_LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
 ../src/game_db.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
-../src/database_cmd.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/database_market.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
-../src/db_player_settings.$(OBJEXT): ../src/$(am__dirstamp) \
-	../src/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/repo
+	@: > ../src/db/repo/$(am__dirstamp)
+../src/db/repo/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/repo/$(DEPDIR)
+	@: > ../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_cmd.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_database.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_market.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_player_settings.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_cron.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_combat.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_planets.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -591,15 +619,13 @@ mostlyclean-compile:
 	-rm -f ../src/*.$(OBJEXT)
 	-rm -f ../src/db/*.$(OBJEXT)
 	-rm -f ../src/db/pg/*.$(OBJEXT)
+	-rm -f ../src/db/repo/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
 include ../src/$(DEPDIR)/bigbang_pg_main.Po # am--include-marker
 include ../src/$(DEPDIR)/common.Po # am--include-marker
-include ../src/$(DEPDIR)/database_cmd.Po # am--include-marker
-include ../src/$(DEPDIR)/database_market.Po # am--include-marker
-include ../src/$(DEPDIR)/db_player_settings.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_consumer.Po # am--include-marker
 include ../src/$(DEPDIR)/game_db.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
@@ -636,6 +662,13 @@ include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
 include ../src/db/$(DEPDIR)/db_api.Po # am--include-marker
 include ../src/db/$(DEPDIR)/sql_driver.Po # am--include-marker
 include ../src/db/pg/$(DEPDIR)/db_pg.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_cmd.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_combat.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_cron.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_database.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_market.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_planets.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_player_settings.Po # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -782,6 +815,8 @@ distclean-generic:
 	-rm -f ../src/db/$(am__dirstamp)
 	-rm -f ../src/db/pg/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../src/db/pg/$(am__dirstamp)
+	-rm -f ../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../src/db/repo/$(am__dirstamp)
 
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
@@ -793,9 +828,6 @@ clean-am: clean-binPROGRAMS clean-generic mostlyclean-am
 distclean: distclean-am
 		-rm -f ../src/$(DEPDIR)/bigbang_pg_main.Po
 	-rm -f ../src/$(DEPDIR)/common.Po
-	-rm -f ../src/$(DEPDIR)/database_cmd.Po
-	-rm -f ../src/$(DEPDIR)/database_market.Po
-	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/game_db.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
@@ -832,6 +864,13 @@ distclean: distclean-am
 	-rm -f ../src/db/$(DEPDIR)/db_api.Po
 	-rm -f ../src/db/$(DEPDIR)/sql_driver.Po
 	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cmd.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_combat.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cron.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_database.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_market.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_planets.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -879,9 +918,6 @@ installcheck-am:
 maintainer-clean: maintainer-clean-am
 		-rm -f ../src/$(DEPDIR)/bigbang_pg_main.Po
 	-rm -f ../src/$(DEPDIR)/common.Po
-	-rm -f ../src/$(DEPDIR)/database_cmd.Po
-	-rm -f ../src/$(DEPDIR)/database_market.Po
-	-rm -f ../src/$(DEPDIR)/db_player_settings.Po
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/game_db.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
@@ -918,6 +954,13 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/db/$(DEPDIR)/db_api.Po
 	-rm -f ../src/db/$(DEPDIR)/sql_driver.Po
 	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cmd.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_combat.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cron.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_database.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_market.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_planets.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 

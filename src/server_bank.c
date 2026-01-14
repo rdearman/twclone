@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_bank.c */
 #include <stdio.h>
 #include <stdint.h>
@@ -10,15 +11,15 @@
 
 /* local includes */
 #include "server_players.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "db/sql_driver.h"
-#include "database_cmd.h"
+#include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "server_cmds.h"
 #include "server_rules.h"
-#include "db_player_settings.h"
+#include "repo_player_settings.h"
 #include "server_envelope.h"
 #include "server_auth.h"
 #include "server_log.h"

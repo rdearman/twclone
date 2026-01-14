@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <strings.h>
 #include <libpq-fe.h>
 #include <stdatomic.h>
@@ -25,7 +26,7 @@
 #include "server_ships.h"
 #include "game_db.h"
 #include "server_config.h"
-#include "database_cmd.h"
+#include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "db/sql_driver.h"

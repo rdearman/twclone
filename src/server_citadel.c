@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include "server_citadel.h"
 #include "db/sql_driver.h"
 #include "server_envelope.h"

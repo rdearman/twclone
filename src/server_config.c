@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,7 @@
 // #include <sqlite3.h> // Removed
 /* local inlcudes */
 #include "server_config.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "server_loop.h"
 #include "errors.h"
 #include "config.h"

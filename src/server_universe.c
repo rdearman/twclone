@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_universe.c */
 #include <time.h>
 #include <stdio.h>
@@ -11,7 +12,7 @@
 /* local includes */
 #include "server_universe.h"
 #include "server_ports.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "server_cmds.h"
 #include "server_rules.h"
@@ -27,12 +28,14 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_combat.h"
-#include "database_cmd.h"
+#include "repo_cmd.h"
 #include "server_ships.h"
 #include "server_corporation.h"
-#include "database_market.h"
+#include "repo_market.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
+
+#define UUID_STR_LEN 37
 
 /* ============ Ferengi Trader Globals ============ */
 static db_t *g_fer_db = NULL;

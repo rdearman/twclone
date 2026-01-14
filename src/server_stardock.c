@@ -1,11 +1,12 @@
+#include "db_legacy.h"
 #include <jansson.h>
 #include <string.h>             // For strcasecmp
 #include <math.h>               // For floor() function
 #include <ctype.h>              // For isalnum, isspace
 #include "server_stardock.h"
 #include "common.h"
-#include "database.h"
-#include "database_cmd.h"       // For player petty cash functions
+#include "db/repo/repo_database.h"
+#include "repo_cmd.h"       // For player petty cash functions
 #include "server_players.h"     // For player petty cash functions
 #include "server_envelope.h"
 #include "errors.h"
@@ -21,7 +22,7 @@
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 #include "game_db.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 
 /* -------------------------------------------------------------------------
  * SQLite removal shim: db_stmt_* provides a minimal "prepared statement" API

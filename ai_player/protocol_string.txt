@@ -327,7 +327,7 @@
     - Description: Manage server-side autopilot.
     - Data Schema: ```json
 {
-  "path": ["<integer>"]
+  "to_sector_id": "<integer>"
 }
 ```
 
@@ -353,8 +353,8 @@
     - Description: Find the shortest path between two sectors.
     - Data Schema: ```json
 {
-  "from_sector_id": "<integer>",
-  "to_sector_id": "<integer>"
+  "from": "<integer>",
+  "to": "<integer>"
 }
 ```
 
@@ -370,8 +370,7 @@
     - Description: Warp to an adjacent sector.
     - Data Schema: ```json
 {
-  "sector_id": "<integer>",
-  "ship_id": "<integer>"
+  "to_sector_id": "<integer>"
 }
 ```
 

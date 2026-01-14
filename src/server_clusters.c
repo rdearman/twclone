@@ -1,10 +1,11 @@
+#include "db_legacy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include "server_clusters.h"
 #include "server_log.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "db/sql_driver.h"
 #include "db/db_api.h"

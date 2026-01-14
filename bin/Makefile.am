@@ -13,7 +13,7 @@ PG_INC = -I/usr/include/postgresql
 
 # 3. Update AM_CFLAGS
 # added $(PG_INC) here
-AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
@@ -46,9 +46,13 @@ server_SOURCES = \
 	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
 	../src/game_db.c \
-	../src/database_cmd.c \
-	../src/database_market.c \
-	../src/db_player_settings.c \
+	../src/db/repo/repo_cmd.c \
+	../src/db/repo/repo_database.c \
+	../src/db/repo/repo_market.c \
+	../src/db/repo/repo_player_settings.c \
+	../src/db/repo/repo_cron.c \
+	../src/db/repo/repo_combat.c \
+	../src/db/repo/repo_planets.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
 	../src/s2s_keyring.c \

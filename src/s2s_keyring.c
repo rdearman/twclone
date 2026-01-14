@@ -8,7 +8,7 @@
 #include "s2s_keyring.h"
 #include "server_log.h"
 #include "db/db_api.h"
-#include "db/sql_driver.h"
+#include "db/repo/repo_database.h"
 #include "common.h"
 
 
@@ -23,41 +23,7 @@ s2s_keyring_generate_key (db_t *db,
                           const char *key_id_in,
                           const char *key_b64_in)
 {
-  const char *now_expr = sql_now_expr(db);
-  if (!now_expr)
-    {
-      LOGE ("S2S_GEN: Unsupported database backend\n");
-      return -1;
-    }
-
-  char sql_tmpl[512];
-  snprintf(sql_tmpl, sizeof(sql_tmpl),
-    "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
-    "VALUES ({1}, {2}, true, %s, 0);",
-    now_expr);
-
-  char SQL_INSERT[512];
-  if (sql_build(db, sql_tmpl, SQL_INSERT, sizeof(SQL_INSERT)) != 0)
-    {
-      LOGE ("S2S_GEN: Failed to build SQL\n");
-      return -1;
-    }
-
-  time_t now = time (NULL);
-  db_bind_t params[] = {
-    db_bind_text (key_id_in),
-    db_bind_text (key_b64_in),
-    db_bind_i64 ((long long)now)
-  };
-
-  db_error_t err;
-  if (!db_exec (db, SQL_INSERT, params, 3, &err))
-    {
-      LOGE ("S2S_GEN: Failed to execute insert: %s\n", err.message);
-      return -1;
-    }
-
-  return 0; // Success
+  return repo_s2s_create_key(db, key_id_in, key_b64_in);
 }
 
 
@@ -152,45 +118,17 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
     }
 
   /* DB lookup */
-  const char *sql =
-    "SELECT key_id, key_b64 FROM s2s_keys WHERE active = TRUE ORDER BY created_ts DESC LIMIT 1";
-
-
   for (int attempt = 0; attempt < 2; attempt++)
     {
-      db_error_t err;
+      char kid[128];
+      char kb64[512];
 
-
-      db_error_clear (&err);
-
-      db_res_t *res = NULL;
-
-
-      if (!db_query (db, sql, NULL, 0, &res, &err))
+      if (repo_s2s_get_default_key(db, kid, sizeof(kid), kb64, sizeof(kb64)) == 0)
         {
-          LOGE ("s2s_load_default_key: query failed: %s (code=%d backend=%d)",
-                err.message, err.code, err.backend_code);
-          return -1;
-        }
-
-      if (db_res_step (res, &err))
-        {
-          /* Found a row */
-          const char *kid = db_res_col_text (res, 0, &err);
-          const char *kb64 = db_res_col_text (res, 1, &err);
-
-
-          if (!kid || !kb64)
-            {
-              db_res_finalize (res);
-              return -1;
-            }
-
           memset (out_key, 0, sizeof(*out_key));
           strncpy (out_key->key_id, kid, sizeof(out_key->key_id) - 1);
 
           size_t key_len = 0;
-
 
           if (b64_decode_strict (kb64,
                                  out_key->key,
@@ -199,27 +137,14 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
             {
               LOGE ("[s2s] base64 decode failed for key_id='%s'\n",
                     out_key->key_id);
-              db_res_finalize (res);
               return -1;
             }
 
           out_key->key_len = key_len;
-          db_res_finalize (res);
           return 0;
         }
 
-      /* No row OR step error */
-      if (err.code != 0)
-        {
-          LOGE ("s2s_load_default_key: step failed: %s (code=%d backend=%d)",
-                err.message, err.code, err.backend_code);
-          db_res_finalize (res);
-          return -1;
-        }
-
       /* No active key found */
-      db_res_finalize (res);
-
       if (attempt == 0)
         {
           /* Attempt generation/recovery once */
@@ -258,4 +183,3 @@ s2s_install_default_key (db_t *db)
   s2s_set_keyring (&k, 1);
   return 0;
 }
-

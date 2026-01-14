@@ -1,1 +1,0 @@
-/* This file is deprecated. Functionality moved to game_db.c and database_cmd.c */

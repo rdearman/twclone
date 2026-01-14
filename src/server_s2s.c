@@ -7,12 +7,12 @@
 #include <signal.h>
 #include <stdlib.h>
 /* local includes */
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "server_s2s.h"
 #include "server_envelope.h"    // send_enveloped_ok/error/refused
 #include "errors.h"
 #include "config.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "server_envelope.h"
 #include "s2s_transport.h"
 #include "schemas.h"

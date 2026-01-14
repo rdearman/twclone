@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_loop.c */
 #include <stdatomic.h>
 #include <inttypes.h>
@@ -19,7 +20,7 @@
 #include <stdbool.h>
 
 /* local includes */
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "schemas.h"
 #include "errors.h"
@@ -46,7 +47,7 @@
 #include "server_corporation.h"
 #include "server_bank.h"
 #include "server_cron.h"
-#include "database_cmd.h"
+#include "repo_cmd.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 

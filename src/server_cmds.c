@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_cmds.c */
 #include <string.h>
 #include <strings.h>
@@ -8,21 +9,21 @@
 #include <stdbool.h> // For bool type
 
 /* local includes */
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "server_cmds.h"
 #include "server_auth.h"
 #include "errors.h" // Include errors.h for ERR_IS_NPC etc.
 #include "server_players.h" // Include for PLAYER_TYPE_SYSOP
 #include "server_envelope.h"
-#include "db_player_settings.h"
+#include "repo_player_settings.h"
 #include "server_cron.h"
 #include "server_log.h" // Include server_log.h for LOGD
 #include "server_clusters.h"
-#include "database_market.h"
+#include "repo_market.h"
 #include "server_ports.h"
 #include "server_universe.h"
-#include "database_cmd.h"
+#include "repo_cmd.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 

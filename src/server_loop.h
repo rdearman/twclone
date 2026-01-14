@@ -2,7 +2,7 @@
 #define SERVER_LOOP_H
 #pragma once
 #include <signal.h>
-#include "database.h"           /* for db_handle, etc. */
+#include "db/repo/repo_database.h"           /* for db_handle, etc. */
 #include "common.h"
 
 

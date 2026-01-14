@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <jansson.h>
 #include <string.h>
 #include <stdbool.h>
@@ -7,7 +8,7 @@
 #include <ctype.h>              // Required for isalnum and isupper
 #include "server_corporation.h"
 #include "server_config.h"
-#include "database.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "server_log.h"
 #include "server_envelope.h"

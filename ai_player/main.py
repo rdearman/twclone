@@ -1561,6 +1561,55 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             del port_info_by_sector[str(current_sector)]
                             state_manager.set("port_info_by_sector", port_info_by_sector)
 
+                # --- FIX: Handle "Port not buying" (1701) by clearing price cache ---
+                if sent_command and command_name == "trade.sell" and error_code == 1701:
+                    port_id = sent_command.get("data", {}).get("port_id")
+                    items = sent_command.get("data", {}).get("items", [])
+                    if port_id and items:
+                        port_id_str = str(port_id)
+                        price_cache = state_manager.get("price_cache", {})
+                        if port_id_str in price_cache and "sell" in price_cache[port_id_str]:
+                            for item in items:
+                                comm = canon_commodity(item.get("commodity"))
+                                if comm in price_cache[port_id_str]["sell"]:
+                                    logger.info(f"Received 1701 (Port Full/Not Buying) for {comm} at port {port_id}. Clearing cached sell price to stop retries.")
+                                    # Set to None to indicate unknown/invalid, forcing a re-quote or skip
+                                    price_cache[port_id_str]["sell"][comm] = None 
+                            state_manager.set("price_cache", price_cache)
+                
+                # --- FIX: Handle "Not Enough Commodity" (1453) by re-syncing ship info ---
+                if sent_command and command_name == "trade.sell" and error_code == 1453:
+                    logger.warning("Received 1453 (Not Enough Commodity). Forcing re-sync of ship info.")
+                    idemp = str(uuid.uuid4())
+                    resync_cmd = {
+                        "id": f"c-resync-1453-{idemp[:8]}",
+                        "command": "ship.info",
+                        "data": {},
+                        "meta": {
+                            "client_version": config.get("client_version"),
+                            "idempotency_key": idemp,
+                            "session_token": state_manager.get("session_id")
+                        }
+                    }
+                    game_conn.send_command(resync_cmd)
+
+                # --- FIX: Handle "Insufficient Funds" (1403) by re-syncing player info ---
+                if sent_command and command_name == "trade.buy" and error_code == 1403:
+                    logger.warning("Received 1403 (Insufficient Funds). Forcing re-sync of player info.")
+                    idemp = str(uuid.uuid4())
+                    resync_cmd = {
+                        "id": f"c-resync-1403-{idemp[:8]}",
+                        "command": "player.my_info",
+                        "data": {},
+                        "meta": {
+                            "client_version": config.get("client_version"),
+                            "idempotency_key": idemp,
+                            "session_token": state_manager.get("session_id")
+                        }
+                    }
+                    game_conn.send_command(resync_cmd)
+                # --------------------------------------------------------------------
+
                 if config.get("qa_mode"):
                     bug_reporter.triage_protocol_error(command_name, response, game_state_before, error_code, error_msg)
 

@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 /* src/server_news.c */
 #include <jansson.h>
 #include <string.h>
@@ -8,8 +9,8 @@
 /* local includes */
 #include "server_news.h"
 #include "server_envelope.h"
-#include "db_player_settings.h"
-#include "database.h"
+#include "repo_player_settings.h"
+#include "db/repo/repo_database.h"
 #include "game_db.h"
 #include "db/sql_driver.h"
 #include "server_log.h"

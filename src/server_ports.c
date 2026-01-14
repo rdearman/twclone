@@ -1,3 +1,4 @@
+#include "db_legacy.h"
 #include <string.h>
 #include <jansson.h>
 #include <stdlib.h>
@@ -9,8 +10,19 @@
 #include <limits.h>             // For INT_MAX
 /* local includes */
 #include "server_ports.h"
-#include "database.h"
-#include "database_cmd.h"
+#include "server_bank.h"
+
+#define UUID_STR_LEN 37
+#define TX_TYPE_TRADE_SELL "TRADE_SELL"
+#define TX_TYPE_TRADE_BUY "TRADE_BUY"
+#ifndef SQLITE_CONSTRAINT
+#define SQLITE_CONSTRAINT 19
+#endif
+
+void free_trade_lines (TradeLine *lines, size_t n);
+
+#include "db/repo/repo_database.h"
+#include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "server_envelope.h"
@@ -22,7 +34,7 @@
 #include "common.h"
 #include "globals.h"
 #include "server_universe.h"
-#include "db_player_settings.h"
+#include "repo_player_settings.h"
 #include "server_clusters.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
@@ -1910,6 +1922,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
   json_t *commodities_array = NULL;
 
   int port_id_val = 0;
+  int port_size = 0; /* Stored for calculating max_quantity */
   int requested_port_id = 0;
   int sector_id = 0;
 
@@ -2055,6 +2068,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
     const char *name = db_res_col_text (res, col_idx++, &err);
     int p_sector = (int) db_res_col_i32 (res, col_idx++, &err);
     int size = (int) db_res_col_i32 (res, col_idx++, &err);
+    port_size = size;
     int tech = (int) db_res_col_i32 (res, col_idx++, &err);
     int petty = (int) db_res_col_i32 (res, col_idx++, &err);
     int type = (int) db_res_col_i32 (res, col_idx++, &err);
@@ -2178,6 +2192,7 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
         json_object_set_new (commodity_obj, "quantity",
                              json_integer (quantity));
         json_object_set_new (commodity_obj, "price", json_integer (price));
+        json_object_set_new (commodity_obj, "max_quantity", json_integer (port_size * 1000));
         json_object_set_new (commodity_obj, "illegal", json_boolean (illegal));
 
         LOGD
