@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_autopilot.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -64,39 +64,11 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
   /* --- Query MAX(id) from sectors --- */
   int max_id = 0;
-  {
-    db_error_t err;
-
-
-    db_error_clear (&err);
-
-    db_res_t *res = NULL;
-
-
-    if (!db_query (db, "SELECT MAX(sector_id) FROM sectors;", NULL, 0, &res, &err))
-      {
-        LOGE (
-          "cmd_move_autopilot_start: MAX(sectors.sector_id) failed: %s (code=%d backend=%d)",
-          err.message,
-          err.code,
-          err.backend_code);
-        send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "No sectors");
-        return 1;
-      }
-
-    if (db_res_step (res, &err))
-      {
-        max_id = (int) db_res_col_i64 (res, 0, &err);
-      }
-
-    db_res_finalize (res);
-
-    if (err.code != 0 || max_id <= 0)
-      {
-        send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "No sectors");
-        return 1;
-      }
-  }
+  if (repo_autopilot_get_max_sector_id (db, &max_id) != 0 || max_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "No sectors");
+      return 1;
+    }
 
 
   /* Clamp from/to */
@@ -213,46 +185,15 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
     }
 
   /* pass 1: count edges */
-  {
-    db_error_t err;
-
-
-    db_error_clear (&err);
-    db_res_t *res = NULL;
-
-
-    if (!db_query (db, "SELECT COUNT(*) FROM sector_warps;", NULL, 0, &res,
-                   &err))
-      {
-        LOGE (
-          "cmd_move_autopilot_start: COUNT(sector_warps) failed: %s (code=%d backend=%d)",
-          err.message,
-          err.code,
-          err.backend_code);
-        free (head); free (avoid); free (seen); free (prev); free (queue);
-        send_response_error (ctx,
-                             root,
-                             ERR_PLANET_NOT_FOUND,
-                             "Pathfind init failed");
-        return 1;
-      }
-
-    if (db_res_step (res, &err))
-      {
-        edges = (int) db_res_col_i64 (res, 0, &err);
-      }
-    db_res_finalize (res);
-
-    if (err.code != 0 || edges < 0)
-      {
-        free (head); free (avoid); free (seen); free (prev); free (queue);
-        send_response_error (ctx,
-                             root,
-                             ERR_PLANET_NOT_FOUND,
-                             "Pathfind init failed");
-        return 1;
-      }
-  }
+  if (repo_autopilot_get_warp_count (db, &edges) != 0 || edges < 0)
+    {
+      free (head); free (avoid); free (seen); free (prev); free (queue);
+      send_response_error (ctx,
+                           root,
+                           ERR_PLANET_NOT_FOUND,
+                           "Pathfind init failed");
+      return 1;
+    }
 
   to_v = (int *) malloc ((size_t) edges * sizeof (int));
   next = (int *) malloc ((size_t) edges * sizeof (int));
@@ -266,25 +207,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
   /* pass 2: read edges and build adjacency */
   {
-    db_error_t err;
-
-
-    db_error_clear (&err);
     db_res_t *res = NULL;
-
-
-    if (!db_query (db,
-                   "SELECT from_sector, to_sector FROM sector_warps;",
-                   NULL,
-                   0,
-                   &res,
-                   &err))
+    db_error_t err;
+    if (repo_autopilot_get_all_warps (db, &res) != 0)
       {
-        LOGE (
-          "cmd_move_autopilot_start: sector_warps read failed: %s (code=%d backend=%d)",
-          err.message,
-          err.code,
-          err.backend_code);
         free (to_v); free (next); free (head);
         free (avoid); free (seen); free (prev); free (queue);
         send_response_error (ctx,

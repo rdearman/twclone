@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_main.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -293,41 +293,20 @@ int bigbang (void);             /* if your function is named differently, change
 /*-------------------  Bigbang ---------------------------------*/
 
 
-// Return first column of first row as int, or -1 on error
-static int
-get_scalar_int (const char *sql)
-{
-  db_t *db = game_db_get_handle ();
-  if (!db)
-    {
-      return -1;
-    }
-
-  db_res_t *res = NULL;
-  db_error_t err;
-  int v = -1;
-
-
-  if (db_query (db, sql, NULL, 0, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          v = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-  return v;
-}
-
-
 // Decide if we need to run bigbang on this DB
 static int
 needs_bigbang (void)
 {
-  // Belt-and-braces: look at contents to determine if schema is seeded
-  int sectors = get_scalar_int ("SELECT COUNT(*) FROM sectors");
-  int warps = get_scalar_int ("SELECT COUNT(*) FROM sector_warps");
-  int ports = get_scalar_int ("SELECT COUNT(*) FROM ports");
+  db_t *db = game_db_get_handle ();
+  if (!db) return 1;
+
+  int sectors = 0;
+  int warps = 0;
+  int ports = 0;
+
+  repo_main_get_sector_count (db, &sectors);
+  repo_main_get_warp_count (db, &warps);
+  repo_main_get_port_count (db, &ports);
 
 
   if (sectors <= 10)

@@ -1,5 +1,12 @@
-#include "db_legacy.h"
+#include "db/repo/repo_stardock.h"
 #include <jansson.h>
+
+#ifndef DB_OK
+#define DB_OK 0
+#endif
+#ifndef DB_ERR
+#define DB_ERR (-1)
+#endif
 #include <string.h>             // For strcasecmp
 #include <math.h>               // For floor() function
 #include <ctype.h>              // For isalnum, isspace
@@ -23,461 +30,6 @@
 #include "db/sql_driver.h"
 #include "game_db.h"
 #include "db/repo/repo_database.h"
-
-/* -------------------------------------------------------------------------
- * SQLite removal shim: db_stmt_* provides a minimal "prepared statement" API
- * backed by the new db_api layer (Postgres/SQLite/etc).  This allows this
- * module to preserve its existing control flow while removing any dependency
- * on sqlite3 headers or symbols.
- *
- * Conventions:
- *   - db_stmt_step(): returns DB_ROW while a row is available, DB_DONE when no
- *     more rows, DB_ERR on error.
- *   - Column accessors read from the current row.
- *   - db_stmt_reset(): resets iteration; bindings remain unless cleared.
- * ------------------------------------------------------------------------- */
-
-#ifndef DB_ROW
-#define DB_ROW   100
-#endif
-#ifndef DB_DONE
-#define DB_DONE  101
-#endif
-#ifndef DB_OK
-#define DB_OK    0
-#endif
-#ifndef DB_ERR
-#define DB_ERR   (-1)
-
-#ifndef DB_NULL
-#define DB_NULL 5
-#endif
-#endif
-
-/* Old code sometimes used SQLITE_* binding lifetime flags; they are ignored. */
-#ifndef DB_BIND_TRANSIENT
-#define DB_BIND_TRANSIENT 0
-#endif
-#ifndef DB_BIND_STATIC
-#define DB_BIND_STATIC 0
-#endif
-
-typedef struct db_stmt_s {
-  db_t *db;
-  const char *sql;
-  char converted_sql[512];  /* buffer for sql_build() output */
-  db_bind_t binds[64];     /* adjust if needed */
-  int nbinds;              /* number of bound params (max index) */
-  bool started;            /* query has been executed */
-  bool had_error;
-  db_res_t *res;
-  db_error_t err;
-} db_stmt_t;
-
-/* Keep a best-effort "last error" for legacy db_errmsg() callsites. */
-static __thread char g_db_last_errmsg[256];
-
-
-static const char *
-db_errmsg (db_t *db_unused)
-{
-  (void)db_unused;
-  return g_db_last_errmsg[0] ? g_db_last_errmsg : "db error";
-}
-
-
-static int
-stx_begin (db_t *db)
-{
-  db_error_t err;
-  db_error_clear (&err);
-  if (!db_tx_begin (db, 0, &err))
-    {
-      snprintf (g_db_last_errmsg, sizeof(g_db_last_errmsg), "%s", err.message);
-      return -1;
-    }
-  return 0;
-}
-
-
-static int
-stx_commit (db_t *db)
-{
-  db_error_t err;
-  db_error_clear (&err);
-  if (!db_tx_commit (db, &err))
-    {
-      snprintf (g_db_last_errmsg, sizeof(g_db_last_errmsg), "%s", err.message);
-      return -1;
-    }
-  return 0;
-}
-
-
-static int
-stx_rollback (db_t *db)
-{
-  db_error_t err;
-  db_error_clear (&err);
-  (void)db_tx_rollback (db, &err);
-  if (err.message && *err.message)
-    {
-      snprintf (g_db_last_errmsg, sizeof(g_db_last_errmsg), "%s", err.message);
-    }
-  return 0;
-}
-
-
-static int
-st_exec_sql (db_t *db, const char *sql)
-{
-  db_error_t err;
-  db_error_clear (&err);
-  if (!db_exec (db, sql, NULL, 0, &err))
-    {
-      snprintf (g_db_last_errmsg, sizeof(g_db_last_errmsg), "%s", err.message);
-      return -1;
-    }
-  return 0;
-}
-
-
-static char *
-st_asprintf (const char *fmt, ...)
-{
-  va_list ap;
-  va_start (ap, fmt);
-#if defined(_GNU_SOURCE) || defined(__GLIBC__)
-  char *buf = NULL;
-
-
-  if (vasprintf (&buf, fmt, ap) < 0)
-    {
-      buf = NULL;
-    }
-  va_end (ap);
-  return buf;
-#else
-  va_list ap2;
-
-
-  va_copy (ap2, ap);
-  int n = vsnprintf (NULL, 0, fmt, ap2);
-
-
-  va_end (ap2);
-  if (n < 0)
-    {
-      va_end (ap); return NULL;
-    }
-  char *buf = (char *)malloc ((size_t)n + 1);
-
-
-  if (!buf)
-    {
-      va_end (ap); return NULL;
-    }
-  vsnprintf (buf, (size_t)n + 1, fmt, ap);
-  va_end (ap);
-  return buf;
-#endif
-}
-
-
-static void
-db_stmt_set_err (db_stmt_t *st, const db_error_t *err)
-{
-  if (!st || !err)
-    {
-      return;
-    }
-  st->had_error = true;
-  st->err = *err;
-  if (err->message && *err->message)
-    {
-      snprintf (g_db_last_errmsg, sizeof(g_db_last_errmsg), "%s", err->message);
-    }
-  else
-    {
-      snprintf (g_db_last_errmsg, sizeof(g_db_last_errmsg), "db error");
-    }
-}
-
-
-static int
-db_stmt_prepare_v2 (db_t *db, const char *sql, int nbytes,
-                    db_stmt_t **out_stmt, const char **tail)
-{
-  (void)nbytes;
-  if (tail)
-    {
-      *tail = NULL;
-    }
-  if (!db || !sql || !out_stmt)
-    {
-      snprintf (g_db_last_errmsg,
-                sizeof(g_db_last_errmsg),
-                "db_stmt_prepare_v2: bad args");
-      return DB_ERR;
-    }
-
-  db_stmt_t *st = (db_stmt_t *)calloc (1, sizeof(*st));
-
-
-  if (!st)
-    {
-      snprintf (g_db_last_errmsg,
-                sizeof(g_db_last_errmsg),
-                "db_stmt_prepare_v2: OOM");
-      return DB_ERR;
-    }
-
-  st->db = db;
-  st->sql = sql;
-  st->nbinds = 0;
-  st->started = false;
-  st->had_error = false;
-  st->res = NULL;
-  db_error_clear (&st->err);
-  *out_stmt = st;
-  return DB_OK;
-}
-
-
-static void
-db_stmt_clear_bindings (db_stmt_t *st)
-{
-  if (!st)
-    {
-      return;
-    }
-  memset (st->binds, 0, sizeof(st->binds));
-  st->nbinds = 0;
-}
-
-
-static void
-db_stmt_reset (db_stmt_t *st)
-{
-  if (!st)
-    {
-      return;
-    }
-  if (st->res)
-    {
-      db_res_finalize (st->res);
-      st->res = NULL;
-    }
-  st->started = false;
-  st->had_error = false;
-  db_error_clear (&st->err);
-}
-
-
-static void
-db_stmt_finalize (db_stmt_t *st)
-{
-  if (!st)
-    {
-      return;
-    }
-  if (st->res)
-    {
-      db_res_finalize (st->res);
-      st->res = NULL;
-    }
-  free (st);
-}
-
-
-static void
-db_stmt_ensure_capacity (db_stmt_t *st, int idx1)
-{
-  if (!st)
-    {
-      return;
-    }
-  if (idx1 > st->nbinds)
-    {
-      st->nbinds = idx1;
-    }
-}
-
-
-static void
-db_stmt_bind_i32 (db_stmt_t *st, int idx1, int v)
-{
-  if (!st || idx1 <= 0 ||
-      idx1 > (int)(sizeof(st->binds) / sizeof(st->binds[0])))
-    {
-      return;
-    }
-  st->binds[idx1 - 1] = db_bind_i32 (v);
-  db_stmt_ensure_capacity (st, idx1);
-}
-
-
-static void
-db_stmt_bind_i64 (db_stmt_t *st, int idx1, int64_t v)
-{
-  if (!st || idx1 <= 0 ||
-      idx1 > (int)(sizeof(st->binds) / sizeof(st->binds[0])))
-    {
-      return;
-    }
-  st->binds[idx1 - 1] = db_bind_i64 (v);
-  db_stmt_ensure_capacity (st, idx1);
-}
-
-
-static void
-db_stmt_bind_text (db_stmt_t *st,
-                   int idx1,
-                   const char *v,
-                   int n,
-                   int lifetime_ignored)
-{
-  (void)n;
-  (void)lifetime_ignored;
-  if (!st || idx1 <= 0 ||
-      idx1 > (int)(sizeof(st->binds) / sizeof(st->binds[0])))
-    {
-      return;
-    }
-  st->binds[idx1 - 1] = v ? db_bind_text (v) : db_bind_null ();
-  db_stmt_ensure_capacity (st, idx1);
-}
-
-
-static void
-db_stmt_bind_null (db_stmt_t *st, int idx1)
-{
-  if (!st || idx1 <= 0 ||
-      idx1 > (int)(sizeof(st->binds) / sizeof(st->binds[0])))
-    {
-      return;
-    }
-  st->binds[idx1 - 1] = db_bind_null ();
-  db_stmt_ensure_capacity (st, idx1);
-}
-
-
-static int
-db_stmt_step (db_stmt_t *st)
-{
-  if (!st)
-    {
-      snprintf (g_db_last_errmsg,
-                sizeof(g_db_last_errmsg),
-                "db_stmt_step: null stmt");
-      return DB_ERR;
-    }
-
-  if (!st->started)
-    {
-      db_error_t err;
-
-
-      db_error_clear (&err);
-      /* Convert {N} placeholders to backend-specific format */
-      sql_build(st->db, st->sql, st->converted_sql, sizeof(st->converted_sql));
-      
-      if (!db_query (st->db,
-                     st->converted_sql,
-                     (st->nbinds > 0) ? st->binds : NULL,
-                     st->nbinds,
-                     &st->res,
-                     &err))
-        {
-          db_stmt_set_err (st, &err);
-          return DB_ERR;
-        }
-      st->started = true;
-    }
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-  if (db_res_step (st->res, &err))
-    {
-      return DB_ROW;
-    }
-
-  /* No row: could be end-of-results or an error */
-  if (err.code != DB_OK && err.code != ERR_DB_NO_ROWS)
-    {
-      db_stmt_set_err (st, &err);
-      return DB_ERR;
-    }
-
-  return DB_DONE;
-}
-
-
-static int
-db_stmt_col_i32 (db_stmt_t *st, int col)
-{
-  if (!st || !st->res)
-    {
-      return 0;
-    }
-  db_error_t err;
-
-
-  db_error_clear (&err);
-  return (int)db_res_col_i64 (st->res, col, &err);
-}
-
-
-static int64_t
-db_stmt_col_i64 (db_stmt_t *st, int col)
-{
-  if (!st || !st->res)
-    {
-      return 0;
-    }
-  db_error_t err;
-
-
-  db_error_clear (&err);
-  return db_res_col_i64 (st->res, col, &err);
-}
-
-
-static const unsigned char *
-db_stmt_col_text (db_stmt_t *st, int col)
-{
-  if (!st || !st->res)
-    {
-      return NULL;
-    }
-  db_error_t err;
-
-
-  db_error_clear (&err);
-  const char *s = db_res_col_text (st->res, col, &err);
-
-
-  return (const unsigned char *)s;
-}
-
-
-static bool
-db_stmt_col_is_null (db_stmt_t *st, int col)
-{
-  if (!st || !st->res)
-    {
-      return true;
-    }
-  db_error_t err;
-
-
-  db_error_clear (&err);
-  return db_res_col_is_null (st->res, col);
-}
-
-
 struct tavern_settings g_tavern_cfg;
 
 
@@ -502,7 +54,6 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   int player_id = ctx->player_id;
   int ship_id = 0;
   int sector_id = 0;
-  db_stmt_t *stmt = NULL;       // Declare stmt here
   int port_type = 0;            // Declare port_type here
   // 1. Authenticate player and get ship/sector context
   if (player_id <= 0)
@@ -526,33 +77,20 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   // 2. Determine location type (Stardock, Class-0, or Other)
   char location_type[16] = "OTHER";
   int port_id = 0;
-  const char *sql_loc_check =
-    "SELECT port_id, type FROM ports WHERE sector_id = {1} AND (type = 9 OR type = 0);";
-  // type 9 for Stardock, 0 for Class-0
-  int rc = db_stmt_prepare_v2 (db, sql_loc_check, -1, &stmt, NULL);
-
-
-  if (rc == DB_OK)
+  if (repo_stardock_get_port_by_sector (db, sector_id, &port_id, &port_type) == 0)
     {
-      db_stmt_bind_i32 (stmt, 1, sector_id);
-      if (db_stmt_step (stmt) == DB_ROW)
-        {
-          port_id = db_stmt_col_i32 (stmt, 0);
-          port_type = db_stmt_col_i32 (stmt, 1);
-          if (port_type == PORT_TYPE_STARDOCK)
-            {                   // Stardock
-              strncpy (location_type, LOCATION_STARDOCK,
-                       sizeof (location_type) - 1);
-            }
-          else if (port_type == PORT_TYPE_CLASS0)
-            {                   // Class-0
-              strncpy (location_type, LOCATION_CLASS0,
-                       sizeof (location_type) - 1);
-            }
+      if (port_type == PORT_TYPE_STARDOCK)
+        {                   // Stardock
+          strncpy (location_type, LOCATION_STARDOCK,
+                   sizeof (location_type) - 1);
         }
-      db_stmt_finalize (stmt);
-      stmt = NULL;
+      else if (port_type == PORT_TYPE_CLASS0)
+        {                   // Class-0
+          strncpy (location_type, LOCATION_CLASS0,
+                   sizeof (location_type) - 1);
+        }
     }
+
   if (port_id == 0)
     {                           // No Stardock or Class-0 port in this sector
       json_t *res = json_object ();
@@ -575,70 +113,59 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   int max_genesis = 0, max_detonators_st = 0, max_probes_st = 0;        // _st suffix for shiptype limits
   int can_transwarp = 0, can_planet_scan = 0, can_long_range_scan = 0;
   // Get ship current state
-  const char *sql_ship_state =
-    "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1};";
-
-
-  rc = db_stmt_prepare_v2 (db, sql_ship_state, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res_state = NULL;
+  db_error_t err;
+  if (repo_stardock_get_ship_state (db, ship_id, &res_state) != 0)
     {
       send_response_error (ctx,
                            root,
                            ERR_DB_QUERY_FAILED, "Failed to get ship state.");
-      return 0; return 0;
+      return 0;
     }
-  db_stmt_bind_i32 (stmt, 1, ship_id);
-  if (db_stmt_step (stmt) == DB_ROW)
+  if (db_res_step (res_state, &err))
     {
-      current_holds = db_stmt_col_i32 (stmt, 0);
-      current_fighters = db_stmt_col_i32 (stmt, 1);
-      current_shields = db_stmt_col_i32 (stmt, 2);
-      current_genesis = db_stmt_col_i32 (stmt, 3);
-      current_detonators = db_stmt_col_i32 (stmt, 4);
-      current_probes = db_stmt_col_i32 (stmt, 5);
-      current_cloaks = db_stmt_col_i32 (stmt, 6);       // cloaking_devices
-      has_transwarp = db_stmt_col_i32 (stmt, 7);
-      has_planet_scanner = db_stmt_col_i32 (stmt, 8);
-      has_long_range_scanner = db_stmt_col_i32 (stmt, 9);
-      max_holds = db_stmt_col_i32 (stmt, 10);
-      max_fighters = db_stmt_col_i32 (stmt, 11);
-      max_shields = db_stmt_col_i32 (stmt, 12);
-      max_genesis = db_stmt_col_i32 (stmt, 13);
-      max_detonators_st = db_stmt_col_i32 (stmt, 14);
-      max_probes_st = db_stmt_col_i32 (stmt, 15);
-      can_transwarp = db_stmt_col_i32 (stmt, 16);
-      can_planet_scan = db_stmt_col_i32 (stmt, 17);
-      can_long_range_scan = db_stmt_col_i32 (stmt, 18);
+      current_holds = (int)db_res_col_i64 (res_state, 0, &err);
+      current_fighters = (int)db_res_col_i64 (res_state, 1, &err);
+      current_shields = (int)db_res_col_i64 (res_state, 2, &err);
+      current_genesis = (int)db_res_col_i64 (res_state, 3, &err);
+      current_detonators = (int)db_res_col_i64 (res_state, 4, &err);
+      current_probes = (int)db_res_col_i64 (res_state, 5, &err);
+      current_cloaks = (int)db_res_col_i64 (res_state, 6, &err);       // cloaking_devices
+      has_transwarp = (int)db_res_col_i64 (res_state, 7, &err);
+      has_planet_scanner = (int)db_res_col_i64 (res_state, 8, &err);
+      has_long_range_scanner = (int)db_res_col_i64 (res_state, 9, &err);
+      max_holds = (int)db_res_col_i64 (res_state, 10, &err);
+      max_fighters = (int)db_res_col_i64 (res_state, 11, &err);
+      max_shields = (int)db_res_col_i64 (res_state, 12, &err);
+      max_genesis = (int)db_res_col_i64 (res_state, 13, &err);
+      max_detonators_st = (int)db_res_col_i64 (res_state, 14, &err);
+      max_probes_st = (int)db_res_col_i64 (res_state, 15, &err);
+      can_transwarp = (int)db_res_col_i64 (res_state, 16, &err);
+      can_planet_scan = (int)db_res_col_i64 (res_state, 17, &err);
+      can_long_range_scan = (int)db_res_col_i64 (res_state, 18, &err);
     }
-  db_stmt_finalize (stmt);
-  stmt = NULL;
+  db_res_finalize (res_state);
+
   json_t *items_array = json_array ();
-  const char *sql_items =
-    "SELECT code, name, price, max_per_ship, category FROM hardware_items WHERE enabled = 1 AND ({1} = '"
-    LOCATION_STARDOCK "' OR ({2} = '" LOCATION_CLASS0 "'));";
-
-
-  rc = db_stmt_prepare_v2 (db, sql_items, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res_items = NULL;
+  if (repo_stardock_get_hardware_items (db, location_type, &res_items) != 0)
     {
       send_response_error (ctx,
                            root,
                            ERR_DB_QUERY_FAILED,
                            "Failed to get hardware items.");
-      return 0; return 0;
+      return 0;
     }
-  db_stmt_bind_text (stmt, 1, location_type, -1, DB_BIND_STATIC);
-  db_stmt_bind_text (stmt, 2, location_type, -1, DB_BIND_STATIC);
-  while (db_stmt_step (stmt) == DB_ROW)
+  while (db_res_step (res_items, &err))
     {
-      const char *code = (const char *) db_stmt_col_text (stmt, 0);
-      const char *name = (const char *) db_stmt_col_text (stmt, 1);
-      int price = db_stmt_col_i32 (stmt, 2);
-      int max_per_ship_hw = db_stmt_col_is_null (stmt,
+      const char *code = db_res_col_text (res_items, 0, &err);
+      const char *name = db_res_col_text (res_items, 1, &err);
+      int price = (int)db_res_col_i64 (res_items, 2, &err);
+      int max_per_ship_hw = db_res_col_is_null (res_items,
                                                  3) ? -1 :
-                            db_stmt_col_i32 (stmt,
-                                             3);                                                // -1 means use shiptype max
-      const char *category = (const char *) db_stmt_col_text (stmt, 4);
+                            (int)db_res_col_i64 (res_items,
+                                             3, &err);                                                // -1 means use shiptype max
+      const char *category = db_res_col_text (res_items, 4, &err);
       int max_purchase = 0;
       bool ship_has_capacity = true;
       bool item_supported = true;
@@ -753,7 +280,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
           json_array_append_new (items_array, item_obj);
         }
     }
-  db_stmt_finalize (stmt);
+  db_res_finalize (res_items);
   {
     json_t *res = json_object ();
 
@@ -813,21 +340,13 @@ cmd_hardware_buy (client_ctx_t *ctx,
       return 0;
     }
   // 2. Check Port Location (Stardock or Class 0)
-  db_stmt_t *stmt = NULL;
   int port_type = -1;
-  const char *sql_port =
-    "SELECT type FROM ports WHERE sector_id = {1} AND (type = 9 OR type = 0);";
-
-
-  if (db_stmt_prepare_v2 (db, sql_port, -1, &stmt, NULL) == DB_OK)
+  int port_id_tmp = 0;
+  if (repo_stardock_get_port_by_sector (db, sector_id, &port_id_tmp, &port_type) != 0)
     {
-      db_stmt_bind_i32 (stmt, 1, sector_id);
-      if (db_stmt_step (stmt) == DB_ROW)
-        {
-          port_type = db_stmt_col_i32 (stmt, 0);
-        }
+      port_type = -1;
     }
-  db_stmt_finalize (stmt);
+
   if (port_type == -1)
     {
       send_response_error (ctx,
@@ -842,24 +361,22 @@ cmd_hardware_buy (client_ctx_t *ctx,
   int sold_in_class0 = 0;
   int max_per_ship = 0;
   char category[32] = { 0 };
-  const char *sql_item =
-    "SELECT price, requires_stardock, sold_in_class0, max_per_ship, category FROM hardware_items WHERE code = {1} AND enabled = 1;";
+  db_res_t *res_item = NULL;
+  db_error_t err;
   bool item_found = false;
 
-
-  if (db_stmt_prepare_v2 (db, sql_item, -1, &stmt, NULL) == DB_OK)
+  if (repo_stardock_get_hardware_item_details (db, code, &res_item) == 0)
     {
-      db_stmt_bind_text (stmt, 1, code, -1, DB_BIND_STATIC);
-      if (db_stmt_step (stmt) == DB_ROW)
+      if (db_res_step (res_item, &err))
         {
-          price = db_stmt_col_i32 (stmt, 0);
-          requires_stardock = db_stmt_col_i32 (stmt, 1);
-          sold_in_class0 = db_stmt_col_i32 (stmt, 2);
-          if (!db_stmt_col_is_null (stmt, 3))
+          price = (int)db_res_col_i64 (res_item, 0, &err);
+          requires_stardock = (int)db_res_col_i64 (res_item, 1, &err);
+          sold_in_class0 = (int)db_res_col_i64 (res_item, 2, &err);
+          if (!db_res_col_is_null (res_item, 3))
             {
-              max_per_ship = db_stmt_col_i32 (stmt, 3);
+              max_per_ship = (int)db_res_col_i64 (res_item, 3, &err);
             }
-          const char *cat = (const char *) db_stmt_col_text (stmt, 4);
+          const char *cat = db_res_col_text (res_item, 4, &err);
 
 
           if (cat)
@@ -868,8 +385,9 @@ cmd_hardware_buy (client_ctx_t *ctx,
             }
           item_found = true;
         }
+      db_res_finalize (res_item);
     }
-  db_stmt_finalize (stmt);
+
   if (!item_found)
     {
       send_response_error (ctx, root, 1812,
@@ -957,7 +475,6 @@ cmd_hardware_buy (client_ctx_t *ctx,
   // Check Limits logic
   int current_val = 0;
   int max_limit = 999999999;
-  char sql_info[512];
   bool is_max_check_needed = true;
   char limit_col[64] = { 0 };
 
@@ -1007,46 +524,32 @@ cmd_hardware_buy (client_ctx_t *ctx,
     {
       is_max_check_needed = false;
     }
-  if (is_max_check_needed)
+
+  db_res_t *res_limit = NULL;
+  if (repo_stardock_get_ship_limit_info (db, ship_id, col_name, limit_col, is_max_check_needed, &res_limit) == 0)
     {
-      snprintf (sql_info,
-                sizeof (sql_info),
-                "SELECT s.%s, st.%s FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1};",
-                col_name,
-                limit_col);
-    }
-  else
-    {
-      snprintf (sql_info,
-                sizeof (sql_info),
-                "SELECT %s, 0 FROM ships WHERE ship_id = {1};", col_name);
-    }
-  if (db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL) == DB_OK)
-    {
-      db_stmt_bind_i32 (stmt, 1, ship_id);
-      if (db_stmt_step (stmt) == DB_ROW)
+      if (db_res_step (res_limit, &err))
         {
-          current_val = db_stmt_col_i32 (stmt, 0);
+          current_val = (int)db_res_col_i64 (res_limit, 0, &err);
           if (is_max_check_needed)
             {
-              max_limit = db_stmt_col_i32 (stmt, 1);
+              max_limit = (int)db_res_col_i64 (res_limit, 1, &err);
             }
         }
       else
         {
-          db_stmt_finalize (stmt);
+          db_res_finalize (res_limit);
           send_response_error (ctx, root, 500, "Ship info not found.");
           return 0;
         }
+      db_res_finalize (res_limit);
     }
   else
     {
-      LOGE ("cmd_hardware_buy: SQL prepare failed: %s", db_errmsg (db));
       send_response_error (ctx, root, 500,
                            "Database error checking limits.");
       return 0;
     }
-  db_stmt_finalize (stmt);
   // 6. Check Logic
   if (max_per_ship > 0)
     {
@@ -1090,17 +593,17 @@ cmd_hardware_buy (client_ctx_t *ctx,
     }
 
 /* 8. Execute transaction (deduct + update must be atomic) */
-  db_error_t err;
+  db_error_t err_tx;
 
 
-  db_error_clear (&err);
+  db_error_clear (&err_tx);
 
-  if (!db_tx_begin (db,0, &err))
+  if (!db_tx_begin (db,0, &err_tx))
     {
       LOGE ("cmd_hardware_buy: tx begin failed: %s (code=%d backend=%d)",
-            err.message, err.code, err.backend_code);
+            err_tx.message, err_tx.code, err_tx.backend_code);
       send_response_error (ctx, root, 500, "Database busy.");
-      return 0; return 0;
+      return 0;
     }
 
 /* Deduct player petty cash */
@@ -1113,47 +616,26 @@ cmd_hardware_buy (client_ctx_t *ctx,
   if (rc_deduct != 0)
     {
       /* ensure we undo any partial work */
-      db_tx_rollback (db, &err);
+      db_tx_rollback (db, &err_tx);
       send_response_error (ctx, root, 1813, "Insufficient credits.");
-      return 0; return 0;
+      return 0;
     }
 
-/* Update ship hardware column: build SQL safely (still dynamic column name) */
-  char *sql_upd =
-    st_asprintf ("UPDATE ships SET %s = %s + {1} WHERE ship_id = {2};",
-                 col_name, col_name);
-
-
-  if (!sql_upd)
+/* Update ship hardware column */
+  if (repo_stardock_update_ship_hardware (db, col_name, quantity, ship_id) != 0)
     {
-      db_tx_rollback (db, &err);
-      send_response_error (ctx, root, 500, "Out of memory.");
-      return 0; return 0;
-    }
-
-  db_bind_t p_upd[2];
-
-
-  p_upd[0] = db_bind_i32 (quantity);
-  p_upd[1] = db_bind_i32 (ship_id);
-
-  if (!db_exec (db, sql_upd, p_upd, 2, &err))
-    {
-      free (sql_upd);
-      db_tx_rollback (db, &err);
+      db_tx_rollback (db, &err_tx);
       send_response_error (ctx, root, 500, "Database update failed.");
-      return 0; return 0;
+      return 0;
     }
-
-  free (sql_upd);
 
 /* Commit */
-  if (!db_tx_commit (db, &err))
+  if (!db_tx_commit (db, &err_tx))
     {
       /* commit can fail on serialization/deadlock etc */
-      db_tx_rollback (db, &err);
+      db_tx_rollback (db, &err_tx);
       send_response_error (ctx, root, 1813, "Purchase failed (concurrent).");
-      return 0; return 0;
+      return 0;
     }
 
 /* 9. Response continues... */
@@ -1218,36 +700,15 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     }
   int player_id = ctx->player_id;
   int sector_id = ctx->sector_id;
-  db_stmt_t *stmt = NULL;
   // Check if player is docked at a port of type 9 or 10 in the current sector
-  const char *sql_loc = "SELECT p.port_id FROM ports p "
-                        "JOIN ships s ON s.ported = p.port_id "
-                        "JOIN players pl ON pl.ship_id = s.ship_id "
-                        "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (p.type = 9 OR p.type = 10);";
-  int rc = db_stmt_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
-
-
-  if (rc != DB_OK)
+  int port_id = 0;
+  if (repo_stardock_check_shipyard_location (db, sector_id, player_id, &port_id) != 0)
     {
-      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to check shipyard location.");
-      return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, sector_id);
-  db_stmt_bind_i32 (stmt, 2, player_id);
-  rc = db_stmt_step (stmt);
-  if (rc != DB_ROW)
-    {
-      db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
                            "You are not docked at a shipyard.");
-      return 0; return 0;
+      return 0;
     }
-  int port_id = db_stmt_col_i32 (stmt, 0);
 
-
-  db_stmt_finalize (stmt);
-  stmt = NULL;
   // Load configuration
   struct twconfig *cfg = config_load ();
 
@@ -1259,53 +720,43 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // Get current player and ship info
-  const char *sql_info = "SELECT "
-                         "p.alignment, p.commission_id, p.experience, "
-                         "s.ship_id, s.type_id, st.name, st.basecost, "
-                         "s.fighters, s.shields, s.mines, s.limpets, s.genesis, s.detonators, s.probes, s.cloaking_devices, "
-                         "s.colonists, s.ore, s.organics, s.equipment, "
-                         "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner "
-                         "FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id "
-                         "WHERE p.player_id = {1};";
-
-
-  rc = db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res_info = NULL;
+  db_error_t err;
+  if (repo_stardock_get_player_ship_info (db, player_id, &res_info) != 0)
     {
       free (cfg);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
                            "Failed to fetch player/ship info.");
       return 0;
     }
-  db_stmt_bind_i32 (stmt, 1, player_id);
-  if (db_stmt_step (stmt) != DB_ROW)
+  if (!db_res_step (res_info, &err))
     {
-      db_stmt_finalize (stmt);
+      db_res_finalize (res_info);
       free (cfg);
       send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
                            "Could not find player's active ship.");
       return 0;
     }
   // Current player/ship state
-  int player_alignment = db_stmt_col_i32 (stmt, 0);
-  int player_commission = db_stmt_col_i32 (stmt, 1);
-  int player_experience = db_stmt_col_i32 (stmt, 2);
-  long long current_ship_basecost = db_stmt_col_i64 (stmt, 6);
-  int current_fighters = db_stmt_col_i32 (stmt, 7);
-  int current_shields = db_stmt_col_i32 (stmt, 8);
-  int current_mines = db_stmt_col_i32 (stmt, 9);
-  int current_limpets = db_stmt_col_i32 (stmt, 10);
-  int current_genesis = db_stmt_col_i32 (stmt, 11);
-  int current_detonators = db_stmt_col_i32 (stmt, 12);
-  int current_probes = db_stmt_col_i32 (stmt, 13);
-  int current_cloaks = db_stmt_col_i32 (stmt, 14);
+  int player_alignment = (int)db_res_col_i64 (res_info, 0, &err);
+  int player_commission = (int)db_res_col_i64 (res_info, 1, &err);
+  int player_experience = (int)db_res_col_i64 (res_info, 2, &err);
+  long long current_ship_basecost = db_res_col_i64 (res_info, 6, &err);
+  int current_fighters = (int)db_res_col_i64 (res_info, 7, &err);
+  int current_shields = (int)db_res_col_i64 (res_info, 8, &err);
+  int current_mines = (int)db_res_col_i64 (res_info, 9, &err);
+  int current_limpets = (int)db_res_col_i64 (res_info, 10, &err);
+  int current_genesis = (int)db_res_col_i64 (res_info, 11, &err);
+  int current_detonators = (int)db_res_col_i64 (res_info, 12, &err);
+  int current_probes = (int)db_res_col_i64 (res_info, 13, &err);
+  int current_cloaks = (int)db_res_col_i64 (res_info, 14, &err);
   long long current_cargo =
-    db_stmt_col_i64 (stmt, 15) + db_stmt_col_i64 (stmt,
-                                                  16) +
-    db_stmt_col_i64 (stmt, 17) + db_stmt_col_i64 (stmt, 18);
-  int has_transwarp = db_stmt_col_i32 (stmt, 19);
-  int has_planet_scanner = db_stmt_col_i32 (stmt, 20);
-  int has_long_range_scanner = db_stmt_col_i32 (stmt, 21);
+    db_res_col_i64 (res_info, 15, &err) + db_res_col_i64 (res_info,
+                                                  16, &err) +
+    db_res_col_i64 (res_info, 17, &err) + db_res_col_i64 (res_info, 18, &err);
+  int has_transwarp = (int)db_res_col_i64 (res_info, 19, &err);
+  int has_planet_scanner = (int)db_res_col_i64 (res_info, 20, &err);
+  int has_long_range_scanner = (int)db_res_col_i64 (res_info, 21, &err);
   long trade_in_value =
     floor (current_ship_basecost *
            (cfg->shipyard_trade_in_factor_bp / 10000.0));
@@ -1318,25 +769,18 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (current_ship_obj, "type",
-                       json_string ((const char *)
-                                    db_stmt_col_text (stmt, 5)));
+                       json_string (db_res_col_text (res_info, 5, &err)));
   json_object_set_new (current_ship_obj, "base_price",
                        json_integer (current_ship_basecost));
   json_object_set_new (current_ship_obj, "trade_in_value",
                        json_integer (trade_in_value));
   json_object_set_new (response_data, "current_ship", current_ship_obj);
-  db_stmt_finalize (stmt);
-  stmt = NULL;
+  db_res_finalize (res_info);
+
   // Fetch shipyard inventory and build "available" array
   json_t *available_array = json_array ();
-  const char *sql_inventory =
-    "SELECT si.ship_type_id, st.name, st.basecost, st.required_alignment, st.required_commission, st.required_experience, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.max_cloaks, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.maxmines, st.maxlimpets "
-    "FROM shipyard_inventory si JOIN shiptypes st ON si.ship_type_id = st.shiptypes_id "
-    "WHERE si.port_id = {1} AND si.enabled = 1 AND st.enabled = 1;";
-
-
-  rc = db_stmt_prepare_v2 (db, sql_inventory, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res_inventory = NULL;
+  if (repo_stardock_get_shipyard_inventory (db, port_id, &res_inventory) != 0)
     {
       json_decref (response_data);
       free (cfg);
@@ -1344,14 +788,13 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
                            "Failed to fetch shipyard inventory.");
       return 0;
     }
-  db_stmt_bind_i32 (stmt, 1, port_id);
-  while (db_stmt_step (stmt) == DB_ROW)
+  while (db_res_step (res_inventory, &err))
     {
       json_t *ship_obj = json_object ();
       json_t *reasons_array = json_array ();
       bool eligible = true;
-      const char *type_name = (const char *) db_stmt_col_text (stmt, 1);
-      long long new_ship_basecost = db_stmt_col_i64 (stmt, 2);
+      const char *type_name = db_res_col_text (res_inventory, 1, &err);
+      long long new_ship_basecost = db_res_col_i64 (res_inventory, 2, &err);
       long long net_cost;
       if (__builtin_sub_overflow(new_ship_basecost, trade_in_value, &net_cost))
         {
@@ -1383,43 +826,43 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
                            json_integer (trade_in_value));
       json_object_set_new (ship_obj, "net_cost", json_integer (net_cost));
       // Eligibility Checks
-      if (!db_stmt_col_is_null (stmt, 3)
-          && player_alignment < db_stmt_col_i32 (stmt, 3))
+      if (!db_res_col_is_null (res_inventory, 3)
+          && player_alignment < (int)db_res_col_i64 (res_inventory, 3, &err))
         {
           eligible = false;
           json_array_append_new (reasons_array,
                                  json_string ("alignment_too_low"));
         }
-      if (!db_stmt_col_is_null (stmt, 4)
-          && player_commission < db_stmt_col_i32 (stmt, 4))
+      if (!db_res_col_is_null (res_inventory, 4)
+          && player_commission < (int)db_res_col_i64 (res_inventory, 4, &err))
         {
           eligible = false;
           json_array_append_new (reasons_array,
                                  json_string ("commission_too_low"));
         }
-      if (!db_stmt_col_is_null (stmt, 5)
-          && player_experience < db_stmt_col_i32 (stmt, 5))
+      if (!db_res_col_is_null (res_inventory, 5)
+          && player_experience < (int)db_res_col_i64 (res_inventory, 5, &err))
         {
           eligible = false;
           json_array_append_new (reasons_array,
                                  json_string ("experience_too_low"));
         }
       if (cfg->shipyard_require_cargo_fit
-          && current_cargo > db_stmt_col_i64 (stmt, 6))
+          && current_cargo > db_res_col_i64 (res_inventory, 6, &err))
         {
           eligible = false;
           json_array_append_new (reasons_array,
                                  json_string ("cargo_would_not_fit"));
         }
       if (cfg->shipyard_require_fighters_fit
-          && current_fighters > db_stmt_col_i32 (stmt, 7))
+          && current_fighters > (int)db_res_col_i64 (res_inventory, 7, &err))
         {
           eligible = false;
           json_array_append_new (reasons_array,
                                  json_string ("fighters_exceed_capacity"));
         }
       if (cfg->shipyard_require_shields_fit
-          && current_shields > db_stmt_col_i32 (stmt, 8))
+          && current_shields > (int)db_res_col_i64 (res_inventory, 8, &err))
         {
           eligible = false;
           json_array_append_new (reasons_array,
@@ -1427,58 +870,58 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
         }
       if (cfg->shipyard_require_hardware_compat)
         {
-          if (current_genesis > db_stmt_col_i32 (stmt, 9))
+          if (current_genesis > (int)db_res_col_i64 (res_inventory, 9, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string ("genesis_exceed_capacity"));
             }
-          if (current_detonators > db_stmt_col_i32 (stmt, 10))
+          if (current_detonators > (int)db_res_col_i64 (res_inventory, 10, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string
                                        ("detonators_exceed_capacity"));
             }
-          if (current_probes > db_stmt_col_i32 (stmt, 11))
+          if (current_probes > (int)db_res_col_i64 (res_inventory, 11, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string ("probes_exceed_capacity"));
             }
-          if (current_cloaks > db_stmt_col_i32 (stmt, 12))
+          if (current_cloaks > (int)db_res_col_i64 (res_inventory, 12, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string ("cloak_not_supported"));
             }
-          if (has_transwarp && !db_stmt_col_i32 (stmt, 13))
+          if (has_transwarp && !(int)db_res_col_i64 (res_inventory, 13, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string ("transwarp_not_supported"));
             }
-          if (has_planet_scanner && !db_stmt_col_i32 (stmt, 14))
+          if (has_planet_scanner && !(int)db_res_col_i64 (res_inventory, 14, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string
                                        ("planet_scan_not_supported"));
             }
-          if (has_long_range_scanner && !db_stmt_col_i32 (stmt, 15))
+          if (has_long_range_scanner && !(int)db_res_col_i64 (res_inventory, 15, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string
                                        ("long_range_not_supported"));
             }
-          if (current_mines > db_stmt_col_i32 (stmt, 16))
+          if (current_mines > (int)db_res_col_i64 (res_inventory, 16, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
                                      json_string ("mines_exceed_capacity"));
             }
-          if (current_limpets > db_stmt_col_i32 (stmt, 17))
+          if (current_limpets > (int)db_res_col_i64 (res_inventory, 17, &err))
             {
               eligible = false;
               json_array_append_new (reasons_array,
@@ -1489,7 +932,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (ship_obj, "reasons", reasons_array);
       json_array_append_new (available_array, ship_obj);
     }
-  db_stmt_finalize (stmt);
+  db_res_finalize (res_inventory);
   json_object_set_new (response_data, "available", available_array);
   send_response_ok_take (ctx, root, "shipyard.list_v1", &response_data);
   free (cfg);
@@ -1535,55 +978,30 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
                            "Missing or invalid 'new_ship_name'.");
       return 0;
     }
-  // FIX: Declare variables here
-  db_stmt_t *stmt = NULL;
-  // int port_id = 0; // Unused
-  // FIX: Define the missing SQL query string
-  const char *sql_loc = "SELECT p.port_id FROM ports p "
-                        "JOIN ships s ON s.ported = p.port_id "
-                        "JOIN players pl ON pl.ship_id = s.ship_id "
-                        "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (p.type = 9 OR p.type = 10);";
-
-
   // Begin transaction
-  if (stx_begin (db) !=
-      DB_OK)
+  db_error_t err;
+  if (!db_tx_begin (db, 0, &err))
     {
       send_response_error (ctx, root, ERR_DB,
                            "Failed to start transaction.");
       return 0;
     }
   // Re-validate location
-  int rc = db_stmt_prepare_v2 (db, sql_loc, -1, &stmt, NULL);
-
-
-  if (rc != DB_OK)
+  int port_id = 0;
+  if (repo_stardock_check_shipyard_location (db, ctx->sector_id, ctx->player_id, &port_id) != 0)
     {
-      stx_rollback (db);
-      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to check shipyard location.");
-      return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, ctx->sector_id);
-  db_stmt_bind_i32 (stmt, 2, ctx->player_id);
-  rc = db_stmt_step (stmt);
-  if (rc != DB_ROW)
-    {
-      db_stmt_finalize (stmt);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
                            "You are not docked at a shipyard.");
-      return 0; return 0;
+      return 0;
     }
-  // port_id = db_stmt_col_i32 (stmt, 0); // Unused
-  db_stmt_finalize (stmt);
-  stmt = NULL;
+
   struct twconfig *cfg = config_load ();
 
 
   if (!cfg)
     {
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_SERVER_ERROR,
                            "Could not load server configuration.");
       return 0;
@@ -1591,77 +1009,64 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   if (strlen (new_ship_name) > (size_t) cfg->max_ship_name_length)
     {
       free (cfg);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Ship name is too long.");
       return 0;
     }
-  const char *sql_info = "SELECT "
-                         "p.alignment, p.commission_id, p.experience, s.credits, "
-                         "s.fighters, s.shields, s.mines, s.limpets, s.genesis, s.detonators, s.probes, s.cloaking_devices, "
-                         "s.colonists, s.ore, s.organics, s.equipment, "
-                         "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, s.ship_id, s.type_id, st.basecost "
-                         "FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id "
-                         "WHERE p.player_id = {1};";
 
-
-  rc = db_stmt_prepare_v2 (db, sql_info, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res_info = NULL;
+  if (repo_stardock_get_player_ship_info (db, ctx->player_id, &res_info) != 0)
     {
-      db_stmt_finalize (stmt);
-      stx_rollback (db);
+      free (cfg);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to check shipyard location.");
-      return 0; return 0;
+                           "Failed to fetch player/ship info.");
+      return 0;
     }
-  db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-  rc = db_stmt_step (stmt);
-  if (rc != DB_ROW)
+  if (!db_res_step (res_info, &err))
     {
-      db_stmt_finalize (stmt);
-      stx_rollback (db);
+      db_res_finalize (res_info);
+      free (cfg);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_SHIP_NOT_FOUND,
                            "Could not find player's active ship.");
-      return 0; return 0;
+      return 0;
     }
-  int player_alignment = db_stmt_col_i32 (stmt, 0);
-  int player_commission = db_stmt_col_i32 (stmt, 1);
-  int player_experience = db_stmt_col_i32 (stmt, 2);
-  long long current_credits = db_stmt_col_i64 (stmt, 3);
-  int current_fighters = db_stmt_col_i32 (stmt, 4);
-  int current_shields = db_stmt_col_i32 (stmt, 5);
-  int current_mines = db_stmt_col_i32 (stmt, 6);
-  int current_limpets = db_stmt_col_i32 (stmt, 7);
-  int current_genesis = db_stmt_col_i32 (stmt, 8);
-  int current_detonators = db_stmt_col_i32 (stmt, 9);
-  int current_probes = db_stmt_col_i32 (stmt, 10);
-  int current_cloaks = db_stmt_col_i32 (stmt, 11);
+  int player_alignment = (int)db_res_col_i64 (res_info, 0, &err);
+  int player_commission = (int)db_res_col_i64 (res_info, 1, &err);
+  int player_experience = (int)db_res_col_i64 (res_info, 2, &err);
+  long long current_credits = db_res_col_i64 (res_info, 3, &err);
+  int current_fighters = (int)db_res_col_i64 (res_info, 4, &err);
+  int current_shields = (int)db_res_col_i64 (res_info, 5, &err);
+  int current_mines = (int)db_res_col_i64 (res_info, 6, &err);
+  int current_limpets = (int)db_res_col_i64 (res_info, 7, &err);
+  int current_genesis = (int)db_res_col_i64 (res_info, 8, &err);
+  int current_detonators = (int)db_res_col_i64 (res_info, 9, &err);
+  int current_probes = (int)db_res_col_i64 (res_info, 10, &err);
+  int current_cloaks = (int)db_res_col_i64 (res_info, 11, &err);
   long long current_cargo =
-    db_stmt_col_i64 (stmt, 12) + db_stmt_col_i64 (stmt,
-                                                  13) +
-    db_stmt_col_i64 (stmt, 14) + db_stmt_col_i64 (stmt, 15);
-  int has_transwarp = db_stmt_col_i32 (stmt, 16);
-  int has_planet_scanner = db_stmt_col_i32 (stmt, 17);
-  int has_long_range_scanner = db_stmt_col_i32 (stmt, 18);
-  int current_ship_id = db_stmt_col_i32 (stmt, 19);
-  long long old_ship_basecost = db_stmt_col_i64 (stmt, 21);
+    db_res_col_i64 (res_info, 12, &err) + db_res_col_i64 (res_info,
+                                                  13, &err) +
+    db_res_col_i64 (res_info, 14, &err) + db_res_col_i64 (res_info, 15, &err);
+  int has_transwarp = (int)db_res_col_i64 (res_info, 16, &err);
+  int has_planet_scanner = (int)db_res_col_i64 (res_info, 17, &err);
+  int has_long_range_scanner = (int)db_res_col_i64 (res_info, 18, &err);
+  int current_ship_id = (int)db_res_col_i64 (res_info, 19, &err);
+  long long old_ship_basecost = db_res_col_i64 (res_info, 21, &err);
 
 
-  db_stmt_finalize (stmt);
-  stmt = NULL;
-  const char *sql_target_type =
-    "SELECT basecost, required_alignment, required_commission, required_experience, maxholds, maxfighters, maxshields, maxgenesis, max_detonators, max_probes, max_cloaks, can_transwarp, can_planet_scan, can_long_range_scan, maxmines, maxlimpets, name FROM shiptypes WHERE shiptypes_id = {1} AND enabled = 1;";
+  db_res_finalize (res_info);
 
-
-  rc = db_stmt_prepare_v2 (db, sql_target_type, -1, &stmt, NULL);
-  if (rc != DB_OK || db_stmt_step (stmt) != DB_ROW)
+  db_res_t *res_target = NULL;
+  if (repo_stardock_get_shiptype_details (db, new_type_id, &res_target) != 0 || !db_res_step (res_target, &err))
     {
-      if (stmt)
+      if (res_target)
         {
-          db_stmt_finalize (stmt);
+          db_res_finalize (res_target);
         }
       free (cfg);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx,
                            root,
                            ERR_SHIPYARD_INVALID_SHIP_TYPE,
@@ -1671,29 +1076,29 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   bool eligible_for_upgrade = true;
 
 
-  if (!db_stmt_col_is_null (stmt, 1)
-      && player_alignment < db_stmt_col_i32 (stmt, 1))
+  if (!db_res_col_is_null (res_target, 1)
+      && player_alignment < (int)db_res_col_i64 (res_target, 1, &err))
     {
       eligible_for_upgrade = false;
     }
-  if (!db_stmt_col_is_null (stmt, 2)
-      && player_commission < db_stmt_col_i32 (stmt, 2))
+  if (!db_res_col_is_null (res_target, 2)
+      && player_commission < (int)db_res_col_i64 (res_target, 2, &err))
     {
       eligible_for_upgrade = false;
     }
-  if (!db_stmt_col_is_null (stmt, 3)
-      && player_experience < db_stmt_col_i32 (stmt, 3))
+  if (!db_res_col_is_null (res_target, 3)
+      && player_experience < (int)db_res_col_i64 (res_target, 3, &err))
     {
       eligible_for_upgrade = false;
     }
-  int new_max_holds = db_stmt_col_i32 (stmt, 4);
+  int new_max_holds = (int)db_res_col_i64 (res_target, 4, &err);
 
 
   if (cfg->shipyard_require_cargo_fit && current_cargo > new_max_holds)
     {
       eligible_for_upgrade = false;
     }
-  int new_max_fighters = db_stmt_col_i32 (stmt, 5);
+  int new_max_fighters = (int)db_res_col_i64 (res_target, 5, &err);
 
 
   if (cfg->shipyard_require_fighters_fit
@@ -1701,7 +1106,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       eligible_for_upgrade = false;
     }
-  int new_max_shields = db_stmt_col_i32 (stmt, 6);
+  int new_max_shields = (int)db_res_col_i64 (res_target, 6, &err);
 
 
   if (cfg->shipyard_require_shields_fit && current_shields > new_max_shields)
@@ -1710,57 +1115,56 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     }
   if (cfg->shipyard_require_hardware_compat)
     {
-      if (current_genesis > db_stmt_col_i32 (stmt, 7))
+      if (current_genesis > (int)db_res_col_i64 (res_target, 7, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (current_detonators > db_stmt_col_i32 (stmt, 8))
+      if (current_detonators > (int)db_res_col_i64 (res_target, 8, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (current_probes > db_stmt_col_i32 (stmt, 9))
+      if (current_probes > (int)db_res_col_i64 (res_target, 9, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (current_cloaks > db_stmt_col_i32 (stmt, 10))
+      if (current_cloaks > (int)db_res_col_i64 (res_target, 10, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (has_transwarp && !db_stmt_col_i32 (stmt, 11))
+      if (has_transwarp && !(int)db_res_col_i64 (res_target, 11, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (has_planet_scanner && !db_stmt_col_i32 (stmt, 12))
+      if (has_planet_scanner && !(int)db_res_col_i64 (res_target, 12, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (has_long_range_scanner && !db_stmt_col_i32 (stmt, 13))
+      if (has_long_range_scanner && !(int)db_res_col_i64 (res_target, 13, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (current_mines > db_stmt_col_i32 (stmt, 14))
+      if (current_mines > (int)db_res_col_i64 (res_target, 14, &err))
         {
           eligible_for_upgrade = false;
         }
-      if (current_limpets > db_stmt_col_i32 (stmt, 15))
+      if (current_limpets > (int)db_res_col_i64 (res_target, 15, &err))
         {
           eligible_for_upgrade = false;
         }
     }
   if (!eligible_for_upgrade)
     {
-      db_stmt_finalize (stmt);
+      db_res_finalize (res_target);
       free (cfg);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx,
                            root,
                            ERR_SHIPYARD_REQUIREMENTS_NOT_MET,
                            "Ship upgrade requirements not met (capacity or capabilities).");
       return 0;
     }
-  long long new_shiptype_basecost = db_stmt_col_i64 (stmt, 0);
-  const char *target_ship_name =
-    (const char *) db_stmt_col_text (stmt, 16);
+  long long new_shiptype_basecost = db_res_col_i64 (res_target, 0, &err);
+  const char *target_ship_name = db_res_col_text (res_target, 16, &err);
 
 
   if (target_ship_name
@@ -1771,9 +1175,9 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
 
       if (!h_is_player_corp_ceo (db, ctx->player_id, &dummy_corp_id))
         {
-          db_stmt_finalize (stmt);
+          db_res_finalize (res_target);
           free (cfg);
-          stx_rollback (db);
+          db_tx_rollback (db, &err);
           send_response_error (ctx,
                                root,
                                ERR_SHIPYARD_REQUIREMENTS_NOT_MET,
@@ -1781,8 +1185,8 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
           return 0;
         }
     }
-  db_stmt_finalize (stmt);
-  stmt = NULL;
+  db_res_finalize (res_target);
+
   long trade_in_value =
     floor (old_ship_basecost * (cfg->shipyard_trade_in_factor_bp / 10000.0));
   long tax = floor (new_shiptype_basecost * (cfg->shipyard_tax_bp / 10000.0));
@@ -1793,7 +1197,7 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       /* Overflow in cost calculation - treat as unaffordable */
       free (cfg);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_SHIPYARD_INSUFFICIENT_FUNDS,
                            "Ship cost calculation overflow.");
       return 0;
@@ -1803,39 +1207,22 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
   if (current_credits < final_cost)
     {
       free (cfg);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_SHIPYARD_INSUFFICIENT_FUNDS,
                            "Insufficient credits for ship upgrade.");
       return 0;
     }
-  const char *sql_update =
-    "UPDATE ships SET type_id = {1}, name = {2}, credits = credits - {3} WHERE ship_id = {4};";
 
-
-  rc = db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  if (repo_stardock_upgrade_ship (db, new_type_id, new_ship_name, final_cost, current_ship_id) != 0)
     {
       free (cfg);
-      stx_rollback (db);
-      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare ship update.");
-      return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, new_type_id);
-  db_stmt_bind_text (stmt, 2, new_ship_name, -1, DB_BIND_STATIC);
-  db_stmt_bind_i64 (stmt, 3, final_cost);
-  db_stmt_bind_i32 (stmt, 4, current_ship_id);
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      db_stmt_finalize (stmt);
-      free (cfg);
-      stx_rollback (db);
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to execute ship upgrade.");
       return 0;
     }
-  db_stmt_finalize (stmt);
-  if (stx_commit (db) != DB_OK)
+
+  if (!db_tx_commit (db, &err))
     {
       free (cfg);
       send_response_error (ctx, root, ERR_DB,
@@ -1864,25 +1251,23 @@ int
 tavern_settings_load (void)
 {
   db_t *db = game_db_get_handle ();
-  db_stmt_t *stmt = NULL;
-  const char *sql =
-    "SELECT max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled FROM tavern_settings WHERE tavern_settings_id = 1;";
-  int rc = db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res = NULL;
+  db_error_t err;
+  if (repo_stardock_get_tavern_settings (db, &res) != 0)
     {
-      LOGE ("Tavern settings prepare error: %s", db_errmsg (db));
+      LOGE ("Tavern settings load error");
       return -1;
     }
-  if (db_stmt_step (stmt) == DB_ROW)
+  if (db_res_step (res, &err))
     {
-      g_tavern_cfg.max_bet_per_transaction = db_stmt_col_i32 (stmt, 0);
-      g_tavern_cfg.daily_max_wager = db_stmt_col_i32 (stmt, 1);
-      g_tavern_cfg.enable_dynamic_wager_limit = db_stmt_col_i32 (stmt, 2);
-      g_tavern_cfg.graffiti_max_posts = db_stmt_col_i32 (stmt, 3);
-      g_tavern_cfg.notice_expires_days = db_stmt_col_i32 (stmt, 4);
-      g_tavern_cfg.buy_round_cost = db_stmt_col_i32 (stmt, 5);
-      g_tavern_cfg.buy_round_alignment_gain = db_stmt_col_i32 (stmt, 6);
-      g_tavern_cfg.loan_shark_enabled = db_stmt_col_i32 (stmt, 7);
+      g_tavern_cfg.max_bet_per_transaction = (int)db_res_col_i64 (res, 0, &err);
+      g_tavern_cfg.daily_max_wager = (int)db_res_col_i64 (res, 1, &err);
+      g_tavern_cfg.enable_dynamic_wager_limit = (int)db_res_col_i64 (res, 2, &err);
+      g_tavern_cfg.graffiti_max_posts = (int)db_res_col_i64 (res, 3, &err);
+      g_tavern_cfg.notice_expires_days = (int)db_res_col_i64 (res, 4, &err);
+      g_tavern_cfg.buy_round_cost = (int)db_res_col_i64 (res, 5, &err);
+      g_tavern_cfg.buy_round_alignment_gain = (int)db_res_col_i64 (res, 6, &err);
+      g_tavern_cfg.loan_shark_enabled = (int)db_res_col_i64 (res, 7, &err);
     }
   else
     {
@@ -1897,7 +1282,7 @@ tavern_settings_load (void)
       g_tavern_cfg.buy_round_alignment_gain = 5;
       g_tavern_cfg.loan_shark_enabled = 1;
     }
-  db_stmt_finalize (stmt);
+  db_res_finalize (res);
   return 0;
 }
 
@@ -1906,22 +1291,12 @@ tavern_settings_load (void)
 static bool
 is_player_in_tavern_sector (db_t *db, int sector_id)
 {
-  db_stmt_t *stmt = NULL;
-  const char *sql =
-    "SELECT 1 FROM taverns WHERE sector_id = {1} AND enabled = 1;";
   bool in_tavern = false;
-  if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) != DB_OK)
+  if (repo_stardock_is_in_tavern (db, sector_id, &in_tavern) != 0)
     {
-      LOGE ("is_player_in_tavern_sector: Failed to prepare statement: %s",
-            db_errmsg (db));
+      LOGE ("is_player_in_tavern_sector: Failed");
       return false;
     }
-  db_stmt_bind_i32 (stmt, 1, sector_id);
-  if (db_stmt_step (stmt) == DB_ROW)
-    {
-      in_tavern = true;
-    }
-  db_stmt_finalize (stmt);
   return in_tavern;
 }
 
@@ -1931,38 +1306,35 @@ bool
 get_player_loan (db_t *db, int player_id, long long *principal,
                  int *interest_rate, int *due_date, int *is_defaulted)
 {
-  db_stmt_t *stmt = NULL;
-  const char *sql =
-    "SELECT principal, interest_rate, due_date, is_defaulted FROM tavern_loans WHERE player_id = {1};";
+  db_res_t *res = NULL;
+  db_error_t err;
   bool found = false;
-  if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) != DB_OK)
+  if (repo_stardock_get_loan (db, player_id, &res) != 0)
     {
-      LOGE ("get_player_loan: Failed to prepare statement: %s",
-            db_errmsg (db));
+      LOGE ("get_player_loan: Failed");
       return false;
     }
-  db_stmt_bind_i32 (stmt, 1, player_id);
-  if (db_stmt_step (stmt) == DB_ROW)
+  if (db_res_step (res, &err))
     {
       if (principal)
         {
-          *principal = db_stmt_col_i64 (stmt, 0);
+          *principal = db_res_col_i64 (res, 0, &err);
         }
       if (interest_rate)
         {
-          *interest_rate = db_stmt_col_i32 (stmt, 1);
+          *interest_rate = (int)db_res_col_i64 (res, 1, &err);
         }
       if (due_date)
         {
-          *due_date = db_stmt_col_i32 (stmt, 2);
+          *due_date = (int)db_res_col_i64 (res, 2, &err);
         }
       if (is_defaulted)
         {
-          *is_defaulted = db_stmt_col_i32 (stmt, 3);
+          *is_defaulted = (int)db_res_col_i64 (res, 3, &err);
         }
       found = true;
     }
-  db_stmt_finalize (stmt);
+  db_res_finalize (res);
   return found;
 }
 
@@ -1978,7 +1350,7 @@ sanitize_text (char *text, size_t max_len)
   size_t len = strnlen (text, max_len);
 
 
-  for (int i = 0; i < len; i++)
+  for (int i = 0; i < (int)len; i++)
     {
       // Allow basic alphanumeric, spaces, and common punctuation
       if (!isalnum ((unsigned char) text[i])
@@ -2010,26 +1382,14 @@ validate_bet_limits (db_t *db, int player_id, long long bet_amount)
   // Check dynamic wager limit (if enabled)
   if (g_tavern_cfg.enable_dynamic_wager_limit)
     {
-      long long player_credits = 0;
-      db_stmt_t *stmt = NULL;
-      const char *sql_credits =
-        "SELECT credits FROM players WHERE player_id = {1};";
-
-
-      if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == DB_OK)
+      int64_t player_credits = 0;
+      if (repo_stardock_get_player_credits (db, player_id, &player_credits) == 0)
         {
-          db_stmt_bind_i32 (stmt, 1, player_id);
-          if (db_stmt_step (stmt) == DB_ROW)
-            {
-              player_credits = db_stmt_col_i64 (stmt, 0);
-            }
-          db_stmt_finalize (stmt);
+          // Ok
         }
       else
         {
-          LOGE
-            ("validate_bet_limits: Failed to prepare credits statement: %s",
-            db_errmsg (db));
+          LOGE ("validate_bet_limits: Failed to get credits");
           // If we can't get credits, we can't apply dynamic limit, so fail safe
           return -3;
         }
@@ -2048,34 +1408,15 @@ static int
 update_player_credits_gambling (db_t *db, int player_id, long long amount,
                                 bool is_win)
 {
-  const char *sql_update = is_win ?
-                           "UPDATE players SET credits = credits + {1} WHERE player_id = {2};"
-    : "UPDATE players SET credits = credits - {1} WHERE player_id = {2};";
-  db_stmt_t *stmt = NULL;
-  int rc = -1;
-  if (db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL) == DB_OK)
+  if (repo_stardock_update_player_credits (db, player_id, (int64_t)amount, is_win) == 0)
     {
-      db_stmt_bind_i64 (stmt, 1, amount);
-      db_stmt_bind_i32 (stmt, 2, player_id);
-      if (db_stmt_step (stmt) == DB_DONE)
-        {
-          rc = 0;               // Success
-        }
-      else
-        {
-          LOGE
-          (
-            "update_player_credits_gambling: Failed to update player credits: %s",
-            db_errmsg (db));
-        }
-      db_stmt_finalize (stmt);
+      return 0;               // Success
     }
   else
     {
-      LOGE ("update_player_credits_gambling: Failed to prepare statement: %s",
-            db_errmsg (db));
+      LOGE ("update_player_credits_gambling: Failed");
+      return -1;
     }
-  return rc;
 }
 
 
@@ -2083,25 +1424,16 @@ update_player_credits_gambling (db_t *db, int player_id, long long amount,
 static bool
 has_sufficient_funds (db_t *db, int player_id, long long required_amount)
 {
-  long long player_credits = 0;
-  db_stmt_t *stmt = NULL;
-  const char *sql = "SELECT credits FROM players WHERE player_id = {1};";
-  if (db_stmt_prepare_v2 (db, sql, -1, &stmt, NULL) == DB_OK)
+  int64_t player_credits = 0;
+  if (repo_stardock_get_player_credits (db, player_id, &player_credits) == 0)
     {
-      db_stmt_bind_i32 (stmt, 1, player_id);
-      if (db_stmt_step (stmt) == DB_ROW)
-        {
-          player_credits = db_stmt_col_i64 (stmt, 0);
-        }
-      db_stmt_finalize (stmt);
+      return player_credits >= required_amount;
     }
   else
     {
-      LOGE ("has_sufficient_funds: Failed to prepare credits statement: %s",
-            db_errmsg (db));
+      LOGE ("has_sufficient_funds: Failed");
       return false;
     }
-  return player_credits >= required_amount;
 }
 
 
@@ -2118,29 +1450,9 @@ check_loan_default (db_t *db, int player_id, int current_time)
     {
       if (is_defaulted == 0 && current_time > due_date && principal > 0)
         {
-          // Mark as defaulted
-          const char *sql_default =
-            "UPDATE tavern_loans SET is_defaulted = 1 WHERE player_id = {1};";
-          db_stmt_t *stmt = NULL;
-
-
-          if (db_stmt_prepare_v2 (db, sql_default, -1, &stmt, NULL) ==
-              DB_OK)
+          if (repo_stardock_mark_loan_defaulted (db, player_id) != 0)
             {
-              db_stmt_bind_i32 (stmt, 1, player_id);
-              if (db_stmt_step (stmt) != DB_DONE)
-                {
-                  LOGE
-                    ("check_loan_default: Failed to mark loan as defaulted: %s",
-                    db_errmsg (db));
-                }
-              db_stmt_finalize (stmt);
-            }
-          else
-            {
-              LOGE
-                ("check_loan_default: Failed to prepare default statement: %s",
-                db_errmsg (db));
+              LOGE ("check_loan_default: Failed");
             }
           return true;          // Just defaulted
         }
@@ -2160,33 +1472,12 @@ apply_loan_interest (db_t *db, int player_id, long long current_principal,
 {
   long long interest_amount = (current_principal * interest_rate_bp) / 10000;   // interest_rate_bp is basis points
   long long new_principal = current_principal + interest_amount;
-  db_stmt_t *stmt = NULL;
-  const char *sql_update =
-    "UPDATE tavern_loans SET principal = {1} WHERE player_id = {2};";
-  int rc = db_stmt_prepare_v2 (db, sql_update, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  if (repo_stardock_update_loan_principal (db, player_id, new_principal) != 0)
     {
-      LOGE ("apply_loan_interest: Failed to prepare statement: %s",
-            db_errmsg (db));
-      return rc;
+      LOGE ("apply_loan_interest: Failed");
+      return DB_ERR;
     }
-  db_stmt_bind_i64 (stmt, 1, new_principal);
-  db_stmt_bind_i32 (stmt, 2, player_id);
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      LOGE
-      (
-        "apply_loan_interest: Failed to update loan principal for player %d: %s",
-        player_id,
-        db_errmsg (db));
-      rc = DB_ERR;
-    }
-  else
-    {
-      rc = DB_OK;
-    }
-  db_stmt_finalize (stmt);
-  return rc;
+  return DB_OK;
 }
 
 
@@ -2283,34 +1574,16 @@ cmd_tavern_lottery_buy_ticket (client_ctx_t *ctx, json_t *root)
                            "Failed to deduct credits for lottery ticket.");
       return 0;
     }
-  const char *sql_insert_ticket =
-    "INSERT INTO tavern_lottery_tickets (draw_date, player_id, number, cost, purchased_at) VALUES ({1}, {2}, {3}, {4}, {5});";
-  db_stmt_t *stmt = NULL;
 
-
-  rc = db_stmt_prepare_v2 (db, sql_insert_ticket, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  if (repo_stardock_insert_lottery_ticket (db, draw_date_str, ctx->player_id, ticket_number, ticket_price, (int)now) != 0)
     {
       // Rollback credits if this fails and no explicit transaction is used
       update_player_credits_gambling (db, ctx->player_id, ticket_price, true);  // Refund credits
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare lottery ticket insert.");
-      return 0;
-    }
-  db_stmt_bind_text (stmt, 1, draw_date_str, -1, DB_BIND_STATIC);
-  db_stmt_bind_i32 (stmt, 2, ctx->player_id);
-  db_stmt_bind_i32 (stmt, 3, ticket_number);
-  db_stmt_bind_i64 (stmt, 4, ticket_price);
-  db_stmt_bind_i32 (stmt, 5, (int) now);
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      db_stmt_finalize (stmt);
-      update_player_credits_gambling (db, ctx->player_id, ticket_price, true);  // Refund credits
-      send_response_error (ctx, root, ERR_DB,
                            "Failed to insert lottery ticket.");
       return 0;
     }
-  db_stmt_finalize (stmt);
+
   json_t *response_data = json_object ();
 
 
@@ -2363,65 +1636,53 @@ cmd_tavern_lottery_status (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "current_draw_date",
                        json_string (draw_date_str));
   // Query current lottery state
-  db_stmt_t *stmt = NULL;
-  const char *sql_state =
-    "SELECT draw_date, winning_number, jackpot FROM tavern_lottery_state WHERE draw_date = {1};";
-  int rc = db_stmt_prepare_v2 (db, sql_state, -1, &stmt, NULL);
-
-
-  if (rc != DB_OK)
+  db_res_t *res_state = NULL;
+  db_error_t err;
+  if (repo_stardock_get_lottery_state (db, draw_date_str, &res_state) != 0)
     {
       json_decref (response_data);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare lottery state query.");
+                           "Failed to query lottery state.");
       return 0;
     }
-  db_stmt_bind_text (stmt, 1, draw_date_str, -1, DB_BIND_STATIC);
-  if (db_stmt_step (stmt) == DB_ROW)
+  if (db_res_step (res_state, &err))
     {
       json_object_set_new (response_data, "draw_date",
-                           json_string ((const char *)
-                                        db_stmt_col_text (stmt, 0)));
-      if (!db_stmt_col_is_null (stmt, 1))
+                           json_string (db_res_col_text (res_state, 0, &err)));
+      if (!db_res_col_is_null (res_state, 1))
         {
           json_object_set_new (response_data, "winning_number",
-                               json_integer (db_stmt_col_i32 (stmt, 1)));
+                               json_integer ((int)db_res_col_i64 (res_state, 1, &err)));
         }
       json_object_set_new (response_data, "jackpot",
-                           json_integer (db_stmt_col_i64 (stmt, 2)));
+                           json_integer (db_res_col_i64 (res_state, 2, &err)));
     }
-  db_stmt_finalize (stmt);
-  stmt = NULL;
+  db_res_finalize (res_state);
+
   // Query player's tickets for the current draw
   json_t *player_tickets_array = json_array ();
-  const char *sql_player_tickets =
-    "SELECT number, cost, purchased_at FROM tavern_lottery_tickets WHERE player_id = {1} AND draw_date = {2};";
-
-
-  rc = db_stmt_prepare_v2 (db, sql_player_tickets, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  db_res_t *res_tickets = NULL;
+  if (repo_stardock_get_player_lottery_tickets (db, ctx->player_id, draw_date_str, &res_tickets) != 0)
     {
       json_decref (response_data);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare player tickets query.");
+                           "Failed to query player tickets.");
       return 0;
     }
-  db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-  db_stmt_bind_text (stmt, 2, draw_date_str, -1, DB_BIND_STATIC);
-  while (db_stmt_step (stmt) == DB_ROW)
+  while (db_res_step (res_tickets, &err))
     {
       json_t *ticket_obj = json_object ();
 
 
       json_object_set_new (ticket_obj, "number",
-                           json_integer (db_stmt_col_i32 (stmt, 0)));
+                           json_integer ((int)db_res_col_i64 (res_tickets, 0, &err)));
       json_object_set_new (ticket_obj, "cost",
-                           json_integer (db_stmt_col_i64 (stmt, 1)));
+                           json_integer (db_res_col_i64 (res_tickets, 1, &err)));
       json_object_set_new (ticket_obj, "purchased_at",
-                           json_integer (db_stmt_col_i32 (stmt, 2)));
+                           json_integer ((int)db_res_col_i64 (res_tickets, 2, &err)));
       json_array_append_new (player_tickets_array, ticket_obj);
     }
-  db_stmt_finalize (stmt);
+  db_res_finalize (res_tickets);
   json_object_set_new (response_data, "player_tickets", player_tickets_array);
   send_response_ok_take (ctx, root, "tavern.lottery.status_v1",
                          &response_data);
@@ -2480,27 +1741,14 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // Check if target player exists
-  db_stmt_t *stmt = NULL;
-  const char *sql_target_exists = "SELECT 1 FROM players WHERE player_id = {1};";
-
-
-  if (db_stmt_prepare_v2 (db, sql_target_exists, -1, &stmt, NULL) !=
-      DB_OK)
+  int64_t target_credits_tmp;
+  if (repo_stardock_get_player_credits (db, target_id, &target_credits_tmp) != 0)
     {
-      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to check target player existence.");
-      return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, target_id);
-  if (db_stmt_step (stmt) != DB_ROW)
-    {
-      db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_TAVERN_PLAYER_NOT_FOUND,
                            "Target player not found.");
       return 0;
     }
-  db_stmt_finalize (stmt);
-  stmt = NULL;
+
   // Validate bet limits
   int limit_check = validate_bet_limits (db, ctx->player_id, bet_amount);
 
@@ -2550,33 +1798,14 @@ cmd_tavern_deadpool_place_bet (client_ctx_t *ctx, json_t *root)
   // This could be more complex, e.g., based on target's alignment, ship strength, etc.
   int odds_bp = get_random_int (5000, 15000);   // Example: 50%-150% odds
   // Insert bet into tavern_deadpool_bets
-  const char *sql_insert_bet =
-    "INSERT INTO tavern_deadpool_bets (bettor_id, target_id, amount, odds_bp, placed_at, expires_at, resolved) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, 0);";
-
-
-  rc = db_stmt_prepare_v2 (db, sql_insert_bet, -1, &stmt, NULL);
-  if (rc != DB_OK)
+  if (repo_stardock_insert_deadpool_bet (db, ctx->player_id, target_id, bet_amount, odds_bp, (int)now, (int)expires_at) != 0)
     {
       update_player_credits_gambling (db, ctx->player_id, bet_amount, true);    // Refund credits
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare dead pool bet insert.");
-      return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-  db_stmt_bind_i32 (stmt, 2, target_id);
-  db_stmt_bind_i64 (stmt, 3, bet_amount);
-  db_stmt_bind_i32 (stmt, 4, odds_bp);
-  db_stmt_bind_i32 (stmt, 5, (int) now);
-  db_stmt_bind_i32 (stmt, 6, (int) expires_at);
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      db_stmt_finalize (stmt);
-      update_player_credits_gambling (db, ctx->player_id, bet_amount, true);    // Refund credits
-      send_response_error (ctx, root, ERR_DB,
                            "Failed to insert dead pool bet.");
       return 0;
     }
-  db_stmt_finalize (stmt);
+
   json_t *response_data = json_object ();
 
 
@@ -2692,20 +1921,9 @@ cmd_tavern_dice_play (client_ctx_t *ctx, json_t *root)
         }
     }
   // Get updated player credits for response
-  long long current_credits = 0;
-  db_stmt_t *stmt = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE player_id = {1};";
+  int64_t current_credits = 0;
+  repo_stardock_get_player_credits (db, ctx->player_id, &current_credits);
 
-
-  if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt, NULL) == DB_OK)
-    {
-      db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-      if (db_stmt_step (stmt) == DB_ROW)
-        {
-          current_credits = db_stmt_col_i64 (stmt, 0);
-        }
-      db_stmt_finalize (stmt);
-    }
   json_t *response_data = json_object ();
 
 
@@ -2850,21 +2068,9 @@ cmd_tavern_highstakes_play (client_ctx_t *ctx, json_t *root)
         }
     }
   // Get updated player credits for response
-  long long player_credits_after_game = 0;
-  db_stmt_t *stmt_credits = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE player_id = {1};";
+  int64_t player_credits_after_game = 0;
+  repo_stardock_get_player_credits (db, ctx->player_id, &player_credits_after_game);
 
-
-  if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
-      DB_OK)
-    {
-      db_stmt_bind_i32 (stmt_credits, 1, ctx->player_id);
-      if (db_stmt_step (stmt_credits) == DB_ROW)
-        {
-          player_credits_after_game = db_stmt_col_i64 (stmt_credits, 0);
-        }
-      db_stmt_finalize (stmt_credits);
-    }
   json_t *response_data = json_object ();
 
 
@@ -2956,32 +2162,20 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long current_pot = 0;
-  // int last_win_ts = 0;
-  // long long last_payout = 0;
-  // int last_winner_id = 0;
   // Get and update raffle state
-  db_stmt_t *stmt = NULL;
-  const char *sql_get_raffle =
-    "SELECT pot, last_winner_id, last_payout, last_win_ts FROM tavern_raffle_state WHERE tavern_raffle_state_id = 1;";
-
-
-  if (db_stmt_prepare_v2 (db, sql_get_raffle, -1, &stmt, NULL) == DB_OK)
+  db_res_t *res_raffle = NULL;
+  db_error_t err;
+  if (repo_stardock_get_raffle_state (db, &res_raffle) == 0)
     {
-      if (db_stmt_step (stmt) == DB_ROW)
+      if (db_res_step (res_raffle, &err))
         {
-          current_pot = db_stmt_col_i64 (stmt, 0);
-          // last_winner_id = db_stmt_col_i32 (stmt, 1);
-          // last_payout = db_stmt_col_i64 (stmt, 2);
-          // last_win_ts = db_stmt_col_i32 (stmt, 3);
+          current_pot = db_res_col_i64 (res_raffle, 0, &err);
         }
-      db_stmt_finalize (stmt);
+      db_res_finalize (res_raffle);
     }
   else
     {
-      LOGE
-      (
-        "cmd_tavern_raffle_buy_ticket: Failed to prepare get raffle state statement: %s",
-        db_errmsg (db));
+      LOGE ("cmd_tavern_raffle_buy_ticket: Failed to get raffle state");
       update_player_credits_gambling (db, ctx->player_id, ticket_price, true);  // Refund
       send_response_error (ctx, root, ERR_DB,
                            "Failed to retrieve raffle state.");
@@ -2990,7 +2184,6 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
   current_pot += ticket_price;  // Add ticket price to pot
   bool player_wins = (get_random_int (1, 1000) == 1);   // 1 in 1000 chance to win
   long long winnings = 0;
-  const char *sql_update_raffle = NULL;
 
 
   if (player_wins)
@@ -3004,73 +2197,24 @@ cmd_tavern_raffle_buy_ticket (client_ctx_t *ctx, json_t *root)
             "cmd_tavern_raffle_buy_ticket: Failed to add winnings to player credits for raffle.");
         }
       // Reset pot and record win
-      sql_update_raffle =
-        "UPDATE tavern_raffle_state SET pot = 0, last_winner_id = {1}, last_payout = {2}, last_win_ts = {3} WHERE tavern_raffle_state_id = 1;";
-      rc = db_stmt_prepare_v2 (db, sql_update_raffle, -1, &stmt, NULL);
-      if (rc == DB_OK)
+      if (repo_stardock_update_raffle_on_win (db, ctx->player_id, winnings, (int)time(NULL)) != 0)
         {
-          db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-          db_stmt_bind_i64 (stmt, 2, winnings);
-          db_stmt_bind_i32 (stmt, 3, (int) time (NULL));
-          if (db_stmt_step (stmt) != DB_DONE)
-            {
-              LOGE
-              (
-                "cmd_tavern_raffle_buy_ticket: Failed to update raffle state on win: %s",
-                db_errmsg (db));
-            }
-          db_stmt_finalize (stmt);
-        }
-      else
-        {
-          LOGE
-          (
-            "cmd_tavern_raffle_buy_ticket: Failed to prepare update raffle state on win: %s",
-            db_errmsg (db));
+          LOGE ("cmd_tavern_raffle_buy_ticket: Failed to update raffle state on win");
         }
       current_pot = 0;          // Pot reset after win
     }
   else
     {
       // Just update pot if no win
-      sql_update_raffle =
-        "UPDATE tavern_raffle_state SET pot = {1} WHERE tavern_raffle_state_id = 1;";
-      rc = db_stmt_prepare_v2 (db, sql_update_raffle, -1, &stmt, NULL);
-      if (rc == DB_OK)
+      if (repo_stardock_update_raffle_pot (db, current_pot) != 0)
         {
-          db_stmt_bind_i64 (stmt, 1, current_pot);
-          if (db_stmt_step (stmt) != DB_DONE)
-            {
-              LOGE
-                ("cmd_tavern_raffle_buy_ticket: Failed to update raffle pot: %s",
-                db_errmsg (db));
-            }
-          db_stmt_finalize (stmt);
-        }
-      else
-        {
-          LOGE
-          (
-            "cmd_tavern_raffle_buy_ticket: Failed to prepare update raffle pot statement: %s",
-            db_errmsg (db));
+          LOGE ("cmd_tavern_raffle_buy_ticket: Failed to update raffle pot");
         }
     }
   // Get updated player credits for response
-  long long player_credits_after_game = 0;
-  db_stmt_t *stmt_credits = NULL;
-  const char *sql_credits = "SELECT credits FROM players WHERE player_id = {1};";
+  int64_t player_credits_after_game = 0;
+  repo_stardock_get_player_credits (db, ctx->player_id, &player_credits_after_game);
 
-
-  if (db_stmt_prepare_v2 (db, sql_credits, -1, &stmt_credits, NULL) ==
-      DB_OK)
-    {
-      db_stmt_bind_i32 (stmt_credits, 1, ctx->player_id);
-      if (db_stmt_step (stmt_credits) == DB_ROW)
-        {
-          player_credits_after_game = db_stmt_col_i64 (stmt_credits, 0);
-        }
-      db_stmt_finalize (stmt_credits);
-    }
   json_t *response_data = json_object ();
 
 
@@ -3110,26 +2254,10 @@ cmd_tavern_trader_buy_password (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // Check player alignment (example: must be < 0 for underground access)
-  long long player_alignment = 0;
-  db_stmt_t *stmt_align = NULL;
-  const char *sql_align = "SELECT alignment FROM players WHERE player_id = {1};";
-
-
-  if (db_stmt_prepare_v2 (db, sql_align, -1, &stmt_align, NULL) == DB_OK)
+  int64_t player_alignment = 0;
+  if (repo_stardock_get_player_alignment (db, ctx->player_id, &player_alignment) != 0)
     {
-      db_stmt_bind_i32 (stmt_align, 1, ctx->player_id);
-      if (db_stmt_step (stmt_align) == DB_ROW)
-        {
-          player_alignment = db_stmt_col_i64 (stmt_align, 0);
-        }
-      db_stmt_finalize (stmt_align);
-    }
-  else
-    {
-      LOGE
-      (
-        "cmd_tavern_trader_buy_password: Failed to prepare alignment statement: %s",
-        db_errmsg (db));
+      LOGE ("cmd_tavern_trader_buy_password: Failed to get alignment");
       send_response_error (ctx, root, ERR_DB,
                            "Failed to retrieve player alignment.");
       return 0;
@@ -3265,64 +2393,26 @@ cmd_tavern_graffiti_post (client_ctx_t *ctx, json_t *root)
     }
   time_t now = time (NULL);
   // Insert new graffiti post
-  const char *sql_insert =
-    "INSERT INTO tavern_graffiti (player_id, text, created_at) VALUES ({1}, {2}, {3});";
-  db_stmt_t *stmt = NULL;
-  int rc = db_stmt_prepare_v2 (db, sql_insert, -1, &stmt, NULL);
-
-
-  if (rc != DB_OK)
+  if (repo_stardock_insert_graffiti (db, ctx->player_id, post_text, (int)now) != 0)
     {
-      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare graffiti insert.");
-      return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-  db_stmt_bind_text (stmt, 2, post_text, -1, DB_BIND_STATIC);
-  db_stmt_bind_i32 (stmt, 3, (int) now);
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to insert graffiti post.");
       return 0;
     }
-  db_stmt_finalize (stmt);
+
   // Optional: Implement FIFO logic - if count exceeds graffiti_max_posts, delete the oldest
-  const char *sql_count = "SELECT COUNT(*) FROM tavern_graffiti;";
-  long long current_graffiti_count = 0;
-
-
-  if (db_stmt_prepare_v2 (db, sql_count, -1, &stmt, NULL) == DB_OK)
+  int64_t current_graffiti_count = 0;
+  if (repo_stardock_get_graffiti_count (db, &current_graffiti_count) == 0)
     {
-      if (db_stmt_step (stmt) == DB_ROW)
+      if (current_graffiti_count > g_tavern_cfg.graffiti_max_posts)
         {
-          current_graffiti_count = db_stmt_col_i64 (stmt, 0);
-        }
-      db_stmt_finalize (stmt);
-    }
-  if (current_graffiti_count > g_tavern_cfg.graffiti_max_posts)
-    {
-      const char *sql_delete_oldest =
-        "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT {1});";
-
-
-      if (db_stmt_prepare_v2 (db, sql_delete_oldest, -1, &stmt, NULL) ==
-          DB_OK)
-        {
-          db_stmt_bind_i32 (stmt, 1,
-                            current_graffiti_count -
-                            g_tavern_cfg.graffiti_max_posts);
-          if (db_stmt_step (stmt) != DB_DONE)
+          if (repo_stardock_delete_oldest_graffiti (db, (int)(current_graffiti_count - g_tavern_cfg.graffiti_max_posts)) != 0)
             {
-              LOGE
-              (
-                "cmd_tavern_graffiti_post: Failed to delete oldest graffiti posts: %s",
-                db_errmsg (db));
+              LOGE ("cmd_tavern_graffiti_post: Failed to delete oldest graffiti posts");
             }
-          db_stmt_finalize (stmt);
         }
     }
+
   json_t *response_data = json_object ();
 
 
@@ -3407,30 +2497,11 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // Increase player's alignment
-  const char *sql_update_alignment =
-    "UPDATE players SET alignment = alignment + {1} WHERE player_id = {2};";
-  db_stmt_t *stmt = NULL;
-
-
-  if (db_stmt_prepare_v2 (db, sql_update_alignment, -1, &stmt, NULL) ==
-      DB_OK)
+  if (repo_stardock_update_alignment (db, ctx->player_id, alignment_gain) != 0)
     {
-      db_stmt_bind_i32 (stmt, 1, alignment_gain);
-      db_stmt_bind_i32 (stmt, 2, ctx->player_id);
-      if (db_stmt_step (stmt) != DB_DONE)
-        {
-          LOGE ("cmd_tavern_round_buy: Failed to update player alignment: %s",
-                db_errmsg (db));
-        }
-      db_stmt_finalize (stmt);
+      LOGE ("cmd_tavern_round_buy: Failed to update player alignment");
     }
-  else
-    {
-      LOGE
-      (
-        "cmd_tavern_round_buy: Failed to prepare alignment update statement: %s",
-        db_errmsg (db));
-    }
+
   // Broadcast message to all online players in the sector
   json_t *broadcast_payload = json_object ();
 
@@ -3519,32 +2590,15 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
   time_t now = time (NULL);
   time_t due_date = now + (7 * 24 * 60 * 60);   // Due in 7 days
   // Insert new loan
-  const char *sql_insert_loan =
-    "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES ({1}, {2}, {3}, to_timestamp({4}), 0);";
-  db_stmt_t *stmt = NULL;
-  int rc = db_stmt_prepare_v2 (db, sql_insert_loan, -1, &stmt, NULL);
-
-
-  if (rc != DB_OK)
+  if (repo_stardock_insert_loan (db, ctx->player_id, loan_amount, interest_rate_bp, (int)due_date) != 0)
     {
-      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                           "Failed to prepare loan insert.");
-      return 0; return 0;
-    }
-  db_stmt_bind_i32 (stmt, 1, ctx->player_id);
-  db_stmt_bind_i64 (stmt, 2, loan_amount);
-  db_stmt_bind_i32 (stmt, 3, interest_rate_bp);
-  db_stmt_bind_i32 (stmt, 4, (int) due_date);
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      db_stmt_finalize (stmt);
       send_response_error (ctx, root, ERR_DB,
                            "Failed to insert loan.");
-      return 0; return 0;
+      return 0;
     }
-  db_stmt_finalize (stmt);
+
   // Add loan amount to player's credits
-  rc = update_player_credits_gambling (db, ctx->player_id, loan_amount, true);  // Add
+  int rc = update_player_credits_gambling (db, ctx->player_id, loan_amount, true);  // Add
   if (rc != 0)
     {
       LOGE
@@ -3650,51 +2704,29 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
     {
       new_principal = 0;        // Cannot overpay beyond principal
     }
-  const char *sql_update_loan = NULL;
-  db_stmt_t *stmt = NULL;
-
 
   if (new_principal == 0)
     {
       // Loan fully paid, delete it
-      sql_update_loan = "DELETE FROM tavern_loans WHERE player_id = {1};";
-      rc = db_stmt_prepare_v2 (db, sql_update_loan, -1, &stmt, NULL);
-      if (rc != DB_OK)
+      if (repo_stardock_delete_loan (db, ctx->player_id) != 0)
         {
           update_player_credits_gambling (db, ctx->player_id, pay_amount, true);        // Refund
           send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                               "Failed to prepare loan delete.");
+                               "Failed to delete loan.");
           return 0;
         }
-      db_stmt_bind_i32 (stmt, 1, ctx->player_id);
     }
   else
     {
       // Update remaining principal and reset default status if paying
-      sql_update_loan =
-        "UPDATE tavern_loans SET principal = {1}, is_defaulted = 0 WHERE player_id = {2};";
-      rc = db_stmt_prepare_v2 (db, sql_update_loan, -1, &stmt, NULL);
-      if (rc != DB_OK)
+      if (repo_stardock_update_loan_repayment (db, ctx->player_id, new_principal) != 0)
         {
           update_player_credits_gambling (db, ctx->player_id, pay_amount, true);        // Refund
           send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
-                               "Failed to prepare loan update.");
+                               "Failed to update loan.");
           return 0;
         }
-      db_stmt_bind_i64 (stmt, 1, new_principal);
-      db_stmt_bind_i32 (stmt, 2, ctx->player_id);
     }
-  if (db_stmt_step (stmt) != DB_DONE)
-    {
-      db_stmt_finalize (stmt);
-      stmt = NULL;
-      update_player_credits_gambling (db, ctx->player_id, pay_amount, true);    // Refund
-      send_response_error (ctx, root, ERR_DB,
-                           "Failed to update loan principal.");
-      return 0;
-    }
-  db_stmt_finalize (stmt);
-  stmt = NULL;
 
   json_t *response_data = json_object ();
 
@@ -3868,45 +2900,34 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *prices_array = json_array ();
-  db_stmt_t *stmt = NULL;
-  // Placeholder: Query for top commodity prices (simplified for now)
-  const char *sql_prices =
-    "SELECT p.sector_id, c.name, pt.mode, pt.maxproduct, (c.base_price * (10000 + c.volatility * (RANDOM() % 200 - 100)) / 10000) AS price "
-    "FROM ports p JOIN port_trade pt ON p.port_id = pt.port_id JOIN commodities c ON c.code = pt.commodity "
-    "ORDER BY price DESC LIMIT 5;";                                                                                                                                                                                                                                                                     // Top 5 prices example
-
-
-  if (db_stmt_prepare_v2 (db, sql_prices, -1, &stmt, NULL) != DB_OK)
+  db_res_t *res_prices = NULL;
+  db_error_t err;
+  if (repo_stardock_get_commodity_prices (db, &res_prices) != 0)
     {
-      LOGE
-      (
-        "cmd_tavern_barcharts_get_prices_summary: Failed to prepare prices query: %s",
-        db_errmsg (db));
+      LOGE ("cmd_tavern_barcharts_get_prices_summary: Failed to get prices");
       update_player_credits_gambling (db, ctx->player_id, summary_cost, true);  // Refund
       send_response_error (ctx, root, ERR_DB,
                            "Failed to retrieve market summary.");
       return 0;
     }
-  while (db_stmt_step (stmt) == DB_ROW)
+  while (db_res_step (res_prices, &err))
     {
       json_t *price_obj = json_object ();
 
 
       json_object_set_new (price_obj, "sector_id",
-                           json_integer (db_stmt_col_i32 (stmt, 0)));
+                           json_integer ((int)db_res_col_i64 (res_prices, 0, &err)));
       json_object_set_new (price_obj, "commodity",
-                           json_string ((const char *)
-                                        db_stmt_col_text (stmt, 1)));
+                           json_string (db_res_col_text (res_prices, 1, &err)));
       json_object_set_new (price_obj, "type",
-                           json_string ((const char *)
-                                        db_stmt_col_text (stmt, 2)));
+                           json_string (db_res_col_text (res_prices, 2, &err)));
       json_object_set_new (price_obj, "amount",
-                           json_integer (db_stmt_col_i32 (stmt, 3)));
+                           json_integer ((int)db_res_col_i64 (res_prices, 3, &err)));
       json_object_set_new (price_obj, "price",
-                           json_integer (db_stmt_col_i32 (stmt, 4)));
+                           json_integer ((int)db_res_col_i64 (res_prices, 4, &err)));
       json_array_append_new (prices_array, price_obj);
     }
-  db_stmt_finalize (stmt);
+  db_res_finalize (res_prices);
   json_t *response_data = json_object ();
 
 

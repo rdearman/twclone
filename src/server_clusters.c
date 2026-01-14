@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_clusters.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,42 +16,24 @@
 static int
 _get_sector_count (db_t *db)
 {
-  db_res_t *res = NULL;
-  db_error_t err;
   int count = 0;
-  if (db_query (db, "SELECT COUNT(*) FROM sectors", NULL, 0, &res, &err))
+  if (repo_clusters_get_sector_count(db, &count) == 0)
     {
-      if (db_res_step (res, &err))
-        {
-          count = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      return count;
     }
-  return count;
+  return 0;
 }
 
 
 static int
 _get_cluster_for_sector (db_t *db, int sector_id)
 {
-  db_res_t *res = NULL;
-  db_error_t err;
   int cluster_id = 0;
-  db_bind_t params[] = { db_bind_i32 (sector_id) };
-
-  char sql_converted[256];
-  sql_build(db, "SELECT cluster_id FROM cluster_sectors WHERE sector_id = {1}", sql_converted, sizeof(sql_converted));
-  if (db_query (db,
-                sql_converted,
-                params, 1, &res, &err))
+  if (repo_clusters_get_cluster_for_sector(db, sector_id, &cluster_id) == 0)
     {
-      if (db_res_step (res, &err))
-        {
-          cluster_id = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      return cluster_id;
     }
-  return cluster_id;
+  return 0;
 }
 
 
@@ -63,30 +45,9 @@ _create_cluster (db_t *db,
                  int center_sector, int alignment, int law_severity)
 {
   int cluster_id = -1;
-  const char *sql =
-    "INSERT INTO clusters (name, role, kind, center_sector, alignment, law_severity) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
-
-  db_bind_t params[] = {
-    db_bind_text (name),
-    db_bind_text (role),
-    db_bind_text (kind),
-    db_bind_i32 (center_sector),
-    db_bind_i32 (alignment),
-    db_bind_i32 (law_severity)
-  };
-
-  db_error_t err;
-  int64_t new_id = 0;
-
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-  if (db_exec_insert_id (db, sql_converted, params, 6, &new_id, &err))
+  if (repo_clusters_create(db, name, role, kind, center_sector, alignment, law_severity, &cluster_id) != 0)
     {
-      cluster_id = (int) new_id;
-    }
-  else
-    {
-      LOGE ("Failed to create cluster %s: %s", name, err.message);
+      LOGE ("Failed to create cluster %s", name);
     }
   return cluster_id;
 }
@@ -95,22 +56,7 @@ _create_cluster (db_t *db,
 static void
 _add_sector_to_cluster (db_t *db, int cluster_id, int sector_id)
 {
-  const char *conflict_clause = sql_insert_ignore_clause(db);
-  if (!conflict_clause)
-    {
-      return;  /* Unsupported backend */
-    }
-  
-  char sql[256];
-  snprintf(sql, sizeof(sql),
-    "INSERT INTO cluster_sectors (cluster_id, sector_id) VALUES ({1}, {2}) %s",
-    conflict_clause);
-  
-  db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (sector_id) };
-  db_error_t err;
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-  db_exec (db, sql_converted, params, 2, &err);
+  repo_clusters_add_sector(db, cluster_id, sector_id);
 }
 
 
@@ -131,11 +77,6 @@ _bfs_expand_cluster (db_t *db,
   queue[tail++] = start_sector;
   count++;
 
-  const char *sql_warps =
-    "SELECT to_sector FROM sector_warps WHERE from_sector = {1}";
-
-  const char *sql_check = "SELECT 1 FROM cluster_sectors WHERE sector_id = {1}";
-
 
   while (head < tail && count < target_size)
     {
@@ -143,32 +84,18 @@ _bfs_expand_cluster (db_t *db,
 
       db_res_t *res_warps = NULL;
       db_error_t err;
-      db_bind_t params_w[] = { db_bind_i32 (current) };
 
-
-      char sql_converted_w[256];
-      sql_build(db, sql_warps, sql_converted_w, sizeof(sql_converted_w));
-      if (db_query (db, sql_converted_w, params_w, 1, &res_warps, &err))
+      if ((res_warps = repo_clusters_get_warps(db, current, &err)) != NULL)
         {
           while (db_res_step (res_warps, &err) && count < target_size)
             {
               int neighbor = db_res_col_i32 (res_warps, 0, &err);
 
               // Check if already in ANY cluster
-              db_res_t *res_check = NULL;
-              db_bind_t params_c[] = { db_bind_i32 (neighbor) };
               int exists = 0;
-
-
-              char sql_converted_c[256];
-              sql_build(db, sql_check, sql_converted_c, sizeof(sql_converted_c));
-              if (db_query (db, sql_converted_c, params_c, 1, &res_check, &err))
+              if (repo_clusters_check_sector_in_any_cluster(db, neighbor, &exists) != 0)
                 {
-                  if (db_res_step (res_check, &err))
-                    {
-                      exists = 1;
-                    }
-                  db_res_finalize (res_check);
+                  exists = 0;
                 }
 
               if (exists)
@@ -208,21 +135,10 @@ _bfs_expand_cluster (db_t *db,
 int
 clusters_init (db_t *db)
 {
-  db_res_t *res = NULL;
-  db_error_t err;
-  // 1. Check if initialized
-  if (db_query (db, "SELECT 1 FROM clusters LIMIT 1", NULL, 0, &res, &err))
+  int inited = 0;
+  if (repo_clusters_is_initialized(db, &inited) == 0 && inited)
     {
-      if (db_res_step (res, &err))
-        {
-          db_res_finalize (res);
-          return 0;                 // Already done
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      return -1;
+      return 0;
     }
 
   LOGI ("Initializing Clusters...");
@@ -242,20 +158,9 @@ clusters_init (db_t *db)
     }
   // 3. Ferrengi
   int fer_sector = 0;
-
-
-  if (db_query (db,
-                "SELECT sector FROM planets WHERE num=2",
-                NULL,
-                0,
-                &res,
-                &err))
+  if (repo_clusters_get_planet_sector(db, 2, &fer_sector) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          fer_sector = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      fer_sector = 0;
     }
 
   if (fer_sector > 0)
@@ -273,20 +178,9 @@ clusters_init (db_t *db)
     }
   // 4. Orion
   int ori_sector = 0;
-
-
-  if (db_query (db,
-                "SELECT sector FROM planets WHERE num=3",
-                NULL,
-                0,
-                &res,
-                &err))
+  if (repo_clusters_get_planet_sector(db, 3, &ori_sector) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          ori_sector = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      ori_sector = 0;
     }
 
   if (ori_sector > 0)
@@ -322,28 +216,13 @@ clusters_init (db_t *db)
   int target_clustered_sectors = (int) (total_sectors * 0.15);
   // Count currently clustered
   int current_clustered = 0;
-
-
-  if (db_query (db, "SELECT COUNT(*) FROM cluster_sectors", NULL, 0, &res,
-                &err))
+  if (repo_clusters_get_clustered_count(db, &current_clustered) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          current_clustered = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      current_clustered = 0;
     }
 
   LOGD ("Cluster Init: Total %d, Target Clustered %d, Current %d",
         total_sectors, target_clustered_sectors, current_clustered);
-
-  // Prepare for random generation - we'll query one by one in loop for simplicity
-  const char *sql_pick =
-    (db_backend (db) == DB_BACKEND_POSTGRES)
-      ?
-    "SELECT id FROM sectors WHERE id > 10 AND id NOT IN (SELECT sector_id FROM cluster_sectors) ORDER BY RANDOM() LIMIT 1"
-      :
-    "SELECT id FROM sectors WHERE id > 10 AND id NOT IN (SELECT sector_id FROM cluster_sectors) ORDER BY RANDOM() LIMIT 1";
 
   int attempts = 0;
 
@@ -351,15 +230,9 @@ clusters_init (db_t *db)
   while (current_clustered < target_clustered_sectors && attempts < 1000)
     {
       int seed = 0;
-
-
-      if (db_query (db, sql_pick, NULL, 0, &res, &err))
+      if (repo_clusters_pick_random_unclustered_sector(db, &seed) != 0)
         {
-          if (db_res_step (res, &err))
-            {
-              seed = db_res_col_i32 (res, 0, &err);
-            }
-          db_res_finalize (res);
+          seed = 0;
         }
 
       if (seed > 0)
@@ -412,12 +285,7 @@ cluster_economy_step (db_t *db, int64_t now_s)
   db_error_t err;
 
 
-  if (db_query (db,
-                "SELECT id, name FROM clusters",
-                NULL,
-                0,
-                &res_clusters,
-                &err))
+  if ((res_clusters = repo_clusters_get_all(db, &err)) != NULL)
     {
       while (db_res_step (res_clusters, &err))
         {
@@ -430,83 +298,27 @@ cluster_economy_step (db_t *db, int64_t now_s)
               const char *comm = commodities[i];
               // Calculate Avg Price
               double avg_price = 0;
-              db_res_t *res_avg = NULL;
-              const char *sql_avg_real =
-                "SELECT AVG(price) FROM port_trade pt "
-                "JOIN ports p ON p.port_id = pt.port_id "
-                "JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
-                "WHERE cs.cluster_id = {1} AND pt.commodity = {2}";
-
-              db_bind_t params_avg[] = { db_bind_i32 (cluster_id),
-                                         db_bind_text (comm) };
-
-
-              char sql_converted_avg[512];
-              sql_build(db, sql_avg_real, sql_converted_avg, sizeof(sql_converted_avg));
-              if (db_query (db, sql_converted_avg, params_avg, 2, &res_avg, &err))
+              if (repo_clusters_get_avg_price(db, cluster_id, comm, &avg_price) != 0)
                 {
-                  if (db_res_step (res_avg, &err))
-                    {
-                      avg_price = db_res_col_double (res_avg, 0, &err);
-                    }
-                  db_res_finalize (res_avg);
+                  continue;
                 }
+
               if (avg_price < 1.0)
                 {
                   continue;         // No trades?
                 }
               int mid_price = (int) avg_price;
               // Update Index
-              const char *conflict_fmt = sql_conflict_target_fmt(db);
-              if (!conflict_fmt)
-                {
-                  continue;  /* Unsupported backend */
-                }
-              
-              char sql_idx[512];
-              char conflict_clause[128];
-              snprintf(conflict_clause, sizeof(conflict_clause),
-                conflict_fmt, "cluster_id, commodity_code");
-              
-              snprintf(sql_idx, sizeof(sql_idx),
-                "INSERT INTO cluster_commodity_index (cluster_id, commodity_code, mid_price, last_updated) VALUES ({1}, {2}, {3}, CURRENT_TIMESTAMP) "
-                "%s UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP",
-                conflict_clause);
-
-              db_bind_t params_idx[] = { db_bind_i32 (cluster_id),
-                                         db_bind_text (comm),
-                                         db_bind_i32 (mid_price) };
-
-
-              char sql_converted_idx[512];
-              sql_build(db, sql_idx, sql_converted_idx, sizeof(sql_converted_idx));
-              db_exec (db, sql_converted_idx, params_idx, 3, &err);
+              repo_clusters_update_commodity_index(db, cluster_id, comm, mid_price);
 
               // Drift Ports
-              // new_price = price + 0.1 * (mid - price)
-              const char *sql_drift =
-                "UPDATE port_trade "
-                "SET price = CAST(price + 0.1 * ({1} - price) AS INTEGER) "
-                "WHERE commodity = {2} AND port_id IN ("
-                "  SELECT p.port_id FROM ports p "
-                "  JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id "
-                "  WHERE cs.cluster_id = {3}" ")";
-
-              db_bind_t params_drift[] = { db_bind_i32 (mid_price),
-                                           db_bind_text (comm),
-                                           db_bind_i32 (cluster_id) };
-
-
-              char sql_converted_drift[512];
-              sql_build(db, sql_drift, sql_converted_drift, sizeof(sql_converted_drift));
-              db_exec (db, sql_converted_drift, params_drift, 3, &err);
+              repo_clusters_drift_port_prices(db, mid_price, comm, cluster_id);
             }
         }
       db_res_finalize (res_clusters);
     }
   return 0;
 }
-
 
 /* Law Enforcement */
 int
@@ -517,27 +329,10 @@ cluster_can_trade (db_t *db, int sector_id, int player_id)
     {
       return 1;                 // Not in a cluster, standard rules apply
     }
-  db_res_t *res = NULL;
-  db_error_t err;
   int banned = 0;
-  db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (player_id) };
-
-
-  const char *sql_ban = "SELECT banned FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
-  char sql_converted_ban[256];
-  sql_build(db, sql_ban, sql_converted_ban, sizeof(sql_converted_ban));
-  if (db_query (db,
-                sql_converted_ban,
-                params,
-                2,
-                &res,
-                &err))
+  if (repo_clusters_get_player_banned(db, cluster_id, player_id, &banned) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          banned = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      banned = 0;
     }
   return (banned == 1) ? 0 : 1;
 }
@@ -553,28 +348,7 @@ cluster_get_bust_modifier (db_t *db, int sector_id, int player_id)
     }
   int suspicion = 0;
   int wanted = 0;
-  db_res_t *res = NULL;
-  db_error_t err;
-  db_bind_t params[] = { db_bind_i32 (cluster_id), db_bind_i32 (player_id) };
-
-
-  const char *sql_sus = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
-  char sql_converted_sus[256];
-  sql_build(db, sql_sus, sql_converted_sus, sizeof(sql_converted_sus));
-  if (db_query (db,
-                sql_converted_sus,
-                params,
-                2,
-                &res,
-                &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          suspicion = db_res_col_i32 (res, 0, &err);
-          wanted = db_res_col_i32 (res, 1, &err);
-        }
-      db_res_finalize (res);
-    }
+  repo_clusters_get_player_suspicion_wanted(db, cluster_id, player_id, &suspicion, &wanted);
   // Formula: Base modifier
   // e.g. Wanted level 1 = +10%, Level 2 = +25%, Level 3 = +50%
   // Suspicion adds tiny bits.
@@ -603,43 +377,7 @@ cluster_on_crime (db_t *db,
       susp_inc += 10;
     }
 
-  const char *conflict_fmt = sql_conflict_target_fmt(db);
-  if (!conflict_fmt)
-    {
-      return;  /* Unsupported backend */
-    }
-  
-  char conflict_clause[128];
-  snprintf(conflict_clause, sizeof(conflict_clause),
-    conflict_fmt, "cluster_id, player_id");
-  
-  char sql_upsert[512];
-  snprintf(sql_upsert, sizeof(sql_upsert),
-    "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
-    "VALUES ({1}, {2}, {3}, {4}, CASE WHEN {5}=1 THEN CURRENT_TIMESTAMP ELSE NULL END) "
-    "%s UPDATE SET "
-    "suspicion = suspicion + {6}, "
-    "bust_count = bust_count + {7}, "
-    "last_bust_at = CASE WHEN {8}=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;",
-    conflict_clause);
-
-  db_bind_t params[] = {
-    db_bind_i32 (cluster_id),
-    db_bind_i32 (player_id),
-    db_bind_i32 (susp_inc),
-    db_bind_i32 (busted ? 1 : 0),
-    db_bind_i32 (busted),
-    db_bind_i32 (susp_inc),
-    db_bind_i32 (busted ? 1 : 0),
-    db_bind_i32 (busted)
-  };
-
-  db_error_t err;
-
-
-  char sql_converted_upsert[1024];
-  sql_build(db, sql_upsert, sql_converted_upsert, sizeof(sql_converted_upsert));
-  db_exec (db, sql_converted_upsert, params, 8, &err);
+  repo_clusters_upsert_player_status(db, cluster_id, player_id, susp_inc, busted);
 }
 
 
@@ -658,7 +396,7 @@ clusters_seed_illegal_goods (db_t *db)
 
 
   // Prepare statement to select all ports
-  if (db_query (db, "SELECT id, sector FROM ports", NULL, 0, &res_ports, &err))
+  if ((res_ports = repo_clusters_get_all_ports(db, &err)) != NULL)
     {
       while (db_res_step (res_ports, &err))
         {
@@ -666,22 +404,9 @@ clusters_seed_illegal_goods (db_t *db)
           int sector_id = db_res_col_i32 (res_ports, 1, &err);
           int cluster_alignment = 0;        // Default to neutral
 
-          // Get cluster alignment for the port's sector
-          db_res_t *res_align = NULL;
-          const char *sql_cluster_align =
-            "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id_id = {1} LIMIT 1";
-          db_bind_t params_a[] = { db_bind_i32 (sector_id) };
-
-
-          char sql_converted_align[512];
-          sql_build(db, sql_cluster_align, sql_converted_align, sizeof(sql_converted_align));
-          if (db_query (db, sql_converted_align, params_a, 1, &res_align, &err))
+          if (repo_clusters_get_alignment(db, sector_id, &cluster_alignment) != 0)
             {
-              if (db_res_step (res_align, &err))
-                {
-                  cluster_alignment = db_res_col_i32 (res_align, 0, &err);
-                }
-              db_res_finalize (res_align);
+              cluster_alignment = 0;
             }
 
           // Check if cluster is evil
@@ -698,50 +423,16 @@ clusters_seed_illegal_goods (db_t *db)
               int weapons_qty = (rand () % 15 + 1) * severity_factor;
               int drugs_qty = (rand () % 20 + 1) * severity_factor;
 
-              const char *conflict_fmt = sql_conflict_target_fmt(db);
-              if (!conflict_fmt)
-                {
-                  continue;  /* Unsupported backend */
-                }
-              
-              char conflict_clause[128];
-              snprintf(conflict_clause, sizeof(conflict_clause),
-                conflict_fmt, "entity_type, entity_id, commodity_code");
-              
-              char sql_update_stock[512];
-              snprintf(sql_update_stock, sizeof(sql_update_stock),
-                "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-                "VALUES ('port', {1}, {2}, {3}, 0, {4}) "
-                "%s UPDATE SET quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;",
-                conflict_clause);
-
               int64_t now_s = (int64_t)time (NULL);
 
               // Update SLV
-              db_bind_t p_slv[] = { db_bind_i32 (port_id), db_bind_text ("SLV"),
-                                    db_bind_i32 (slaves_qty),
-                                    db_bind_i64 (now_s) };
-
-
-              char sql_converted_stock[512];
-              sql_build(db, sql_update_stock, sql_converted_stock, sizeof(sql_converted_stock));
-              db_exec (db, sql_converted_stock, p_slv, 4, &err);
+              repo_clusters_upsert_port_stock(db, port_id, "SLV", slaves_qty, now_s);
 
               // Update WPN
-              db_bind_t p_wpn[] = { db_bind_i32 (port_id), db_bind_text ("WPN"),
-                                    db_bind_i32 (weapons_qty),
-                                    db_bind_i64 (now_s) };
-
-
-              db_exec (db, sql_converted_stock, p_wpn, 4, &err);
+              repo_clusters_upsert_port_stock(db, port_id, "WPN", weapons_qty, now_s);
 
               // Update DRG
-              db_bind_t p_drg[] = { db_bind_i32 (port_id), db_bind_text ("DRG"),
-                                    db_bind_i32 (drugs_qty),
-                                    db_bind_i64 (now_s) };
-
-
-              db_exec (db, sql_converted_stock, p_drg, 4, &err);
+              repo_clusters_upsert_port_stock(db, port_id, "DRG", drugs_qty, now_s);
 
               LOGD
               (

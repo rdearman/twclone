@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_players.h"
 /* src/server_players.c */
 #include <stdio.h>
 #include <stdint.h>
@@ -134,17 +134,7 @@ h_db_prefs_set_one (int player_id,
 {
   LOGD ("h_db_prefs_set_one: pid=%d key=%s val=%s", player_id, key, value);
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "INSERT INTO player_prefs (player_id, key, type, value) VALUES ({1}, {2}, {3}, {4}) "
-    "ON CONFLICT (player_id, key) DO UPDATE SET type = EXCLUDED.type, value = EXCLUDED.value";
-  db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (key),
-                    db_bind_text (type), db_bind_text (value) };
-  db_error_t err;
-  if (!db_exec (db, sql, p, 4, &err)) {
-    LOGE("h_db_prefs_set_one: DB EXEC FAILED for pid=%d key=%s: %s", player_id, key, err.message);
-    return -1;
-  }
-  return 0;
+  return repo_players_set_pref(db, player_id, key, type, value);
 }
 
 
@@ -152,13 +142,7 @@ static int
 h_db_bookmark_upsert (int player_id, const char *name, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3}) "
-    "ON CONFLICT (player_id, name) DO UPDATE SET sector_id = EXCLUDED.sector_id";
-  db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (name),
-                    db_bind_i32 (sector_id) };
-  db_error_t err;
-  return db_exec (db, sql, p, 3, &err) ? 0 : -1;
+  return repo_players_upsert_bookmark(db, player_id, name, sector_id);
 }
 
 
@@ -166,11 +150,7 @@ static int
 h_db_bookmark_remove (int player_id, const char *name)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "DELETE FROM player_bookmarks WHERE player_id = {1} AND name = {2}";
-  db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (name) };
-  db_error_t err;
-  return db_exec (db, sql, p, 2, &err) ? 0 : -1;
+  return repo_players_delete_bookmark(db, player_id, name);
 }
 
 
@@ -178,18 +158,7 @@ static int
 h_db_avoid_add (int player_id, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  const char *conflict_clause = sql_insert_ignore_clause(db);
-  if (!conflict_clause)
-    {
-      return -1;
-    }
-  char sql_buf[256];
-  snprintf(sql_buf, sizeof(sql_buf),
-      "INSERT INTO player_avoid (player_id, sector_id) VALUES ({1}, {2}) %s",
-      conflict_clause);
-  db_bind_t p[] = { db_bind_i32 (player_id), db_bind_i32 (sector_id) };
-  db_error_t err;
-  return db_exec (db, sql_buf, p, 2, &err) ? 0 : -1;
+  return repo_players_add_avoid(db, player_id, sector_id);
 }
 
 
@@ -197,11 +166,7 @@ static int
 h_db_avoid_remove (int player_id, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "DELETE FROM player_avoid WHERE player_id = {1} AND sector_id = {2}";
-  db_bind_t p[] = { db_bind_i32 (player_id), db_bind_i32 (sector_id) };
-  db_error_t err;
-  return db_exec (db, sql, p, 2, &err) ? 0 : -1;
+  return repo_players_delete_avoid(db, player_id, sector_id);
 }
 
 
@@ -209,11 +174,7 @@ static int
 h_db_subscribe_disable (int player_id, const char *topic)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "UPDATE player_subscriptions SET enabled = 0 WHERE player_id = {1} AND topic = {2}";
-  db_bind_t p[] = { db_bind_i32 (player_id), db_bind_text (topic) };
-  db_error_t err;
-  return db_exec (db, sql, p, 2, &err) ? 0 : -1;
+  return repo_players_disable_subscription(db, player_id, topic);
 }
 
 
@@ -224,16 +185,7 @@ h_db_subscribe_upsert (int player_id,
                        const char *filter)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, 1, {3}, {4}) "
-    "ON CONFLICT (player_id, topic) DO UPDATE SET enabled = 1, delivery = EXCLUDED.delivery, filter = EXCLUDED.filter";
-  db_bind_t p[] = {
-    db_bind_i32 (player_id), db_bind_text (topic),
-    db_bind_text (delivery ? delivery : "push"),
-    db_bind_text (filter ? filter : "")
-  };
-  db_error_t err;
-  return db_exec (db, sql, p, 4, &err) ? 0 : -1;
+  return repo_players_upsert_subscription(db, player_id, topic, delivery, filter);
 }
 
 
@@ -244,19 +196,16 @@ static json_t *
 prefs_as_object (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "SELECT key, value FROM player_prefs WHERE player_id = {1}";
-  db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
 
   json_t *obj = json_object ();
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_prefs(db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
           const char *k = db_res_col_text (res, 0, &err);
-          const char *v = db_res_col_text (res, 1, &err);
+          const char *v = db_res_col_text (res, 2, &err);
           LOGD ("prefs_as_object: found key=%s val=%s", k ? k : "NULL", v ? v : "NULL");
           json_object_set_new (obj, k ? k : "unknown", json_string (v ? v : ""));
         }
@@ -270,14 +219,11 @@ static json_t *
 prefs_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "SELECT key, type, value FROM player_prefs WHERE player_id = {1}";
-  db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
 
   json_t *arr = json_array ();
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_prefs(db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -303,13 +249,10 @@ static json_t *
 bookmarks_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "SELECT name, sector_id FROM player_bookmarks WHERE player_id={1} ORDER BY name";
-  db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
   json_t *arr = json_array ();
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_bookmarks(db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -332,13 +275,10 @@ static json_t *
 avoid_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "SELECT sector_id FROM player_avoid WHERE player_id={1} ORDER BY sector_id";
-  db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
   json_t *arr = json_array ();
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_avoids(db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -355,13 +295,10 @@ static json_t *
 subscriptions_as_array (int64_t pid)
 {
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "SELECT topic, locked, enabled, delivery, filter FROM player_subscriptions WHERE player_id={1}";
-  db_bind_t params[] = { db_bind_i64 (pid) };
   db_res_t *res = NULL;
   db_error_t err;
   json_t *arr = json_array ();
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_subscriptions(db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -910,20 +847,11 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   db_t *db = game_db_get_handle ();
-  const char *sql =
-    "SELECT p.name, p.credits, t.turns_remaining, p.sector_id, p.ship_id, "
-    "p.alignment, p.experience, cm.corporation_id "
-    "FROM players p "
-    "LEFT JOIN turns t ON t.player_id = p.player_id "
-    "LEFT JOIN corp_members cm ON cm.player_id = p.player_id "
-    "WHERE p.player_id = {1}";
-
-  db_bind_t params[] = { db_bind_i32 (ctx->player_id) };
   db_res_t *res = NULL;
   db_error_t err;
 
 
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_my_info(db, ctx->player_id, &err)) != NULL)
     {
       if (db_res_step (res, &err))
         {
@@ -1048,18 +976,14 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
       return -1;
     }
 
-  const char *sql =
-    "SELECT alignment, experience, commission_id FROM players WHERE player_id = {1};";
   db_res_t *res = NULL;
   db_error_t err;
 
 
   db_error_clear (&err);
 
-  db_bind_t params[] = { db_bind_i32 (player_id) };
 
-
-  if (!db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_players_get_title_info(db, player_id, &err)) == NULL)
     {
       return -1;
     }
@@ -1155,25 +1079,7 @@ h_send_message_to_player (db_t *db,
       return 1;
     }
 
-  const char *sql =
-    "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES ({1}, {2}, {3}, {4});";
-  db_bind_t params[] = {
-    db_bind_i32 (sender_id),
-    db_bind_i32 (recipient_id),
-    db_bind_text (subject),
-    db_bind_text (message)
-  };
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  if (db_exec (db, sql, params, 4, &err))
-    {
-      return 0;
-    }
-  return 1;
+  return repo_players_send_mail(db, sender_id, recipient_id, subject, message) == 0 ? 0 : 1;
 }
 
 
@@ -1198,419 +1104,82 @@ h_get_player_bank_account_id (db_t *db, int player_id)
 
 
 int
-
-
 h_get_cargo_space_free (db_t *db, int player_id, int *free_out)
-
-
 {
   if (!db || !free_out)
-
-
     {
       return -1;
     }
 
-
-  const char *sql =
-
-
-    "SELECT (COALESCE(s.holds, 0) - COALESCE(s.colonists + s.equipment + s.organics + s.ore + s.slaves + s.weapons + s.drugs, 0)) "
-    "FROM players p "
-    "JOIN ships s ON s.ship_id = p.ship_id "
-    "WHERE p.player_id = {1};";
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  db_bind_t params[] = { db_bind_i32 (player_id) };
-
-
-  if (!db_query (db, sql, params, 1, &res, &err))
-
-
-    {
-      return -1;
-    }
-
-
-  int total = 0;
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      total = (int)db_res_col_i32 (res, 0, &err);
-    }
-
-
-  else
-
-
-    {
-      db_res_finalize (res);
-
-
-      return -1;
-    }
-
-
-  db_res_finalize (res);
-
-
-  if (total < 0)
-
-
-    {
-      total = 0;
-    }
-
-
-  *free_out = total;
-
-
-  return 0;
+  return repo_players_get_cargo_free(db, player_id, free_out);
 }
 
 
 int
-
-
 h_player_is_npc (db_t *db, int player_id)
-
-
 {
   if (!db)
-
-
     {
       return 0;
     }
-
-
-  const char *sql = "SELECT is_npc FROM players WHERE player_id = {1};";
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  db_bind_t params[] = { db_bind_i32 (player_id) };
-
-
-  if (!db_query (db, sql, params, 1, &res, &err))
-
-
-    {
-      return 0;
-    }
-
 
   int is_npc = 0;
-
-
-  if (db_res_step (res, &err))
-
-
+  if (repo_players_is_npc(db, player_id, &is_npc) == 0)
     {
-      is_npc = (int) db_res_col_i32 (res, 0, &err);
+      return is_npc;
     }
-
-
-  db_res_finalize (res);
-
-
-  return is_npc;
+  return 0;
 }
 
 
 int
-
-
 spawn_starter_ship (db_t *db, int player_id, int sector_id)
-
-
 {
   if (!db)
-
-
     {
       return -1;
     }
-
-
-  // Get ship type
-
-
-  const char *sql_type =
-
-
-    "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = {1};";
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  db_bind_t type_params[] = { db_bind_text ("Scout Marauder") };
-
-
-  if (!db_query (db, sql_type, type_params, 1, &res, &err))
-
-
-    {
-      return -1;
-    }
-
 
   int ship_type_id = 0, holds = 0, fighters = 0, shields = 0;
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      ship_type_id = (int)db_res_col_i32 (res, 0, &err);
-
-
-      holds = (int)db_res_col_i32 (res, 1, &err);
-
-
-      fighters = (int)db_res_col_i32 (res, 2, &err);
-
-
-      shields = (int)db_res_col_i32 (res, 3, &err);
-    }
-
-
-  db_res_finalize (res);
-
-
-  if (ship_type_id == 0)
-
-
+  if (repo_players_get_shiptype_by_name(db, "Scout Marauder", &ship_type_id, &holds, &fighters, &shields) != 0)
     {
       return -1;
     }
-
-
-  // Insert ship with RETURNING to get ID
-
-
-  const char *sql_ins =
-
-
-    "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6}) RETURNING id;";
-
-
-  db_bind_t ins_params[] = {
-    db_bind_text ("Starter Ship"),
-
-
-    db_bind_i32 (ship_type_id),
-
-
-    db_bind_i32 (holds),
-
-
-    db_bind_i32 (fighters),
-
-
-    db_bind_i32 (shields),
-
-
-    db_bind_i32 (sector_id)
-  };
-
-
-  res = NULL;
-
-
-  db_error_clear (&err);
-
-
-  if (!db_query (db, sql_ins, ins_params, 6, &res, &err))
-
-
-    {
-      return -1;
-    }
-
 
   int ship_id = 0;
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      ship_id = (int)db_res_col_i32 (res, 0, &err);
-    }
-
-
-  db_res_finalize (res);
-
-
-  if (ship_id == 0)
-
-
+  if (repo_players_insert_ship(db, "Starter Ship", ship_type_id, holds, fighters, shields, sector_id, &ship_id) != 0)
     {
       return -1;
     }
 
+  if (repo_players_set_ship_ownership(db, ship_id, player_id) != 0)
+    {
+      return -1;
+    }
 
-  // Set ownership
+  if (repo_players_update_ship_and_sector(db, player_id, ship_id, sector_id) != 0)
+    {
+      return -1;
+    }
 
-
-  const char *sql_own =
-
-
-    "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES ({1}, {2}, 1, 1);";
-
-
-  db_bind_t own_params[] = {
-    db_bind_i32 (ship_id),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_error_clear (&err);
-
-
-  db_exec (db, sql_own, own_params, 2, &err);
-
-
-  // Update player
-
-
-  const char *sql_upd =
-
-
-    "UPDATE players SET ship_id = {1}, sector_id = {2} WHERE player_id = {3};";
-
-
-  db_bind_t upd_params[] = {
-    db_bind_i32 (ship_id),
-
-
-    db_bind_i32 (sector_id),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_error_clear (&err);
-
-
-  db_exec (db, sql_upd, upd_params, 3, &err);
-
-
-  // Update podded status
-
-
-  const char *sql_pod =
-
-
-    "UPDATE podded_status SET status = {1} WHERE player_id = {2};";
-
-
-  db_bind_t pod_params[] = {
-    db_bind_text ("alive"),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_error_clear (&err);
-
-
-  db_exec (db, sql_pod, pod_params, 2, &err);
-
+  if (repo_players_update_podded_status(db, player_id, "alive") != 0)
+    {
+      return -1;
+    }
 
   return 0;
 }
 
 
 int
-
-
 h_get_player_petty_cash (db_t *db, int player_id, long long *bal)
-
-
 {
   if (!db || player_id <= 0 || !bal)
-
-
     {
       return -1;
     }
 
-
-  const char *sql_template = "SELECT credits FROM players WHERE player_id = {1};";
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  db_bind_t params[] = { db_bind_i32 (player_id) };
-
-  char sql[256];
-  sql_build (db, sql_template, sql, sizeof sql);
-
-  if (!db_query (db, sql, params, 1, &res, &err))
-
-
-    {
-      return -1;
-    }
-
-
-  int rc = -1;
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      *bal = db_res_col_i64 (res, 0, &err);
-
-
-      rc = 0;
-    }
-
-
-  db_res_finalize (res);
-
-
-  return rc;
+  return repo_players_get_credits(db, player_id, bal);
 }
 
 
@@ -1634,289 +1203,61 @@ h_deduct_ship_credits (db_t *db, int player_id, int amount, int *new_balance)
 
 
 int
-
-
 h_deduct_player_petty_cash_unlocked (db_t *db,
-
-
                                      int player_id,
-
-
                                      long long amount,
-
-
                                      long long *new_balance_out)
-
-
 {
   if (!db || amount < 0)
-
-
     {
       return -1;
     }
 
-
-  if (new_balance_out)
-
-
-    {
-      *new_balance_out = 0;
-    }
-
-
-  const char *sql_template =
-
-
-    "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1} RETURNING credits;";
-
-
-  db_bind_t params[] = {
-    db_bind_i64 (amount),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  char sql[256];
-  sql_build (db, sql_template, sql, sizeof sql);
-
-  if (!db_query (db, sql, params, 2, &res, &err))
-
-
-    {
-      return -1;
-    }
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      if (new_balance_out)
-
-
-        {
-          *new_balance_out = db_res_col_i64 (res, 0, &err);
-        }
-
-
-      db_res_finalize (res);
-
-
-      return 0;
-    }
-
-
-  db_res_finalize (res);
-
-
-  return -1;
+  return repo_players_deduct_credits_returning(db, player_id, amount, new_balance_out);
 }
 
 
 int
-
-
 h_add_player_petty_cash (db_t *db,
-
-
                          int player_id,
-
-
                          long long amount,
-
-
                          long long *new_balance_out)
-
-
 {
   if (!db || amount < 0)
-
-
     {
       return -1;
     }
 
-
-  if (new_balance_out)
-
-
-    {
-      *new_balance_out = 0;
-    }
-
-
-  const char *sql_template =
-    "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
-
-
-  db_bind_t params[] = {
-    db_bind_i64 (amount),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  char sql[256];
-  sql_build (db, sql_template, sql, sizeof sql);
-
-  if (!db_query (db, sql, params, 2, &res, &err))
-
-
-    {
-      return -1;
-    }
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      if (new_balance_out)
-
-
-        {
-          *new_balance_out = db_res_col_i64 (res, 0, &err);
-        }
-
-
-      db_res_finalize (res);
-
-
-      return 0;
-    }
-
-
-  db_res_finalize (res);
-
-
-  return -1;
+  return repo_players_add_credits_returning(db, player_id, amount, new_balance_out);
 }
 
 
 TurnConsumeResult
-
-
 h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
-
-
 {
   if (!db || !ctx || turns <= 0)
-
-
     {
       return TURN_CONSUME_ERROR_INVALID_AMOUNT;
     }
 
-
   int player_id = ctx->player_id;
 
-
-  // Check if player has enough turns
-
-
-  const char *sql_template =
-
-
-    "SELECT turns_remaining FROM turns WHERE player_id = {1};";
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-  char sql_check[256];
-  sql_build(db, sql_template, sql_check, sizeof sql_check);
-
-  db_error_clear (&err);
-
-
-  db_bind_t check_params[] = { db_bind_i32 (player_id) };
-
-
-  if (!db_query (db, sql_check, check_params, 1, &res, &err))
-
-
+  int turns_remaining = 0;
+  if (repo_players_get_turns(db, player_id, &turns_remaining) != 0)
     {
-      LOGE ("h_consume_player_turn: db_query failed for player_id=%d: %s",
-            player_id,
-            err.message);
-
-
+      LOGE ("h_consume_player_turn: failed to get turns for player_id=%d", player_id);
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
 
-
-  int turns_remaining = 0;
-
-
-  if (db_res_step (res, &err))
-
-
-    {
-      turns_remaining = (int)db_res_col_i32 (res, 0, &err);
-    }
-
-
-  db_res_finalize (res);
-
-
   if (turns_remaining < turns)
-
-
     {
       return TURN_CONSUME_ERROR_NO_TURNS;
     }
 
-
-  // Update turns with EXTRACT(EPOCH FROM NOW()) for PostgreSQL compatibility
-
-
-  const char *sql_update =
-
-
-    "UPDATE turns SET turns_remaining = turns_remaining - {1}, last_update = NOW() WHERE player_id = {2} AND turns_remaining >= {1} "
-    ";";
-
-
-  db_bind_t upd_params[] = {
-    db_bind_i32 (turns),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_error_clear (&err);
-
-
-  if (!db_exec (db, sql_update, upd_params, 2, &err))
-
-
+  if (repo_players_consume_turns(db, player_id, turns) != 0)
     {
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
-
 
   return TURN_CONSUME_SUCCESS;
 }
@@ -2034,354 +1375,78 @@ handle_turn_consumption_error (client_ctx_t *ctx,
 
 
 int
-
-
 h_player_apply_progress (db_t *db,
-
-
                          int player_id,
-
-
                          long long delta_xp,
-
-
                          int delta_align,
-
-
                          const char *reason)
-
-
 {
   if (!db || player_id <= 0)
-
-
     {
       return -1;
     }
-
-
-  // Get current alignment and experience
-
-
-  const char *sql_get =
-
-
-    "SELECT alignment, experience FROM players WHERE player_id = {1};";
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  db_bind_t get_params[] = { db_bind_i32 (player_id) };
-
-
-  if (!db_query (db, sql_get, get_params, 1, &res, &err))
-
-
-    {
-      return -1;
-    }
-
 
   int cur_align = 0;
-
-
   long long cur_xp = 0;
 
-
-  if (db_res_step (res, &err))
-
-
+  if (repo_players_get_align_exp(db, player_id, &cur_align, &cur_xp) != 0)
     {
-      cur_align = (int)db_res_col_i32 (res, 0, &err);
-
-
-      cur_xp = db_res_col_i64 (res, 1, &err);
-    }
-
-
-  else
-
-
-    {
-      db_res_finalize (res);
-
-
       return -1;
     }
-
-
-  db_res_finalize (res);
-
 
   // Calculate new values
-
-
   long long new_xp = cur_xp + delta_xp;
-
-
-  if (new_xp < 0)
-
-
-    {
-      new_xp = 0;
-    }
-
+  if (new_xp < 0) new_xp = 0;
 
   int new_align = cur_align + delta_align;
+  if (new_align > 2000) new_align = 2000;
+  if (new_align < -2000) new_align = -2000;
 
-
-  if (new_align > 2000)
-
-
-    {
-      new_align = 2000;
-    }
-
-
-  if (new_align < -2000)
-
-
-    {
-      new_align = -2000;
-    }
-
-
-  // Update player
-
-
-  const char *sql_upd =
-
-
-    "UPDATE players SET experience = {1}, alignment = {2} WHERE player_id = {3};";
-
-
-  db_bind_t upd_params[] = {
-    db_bind_i64 (new_xp),
-
-
-    db_bind_i32 (new_align),
-
-
-    db_bind_i32 (player_id)
-  };
-
-
-  db_error_clear (&err);
-
-
-  if (!db_exec (db, sql_upd, upd_params, 3, &err))
-
-
+  if (repo_players_update_align_exp(db, player_id, new_align, new_xp) != 0)
     {
       return -1;
     }
 
-
   // Update commission (call the DB function)
-
-
   db_player_update_commission (db, player_id);
 
-
   LOGD ("Player %d progress updated. Reason: %s",
-
-
         player_id,
-
-
         reason ? reason : "N/A");
-
 
   return 0;
 }
 
 
 int
-
-
 h_get_player_sector (db_t *db, int player_id)
-
-
 {
   if (!db)
-
-
     {
       return 0;
     }
-
-
-  const char *sql_template =
-    "SELECT COALESCE(sector_id, 0) FROM players WHERE player_id = {1};";
-  char sql[256];
-  sql_build (db, sql_template, sql, sizeof sql);
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  db_bind_t params[] = { db_bind_i32 (player_id) };
-
-
-  if (!db_query (db, sql, params, 1, &res, &err))
-
-
-    {
-      return 0;
-    }
-
 
   int sector = 0;
-
-
-  if (db_res_step (res, &err))
-
-
+  if (repo_players_get_sector(db, player_id, &sector) == 0)
     {
-      sector = (int)db_res_col_i32 (res, 0, &err);
-
-
-      if (sector < 0)
-
-
-        {
-          sector = 0;
-        }
+      return sector;
     }
-
-
-  db_res_finalize (res);
-
-
-  return sector;
+  return 0;
 }
 
 
 int
-
-
 h_add_player_petty_cash_unlocked (db_t *db,
-
-
                                   int player_id,
-
-
                                   long long amount,
-
-
                                   long long *new_balance_out)
-
-
 {
-
-
   if (!db || amount < 0)
-
-
-    {
-
-
-      return -1;
-
-
-    }
-
-
-  if (new_balance_out)
-
-
-    {
-
-
-      *new_balance_out = 0;
-
-
-    }
-
-
-  const char *sql_template =
-
-
-    "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
-
-
-  db_bind_t params[] = {
-
-
-    db_bind_i64 (amount),
-
-
-    db_bind_i32 (player_id)
-
-
-  };
-
-
-  db_res_t *res = NULL;
-
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-
-
-
-  char sql[256];
-
-
-  sql_build(db, sql_template, sql, sizeof sql);
-
-
-
-
-
-  if (!db_query (db, sql, params, 2, &res, &err))
-
-
     {
       return -1;
     }
 
-
-  if (db_res_step (res, &err))
-
-
-    {
-      if (new_balance_out)
-
-
-        {
-          *new_balance_out = db_res_col_i64 (res, 0, &err);
-        }
-
-
-      db_res_finalize (res);
-
-
-      return 0;
-    }
-
-
-  db_res_finalize (res);
-
-
-  return -1;
+  return repo_players_add_credits_returning(db, player_id, amount, new_balance_out);
 }
 
 
@@ -2389,145 +1454,28 @@ h_add_player_petty_cash_unlocked (db_t *db,
 
 
 int
-
-
 h_player_petty_cash_add (db_t *db, int player_id, long long delta,
-
-
                          long long *new_balance_out)
-
-
 {
   if (!db || player_id <= 0 || !new_balance_out)
-
-
     {
       return ERR_DB_MISUSE;
     }
 
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-
-  /* Prevent negative balances (closest analogue to your old logic). */
-
-
-  const char *sql =
-
-
-    "UPDATE players "
-
-
-    "SET credits = credits + {2} "
-
-
-    "WHERE player_id = {1} AND (credits + {2}) >= 0 "
-
-
-    "RETURNING credits;";
-
-
-  db_bind_t params[] = {
-    db_bind_i32 ((int32_t) player_id),
-
-
-    db_bind_i64 ((int64_t) delta)
-  };
-
-
-  db_res_t *res = NULL;
-
-
-  if (!db_query (db,
-                 sql,
-                 params,
-                 sizeof (params) / sizeof (params[0]),
-                 &res,
-                 &err))
-
-
+  int rc = repo_players_update_credits_safe(db, player_id, delta, new_balance_out);
+  if (rc == 0)
     {
-      return err.code ? err.code : ERR_DB_QUERY_FAILED;
+      return 0;
     }
 
-
-  long long new_bal = 0;
-
-
-  bool have_row = db_res_step (res, &err);
-
-
-  if (have_row && !err.code)
-
-
+  /* Could be: player missing OR insufficient funds. Distinguish minimally. */
+  int exists = 0;
+  if (repo_players_check_exists(db, player_id, &exists) == 0)
     {
-      new_bal = (long long) db_res_col_i64 (res, 0, &err);
+      if (!exists) return ERR_DB_NOT_FOUND;
+      return ERR_DB_CONSTRAINT;
     }
 
-
-  db_res_finalize (res);
-
-
-  if (err.code)
-
-
-    {
-      return err.code;
-    }
-
-
-  if (!have_row)
-
-
-    {
-      /* Could be: player missing OR insufficient funds. Distinguish minimally. */
-
-
-      db_error_clear (&err);
-
-
-      const char *sql_exists =
-        "SELECT 1 FROM players WHERE player_id =  LIMIT 1;";
-
-
-      db_bind_t p2[] = { db_bind_i32 ((int32_t) player_id) };
-
-
-      res = NULL;
-
-
-      if (!db_query (db, sql_exists, p2, 1, &res, &err))
-
-
-        {
-          return err.code ? err.code : ERR_DB_QUERY_FAILED;
-        }
-
-
-      bool exists = db_res_step (res, &err);
-
-
-      db_res_finalize (res);
-
-
-      if (err.code)
-
-
-        {
-          return err.code;
-        }
-
-
-      return exists ? ERR_DB_CONSTRAINT : ERR_DB_NOT_FOUND;
-    }
-
-
-  *new_balance_out = new_bal;
-
-
-  return 0;
+  return rc;
 }
 

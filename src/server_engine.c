@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_engine.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -156,77 +156,20 @@ db_load_ports (int *server_port, int *s2s_port)
     }
 
   /* Try to load server_port */
-  {
-    char sql[512];
-    sql_build(db, "SELECT value FROM config WHERE key = {1} AND type = 'int' LIMIT 1;", sql, sizeof(sql));
-    db_res_t *res = NULL;
-    db_error_t err;
-
-
-    memset (&err, 0, sizeof (err));
-
-    if (db_query (db,
-                  sql,
-                  (db_bind_t[]){ db_bind_text ("server_port") },
-                  1,
-                  &res,
-                  &err))
-      {
-        if (db_res_step (res, &err))
-          {
-            *server_port = db_res_col_i32 (res, 0, &err);
-          }
-        else
-          {
-            LOGW (
-              "[config] 'server_port' missing or invalid in DB, using default: %d",
-              *server_port);
-          }
-        db_res_finalize (res);
-      }
-    else
-      {
-        LOGW (
-          "[config] 'server_port' missing or invalid in DB, using default: %d",
-          *server_port);
-      }
-  }
+  if (repo_engine_get_config_int(db, "server_port", server_port) != 0)
+    {
+      LOGW (
+        "[config] 'server_port' missing or invalid in DB, using default: %d",
+        *server_port);
+    }
 
   /* Try to load s2s_port */
-  {
-    char sql[512];
-    sql_build(db, "SELECT value FROM config WHERE key = {1} AND type = 'int' LIMIT 1;", sql, sizeof(sql));
-    db_res_t *res = NULL;
-    db_error_t err;
-
-
-    memset (&err, 0, sizeof (err));
-
-    if (db_query (db,
-                  sql,
-                  (db_bind_t[]){ db_bind_text ("s2s_port") },
-                  1,
-                  &res,
-                  &err))
-      {
-        if (db_res_step (res, &err))
-          {
-            *s2s_port = db_res_col_i32 (res, 0, &err);
-          }
-        else
-          {
-            LOGW (
-              "[config] 's2s_port' missing or invalid in DB, using default: %d",
-              *s2s_port);
-          }
-        db_res_finalize (res);
-      }
-    else
-      {
-        LOGW ("[config] 's2s_port' missing or invalid in DB, using default: %d",
-              *s2s_port);
-      }
-  }
+  if (repo_engine_get_config_int(db, "s2s_port", s2s_port) != 0)
+    {
+      LOGW (
+        "[config] 's2s_port' missing or invalid in DB, using default: %d",
+        *s2s_port);
+    }
 
   return ret_code;
 }
@@ -456,25 +399,10 @@ h_compute_illegal_alignment_delta (int player_alignment,
   int cluster_band_is_good = 0;
   int cluster_band_is_evil = 0;
   // For cluster, we have the band ID, so query alignment_band directly
-  db_error_t err;
-
-
-  db_error_clear (&err);
-  db_res_t *res = NULL;
-  char sql[512];
-  sql_build(db, "SELECT is_good, is_evil FROM alignment_band WHERE alignment_band_id = {1};", sql, sizeof(sql));
-
-  db_bind_t params[1] = { db_bind_i32 (cluster_align_band_id) };
-
-
-  if (db_query (db, sql, params, 1, &res, &err))
+  
+  if (repo_engine_get_alignment_band_info(db, cluster_align_band_id, &cluster_band_is_good, &cluster_band_is_evil) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          cluster_band_is_good = (int) db_res_col_i32 (res, 0, &err);
-          cluster_band_is_evil = (int) db_res_col_i32 (res, 1, &err);
-        }
-      db_res_finalize (res);
+      LOGW("h_compute_illegal_alignment_delta: Failed to get alignment band info for ID %d", cluster_align_band_id);
     }
 
   int base_penalty = floor (value / g_xp_align.illegal_base_align_divisor);
@@ -745,50 +673,7 @@ exec_broadcast_create (db_t *db, json_t *payload, const char *idem_key,
       return -1;
     }
 
-  char sql_tmpl[512];
-  snprintf(sql_tmpl, sizeof(sql_tmpl),
-    "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
-    "VALUES(%s, {2}, {3}, {4}, %s)",
-    ts_fmt, ts_fmt);
-
-  char sql[512];
-  sql_build(db, sql_tmpl, sql, sizeof(sql));
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  db_bind_t params[5];
-
-
-  params[0] = db_bind_i64 (now_s);
-  params[1] = db_bind_text (title);
-  params[2] = db_bind_text (body);
-  params[3] = db_bind_text (severity ? severity : "info");
-
-  if (expires_at > 0)
-    {
-      params[4] = db_bind_i64 (expires_at);
-    }
-  else
-    {
-      params[4] = db_bind_null ();
-    }
-
-  int64_t new_id = 0;
-
-
-  if (!db_exec_insert_id (db, sql, params, 5, &new_id, &err))
-    {
-      return -1;
-    }
-
-  if (out_notice_id)
-    {
-      *out_notice_id = new_id;
-    }
-  return 0;
+  return repo_engine_create_broadcast_notice(db, ts_fmt, now_s, title, body, severity, expires_at, out_notice_id);
 }
 
 
@@ -838,51 +723,7 @@ exec_notice_publish (db_t *db, json_t *payload, const char *idem_key,
       return -1;
     }
 
-  char sql_tmpl[512];
-  snprintf(sql_tmpl, sizeof(sql_tmpl),
-    "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-    "VALUES(%s, {2}, {3}, 'Notice', {4}, {5}, %s)",
-    ts_fmt, ts_fmt);
-
-  char sql[512];
-  sql_build(db, sql_tmpl, sql, sizeof(sql));
-
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  db_bind_t params[6];
-
-
-  params[0] = db_bind_i64 (now_s);
-  params[1] = db_bind_text (scope);
-  params[2] = db_bind_i32 (player_id);
-  params[3] = db_bind_text (message);
-  params[4] = db_bind_text (severity);
-
-  if (expires_at > 0)
-    {
-      params[5] = db_bind_i64 (expires_at);
-    }
-  else
-    {
-      params[5] = db_bind_null ();
-    }
-
-  int64_t new_id = 0;
-
-
-  if (!db_exec_insert_id (db, sql, params, 6, &new_id, &err))
-    {
-      return -1;
-    }
-
-  if (out_notice_id)
-    {
-      *out_notice_id = new_id;
-    }
-  return 0;
+  return repo_engine_publish_notice(db, ts_fmt, now_s, scope, player_id, message, severity, expires_at, out_notice_id);
 }
 
 
@@ -897,22 +738,13 @@ server_commands_tick (db_t *db, int max_rows)
   int processed = 0;
   int64_t now_s = (int64_t)time (NULL);
 
-  char sql_select[512];
-  sql_build(db, "SELECT engine_commands_id, type, payload, idem_key FROM engine_commands WHERE status='ready' AND due_at <= {1} ORDER BY priority ASC, due_at ASC, engine_commands_id ASC LIMIT {2};", sql_select, sizeof(sql_select));
-
   db_res_t *res = NULL;
   db_error_t err;
 
 
   db_error_clear (&err);
 
-  db_bind_t params[2];
-
-
-  params[0] = db_bind_i64 (now_s);
-  params[1] = db_bind_i32 (max_rows);
-
-  if (!db_query (db, sql_select, params, 2, &res, &err))
+  if ((res = repo_engine_get_ready_commands(db, now_s, max_rows, &err)) == NULL)
     {
       return 0;
     }
@@ -932,23 +764,11 @@ server_commands_tick (db_t *db, int max_rows)
       const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
       if (!ts_fmt)
         {
+          free(type); free(payload_json); free(idem_key);
           return 0;
         }
 
-      char sql_running_tmpl[256];
-      snprintf(sql_running_tmpl, sizeof(sql_running_tmpl),
-        "UPDATE engine_commands SET status='running', started_at=%s WHERE engine_commands_id={2}",
-        ts_fmt);
-      char sql_running[256];
-      sql_build(db, sql_running_tmpl, sql_running, sizeof(sql_running));
-
-      db_bind_t run_params[2];
-
-
-      run_params[0] = db_bind_i64 (now_s);
-      run_params[1] = db_bind_i64 (cmd_id);
-
-      db_exec (db, sql_running, run_params, 2, &err);
+      repo_engine_mark_command_running(db, ts_fmt, now_s, cmd_id);
 
       int ok = -1;
       json_error_t jerr;
@@ -990,31 +810,11 @@ server_commands_tick (db_t *db, int max_rows)
       /* finalize status */
       if (ok == 0)
         {
-          char sql_done_tmpl[256];
-          snprintf(sql_done_tmpl, sizeof(sql_done_tmpl),
-            "UPDATE engine_commands SET status='done', finished_at=%s WHERE engine_commands_id={2}",
-            sql_epoch_param_to_timestamptz(db));
-          char sql_done[256];
-          sql_build(db, sql_done_tmpl, sql_done, sizeof(sql_done));
-          db_bind_t done_params[2] = { db_bind_i64 (now_s),
-                                       db_bind_i64 (cmd_id) };
-
-
-          db_exec (db, sql_done, done_params, 2, &err);
+          repo_engine_mark_command_done(db, ts_fmt, now_s, cmd_id);
         }
       else
         {
-          char sql_err_tmpl[256];
-          snprintf(sql_err_tmpl, sizeof(sql_err_tmpl),
-            "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=%s WHERE engine_commands_id={2}",
-            sql_epoch_param_to_timestamptz(db));
-          char sql_err[256];
-          sql_build(db, sql_err_tmpl, sql_err, sizeof(sql_err));
-          db_bind_t err_params[2] = { db_bind_i64 (now_s),
-                                      db_bind_i64 (cmd_id) };
-
-
-          db_exec (db, sql_err, err_params, 2, &err);
+          repo_engine_mark_command_error(db, ts_fmt, now_s, cmd_id);
         }
       processed++;
     }
@@ -1209,13 +1009,7 @@ engine_main_loop (int shutdown_fd)
             int64_t stale_threshold_ms =
               monotonic_millis () - CRON_LOCK_STALE_MS;
 
-            char sql_reclaim[512];
-            sql_build(db_handle, "DELETE FROM locks WHERE owner='server' AND until_ms < {1};", sql_reclaim, sizeof(sql_reclaim));
-            db_bind_t params[1] = { db_bind_i64 (stale_threshold_ms) };
-
-
-            db_exec (db_handle, sql_reclaim, params, 1, &err);
-            // Ignore reclaimed count for now, or assume success implies cleanup
+            repo_engine_reclaim_stale_locks(db_handle, stale_threshold_ms);
           }
           /* ---- bounded cron runner (inline) ---- */
           const int LIMIT = CRON_BATCH_LIMIT;
@@ -1224,19 +1018,6 @@ engine_main_loop (int shutdown_fd)
           const char *ts_fmt = sql_epoch_param_to_timestamptz(db_handle);
           char ts_expr[64];
           snprintf(ts_expr, sizeof(ts_expr), ts_fmt, "{1}");
-
-          char sql_pick_tmpl[512];
-          snprintf(sql_pick_tmpl, sizeof(sql_pick_tmpl),
-            "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
-            "WHERE enabled=TRUE "
-            "  AND (next_due_at IS NULL OR next_due_at <= %s) "
-            "ORDER BY next_due_at ASC "
-            "LIMIT {2}",
-            ts_expr);
-
-          char sql_pick[512];
-          sql_build(db_handle, sql_pick_tmpl, sql_pick, sizeof(sql_pick));
-
 
           typedef struct {
             int64_t id;
@@ -1248,13 +1029,8 @@ engine_main_loop (int shutdown_fd)
           int task_count = 0;
 
           db_res_t *res = NULL;
-          db_bind_t params[2];
 
-
-          params[0] = db_bind_i64 (now_s);
-          params[1] = db_bind_i32 (LIMIT);
-
-          if (db_query (db_handle, sql_pick, params, 2, &res, &err))
+          if ((res = repo_engine_get_pending_cron_tasks(db_handle, ts_expr, now_s, LIMIT, &err)) != NULL)
             {
               while (db_res_step (res, &err) && task_count < LIMIT)
                 {
@@ -1293,30 +1069,13 @@ engine_main_loop (int shutdown_fd)
               /* reschedule deterministically */
               int64_t next_due = cron_next_due_from (now_s, sch);
               
-              const char *ts_fmt = sql_epoch_param_to_timestamptz(db_handle);
+              const char *ts_fmt_inner = sql_epoch_param_to_timestamptz(db_handle);
               char ts_expr1[64];
               char ts_expr2[64];
-              snprintf(ts_expr1, sizeof(ts_expr1), ts_fmt, "{2}");
-              snprintf(ts_expr2, sizeof(ts_expr2), ts_fmt, "{3}");
+              snprintf(ts_expr1, sizeof(ts_expr1), ts_fmt_inner, "{2}");
+              snprintf(ts_expr2, sizeof(ts_expr2), ts_fmt_inner, "{3}");
 
-              char sql_upd_tmpl[256];
-              snprintf(sql_upd_tmpl, sizeof(sql_upd_tmpl),
-                "UPDATE cron_tasks "
-                "SET last_run_at=%s, next_due_at=%s "
-                "WHERE cron_tasks_id={1};",
-                ts_expr1, ts_expr2);
-
-              char sql_upd[256];
-              sql_build(db_handle, sql_upd_tmpl, sql_upd, sizeof(sql_upd));
-
-              db_bind_t up_params[3];
-
-
-              up_params[0] = db_bind_i64 (id);
-              up_params[1] = db_bind_i64 (now_s);
-              up_params[2] = db_bind_i64 (next_due);
-
-              db_exec (db_handle, sql_upd, up_params, 3, &err);
+              repo_engine_update_cron_task_schedule(db_handle, ts_expr1, ts_expr2, id, now_s, next_due);
 
               free (tasks[i].name);
               free (tasks[i].schedule);
@@ -1438,30 +1197,7 @@ engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
       return -1;
     }
 
-  char sql[512];
-  snprintf(sql, sizeof(sql),
-    "DELETE FROM system_notice "
-    "WHERE expires_at IS NOT NULL AND expires_at <= %s "
-    "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= %s LIMIT 500);",
-    ts_fmt, ts_fmt);
-
-  // Backend bind parameters can be reused if the database supports it.
-  // Using subquery with LIMIT is the standard cross-DB way for batch delete.
-
-  db_error_t err;
-  db_error_clear (&err);
-
-  db_bind_t params[1] = { db_bind_i64 (now_s) };
-
-
-  // Note: if system_notice_id is not primary key or unique, this might be slow, but it is standard.
-  // system_notice usually has system_notice_id PK.
-
-  if (!db_exec (db, sql, params, 1, &err))
-    {
-      return 1;
-    }
-  return 0;
+  return repo_engine_sweep_expired_notices(db, ts_fmt, now_s) == 0 ? 0 : 1;
 }
 
 
@@ -1472,17 +1208,11 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
   int retried_count = 0;
   int final_rc = 0;
   // Select error commands ready for retry
-  char sql_select_deadletters[512];
-  sql_build(db, "SELECT engine_commands_id, attempts FROM engine_commands WHERE status='error' AND attempts < {1} LIMIT 500;", sql_select_deadletters, sizeof(sql_select_deadletters));
-
   db_res_t *res = NULL;
   db_error_t err;
   db_error_clear (&err);
 
-  db_bind_t params[1] = { db_bind_i32 (MAX_RETRIES) };
-
-
-  if (!db_query (db, sql_select_deadletters, params, 1, &res, &err))
+  if ((res = repo_engine_get_retryable_commands(db, MAX_RETRIES, &err)) == NULL)
     {
       LOGE
       (
@@ -1495,21 +1225,11 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
     {
       int64_t cmd_id = db_res_col_i64 (res, 0, &err);
 
-      char sql_update_deadletter[512];
-      sql_build(db, "UPDATE engine_commands SET status='ready', due_at={1} + (attempts * 60) WHERE engine_commands_id={2};", sql_update_deadletter, sizeof(sql_update_deadletter));
-
-      db_bind_t up_params[2];
-
-
-      up_params[0] = db_bind_i64 (now_s);
-      up_params[1] = db_bind_i64 (cmd_id);
-
-      if (!db_exec (db, sql_update_deadletter, up_params, 2, &err))
+      if (repo_engine_reschedule_deadletter(db, now_s, cmd_id) != 0)
         {
           LOGE
-            ("sweeper_engine_deadletter_retry: Failed to update command %ld: %s",
-            cmd_id,
-            err.message);
+            ("sweeper_engine_deadletter_retry: Failed to update command %ld",
+            cmd_id);
           final_rc = -1;
           break;
         }
@@ -1559,32 +1279,9 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
       return -1;
     }
 
-  char sql_delete_template[512];
-  
-  snprintf(sql_delete_template, sizeof(sql_delete_template),
-    "DELETE FROM sector_assets "
-    "WHERE asset_type = {1} AND %s <= {2}",
-    deployed_as_epoch);
-
-  db_error_t err;
-
-  char sql_delete_expired[512];
-  if (sql_build(db, sql_delete_template, sql_delete_expired, sizeof sql_delete_expired) != 0)
+  if (repo_engine_cleanup_expired_limpets(db, deployed_as_epoch, ASSET_LIMPET_MINE, expiry_threshold_s) != 0)
     {
-      LOGE("limpet_ttl_cleanup: Failed to build SQL");
-      return -1;
-    }
-
-  db_error_clear (&err);
-
-  db_bind_t params[2];
-
-  params[0] = db_bind_i32 (ASSET_LIMPET_MINE);
-  params[1] = db_bind_i64 (expiry_threshold_s);
-
-  if (!db_exec (db, sql_delete_expired, params, 2, &err))
-    {
-      LOGE ("limpet_ttl_cleanup: Failed to delete: %s", err.message);
+      LOGE ("limpet_ttl_cleanup: Failed to delete expired limpets");
       return -1;
     }
 
@@ -1602,17 +1299,13 @@ h_daily_bank_interest_tick (db_t *db, int64_t now_s)
     }
   LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
 
-  const char *sql_select_accounts =
-    "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick "
-    "FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
-
   db_res_t *res = NULL;
   db_error_t err;
 
 
   db_error_clear (&err);
 
-  if (!db_query (db, sql_select_accounts, NULL, 0, &res, &err))
+  if ((res = repo_engine_get_active_interest_accounts(db, &err)) == NULL)
     {
       LOGE
       (
@@ -1695,22 +1388,13 @@ h_daily_bank_interest_tick (db_t *db, int64_t now_s)
                 }
             }
         }
-      char sql_update_tick[512];
-      sql_build(db, "UPDATE bank_accounts SET last_interest_tick = {1} WHERE bank_accounts_id = {2};", sql_update_tick, sizeof(sql_update_tick));
-
-      db_bind_t up_params[2];
-
-
-      up_params[0] = db_bind_i32 (current_epoch_day);
-      up_params[1] = db_bind_i32 (account_id);
-
-      if (!db_exec (db, sql_update_tick, up_params, 2, &err))
+      
+      if (repo_engine_update_last_interest_tick(db, current_epoch_day, account_id) != 0)
         {
           LOGE
           (
-            "daily_bank_interest_tick: Failed to update last_interest_tick for account %d: %s",
-            account_id,
-            err.message);
+            "daily_bank_interest_tick: Failed to update last_interest_tick for account %d",
+            account_id);
           db_res_finalize (res);
           unlock (db, "daily_bank_interest_tick");
           return -1;

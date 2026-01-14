@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_ships.h"
 #include <strings.h>
 #include <libpq-fe.h>
 #include <stdatomic.h>
@@ -29,13 +29,13 @@
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
-#include "db/sql_driver.h"
 #include "common.h"
 #include "server_envelope.h"
 #include "server_rules.h"
 #include "server_players.h"
 #include "server_log.h"
 #include "server_ports.h"
+#include "db/db_api.h"
 #include "db/sql_driver.h"
 
 
@@ -108,47 +108,28 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
 
   const char *cause_text = kill_cause_to_text (ctx->cause);
 
-  const char *sql =
-    "SELECT result_code "
-    "FROM public.handle_ship_destruction("
-    "{1},{2},{3},{4},{5},"
-    "{6},{7},{8},{9},{10},{11}"
-    ");";
-
-  db_bind_t params[] = {
-    db_bind_i64 (ctx->victim_player_id),
-    db_bind_i64 (ctx->victim_ship_id),
-    db_bind_i64 (ctx->killer_player_id),
-    db_bind_text (cause_text),
-    db_bind_i64 (ctx->sector_id),
-    db_bind_i64 (g_cfg.death.xp_loss_flat),
-    db_bind_i64 (g_cfg.death.xp_loss_percent),
-    db_bind_i64 (g_cfg.death.max_per_day),
-    db_bind_i64 (g_cfg.death.big_sleep_duration_seconds),
-    db_bind_i64 (now_ts),
-    db_bind_i64 (0)
-  };
-
-  db_res_t *res = NULL;
-  db_error_t err;
-
-  char sql_converted[1024];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_query (db, sql_converted, params, 11, &res, &err))
+  int rc = -1;
+  int32_t result_code = -1;
+  if (repo_ships_handle_destruction (db,
+                                     ctx->victim_player_id,
+                                     ctx->victim_ship_id,
+                                     ctx->killer_player_id,
+                                     cause_text,
+                                     ctx->sector_id,
+                                     g_cfg.death.xp_loss_flat,
+                                     g_cfg.death.xp_loss_percent,
+                                     g_cfg.death.max_per_day,
+                                     g_cfg.death.big_sleep_duration_seconds,
+                                     now_ts,
+                                     &result_code) == 0)
     {
-      LOGE ("handle_ship_destruction: SQL error: %s", err.message);
+      rc = (int)result_code;
+    }
+  else
+    {
+      LOGE ("handle_ship_destruction: Repository error");
       return -1;
     }
-
-  int rc = -1;
-
-
-  if (db_res_step (res, &err))
-    {
-      rc = (int)db_res_col_i32 (res, 0, &err);
-    }
-  db_res_finalize (res);
 
   if (rc != 0)
     {
@@ -296,25 +277,9 @@ int
 h_get_active_ship_id (db_t *db, int player_id)
 {
   int ship_id = 0;
-  db_res_t *res = NULL;
-  db_error_t err;
-
-  const char *sql_template = "SELECT ship_id FROM players WHERE player_id = {1};";
-  char sql[256];
-  sql_build(db, sql_template, sql, sizeof sql);
-
-  if (db_query (db, sql,
-                (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res, &err))
+  if (repo_ships_get_active_id (db, player_id, &ship_id) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          ship_id = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("Failed to get active ship id: %s", err.message);
+      LOGE ("Failed to get active ship id for player %d", player_id);
     }
   return ship_id;
 }
@@ -692,25 +657,9 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
   /* 1. Get Player's Current Tow Status */
   int current_towing_ship_id = 0;
-  db_res_t *res = NULL;
-  db_error_t err;
-
-  const char *sql_template = "SELECT towing_ship_id FROM ships WHERE ship_id = {1};";
-  char sql[256];
-  sql_build(db, sql_template, sql, sizeof sql);
-
-  if (db_query (db, sql,
-                (db_bind_t[]){ db_bind_i32 (player_ship_id) }, 1, &res, &err))
+  if (repo_ships_get_towing_id (db, player_ship_id, &current_towing_ship_id) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          current_towing_ship_id = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("cmd_ship_tow: DB error checking status: %s", err.message);
+      LOGE ("cmd_ship_tow: DB error checking status for ship %d", player_ship_id);
       send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Database error");
       return 0;
     }
@@ -736,31 +685,20 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     {
       if (target_ship_id == 0 || target_ship_id == current_towing_ship_id)
         {
+          db_error_t err;
           if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
             {
               goto rollback;
             }
 
           // 3a. Clear player's towing field
-          char sql_tow1[256];
-          sql_build(db, "UPDATE ships SET towing_ship_id = 0 WHERE ship_id = {1};", sql_tow1, sizeof(sql_tow1));
-          if (!db_exec (db,
-                        sql_tow1,
-                        (db_bind_t[]){ db_bind_i32 (player_ship_id) },
-                        1,
-                        &err))
+          if (repo_ships_clear_towing_id (db, player_ship_id) != 0)
             {
               goto rollback;
             }
 
           // 3b. Clear target's "being towed" field
-          char sql_tow2[256];
-          sql_build(db, "UPDATE ships SET is_being_towed_by = 0 WHERE ship_id = {1};", sql_tow2, sizeof(sql_tow2));
-          if (!db_exec (db,
-                        sql_tow2,
-                        (db_bind_t[]){ db_bind_i32 (current_towing_ship_id) },
-                        1,
-                        &err))
+          if (repo_ships_clear_is_being_towed_by (db, current_towing_ship_id) != 0)
             {
               goto rollback;
             }
@@ -868,21 +806,9 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 
   // Already Towed Check
   int is_being_towed = 0;
-
-  const char *sql_template2 = "SELECT is_being_towed_by FROM ships WHERE ship_id = {1};";
-  char sql2[256];
-  sql_build(db, sql_template2, sql2, sizeof sql2);
-
-  if (db_query (db, sql2,
-                (db_bind_t[]){ db_bind_i32 (target_ship_id) }, 1, &res, &err))
+  if (repo_ships_get_is_being_towed_by (db, target_ship_id, &is_being_towed) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          is_being_towed = db_res_col_i32 (res,
-                                           0,
-                                           &err);
-        }
-      db_res_finalize (res);
+      LOGE ("cmd_ship_tow: DB error checking towed status for ship %d", target_ship_id);
     }
 
   if (is_being_towed != 0)
@@ -896,32 +822,20 @@ cmd_ship_tow (client_ctx_t *ctx, json_t *root)
     }
 
   /* 5. ENGAGE LOGIC - Execution */
+  db_error_t err;
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
       goto rollback;
     }
 
   // 5a. Set player's towing_ship_id -> target
-  const char *sql_template3 = "UPDATE ships SET towing_ship_id = {1} WHERE ship_id = {2};";
-  char sql3[256];
-  sql_build(db, sql_template3, sql3, sizeof sql3);
-
-  if (!db_exec (db, sql3,
-                (db_bind_t[]){ db_bind_i32 (target_ship_id),
-                               db_bind_i32 (player_ship_id) }, 2, &err))
+  if (repo_ships_set_towing_id (db, player_ship_id, target_ship_id) != 0)
     {
       goto rollback;
     }
 
   // 5b. Set target's is_being_towed_by -> player
-  char sql_tow3[256];
-  sql_build(db, "UPDATE ships SET is_being_towed_by = {1} WHERE ship_id = {2};", sql_tow3, sizeof(sql_tow3));
-  if (!db_exec (db,
-                sql_tow3,
-                (db_bind_t[]){ db_bind_i32 (player_ship_id),
-                               db_bind_i32 (target_ship_id) },
-                2,
-                &err))
+  if (repo_ships_set_is_being_towed_by (db, target_ship_id, player_ship_id) != 0)
     {
       goto rollback;
     }
@@ -1047,51 +961,22 @@ h_update_ship_cargo (db_t *db,
       return ERR_DB_MISUSE;
     }
 
-  db_res_t *res = NULL;
-  db_error_t err;
-  const char *sql_check =
-    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = {1};";
-
-  /* 
-   * WAIT! I must ensure the indices in db_res_col_i32 below match this SELECT list.
-   * ore=0, organics=1, equipment=2, colonists=3, slaves=4, weapons=5, drugs=6, holds=7.
-   */
-
-  char sql_check_converted[512];
-  sql_build(db, sql_check, sql_check_converted, sizeof(sql_check_converted));
-
   int ore = 0, org = 0, equ = 0, holds = 0, colonists = 0, slaves = 0,
       weapons = 0, drugs = 0;
 
 
-  if (db_query (db,
-                sql_check_converted,
-                (db_bind_t[]){ db_bind_i32 (ship_id) },
-                1,
-                &res,
-                &err))
+  if (repo_ships_get_cargo_and_holds (db,
+                                      ship_id,
+                                      &ore,
+                                      &org,
+                                      &equ,
+                                      &colonists,
+                                      &slaves,
+                                      &weapons,
+                                      &drugs,
+                                      &holds) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          ore = db_res_col_i32 (res, 0, &err);
-          org = db_res_col_i32 (res, 1, &err);
-          equ = db_res_col_i32 (res, 2, &err);
-          colonists = db_res_col_i32 (res, 3, &err);
-          slaves = db_res_col_i32 (res, 4, &err);
-          weapons = db_res_col_i32 (res, 5, &err);
-          drugs = db_res_col_i32 (res, 6, &err);
-          holds = db_res_col_i32 (res, 7, &err);
-        }
-      else
-        {
-          db_res_finalize (res);
-          return ERR_SHIP_NOT_FOUND;
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      return err.code;
+      return ERR_SHIP_NOT_FOUND;
     }
 
   int current_qty = 0;
@@ -1149,28 +1034,14 @@ h_update_ship_cargo (db_t *db,
       return ERR_HOLD_FULL;
     }
 
-  char sql_up[512];
-
-
-  snprintf (sql_up,
-            sizeof(sql_up),
-            "UPDATE ships SET %s = {1} WHERE ship_id = {2};",
-            col_name);
-
-  char sql_up_converted[512];
-  sql_build(db, sql_up, sql_up_converted, sizeof(sql_up_converted));
-
-  if (!db_exec (db,
-                sql_up_converted,
-                (db_bind_t[]){ db_bind_i32 (new_qty), db_bind_i32 (ship_id) },
-                2,
-                &err))
+  int rc = repo_ships_update_cargo_column (db, ship_id, col_name, new_qty);
+  if (rc != 0)
     {
       if (new_quantity_out)
         {
           *new_quantity_out = current_qty;
         }
-      return err.code;
+      return rc;
     }
 
   if (new_quantity_out)
@@ -1198,59 +1069,15 @@ h_get_ship_cargo_and_holds (db_t *db,
       return ERR_DB_MISUSE;
     }
 
-  db_res_t *res = NULL;
-  db_error_t err;
-  const char *sql =
-    "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = {1};";
-
-  char sql_final[512];
-  sql_build(db, sql, sql_final, sizeof(sql_final));
-
-  if (db_query (db, sql_final, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          if (ore)
-            {
-              *ore = db_res_col_i32 (res, 0, &err);
-            }
-          if (organics)
-            {
-              *organics = db_res_col_i32 (res, 1, &err);
-            }
-          if (equipment)
-            {
-              *equipment = db_res_col_i32 (res, 2, &err);
-            }
-          if (colonists)
-            {
-              *colonists = db_res_col_i32 (res, 3, &err);
-            }
-          if (slaves)
-            {
-              *slaves = db_res_col_i32 (res, 4, &err);
-            }
-          if (weapons)
-            {
-              *weapons = db_res_col_i32 (res, 5, &err);
-            }
-          if (drugs)
-            {
-              *drugs = db_res_col_i32 (res, 6, &err);
-            }
-          if (holds)
-            {
-              *holds = db_res_col_i32 (res, 7, &err);
-            }
-          db_res_finalize (res);
-          return 0;
-        }
-      else
-        {
-          db_res_finalize (res);
-          return ERR_SHIP_NOT_FOUND;
-        }
-    }
-  return err.code;
+  return repo_ships_get_cargo_and_holds (db,
+                                         ship_id,
+                                         ore,
+                                         organics,
+                                         equipment,
+                                         colonists,
+                                         slaves,
+                                         weapons,
+                                         drugs,
+                                         holds);
 }
 

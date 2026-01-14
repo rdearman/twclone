@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_cmds.h"
 /* src/server_cmds.c */
 #include <string.h>
 #include <strings.h>
@@ -42,27 +42,15 @@ is_fedspace_sector (int sector_id)
 static bool
 is_black_market_port (db_t *db, int port_id)
 {
-  db_res_t *res = NULL;
-  db_error_t err;
-  const char *sql = "SELECT name FROM ports WHERE port_id = {1};";
+  char name[256];
   bool is_bm = false;
-  char sql_converted[256];
 
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32 (port_id) }, 1, &res, &err))
+  if (repo_cmds_get_port_name (db, port_id, name, sizeof(name)) == 0)
     {
-      if (db_res_step (res, &err))
+      if (strstr (name, "Black Market"))
         {
-          const char *name = db_res_col_text (res, 0, &err);
-
-
-          if (name && strstr (name, "Black Market"))
-            {
-              is_bm = true;
-            }
+          is_bm = true;
         }
-      db_res_finalize (res);
     }
   return is_bm;
 }
@@ -204,28 +192,19 @@ play_login (const char *user, const char *pass, int *pid)
       LOGD ("[play_login] DB handle is NULL. Returning AUTH_ERR_DB.");
       return AUTH_ERR_DB;
     }
-  db_res_t *res = NULL; db_error_t err;
-  const char *sql =
-    "SELECT player_id, passwd, is_npc FROM players WHERE name = {1};";
-  char sql_converted[256];
 
-  LOGD ("[play_login] Executing query: %s for user: %s", sql, user);
+  int32_t player_id = 0;
+  char db_pass[256];
+  bool is_npc_flag = false;
 
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+  int rc = repo_cmds_get_login_info (db, user, &player_id, db_pass, sizeof(db_pass), &is_npc_flag);
 
-  if (db_query (db, sql_converted, (db_bind_t[]){db_bind_text (user)}, 1, &res, &err))
+  if (rc == 0)
     {
-      if (db_res_step (res, &err))
-        {
-          int player_id = db_res_col_i32 (res, 0, &err);
-          const char *db_pass = db_res_col_text (res, 1, &err);
-          bool is_npc_flag = (bool)db_res_col_i32 (res, 2, &err);   // Get is_npc boolean
-
-
           LOGD (
             "[play_login] Found user: %s (pid: %d, is_npc: %d). DB hashed pass: %s",
             user,
-            player_id,
+            (int)player_id,
             is_npc_flag,
             db_pass);
 
@@ -233,7 +212,6 @@ play_login (const char *user, const char *pass, int *pid)
             {
               LOGD ("[play_login] User %s is an NPC. Returning ERR_IS_NPC.",
                     user);
-              db_res_finalize (res);
               return ERR_IS_NPC;   // Use ERR_IS_NPC from errors.h
             }
 
@@ -248,8 +226,7 @@ play_login (const char *user, const char *pass, int *pid)
 
           if (cmp_result)
             {
-              *pid = player_id;
-              db_res_finalize (res);
+              *pid = (int)player_id;
               LOGD (
                 "[play_login] Authentication successful for user %s. Returning AUTH_OK.",
                 user);
@@ -257,29 +234,24 @@ play_login (const char *user, const char *pass, int *pid)
             }
           else
             {
-              db_res_finalize (res);
               LOGD (
                 "[play_login] Password mismatch for user %s. Returning AUTH_ERR_INVALID_CRED.",
                 user);
               return AUTH_ERR_INVALID_CRED;
             }
-        }
-      else
-        {
-          db_res_finalize (res);
+    }
+  else if (rc == 1)
+    {
           LOGD (
             "[play_login] No user found with name %s. Returning AUTH_ERR_INVALID_CRED.",
             user);
           return AUTH_ERR_INVALID_CRED;
-        }
     }
   else
     {
-      LOGE ("[play_login] DB query failed for user %s: %s (code=%d backend=%d)",
+      LOGE ("[play_login] DB query failed for user %s (code=%d)",
             user,
-            err.message,
-            err.code,
-            err.backend_code);
+            rc);
       return AUTH_ERR_DB;
     }
 }
@@ -296,43 +268,21 @@ user_create (db_t *db,
     {
       return AUTH_ERR_BAD_REQUEST;
     }
-  db_error_t err; int64_t player_id = 0;
-  char sql_register[256];
-  const char *sql_reg = "SELECT register_player({1}, {2}, {3});";
+  int64_t player_id = 0;
 
-  sql_build(db, sql_reg, sql_register, sizeof(sql_register));
-
-  if (!db_exec_insert_id (db,
-                          sql_register,
-                          (db_bind_t[]){db_bind_text (user),
-                                        db_bind_text (pass),
-                                        db_bind_text (ship_name)},
-                          3,
-                          &player_id,
-                          &err))
+  int rc = repo_cmds_register_player (db, user, pass, ship_name, &player_id);
+  if (rc != 0)
     {
-      if (err.code == ERR_DB_CONSTRAINT)
+      if (rc == ERR_DB_CONSTRAINT)
         {
           return ERR_NAME_TAKEN;
         }
       return AUTH_ERR_DB;
     }
 
-  const char *sql_turns =
-    "INSERT INTO turns (player_id, turns_remaining, last_update) "
-    "SELECT {1}, CAST(value AS INTEGER), CURRENT_TIMESTAMP "
-    "FROM config "
-    "WHERE key='turnsperday' "
-    "ON CONFLICT(player_id) DO UPDATE SET "
-    "  turns_remaining = excluded.turns_remaining, "
-    "  last_update    = excluded.last_update;";
-  char sql_turns_converted[512];
-
-  sql_build(db, sql_turns, sql_turns_converted, sizeof(sql_turns_converted));
-
-  if (!db_exec (db, sql_turns_converted, (db_bind_t[]){db_bind_i64 (player_id)}, 1, &err))
+  if (repo_cmds_upsert_turns (db, player_id) != 0)
     {
-      LOGE ("user_create: turns upsert failed: %s", err.message);
+      LOGE ("user_create: turns upsert failed for player %d", (int)player_id);
     }
 
   /* Create default bank account for this player */
@@ -549,7 +499,7 @@ cmd_sys_raw_sql_exec (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
 
-  if (!db_query (db, sql, NULL, 0, &res, &err))
+  if (repo_database_raw_query (db, sql, &res) != 0)
     {
       send_response_error (ctx,
                            root,
@@ -908,33 +858,10 @@ cmd_bounty_list (client_ctx_t *ctx, json_t *root)
 
   db_player_get_alignment (db, ctx->player_id, &alignment);
 
-  const char *sql = NULL;
-
-
-  if (alignment >= 0)
-    {
-      sql =
-        "SELECT b.bounties_id, b.target_id, p.name, b.reward, b.posted_by_type "
-        "FROM bounties b "
-        "JOIN players p ON b.target_id = p.player_id "
-        "WHERE b.status = 'open' AND p.alignment < 0 "
-        "ORDER BY b.reward DESC LIMIT 20;";
-    }
-  else
-    {
-      sql =
-        "SELECT b.bounties_id, b.target_id, p.name, b.reward, b.posted_by_type "
-        "FROM bounties b "
-        "JOIN players p ON b.target_id = p.player_id "
-        "WHERE b.status = 'open' AND (p.alignment > 0 OR b.posted_by_type = 'gov') "
-        "ORDER BY b.reward DESC LIMIT 20;";
-    }
-
   db_res_t *res = NULL;
   db_error_t err;
 
-
-  if (db_query (db, sql, NULL, 0, &res, &err))
+  if (repo_cmds_get_bounties (db, alignment, &res) == 0)
     {
       json_t *arr = json_array ();
 
@@ -1029,18 +956,7 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
   // 1. Planet Basic Info
-  const char *sql_planet =
-    "SELECT planet_id, name, type, owner_id, owner_type FROM planets WHERE planet_id = {1};";
-  char sql_planet_converted[256];
-
-  sql_build(db, sql_planet, sql_planet_converted, sizeof(sql_planet_converted));
-
-  if (db_query (db,
-                sql_planet_converted,
-                (db_bind_t[]){db_bind_i32 (planet_id)},
-                1,
-                &res,
-                &err))
+  if (repo_cmds_get_planet_info (db, planet_id, &res) == 0)
     {
       if (db_res_step (res, &err))
         {
@@ -1084,21 +1000,7 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
 
   // 2. Current Stock
   json_t *stock_arr = json_array ();
-  const char *sql_stock =
-    "SELECT es.commodity_code, c.commodities_id, es.quantity "
-    "FROM entity_stock es "
-    "JOIN commodities c ON es.commodity_code = c.code "
-    "WHERE es.entity_type = 'planet' AND es.entity_id = {1};";
-  char sql_stock_converted[384];
-
-  sql_build(db, sql_stock, sql_stock_converted, sizeof(sql_stock_converted));
-
-  if (db_query (db,
-                sql_stock_converted,
-                (db_bind_t[]){db_bind_i32 (planet_id)},
-                1,
-                &res,
-                &err))
+  if (repo_cmds_get_planet_stock (db, planet_id, &res) == 0)
     {
       while (db_res_step (res, &err))
         {
@@ -1179,17 +1081,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
   // 1. Port Basic Info
-  const char *sql_port = "SELECT port_id, name, size FROM ports WHERE port_id = {1};";
-  char sql_port_converted[256];
-
-  sql_build(db, sql_port, sql_port_converted, sizeof(sql_port_converted));
-
-  if (db_query (db,
-                sql_port_converted,
-                (db_bind_t[]){db_bind_i32 (port_id)},
-                1,
-                &res,
-                &err))
+  if (repo_cmds_get_port_info (db, port_id, &res) == 0)
     {
       if (db_res_step (res, &err))
         {
@@ -1218,21 +1110,7 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
 
   // 2. Current Stock
   json_t *stock_arr = json_array ();
-  const char *sql_stock =
-    "SELECT es.commodity_code, c.commodities_id, es.quantity "
-    "FROM entity_stock es "
-    "JOIN commodities c ON es.commodity_code = c.code "
-    "WHERE es.entity_type = 'port' AND es.entity_id = {1};";
-  char sql_stock_converted[384];
-
-  sql_build(db, sql_stock, sql_stock_converted, sizeof(sql_stock_converted));
-
-  if (db_query (db,
-                sql_stock_converted,
-                (db_bind_t[]){db_bind_i32 (port_id)},
-                1,
-                &res,
-                &err))
+  if (repo_cmds_get_port_stock (db, port_id, &res) == 0)
     {
       while (db_res_step (res, &err))
         {

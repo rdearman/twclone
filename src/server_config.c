@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -378,9 +378,7 @@ apply_db (db_t *db)
   db_res_t *res = NULL;
   db_error_t err;
   /* New Key-Value-Type Query */
-  const char *sql = "SELECT key, value, type FROM config;";
-
-  if (db_query (db, sql, NULL, 0, &res, &err))
+  if (repo_config_get_all (db, &res) == 0)
     {
       while (db_res_step (res, &err))
         {
@@ -389,6 +387,7 @@ apply_db (db_t *db)
           const char *type = db_res_col_text (res,
                                               2,
                                               &err);
+          /* ... logic ... */
 
 
           if (!key || !val || !type)
@@ -654,11 +653,7 @@ apply_db (db_t *db)
     }
 
   // Secrets loading
-  const char *sql_keys =
-    "SELECT key_id,key_b64 FROM s2s_keys WHERE active=1 AND is_default_tx=1 LIMIT 1";
-
-
-  if (db_query (db, sql_keys, NULL, 0, &res, &err))
+  if (repo_config_get_default_s2s_key (db, &res) == 0)
     {
       if (db_res_step (res, &err))
         {

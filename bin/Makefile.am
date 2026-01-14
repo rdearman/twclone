@@ -47,12 +47,32 @@ server_SOURCES = \
 	../src/db/pg/db_pg.c \
 	../src/game_db.c \
 	../src/db/repo/repo_cmd.c \
+	../src/db/repo/repo_cmds.c \
+	../src/db/repo/repo_citadel.c \
+	../src/db/repo/repo_config.c \
+	../src/db/repo/repo_engine_consumer.c \
 	../src/db/repo/repo_database.c \
+	../src/db/repo/repo_engine.c \
+	../src/db/repo/repo_auth.c \
+	../src/db/repo/repo_autopilot.c \
+	../src/db/repo/repo_bank.c \
 	../src/db/repo/repo_market.c \
+	../src/db/repo/repo_main.c \
+	../src/db/repo/repo_news.c \
 	../src/db/repo/repo_player_settings.c \
 	../src/db/repo/repo_cron.c \
 	../src/db/repo/repo_combat.c \
+	../src/db/repo/repo_communication.c \
 	../src/db/repo/repo_planets.c \
+	../src/db/repo/repo_ports.c \
+	../src/db/repo/repo_corporation.c \
+	../src/db/repo/repo_players.c \
+	../src/db/repo/repo_ships.c \
+	../src/db/repo/repo_session.c \
+	../src/db/repo/repo_stardock.c \
+	../src/db/repo/repo_universe.c \
+	../src/db/repo/repo_clusters.c \
+	../src/db/repo/repo_warp.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
 	../src/s2s_keyring.c \

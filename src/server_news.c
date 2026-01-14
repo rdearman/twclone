@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_news.h"
 /* src/server_news.c */
 #include <jansson.h>
 #include <string.h>
@@ -78,20 +78,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
 
   if (fetch_mode == 0)
     {                           // Unread
-      const char *sql =
-        "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE player_id = {1}) "
-        "ORDER BY published_ts DESC LIMIT 100;";
-
-      char sql_converted1[512];
-      sql_build(db, sql, sql_converted1, sizeof(sql_converted1));
-
-      if (!db_query (db,
-                     sql_converted1,
-                     (db_bind_t[]){db_bind_i32 (ctx->player_id)},
-                     1,
-                     &res,
-                     &err))
+      if (repo_news_get_unread (db, ctx->player_id, &res) != 0)
         {
           goto sql_err;
         }
@@ -105,22 +92,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
           goto sql_err;
         }
 
-      char sql[256];
-      snprintf(sql, sizeof(sql),
-        "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (%s - {1}) "
-        "ORDER BY published_ts DESC LIMIT 100;",
-        epoch_expr);
-
-      char sql_converted2[512];
-      sql_build(db, sql, sql_converted2, sizeof(sql_converted2));
-
-      if (!db_query (db,
-                     sql_converted2,
-                     (db_bind_t[]){db_bind_i32 (fetch_mode * 86400)},
-                     1,
-                     &res,
-                     &err))
+      if (repo_news_get_recent (db, epoch_expr, fetch_mode * 86400, &res) != 0)
         {
           goto sql_err;
         }
@@ -219,16 +191,7 @@ cmd_news_get_feed (client_ctx_t *ctx, json_t *root)
       goto sql_err;
     }
 
-  char sql_update[256];
-  snprintf(sql_update, sizeof(sql_update),
-    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = {1};",
-    now_expr);
-
-  char sql_converted3[512];
-  sql_build(db, sql_update, sql_converted3, sizeof(sql_converted3));
-
-  db_exec (db, sql_converted3,
-           (db_bind_t[]){db_bind_i32 (ctx->player_id)}, 1, &err);
+  repo_news_update_last_read (db, now_expr, ctx->player_id);
 
   // 5. Send response
   json_t *payload = json_object ();
@@ -265,7 +228,6 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_error_t err;
   const char *now_expr = sql_now_timestamptz(db);
   if (!now_expr)
     {
@@ -274,19 +236,10 @@ cmd_news_mark_feed_read (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql[256];
-  snprintf(sql, sizeof(sql),
-    "UPDATE players SET last_news_read_timestamp = %s WHERE player_id = {1};",
-    now_expr);
-
-  char sql_converted4[512];
-  sql_build(db, sql, sql_converted4, sizeof(sql_converted4));
-
-  if (!db_exec (db, sql_converted4, (db_bind_t[]){ db_bind_i32 (ctx->player_id) }, 1,
-                &err))
+  if (repo_news_update_last_read (db, now_expr, ctx->player_id) != 0)
     {
-      LOGE ("cmd_news_mark_feed_read: Failed for player %d: %s",
-            ctx->player_id, err.message);
+      LOGE ("cmd_news_mark_feed_read: Failed for player %d",
+            ctx->player_id);
       send_response_error (ctx, root, ERR_MISSING_FIELD, "Database error.");
       return 0;
     }
@@ -307,40 +260,70 @@ cmd_news_read (client_ctx_t *ctx, json_t *root)
 
 
 int
+
+
 news_post (const char *body, const char *cat, int aid)
+
+
 {
+
+
   db_t *db = game_db_get_handle ();
+
+
   if (!db)
+
+
     {
+
+
       LOGE ("news_post: Database handle not available.");
+
+
       return -1;
+
+
     }
-  db_error_t err;
+
+
   const char *epoch_expr = sql_epoch_now(db);
+
+
   if (!epoch_expr)
+
+
     {
+
+
       LOGE ("news_post: unsupported database backend");
+
+
       return -1;
+
+
     }
 
-  char sql[256];
-  snprintf(sql, sizeof(sql),
-    "INSERT INTO news_feed (published_ts, news_category, article_text, author_id) VALUES (%s, {1}, {2}, {3});",
-    epoch_expr);
 
-  db_bind_t params[] = {
-    db_bind_text (cat),
-    db_bind_text (body),
-    db_bind_i32 (aid)
-  };
 
-  char sql_converted5[512];
-  sql_build(db, sql, sql_converted5, sizeof(sql_converted5));
 
-  if (!db_exec (db, sql_converted5, params, 3, &err))
+
+  if (repo_news_post (db, epoch_expr, cat, body, aid) != 0)
+
+
     {
-      LOGE ("news_post: Failed: %s", err.message);
+
+
+      LOGE ("news_post: Failed");
+
+
       return -1;
+
+
     }
+
+
   return 0;
+
+
 }
+

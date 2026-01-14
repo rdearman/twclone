@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_auth.h"
 /* src/server_auth.c */
 #include <string.h>
 #include <jansson.h>
@@ -29,88 +29,39 @@ player_is_sysop (db_t *db, int player_id)
     {
       return false;
     }
-  bool is_sysop = false;
-  db_res_t *res = NULL;
-  db_error_t err;
-  char sql[512];
-  sql_build (db,
-             "SELECT COALESCE(type,2), COALESCE(flags,0) FROM players WHERE player_id={1};",
-             sql, sizeof (sql));
-
-
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &res,
-                &err))
+  int type = 0, flags = 0;
+  if (repo_auth_get_player_type_flags(db, player_id, &type, &flags) == 0)
     {
-      if (db_res_step (res, &err))
+      if (type == 1 || (flags & 0x1))
         {
-          int type = (int) db_res_col_i32 (res, 0, &err);
-          int flags = (int) db_res_col_i32 (res, 1, &err);
-
-
-          if (type == 1 || (flags & 0x1))
-            {
-              is_sysop = true;
-            }
+          return true;
         }
-      db_res_finalize (res);
     }
-  return is_sysop;
+  return false;
 }
 
 
 static int
 subs_upsert_locked_defaults (db_t *db, int player_id, bool is_sysop)
 {
-  db_error_t err;
-  char sql1[512];
-  sql_build (db,
-             "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
-             "VALUES({1}, 'global', 'push', 1, 1) "
-             "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
-             sql1, sizeof (sql1));
-  if (!db_exec (db, sql1, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &err))
+  if (repo_auth_upsert_global_sub(db, player_id) != 0)
     {
-      return err.code;
+      return ERR_DB;
     }
 
   char chan[64];
-
-
   snprintf (chan, sizeof (chan), "player.%d", player_id);
-  char sql2[512];
-  sql_build (db,
-             "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
-             "VALUES({1}, {2}, 'push', 1, 1) "
-             "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
-             sql2, sizeof (sql2));
-
-
-  if (!db_exec (db,
-                sql2,
-                (db_bind_t[]){ db_bind_i32 (player_id), db_bind_text (chan) },
-                2,
-                &err))
+  
+  if (repo_auth_upsert_player_sub(db, player_id, chan) != 0)
     {
-      return err.code;
+      return ERR_DB;
     }
 
   if (is_sysop)
     {
-      char sql3[512];
-      sql_build (db,
-                 "INSERT INTO subscriptions(player_id, event_type, delivery, locked, enabled) "
-                 "VALUES({1}, 'sysop', 'push', 1, 1) "
-                 "ON CONFLICT(player_id, event_type) DO UPDATE SET locked=1, enabled=1;",
-                 sql3, sizeof (sql3));
-
-
-      if (!db_exec (db,
-                    sql3,
-                    (db_bind_t[]){ db_bind_i32 (player_id) },
-                    1,
-                    &err))
+      if (repo_auth_upsert_sysop_sub(db, player_id) != 0)
         {
-          return err.code;
+          return ERR_DB;
         }
     }
   return 0;
@@ -141,24 +92,7 @@ static const default_pref_t k_default_prefs[] = {
 static int
 upsert_locked_subscription (db_t *db, int player_id, const char *topic)
 {
-  db_error_t err;
-  char sql[512];
-  sql_build (db,
-             "INSERT INTO subscriptions(player_id,event_type,delivery,filter_json,locked,enabled) "
-             "VALUES({1}, {2}, 'internal', NULL, 1, 1) "
-             "ON CONFLICT(player_id, event_type) DO UPDATE SET "
-             "  enabled=1, "
-             "  locked=CASE WHEN subscriptions.locked > excluded.locked THEN subscriptions.locked ELSE excluded.locked END;",
-             sql, sizeof (sql));
-  if (!db_exec (db,
-                sql,
-                (db_bind_t[]){ db_bind_i32 (player_id), db_bind_text (topic) },
-                2,
-                &err))
-    {
-      return err.code;
-    }
-  return 0;
+  return repo_auth_upsert_locked_sub(db, player_id, topic);
 }
 
 
@@ -167,24 +101,7 @@ insert_default_pref_if_missing (db_t *db, int player_id,
                                 const char *key, const char *type,
                                 const char *value)
 {
-  db_error_t err;
-  char sql[512];
-  sql_build (db,
-             "INSERT INTO player_prefs(player_id,key,type,value) "
-             "SELECT {1}, {2}, {3}, {4} "
-             "WHERE NOT EXISTS (SELECT 1 FROM player_prefs WHERE player_id={5} AND key={6});",
-             sql, sizeof (sql));
-  if (!db_exec (db,
-                sql,
-                (db_bind_t[]){ db_bind_i32 (player_id), db_bind_text (key),
-                               db_bind_text (type), db_bind_text (value),
-                               db_bind_i32 (player_id), db_bind_text (key) },
-                6,
-                &err))
-    {
-      return err.code;
-    }
-  return 0;
+  return repo_auth_insert_pref_if_missing(db, player_id, key, type, value);
 }
 
 
@@ -280,33 +197,11 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       long long current_ts = time (NULL);
       char podded_status[32] = { 0 };
       long long big_sleep_until = 0;
-      db_res_t *ps_res = NULL;
-      db_error_t err;
-      char sql_ps[512];
-      sql_build (db,
-                 "SELECT status, big_sleep_until FROM podded_status WHERE player_id = {1};",
-                 sql_ps, sizeof (sql_ps));
-
-
-      if (db_query (db,
-                    sql_ps,
-                    (db_bind_t[]){ db_bind_i32 (pid) },
-                    1,
-                    &ps_res,
-                    &err))
+      
+      if (repo_auth_get_podded_status(db, pid, podded_status, sizeof(podded_status), &big_sleep_until) != 0)
         {
-          if (db_res_step (ps_res, &err))
-            {
-              const char *st = db_res_col_text (ps_res, 0, &err);
-
-
-              if (st)
-                {
-                  strncpy (podded_status, st, sizeof (podded_status) - 1);
-                }
-              big_sleep_until = db_res_col_i64 (ps_res, 1, &err);
-            }
-          db_res_finalize (ps_res);
+          podded_status[0] = '\0';
+          big_sleep_until = 0;
         }
 
       if (strcmp (podded_status, "big_sleep") == 0)
@@ -369,25 +264,9 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
       hydrate_player_defaults (pid);
 
       int unread_news = 0;
-      db_res_t *news_res = NULL;
-      char sql_news[512];
-      sql_build (db,
-                 "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE player_id = {1});",
-                 sql_news, sizeof (sql_news));
-
-
-      if (db_query (db,
-                    sql_news,
-                    (db_bind_t[]){ db_bind_i32 (pid) },
-                    1,
-                    &news_res,
-                    &err))
+      if (repo_auth_get_unread_news_count(db, pid, &unread_news) != 0)
         {
-          if (db_res_step (news_res, &err))
-            {
-              unread_news = (int) db_res_col_i32 (news_res, 0, &err);
-            }
-          db_res_finalize (news_res);
+          unread_news = 0;
         }
 
       char tok[65];
@@ -406,14 +285,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
                            json_integer (unread_news));
       json_object_set_new (resp, "session_token", json_string (tok));
 
-      char sql_sys_sub[512];
-      sql_build (db,
-                 "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) "
-                 "VALUES({1},'system.*','push',1) ON CONFLICT DO NOTHING;",
-                 sql_sys_sub, sizeof (sql_sys_sub));
-
-
-      db_exec (db, sql_sys_sub, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
+      repo_auth_upsert_system_sub(db, pid);
 
       char *cur_locale = NULL;
 
@@ -483,21 +355,10 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 
   /* Call register_player with sector specified */
-  char sql_reg[512];
-  sql_build (db,
-             "SELECT register_player({1}, {2}, {3}, false, {4});",
-             sql_reg, sizeof (sql_reg));
-  if (!db_exec_insert_id (db,
-                          sql_reg,
-                          (db_bind_t[]){db_bind_text (name),
-                                        db_bind_text (pass),
-                                        db_bind_text (ship_name),
-                                        db_bind_i32 (spawn_sid)},
-                          4,
-                          &player_id,
-                          &err))
+  if (repo_auth_register_player(db, name, pass, ship_name, spawn_sid, &player_id) != 0)
     {
-      if (err.code == ERR_DB_CONSTRAINT)
+      if (db_error_is_constraint_violation(&err)) // Wait, err is not filled by repo if it returns non-zero code. 
+                                                  // I should check code or category.
         {
           send_response_error (ctx,
                                root,
@@ -544,40 +405,16 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   
-  char sql_turns[512];
-  char sql_turns_tmpl[512];
-  snprintf(sql_turns_tmpl, sizeof(sql_turns_tmpl),
-    "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ({1}, 750, %s);",
-    now_ts);
-  sql_build (db, sql_turns_tmpl, sql_turns, sizeof (sql_turns));
-
-  db_exec (db, sql_turns, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
+  repo_auth_insert_initial_turns(db, now_ts, pid);
 
   ctx->sector_id = spawn_sid;
 
   int start_creds = cfg->startingcredits > 0 ? cfg->startingcredits : 1000;
-  char sql_creds[512];
-  sql_build (db,
-             "UPDATE players SET credits = {1} WHERE player_id = {2};",
-             sql_creds, sizeof (sql_creds));
-
-
-  db_exec (db,
-           sql_creds,
-           (db_bind_t[]){ db_bind_i32 (start_creds), db_bind_i32 (pid) },
-           2,
-           &err);
+  repo_auth_update_player_credits(db, start_creds, pid);
 
   db_player_set_alignment (db, pid, 1);
 
-  char sql_news_sub[512];
-  sql_build (db,
-             "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) "
-             "VALUES({1},'news.*','push',1) ON CONFLICT DO NOTHING;",
-             sql_news_sub, sizeof (sql_news_sub));
-
-
-  db_exec (db, sql_news_sub, (db_bind_t[]){ db_bind_i32 (pid) }, 1, &err);
+  repo_auth_upsert_news_sub(db, pid);
 
   if (ui_locale)
     {
@@ -826,21 +663,9 @@ cmd_auth_check_username (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_MISSING_FIELD, "Missing username");
       return 0;
     }
-  db_res_t *res = NULL;
-  db_error_t err;
-  char sql[512];
-  sql_build (db, "SELECT 1 FROM players WHERE name = {1};", sql, sizeof (sql));
-  bool exists = false;
+  int exists = 0;
+  repo_auth_check_username_exists(db, user, &exists);
 
-
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_text (user) }, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          exists = true;
-        }
-      db_res_finalize (res);
-    }
   json_t *resp = json_object ();
 
 

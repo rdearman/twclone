@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_communication.h"
 /* src/server_communication.c */
 #include <jansson.h>
 #include <string.h>
@@ -212,33 +212,10 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
 
   int64_t notice_id = 0;
   time_t now = time (NULL);
-  db_error_t err;
+  int64_t expires_at = (exp && json_is_integer (exp)) ? json_integer_value (exp) : 0;
 
-  char sql[256];
-  sql_build(db, 
-    "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
-    "VALUES ({1}, {2}, {3}, {4}, {5});",
-    sql, sizeof(sql));
-
-  db_bind_t params[5];
-
-
-  params[0] = db_bind_i64 ((int64_t)now);
-  params[1] = db_bind_text (title);
-  params[2] = db_bind_text (body);
-  params[3] = db_bind_text (sev);
-  if (exp && json_is_integer (exp))
+  if (repo_comm_create_system_notice(db, (int64_t)now, title, body, sev, expires_at, &notice_id) != 0)
     {
-      params[4] = db_bind_i64 (json_integer_value (exp));
-    }
-  else
-    {
-      params[4] = db_bind_null ();
-    }
-
-  if (!db_exec_insert_id (db, sql, params, 5, &notice_id, &err))
-    {
-      LOGE ("sys.notice.create SQL error: %s", err.message);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
@@ -305,25 +282,7 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql[512];
-  char sql_tmpl[512];
-  snprintf(sql_tmpl, sizeof(sql_tmpl),
-    "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
-    "FROM system_notice n "
-    "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = {1} "
-    "WHERE ({2} = 1 OR n.expires_at IS NULL OR n.expires_at > %s) "
-    "ORDER BY n.created_at DESC LIMIT {3};",
-    now_expr);
-  sql_build(db, sql_tmpl, sql, sizeof(sql));
-
-  db_bind_t params[3];
-
-
-  params[0] = db_bind_i32 (ctx->player_id);
-  params[1] = db_bind_i32 (include_expired ? 1 : 0);
-  params[2] = db_bind_i32 (limit);
-
-  if (!db_query (db, sql, params, 3, &res, &err))
+  if ((res = repo_comm_list_notices(db, now_expr, ctx->player_id, include_expired ? 1 : 0, limit, &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       rc = 0;
@@ -406,23 +365,8 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
     }
 
   time_t now = time (NULL);
-  db_error_t err;
 
-  char sql[256];
-  sql_build(db,
-    "INSERT INTO notice_seen (notice_id, player_id, seen_at) "
-    "VALUES ({1}, {2}, {3}) "
-    "ON CONFLICT(notice_id, player_id) DO UPDATE SET seen_at = excluded.seen_at;",
-    sql, sizeof(sql));
-
-  db_bind_t params[3];
-
-
-  params[0] = db_bind_i32 (id);
-  params[1] = db_bind_i32 (ctx->player_id);
-  params[2] = db_bind_i64 ((int64_t)now);
-
-  if (!db_exec (db, sql, params, 3, &err))
+  if (repo_comm_mark_notice_seen(db, id, ctx->player_id, (int64_t)now) != 0)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
@@ -1034,32 +978,11 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* Resolve recipient by name if needed */
-  db_error_t err;
 
 
   if (to_id <= 0 && to_name)
     {
-      db_res_t *res = NULL;
-      char sql[256];
-      sql_build(db,
-        "SELECT id FROM players WHERE lower(name) = lower({1}) LIMIT 1;",
-        sql, sizeof(sql));
-
-
-      if (db_query (db,
-                    sql,
-                    (db_bind_t[]){ db_bind_text (to_name) },
-                    1,
-                    &res,
-                    &err))
-        {
-          if (db_res_step (res, &err))
-            {
-              to_id = db_res_col_i32 (res, 0, &err);
-            }
-          db_res_finalize (res);
-        }
-      if (to_id <= 0)
+      if (repo_comm_get_player_id_by_name(db, to_name, &to_id) != 0 || to_id <= 0)
         {
           send_response_error (ctx, root, 1900, "Recipient not found");
           return 0;
@@ -1067,22 +990,10 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
     }
   /* Check if recipient has blocked the sender */
   {
-    db_res_t *res = NULL;
-    char sql[256];
-    sql_build(db,
-      "SELECT 1 FROM player_block WHERE blocker_id={1} AND blocked_id={2} LIMIT 1;",
-      sql, sizeof(sql));
-    db_bind_t p[] = { db_bind_i32 (to_id), db_bind_i32 (ctx->player_id) };
     int blocked = 0;
-
-
-    if (db_query (db, sql, p, 2, &res, &err))
+    if (repo_comm_check_player_blocked(db, to_id, ctx->player_id, &blocked) != 0)
       {
-        if (db_res_step (res, &err))
-          {
-            blocked = 1;
-          }
-        db_res_finalize (res);
+        blocked = 0;
       }
     if (blocked)
       {
@@ -1098,61 +1009,17 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
 
   if (idem && *idem)
     {
-      db_res_t *chk_res = NULL;
-      char sql[256];
-      sql_build(db,
-        "SELECT mail_id FROM mail WHERE idempotency_key={1} AND recipient_id={2} LIMIT 1;",
-        sql, sizeof(sql));
-      db_bind_t p[] = { db_bind_text (idem), db_bind_i32 (to_id) };
-
-
-      if (db_query (db, sql, p, 2, &chk_res, &err))
-        {
-          if (db_res_step (chk_res, &err))
-            {
-              mail_id = db_res_col_i64 (chk_res, 0, &err);
-            }
-          db_res_finalize (chk_res);
-        }
+      repo_comm_get_mail_id_by_idem(db, idem, to_id, &mail_id);
     }
   /* Insert if not already present */
   if (mail_id == 0)
     {
-      char sql[256];
-      sql_build(db,
-        "INSERT INTO mail(sender_id, recipient_id, subject, body, idempotency_key) "
-        "VALUES({1},{2},{3},{4},{5});",
-        sql, sizeof(sql));
-      db_bind_t p[5];
-
-
-      p[0] = db_bind_i32 (ctx->player_id);
-      p[1] = db_bind_i32 (to_id);
-      p[2] = subject ? db_bind_text (subject) : db_bind_null ();
-      p[3] = db_bind_text (body);
-      p[4] = (idem && *idem) ? db_bind_text (idem) : db_bind_null ();
-
-      if (!db_exec_insert_id (db, sql, p, 5, &mail_id, &err))
+      if (repo_comm_insert_mail(db, ctx->player_id, to_id, subject, body, idem, &mail_id) != 0)
         {
           /* Re-check idempotency in case of race */
           if (idem && *idem)
             {
-              db_res_t *chk_res = NULL;
-              char sql_chk[256];
-              sql_build(db,
-                "SELECT mail_id FROM mail WHERE idempotency_key={1} AND recipient_id={2} LIMIT 1;",
-                sql_chk, sizeof(sql_chk));
-              db_bind_t p_chk[] = { db_bind_text (idem), db_bind_i32 (to_id) };
-
-
-              if (db_query (db, sql_chk, p_chk, 2, &chk_res, &err))
-                {
-                  if (db_res_step (chk_res, &err))
-                    {
-                      mail_id = db_res_col_i64 (chk_res, 0, &err);
-                    }
-                  db_res_finalize (chk_res);
-                }
+              repo_comm_get_mail_id_by_idem(db, idem, to_id, &mail_id);
             }
           if (mail_id == 0)
             {
@@ -1206,24 +1073,11 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
     {
       limit = 50;
     }
-  char SQL[512];
-  sql_build(db,
-    "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.player_id "
-    "WHERE m.recipient_id={1} AND m.deleted=0 AND m.archived=0 "
-    "  AND ({2}=0 OR m.mail_id<{2}) " "ORDER BY m.mail_id DESC " "LIMIT {3};",
-    SQL, sizeof(SQL));
 
   db_res_t *res = NULL;
   db_error_t err;
-  db_bind_t params[3];
 
-
-  params[0] = db_bind_i32 (ctx->player_id);
-  params[1] = db_bind_i32 (after_id);
-  params[2] = db_bind_i32 (limit);
-
-  if (!db_query (db, SQL, params, 3, &res, &err))
+  if ((res = repo_comm_list_inbox(db, ctx->player_id, after_id, limit, &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
@@ -1320,23 +1174,12 @@ cmd_mail_read (client_ctx_t *ctx,
   LOGI ("cmd_mail_read: reading mail id %d for player %d", id,
         ctx->player_id);
   /* Load and verify ownership */
-  char SEL[512];
-  sql_build(db,
-    "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.body, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id={1} AND m.recipient_id={2} AND m.deleted=0;",
-    SEL, sizeof(SEL));
-
   db_res_t *res = NULL;
   db_error_t err;
-  db_bind_t params[2];
 
-
-  params[0] = db_bind_i32 (id);
-  params[1] = db_bind_i32 (ctx->player_id);
-
-  if (!db_query (db, SEL, params, 2, &res, &err))
+  if ((res = repo_comm_get_mail_details(db, id, ctx->player_id, &err)) == NULL)
     {
-      LOGE ("cmd_mail_read: prepare failed: %s", err.message);
+      LOGE ("cmd_mail_read: query failed: %s", err.message);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
@@ -1383,15 +1226,7 @@ cmd_mail_read (client_ctx_t *ctx,
 
       strftime (iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime (&now));
 
-      char up_sql[256];
-      sql_build(db, "UPDATE mail SET read_at={1} WHERE mail_id={2};",
-        up_sql, sizeof(up_sql));
-      db_bind_t up_params[2];
-
-
-      up_params[0] = db_bind_text (iso);
-      up_params[1] = db_bind_i32 (id);
-      db_exec (db, up_sql, up_params, 2, &err);
+      repo_comm_mark_mail_read(db, id, iso);
     }
 
   json_t *resp = json_object ();
@@ -1477,50 +1312,28 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
                            "Too many bulk items");
       return 0;
     }
-  /* Create: UPDATE mail SET deleted=1 WHERE recipient_id={1} AND mail_id IN ({2},{3},...) */
-  char sql[4096];
-  char *p = sql;
 
-
-  p +=
-    snprintf (p, sizeof (sql),
-              "UPDATE mail SET deleted=1 WHERE recipient_id={1} AND mail_id IN (");
-  for (size_t i = 0; i < n; i++)
-    {
-      p +=
-        snprintf (p, (size_t) (sql + sizeof (sql) - p),
-                  (i ? ",{%zu}" : "{%zu}"), i + 2);
-    }
-  p += snprintf (p, (size_t) (sql + sizeof (sql) - p), ");");
-
-  db_bind_t *params = malloc ((n + 1) * sizeof (db_bind_t));
-
-
-  if (!params)
+  int *id_array = malloc (n * sizeof(int));
+  if (!id_array)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "out of memory");
       return 0;
     }
 
-  params[0] = db_bind_i32 (ctx->player_id);
   for (size_t i = 0; i < n; i++)
     {
-      params[i +
-             1] = db_bind_i32 ((int) json_integer_value (json_array_get (ids,
-                                                                         i)));
+      id_array[i] = (int) json_integer_value (json_array_get (ids, i));
     }
 
   int64_t rows_affected = 0;
-  db_error_t err;
 
-
-  if (!db_exec_rows_affected (db, sql, params, n + 1, &rows_affected, &err))
+  if (repo_comm_delete_mail_bulk(db, ctx->player_id, id_array, (int)n, &rows_affected) != 0)
     {
-      free (params);
+      free (id_array);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
-  free (params);
+  free (id_array);
 
   json_t *resp = json_object ();
 
@@ -1636,29 +1449,8 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  db_res_t *res = NULL;
-  db_error_t err;
-  char sql[256];
-  sql_build(db,
-    "SELECT COUNT(*) FROM subscriptions WHERE player_id={1} AND enabled=1;",
-    sql, sizeof(sql));
   int have = 0;
-
-
-  if (db_query (db,
-                sql,
-                (db_bind_t[]){ db_bind_i32 (ctx->player_id) },
-                1,
-                &res,
-                &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          have = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-  else
+  if (repo_comm_get_subscription_count(db, ctx->player_id, &have) != 0)
     {
       send_response_error (ctx, root, ERR_UNKNOWN, "db error");
       return 0;
@@ -1797,18 +1589,8 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 
   db_res_t *res = NULL;
   db_error_t err;
-  char sql[256];
-  sql_build(db,
-    "SELECT event_type, locked, enabled, delivery, filter_json FROM subscriptions WHERE player_id = {1};",
-    sql, sizeof(sql));
 
-
-  if (!db_query (db,
-                 sql,
-                 (db_bind_t[]){ db_bind_i32 (ctx->player_id) },
-                 1,
-                 &res,
-                 &err))
+  if ((res = repo_comm_list_subscriptions(db, ctx->player_id, &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_UNKNOWN, "db error");
       return 0;

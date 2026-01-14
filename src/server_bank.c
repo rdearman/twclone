@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_bank.h"
 /* src/server_bank.c */
 #include <stdio.h>
 #include <stdint.h>
@@ -49,71 +49,10 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
       return ERR_DB_MISUSE;
     }
 
-  db_error_t err;
+  long long new_bal = 0;
+  int account_id = repo_bank_player_balance_add(db, player_id, delta, &new_bal);
 
-
-  db_error_clear (&err);
-
-  /*
-   * 1) Try UPDATE with bounds; if no row and delta>=0, INSERT account.
-   * Return: account_id, new_balance
-   */
-  const char *sql =
-    "WITH upd AS ("
-    "  UPDATE bank_accounts "
-    "  SET balance = balance + {2} "
-    "  WHERE owner_type = 'player' AND owner_id = {1} "
-    "    AND currency = 'CRD' AND is_active = 1 "
-    "    AND (balance + {2}) >= 0 "
-    "  RETURNING id, balance"
-    "), ins AS ("
-    "  INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
-    "  SELECT 'player', {1}, 'CRD', {2}, 1 "
-    "  WHERE {2} >= 0 AND NOT EXISTS ("
-    "    SELECT 1 FROM bank_accounts "
-    "    WHERE owner_type = 'player' AND owner_id = {1} "
-    "      AND currency = 'CRD' AND is_active = 1"
-    "  ) "
-    "  RETURNING id, balance"
-    ") "
-    "SELECT id, balance FROM upd "
-    "UNION ALL "
-    "SELECT id, balance FROM ins;";
-
-  db_bind_t params[] = {
-    db_bind_i32 ((int32_t) player_id),
-    db_bind_i64 ((int64_t) delta)
-  };
-
-  db_res_t *res = NULL;
-
-  char sql_converted[1024];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_query (db, sql_converted, params, 2, &res, &err))
-    {
-      return err.code ? err.code : ERR_DB_QUERY_FAILED;
-    }
-
-  bool have_row = db_res_step (res, &err);
-  int64_t account_id = 0;
-  int64_t new_bal = 0;
-
-
-  if (have_row && !err.code)
-    {
-      account_id = db_res_col_i64 (res, 0, &err);
-      new_bal = db_res_col_i64 (res, 1, &err);
-    }
-
-  db_res_finalize (res);
-
-  if (err.code)
-    {
-      return err.code;
-    }
-
-  if (!have_row)
+  if (account_id < 0)
     {
       /*
        * Either:
@@ -122,33 +61,12 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
        *
        * Distinguish with a quick existence check.
        */
-      db_error_clear (&err);
-      const char *sql_exists =
-        "SELECT 1 FROM bank_accounts "
-        "WHERE owner_type='player' AND owner_id={1} AND currency='CRD' AND is_active=1 "
-        "LIMIT 1;";
+      int exists = 0;
+      int rc = repo_bank_check_account_active(db, player_id, &exists);
 
-      db_bind_t p2[] = { db_bind_i32 ((int32_t) player_id) };
-
-
-      res = NULL;
-
-      char sql_exists_converted[256];
-      sql_build(db, sql_exists, sql_exists_converted, sizeof(sql_exists_converted));
-
-      if (!db_query (db, sql_exists_converted, p2, 1, &res, &err))
+      if (rc != 0)
         {
-          return err.code ? err.code : ERR_DB_QUERY_FAILED;
-        }
-
-      bool exists = db_res_step (res, &err);
-
-
-      db_res_finalize (res);
-
-      if (err.code)
-        {
-          return err.code;
+          return rc;
         }
 
       return exists ? ERR_DB_CONSTRAINT : ERR_DB_NOT_FOUND;
@@ -159,51 +77,14 @@ h_player_bank_balance_add (db_t *db, int player_id, long long delta,
    * Schema: (account_id, tx_type, direction, amount, currency, description, ts, balance_after)
    */
   {
-    db_error_clear (&err);
-
-    const char *tx_sql =
-      "INSERT INTO bank_transactions "
-      "  (account_id, tx_type, direction, amount, currency, description, ts, balance_after) "
-      "VALUES "
-      "  ({1}, {2}, {3}, {4}, 'CRD', {5}, {6}, {7});";
-
     const char *direction = (delta >= 0) ? "CREDIT" : "DEBIT";
     int64_t amount_abs = (delta >= 0) ? (int64_t) delta : (int64_t) (-delta);
     int64_t ts = (int64_t) time (NULL);
 
-    /* Keep description stable and generic (you can refine later). */
-    const char *desc = "player bank balance adjustment";
-
-    db_bind_t tx_params[] = {
-      db_bind_i64 (account_id),
-      db_bind_text ("ADJUSTMENT"),
-      db_bind_text (direction),
-      db_bind_i64 (amount_abs),
-      db_bind_text (desc),
-      db_bind_i64 (ts),
-      db_bind_i64 (new_bal)
-    };
-
-    db_res_t *tx_res = NULL;
-
-    char tx_sql_converted[512];
-    sql_build(db, tx_sql, tx_sql_converted, sizeof(tx_sql_converted));
-
-    if (!db_query (db, tx_sql_converted,
-                   tx_params,
-                   sizeof (tx_params) / sizeof (tx_params[0]),
-                   &tx_res,
-                   &err))
+    int rc = repo_bank_insert_adj_transaction(db, (int64_t)account_id, direction, amount_abs, ts, (int64_t)new_bal);
+    if (rc != 0)
       {
-        return err.code ? err.code : ERR_DB_QUERY_FAILED;
-      }
-
-    /* INSERT returns no rows; step isn’t needed. */
-    db_res_finalize (tx_res);
-
-    if (err.code)
-      {
-        return err.code;
+        return rc;
       }
   }
 
@@ -290,27 +171,7 @@ h_get_bank_balance (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL;
-  db_error_t err;
-  const char *sql =
-    "SELECT balance FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2} AND is_active = 1;";
-  db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id) };
-
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (db_query (db, sql_converted, params, 2, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          *out_balance = db_res_col_i64 (res, 0, &err);
-          db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res);
-      return ERR_NOT_FOUND;
-    }
-  return err.code;
+  return repo_bank_get_balance(db, owner_type, owner_id, out_balance);
 }
 
 
@@ -326,32 +187,7 @@ h_get_account_id_unlocked (db_t *db,
       return ERR_INVALID_ARG;
     }
 
-  const char *sql =
-    "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}";
-  db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id) };
-  db_res_t *res = NULL;
-  db_error_t err = {0};
-  int rc = ERR_NOT_FOUND;
-
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_query (db, sql_converted, params, 2, &res, &err))
-    {
-      rc = err.code;
-      goto cleanup;
-    }
-
-  if (db_res_step (res, &err))
-    {
-      *account_id_out = db_res_col_i32 (res, 0, &err);
-      rc = 0;
-    }
-
-cleanup:
-  if (res)
-    db_res_finalize (res);
-  return rc;
+  return repo_bank_get_account_id(db, owner_type, owner_id, account_id_out);
 }
 
 
@@ -382,28 +218,13 @@ h_get_system_account_id_unlocked (db_t *db, const char *system_owner_type,
 static int
 h_create_personal_bank_alert_notice (db_t *db, int player_id, const char *msg)
 {
-  db_error_t err;
   const char *now_ts = sql_now_timestamptz(db);
   if (!now_ts)
     {
       return -1;  /* Unsupported backend */
     }
   
-  char sql[512];
-  snprintf(sql, sizeof(sql),
-    "INSERT INTO system_notice (created_at, scope, player_id, title, body, severity) VALUES (%s, 'player', {1}, 'Bank Alert', {2}, 'info');",
-    now_ts);
-  
-  db_bind_t params[] = { db_bind_i32 (player_id), db_bind_text (msg) };
-
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_exec (db, sql_converted, params, 2, &err))
-    {
-      return err.code;
-    }
-  return 0;
+  return repo_bank_create_system_notice(db, now_ts, player_id, msg);
 }
 
 
@@ -492,40 +313,19 @@ h_add_credits_unlocked (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_error_t err;
-  const char *sql_upd =
-    "UPDATE bank_accounts SET balance = balance + {1} WHERE bank_accounts_id = {2} RETURNING balance;";
-  db_bind_t params[] = { db_bind_i64 (amount), db_bind_i32 (account_id) };
-  db_res_t *res = NULL;
-
-  char sql_upd_converted[256];
-  sql_build(db, sql_upd, sql_upd_converted, sizeof(sql_upd_converted));
-
-  if (!db_query (db, sql_upd_converted, params, 2, &res, &err))
-    {
-      return err.code;
-    }
   long long new_balance = 0;
-
-
-  if (db_res_step (res, &err))
+  int rc = repo_bank_add_credits_returning(db, account_id, amount, &new_balance);
+  if (rc != 0)
     {
-      new_balance = db_res_col_i64 (res, 0, &err);
-      /* Sanity check: balance should never be negative after adding credits */
-      if (new_balance < 0)
-        {
-          db_res_finalize (res);
-          LOGE("Overflow detected: balance became negative after credit");
-          return ERR_DB_QUERY_FAILED;
-        }
+      return rc;
     }
-  else
-    {
-      db_res_finalize (res);
-      return ERR_NOT_FOUND;
-    }
-  db_res_finalize (res);
 
+  /* Sanity check: balance should never be negative after adding credits */
+  if (new_balance < 0)
+    {
+      LOGE("Overflow detected: balance became negative after credit");
+      return ERR_DB_QUERY_FAILED;
+    }
 
   const char *now_epoch = sql_epoch_now(db);
   if (!now_epoch)
@@ -537,20 +337,10 @@ h_add_credits_unlocked (db_t *db,
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
     "VALUES ({1}, {2}, 'CREDIT', {3}, 'CRD', {4}, {5}, %s);";
   
-  char sql_tx_dialect[512];
-  sql_build (db, sql_tx_template, sql_tx_dialect, sizeof (sql_tx_dialect));
-
-  char sql_tx[512];
-  snprintf (sql_tx, sizeof (sql_tx), sql_tx_dialect, now_epoch);
-  
-  db_bind_t tx_params[] = {
-    db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
-    db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
-  };
-
-  if (!db_exec (db, sql_tx, tx_params, 5, &err))
+  rc = repo_bank_insert_transaction(db, sql_tx_template, account_id, tx_type, "CREDIT", amount, new_balance, tx_group_id ? tx_group_id : "", now_epoch);
+  if (rc != 0)
     {
-      return err.code;
+      return rc;
     }
 
 
@@ -574,33 +364,13 @@ h_deduct_credits_unlocked (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_error_t err;
-  const char *sql_upd =
-    "UPDATE bank_accounts SET balance = balance - {1} WHERE bank_accounts_id = {2} AND balance >= {1} RETURNING balance;";
-  db_bind_t params[] = { db_bind_i64 (amount), db_bind_i32 (account_id) };
-  db_res_t *res = NULL;
-
-  char sql_upd_converted[256];
-  sql_build(db, sql_upd, sql_upd_converted, sizeof(sql_upd_converted));
-
-  if (!db_query (db, sql_upd_converted, params, 2, &res, &err))
-    {
-      return err.code;
-    }
   long long new_balance = 0;
-
-
-  if (db_res_step (res, &err))
+  int rc = repo_bank_deduct_credits_returning(db, account_id, amount, &new_balance);
+  if (rc != 0)
     {
-      new_balance = db_res_col_i64 (res, 0, &err);
+      if (rc == ERR_DB_NOT_FOUND) return ERR_INSUFFICIENT_FUNDS;
+      return rc;
     }
-  else
-    {
-      db_res_finalize (res);
-      return ERR_INSUFFICIENT_FUNDS;
-    }
-  db_res_finalize (res);
-
 
   const char *now_epoch = sql_epoch_now(db);
   if (!now_epoch)
@@ -612,20 +382,10 @@ h_deduct_credits_unlocked (db_t *db,
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
     "VALUES ({1}, {2}, 'DEBIT', {3}, 'CRD', {4}, {5}, %s);";
   
-  char sql_tx_dialect[512];
-  sql_build(db, sql_tx_template, sql_tx_dialect, sizeof(sql_tx_dialect));
-
-  char sql_tx[512];
-  snprintf(sql_tx, sizeof(sql_tx), sql_tx_dialect, now_epoch);
-  
-  db_bind_t tx_params[] = {
-    db_bind_i32 (account_id), db_bind_text (tx_type), db_bind_i64 (amount),
-    db_bind_i64 (new_balance), db_bind_text (tx_group_id ? tx_group_id : "")
-  };
-
-  if (!db_exec (db, sql_tx, tx_params, 5, &err))
+  rc = repo_bank_insert_transaction(db, sql_tx_template, account_id, tx_type, "DEBIT", amount, new_balance, tx_group_id ? tx_group_id : "", now_epoch);
+  if (rc != 0)
     {
-      return err.code;
+      return rc;
     }
 
 
@@ -648,18 +408,11 @@ h_create_bank_account_unlocked (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_error_t err;
-  const char *sql =
-    "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ({1}, {2}, {3}, 0, 1) ON CONFLICT DO NOTHING;";
-  db_bind_t params[] = { db_bind_text (owner_type), db_bind_i32 (owner_id),
-                         db_bind_i64 (initial_balance) };
-
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_exec (db, sql_converted, params, 3, &err))
+  
+  int rc = repo_bank_create_account_if_not_exists(db, owner_type, owner_id, initial_balance);
+  if (rc != 0)
     {
-      return err.code;
+      return rc;
     }
 
   if (account_id_out)
@@ -935,89 +688,14 @@ db_bank_get_transactions (db_t *db,
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err; char sql[2048];
+  db_error_t err;
+  db_res_t *res = NULL;
+  int rc = 0;
 
-
-  snprintf (sql,
-            sizeof(sql),
-            "SELECT ts, account_id, tx_type, amount, balance_after, description, tx_group_id FROM bank_transactions "
-            "WHERE account_id = (SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}) ");
-
-  db_bind_t params[12]; int idx = 0;
-
-
-  params[idx++] = db_bind_text (owner_type);
-  params[idx++] = db_bind_i32 (owner_id);
-
-  if (filter && *filter)
+  if (repo_bank_get_transactions(db, owner_type, owner_id, limit, filter, start, end, min, max, &res, &err) == 0)
     {
-      char buf[32]; snprintf (buf, sizeof(buf), "AND tx_type = $%d ", idx + 1);
-
-
-      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-      params[idx++] = db_bind_text (filter);
-    }
-
-  if (start > 0)
-    {
-      char buf[32]; snprintf (buf, sizeof(buf), "AND ts >= $%d ", idx + 1);
-
-
-      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-      params[idx++] = db_bind_i64 (start);
-    }
-
-  if (end > 0)
-    {
-      char buf[32]; snprintf (buf, sizeof(buf), "AND ts <= $%d ", idx + 1);
-
-
-      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-      params[idx++] = db_bind_i64 (end);
-    }
-
-  if (min > 0)
-    {
-      char buf[32]; snprintf (buf,
-                              sizeof(buf),
-                              "AND ABS(amount) >= $%d ",
-                              idx + 1);
-
-
-      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-      params[idx++] = db_bind_i64 (min);
-    }
-
-  if (max > 0)
-    {
-      char buf[32]; snprintf (buf,
-                              sizeof(buf),
-                              "AND ABS(amount) <= $%d ",
-                              idx + 1);
-
-
-      strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-      params[idx++] = db_bind_i64 (max);
-    }
-
-  strncat (sql,
-           "ORDER BY ts DESC, id DESC LIMIT ",
-           sizeof(sql) - strlen (sql) - 1);
-  char buf[16]; snprintf (buf, sizeof(buf), "$%d;", idx + 1);
-
-
-  strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-
-  params[idx++] = db_bind_i32 (limit);
-
-  db_res_t *res = NULL; int rc = 0;
-
-  char sql_converted[2048];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (db_query (db, sql_converted, params, idx, &res, &err))
-    {
-      rc = stmt_to_json_array (res, out, &err); db_res_finalize (res);
+      rc = stmt_to_json_array (res, out, &err);
+      db_res_finalize (res);
     }
   else
     {
@@ -1061,19 +739,7 @@ db_bank_set_frozen_status (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  const char *sql =
-    "INSERT INTO bank_flags (player_id, is_frozen) VALUES ({1}, {2}) ON CONFLICT(player_id) DO UPDATE SET is_frozen = excluded.is_frozen;";
-  db_error_t err;
-  db_bind_t params[] = { db_bind_i32 (owner_id), db_bind_i32 (is_frozen) };
-
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_exec (db, sql_converted, params, 2, &err))
-    {
-      return err.code;
-    }
-  return 0;
+  return repo_bank_set_frozen_status(db, owner_id, is_frozen);
 }
 
 
@@ -1087,40 +753,7 @@ db_bank_get_frozen_status (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL; db_error_t err;
-  int rc = 0;
-  db_bind_t params[] = { db_bind_i32 (owner_id) };
-
-  const char *sql = "SELECT is_frozen FROM bank_flags WHERE player_id = {1};";
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (db_query (db,
-                sql_converted,
-                params,
-                1,
-                &res,
-                &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          *out_frozen = db_res_col_i32 (res,
-                                        0,
-                                        &err);
-        }
-      else
-        {
-          *out_frozen = 0;
-        }
-      rc = 0;
-      goto cleanup;
-    }
-  rc = err.code;
-
-cleanup:
-  if (res)
-      db_res_finalize(res);
-  return rc;
+  return repo_bank_get_frozen_status(db, owner_id, out_frozen);
 }
 
 
@@ -1351,18 +984,11 @@ cmd_bank_leaderboard (client_ctx_t *ctx, json_t *root)
       limit = 20;
     }
 
-  const char *sql_query =
-    "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.player_id = BA.owner_id "
-    "WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT {1};";
-  db_bind_t params[] = { db_bind_i32 (limit) };
   db_res_t *res = NULL;
   db_error_t err;
   json_t *leaderboard_array = json_array ();
 
-  char sql_converted[512];
-  sql_build(db, sql_query, sql_converted, sizeof(sql_converted));
-
-  if (db_query (db, sql_converted, params, 1, &res, &err))
+  if ((res = repo_bank_get_leaderboard(db, limit, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -1779,15 +1405,9 @@ cmd_fine_list (client_ctx_t *ctx, json_t *root)
 
   json_t *fines_array = json_array ();
   db_error_t err;
-  const char *sql =
-    "SELECT fines_id as id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = {1} AND status != 'paid';";
-  db_bind_t params[] = { db_bind_i32 (ctx->player_id) };
   db_res_t *res = NULL;
 
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (db_query (db, sql_converted, params, 1, &res, &err))
+  if ((res = repo_bank_get_fines(db, ctx->player_id, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -1882,15 +1502,9 @@ cmd_fine_pay (client_ctx_t *ctx,
   const char *fine_recipient_type = NULL;
 
   db_error_t err;
-  const char *sql_select_fine =
-    "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE fines_id = {1};";
-  db_bind_t params_fine[] = { db_bind_i32 (fine_id) };
   db_res_t *res_fine = NULL;
 
-  char sql_select_fine_converted[512];
-  sql_build(db, sql_select_fine, sql_select_fine_converted, sizeof(sql_select_fine_converted));
-
-  if (db_query (db, sql_select_fine_converted, params_fine, 1, &res_fine, &err))
+  if ((res_fine = repo_bank_get_fine_details(db, fine_id, &err)) != NULL)
     {
       if (db_res_step (res_fine, &err))
         {
@@ -1964,16 +1578,7 @@ cmd_fine_pay (client_ctx_t *ctx,
     }
 
   const char *new_status = (amount_to_pay == fine_amount) ? "paid" : "unpaid";
-  const char *sql_update_fine =
-    "UPDATE fines SET status = {1}, amount = amount - {2} WHERE fines_id = {3};";
-  db_bind_t params_update[] = { db_bind_text (new_status),
-                                db_bind_i64 (amount_to_pay),
-                                db_bind_i32 (fine_id) };
-
-  char sql_update_fine_converted[512];
-  sql_build(db, sql_update_fine, sql_update_fine_converted, sizeof(sql_update_fine_converted));
-
-  if (!db_exec (db, sql_update_fine_converted, params_update, 3, &err))
+  if (repo_bank_update_fine(db, fine_id, new_status, amount_to_pay) != 0)
     {
       send_response_error (ctx,
                            root,

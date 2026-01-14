@@ -92,3 +92,13 @@ repo_s2s_get_default_key (db_t *db, char *out_key_id, size_t key_id_size, char *
   db_res_finalize (res);
   return -1;
 }
+
+int repo_database_raw_query(db_t *db, const char *sql, db_res_t **out_res)
+{
+    /* SQL_VERBATIM: USER_DYNAMIC */
+    db_error_t err;
+    if (db_query(db, sql, NULL, 0, out_res, &err)) {
+        return 0;
+    }
+    return err.code;
+}

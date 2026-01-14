@@ -1,4 +1,5 @@
-#include "db_legacy.h"
+#include "db/repo/repo_corporation.h"
+#include "db/repo/repo_cmd.h"
 #include <jansson.h>
 #include <string.h>
 #include <stdbool.h>
@@ -23,37 +24,7 @@ int
 h_get_player_corp_role (db_t *db, int player_id, int corp_id,
                         char *role_buffer, size_t buffer_size)
 {
-  char sql[512];
-  sql_build (db, "SELECT role FROM corp_members WHERE player_id = {1} AND corporation_id = {2};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (player_id), db_bind_i32 (corp_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-
-  if (db_query (db, sql, params, 2, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          const char *role = db_res_col_text (res, 0, &err);
-
-
-          if (role)
-            {
-              strncpy (role_buffer, role, buffer_size - 1);
-              role_buffer[buffer_size - 1] = '\0';
-            }
-          else
-            {
-              role_buffer[0] = '\0';
-            }
-          db_res_finalize (res);
-          return 0;
-        }
-      db_res_finalize (res);
-      role_buffer[0] = '\0';
-      return ERR_DB_NOT_FOUND;
-    }
-  role_buffer[0] = '\0';
-  return err.code;
+  return repo_corp_get_player_role(db, player_id, corp_id, role_buffer, buffer_size);
 }
 
 
@@ -64,158 +35,35 @@ h_is_player_corp_ceo (db_t *db, int player_id, int *out_corp_id)
     {
       return 0;
     }
-  char sql[512];
-  sql_build (db, "SELECT corporation_id FROM corporations WHERE owner_id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (player_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int found = 0;
-
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          int corp_id = db_res_col_i32 (res, 0, &err);
-
-
-          if (out_corp_id)
-            {
-              *out_corp_id = corp_id;
-            }
-          found = 1;
-        }
-      db_res_finalize (res);
-    }
-  return found;
+  return repo_corp_is_player_ceo(db, player_id, out_corp_id);
 }
 
 
 int
 h_get_player_corp_id (db_t *db, int player_id)
 {
-  char sql[512];
-  sql_build (db, "SELECT corporation_id FROM corp_members WHERE player_id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (player_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int corp_id = 0;
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          corp_id = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("h_get_player_corp_id: query failed: %s", err.message);
-    }
-  return corp_id;
+  return repo_corp_get_player_corp_id(db, player_id);
 }
 
 
 int
 h_get_corp_bank_account_id (db_t *db, int corp_id)
 {
-  char sql[512];
-  sql_build (db, "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (corp_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int account_id = -1;
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          account_id = db_res_col_i32 (res, 0, &err);
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("h_get_corp_bank_account_id: query failed: %s", err.message);
-    }
-  return account_id;
+  return repo_corp_get_bank_account_id(db, corp_id);
 }
 
 
 int
 h_get_corp_credit_rating (db_t *db, int corp_id, int *rating)
 {
-  char sql[512];
-  sql_build (db, "SELECT credit_rating FROM corporations WHERE corporation_id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (corp_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int rc = ERR_DB_NOT_FOUND;
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          if (rating)
-            {
-              *rating = db_res_col_i32 (res, 0, &err);
-            }
-          rc = 0;
-        }
-      else
-        {
-          if (rating)
-            {
-              *rating = 0;
-            }
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("h_get_corp_credit_rating: query failed: %s", err.message);
-      rc = err.code;
-    }
-  return rc;
+  return repo_corp_get_credit_rating(db, corp_id, rating);
 }
 
 
 int
 h_get_corp_stock_id (db_t *db, int corp_id, int *out_stock_id)
 {
-  char sql[512];
-  sql_build (db, "SELECT id FROM stocks WHERE corp_id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (corp_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int rc = ERR_DB_NOT_FOUND;
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          if (out_stock_id)
-            {
-              *out_stock_id = db_res_col_i32 (res, 0, &err);
-            }
-          rc = 0;
-        }
-      else
-        {
-          if (out_stock_id)
-            {
-              *out_stock_id = 0;
-            }
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("h_get_corp_stock_id: query failed: %s", err.message);
-      rc = err.code;
-    }
-  return rc;
+  return repo_corp_get_stock_id(db, corp_id, out_stock_id);
 }
 
 
@@ -225,54 +73,7 @@ h_get_stock_info (db_t *db, int stock_id, char **out_ticker,
                   int *out_par_value, int *out_current_price,
                   long long *out_last_dividend_ts)
 {
-  char sql[512];
-  sql_build (db, "SELECT ticker, corp_id, total_shares, par_value, current_price, last_dividend_ts FROM stocks WHERE id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (stock_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int rc = ERR_DB_NOT_FOUND;
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          if (out_ticker)
-            {
-              const char *tmp = db_res_col_text (res, 0, &err);
-
-
-              *out_ticker = tmp ? strdup (tmp) : NULL;
-            }
-          if (out_corp_id)
-            {
-              *out_corp_id = db_res_col_i32 (res, 1, &err);
-            }
-          if (out_total_shares)
-            {
-              *out_total_shares = db_res_col_i32 (res, 2, &err);
-            }
-          if (out_par_value)
-            {
-              *out_par_value = db_res_col_i32 (res, 3, &err);
-            }
-          if (out_current_price)
-            {
-              *out_current_price = db_res_col_i32 (res, 4, &err);
-            }
-          if (out_last_dividend_ts)
-            {
-              *out_last_dividend_ts = db_res_col_i64 (res, 5, &err);
-            }
-          rc = 0;
-        }
-      db_res_finalize (res);
-    }
-  else
-    {
-      LOGE ("h_get_stock_info: query failed: %s", err.message);
-      rc = err.code;
-    }
-  return rc;
+  return repo_corp_get_stock_info(db, stock_id, out_ticker, out_corp_id, out_total_shares, out_par_value, out_current_price, out_last_dividend_ts);
 }
 
 
@@ -285,68 +86,25 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
       return 0;         // No change needed
     }
 
-  db_error_t err;
-
 
   if (quantity_change > 0)
     {
-      // Add shares, or insert if not exists
-      const char *conflict_fmt = sql_conflict_target_fmt(db);
-      if (!conflict_fmt)
+      int rc = repo_corp_add_shares(db, player_id, stock_id, quantity_change);
+      if (rc != 0)
         {
-          return -1;  /* Unsupported backend */
-        }
-      
-      char conflict_clause[128];
-      snprintf(conflict_clause, sizeof(conflict_clause),
-        conflict_fmt, "player_id, corp_id");
-      
-      char sql_add[512];
-      char sql_template[512];
-      snprintf(sql_template, sizeof(sql_template),
-        "INSERT INTO corp_shareholders (player_id, corp_id, shares) "
-        "VALUES ({1}, (SELECT corp_id FROM stocks WHERE id = {2}), {3}) "
-        "%s UPDATE SET shares = shares + excluded.shares;",
-        conflict_clause);
-      sql_build(db, sql_template, sql_add, sizeof(sql_add));
-
-      db_bind_t params[] = { db_bind_i32 (player_id), db_bind_i32 (stock_id),
-                             db_bind_i32 (quantity_change) };
-
-
-      if (!db_exec (db, sql_add, params, 3, &err))
-        {
-          LOGE ("h_update_player_shares: Failed to add shares: %s",
-                err.message);
-          return err.code;
+          LOGE ("h_update_player_shares: Failed to add shares: %d", rc);
+          return rc;
         }
     }
   else
     {
-      char sql_deduct[512];
-      sql_build (db, "UPDATE corp_shareholders SET shares = shares + {1} "
-        "WHERE player_id = {2} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {3}) AND (shares + {4}) >= 0;",
-        sql_deduct, sizeof(sql_deduct));
-
-      db_bind_t params[] = {
-        db_bind_i32 (quantity_change),
-        db_bind_i32 (player_id),
-        db_bind_i32 (stock_id),
-        db_bind_i32 (quantity_change)
-      };
       int64_t rows_affected = 0;
+      int rc = repo_corp_deduct_shares(db, player_id, stock_id, quantity_change, &rows_affected);
 
-
-      if (!db_exec_rows_affected (db,
-                                  sql_deduct,
-                                  params,
-                                  4,
-                                  &rows_affected,
-                                  &err))
+      if (rc != 0)
         {
-          LOGE ("h_update_player_shares: Failed to deduct shares: %s",
-                err.message);
-          return err.code;
+          LOGE ("h_update_player_shares: Failed to deduct shares: %d", rc);
+          return rc;
         }
 
       if (rows_affected == 0)
@@ -360,8 +118,7 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
     }
 
   // Clean up 0-share entries
-  db_exec (db, "DELETE FROM corp_shareholders WHERE shares = 0;", NULL, 0,
-           &err);
+  repo_corp_delete_zero_shares(db);
   return 0;
 }
 
@@ -426,61 +183,33 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* Ensure target is a member of the same corp */
-  char sql_check_member[512];
-  sql_build (db, "SELECT role FROM corp_members WHERE corp_id = {1} AND player_id = {2};", sql_check_member, sizeof(sql_check_member));
-  db_bind_t params_check[] = { db_bind_i32 (corp_id),
-                               db_bind_i32 (target_player_id) };
-  db_res_t *res_check = NULL;
-  db_error_t err;
+  char target_role_buf[16];
   const char *target_role = NULL;
 
-
-  if (db_query (db, sql_check_member, params_check, 2, &res_check, &err))
+  if (repo_corp_check_member_role(db, corp_id, target_player_id, target_role_buf, sizeof(target_role_buf)) == 0)
     {
-      if (db_res_step (res_check, &err))
-        {
-          target_role = db_res_col_text (res_check, 0, &err);
-        }
+      target_role = target_role_buf;
     }
 
   if (!target_role)
     {
-      db_res_finalize (res_check);
       send_response_error (ctx,
                            root,
                            ERR_INVALID_ARG,
                            "Target player is not a member of your corporation.");
       return 0;
     }
-  db_res_finalize (res_check);
 
   /* Guard: current CEO must NOT be flying the Corporate Flagship */
-  char sql_flagship_check[512];
-  sql_build (db,
-    "SELECT st.name "
-    "FROM players p "
-    "JOIN ships s ON p.ship_id = s.id "
-    "JOIN shiptypes st ON s.type_id = st.id WHERE p.id = {1};",
-    sql_flagship_check, sizeof(sql_flagship_check));
-
-  db_bind_t params_fs[] = { db_bind_i32 (ctx->player_id) };
-  db_res_t *res_fs = NULL;
+  char ship_name_buf[128];
   bool is_flagship = false;
 
-
-  if (db_query (db, sql_flagship_check, params_fs, 1, &res_fs, &err))
+  if (repo_corp_get_player_ship_type_name(db, ctx->player_id, ship_name_buf, sizeof(ship_name_buf)) == 0)
     {
-      if (db_res_step (res_fs, &err))
+      if (ship_name_buf[0] != '\0' && !strcasecmp (ship_name_buf, "Corporate Flagship"))
         {
-          const char *ship_name = db_res_col_text (res_fs, 0, &err);
-
-
-          if (ship_name && !strcasecmp (ship_name, "Corporate Flagship"))
-            {
-              is_flagship = true;
-            }
+          is_flagship = true;
         }
-      db_res_finalize (res_fs);
     }
 
   if (is_flagship)
@@ -493,6 +222,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
     }
 
   /* Perform the transfer in a transaction */
+  db_error_t err;
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
       send_response_error (ctx, root, err.code, "Failed to start transaction.");
@@ -502,13 +232,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   bool ok = true;
 
   /* Demote current CEO to Officer */
-  char sql_demote[512];
-  sql_build (db, "UPDATE corp_members SET role = 'Officer' WHERE corp_id = {1} AND player_id = {2} AND role = 'Leader';", sql_demote, sizeof(sql_demote));
-  db_bind_t params_demote[] = { db_bind_i32 (corp_id),
-                                db_bind_i32 (ctx->player_id) };
-
-
-  if (!db_exec (db, sql_demote, params_demote, 2, &err))
+  if (repo_corp_demote_ceo(db, corp_id, ctx->player_id) != 0)
     {
       ok = false;
     }
@@ -516,42 +240,16 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   /* Ensure target has a membership row */
   if (ok)
     {
-      const char *conflict_clause = sql_insert_ignore_clause(db);
-      if (!conflict_clause)
+      if (repo_corp_insert_member_ignore(db, corp_id, target_player_id, "Member") != 0)
         {
-          ok = false;  /* Unsupported backend */
-        }
-      else
-        {
-          char sql_insert_member[256];
-          char sql_insert_template[256];
-          snprintf(sql_insert_template, sizeof(sql_insert_template),
-            "INSERT INTO corp_members (corp_id, player_id, role) "
-            "VALUES ({1}, {2}, 'Member') %s;",
-            conflict_clause);
-          sql_build(db, sql_insert_template, sql_insert_member, sizeof(sql_insert_member));
-          
-          db_bind_t params_ins[] = { db_bind_i32 (corp_id),
-                                     db_bind_i32 (target_player_id) };
-
-
-          if (!db_exec (db, sql_insert_member, params_ins, 2, &err))
-            {
-              ok = false;
-            }
+          ok = false;
         }
     }
 
   /* Promote target to Leader */
   if (ok)
     {
-      char sql_promote[512];
-      sql_build (db, "UPDATE corp_members SET role = 'Leader' WHERE corp_id = {1} AND player_id = {2};", sql_promote, sizeof(sql_promote));
-      db_bind_t params_promote[] = { db_bind_i32 (corp_id),
-                                     db_bind_i32 (target_player_id) };
-
-
-      if (!db_exec (db, sql_promote, params_promote, 2, &err))
+      if (repo_corp_promote_leader(db, corp_id, target_player_id) != 0)
         {
           ok = false;
         }
@@ -560,13 +258,7 @@ cmd_corp_transfer_ceo (client_ctx_t *ctx, json_t *root)
   /* Update corporations.owner_id */
   if (ok)
     {
-      char sql_update_owner[512];
-      sql_build (db, "UPDATE corporations SET owner_id = {1} WHERE corporation_id = {2};", sql_update_owner, sizeof(sql_update_owner));
-      db_bind_t params_owner[] = { db_bind_i32 (target_player_id),
-                                   db_bind_i32 (corp_id) };
-
-
-      if (!db_exec (db, sql_update_owner, params_owner, 2, &err))
+      if (repo_corp_update_owner(db, corp_id, target_player_id) != 0)
         {
           ok = false;
         }
@@ -697,22 +389,12 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql_insert_corp[512];
-  sql_build (db, "INSERT INTO corporations (name, owner_id) VALUES ({1}, {2});", sql_insert_corp, sizeof(sql_insert_corp));
-  db_bind_t params_corp[] = { db_bind_text (name),
-                              db_bind_i32 (ctx->player_id) };
   int64_t new_corp_id = 0;
-
-
-  if (!db_exec_insert_id (db,
-                          sql_insert_corp,
-                          params_corp,
-                          2,
-                          &new_corp_id,
-                          &err))
+  int rc = repo_corp_create(db, name, ctx->player_id, &new_corp_id);
+  if (rc != 0)
     {
       db_tx_rollback (db, NULL);
-      if (err.code == ERR_DB_CONSTRAINT)
+      if (rc == ERR_DB_CONSTRAINT)
         {
           send_response_refused_steal (ctx,
                                        root,
@@ -722,48 +404,31 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
         }
       else
         {
-          send_response_error (ctx, root, err.code, "Database error.");
+          send_response_error (ctx, root, rc, "Database error.");
         }
       return 0;
     }
 
   int corp_id = (int) new_corp_id;
 
-  char sql_insert_member[512];
-  sql_build (db, "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Leader');", sql_insert_member, sizeof(sql_insert_member));
-  db_bind_t params_mem[] = { db_bind_i32 (corp_id),
-                             db_bind_i32 (ctx->player_id) };
-
-
-  if (!db_exec (db, sql_insert_member, params_mem, 2, &err))
+  if (repo_corp_insert_member(db, corp_id, ctx->player_id, "Leader") != 0)
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx, root, err.code, "Failed to add CEO.");
+      send_response_error (ctx, root, ERR_DB, "Failed to add CEO.");
       return 0;
     }
 
-  char sql_create_bank[512];
-  sql_build (db, "INSERT INTO bank_accounts (owner_type, owner_id, currency) VALUES ('corp', {1}, 'CRD');", sql_create_bank, sizeof(sql_create_bank));
-  db_bind_t params_bank[] = { db_bind_i32 (corp_id) };
-
-
-  if (!db_exec (db, sql_create_bank, params_bank, 1, &err))
+  if (repo_corp_create_bank_account(db, corp_id) != 0)
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx, root, err.code, "Failed to create bank.");
+      send_response_error (ctx, root, ERR_DB, "Failed to create bank.");
       return 0;
     }
 
-  char sql_convert_planets[512];
-  sql_build (db, "UPDATE planets SET owner_id = {1}, owner_type = 'corp' WHERE owner_id = {2} AND owner_type = 'player';", sql_convert_planets, sizeof(sql_convert_planets));
-  db_bind_t params_pl[] = { db_bind_i32 (corp_id),
-                            db_bind_i32 (ctx->player_id) };
-
-
-  if (!db_exec (db, sql_convert_planets, params_pl, 2, &err))
+  if (repo_corp_transfer_planets_to_corp(db, corp_id, ctx->player_id) != 0)
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx, root, err.code, "Failed to update planets.");
+      send_response_error (ctx, root, ERR_DB, "Failed to update planets.");
       return 0;
     }
 
@@ -834,21 +499,9 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
     }
 
   long long expires_at = 0;
-  char sql_check_invite[512];
-  sql_build (db, "SELECT expires_at FROM corp_invites WHERE corp_id = {1} AND player_id = {2};", sql_check_invite, sizeof(sql_check_invite));
-  db_bind_t params_check[] = { db_bind_i32 (corp_id),
-                               db_bind_i32 (ctx->player_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-
-
-  if (db_query (db, sql_check_invite, params_check, 2, &res, &err))
+  if (repo_corp_get_invite_expiry(db, corp_id, ctx->player_id, &expires_at) != 0)
     {
-      if (db_res_step (res, &err))
-        {
-          expires_at = db_res_col_i64 (res, 0, &err);
-        }
-      db_res_finalize (res);
+      expires_at = 0;
     }
 
   if (expires_at == 0 || expires_at < (long long) time (NULL))
@@ -860,22 +513,16 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  db_error_t err;
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
       send_response_error (ctx, root, err.code, "Database busy (join)");
       return 0;
     }
 
-  char sql_insert_member[512];
-  sql_build (db, "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Member');", sql_insert_member, sizeof(sql_insert_member));
-  db_bind_t params_mem[] = { db_bind_i32 (corp_id),
-                             db_bind_i32 (ctx->player_id) };
-
-
-  if (!db_exec (db, sql_insert_member, params_mem, 2, &err))
+  if (repo_corp_insert_member_basic(db, corp_id, ctx->player_id, "Member") != 0)
     {
       db_tx_rollback (db, NULL);
-      LOGE ("cmd_corp_join: Failed to insert new member: %s", err.message);
       send_response_error (ctx,
                            root,
                            ERR_DB,
@@ -883,14 +530,10 @@ cmd_corp_join (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql_delete_invite[512];
-  sql_build (db, "DELETE FROM corp_invites WHERE corp_id = {1} AND player_id = {2};", sql_delete_invite, sizeof(sql_delete_invite));
-
-
-  if (!db_exec (db, sql_delete_invite, params_mem, 2, &err))
+  if (repo_corp_delete_invite(db, corp_id, ctx->player_id) != 0)
     {
       // Not critical if delete fails, but log it
-      LOGW ("cmd_corp_join: Failed to delete invite: %s", err.message);
+      LOGW ("cmd_corp_join: Failed to delete invite");
     }
 
   if (!db_tx_commit (db, &err))
@@ -924,18 +567,11 @@ cmd_corp_list (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *corp_array = json_array ();
-  const char *sql =
-    "SELECT c.corporation_id, c.name, c.tag, c.owner_id, p.name, "
-    "(SELECT COUNT(*) FROM corp_members cm WHERE cm.corporation_id = c.corporation_id) as member_count "
-    "FROM corporations c "
-    "LEFT JOIN players p ON c.owner_id = p.player_id "
-    "WHERE c.corporation_id > 0;";
-
   db_res_t *res = NULL;
   db_error_t err;
 
 
-  if (db_query (db, sql, NULL, 0, &res, &err))
+  if ((res = repo_corp_list(db, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -1025,20 +661,11 @@ cmd_corp_roster (client_ctx_t *ctx, json_t *root)
     }
   corp_id = (int) json_integer_value (j_corp_id);
   json_t *roster_array = json_array ();
-  char sql[1024];
-  sql_build (db,
-    "SELECT cm.player_id, p.name, cm.role "
-    "FROM corp_members cm "
-    "JOIN players p ON cm.player_id = p.player_id "
-    "WHERE cm.corporation_id = {1};",
-    sql, sizeof(sql));
-
-  db_bind_t params[] = { db_bind_i32 (corp_id) };
   db_res_t *res = NULL;
   db_error_t err;
 
 
-  if (db_query (db, sql, params, 1, &res, &err))
+  if ((res = repo_corp_roster(db, corp_id, &err)) != NULL)
     {
       while (db_res_step (res, &err))
         {
@@ -1184,16 +811,11 @@ cmd_corp_kick (client_ctx_t *ctx, json_t *root)
                            "Your rank is not high enough to kick this member.");
       return 0;
     }
-  char sql_delete_member[512];
-  sql_build (db, "DELETE FROM corp_members WHERE corp_id = {1} AND player_id = {2};", sql_delete_member, sizeof(sql_delete_member));
-  db_bind_t params[] = { db_bind_i32 (kicker_corp_id),
-                         db_bind_i32 (target_player_id) };
-  db_error_t err;
 
-
-  if (!db_exec (db, sql_delete_member, params, 2, &err))
+  int rc = repo_corp_delete_member(db, kicker_corp_id, target_player_id);
+  if (rc != 0)
     {
-      LOGE ("cmd_corp_kick: Failed to delete member: %s", err.message);
+      LOGE ("cmd_corp_kick: Failed to delete member: %d", rc);
       send_response_error (ctx,
                            root,
                            ERR_DB,
@@ -1265,18 +887,12 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql_update_planets[512];
-  sql_build (db, "UPDATE planets SET owner_id = 0, owner_type = 'player' WHERE owner_id = {1} AND owner_type = 'corp';", sql_update_planets, sizeof(sql_update_planets));
-  db_bind_t params[] = { db_bind_i32 (corp_id) };
-
-
-  if (!db_exec (db, sql_update_planets, params, 1, &err))
+  if (repo_corp_transfer_planets_to_player(db, corp_id) != 0)
     {
       db_tx_rollback (db, NULL);
       LOGE (
-        "cmd_corp_dissolve: Failed to update planet ownership for corp %d: %s",
-        corp_id,
-        err.message);
+        "cmd_corp_dissolve: Failed to update planet ownership for corp %d",
+        corp_id);
       send_response_error (ctx,
                            root,
                            ERR_DB,
@@ -1284,16 +900,11 @@ cmd_corp_dissolve (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql_delete_corp[512];
-  sql_build (db, "DELETE FROM corporations WHERE corporation_id = {1};", sql_delete_corp, sizeof(sql_delete_corp));
-
-
-  if (!db_exec (db, sql_delete_corp, params, 1, &err))
+  if (repo_corp_delete(db, corp_id) != 0)
     {
       db_tx_rollback (db, NULL);
-      LOGE ("cmd_corp_dissolve: Failed to delete corporation %d: %s",
-            corp_id,
-            err.message);
+      LOGE ("cmd_corp_dissolve: Failed to delete corporation %d",
+            corp_id);
       send_response_error (ctx,
                            root,
                            ERR_DB,
@@ -1358,20 +969,9 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
   if (strcasecmp (role, "Leader") == 0)
     {
       int member_count = 0;
-      char sql_count[512];
-      sql_build (db, "SELECT COUNT(*) FROM corp_members WHERE corp_id = {1};", sql_count, sizeof(sql_count));
-      db_bind_t params_count[] = { db_bind_i32 (corp_id) };
-      db_res_t *res_count = NULL;
-      db_error_t err;
-
-
-      if (db_query (db, sql_count, params_count, 1, &res_count, &err))
+      if (repo_corp_get_member_count(db, corp_id, &member_count) != 0)
         {
-          if (db_res_step (res_count, &err))
-            {
-              member_count = db_res_col_i32 (res_count, 0, &err);
-            }
-          db_res_finalize (res_count);
+          member_count = 0;
         }
 
       if (member_count > 1)
@@ -1383,21 +983,16 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
           return 0;
         }
 
+      db_error_t err;
       if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
         {
           send_response_error (ctx, root, err.code, "Database busy (leave)");
           return 0;
         }
 
-      char sql_delete_corp[512];
-      sql_build (db, "DELETE FROM corporations WHERE corporation_id = {1};", sql_delete_corp, sizeof(sql_delete_corp));
-      db_bind_t params_del[] = { db_bind_i32 (corp_id) };
-
-
-      if (!db_exec (db, sql_delete_corp, params_del, 1, &err))
+      if (repo_corp_delete(db, corp_id) != 0)
         {
           db_tx_rollback (db, NULL);
-          LOGE ("cmd_corp_leave: Failed to delete corp: %s", err.message);
           send_response_error (ctx,
                                root,
                                ERR_DB,
@@ -1421,16 +1016,8 @@ cmd_corp_leave (client_ctx_t *ctx, json_t *root)
     }
   else
     {
-      char sql_delete_member[512];
-      sql_build (db, "DELETE FROM corp_members WHERE corp_id = {1} AND player_id = {2};", sql_delete_member, sizeof(sql_delete_member));
-      db_bind_t params_del[] = { db_bind_i32 (corp_id),
-                                 db_bind_i32 (ctx->player_id) };
-      db_error_t err;
-
-
-      if (!db_exec (db, sql_delete_member, params_del, 2, &err))
+      if (repo_corp_delete_member(db, corp_id, ctx->player_id) != 0)
         {
-          LOGE ("cmd_corp_leave: Failed to leave corp: %s", err.message);
           send_response_error (ctx,
                                root,
                                ERR_DB,
@@ -1534,40 +1121,11 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long expires_at = (long long) time (NULL) + 86400;
-  const char *conflict_fmt = sql_conflict_target_fmt(db);
-  if (!conflict_fmt)
-    {
-      send_response_error (ctx,
-                           root,
-                           ERR_DB,
-                           "Unsupported database backend.");
-      return 0;
-    }
-  
-  char conflict_clause[128];
-  snprintf(conflict_clause, sizeof(conflict_clause),
-    conflict_fmt, "corp_id, player_id");
-  
-  char sql_insert_invite[512];
-  char sql_insert_template[512];
-  snprintf(sql_insert_template, sizeof(sql_insert_template),
-    "INSERT INTO corp_invites (corp_id, player_id, invited_at, expires_at) VALUES ({1}, {2}, {3}, {4}) "
-    "%s UPDATE SET invited_at = excluded.invited_at, expires_at = excluded.expires_at;",
-    conflict_clause);
-  sql_build(db, sql_insert_template, sql_insert_invite, sizeof(sql_insert_invite));
-  
-  db_bind_t params[] = {
-    db_bind_i32 (inviter_corp_id),
-    db_bind_i32 (target_player_id),
-    db_bind_i64 (time (NULL)),
-    db_bind_i64 (expires_at)
-  };
-  db_error_t err;
+  int rc = repo_corp_upsert_invite(db, inviter_corp_id, target_player_id, time(NULL), expires_at);
 
-
-  if (!db_exec (db, sql_insert_invite, params, 4, &err))
+  if (rc != 0)
     {
-      LOGE ("cmd_corp_invite: Failed to insert invite: %s", err.message);
+      LOGE ("cmd_corp_invite: Failed to insert invite: %d", rc);
       send_response_error (ctx,
                            root,
                            ERR_DB,
@@ -1897,20 +1455,12 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql_corp_info[512];
-  sql_build (db, "SELECT name, tag, created_at, owner_id FROM corporations WHERE corporation_id = {1};", sql_corp_info, sizeof(sql_corp_info));
-  db_bind_t params_corp[] = { db_bind_i32 (corp_id) };
   db_res_t *res_corp = NULL;
   db_error_t err;
   json_t *response_data = json_object ();
 
 
-  if (db_query (db,
-                sql_corp_info,
-                params_corp,
-                1,
-                &res_corp,
-                &err))
+  if ((res_corp = repo_corp_get_info(db, corp_id, &err)) != NULL)
     {
       if (db_res_step (res_corp, &err))
         {
@@ -1943,26 +1493,16 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  char sql_member_count[512];
-  sql_build (db, "SELECT COUNT(*) FROM corp_members WHERE corp_id = {1};", sql_member_count, sizeof(sql_member_count));
-  db_bind_t params_count[] = { db_bind_i32 (corp_id) };
-  db_res_t *res_count = NULL;
-
-
-  if (db_query (db, sql_member_count, params_count, 1, &res_count, &err))
+  int member_count = 0;
+  if (repo_corp_get_member_count(db, corp_id, &member_count) == 0)
     {
-      if (db_res_step (res_count, &err))
-        {
-          json_object_set_new (response_data,
-                               "member_count",
-                               json_integer (db_res_col_i32 (res_count, 0,
-                                                             &err)));
-        }
-      db_res_finalize (res_count);
+      json_object_set_new (response_data,
+                           "member_count",
+                           json_integer (member_count));
     }
   else
     {
-      LOGE ("cmd_corp_status: member count query failed: %s", err.message);
+      LOGE ("cmd_corp_status: member count query failed");
       send_response_error (ctx, root, ERR_DB, "Database error.");
       json_decref (response_data);
       return 0;
@@ -2098,25 +1638,14 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
                            "Missing or invalid 'par_value'.");
       return 0;
     }
-  db_error_t err;
-  char sql_insert_stock[512];
-  sql_build (db, "INSERT INTO stocks (corp_id, ticker, total_shares, par_value, current_price) VALUES ({1}, {2}, {3}, {4}, {5});", sql_insert_stock, sizeof(sql_insert_stock));
-  db_bind_t params_stock[] = { db_bind_i32 (corp_id), db_bind_text (ticker),
-                               db_bind_i32 (total_shares),
-                               db_bind_i32 (par_value),
-                               db_bind_i32 (par_value) };
   int64_t new_stock_id_64 = 0;
+  int rc = repo_corp_register_stock(db, corp_id, ticker, total_shares, par_value, &new_stock_id_64);
 
 
-  if (!db_exec_insert_id (db,
-                          sql_insert_stock,
-                          params_stock,
-                          5,
-                          &new_stock_id_64,
-                          &err))
+  if (rc != 0)
     {
-      LOGE ("cmd_stock_ipo_register: Failed to insert stock: %s", err.message);
-      if (err.code == ERR_DB_CONSTRAINT)
+      LOGE ("cmd_stock_ipo_register: Failed to insert stock: %d", rc);
+      if (rc == ERR_DB_CONSTRAINT)
         {
           send_response_error (ctx,
                                root,
@@ -2135,7 +1664,7 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
   int new_stock_id = (int) new_stock_id_64;
 
   // Distribute initial shares to the corporation itself (as a shareholder)
-  int rc = h_update_player_shares (db, 0, new_stock_id, total_shares);      // player_id 0 for corporation
+  rc = h_update_player_shares (db, 0, new_stock_id, total_shares);      // player_id 0 for corporation
 
 
   if (rc != 0)
@@ -2412,17 +1941,13 @@ cmd_stock_dividend_set (client_ctx_t *ctx,
       return 0;
     }
 
-  db_error_t err;
-  char sql_insert_dividend[512];
-  sql_build (db, "INSERT INTO stock_dividends (stock_id, amount_per_share, declared_ts) VALUES ({1}, {2}, {3});", sql_insert_dividend, sizeof(sql_insert_dividend));
-  db_bind_t params[] = { db_bind_i32 (stock_id), db_bind_i32 (amount_per_share),
-                         db_bind_i64 (time (NULL)) };
+  rc = repo_corp_declare_dividend(db, stock_id, amount_per_share, time(NULL));
 
 
-  if (!db_exec (db, sql_insert_dividend, params, 3, &err))
+  if (rc != 0)
     {
-      LOGE ("cmd_stock_dividend_set: Failed to insert dividend: %s",
-            err.message);
+      LOGE ("cmd_stock_dividend_set: Failed to insert dividend: %d",
+            rc);
       send_response_error (ctx,
                            root,
                            ERR_DB,
@@ -2534,22 +2059,10 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
   long long total_proceeds = (long long) quantity * current_price;
 
   // Verify shares owned
-  char sql_shares[512];
-  sql_build (db, "SELECT shares FROM corp_shareholders WHERE player_id = {1} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {2});", sql_shares, sizeof(sql_shares));
-  db_bind_t params_s[] = { db_bind_i32 (ctx->player_id),
-                           db_bind_i32 (stock_id) };
-  db_res_t *res_s = NULL;
-  db_error_t err;
   int shares_owned = 0;
-
-
-  if (db_query (db, sql_shares, params_s, 2, &res_s, &err))
+  if (repo_corp_get_shares_owned(db, ctx->player_id, stock_id, &shares_owned) != 0)
     {
-      if (db_res_step (res_s, &err))
-        {
-          shares_owned = db_res_col_i32 (res_s, 0, &err);
-        }
-      db_res_finalize (res_s);
+      shares_owned = 0;
     }
 
   if (shares_owned < quantity)
@@ -2677,36 +2190,7 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
 int
 h_corp_is_publicly_traded (db_t *db, int corp_id, bool *is_publicly_traded)
 {
-  if (!db || corp_id <= 0 || !is_publicly_traded)
-    {
-      return ERR_INVALID_ARG;
-    }
-
-  char sql[512];
-  sql_build (db, "SELECT 1 FROM stocks WHERE corp_id = {1};", sql, sizeof(sql));
-  db_bind_t params[] = { db_bind_i32 (corp_id) };
-  db_res_t *res = NULL;
-  db_error_t err;
-  int rc = 0;
-
-
-  *is_publicly_traded = false;
-
-  if (db_query (db, sql, params, 1, &res, &err))
-    {
-      if (db_res_step (res, &err))
-        {
-          *is_publicly_traded = true;
-        }
-      rc = 0;
-      goto cleanup;
-    }
-  rc = err.code;
-
-cleanup:
-  if (res)
-      db_res_finalize(res);
-  return rc;
+  return repo_corp_is_public(db, corp_id, is_publicly_traded);
 }
 
 
@@ -2718,12 +2202,11 @@ h_daily_corp_tax (db_t *db, int64_t now_s)
       return ERR_INVALID_ARG;
     }
 
-  const char *sql_corps = "SELECT corporation_id, name FROM corporations;";
   db_res_t *res_corps = NULL;
   db_error_t err;
 
 
-  if (!db_query (db, sql_corps, NULL, 0, &res_corps, &err))
+  if ((res_corps = repo_corp_get_all_corps(db, &err)) == NULL)
     {
       LOGE ("h_daily_corp_tax: Failed to fetch corporations: %s", err.message);
       return err.code;
@@ -2772,13 +2255,11 @@ h_dividend_payout (db_t *db, int64_t now_s)
       return ERR_INVALID_ARG;
     }
 
-  const char *sql_unpaid =
-    "SELECT id, stock_id, amount_per_share FROM stock_dividends WHERE paid_ts IS NULL;";
   db_res_t *res_unpaid = NULL;
   db_error_t err;
 
 
-  if (!db_query (db, sql_unpaid, NULL, 0, &res_unpaid, &err))
+  if ((res_unpaid = repo_corp_get_unpaid_dividends(db, &err)) == NULL)
     {
       LOGE ("h_dividend_payout: Failed to fetch unpaid dividends: %s",
             err.message);
@@ -2833,14 +2314,10 @@ h_dividend_payout (db_t *db, int64_t now_s)
 
               if (ok)
                 {
-              char sql_holders[512];
-              sql_build (db, "SELECT player_id, shares FROM corp_shareholders WHERE corp_id = (SELECT corp_id FROM stocks WHERE id = {1}) AND shares > 0;", sql_holders, sizeof(sql_holders));
-              db_bind_t params_h[] = { db_bind_i32 (stock_id) };
                   db_res_t *res_holders = NULL;
 
 
-                  if (db_query (db, sql_holders, params_h, 1, &res_holders,
-                                &err))
+                  if ((res_holders = repo_corp_get_stock_holders(db, stock_id, &err)) != NULL)
                     {
                       while (db_res_step (res_holders, &err))
                         {
@@ -2881,13 +2358,7 @@ h_dividend_payout (db_t *db, int64_t now_s)
 
               if (ok)
                 {
-              char sql_mark_paid[512];
-              sql_build (db, "UPDATE stock_dividends SET paid_ts = {1} WHERE id = {2};", sql_mark_paid, sizeof(sql_mark_paid));
-              db_bind_t params_paid[] = { db_bind_i64 (now_s),
-                                          db_bind_i32 (div_id) };
-
-
-                  if (!db_exec (db, sql_mark_paid, params_paid, 2, &err))
+                  if (repo_corp_mark_dividend_paid(db, div_id, now_s) != 0)
                     {
                       ok = false;
                     }

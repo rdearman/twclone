@@ -1,4 +1,4 @@
-#include "db_legacy.h"
+#include "db/repo/repo_session.h"
 /* src/server_loop.c */
 #include <stdatomic.h>
 #include <inttypes.h>
@@ -531,15 +531,6 @@ broadcast_sweep_once (db_t *db, int max_rows)
   db_res_t *res = NULL;
   int rows = 0;
 
-  static const char *sql =
-    "SELECT system_notice_id, created_at, title, body, severity, expires_at "
-    "FROM system_notice "
-    "WHERE system_notice_id NOT IN (" 
-    "    SELECT notice_id FROM notice_seen WHERE player_id = 0"
-    ") "
-    "ORDER BY created_at ASC, system_notice_id ASC "
-    "LIMIT {1};";
-
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
       if (err.code == ERR_DB_BUSY || err.code == ERR_DB_LOCKED)
@@ -549,12 +540,7 @@ broadcast_sweep_once (db_t *db, int max_rows)
       return -1;
     }
 
-  db_bind_t params[] = { db_bind_i32 (max_rows) };
-
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_query (db, sql_converted, params, 1, &res, &err))
+  if (repo_session_get_unseen_notices (db, max_rows, &res) != 0)
     {
       db_tx_rollback (db, NULL);
       return -1;
@@ -562,7 +548,7 @@ broadcast_sweep_once (db_t *db, int max_rows)
 
   while (db_res_step (res, &err))
     {
-      int notice_id = db_res_col_i32 (res, 0, &err);
+      int notice_id = (int)db_res_col_i64 (res, 0, &err);
       int64_t created_at = db_res_col_i64 (res, 1, &err);
       const char *title = db_res_col_text (res, 2, &err);
       const char *body = db_res_col_text (res, 3, &err);
@@ -905,15 +891,15 @@ process_message (client_ctx_t *ctx, json_t *root)
 
   if (session_token)
     {
-      int pid = 0;
-      long long exp = 0;
-      int rc = db_session_lookup (session_token, &pid, &exp);
+      int32_t pid = 0;
+      int64_t exp = 0;
+      int rc = repo_session_lookup (db, session_token, &pid, &exp);
       if (rc == 0 && pid > 0)
         {
-          ctx->player_id = pid;
-          ctx->corp_id = h_get_player_corp_id (db, pid);
-          ctx->ship_id = h_get_active_ship_id (db, pid);
-          int db_sector = h_get_player_sector (db, pid);
+          ctx->player_id = (int)pid;
+          ctx->corp_id = h_get_player_corp_id (db, (int)pid);
+          ctx->ship_id = h_get_active_ship_id (db, (int)pid);
+          int db_sector = h_get_player_sector (db, (int)pid);
 
           if (db_sector > 0)
             {
