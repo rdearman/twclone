@@ -4,6 +4,7 @@
 #include <string.h>
 #include <libpq-fe.h>
 #include <pthread.h>
+#include <time.h>
 
 // local includes
 #include "db_pg.h"
@@ -103,6 +104,15 @@ static char* pg_bind_param_to_string(const db_bind_t *param) {
         case DB_BIND_I64: asprintf(&buf, "%lld", (long long)param->v.i64); break;
         case DB_BIND_I32: asprintf(&buf, "%d", param->v.i32); break;
         case DB_BIND_BOOL: asprintf(&buf, "%s", param->v.b ? "t" : "f"); break;
+        case DB_BIND_TIMESTAMP: {
+            struct tm tm;
+            time_t t = (time_t)param->v.timestamp;
+            gmtime_r(&t, &tm);
+            char tmp[32];
+            strftime(tmp, sizeof(tmp), "%Y-%m-%dT%H:%M:%SZ", &tm);
+            buf = strdup(tmp);
+            break;
+        }
         case DB_BIND_TEXT: 
             if (param->v.text.ptr == NULL)
                 return NULL;
@@ -180,19 +190,31 @@ static bool pg_exec_rows_affected_impl(db_t *db, const char *sql, const db_bind_
     return pg_exec_internal(db, sql, params, n_params, out_rows, err);
 }
 
-static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_id, db_error_t *err) {
+static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, const char *id_col, int64_t *out_id, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     
+    char *sql_with_returning = (char*)sql;
+    bool free_sql = false;
+
+    if (id_col && !strcasestr(sql, "RETURNING")) {
+        asprintf(&sql_with_returning, "%s RETURNING %s", sql, id_col);
+        free_sql = true;
+    }
+
     char **values = calloc(n_params, sizeof(char*));
     if (!values && n_params > 0) {
         err->code = ERR_DB_QUERY_FAILED;
         snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        if (free_sql) free(sql_with_returning);
         return false;
     }
     for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
     pthread_mutex_lock(&g_pg_mutex);
-    PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    PGresult *res = PQexecParams(impl->conn, sql_with_returning, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
     pthread_mutex_unlock(&g_pg_mutex);
+    
+    if (free_sql) free(sql_with_returning);
+
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);

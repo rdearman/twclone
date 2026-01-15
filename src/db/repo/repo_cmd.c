@@ -2048,11 +2048,11 @@ db_log_engine_event (long long ts,
     }
   db_error_t err;
   const char *sql =
-    "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload) VALUES (to_timestamp({1}), {2}, {3}, {4}, {5});";
+    "INSERT INTO engine_events (ts, type, actor_player_id, sector_id, payload) VALUES ({1}, {2}, {3}, {4}, {5});";
   char sql_converted[512];
   sql_build(db, sql, sql_converted, sizeof(sql_converted));
   bool ok = db_exec (db, sql_converted,
-                     (db_bind_t[]){db_bind_i64 (ts), db_bind_text (type),
+                     (db_bind_t[]){db_bind_timestamp_text (ts), db_bind_text (type),
                                    db_bind_i32 (pid), db_bind_i32 (sid),
                                    db_bind_text (pstr)}, 5, &err);
 
@@ -3573,7 +3573,7 @@ db_notice_create (db_t *db,
                          (db_bind_t[]){db_bind_text (title),
                                        db_bind_text (body),
                                        db_bind_text (severity),
-                                       db_bind_i64 (expires_at)}, 4, &id, &err))
+                                       db_bind_i64 (expires_at)}, 4, "system_notice_id", &id, &err))
     {
       return (int)id;
     }
@@ -4842,9 +4842,9 @@ db_session_create (int player_id, const char *token, long long expires_at)
       return -1;
     }
   const char *sql =
-    "INSERT INTO sessions (token, player_id, expires) VALUES ({1}, {2}, to_timestamp({3}))";
+    "INSERT INTO sessions (token, player_id, expires) VALUES ({1}, {2}, {3})";
   db_bind_t p[] = { db_bind_text (token), db_bind_i32 (player_id),
-                    db_bind_i64 (expires_at) };
+                    db_bind_timestamp_text (expires_at) };
   db_error_t err;
 
   char sql_converted[256];

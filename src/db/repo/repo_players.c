@@ -186,17 +186,15 @@ int repo_players_get_shiptype_by_name(db_t *db, const char *name, int *id, int *
 }
 
 int repo_players_insert_ship(db_t *db, const char *name, int type_id, int holds, int fighters, int shields, int sector_id, int *ship_id_out) {
-    db_res_t *res = NULL;
     db_error_t err;
+    int64_t new_id = 0;
     /* SQL_VERBATIM: Q19 */
-    const char *q19 = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6}) RETURNING id;";
+    const char *q19 = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6});";
     char sql[512]; sql_build(db, q19, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(type_id), db_bind_i32(holds), db_bind_i32(fighters), db_bind_i32(shields), db_bind_i32(sector_id) }, 6, &res, &err) && db_res_step(res, &err)) {
-        *ship_id_out = db_res_col_i32(res, 0, &err);
-        db_res_finalize(res);
+    if (db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(type_id), db_bind_i32(holds), db_bind_i32(fighters), db_bind_i32(shields), db_bind_i32(sector_id) }, 6, "id", &new_id, &err)) {
+        *ship_id_out = (int)new_id;
         return 0;
     }
-    if (res) db_res_finalize(res);
     return -1;
 }
 
@@ -234,7 +232,7 @@ int repo_players_get_credits(db_t *db, int player_id, long long *credits_out) {
     const char *q23 = "SELECT credits FROM players WHERE player_id = {1};";
     char sql[512]; sql_build(db, q23, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        *credits_out = db_res_col_i64(res, 0, &err);
+        if (credits_out) *credits_out = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
     }
@@ -243,32 +241,36 @@ int repo_players_get_credits(db_t *db, int player_id, long long *credits_out) {
 }
 
 int repo_players_deduct_credits_returning(db_t *db, int player_id, long long amount, long long *new_balance_out) {
-    db_res_t *res = NULL;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q24 */
-    const char *q24 = "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1} RETURNING credits;";
+    const char *q24 = "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1};";
     char sql[512]; sql_build(db, q24, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
-        if (new_balance_out) *new_balance_out = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(player_id) }, 2, &rows, &err)) {
+        if (rows > 0) {
+            if (new_balance_out) {
+                return repo_players_get_credits(db, player_id, new_balance_out);
+            }
+            return 0;
+        }
     }
-    if (res) db_res_finalize(res);
     return -1;
 }
 
 int repo_players_add_credits_returning(db_t *db, int player_id, long long amount, long long *new_balance_out) {
-    db_res_t *res = NULL;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q25 */
-    const char *q25 = "UPDATE players SET credits = credits + {1} WHERE player_id = {2} RETURNING credits;";
+    const char *q25 = "UPDATE players SET credits = credits + {1} WHERE player_id = {2};";
     char sql[512]; sql_build(db, q25, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
-        if (new_balance_out) *new_balance_out = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(player_id) }, 2, &rows, &err)) {
+        if (rows > 0) {
+            if (new_balance_out) {
+                return repo_players_get_credits(db, player_id, new_balance_out);
+            }
+            return 0;
+        }
     }
-    if (res) db_res_finalize(res);
     return -1;
 }
 
@@ -337,17 +339,19 @@ int repo_players_get_sector(db_t *db, int player_id, int *sector_out) {
 }
 
 int repo_players_update_credits_safe(db_t *db, int player_id, long long delta, long long *new_balance_out) {
-    db_res_t *res = NULL;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q32 */
-    const char *q32 = "UPDATE players SET credits = credits + {2} WHERE player_id = {1} AND (credits + {2}) >= 0 RETURNING credits;";
+    const char *q32 = "UPDATE players SET credits = credits + {2} WHERE player_id = {1} AND (credits + {2}) >= 0;";
     char sql[512]; sql_build(db, q32, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &res, &err) && db_res_step(res, &err)) {
-        if (new_balance_out) *new_balance_out = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
+        if (rows > 0) {
+            if (new_balance_out) {
+                return repo_players_get_credits(db, player_id, new_balance_out);
+            }
+            return 0;
+        }
     }
-    if (res) db_res_finalize(res);
     return err.code ? err.code : -1;
 }
 

@@ -111,18 +111,19 @@ int repo_universe_get_port_sector_by_id_name(db_t *db, int port_id, const char *
 }
 
 db_res_t* repo_universe_search_index(db_t *db, const char *q, int limit, int offset, int search_type, db_error_t *err) {
-    const char *q_text;
+    const char *op = sql_ilike_op(db);
+    char q_tmpl[1024];
     if (search_type == 0) { /* type_any */
         /* SQL_VERBATIM: Q11 */
-        q_text = "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index WHERE (({1} = '') OR (search_term_1 ILIKE {1})) ORDER BY kind, name, id LIMIT {2} OFFSET {3}";
+        snprintf(q_tmpl, sizeof(q_tmpl), "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index WHERE (({1} = '') OR (search_term_1 %s {1})) ORDER BY kind, name, id LIMIT {2} OFFSET {3}", op);
     } else if (search_type == 1) { /* type_sector */
         /* SQL_VERBATIM: Q12 */
-        q_text = "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index WHERE kind = 'sector' AND (({1} = '') OR (search_term_1 ILIKE {1})) ORDER BY kind, name, id LIMIT {2} OFFSET {3}";
+        snprintf(q_tmpl, sizeof(q_tmpl), "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index WHERE kind = 'sector' AND (({1} = '') OR (search_term_1 %s {1})) ORDER BY kind, name, id LIMIT {2} OFFSET {3}", op);
     } else { /* type_port */
         /* SQL_VERBATIM: Q13 */
-        q_text = "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index WHERE kind = 'port' AND (({1} = '') OR (search_term_1 ILIKE {1})) ORDER BY kind, name, id LIMIT {2} OFFSET {3}";
+        snprintf(q_tmpl, sizeof(q_tmpl), "SELECT kind, id, name, sector_id, sector_name FROM sector_search_index WHERE kind = 'port' AND (({1} = '') OR (search_term_1 %s {1})) ORDER BY kind, name, id LIMIT {2} OFFSET {3}", op);
     }
-    char sql[1024]; sql_build(db, q_text, sql, sizeof(sql));
+    char sql[1024]; sql_build(db, q_tmpl, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_text(q), db_bind_i32(limit), db_bind_i32(offset) }, 3, &res, err);
     return res;
@@ -130,8 +131,14 @@ db_res_t* repo_universe_search_index(db_t *db, const char *q, int limit, int off
 
 db_res_t* repo_universe_get_density_sector_list(db_t *db, int target_sector, db_error_t *err) {
     /* SQL_VERBATIM: Q14 */
-    const char *q14 = "WITH sector_list AS ( SELECT {1}::int as sector_id UNION SELECT to_sector FROM sector_warps WHERE from_sector = {1} ) SELECT DISTINCT sector_id FROM sector_list ORDER BY sector_id;";
-    char sql[1024]; sql_build(db, q14, sql, sizeof(sql));
+    char cast_fragment[64];
+    if (sql_cast_int(db, "{1}", cast_fragment, sizeof(cast_fragment)) != 0) {
+        if (err) err->code = ERR_DB_INTERNAL;
+        return NULL;
+    }
+    char q_tmpl[1024];
+    snprintf(q_tmpl, sizeof(q_tmpl), "WITH sector_list AS ( SELECT %s as sector_id UNION SELECT to_sector FROM sector_warps WHERE from_sector = {1} ) SELECT DISTINCT sector_id FROM sector_list ORDER BY sector_id;", cast_fragment);
+    char sql[1024]; sql_build(db, q_tmpl, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i32(target_sector) }, 1, &res, err);
     return res;

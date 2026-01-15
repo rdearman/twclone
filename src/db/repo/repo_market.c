@@ -58,8 +58,7 @@ db_insert_commodity_order (db_t *db,
     "INSERT INTO commodity_orders ("
     "actor_type, actor_id, location_type, location_id, commodity_id, side, "
     "quantity, filled_quantity, price, ts, expires_at) "
-    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, %s, %s) "
-    "RETURNING commodity_orders_id";
+    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, %s, %s);";
 
   char sql_with_conv[512];
 
@@ -75,7 +74,7 @@ db_insert_commodity_order (db_t *db,
   int64_t new_order_id = -1;
 
 
-  if (!db_exec_insert_id (db, sql_final, params, 10, &new_order_id, &err))
+  if (!db_exec_insert_id (db, sql_final, params, 10, "commodity_orders_id", &new_order_id, &err))
     {
       LOGE ("db_insert_commodity_order: insert failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
@@ -545,7 +544,7 @@ db_insert_commodity_trade (db_t *db,
 
   
   int64_t new_id = -1;
-  if (!db_exec_insert_id(db, sql, params, 10, &new_id, &err))
+  if (!db_exec_insert_id(db, sql, params, 10, "id", &new_id, &err))
     {
       LOGE("db_insert_commodity_trade: insert failed: %s (code=%d backend=%d)",
            err.message, err.code, err.backend_code);

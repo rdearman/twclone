@@ -7,38 +7,51 @@
 #include <stdlib.h>
 
 int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long long *new_balance_out) {
-    db_res_t *res = NULL;
     db_error_t err;
-    /* SQL_VERBATIM: Q1 */
-    const char *q1 = "WITH upd AS ("
-    "  UPDATE bank_accounts "
-    "  SET balance = balance + {2} "
-    "  WHERE owner_type = 'player' AND owner_id = {1} "
-    "    AND currency = 'CRD' AND is_active = 1 "
-    "    AND (balance + {2}) >= 0 "
-    "  RETURNING id, balance"
-    "), ins AS ("
-    "  INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
-    "  SELECT 'player', {1}, 'CRD', {2}, 1 "
-    "  WHERE {2} >= 0 AND NOT EXISTS ("
-    "    SELECT 1 FROM bank_accounts "
-    "    WHERE owner_type = 'player' AND owner_id = {1} "
-    "      AND currency = 'CRD' AND is_active = 1"
-    "  ) "
-    "  RETURNING id, balance"
-    ") "
-    "SELECT id, balance FROM upd "
-    "UNION ALL "
-    "SELECT id, balance FROM ins;";
-    char sql[1024]; sql_build(db, q1, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &res, &err) && db_res_step(res, &err)) {
-        *new_balance_out = db_res_col_i64(res, 1, &err);
-        int64_t account_id = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return (int)account_id; // Returning account_id as positive int on success
+    int64_t rows = 0;
+    int account_id = 0;
+
+    if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) return -err.code;
+
+    /* 1. Try Update */
+    /* SQL_VERBATIM: Q1_UPD */
+    const char *q_upd = "UPDATE bank_accounts SET balance = balance + {2} "
+                        "WHERE owner_type = 'player' AND owner_id = {1} "
+                        "AND currency = 'CRD' AND is_active = 1 "
+                        "AND (balance + {2}) >= 0;";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (!db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
+        db_tx_rollback(db, NULL);
+        return -err.code;
     }
-    if (res) db_res_finalize(res);
-    return err.code ? -err.code : -1;
+
+    if (rows == 0) {
+        /* 2. Try Insert if delta >= 0 */
+        if (delta < 0) {
+            db_tx_rollback(db, NULL);
+            return -1;
+        }
+        /* SQL_VERBATIM: Q1_INS */
+        const char *q_ins = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
+                            "SELECT 'player', {1}, 'CRD', {2}, 1 "
+                            "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'player' AND owner_id = {1} AND currency = 'CRD' AND is_active = 1);";
+        char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+        if (!db_exec_rows_affected(db, sql_ins, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
+            db_tx_rollback(db, NULL);
+            return -err.code;
+        }
+    }
+
+    /* 3. Get ID and Balance */
+    if (repo_bank_get_account_id(db, "player", player_id, &account_id) != 0 ||
+        repo_bank_get_balance_by_account_id(db, account_id, new_balance_out) != 0) {
+        db_tx_rollback(db, NULL);
+        return -1;
+    }
+
+    if (!db_tx_commit(db, &err)) return -err.code;
+
+    return account_id;
 }
 
 int repo_bank_check_account_active(db_t *db, int player_id, int *exists_out) {
@@ -102,6 +115,21 @@ int repo_bank_get_account_id(db_t *db, const char *owner_type, int owner_id, int
     return ERR_DB_NOT_FOUND;
 }
 
+int repo_bank_get_balance_by_account_id(db_t *db, int account_id, long long *balance_out) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q18 */
+    const char *q18 = "SELECT balance FROM bank_accounts WHERE bank_accounts_id = {1};";
+    char sql[256]; sql_build(db, q18, sql, sizeof(sql));
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(account_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+        if (balance_out) *balance_out = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        return 0;
+    }
+    if (res) db_res_finalize(res);
+    return ERR_DB_NOT_FOUND;
+}
+
 int repo_bank_create_system_notice(db_t *db, const char *now_ts, int player_id, const char *msg) {
     db_error_t err;
     /* SQL_VERBATIM: Q6 */
@@ -115,17 +143,16 @@ int repo_bank_create_system_notice(db_t *db, const char *now_ts, int player_id, 
 }
 
 int repo_bank_add_credits_returning(db_t *db, int account_id, long long amount, long long *new_balance_out) {
-    db_res_t *res = NULL;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q7 */
-    const char *q7 = "UPDATE bank_accounts SET balance = balance + {1} WHERE bank_accounts_id = {2} RETURNING balance;";
+    const char *q7 = "UPDATE bank_accounts SET balance = balance + {1} WHERE bank_accounts_id = {2};";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(account_id) }, 2, &res, &err) && db_res_step(res, &err)) {
-        *new_balance_out = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(account_id) }, 2, &rows, &err)) {
+        if (rows > 0) {
+            return repo_bank_get_balance_by_account_id(db, account_id, new_balance_out);
+        }
     }
-    if (res) db_res_finalize(res);
     return ERR_DB_NOT_FOUND;
 }
 
@@ -138,17 +165,16 @@ int repo_bank_insert_transaction(db_t *db, const char *sql_template, int account
 }
 
 int repo_bank_deduct_credits_returning(db_t *db, int account_id, long long amount, long long *new_balance_out) {
-    db_res_t *res = NULL;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q9 */
-    const char *q9 = "UPDATE bank_accounts SET balance = balance - {1} WHERE bank_accounts_id = {2} AND balance >= {1} RETURNING balance;";
+    const char *q9 = "UPDATE bank_accounts SET balance = balance - {1} WHERE bank_accounts_id = {2} AND balance >= {1};";
     char sql[256]; sql_build(db, q9, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(account_id) }, 2, &res, &err) && db_res_step(res, &err)) {
-        *new_balance_out = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(account_id) }, 2, &rows, &err)) {
+        if (rows > 0) {
+            return repo_bank_get_balance_by_account_id(db, account_id, new_balance_out);
+        }
     }
-    if (res) db_res_finalize(res);
     return ERR_DB_NOT_FOUND;
 }
 

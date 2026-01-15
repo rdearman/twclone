@@ -44,7 +44,7 @@ int repo_clusters_create(db_t *db, const char *name, const char *role, const cha
     /* SQL_VERBATIM: Q3 */
     const char *q3 = "INSERT INTO clusters (name, role, kind, center_sector, alignment, law_severity) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
     char sql[512]; sql_build(db, q3, sql, sizeof(sql));
-    if (db_exec_insert_id (db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(role), db_bind_text(kind), db_bind_i32(center_sector), db_bind_i32(alignment), db_bind_i32(law_severity) }, 6, &new_id, &err)) {
+    if (db_exec_insert_id (db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(role), db_bind_text(kind), db_bind_i32(center_sector), db_bind_i32(alignment), db_bind_i32(law_severity) }, 6, "cluster_id", &new_id, &err)) {
         *cluster_id_out = (int)new_id;
         return 0;
     }

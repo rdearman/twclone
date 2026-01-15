@@ -53,7 +53,7 @@ int repo_engine_create_broadcast_notice(db_t *db, const char *ts_fmt, int64_t no
     params[3] = db_bind_text (severity ? severity : "info");
     if (expires_at > 0) params[4] = db_bind_i64 (expires_at);
     else params[4] = db_bind_null ();
-    if (!db_exec_insert_id (db, sql, params, 5, new_id_out, &err)) return err.code;
+    if (!db_exec_insert_id (db, sql, params, 5, "system_notice_id", new_id_out, &err)) return err.code;
     return 0;
 }
 
@@ -74,7 +74,7 @@ int repo_engine_publish_notice(db_t *db, const char *ts_fmt, int64_t now_s, cons
     params[4] = db_bind_text (severity);
     if (expires_at > 0) params[5] = db_bind_i64 (expires_at);
     else params[5] = db_bind_null ();
-    if (!db_exec_insert_id (db, sql, params, 6, new_id_out, &err)) return err.code;
+    if (!db_exec_insert_id (db, sql, params, 6, "system_notice_id", new_id_out, &err)) return err.code;
     return 0;
 }
 

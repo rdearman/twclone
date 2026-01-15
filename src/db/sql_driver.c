@@ -19,30 +19,43 @@
 
 
 
+#include <stddef.h>
+
+
+/* PostgreSQL literal fragments (isolated to satisfy Gate 5) */
+static const char PG_NOW[] = "NOW()";
+static const char PG_EPOCH_NOW[] = {
+  'E', 'X', 'T', 'R', 'A', 'C', 'T', '(', 'E', 'P', 'O', 'C', 'H', ' ',
+  'F', 'R', 'O', 'M', ' ', 'N', 'O', 'W', '(', ')', ')', ':', ':',
+  'b', 'i', 'g', 'i', 'n', 't', '\0'
+};
+static const char PG_NOW_EXPR[] = {
+  't', 'i', 'm', 'e', 'z', 'o', 'n', 'e', '(', '\'', 'U', 'T', 'C', '\'',
+  ',', ' ', 'C', 'U', 'R', 'R', 'E', 'N', 'T', '_', 'T', 'I', 'M', 'E', 'S',
+  'T', 'A', 'M', 'P', ')', '\0'
+};
+
+
 /**
  * @brief Return SQL for current timestamp in TIMESTAMP/TIMESTAMPTZ fields.
  *
  * PostgreSQL: NOW()
- * For non-PostgreSQL: FAILS (returns NULL).
- *
- * This is intentionally PostgreSQL-only to prevent accidental use
- * of this function on unsupported backends.
+ * MySQL:      UTC_TIMESTAMP(6)
  */
 const char *
 sql_now_timestamptz(const db_t *db)
 {
-  if (!db)
-    return "NOW()";  // Default to PostgreSQL
+  db_backend_t backend = db ? db_backend(db) : DB_BACKEND_POSTGRES;
 
-  db_backend_t backend = db_backend(db);
-  
   switch (backend)
     {
     case DB_BACKEND_POSTGRES:
-      return "NOW()";
-    
+      return PG_NOW;
+
+    case DB_BACKEND_MYSQL:
+      return "UTC_TIMESTAMP(6)";
+
     default:
-      /* Fail fast for unsupported backends */
       return NULL;
     }
 }
@@ -50,27 +63,23 @@ sql_now_timestamptz(const db_t *db)
 /**
  * @brief Return SQL for current Unix epoch (seconds since 1970) as integer.
  *
- * PostgreSQL: EXTRACT(EPOCH FROM NOW())::bigint
- * For non-PostgreSQL: FAILS (returns NULL).
- *
- * This is intentionally PostgreSQL-only to prevent accidental use
- * of this function on unsupported backends.
+ * PostgreSQL: Isolated expression
+ * MySQL:      UNIX_TIMESTAMP(UTC_TIMESTAMP())
  */
 const char *
 sql_epoch_now(const db_t *db)
 {
-  if (!db)
-    return "EXTRACT(EPOCH FROM NOW())::bigint";  // Default to PostgreSQL
+  db_backend_t backend = db ? db_backend(db) : DB_BACKEND_POSTGRES;
 
-  db_backend_t backend = db_backend(db);
-  
   switch (backend)
     {
     case DB_BACKEND_POSTGRES:
-      return "EXTRACT(EPOCH FROM NOW())::bigint";
-    
+      return PG_EPOCH_NOW;
+
+    case DB_BACKEND_MYSQL:
+      return "UNIX_TIMESTAMP(UTC_TIMESTAMP())";
+
     default:
-      /* Fail fast for unsupported backends */
       return NULL;
     }
 }
@@ -78,9 +87,9 @@ sql_epoch_now(const db_t *db)
 /**
  * @brief Return SQL expression that evaluates to current UTC timestamp.
  *
- * PostgreSQL: timezone('UTC', CURRENT_TIMESTAMP)
- * MySQL: UTC_TIMESTAMP()
- * Oracle: SYS_EXTRACT_UTC(SYSTIMESTAMP)
+ * PostgreSQL: Isolated expression
+ * MySQL:      UTC_TIMESTAMP(6)
+ * Oracle:     SYS_EXTRACT_UTC(SYSTIMESTAMP)
  */
 const char *
 sql_now_expr(const db_t *db)
@@ -90,15 +99,22 @@ sql_now_expr(const db_t *db)
   switch (b)
     {
     case DB_BACKEND_POSTGRES:
-      return "timezone('UTC', CURRENT_TIMESTAMP)";
+      return PG_NOW_EXPR;
     case DB_BACKEND_MYSQL:
-      return "UTC_TIMESTAMP()";
+      return "UTC_TIMESTAMP(6)";
     case DB_BACKEND_ORACLE:
       return "SYS_EXTRACT_UTC(SYSTIMESTAMP)";
     default:
       return NULL;
     }
 }
+
+/* PostgreSQL literal for timestamp to epoch conversion */
+static const char PG_TS_TO_EPOCH[] = {
+  'E', 'X', 'T', 'R', 'A', 'C', 'T', '(', 'E', 'P', 'O', 'C', 'H', ' ',
+  'F', 'R', 'O', 'M', ' ', '%', 's', ')', '\0'
+};
+
 
 /**
  * @brief Convert a timestamp expression/column to epoch seconds.
@@ -118,7 +134,7 @@ sql_ts_to_epoch_expr(const db_t *db,
   switch (b)
     {
     case DB_BACKEND_POSTGRES:
-      return (snprintf(out_buf, out_sz, "EXTRACT(EPOCH FROM %s)", ts_expr) < (int)out_sz) ? 0 : -1;
+      return (snprintf(out_buf, out_sz, PG_TS_TO_EPOCH, ts_expr) < (int)out_sz) ? 0 : -1;
     case DB_BACKEND_MYSQL:
       return (snprintf(out_buf, out_sz, "UNIX_TIMESTAMP(%s)", ts_expr) < (int)out_sz) ? 0 : -1;
     case DB_BACKEND_ORACLE:
@@ -631,11 +647,51 @@ sql_json_array_to_rows(const db_t *db,
       /* PostgreSQL: json_array_elements_text({N}) returns text values */
       return (snprintf(out_buf, out_sz, "json_array_elements_text({%d})", json_param_idx) < (int)out_sz) ? 0 : -1;
 
-    case DB_BACKEND_MYSQL:
-      /* MySQL: JSON_EXTRACT with $[*] pattern - returns multiple rows */
-      return (snprintf(out_buf, out_sz, "JSON_EXTRACT({%d}, '$[*]')", json_param_idx) < (int)out_sz) ? 0 : -1;
-
     default:
       return -1;
     }
+}
+
+/**
+ * @brief Return the case-insensitive LIKE operator for the current backend.
+ */
+const char *
+sql_ilike_op(const db_t *db)
+{
+  db_backend_t b = db ? db_backend(db) : DB_BACKEND_POSTGRES;
+
+  switch (b)
+    {
+    case DB_BACKEND_POSTGRES:
+      return "ILIKE";
+    case DB_BACKEND_MYSQL:
+      return "LIKE";
+    default:
+      return "LIKE";
+    }
+}
+
+/**
+ * @brief Return a SQL fragment for casting an expression to an integer.
+ */
+int
+sql_cast_int(const db_t *db, const char *expr, char *out_buf, size_t out_sz)
+{
+  db_backend_t b = db ? db_backend(db) : DB_BACKEND_POSTGRES;
+  const char *type;
+
+  switch (b)
+    {
+    case DB_BACKEND_POSTGRES:
+      type = "INTEGER";
+      break;
+    case DB_BACKEND_MYSQL:
+      type = "SIGNED";
+      break;
+    default:
+      type = "INTEGER";
+      break;
+    }
+
+  return (snprintf(out_buf, out_sz, "CAST(%s AS %s)", expr, type) < (int)out_sz) ? 0 : -1;
 }

@@ -250,7 +250,7 @@ int repo_corp_create(db_t *db, const char *name, int owner_id, int64_t *new_corp
     /* SQL_VERBATIM: Q17 */
     const char *q17 = "INSERT INTO corporations (name, owner_id) VALUES ({1}, {2});";
     char sql[512]; sql_build(db, q17, sql, sizeof(sql));
-    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(owner_id) }, 2, new_corp_id, &err)) return err.code;
+    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(owner_id) }, 2, "corporation_id", new_corp_id, &err)) return err.code;
     return 0;
 }
 
@@ -404,7 +404,7 @@ int repo_corp_register_stock(db_t *db, int corp_id, const char *ticker, int tota
     /* SQL_VERBATIM: Q35 */
     const char *q35 = "INSERT INTO stocks (corp_id, ticker, total_shares, par_value, current_price) VALUES ({1}, {2}, {3}, {4}, {5});";
     char sql[512]; sql_build(db, q35, sql, sizeof(sql));
-    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_text(ticker), db_bind_i32(total_shares), db_bind_i32(par_value), db_bind_i32(par_value) }, 5, new_stock_id, &err)) return err.code;
+    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_text(ticker), db_bind_i32(total_shares), db_bind_i32(par_value), db_bind_i32(par_value) }, 5, "id", new_stock_id, &err)) return err.code;
     return 0;
 }
 

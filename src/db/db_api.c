@@ -102,6 +102,7 @@ db_exec_insert_id(db_t *db,
                   const char *sql,
                   const db_bind_t *params,
                   size_t n_params,
+                  const char *id_col,
                   int64_t *out_id,
                   db_error_t *err)
 {
@@ -115,7 +116,7 @@ db_exec_insert_id(db_t *db,
     }
 
     char *rendered = db_render_sql(db, sql, err);
-    bool result = db->vt->exec_insert_id(db, rendered ? rendered : sql, params, n_params, out_id, err);
+    bool result = db->vt->exec_insert_id(db, rendered ? rendered : sql, params, n_params, id_col, out_id, err);
     free(rendered);
     return result;
 }

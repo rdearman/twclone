@@ -43,11 +43,11 @@ int repo_engine_save_watermark(db_t *db, const char *key, long long last_id, lon
     char up[512];
     sql_build(db,
               "INSERT INTO engine_offset(key,last_event_id,last_event_ts) "
-              "VALUES({1},{2},to_timestamp({3})) "
+              "VALUES({1},{2},{3}) "
               "ON CONFLICT(key) DO UPDATE SET last_event_id=excluded.last_event_id, last_event_ts=excluded.last_event_ts;",
               up, sizeof(up));
 
-    db_bind_t params[] = { db_bind_text(key), db_bind_i64(last_id), db_bind_i64(last_ts) };
+    db_bind_t params[] = { db_bind_text(key), db_bind_i64(last_id), db_bind_timestamp_text(last_ts) };
     db_error_t err;
     if (!db_exec(db, up, params, 3, &err)) {
         return err.code;

@@ -292,6 +292,31 @@ int sql_json_array_to_rows(const db_t *db,
                            char *out_buf,
                            size_t out_sz);
 
+/**
+ * @brief Return the case-insensitive LIKE operator for the current backend.
+ *
+ * PostgreSQL: "ILIKE"
+ * MySQL:      "LIKE" (assumes case-insensitive collation)
+ *
+ * @param db Database handle.
+ * @return Static string with the operator.
+ */
+const char *sql_ilike_op(const db_t *db);
+
+/**
+ * @brief Return a SQL fragment for casting an expression to an integer.
+ *
+ * PostgreSQL: "CAST(expr AS INTEGER)"
+ * MySQL:      "CAST(expr AS SIGNED)"
+ *
+ * @param db Database handle.
+ * @param expr The expression to cast.
+ * @param out_buf Buffer to write the fragment into.
+ * @param out_sz Size of out_buf.
+ * @return 0 on success, -1 on overflow or unsupported backend.
+ */
+int sql_cast_int(const db_t *db, const char *expr, char *out_buf, size_t out_sz);
+
 #ifdef __cplusplus
 }
 #endif

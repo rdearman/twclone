@@ -410,14 +410,14 @@ int db_planets_get_type_id_by_code(db_t *db, const char *code, int *type_id) {
 int db_planets_create(db_t *db, int sector_id, const char *name, int owner_id, const char *owner_type, const char *class_str, int type_id, long long ts, int created_by, int64_t *new_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q33 */
-    const char *q33 = "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, to_timestamp({7}), {8}, TRUE) RETURNING planet_id;";
+    const char *q33 = "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, TRUE);";
     char sql[1024]; sql_build(db, q33, sql, sizeof(sql));
     db_bind_t params[] = {
         db_bind_i32 (sector_id), db_bind_text (name), db_bind_i32 (owner_id),
         db_bind_text (owner_type), db_bind_text (class_str), db_bind_i32 (type_id),
-        db_bind_i64 (ts), db_bind_i32 (created_by)
+        db_bind_timestamp_text (ts), db_bind_i32 (created_by)
     };
-    if (db_exec_insert_id(db, sql, params, 8, new_id, &err)) return 0;
+    if (db_exec_insert_id(db, sql, params, 8, "planet_id", new_id, &err)) return 0;
     return -1;
 }
 
@@ -444,7 +444,7 @@ int db_planets_insert_genesis_idem(db_t *db, const char *key, const char *payloa
     /* SQL_VERBATIM: Q36 */
     const char *q36 = "INSERT INTO idempotency (key, cmd, response, created_at) VALUES ({1}, 'planet.genesis_create', {2}, {3});";
     char sql[1024]; sql_build(db, q36, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_text(payload), db_bind_i64(ts) }, 3, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_text(payload), db_bind_timestamp_text(ts) }, 3, &err)) return 0;
     return -1;
 }
 
@@ -515,7 +515,7 @@ int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int comm
         db_bind_i32(planet_id), db_bind_i32(commodity_id),
         db_bind_i32(qty), db_bind_i32(price), db_bind_null()
     };
-    if (db_exec_insert_id(db, sql, params, 7, order_id, &err)) return 0;
+    if (db_exec_insert_id(db, sql, params, 7, "id", order_id, &err)) return 0;
     return -1;
 }
 

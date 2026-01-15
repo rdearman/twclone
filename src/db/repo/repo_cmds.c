@@ -69,6 +69,7 @@ int repo_cmds_register_player(db_t *db, const char *user, const char *pass, cons
                                          db_bind_text(pass),
                                          db_bind_text(ship_name) },
                            3,
+                           NULL,
                            player_id_out,
                            &err)) {
         return err.code;

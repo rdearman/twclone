@@ -1,6 +1,7 @@
 #define TW_DB_INTERNAL 1
 #include "db_int.h"
 #include "repo_combat.h"
+#include "repo_players.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -582,14 +583,17 @@ int db_combat_select_mines_locked(db_t *db, int sector_id, int asset_type, json_
 
 int db_combat_debit_credits(db_t *db, int player_id, int amount) {
     if (!db) return -1;
-    db_res_t *res = NULL;
     db_error_t err = {0};
+    int64_t rows = 0;
     char sql[512];
-    sql_build(db, "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1} RETURNING credits;", sql, sizeof(sql));
-    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i32(amount), db_bind_i32(player_id) }, 2, &res, &err)) return -1;
-    int success = 0; if (db_res_step(res, &err)) success = 1;
-    db_res_finalize(res);
-    return (success && err.code == 0) ? 0 : -1;
+    sql_build(db, "UPDATE players SET credits = credits - {1} WHERE player_id = {2} AND credits >= {1};", sql, sizeof(sql));
+    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i32(amount), db_bind_i32(player_id) }, 2, &rows, &err)) return -1;
+    
+    if (rows > 0) {
+        long long dummy;
+        return repo_players_get_credits(db, player_id, &dummy);
+    }
+    return -1;
 }
 
 int db_combat_update_asset_quantity(db_t *db, int asset_id, int new_quantity) {

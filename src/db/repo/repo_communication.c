@@ -13,7 +13,7 @@ int repo_comm_create_system_notice(db_t *db, int64_t created_at, const char *tit
     "VALUES ({1}, {2}, {3}, {4}, {5});";
     char sql[256]; sql_build(db, q1, sql, sizeof(sql));
     db_bind_t params[5] = { db_bind_i64(created_at), db_bind_text(title), db_bind_text(body), db_bind_text(severity), expires_at > 0 ? db_bind_i64(expires_at) : db_bind_null() };
-    if (!db_exec_insert_id (db, sql, params, 5, new_id_out, &err)) return err.code;
+    if (!db_exec_insert_id (db, sql, params, 5, "system_notice_id", new_id_out, &err)) return err.code;
     return 0;
 }
 
@@ -98,7 +98,7 @@ int repo_comm_insert_mail(db_t *db, int sender_id, int recipient_id, const char 
     "VALUES({1},{2},{3},{4},{5});";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
     db_bind_t p[5] = { db_bind_i32(sender_id), db_bind_i32(recipient_id), subject ? db_bind_text(subject) : db_bind_null(), db_bind_text(body), idem ? db_bind_text(idem) : db_bind_null() };
-    if (!db_exec_insert_id(db, sql, p, 5, new_id_out, &err)) return err.code;
+    if (!db_exec_insert_id(db, sql, p, 5, "mail_id", new_id_out, &err)) return err.code;
     return 0;
 }
 
