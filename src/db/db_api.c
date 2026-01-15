@@ -11,9 +11,6 @@
 
 // Include specific backend open functions
 #include "pg/db_pg.h"
-#ifdef DB_BACKEND_SQLITE
-#include "sqlite/db_sqlite.h" // Include for SQLite backend
-#endif
 
 /**
  * @brief Helper to set error with category
@@ -153,17 +150,6 @@ db_t *db_open(const db_config_t *cfg, db_error_t *err) {
             }
             db->impl = db_pg_open_internal(db, cfg, err); // Pass db_t for internal setup
             break;
-#ifdef DB_BACKEND_SQLITE
-        case DB_BACKEND_SQLITE:
-            if (!cfg->sqlite_path) {
-                err->code = ERR_DB_CONFIG;
-                strncpy(err->message, "db_open: SQLite path is NULL", sizeof(err->message));
-                free(db);
-                return NULL;
-            }
-            db->impl = db_sqlite_open_internal(db, cfg, err);
-            break;
-#endif
         case DB_BACKEND_UNKNOWN:
         default:
             err->code = ERR_DB_CONFIG;

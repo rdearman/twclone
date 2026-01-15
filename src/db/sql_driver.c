@@ -213,13 +213,11 @@ sql_conflict_target_fmt(const db_t *db)
 /*     case DB_BACKEND_POSTGRES: */
 /*       return "to_timestamp($%d)"; */
     
-/*     case DB_BACKEND_SQLITE: */
-/*       return "datetime($%d, 'unixepoch')"; */
-    
 /*     default: */
 /*       return "to_timestamp($%d)"; */
 /*     } */
 /* } */
+
 
 /**
  * @brief Return format string for entity_stock upsert with epoch timestamp.
@@ -580,13 +578,6 @@ sql_build(const db_t *db, const char *template, char *out_buf, size_t buf_size)
                   /* $N */
                   /* tmp size is ample for "$2147483647" */
                   int written = snprintf(tmp, sizeof tmp, "$%lu", n);
-                  if (written <= 0 || (size_t)written >= sizeof tmp) goto parse_error;
-                  if (sqlb_puts(out_buf, buf_size, &out_i, tmp) != 0) goto overflow;
-                }
-              else if (backend == DB_BACKEND_SQLITE)
-                {
-                  /* ?N  (SQLite supports numbered parameters like ?1 ?2 ...) */
-                  int written = snprintf(tmp, sizeof tmp, "?%lu", n);
                   if (written <= 0 || (size_t)written >= sizeof tmp) goto parse_error;
                   if (sqlb_puts(out_buf, buf_size, &out_i, tmp) != 0) goto overflow;
                 }

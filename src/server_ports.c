@@ -15,9 +15,6 @@
 #define UUID_STR_LEN 37
 #define TX_TYPE_TRADE_SELL "TRADE_SELL"
 #define TX_TYPE_TRADE_BUY "TRADE_BUY"
-#ifndef SQLITE_CONSTRAINT
-#define SQLITE_CONSTRAINT 19
-#endif
 
 void free_trade_lines (TradeLine *lines, size_t n);
 
@@ -517,7 +514,6 @@ h_can_trade_commodity (db_t *db,
                                                   &dummy_qty);
 
 
-  /* Refactor: replace 0 / SQLITE_NOTFOUND with DB-layer equivalents */
   if (rc_get_qty != 0 && rc_get_qty != ERR_DB_NOT_FOUND)
     {
       LOGE
@@ -2682,7 +2678,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
                                -amount, &new_ship_qty);
         if (rc != 0)
           {
-            if (rc == SQLITE_CONSTRAINT)
+            if (rc == ERR_DB_CONSTRAINT)
               {
                 send_response_refused_steal (ctx,
                                              root,
@@ -2702,7 +2698,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
           h_update_port_stock (db, port_id, commodity, amount, &new_port_qty);
         if (rc != 0)
           {
-            if (rc == SQLITE_CONSTRAINT)
+            if (rc == ERR_DB_CONSTRAINT)
               {
                 send_response_refused_steal (ctx,
                                              root,

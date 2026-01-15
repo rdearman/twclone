@@ -1018,7 +1018,7 @@ h_planet_market_tick (db_t *db, int64_t now_s)
           commodity_order_t existing_order;
           int find_rc = db_get_open_order (db, "planet", planet_id, commodity_id, side, &existing_order);
 
-          if (find_rc == 0) // SQLITE_OK is 0
+          if (find_rc == 0)
             {
               int new_total = existing_order.filled_quantity + order_qty;
               db_update_commodity_order (db, existing_order.id, new_total, existing_order.filled_quantity, "open");
@@ -1212,7 +1212,7 @@ h_port_economy_tick (db_t *db, int64_t now_s)
           commodity_order_t existing_order;
           int find_rc = db_get_open_order_for_port (db, port_id, commodity_id, side, &existing_order);
 
-          if (find_rc == 0) // SQLITE_OK
+          if (find_rc == 0)
             {
               int new_total = existing_order.filled_quantity + order_qty;
               db_update_commodity_order (db, existing_order.id, new_total, existing_order.filled_quantity, "open");

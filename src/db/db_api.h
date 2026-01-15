@@ -18,8 +18,7 @@ extern "C" {
  * 1. ownership: The Caller owns the DB handle. The DB owns Result handles.
  * 2. lifetime: Strings returned by column accessors are valid only until the 
  * next db_step() or db_finalize(). They must be copied if needed longer.
- * 3. placeholders: SQL MUST use '$1', '$2' syntax. Drivers must translate 
- * if the backend uses '?' (SQLite).
+ * 3. placeholders: SQL MUST use '$1', '$2' syntax.
  */
 
 // Opaque handles for the database connection and result sets
@@ -82,7 +81,6 @@ typedef struct db_res_s     db_res_t;
 typedef enum
 {
   DB_BACKEND_UNKNOWN = 0,
-  DB_BACKEND_SQLITE,
   DB_BACKEND_POSTGRES,
   DB_BACKEND_MYSQL,
   DB_BACKEND_ORACLE
@@ -96,9 +94,6 @@ typedef enum
 typedef struct
 {
   db_backend_t backend;         // Which backend to use
-
-  // SQLite specific configuration
-  const char  *sqlite_path;     // Path to the SQLite database file (e.g., "./twclone.db")
 
   // Postgres specific configuration
   const char  *pg_conninfo;     // libpq connection string (e.g., "host=localhost dbname=twclone")

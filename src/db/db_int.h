@@ -139,7 +139,6 @@ bool db_exec_insert_id(db_t *db,
 
 // Forward declarations for internal backend-specific data structures
 struct db_pg_impl_s; // For PostgreSQL driver
-struct db_sqlite_impl_s; // For SQLite driver (future)
 
 
 // V-table for generic DB operations

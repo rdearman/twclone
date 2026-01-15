@@ -1062,8 +1062,6 @@ db_clear_player_active_ship (db_t *db, int player_id)
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
-  /* Players table doesn't have active_ship_id in sqlite schema, but postgres schema has it?
-     Actually schema in 000_tables.sql has 'ship_id' column. */
   if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i32 (player_id)}, 1, &err))
     {
@@ -4825,14 +4823,6 @@ db_ensure_planet_bank_accounts_deprecated (void *db)
 
 
 /* ========================================================= */
-
-
-/* Stub for SQLite internal open (needed because headers reference it) */
-int
-db_sqlite_open_internal (void)
-{
-  return -1;
-}
 
 
 /* Thread cleanup is handled by libpq internally, but the symbol must exist */

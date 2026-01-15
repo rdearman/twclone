@@ -16,7 +16,6 @@
 #include <ctype.h>
 #include <string.h>
 #include <jansson.h>
-// #include <sqlite3.h> // Removed
 /* local inlcudes */
 #include "server_config.h"
 #include "db/repo/repo_database.h"
@@ -36,8 +35,6 @@ json_t *g_capabilities;
 
 
 // xp_align_config_t g_xp_align;   // REMOVED: Defined in globals.c
-/* Provided by your DB module; MUST be defined there (no 'static') */
-// sqlite3 *g_db = NULL; // Removed global raw handle
 
 
 /* --------- static helpers (not visible to linker) --------- */

@@ -15,9 +15,6 @@ static char g_main_conninfo[1024];
 static db_backend_t g_main_backend;
 
 
-// static const char *g_main_sqlite_path;
-
-
 static void
 db_connection_destructor (void *handle)
 {
@@ -59,10 +56,6 @@ game_db_init (void)
         "game_db_init: PostgreSQL backend enabled but no connection string is configured.");
       return -1;
     }
-#else
-  g_main_backend = DB_BACKEND_SQLITE;
-  g_main_sqlite_path = DEFAULT_DB_NAME;
-  LOGI ("game_db_init: Caching SQLite path for per-thread connections.");
 #endif
   return 0;
 }
@@ -97,11 +90,6 @@ game_db_get_handle (void)
       db_cfg.pg_conninfo = g_main_conninfo;
       LOGI ("game_db_get_handle: Creating new PG connection for thread %lu.",
             (unsigned long)pthread_self ());
-#else
-      db_cfg.sqlite_path = g_main_sqlite_path;
-      LOGI (
-        "game_db_get_handle: Creating new SQLite connection for thread %lu.",
-        (unsigned long)pthread_self ());
 #endif
 
       db = db_open (&db_cfg,
