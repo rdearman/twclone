@@ -179,29 +179,42 @@ int repo_bank_deduct_credits_returning(db_t *db, int account_id, long long amoun
 }
 
 int repo_bank_create_account_if_not_exists(db_t *db, const char *owner_type, int owner_id, long long initial_balance) {
-
     db_error_t err;
-
     /* SQL_VERBATIM: Q11 */
-
-    const char *q11 = "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ({1}, {2}, {3}, 0, 1) ON CONFLICT DO NOTHING;";
-
+    const char *q11 = "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ({1}, {2}, {3}, 0, 1);";
     char sql[256]; sql_build(db, q11, sql, sizeof(sql));
-
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id), db_bind_i64(initial_balance) }, 3, &err)) return err.code;
-
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id), db_bind_i64(initial_balance) }, 3, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            // Treat duplicate key as success (DO NOTHING semantics)
+            return 0;
+        }
+        return err.code;
+    }
     return 0;
-
 }
 
 
 
 int repo_bank_set_frozen_status(db_t *db, int player_id, int is_frozen) {
     db_error_t err;
-    /* SQL_VERBATIM: Q13 */
-    const char *q13 = "INSERT INTO bank_flags (player_id, is_frozen) VALUES ({1}, {2}) ON CONFLICT(player_id) DO UPDATE SET is_frozen = excluded.is_frozen;";
-    char sql[256]; sql_build(db, q13, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(is_frozen) }, 2, &err)) return err.code;
+    int64_t rows = 0;
+    db_bind_t params[] = { db_bind_i32(player_id), db_bind_i32(is_frozen) };
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE bank_flags SET is_frozen = {2} WHERE player_id = {1};";
+    char sql_upd[256]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 2, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO bank_flags (player_id, is_frozen) VALUES ({1}, {2});";
+    char sql_ins[256]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 2, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, params, 2, &err)) return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 

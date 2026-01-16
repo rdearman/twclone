@@ -1347,9 +1347,10 @@ class Planner:
 
             quantity = item.get("quantity", 0)
             purchase_price = item.get("purchase_price")
+            origin_port_id = item.get("origin_port_id")
 
             if quantity > 0:
-                # Check if port is full
+                # 1. Skip if port is full
                 comm_info = next((c for c in commodities_info if canon_commodity(c.get("commodity")) == commodity), None)
                 if comm_info:
                     port_qty = comm_info.get("quantity", 0)
@@ -1360,11 +1361,17 @@ class Planner:
 
                 sell_price = port_sell_prices.get(commodity)
                 if sell_price is not None and sell_price > 0:
-                    # If we know the purchase price, calculate profit margin
+                    # 2. Check profit margin
                     if purchase_price is not None:
                         profit_margin = sell_price - purchase_price
                         
-                        # Only allow loss if holds are full
+                        # 3. Apply origin restriction: 
+                        # Cannot sell at same port it was bought from unless it's profitable.
+                        if str(origin_port_id) == str(port_id) and profit_margin <= 0:
+                            logger.debug(f"Restricting sell of {commodity}: originated from this port ({port_id}) and not profitable.")
+                            continue
+
+                        # 4. Only allow loss if holds are full
                         if profit_margin < 0 and not allow_loss:
                             continue
 

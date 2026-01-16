@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-fc4d2546",
+    "ts": "2026-01-16T04:57:22Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1000,
+        "message": "Database error."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

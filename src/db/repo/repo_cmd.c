@@ -988,24 +988,28 @@ db_planet_update_goods_on_hand (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_error_t err;
-  /* Postgres UPSERT */
-  const char *sql =
-    "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) "
-    "VALUES ({1}, {2}, GREATEST({3}, 0), 1000000, 0) "
-    "ON CONFLICT(planet_id, commodity) DO UPDATE SET quantity = GREATEST(planet_goods.quantity + {3}, 0);";
+    db_error_t err;
+    int64_t rows = 0;
 
-  db_bind_t params[] = { db_bind_i32 (planet_id), db_bind_text (code),
-                         db_bind_i32 (delta) };
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE planet_goods SET quantity = GREATEST(quantity + {1}, 0) WHERE planet_id = {2} AND commodity = {3};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    db_bind_t upd_params[] = { db_bind_i32(delta), db_bind_i32(planet_id), db_bind_text(code) };
+    if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_exec (db, sql_converted, params, 3, &err))
-    {
-      return err.code;
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES ({1}, {2}, GREATEST({3}, 0), 1000000, 0);";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    db_bind_t ins_params[] = { db_bind_i32(planet_id), db_bind_text(code), db_bind_i32(delta) };
+    if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, upd_params, 3, &err)) return 0;
+        }
+        return err.code;
     }
-  return 0;
+
+    return 0;
 }
 
 
@@ -1211,7 +1215,7 @@ db_create_podded_status_entry (db_t *db, int pid)
   db_error_t err;
   
   const char *sql_template =
-    "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, %s) ON CONFLICT DO NOTHING;";
+    "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, %s);";
 
   char sql_dialect[512];
   sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
@@ -1221,6 +1225,9 @@ db_create_podded_status_entry (db_t *db, int pid)
 
   if (!db_exec (db, sql, (db_bind_t[]){db_bind_i32 (pid)}, 1, &err))
     {
+      if (err.code == ERR_DB_CONSTRAINT) {
+        return 0; // DO NOTHING
+      }
       return err.code;
     }
   return 0;
@@ -1844,18 +1851,29 @@ db_player_set_last_rob_attempt (int pid, int lpid, long long lts)
     {
       return -1;
     }
-  db_error_t err;
-  const char *sql =
-    "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0) ON CONFLICT(player_id) DO UPDATE SET port_id = excluded.port_id, last_attempt_at = excluded.last_attempt_at;";
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-  if (!db_exec (db, sql_converted,
-                (db_bind_t[]){db_bind_i32 (pid), db_bind_i32 (lpid),
-                              db_bind_i64 (lts)}, 3, &err))
-    {
-      return err.code;
+    db_error_t err;
+    int64_t rows = 0;
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE player_last_rob SET port_id = {1}, last_attempt_at = {2} WHERE player_id = {3};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    db_bind_t upd_params[] = { db_bind_i32(lpid), db_bind_i64(lts), db_bind_i32(pid) };
+    if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
+
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0);";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    db_bind_t ins_params[] = { db_bind_i32(pid), db_bind_i32(lpid), db_bind_i64(lts) };
+    if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, upd_params, 3, &err)) return 0;
+        }
+        return err.code;
     }
-  return 0;
+
+    return 0;
 }
 
 
@@ -1866,18 +1884,29 @@ db_port_add_bust_record (int port_id, int pid, long long ts, const char *type)
     {
       return -1;
     }
-  db_error_t err;
-  const char *sql =
-    "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type) VALUES ({1}, {2}, {3}, {4}) ON CONFLICT(port_id, player_id) DO UPDATE SET last_bust_at = excluded.last_bust_at;";
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-  if (!db_exec (db, sql_converted,
-                (db_bind_t[]){db_bind_i32 (port_id), db_bind_i32 (pid),
-                              db_bind_i64 (ts), db_bind_text (type)}, 4, &err))
-    {
-      return err.code;
+    db_error_t err;
+    int64_t rows = 0;
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE port_busts SET last_bust_at = {1} WHERE port_id = {2} AND player_id = {3};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    db_bind_t upd_params[] = { db_bind_i64(ts), db_bind_i32(port_id), db_bind_i32(pid) };
+    if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
+
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type) VALUES ({1}, {2}, {3}, {4});";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    db_bind_t ins_params[] = { db_bind_i32(port_id), db_bind_i32(pid), db_bind_i64(ts), db_bind_text(type) };
+    if (!db_exec(db, sql_ins, ins_params, 4, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, upd_params, 3, &err)) return 0;
+        }
+        return err.code;
     }
-  return 0;
+
+    return 0;
 }
 
 
@@ -3460,22 +3489,28 @@ db_idemp_store_response (db_t *db, const char *key, const char *response_json)
     {
       return ERR_DB_MISUSE;
     }
-  db_error_t err;
-  const char *sql =
-    "INSERT INTO idempotency (key, response) VALUES ({1}, {2}) ON CONFLICT(key) DO UPDATE SET response = excluded.response;";
+    db_error_t err;
+    int64_t rows = 0;
 
-  char sql_converted[512];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE idempotency SET response = {1} WHERE key = {2};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    db_bind_t upd_params[] = { db_bind_text(response_json), db_bind_text(key) };
+    if (db_exec_rows_affected(db, sql_upd, upd_params, 2, &rows, &err) && rows > 0) return 0;
 
-  if (!db_exec (db,
-                sql_converted,
-                (db_bind_t[]){db_bind_text (key), db_bind_text (response_json)},
-                2,
-                &err))
-    {
-      return err.code;
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO idempotency (key, response) VALUES ({1}, {2});";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    db_bind_t ins_params[] = { db_bind_text(key), db_bind_text(response_json) };
+    if (!db_exec(db, sql_ins, ins_params, 2, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, upd_params, 2, &err)) return 0;
+        }
+        return err.code;
     }
-  return 0;
+
+    return 0;
 }
 
 
@@ -3620,7 +3655,7 @@ db_notice_mark_seen (db_t *db, int notice_id, int player_id)
   db_error_t err;
   
   const char *sql_template =
-    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s) ON CONFLICT DO NOTHING;";
+    "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, %s);";
 
   char sql_dialect[512];
   sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
@@ -3634,6 +3669,9 @@ db_notice_mark_seen (db_t *db, int notice_id, int player_id)
                 2,
                 &err))
     {
+      if (err.code == ERR_DB_CONSTRAINT) {
+        return 0; // DO NOTHING
+      }
       return err.code;
     }
   return 0;
@@ -4467,25 +4505,29 @@ db_chain_traps_and_bridge (db_t *db, int fedspace_max)
 
 
   const char *sql_ins =
-    "INSERT INTO sector_warps(from_sector, to_sector) VALUES ({1}, {2}) ON CONFLICT DO NOTHING;";
+    "INSERT INTO sector_warps(from_sector, to_sector) VALUES ({1}, {2});";
 
   char sql_ins_converted[256];
   sql_build(db, sql_ins, sql_ins_converted, sizeof(sql_ins_converted));
 
   for (int i = 0; i + 1 < n; ++i)
     {
-      db_exec (db,
+      if (!db_exec (db,
                sql_ins_converted,
                (db_bind_t[]){ db_bind_i32 (traps[i]),
                               db_bind_i32 (traps[i + 1]) },
                2,
-               &err);
-      db_exec (db,
+               &err) && err.code != ERR_DB_CONSTRAINT) {
+          // Log or handle error if it's not a duplicate
+      }
+      if (!db_exec (db,
                sql_ins_converted,
                (db_bind_t[]){ db_bind_i32 (traps[i + 1]),
                               db_bind_i32 (traps[i]) },
                2,
-               &err);
+               &err) && err.code != ERR_DB_CONSTRAINT) {
+          // Log or handle error if it's not a duplicate
+      }
     }
 
 

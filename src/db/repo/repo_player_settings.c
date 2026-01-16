@@ -20,6 +20,28 @@ db_player_settings_init (db_t *db)
   (void)db; return 0;
 }
 
+static int
+h_upsert(db_t *db, const char *sql_upd, const char *sql_ins, const db_bind_t *params, int n_params) {
+    db_error_t err;
+    int64_t rows = 0;
+    if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) return -1;
+
+    if (!db_exec_rows_affected(db, sql_upd, params, n_params, &rows, &err)) {
+        db_tx_rollback(db, NULL);
+        return -1;
+    }
+
+    if (rows == 0) {
+        if (!db_exec(db, sql_ins, params, n_params, &err)) {
+            db_tx_rollback(db, NULL);
+            return -1;
+        }
+    }
+
+    if (!db_tx_commit(db, &err)) return -1;
+    return 0;
+}
+
 
 int
 db_subscribe_upsert (db_t *db,
@@ -28,25 +50,23 @@ db_subscribe_upsert (db_t *db,
                      const char *filter,
                      int locked)
 {
-  db_error_t err; if (!db)
-    {
-      return -1;
-    }
-  char sql[512];
-  sql_build (db,
-             "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) VALUES ({1}, {2}, {3}, {4}, 1) "
-             "ON CONFLICT(player_id, event_type) DO UPDATE SET filter_json = {3}, locked = {4}, enabled = 1;",
-             sql, sizeof (sql));
-  if (!db_exec (db,
-                sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_text (topic),
-                              db_bind_text (filter), db_bind_i32 (locked)},
-                4,
-                &err))
-    {
-      return -1;
-    }
-  return 0;
+  if (!db) return -1;
+  const char *q_upd = "UPDATE subscriptions SET filter_json = {3}, locked = {4}, enabled = 1 "
+                      "WHERE player_id = {1} AND event_type = {2};";
+  const char *q_ins = "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) "
+                      "VALUES ({1}, {2}, {3}, {4}, 1);";
+  
+  char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+  char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+
+  db_bind_t params[] = {
+      db_bind_i64(pid),
+      db_bind_text(topic),
+      db_bind_text(filter),
+      db_bind_i32(locked)
+  };
+
+  return h_upsert(db, sql_upd, sql_ins, params, 4);
 }
 
 
@@ -80,22 +100,20 @@ db_subscribe_disable (db_t *db, int64_t pid, const char *topic, int *locked_out)
 int
 db_bookmark_upsert (db_t *db, int64_t pid, const char *name, int64_t sid)
 {
-  db_error_t err; if (!db)
-    {
-      return -1;
-    }
-  char sql[512];
-  sql_build (db,
-             "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3}) "
-             "ON CONFLICT(player_id, name) DO UPDATE SET sector_id = {3};",
-             sql, sizeof (sql));
-  if (!db_exec (db, sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_text (name),
-                              db_bind_i64 (sid)}, 3, &err))
-    {
-      return -1;
-    }
-  return 0;
+  if (!db) return -1;
+  const char *q_upd = "UPDATE player_bookmarks SET sector_id = {3} WHERE player_id = {1} AND name = {2};";
+  const char *q_ins = "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3});";
+
+  char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+  char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+
+  db_bind_t params[] = {
+      db_bind_i64(pid),
+      db_bind_text(name),
+      db_bind_i64(sid)
+  };
+
+  return h_upsert(db, sql_upd, sql_ins, params, 3);
 }
 
 
@@ -150,28 +168,33 @@ int
 db_avoid_add (db_t *db, int64_t pid, int64_t sid)
 {
   db_error_t err;
-  if (!db)
-    {
+  if (!db) return -1;
+
+  if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) return -1;
+
+  /* Check if already exists */
+  char sql_chk[512];
+  sql_build(db, "SELECT 1 FROM player_avoid WHERE player_id = {1} AND sector_id = {2} LIMIT 1;", sql_chk, sizeof(sql_chk));
+  db_res_t *res = NULL;
+  bool exists = false;
+  if (db_query(db, sql_chk, (db_bind_t[]){db_bind_i64(pid), db_bind_i64(sid)}, 2, &res, &err)) {
+      exists = db_res_step(res, &err);
+      db_res_finalize(res);
+  } else {
+      db_tx_rollback(db, NULL);
       return -1;
-    }
-  const char *conflict_clause = sql_insert_ignore_clause(db);
-  if (!conflict_clause)
-    {
-      return -1;
-    }
-  char sql_buf[256];
-  snprintf(sql_buf, sizeof(sql_buf),
-      "INSERT INTO player_avoid (player_id, sector_id) VALUES ({1}, {2}) %s;",
-      conflict_clause);
-  char sql[512];
-  sql_build (db, sql_buf, sql, sizeof (sql));
-  if (!db_exec (db, sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_i64 (sid)},
-                2,
-                &err))
-    {
-      return -1;
-    }
+  }
+
+  if (!exists) {
+      char sql_ins[512];
+      sql_build(db, "INSERT INTO player_avoid (player_id, sector_id) VALUES ({1}, {2});", sql_ins, sizeof(sql_ins));
+      if (!db_exec(db, sql_ins, (db_bind_t[]){db_bind_i64(pid), db_bind_i64(sid)}, 2, &err)) {
+          db_tx_rollback(db, NULL);
+          return -1;
+      }
+  }
+
+  if (!db_tx_commit(db, &err)) return -1;
   return 0;
 }
 
@@ -230,23 +253,21 @@ db_note_set (db_t *db,
              const char *key,
              const char *note)
 {
-  db_error_t err; if (!db)
-    {
-      return -1;
-    }
-  char sql[512];
-  sql_build (db,
-             "INSERT INTO player_notes (player_id, scope, key, note) VALUES ({1}, {2}, {3}, {4}) "
-             "ON CONFLICT(player_id, scope, key) DO UPDATE SET note = {4};",
-             sql, sizeof (sql));
-  if (!db_exec (db, sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_text (scope),
-                              db_bind_text (key), db_bind_text (note)}, 4,
-                &err))
-    {
-      return -1;
-    }
-  return 0;
+  if (!db) return -1;
+  const char *q_upd = "UPDATE player_notes SET note = {4} WHERE player_id = {1} AND scope = {2} AND key = {3};";
+  const char *q_ins = "INSERT INTO player_notes (player_id, scope, key, note) VALUES ({1}, {2}, {3}, {4});";
+
+  char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+  char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+
+  db_bind_t params[] = {
+      db_bind_i64(pid),
+      db_bind_text(scope),
+      db_bind_text(key),
+      db_bind_text(note)
+  };
+
+  return h_upsert(db, sql_upd, sql_ins, params, 4);
 }
 
 
@@ -394,21 +415,21 @@ db_prefs_set_one (db_t *db,
                   pref_type t,
                   const char *val)
 {
-  db_error_t err; if (!db || !key)
-    {
-      return -1;
-    }
-  char sql[512];
-  sql_build (db,
-             "INSERT INTO player_prefs (player_id, key, value) VALUES ({1}, {2}, {3}) ON CONFLICT(player_id, key) DO UPDATE SET value = {3};",
-             sql, sizeof (sql));
-  if (!db_exec (db, sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_text (key),
-                              db_bind_text (val)}, 3, &err))
-    {
-      return -1;
-    }
-  (void)t; return 0;
+  if (!db) return -1;
+  const char *q_upd = "UPDATE player_prefs SET value = {3} WHERE player_id = {1} AND key = {2};";
+  const char *q_ins = "INSERT INTO player_prefs (player_id, key, value) VALUES ({1}, {2}, {3});";
+
+  char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+  char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+
+  db_bind_t params[] = {
+      db_bind_i64(pid),
+      db_bind_text(key),
+      db_bind_text(val)
+  };
+
+  (void)t;
+  return h_upsert(db, sql_upd, sql_ins, params, 3);
 }
 
 

@@ -8,19 +8,46 @@
 
 int repo_players_set_pref(db_t *db, int player_id, const char *key, const char *type, const char *value) {
     db_error_t err;
-    /* SQL_VERBATIM: Q1 */
-    const char *q1 = "INSERT INTO player_prefs (player_id, key, type, value) VALUES ({1}, {2}, {3}, {4}) ON CONFLICT (player_id, key) DO UPDATE SET type = EXCLUDED.type, value = EXCLUDED.value";
-    char sql[512]; sql_build(db, q1, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(key), db_bind_text(type), db_bind_text(value) }, 4, &err)) return err.code;
+    int64_t rows = 0;
+    db_bind_t params[] = { db_bind_i32(player_id), db_bind_text(key), db_bind_text(type), db_bind_text(value) };
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE player_prefs SET type = {3}, value = {4} WHERE player_id = {1} AND key = {2}";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 4, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO player_prefs (player_id, key, type, value) VALUES ({1}, {2}, {3}, {4})";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 4, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, params, 4, &err)) return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 
 int repo_players_upsert_bookmark(db_t *db, int player_id, const char *name, int sector_id) {
     db_error_t err;
-    /* SQL_VERBATIM: Q2 */
-    const char *q2 = "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3}) ON CONFLICT (player_id, name) DO UPDATE SET sector_id = EXCLUDED.sector_id";
-    char sql[512]; sql_build(db, q2, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(name), db_bind_i32(sector_id) }, 3, &err)) return err.code;
+    int64_t rows = 0;
+    db_bind_t params[] = { db_bind_i32(player_id), db_bind_text(name), db_bind_i32(sector_id) };
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE player_bookmarks SET sector_id = {3} WHERE player_id = {1} AND name = {2}";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 3, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert */
+    const char *q_ins = "INSERT INTO player_bookmarks (player_id, name, sector_id) VALUES ({1}, {2}, {3})";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 3, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, params, 3, &err)) return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 
@@ -67,10 +94,28 @@ int repo_players_disable_subscription(db_t *db, int player_id, const char *topic
 
 int repo_players_upsert_subscription(db_t *db, int player_id, const char *topic, const char *delivery, const char *filter) {
     db_error_t err;
-    /* SQL_VERBATIM: Q7 */
-    const char *q7 = "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, 1, {3}, {4}) ON CONFLICT (player_id, topic) DO UPDATE SET enabled = 1, delivery = EXCLUDED.delivery, filter = EXCLUDED.filter";
-    char sql[512]; sql_build(db, q7, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(topic), db_bind_text(delivery ? delivery : "push"), db_bind_text(filter ? filter : "") }, 4, &err)) return err.code;
+    int64_t rows = 0;
+    db_bind_t params[] = { 
+        db_bind_i32(player_id), 
+        db_bind_text(topic), 
+        db_bind_text(delivery ? delivery : "push"), 
+        db_bind_text(filter ? filter : "") 
+    };
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE player_subscriptions SET enabled = 1, delivery = {3}, filter = {4} WHERE player_id = {1} AND topic = {2}";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 4, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert */
+    const char *q_ins = "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, 1, {3}, {4})";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 4, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, params, 4, &err)) return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 

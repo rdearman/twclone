@@ -433,11 +433,11 @@ int repo_stardock_update_alignment(db_t *db, int32_t player_id, int32_t alignmen
 int repo_stardock_insert_loan(db_t *db, int32_t player_id, int64_t principal, int32_t interest_rate_bp, int32_t due_date)
 {
     /* SQL_VERBATIM: Q36 */
-    const char *sql = "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES ({1}, {2}, {3}, to_timestamp({4}), 0);";
+    const char *sql = "INSERT INTO tavern_loans (player_id, principal, interest_rate, due_date, is_defaulted) VALUES ({1}, {2}, {3}, {4}, 0);";
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(principal), db_bind_i32(interest_rate_bp), db_bind_i32(due_date) }, 4, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(principal), db_bind_i32(interest_rate_bp), db_bind_timestamp_text(due_date) }, 4, &err)) {
         return 0;
     }
     return err.code;

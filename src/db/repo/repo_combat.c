@@ -404,8 +404,14 @@ int db_combat_attach_limpet(db_t *db, int ship_id, int owner_id, int64_t created
     if (!db) return -1;
     db_error_t err = {0};
     char sql[256];
-    sql_build(db, "INSERT INTO limpet_attached (ship_id, owner_player_id, created_ts) VALUES ({1}, {2}, to_timestamp({3})) ON CONFLICT (ship_id, owner_player_id) DO NOTHING;", sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(ship_id), db_bind_i32(owner_id), db_bind_i64(created_ts) }, 3, &err)) return -1;
+    sql_build(db, "INSERT INTO limpet_attached (ship_id, owner_player_id, created_ts) VALUES ({1}, {2}, {3});", sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(ship_id), db_bind_i32(owner_id), db_bind_timestamp_text(created_ts) }, 3, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            // Treat duplicate key as success (DO NOTHING semantics)
+            return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 

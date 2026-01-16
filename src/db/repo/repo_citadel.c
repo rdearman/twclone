@@ -114,23 +114,25 @@ int repo_citadel_deduct_resources(db_t *db, int64_t ore, int64_t org, int64_t eq
 
 int repo_citadel_start_construction(db_t *db, int32_t planet_id, int32_t current_level, int32_t player_id, int32_t target_level, int64_t start_time, int64_t end_time)
 {
-    /* SQL_VERBATIM: Q6 */
-    const char *sql_update_citadel =
-        "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ({1}, {2}, {3}, 'upgrading', {4}, {5}, {6}) ON CONFLICT(planet_id) DO UPDATE SET construction_status='upgrading', target_level={4}, construction_start_time={5}, construction_end_time={6};";
-    char sql_converted[1024];
-    sql_build(db, sql_update_citadel, sql_converted, sizeof(sql_converted));
-
-    db_bind_t params[] = {
-        db_bind_i32(planet_id),
-        db_bind_i32(current_level),
-        db_bind_i32(player_id),
-        db_bind_i32(target_level),
-        db_bind_i64(start_time),
-        db_bind_i64(end_time)
-    };
-
     db_error_t err;
-    if (!db_exec(db, sql_converted, params, 6, &err)) {
+    int64_t rows = 0;
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE citadels SET construction_status='upgrading', target_level={1}, construction_start_time={2}, construction_end_time={3} WHERE planet_id = {4};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    db_bind_t upd_params[] = { db_bind_i32(target_level), db_bind_i64(start_time), db_bind_i64(end_time), db_bind_i32(planet_id) };
+    if (db_exec_rows_affected(db, sql_upd, upd_params, 4, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ({1}, {2}, {3}, 'upgrading', {4}, {5}, {6});";
+    char sql_ins[1024]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    db_bind_t ins_params[] = { db_bind_i32(planet_id), db_bind_i32(current_level), db_bind_i32(player_id), db_bind_i32(target_level), db_bind_i64(start_time), db_bind_i64(end_time) };
+
+    if (!db_exec(db, sql_ins, ins_params, 6, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, upd_params, 4, &err)) return 0;
+        }
         return err.code;
     }
     return 0;

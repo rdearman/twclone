@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_trade.buy_1403",
+    "first_seen": "20260116_002449_625",
+    "command": "trade.buy",
+    "error_code": 1403,
+    "error_message": "Insufficient funds."
+}

@@ -36,12 +36,24 @@ db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, 
 
 int repo_comm_mark_notice_seen(db_t *db, int notice_id, int player_id, int64_t seen_at) {
     db_error_t err;
-    /* SQL_VERBATIM: Q3 */
-    const char *q3 = "INSERT INTO notice_seen (notice_id, player_id, seen_at) "
-    "VALUES ({1}, {2}, {3}) "
-    "ON CONFLICT(notice_id, player_id) DO UPDATE SET seen_at = excluded.seen_at;";
-    char sql[256]; sql_build(db, q3, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(notice_id), db_bind_i32(player_id), db_bind_i64(seen_at) }, 3, &err)) return err.code;
+    int64_t rows = 0;
+    db_bind_t params[] = { db_bind_i32(notice_id), db_bind_i32(player_id), db_bind_i64(seen_at) };
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE notice_seen SET seen_at = {3} WHERE notice_id = {1} AND player_id = {2};";
+    char sql_upd[256]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 3, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO notice_seen (notice_id, player_id, seen_at) VALUES ({1}, {2}, {3});";
+    char sql_ins[256]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 3, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, params, 3, &err)) return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 

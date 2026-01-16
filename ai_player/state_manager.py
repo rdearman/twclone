@@ -345,10 +345,12 @@ class StateManager:
                 logger.warning(f"Could not log purchase for {item}, missing data (commodity, quantity, or unit_price).")
                 continue
 
-            # Check if we already have a batch of this commodity at the same price
+            # Check if we already have a batch of this commodity at the same price and origin
             found = False
             for cargo_item in self.state['ship_info']['cargo']:
-                if cargo_item.get('commodity') == commodity and cargo_item.get('purchase_price') == purchase_price:
+                if (cargo_item.get('commodity') == commodity and 
+                    cargo_item.get('purchase_price') == purchase_price and
+                    cargo_item.get('origin_port_id') == port_id):
                     cargo_item['quantity'] += quantity
                     found = True
                     break
@@ -357,7 +359,8 @@ class StateManager:
                 self.state['ship_info']['cargo'].append({
                     "commodity": commodity,
                     "quantity": quantity,
-                    "purchase_price": purchase_price
+                    "purchase_price": purchase_price,
+                    "origin_port_id": port_id
                 })
         logger.info(f"Cargo updated after buy: {self.state['ship_info']['cargo']}")
         self.save_state()
@@ -396,6 +399,7 @@ class StateManager:
                     purchase_price = cargo_item.get("purchase_price")
                     qty_from_this_batch = min(quantity_to_remove, cargo_item.get("quantity", 0))
                     
+                    # Log profit based on batch purchase price
                     profit = (sell_price - purchase_price) * qty_from_this_batch
                     total_profit += profit
 

@@ -39,17 +39,23 @@ int repo_engine_load_watermark(db_t *db, const char *key, long long *last_id, lo
 
 int repo_engine_save_watermark(db_t *db, const char *key, long long last_id, long long last_ts)
 {
-    /* SQL_VERBATIM: Q2 */
-    char up[512];
-    sql_build(db,
-              "INSERT INTO engine_offset(key,last_event_id,last_event_ts) "
-              "VALUES({1},{2},{3}) "
-              "ON CONFLICT(key) DO UPDATE SET last_event_id=excluded.last_event_id, last_event_ts=excluded.last_event_ts;",
-              up, sizeof(up));
-
-    db_bind_t params[] = { db_bind_text(key), db_bind_i64(last_id), db_bind_timestamp_text(last_ts) };
     db_error_t err;
-    if (!db_exec(db, up, params, 3, &err)) {
+    int64_t rows = 0;
+    db_bind_t params[] = { db_bind_text(key), db_bind_i64(last_id), db_bind_timestamp_text(last_ts) };
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE engine_offset SET last_event_id={2}, last_event_ts={3} WHERE key={1};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 3, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert */
+    const char *q_ins = "INSERT INTO engine_offset(key, last_event_id, last_event_ts) VALUES({1}, {2}, {3});";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 3, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            /* 3. Concurrent write - retry Update once */
+            if (db_exec(db, sql_upd, params, 3, &err)) return 0;
+        }
         return err.code;
     }
     return 0;
@@ -73,14 +79,8 @@ int repo_engine_fetch_max_event_id(db_t *db, long long *max_id)
 
 int repo_engine_quarantine(db_t *db, int64_t id, int64_t ts, const char *type, const char *payload, const char *err_msg, int now_s)
 {
-    /* SQL_VERBATIM: Q4 */
-    char sql[512];
-    sql_build(db,
-              "INSERT INTO engine_events_deadletter(engine_events_deadletter_id,ts,type,payload,error,moved_at) "
-              "VALUES({1},{2},{3},{4},{5},{6}) "
-              "ON CONFLICT(engine_events_deadletter_id) DO UPDATE SET error=excluded.error, moved_at=excluded.moved_at;",
-              sql, sizeof(sql));
-
+    db_error_t err;
+    int64_t rows = 0;
     db_bind_t params[] = {
         db_bind_i64(id),
         db_bind_i64(ts),
@@ -90,8 +90,20 @@ int repo_engine_quarantine(db_t *db, int64_t id, int64_t ts, const char *type, c
         db_bind_i32(now_s)
     };
 
-    db_error_t err;
-    if (!db_exec(db, sql, params, 6, &err)) {
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE engine_events_deadletter SET error={5}, moved_at={6} WHERE engine_events_deadletter_id={1};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 6, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert */
+    const char *q_ins = "INSERT INTO engine_events_deadletter(engine_events_deadletter_id, ts, type, payload, error, moved_at) "
+                        "VALUES({1}, {2}, {3}, {4}, {5}, {6});";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 6, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            /* 3. Concurrent write - retry Update once */
+            if (db_exec(db, sql_upd, params, 6, &err)) return 0;
+        }
         return err.code;
     }
     return 0;
