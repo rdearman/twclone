@@ -11,20 +11,55 @@
       "password": "password"
     },
     {
+      "name": "Rig: Find Quasar Planet",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT p.planet_id, p.sector_id FROM planets p JOIN citadels c ON p.planet_id = c.planet_id WHERE c.level >= 3 AND c.qCannonSector > 0 LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "target_planet_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Create Warp Links",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, @{target_sector_id}), (@{target_sector_id}, 1) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position victim_user player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'victim_user';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position victim_user ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'victim_user');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Victim Gets Hull Status Before Warp",
       "command": "combat.status",
       "user": "victim_user",
       "expect": { "status": "ok" },
-      "save": { "hull_before": "data.ship.hull" }
+      "save": { "hull_before": "data.hull" }
     },
     {
       "name": "Victim Warps to Quasar Sector (Should Take Damage)",
-      "command": "ship.warp",
-      "data": { "sector_id": 3 },
+      "command": "move.warp",
+      "data": { "sector_id": "@target_sector_id" },
       "user": "victim_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 3 }
+        { "path": "data.sector_id", "op": "==", "value": "@target_sector_id" }
       ]
     },
     {
@@ -33,39 +68,39 @@
       "user": "victim_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.ship.hull", "op": "<", "value": "@hull_before" }
+        { "path": "data.hull", "op": "<", "value": "@hull_before" }
       ]
     },
     {
       "name": "Victim Warps Away",
-      "command": "ship.warp",
+      "command": "move.warp",
       "data": { "sector_id": 1 },
       "user": "victim_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Victim Warps Back to Quasar Sector (Should Take Damage Again)",
-      "command": "ship.warp",
-      "data": { "sector_id": 3 },
+      "command": "move.warp",
+      "data": { "sector_id": "@target_sector_id" },
       "user": "victim_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Test Atmosphere Quasar Shot (Planet Landing)",
-      "command": "planet.view",
-      "data": { "planet_id": 8001 },
+      "command": "planet.info",
+      "data": { "planet_id": "@target_planet_id" },
       "user": "victim_user",
       "expect": { "status": "ok" },
-      "save": { "hull_before_atmosphere": "data.ship.hull" }
+      "save": { "hull_before_atmosphere": "data.hull" }
     },
     {
       "name": "Verify Event Logging - Check Combat Log",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(*) as quasar_shots FROM engine_events WHERE event_type IN ('combat.hit.quasar', 'combat.hit.fighters') AND player_id = @victim_user_player_id;" },
+      "data": { "sql": "SELECT COUNT(*) as quasar_shots FROM engine_events WHERE type IN ('combat.hit.quasar', 'combat.hit.fighters') AND actor_player_id = @{victim_user_player_id};" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.result[0].quasar_shots", "op": ">=", "value": 1 }
+        { "path": "data.rows.0.0", "op": ">=", "value": 1 }
       ]
     }
   ]

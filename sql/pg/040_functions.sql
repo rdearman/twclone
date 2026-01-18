@@ -647,7 +647,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 7) Player Registration - Auto-create starter ship
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION register_player (p_username text, p_password text, p_ship_name text DEFAULT NULL, p_is_npc boolean DEFAULT FALSE, p_sector_id integer DEFAULT 1)
+CREATE OR REPLACE FUNCTION register_player (p_username text, p_password text, p_ship_name text DEFAULT NULL, p_is_npc boolean DEFAULT FALSE, p_sector_id integer DEFAULT 1, p_player_type integer DEFAULT 2)
     RETURNS bigint
     LANGUAGE plpgsql
     AS $$
@@ -658,6 +658,13 @@ DECLARE
     v_starting_credits bigint;
     v_turns_per_day integer;
 BEGIN
+    -- 1. Check if player already exists
+    SELECT player_id INTO v_player_id FROM players WHERE name = p_username;
+
+    IF FOUND THEN
+        RETURN v_player_id;
+    END IF;
+
     -- Use provided ship name or default
     v_ship_name := COALESCE(p_ship_name, 'Used Scout Marauder');
     -- Get config values
@@ -675,16 +682,18 @@ BEGIN
         key = 'turnsperday';
     v_starting_credits := COALESCE(v_starting_credits, 5000);
     v_turns_per_day := COALESCE(v_turns_per_day, 500);
-    -- Insert new player (will get auto-generated ID)
+    -- Insert new player
     INSERT INTO players (name, passwd, sector_id, credits, type, is_npc, loggedin, commission_id)
-        VALUES (p_username, p_password, p_sector_id, v_starting_credits, 2, p_is_npc, now(), 1)
+        VALUES (p_username, p_password, p_sector_id, v_starting_credits, p_player_type, p_is_npc, now(), 1)
     RETURNING
         player_id INTO v_player_id;
+
     -- Create starter ship (Scout Marauder, type_id = 2)
     INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields)
         VALUES (v_ship_name, 2, p_sector_id, 10, 1, 1)
     RETURNING
         ship_id INTO v_ship_id;
+
     -- Assign ship to player
     UPDATE
         players
@@ -692,24 +701,29 @@ BEGIN
         ship_id = v_ship_id
     WHERE
         player_id = v_player_id;
+
     -- Create ship ownership record
     INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary)
         VALUES (v_ship_id, v_player_id, 1, TRUE);
+
     -- Create bank account for player
     INSERT INTO bank_accounts (owner_type, owner_id, currency, balance)
         VALUES ('player', v_player_id, 'CRD', 0)
     ON CONFLICT
         DO NOTHING;
+
     -- Initialize turns for player
     INSERT INTO turns (player_id, turns_remaining, last_update)
         VALUES (v_player_id, v_turns_per_day, now())
     ON CONFLICT
         DO NOTHING;
+
     -- Create player preferences record
     INSERT INTO player_prefs (player_prefs_id, key, type, value)
         VALUES (v_player_id, 'default_preferences_initialized', 'bool', 'true')
     ON CONFLICT
         DO NOTHING;
+
     RETURN v_player_id;
 END;
 $$;

@@ -36,7 +36,7 @@ void game_db_close (void);
  * If a handle does not exist for the thread, a new connection is established.
  * @return A pointer to the db_t handle, or NULL on connection failure.
  */
-db_t * game_db_get_handle (void);
+db_t *game_db_get_handle (void);
 
 /**
  * @brief Cleans up database state in a child process after a fork.

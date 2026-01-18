@@ -9,9 +9,9 @@
 #include "game_db.h"
 #include "repo_cmd.h"
 #include "db/repo/repo_database.h"
-#include "server_communication.h"       // (optional if you want to also emit immediately)
+#include "server_communication.h"	// (optional if you want to also emit immediately)
 #include "engine_consumer.h"
-#include "server_engine.h"      // For h_player_progress_from_event_payload
+#include "server_engine.h"	// For h_player_progress_from_event_payload
 #include "server_log.h"
 
 
@@ -37,23 +37,23 @@ csv_contains (const char *csv, const char *needle)
   while (*p)
     {
       while (*p == ' ' || *p == ',')
-        {
-          ++p;
-        }
+	{
+	  ++p;
+	}
       const char *start = p;
 
 
       while (*p && *p != ',')
-        {
-          ++p;
-        }
+	{
+	  ++p;
+	}
       size_t len = (size_t) (p - start);
 
 
       if (len == nlen && strncmp (start, needle, len) == 0)
-        {
-          return 1;
-        }
+	{
+	  return 1;
+	}
     }
   return 0;
 }
@@ -61,7 +61,7 @@ csv_contains (const char *csv, const char *needle)
 
 static int
 load_watermark (db_t *db, const char *key, long long *last_id,
-                long long *last_ts)
+		long long *last_ts)
 {
   return repo_engine_load_watermark (db, key, last_id, last_ts);
 }
@@ -69,7 +69,7 @@ load_watermark (db_t *db, const char *key, long long *last_id,
 
 static int
 save_watermark (db_t *db, const char *key, long long last_id,
-                long long last_ts)
+		long long last_ts)
 {
   return repo_engine_save_watermark (db, key, last_id, last_ts);
 }
@@ -91,7 +91,8 @@ quarantine (db_t *db, db_res_t *row, const char *err_msg)
   const char *type = db_res_col_text (row, 2, &err);
   const char *payload = db_res_col_text (row, 5, &err);
 
-  return repo_engine_quarantine (db, id, ts, type, payload, err_msg, get_now_epoch ());
+  return repo_engine_quarantine (db, id, ts, type, payload, err_msg,
+				 get_now_epoch ());
 }
 
 
@@ -111,12 +112,7 @@ quarantine (db_t *db, db_res_t *row, const char *err_msg)
 
 
 static int
-
-
 handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
-
-
-
 {
   db_error_t err;
   // Columns in ev_row: id, ts, type, payload (from BASE_SELECT)
@@ -159,7 +155,7 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   if (!payload)
     {
       LOGE ("Error parsing JSON payload for self-destruct: %s", jerr.text);
-      return 1;                 // Quarantine
+      return 1;			// Quarantine
     }
   // Get ship_id from player_id
   int ship_id = 0;
@@ -172,13 +168,14 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
   if (ship_id == 0)
     {
       LOGE ("Error: Player %d has no active ship to self-destruct.",
-            player_id);
+	    player_id);
       json_decref (payload);
-      return 1;                 // Quarantine
+      return 1;			// Quarantine
     }
   // Get ship name for the destroyed event
   char ship_name[256] = { 0 };
-  if (repo_engine_get_ship_name (db, ship_id, ship_name, sizeof(ship_name)) != 0)
+  if (repo_engine_get_ship_name (db, ship_id, ship_name, sizeof (ship_name))
+      != 0)
     {
       // (Optional: handle error)
     }
@@ -186,39 +183,39 @@ handle_ship_self_destruct_initiated (db_t *db, db_res_t *ev_row)
 
   // Perform ship destruction
   int rc = db_destroy_ship (db,
-                            player_id,
-                            ship_id);
+			    player_id,
+			    ship_id);
 
 
   if (rc != 0)
     {
       LOGE ("Error destroying ship %d for player %d: %d", ship_id, player_id,
-            rc);
+	    rc);
       json_decref (payload);
-      return 1;                 // Quarantine
+      return 1;			// Quarantine
     }
   // Log ship.destroyed event
   json_t *destroyed_payload = json_object ();
 
 
   json_object_set_new (destroyed_payload, "player_id",
-                       json_integer (player_id));
+		       json_integer (player_id));
   json_object_set_new (destroyed_payload, "ship_id", json_integer (ship_id));
   json_object_set_new (destroyed_payload, "ship_name",
-                       json_string (ship_name));
+		       json_string (ship_name));
 
 
   if (!destroyed_payload)
     {
       LOGE ("Error creating ship.destroyed payload.");
       json_decref (payload);
-      return 1;                 // Quarantine
+      return 1;			// Quarantine
     }
   db_log_engine_event (get_now_epoch (), "ship.destroyed", "player",
-                       player_id, sector_id, destroyed_payload, db);
+		       player_id, sector_id, destroyed_payload, db);
   json_decref (destroyed_payload);
   json_decref (payload);
-  return 0;                     // Success
+  return 0;			// Success
 }
 
 
@@ -236,9 +233,9 @@ engine_event_handler_player_trade_v1 (db_t *db, db_res_t *ev_row)
   if (!payload)
     {
       LOGE
-        ("engine_event_handler_player_trade_v1: Error parsing JSON payload: %s",
-        jerr.text);
-      return 1;                 // Quarantine
+	("engine_event_handler_player_trade_v1: Error parsing JSON payload: %s",
+	 jerr.text);
+      return 1;			// Quarantine
     }
   int rc = h_player_progress_from_event_payload (payload);
 
@@ -274,8 +271,8 @@ handle_event (const char *type, db_t *db, db_res_t *ev_row)
 /* --- main tick ------------------------------------------------------------- */
 int
 engine_consume_tick (db_t *db,
-                     const eng_consumer_cfg_t *cfg,
-                     eng_consumer_metrics_t *out)
+		     const eng_consumer_cfg_t *cfg,
+		     eng_consumer_metrics_t *out)
 {
   memset (out, 0, sizeof (*out));
   long long last_id = 0, last_ts = 0, max_id = 0;
@@ -297,8 +294,8 @@ engine_consume_tick (db_t *db,
   out->lag = (max_id > last_id) ? (max_id - last_id) : 0;
   int remaining = (cfg->batch_size > 0 ? cfg->batch_size : 100);
   int prio_phase = (cfg->priority_types_csv && *cfg->priority_types_csv &&
-                    out->lag >= (cfg->backlog_prio_threshold >
-                                 0 ? cfg->backlog_prio_threshold : 0));
+		    out->lag >= (cfg->backlog_prio_threshold >
+				 0 ? cfg->backlog_prio_threshold : 0));
 
   /* We may run up to two passes: priority-only, then non-priority. */
   for (int pass = 0; pass < (prio_phase ? 2 : 1); ++pass)
@@ -309,115 +306,114 @@ engine_consume_tick (db_t *db,
 
 
       if (priority_only)
-        {
-          /* Convert CSV to simple JSON array on the fly (best-effort, tiny buffer). */
-          /* Expect small list; if bigger, plug a proper builder. */
-          snprintf (prio_json,
-                    sizeof (prio_json),
-                    "[\"%s\"]",
-                    cfg->priority_types_csv);                                                   /* commas acceptable for json_each */
-          for (char *p = prio_json; *p; ++p)
-            {
-              if (*p == ',')
-                {
-                  *p = '"', memmove (p + 1, p, strlen (p) + 1), *p++ = ',';
-                }
-            }
-          /* Result is not perfect JSON for spaces; acceptable if CSV is simple. */
-        }
+	{
+	  /* Convert CSV to simple JSON array on the fly (best-effort, tiny buffer). */
+	  /* Expect small list; if bigger, plug a proper builder. */
+	  snprintf (prio_json, sizeof (prio_json), "[\"%s\"]", cfg->priority_types_csv);	/* commas acceptable for json_each */
+	  for (char *p = prio_json; *p; ++p)
+	    {
+	      if (*p == ',')
+		{
+		  *p = '"', memmove (p + 1, p, strlen (p) + 1), *p++ = ',';
+		}
+	    }
+	  /* Result is not perfect JSON for spaces; acceptable if CSV is simple. */
+	}
       while (remaining > 0)
-        {
-          db_res_t *st = NULL;
+	{
+	  db_res_t *st = NULL;
 
-          int qrc = repo_engine_fetch_events (db, last_id, priority_only ? 1 : 0, prio_json, remaining, &st);
-          if (qrc != 0)
-            {
-              return qrc;
-            }
+	  int qrc =
+	    repo_engine_fetch_events (db, last_id, priority_only ? 1 : 0,
+				      prio_json, remaining, &st);
+	  if (qrc != 0)
+	    {
+	      return qrc;
+	    }
 
-          /* Wrap one pass in a transaction so the watermark is advanced atomically per pass. */
-          db_tx_begin (db, DB_TX_IMMEDIATE, NULL);
+	  /* Wrap one pass in a transaction so the watermark is advanced atomically per pass. */
+	  db_tx_begin (db, DB_TX_IMMEDIATE, NULL);
 
-          long long batch_max_id = last_id;
-          long long batch_max_ts = last_ts;
-          int processed_this_stmt = 0;
-          db_error_t err;
-
-
-          while (db_res_step (st, &err))
-            {
-              long long ev_id = db_res_col_i64 (st, 0, &err);
-              long long ev_ts = db_res_col_i64 (st, 1, &err);
-              const char *tmp_ev_type = db_res_col_text (st, 2, &err);
-
-              char *ev_type = tmp_ev_type ? strdup (tmp_ev_type) : NULL;
+	  long long batch_max_id = last_id;
+	  long long batch_max_ts = last_ts;
+	  int processed_this_stmt = 0;
+	  db_error_t err;
 
 
-              /* Prioritisation second pass: skip priority types to avoid reprocessing. */
-              if (!priority_only && cfg->priority_types_csv &&
-                  csv_contains (cfg->priority_types_csv, ev_type))
-                {
-                  free (ev_type);
-                  continue;     /* Leave for next tick; preserves per-pass order. */
-                }
+	  while (db_res_step (st, &err))
+	    {
+	      long long ev_id = db_res_col_i64 (st, 0, &err);
+	      long long ev_ts = db_res_col_i64 (st, 1, &err);
+	      const char *tmp_ev_type = db_res_col_text (st, 2, &err);
 
-              int hrc = handle_event (ev_type, db, st);
+	      char *ev_type = tmp_ev_type ? strdup (tmp_ev_type) : NULL;
 
 
-              if (hrc != 0)
-                {
-                  /* Quarantine and continue (clear error path) */
-                  (void) quarantine (db, st,
-                                     "handler failed or unknown type");
-                  out->quarantined++;
-                  /* Advance past this poisoned event to avoid permanent block */
-                }
-              else
-                {
-                  out->processed++;
-                }
-              if (ev_id > batch_max_id)
-                {
-                  batch_max_id = ev_id;
-                }
-              if (ev_ts > batch_max_ts)
-                {
-                  batch_max_ts = ev_ts;
-                }
-              processed_this_stmt++;
-              remaining--;
-              free (ev_type);
-              if (remaining == 0)
-                {
-                  break;
-                }
-            }
-          db_res_finalize (st);
-          /* If we fetched none, end this pass */
-          if (processed_this_stmt == 0)
-            {
-              db_tx_rollback (db, NULL);
-              break;
-            }
-          /* Persist watermark AFTER the pass */
-          rc =
-            save_watermark (db, cfg->consumer_key, batch_max_id,
-                            batch_max_ts);
-          if (rc != 0)
-            {
-              db_tx_rollback (db, NULL);
-              return rc;
-            }
-          db_tx_commit (db, NULL);
-          last_id = batch_max_id;
-          last_ts = batch_max_ts;
-          out->last_event_id = last_id;
-          /* If we hit remaining==0, we leave the loop and return (bounded work). */
-          if (remaining == 0)
-            {
-              break;
-            }
-        }
+	      /* Prioritisation second pass: skip priority types to avoid reprocessing. */
+	      if (!priority_only && cfg->priority_types_csv &&
+		  csv_contains (cfg->priority_types_csv, ev_type))
+		{
+		  free (ev_type);
+		  continue;	/* Leave for next tick; preserves per-pass order. */
+		}
+
+	      int hrc = handle_event (ev_type, db, st);
+
+
+	      if (hrc != 0)
+		{
+		  /* Quarantine and continue (clear error path) */
+		  (void) quarantine (db, st,
+				     "handler failed or unknown type");
+		  out->quarantined++;
+		  /* Advance past this poisoned event to avoid permanent block */
+		}
+	      else
+		{
+		  out->processed++;
+		}
+	      if (ev_id > batch_max_id)
+		{
+		  batch_max_id = ev_id;
+		}
+	      if (ev_ts > batch_max_ts)
+		{
+		  batch_max_ts = ev_ts;
+		}
+	      processed_this_stmt++;
+	      remaining--;
+	      free (ev_type);
+	      if (remaining == 0)
+		{
+		  break;
+		}
+	    }
+	  db_res_finalize (st);
+	  /* If we fetched none, end this pass */
+	  if (processed_this_stmt == 0)
+	    {
+	      db_tx_rollback (db, NULL);
+	      break;
+	    }
+	  /* Persist watermark AFTER the pass */
+	  rc =
+	    save_watermark (db, cfg->consumer_key, batch_max_id,
+			    batch_max_ts);
+	  if (rc != 0)
+	    {
+	      db_tx_rollback (db, NULL);
+	      return rc;
+	    }
+	  db_tx_commit (db, NULL);
+	  last_id = batch_max_id;
+	  last_ts = batch_max_ts;
+	  out->last_event_id = last_id;
+	  /* If we hit remaining==0, we leave the loop and return (bounded work). */
+	  if (remaining == 0)
+	    {
+	      break;
+	    }
+	}
       /* fallthrough to next pass if any */
     }
   /* Recompute lag after work (optional) */
@@ -430,4 +426,3 @@ engine_consume_tick (db_t *db,
     (max_id > out->last_event_id) ? (max_id - out->last_event_id) : 0;
   return 0;
 }
-

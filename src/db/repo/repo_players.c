@@ -216,7 +216,7 @@ int repo_players_get_shiptype_by_name(db_t *db, const char *name, int *id, int *
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q18 */
-    const char *q18 = "SELECT id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = {1};";
+    const char *q18 = "SELECT shiptypes_id, initialholds, maxfighters, maxshields FROM shiptypes WHERE name = {1};";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_text(name) }, 1, &res, &err) && db_res_step(res, &err)) {
         *id = db_res_col_i32(res, 0, &err);
@@ -234,9 +234,9 @@ int repo_players_insert_ship(db_t *db, const char *name, int type_id, int holds,
     db_error_t err;
     int64_t new_id = 0;
     /* SQL_VERBATIM: Q19 */
-    const char *q19 = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6});";
+    const char *q19 = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
     char sql[512]; sql_build(db, q19, sql, sizeof(sql));
-    if (db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(type_id), db_bind_i32(holds), db_bind_i32(fighters), db_bind_i32(shields), db_bind_i32(sector_id) }, 6, "id", &new_id, &err)) {
+    if (db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(type_id), db_bind_i32(holds), db_bind_i32(fighters), db_bind_i32(shields), db_bind_i32(sector_id) }, 6, "ship_id", &new_id, &err)) {
         *ship_id_out = (int)new_id;
         return 0;
     }

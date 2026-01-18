@@ -25,29 +25,27 @@ typedef struct
   int sector_id;
 } ship_kill_context_t;
 
-int handle_ship_destruction (db_t *db, ship_kill_context_t *ctx);
+int handle_ship_destruction (db_t * db, ship_kill_context_t * ctx);
 
 
-int cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root);
-int cmd_ship_upgrade (client_ctx_t *ctx, json_t *root);
-int cmd_ship_repair (client_ctx_t *ctx, json_t *root);
-int cmd_ship_inspect (client_ctx_t *ctx, json_t *root);
-int cmd_ship_rename (client_ctx_t *ctx, json_t *root);
-int cmd_ship_claim (client_ctx_t *ctx, json_t *root);
-int cmd_ship_status (client_ctx_t *ctx, json_t *root);
-int cmd_ship_info_compat (client_ctx_t *ctx, json_t *root);
-int cmd_ship_self_destruct (client_ctx_t *ctx, json_t *root);
-int cmd_ship_tow (client_ctx_t *ctx, json_t *root);
-int cmd_ship_list (client_ctx_t *ctx, json_t *root);
-int cmd_ship_sell (client_ctx_t *ctx, json_t *root);
-int cmd_ship_transfer (client_ctx_t *ctx, json_t *root);
+int cmd_ship_transfer_cargo (client_ctx_t * ctx, json_t * root);
+int cmd_ship_upgrade (client_ctx_t * ctx, json_t * root);
+int cmd_ship_repair (client_ctx_t * ctx, json_t * root);
+int cmd_ship_inspect (client_ctx_t * ctx, json_t * root);
+int cmd_ship_rename (client_ctx_t * ctx, json_t * root);
+int cmd_ship_claim (client_ctx_t * ctx, json_t * root);
+int cmd_ship_status (client_ctx_t * ctx, json_t * root);
+int cmd_ship_info_compat (client_ctx_t * ctx, json_t * root);
+int cmd_ship_self_destruct (client_ctx_t * ctx, json_t * root);
+int cmd_ship_tow (client_ctx_t * ctx, json_t * root);
+int cmd_ship_list (client_ctx_t * ctx, json_t * root);
+int cmd_ship_sell (client_ctx_t * ctx, json_t * root);
+int cmd_ship_transfer (client_ctx_t * ctx, json_t * root);
 // void handle_move_pathfind (client_ctx_t *ctx, json_t *root);
-int h_get_active_ship_id (db_t *db, int player_id);
-int h_update_ship_cargo (db_t *db,
-                         int ship_id,
-                         const char *commodity,
-                         int delta,
-                         int *new_qty);
+int h_get_active_ship_id (db_t * db, int player_id);
+int h_update_ship_cargo (db_t * db,
+			 int ship_id,
+			 const char *commodity, int delta, int *new_qty);
 
 
 #endif

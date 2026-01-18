@@ -20,10 +20,10 @@ db_connection_destructor (void *handle)
 {
   if (handle)
     {
-      db_t *db = (db_t *)handle;
+      db_t *db = (db_t *) handle;
 
 
-      LOGI ("Closing DB handle %p for thread.", (void *)db);
+      LOGI ("Closing DB handle %p for thread.", (void *) db);
       db_close (db);
     }
 }
@@ -46,14 +46,14 @@ game_db_init (void)
   g_main_backend = DB_BACKEND_POSTGRES;
   if (g_cfg.pg_conn_str)
     {
-      strlcpy (g_main_conninfo, g_cfg.pg_conn_str, sizeof(g_main_conninfo));
-      LOGI (
-        "game_db_init: Caching PostgreSQL conninfo for per-thread connections.");
+      strlcpy (g_main_conninfo, g_cfg.pg_conn_str, sizeof (g_main_conninfo));
+      LOGI
+	("game_db_init: Caching PostgreSQL conninfo for per-thread connections.");
     }
   else
     {
-      LOGE (
-        "game_db_init: PostgreSQL backend enabled but no connection string is configured.");
+      LOGE
+	("game_db_init: PostgreSQL backend enabled but no connection string is configured.");
       return -1;
     }
 #endif
@@ -75,13 +75,13 @@ db_t *
 game_db_get_handle (void)
 {
   pthread_once (&g_db_key_once, make_db_key);
-  db_t *db = (db_t *)pthread_getspecific (g_db_handle_key);
+  db_t *db = (db_t *) pthread_getspecific (g_db_handle_key);
 
 
   if (!db)
     {
-      db_config_t db_cfg = {0};
-      db_error_t err = {0};
+      db_config_t db_cfg = { 0 };
+      db_error_t err = { 0 };
 
 
       db_cfg.backend = g_main_backend;
@@ -89,27 +89,25 @@ game_db_get_handle (void)
 #ifdef DB_BACKEND_PG
       db_cfg.pg_conninfo = g_main_conninfo;
       LOGI ("game_db_get_handle: Creating new PG connection for thread %lu.",
-            (unsigned long)pthread_self ());
+	    (unsigned long) pthread_self ());
 #endif
 
-      db = db_open (&db_cfg,
-                    &err);
+      db = db_open (&db_cfg, &err);
       if (!db)
-        {
-          LOGE (
-            "Failed to open new thread-local database connection (code: %d): %s",
-            err.code,
-            err.message);
-          return NULL;
-        }
+	{
+	  LOGE
+	    ("Failed to open new thread-local database connection (code: %d): %s",
+	     err.code, err.message);
+	  return NULL;
+	}
 
       if (pthread_setspecific (g_db_handle_key, db) != 0)
-        {
-          LOGE (
-            "Failed to set thread-specific database handle. Closing connection.");
-          db_close (db);
-          return NULL;
-        }
+	{
+	  LOGE
+	    ("Failed to set thread-specific database handle. Closing connection.");
+	  db_close (db);
+	  return NULL;
+	}
     }
   return db;
 }
@@ -120,7 +118,7 @@ game_db_after_fork_child (void)
 {
   LOGI ("Child process after fork: cleaning up inherited DB handle state.");
   pthread_once (&g_db_key_once, make_db_key);
-  db_t *db = (db_t *)pthread_getspecific (g_db_handle_key);
+  db_t *db = (db_t *) pthread_getspecific (g_db_handle_key);
 
 
   if (db)
@@ -132,4 +130,3 @@ game_db_after_fork_child (void)
       pthread_setspecific (g_db_handle_key, NULL);
     }
 }
-

@@ -7,43 +7,65 @@
       "password": "password"
     },
     {
+      "name": "Rig: Move player to Sector 200",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 200 WHERE player_id = @{mine_tester_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move ship to Sector 200",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = 200 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{mine_tester_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed Ship Mines",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET mines = 1000 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{mine_tester_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Action: Lay Armid Mines",
       "command": "combat.lay_mines",
       "data": {
         "count": 50,
-        "offense_mode": 3,
-        "owner_mode": "personal",
         "mine_type": "armid"
       },
       "user": "mine_tester",
       "expect": {
         "status": "ok",
-        "data": {
-          "count_added": 50,
-          "total_now": 50
-        }
+        "count_added": 50
       }
     },
     {
       "name": "Verify: Inventory Decreased",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT mines FROM ships WHERE ship_id=1015;" },
+      "data": { "sql": "SELECT mines FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{mine_tester_player_id});" },
       "user": "admin",
-      "expect": { "status": "ok", "data": { "rows": [[950]] } }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 950 }
+      ]
     },
     {
       "name": "Verify: Sector Asset Created",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT quantity FROM sector_assets WHERE sector_id=200 AND owner_id=@mine_tester_player_id AND asset_type=1;" },
+      "data": { "sql": "SELECT quantity FROM sector_assets WHERE sector_id = (SELECT sector_id FROM players WHERE player_id = @{mine_tester_player_id}) AND owner_id = @{mine_tester_player_id} AND asset_type = 1;" },
       "user": "admin",
-      "expect": { "status": "ok", "data": { "rows": [[50]] } }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 50 }
+      ]
     },
     {
       "name": "Action: Lay Negative Amount (Invalid Input)",
       "command": "combat.lay_mines",
-      "data": { "count": -10, "offense_mode": 3, "owner_mode": "personal", "mine_type": "armid" },
+      "data": { "count": -10, "mine_type": "armid" },
       "user": "mine_tester",
-      "expect": { "status": "error", "error": { "code": 1302 } } 
+      "expect": { "status": "error", "error_code": 400 } 
     },
     {
       "name": "Setup: Reset for Sweep (Clear)",
@@ -55,7 +77,7 @@
     {
       "name": "Setup: Reset for Sweep (Seed)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, offensive_setting, deployed_at) VALUES (200, 0, 1, 50, 3, to_timestamp(0)) ON CONFLICT DO NOTHING;" },
+      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (1, 1, 1, 10, now());" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

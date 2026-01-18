@@ -58,7 +58,7 @@ db_insert_commodity_order (db_t *db,
     "INSERT INTO commodity_orders ("
     "actor_type, actor_id, location_type, location_id, commodity_id, side, "
     "quantity, filled_quantity, price, ts, expires_at) "
-    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, %s, %s);";
+    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, %s, %s)";
 
   char sql_with_conv[512];
 
@@ -531,7 +531,7 @@ db_insert_commodity_trade (db_t *db,
     "buy_order_id, sell_order_id, quantity, price, ts, "
     "buyer_actor_type, buyer_actor_id, seller_actor_type, seller_actor_id, "
     "settlement_tx_buy, settlement_tx_sell) "
-    "VALUES ({1}, {2}, {3}, {4}, %s, {6}, {7}, {8}, {9}, {10}, {11});";
+    "VALUES ({1}, {2}, {3}, {4}, %s, {6}, {7}, {8}, {9}, {10}, {11})";
 
   char sql_with_conv[512];
   int n = snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, now_expr);
@@ -544,7 +544,7 @@ db_insert_commodity_trade (db_t *db,
 
   
   int64_t new_id = -1;
-  if (!db_exec_insert_id(db, sql, params, 10, "id", &new_id, &err))
+  if (!db_exec_insert_id(db, sql, params, 11, "id", &new_id, &err))
     {
       LOGE("db_insert_commodity_trade: insert failed: %s (code=%d backend=%d)",
            err.message, err.code, err.backend_code);

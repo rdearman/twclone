@@ -9,7 +9,7 @@
 /* local includes */
 #include "db/repo/repo_database.h"
 #include "server_s2s.h"
-#include "server_envelope.h"    // send_enveloped_ok/error/refused
+#include "server_envelope.h"	// send_enveloped_ok/error/refused
 #include "errors.h"
 #include "config.h"
 #include "db/repo/repo_database.h"
@@ -17,7 +17,7 @@
 #include "s2s_transport.h"
 #include "schemas.h"
 #include "server_log.h"
-#include "game_db.h" // Include game_db.h
+#include "game_db.h"		// Include game_db.h
 
 
 static int
@@ -29,20 +29,20 @@ handle_command_push (s2s_conn_t *c, json_t *env)
   json_t *cmd_payload = json_object_get (pl, "payload");
   /* now it's safe to log */
   LOGE ("[server] handle_command_push: %s %s\n",
-        cmd_type ? cmd_type : "(null)", idem_key ? idem_key : "(null)");
+	cmd_type ? cmd_type : "(null)", idem_key ? idem_key : "(null)");
   int due_at = 0;
   int cmd_id = 0;
   int duplicate = 0;
-  db_t *db = game_db_get_handle (); // Get global DB handle
+  db_t *db = game_db_get_handle ();	// Get global DB handle
 
   int rcdb = db_commands_accept (db, cmd_type, idem_key, cmd_payload,
-                                 &cmd_id, &duplicate, &due_at);
+				 &cmd_id, &duplicate, &due_at);
 
 
   if (rcdb != 0)
     {
       json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
-                                    "internal_error", "db error", NULL);
+				    "internal_error", "db error", NULL);
 
 
       s2s_send_env (c, err, 2000);
@@ -81,7 +81,7 @@ handle_broadcast_sweep (s2s_conn_t *c, json_t *env)
   json_t *ackpl = json_object ();
   json_object_set_new (ackpl, "ok", json_boolean (1));
   json_object_set_new (ackpl, "since_ts",
-                       json_integer ((json_int_t) since_ts));
+		       json_integer ((json_int_t) since_ts));
   json_t *ack = s2s_make_ack ("server", "engine", s2s_env_id (env), ackpl);
 
 
@@ -101,7 +101,7 @@ handle_health_check (s2s_conn_t *c, json_t *env)
   json_t *pl = json_object ();
   json_object_set_new (pl, "role", json_string ("server"));
   json_object_set_new (pl, "version", json_string ("0.1.0"));
-  json_object_set_new (pl, "uptime_s", json_integer ((json_int_t) now));        /* TODO: subtract start ts */
+  json_object_set_new (pl, "uptime_s", json_integer ((json_int_t) now));	/* TODO: subtract start ts */
   json_t *ack = s2s_make_ack ("server", "engine", s2s_env_id (env), pl);
 
 
@@ -131,8 +131,8 @@ server_s2s_dispatch (s2s_conn_t *c, json_t *env)
   if (schema_validate_payload (type, payload, &why) != 0)
     {
       json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
-                                    "bad_request",
-                                    (why ? why : "invalid payload"), NULL);
+				    "bad_request",
+				    (why ? why : "invalid payload"), NULL);
 
 
       free (why);
@@ -153,7 +153,7 @@ server_s2s_dispatch (s2s_conn_t *c, json_t *env)
       return handle_command_push (c, env);
     }
   json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
-                                "unsupported_type", type, NULL);
+				"unsupported_type", type, NULL);
 
 
   s2s_send_env (c, err, 2000);
@@ -178,28 +178,28 @@ s2s_control_thread_fn (void *arg)
   while (*(ctx->running_flag))
     {
       json_t *env = NULL;
-      int rc = s2s_recv_env (c, &env, 1000);    /* 1s poll */
+      int rc = s2s_recv_env (c, &env, 1000);	/* 1s poll */
 
 
       if (rc == 0 && env)
-        {
-          server_s2s_dispatch (c, env);
-          json_decref (env);
-          continue;
-        }
+	{
+	  server_s2s_dispatch (c, env);
+	  json_decref (env);
+	  continue;
+	}
       if (rc == S2S_E_CLOSED)
-        {
-          break;                /* peer closed */
-        }
+	{
+	  break;		/* peer closed */
+	}
       if (rc == S2S_E_TIMEOUT)
-        {
-          continue;             /* idle */
-        }
+	{
+	  continue;		/* idle */
+	}
       if (rc == S2S_E_AUTH_REQUIRED || rc == S2S_E_AUTH_BAD
-          || rc == S2S_E_TOOLARGE)
-        {
-          break;                /* hard errors: exit thread */
-        }
+	  || rc == S2S_E_TOOLARGE)
+	{
+	  break;		/* hard errors: exit thread */
+	}
       /* Other I/O errors: log and continue/retry */
     }
   free (ctx);
@@ -209,7 +209,7 @@ s2s_control_thread_fn (void *arg)
 
 int
 server_s2s_start (s2s_conn_t *conn, pthread_t *out_thr,
-                  volatile sig_atomic_t *running_flag)
+		  volatile sig_atomic_t *running_flag)
 {
   if (!conn || !out_thr || !running_flag)
     {
@@ -263,24 +263,24 @@ require_s2s (json_t *root, const char **why_out)
 
 
       if (json_is_string (jtok))
-        {
-          tok = json_string_value (jtok);
-        }
+	{
+	  tok = json_string_value (jtok);
+	}
       json_t *jkey = json_object_get (meta, "api_key");
 
 
       if (json_is_string (jkey))
-        {
-          api_key = json_string_value (jkey);
-        }
+	{
+	  api_key = json_string_value (jkey);
+	}
     }
   // TODO: compare tok/api_key to configured secret.
   if (!tok && !api_key)
     {
       if (why_out)
-        {
-          *why_out = "Missing S2S credentials";
-        }
+	{
+	  *why_out = "Missing S2S credentials";
+	}
       return 0;
     }
   return 1;
@@ -303,9 +303,9 @@ cmd_s2s_planet_genesis (client_ctx_t *ctx, json_t *root)
 {
   /* Original: return niy (ctx, root, "s2s.planet.genesis"); */
   send_response_refused_steal (ctx,
-                               root,
-                               ERR_CAPABILITY_DISABLED,
-                               "S2S command disabled for v1.0", NULL);
+			       root,
+			       ERR_CAPABILITY_DISABLED,
+			       "S2S command disabled for v1.0", NULL);
   return 0;
 
   const char *why = NULL;
@@ -314,9 +314,9 @@ cmd_s2s_planet_genesis (client_ctx_t *ctx, json_t *root)
   if (!require_s2s (root, &why))
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   why ? why : "Unauthorized", NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   why ? why : "Unauthorized", NULL);
       return 0;
     }
   // TODO: parse sector_id, seed, owner, call DB, broadcast
@@ -330,9 +330,9 @@ cmd_s2s_planet_transfer (client_ctx_t *ctx, json_t *root)
 {
   /* Original: return niy (ctx, root, "s2s.planet.transfer"); */
   send_response_refused_steal (ctx,
-                               root,
-                               ERR_CAPABILITY_DISABLED,
-                               "S2S command disabled for v1.0", NULL);
+			       root,
+			       ERR_CAPABILITY_DISABLED,
+			       "S2S command disabled for v1.0", NULL);
   return 0;
 
   const char *why = NULL;
@@ -341,9 +341,9 @@ cmd_s2s_planet_transfer (client_ctx_t *ctx, json_t *root)
   if (!require_s2s (root, &why))
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   why ? why : "Unauthorized", NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   why ? why : "Unauthorized", NULL);
       return 0;
     }
   // TODO: parse planet_id, from_server, to_server, handoff metadata
@@ -357,9 +357,9 @@ cmd_s2s_player_migrate (client_ctx_t *ctx, json_t *root)
 {
   /* Original: return niy (ctx, root, "s2s.player.migrate"); */
   send_response_refused_steal (ctx,
-                               root,
-                               ERR_CAPABILITY_DISABLED,
-                               "S2S command disabled for v1.0", NULL);
+			       root,
+			       ERR_CAPABILITY_DISABLED,
+			       "S2S command disabled for v1.0", NULL);
   return 0;
 
   const char *why = NULL;
@@ -368,9 +368,9 @@ cmd_s2s_player_migrate (client_ctx_t *ctx, json_t *root)
   if (!require_s2s (root, &why))
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   why ? why : "Unauthorized", NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   why ? why : "Unauthorized", NULL);
       return 0;
     }
   // TODO: parse player_id, snapshot blob, import/export
@@ -384,9 +384,9 @@ cmd_s2s_port_restock (client_ctx_t *ctx, json_t *root)
 {
   /* Original: return niy (ctx, root, "s2s.port.restock"); */
   send_response_refused_steal (ctx,
-                               root,
-                               ERR_CAPABILITY_DISABLED,
-                               "S2S command disabled for v1.0", NULL);
+			       root,
+			       ERR_CAPABILITY_DISABLED,
+			       "S2S command disabled for v1.0", NULL);
   return 0;
 
   const char *why = NULL;
@@ -395,9 +395,9 @@ cmd_s2s_port_restock (client_ctx_t *ctx, json_t *root)
   if (!require_s2s (root, &why))
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   why ? why : "Unauthorized", NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   why ? why : "Unauthorized", NULL);
       return 0;
     }
   // TODO: parse sector_id/port_id, quantities, pricing policy
@@ -411,9 +411,9 @@ cmd_s2s_event_relay (client_ctx_t *ctx, json_t *root)
 {
   /* Original: return niy (ctx, root, "s2s.event.relay"); */
   send_response_refused_steal (ctx,
-                               root,
-                               ERR_CAPABILITY_DISABLED,
-                               "S2S command disabled for v1.0", NULL);
+			       root,
+			       ERR_CAPABILITY_DISABLED,
+			       "S2S command disabled for v1.0", NULL);
   return 0;
 
   const char *why = NULL;
@@ -422,9 +422,9 @@ cmd_s2s_event_relay (client_ctx_t *ctx, json_t *root)
   if (!require_s2s (root, &why))
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   why ? why : "Unauthorized", NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   why ? why : "Unauthorized", NULL);
       return 0;
     }
   // TODO: parse event type/payload, fanout to connected players/servers
@@ -440,9 +440,9 @@ cmd_s2s_replication_heartbeat (client_ctx_t *ctx, json_t *root)
   if (!require_s2s (root, &why))
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   why ? why : "Unauthorized", NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   why ? why : "Unauthorized", NULL);
       return 0;
     }
   // TODO: update replication status; reply with ack + version/lsn
@@ -455,4 +455,3 @@ cmd_s2s_replication_heartbeat (client_ctx_t *ctx, json_t *root)
   send_response_ok_take (ctx, root, "s2s.heartbeat", &payload);
   return 0;
 }
-

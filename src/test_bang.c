@@ -40,9 +40,7 @@ update_config_int (db_t *db, const char *key, int value)
 
   if (!db_exec (db, sql, params, 2, &err))
     {
-      fprintf (stderr,
-               "Failed to update config %s: %s\n",
-               key, err.message);
+      fprintf (stderr, "Failed to update config %s: %s\n", key, err.message);
       return -1;
     }
   return 0;
@@ -61,15 +59,15 @@ get_config_int (db_t *db, const char *key, int default_val)
   if (db_query (db, sql, params, 1, &res, &err))
     {
       if (db_res_step (res, &err))
-        {
-          const char *val = db_res_col_text (res, 0, &err);
+	{
+	  const char *val = db_res_col_text (res, 0, &err);
 
 
-          if (val)
-            {
-              result = atoi (val);
-            }
-        }
+	  if (val)
+	    {
+	      result = atoi (val);
+	    }
+	}
       db_res_finalize (res);
     }
   return result;
@@ -87,8 +85,7 @@ print_usage (const char *progname)
   printf
     ("  -r, --port-ratio <%%>   Percentage of sectors that have ports (0-100)\n");
   printf
-  (
-    "  -R, --planet-ratio <%%> Percentage of sectors that have planets (0-100+)\n");
+    ("  -R, --planet-ratio <%%> Percentage of sectors that have planets (0-100+)\n");
   printf ("  -c, --credits <N>      Starting credits for new players\n");
   printf ("  -f, --fighters <N>     Starting fighters for new players\n");
   printf ("  -H, --holds <N>        Starting cargo holds for new players\n");
@@ -135,61 +132,61 @@ main (int argc, char *argv[])
 
 
   while ((opt = getopt_long (argc,
-                             argv,
-                             "s:d:r:R:c:f:H:t:h",
-                             long_options, &option_index)) != -1)
+			     argv,
+			     "s:d:r:R:c:f:H:t:h",
+			     long_options, &option_index)) != -1)
     {
       switch (opt)
-        {
-          case 's':
-            sectors = atoi (optarg);
-            if (sectors < 10)
-              {
-                sectors = 10;   /* Minimum sanity check */
-              }
-            break;
-          case 'd':
-            density = atoi (optarg);
-            break;
-          case 'r':
-            port_ratio = atoi (optarg);
-            if (port_ratio < 0)
-              {
-                port_ratio = 0;
-              }
-            if (port_ratio > 100)
-              {
-                port_ratio = 100;
-              }
-            break;
-          case 'R':
-            planet_ratio = atoi (optarg);
-            if (planet_ratio < 0)
-              {
-                planet_ratio = 0;
-              }
-            break;
-          case 'c':
-            credits = atoi (optarg);
-            break;
-          case 'f':
-            fighters = atoi (optarg);
-            break;
-          case 'H':
-            holds = atoi (optarg);
-            break;
-          case 't':
-            turns = atoi (optarg);
-            break;
-          case 'h':
-            print_usage (argv[0]);
-            game_db_close ();
-            return 0;
-          default:
-            print_usage (argv[0]);
-            game_db_close ();
-            return 1;
-        }
+	{
+	case 's':
+	  sectors = atoi (optarg);
+	  if (sectors < 10)
+	    {
+	      sectors = 10;	/* Minimum sanity check */
+	    }
+	  break;
+	case 'd':
+	  density = atoi (optarg);
+	  break;
+	case 'r':
+	  port_ratio = atoi (optarg);
+	  if (port_ratio < 0)
+	    {
+	      port_ratio = 0;
+	    }
+	  if (port_ratio > 100)
+	    {
+	      port_ratio = 100;
+	    }
+	  break;
+	case 'R':
+	  planet_ratio = atoi (optarg);
+	  if (planet_ratio < 0)
+	    {
+	      planet_ratio = 0;
+	    }
+	  break;
+	case 'c':
+	  credits = atoi (optarg);
+	  break;
+	case 'f':
+	  fighters = atoi (optarg);
+	  break;
+	case 'H':
+	  holds = atoi (optarg);
+	  break;
+	case 't':
+	  turns = atoi (optarg);
+	  break;
+	case 'h':
+	  print_usage (argv[0]);
+	  game_db_close ();
+	  return 0;
+	default:
+	  print_usage (argv[0]);
+	  game_db_close ();
+	  return 1;
+	}
     }
 
   /* clear tables before bigbang if we are re-running?
@@ -208,4 +205,3 @@ main (int argc, char *argv[])
   game_db_close ();
   return 0;
 }
-

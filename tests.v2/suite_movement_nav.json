@@ -11,6 +11,33 @@
       "password": "password"
     },
     {
+      "name": "Rig: Create Warp Links",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 1646), (1646, 1) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position nav_user player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'nav_user';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position nav_user ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'nav_user');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Sector Info",
       "command": "sector.info",
       "user": "nav_user",
@@ -94,7 +121,7 @@
       "command": "move.transwarp",
       "data": { "sector_id": 2 },
       "user": "nav_user",
-      "expect": { "error_code": 400 }
+      "expect": { "error_code": 1458 }
     }
   ]
 }

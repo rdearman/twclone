@@ -1,0 +1,53 @@
+{
+  "test_suite_name": "Sector Search Command",
+  "description": "Tests the sector.search command",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "search_user",
+      "password": "password"
+    },
+    {
+      "name": "Test sector.search with empty query and default params",
+      "user": "search_user",
+      "command": "sector.search",
+      "data": { "q": "" },
+      "expect": { "status": "ok", "type": "sector.search_results_v1" },
+      "asserts": [
+        { "path": "data.items", "op": "exists" },
+        { "path": "data.items", "op": "is_array" }
+      ]
+    },
+    {
+      "name": "Test sector.search with type='sector'",
+      "user": "search_user",
+      "command": "sector.search",
+      "data": { "q": "", "type": "sector", "limit": 5 },
+      "expect": { "status": "ok", "type": "sector.search_results_v1" },
+      "asserts": [
+        { "path": "data.items", "op": "len_gt", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test sector.search with type='port'",
+      "user": "search_user",
+      "command": "sector.search",
+      "data": { "q": "", "type": "port", "limit": 5 },
+      "expect": { "status": "ok", "type": "sector.search_results_v1" },
+      "asserts": [
+        { "path": "data.items", "op": "len_gt", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test sector.search with specific query",
+      "user": "search_user",
+      "command": "sector.search",
+      "data": { "q": "Sol", "type": "sector" },
+      "expect": { "status": "ok", "type": "sector.search_results_v1" },
+      "asserts": [
+        { "path": "data.items[0].name", "op": "==", "value": "Sol" }
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@
   "tests": [
     {
       "name": "Server Running - Check Status",
-      "command": "system.status",
+      "command": "session.hello",
       "expect": { "status": "ok" }
     },
     {

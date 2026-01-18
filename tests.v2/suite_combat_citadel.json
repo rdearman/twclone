@@ -8,29 +8,55 @@
       "password": "password"
     },
     {
-      "name": "Rig: Land planet_gov on Planet 700",
+      "name": "Rig: Find Target Planet",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT planet_id, sector_id FROM planets WHERE planet_id > 1 LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "target_planet_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Reset Citadel",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM planets WHERE planet_id = 700), lastplanet = 700 WHERE name = 'planet_gov' RETURNING sector_id;"
+        "sql": "DELETE FROM citadels WHERE planet_id = @{target_planet_id};"
       },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Set Ship on Planet",
+      "name": "Rig: Reset Planet Level",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET onplanet = 700, sector_id = (SELECT sector_id FROM planets WHERE planet_id = 700) WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'planet_gov') RETURNING onplanet;"
+        "sql": "UPDATE planets SET citadel_level = 0 WHERE planet_id = @{target_planet_id};"
       },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Give Resources for Citadel",
+      "name": "Rig: Move planet_gov to Planet Sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE planets SET colonist = 1000, ore_on_hand = 1000, organics_on_hand = 1000, equipment_on_hand = 1000 WHERE planet_id = 700 RETURNING planet_id;"
+        "sql": "UPDATE players SET sector_id = @{target_sector_id}, lastplanet = @{target_planet_id}, credits = 100000 WHERE name = 'planet_gov';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Land ship on Planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET onplanet = @{target_planet_id}, sector_id = @{target_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'planet_gov');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Claim Planet Ownership",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE planets SET owner_id = @{planet_gov_player_id}, owner_type = 'player', colonist = 50000000, ore_on_hand = 10000, organics_on_hand = 10000, equipment_on_hand = 10000 WHERE planet_id = @{target_planet_id};"
       },
       "expect": { "status": "ok" }
     },
@@ -38,6 +64,24 @@
       "name": "Positive: Citadel Build",
       "command": "citadel.build",
       "user": "planet_gov",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Force Finish Build - Status",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE citadels SET level = 1, construction_status = 'idle', target_level = 0 WHERE planet_id = @{target_planet_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Force Finish Build - Level",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE planets SET citadel_level = 1 WHERE planet_id = @{target_planet_id};"
+      },
       "expect": { "status": "ok" }
     },
     {

@@ -4703,8 +4703,8 @@ CREATE TABLE public.mail (
     body text NOT NULL,
     sent_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     read_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    archived timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    deleted timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    archived smallint DEFAULT 0 NOT NULL,
+    deleted smallint DEFAULT 0 NOT NULL,
     idempotency_key text
 );
 

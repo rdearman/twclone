@@ -1,0 +1,28 @@
+{
+  "test_suite_name": "Sector Scan Commands",
+  "description": "Tests the sector.scan command",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "scan_user",
+      "password": "password"
+    },
+    {
+      "name": "Test sector.scan command",
+      "user": "scan_user",
+      "command": "sector.scan",
+      "expect": { "status": "ok", "type": "sector.scan" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "exists" },
+        { "path": "data.name", "op": "exists" },
+        { "path": "data.adjacent_sectors", "op": "exists" },
+        { "path": "data.ships_present", "op": "exists" },
+        { "path": "data.ports", "op": "exists" },
+        { "path": "data.celestial_objects", "op": "exists" },
+        { "path": "data.counts", "op": "exists" },
+        { "path": "data.server_tick", "op": "exists" }
+      ]
+    }
+  ]
+}

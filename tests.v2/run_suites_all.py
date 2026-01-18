@@ -35,6 +35,10 @@ def run_all():
         sys.exit(1)
     # --------------------
 
+    # PAUSE FOR SERVER RESTART
+    input("\n>>> IMPORTANT: Database rigged. Please restart the game server now. Press Enter to continue tests...")
+    # --------------------
+
     runner = JsonSuiteRunner(args.host, args.port, macros_path=os.path.join(base_dir, "macros.json"))
     
     # Find all .json suites relative to this script

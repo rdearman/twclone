@@ -8,6 +8,24 @@
       "password": "password"
     },
     {
+      "name": "Rig: Position mover_transwarp player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'mover_transwarp';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position mover_transwarp ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1, has_transwarp = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'mover_transwarp');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Positive: Transwarp to Sector",
       "command": "move.transwarp",
       "data": { "to_sector_id": 10 },

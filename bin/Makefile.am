@@ -7,13 +7,14 @@
 # 1. Define Sanitizer Flags
 SANITIZE_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g
 
-# 2. Add the PostgreSQL include path explicitly
+# 2. Add the PostgreSQL and MySQL include paths explicitly
 # Replace /usr/include/postgresql with the result of 'pg_config --includedir' if different
 PG_INC = -I/usr/include/postgresql
+MYSQL_INC = -I/usr/include/mysql # Common MySQL include path
 
 # 3. Update AM_CFLAGS
-# added $(PG_INC) here
-AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+# added $(PG_INC) and $(MYSQL_INC) here
+AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) $(MYSQL_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
@@ -33,6 +34,7 @@ bigbang_SOURCES = \
         ../src/db/db_api.c \
         ../src/db/sql_driver.c \
         ../src/db/pg/db_pg.c \
+        ../src/db/mysql/db_mysql.c \
         ../src/common.c \
         ../src/server_log.c
 bigbang_LDFLAGS = -ljansson -lpq
@@ -45,6 +47,7 @@ server_SOURCES = \
 	../src/db/db_api.c \
 	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
+	../src/db/mysql/db_mysql.c \
 	../src/game_db.c \
 	../src/db/repo/repo_cmd.c \
 	../src/db/repo/repo_cmds.c \

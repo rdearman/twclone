@@ -17,8 +17,35 @@
       "password": "password123"
     },
     {
+      "name": "Rig: Create Warp Links",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 2), (2, 1) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position toll_victim player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'toll_victim';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position toll_victim ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'toll_victim');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Victim Warps to Toll Sector (Should Auto-Pay)",
-      "command": "ship.warp",
+      "command": "move.warp",
       "data": { "sector_id": 2 },
       "user": "toll_victim",
       "expect": { "status": "ok" },
@@ -29,21 +56,21 @@
     {
       "name": "Verify Toll Was Collected",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@toll_victim_player_id LIMIT 1;" },
+      "data": { "sql": "SELECT credits FROM players WHERE name = 'toll_victim';" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.result[0].balance", "op": "<", "value": 100000 }
+        { "path": "data.rows.0.0", "op": "<", "value": 100000 }
       ]
     },
     {
       "name": "Verify Toll Receiver Got Credits",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@toll_collector_player_id LIMIT 1;" },
+      "data": { "sql": "SELECT credits FROM players WHERE name = 'toll_collector';" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.result[0].balance", "op": ">", "value": 1000000 }
+        { "path": "data.rows.0.0", "op": ">", "value": 1000000 }
       ]
     }
   ]

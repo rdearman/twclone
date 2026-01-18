@@ -11,7 +11,7 @@
       "command": "auth.login",
       "data": { "username": "chat_test_user1", "passwd": "password" },
       "user": "chat_test_user1",
-      "save": { "session": "data.session" }
+      "save": { "session": "data.session_token", "chat_user1_player_id": "data.player_id" }
     },
     {
       "name": "Setup: Register chat user 2",
@@ -24,7 +24,7 @@
       "command": "auth.login",
       "data": { "username": "chat_test_user2", "passwd": "password" },
       "user": "chat_test_user2",
-      "save": { "session": "data.session" }
+      "save": { "session": "data.session_token", "chat_user2_player_id": "data.player_id" }
     },
     {
       "name": "chat.send - Send private message",

@@ -8,81 +8,117 @@
       "password": "password"
     },
     {
+      "name": "Setup: Grant Genesis Torpedoes",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET genesis = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{trader_player_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "planet.create - Negative (FedSpace)",
+      "command": "planet.create",
+      "data": { "sector_id": 1, "name": "IllegalWorld", "owner_entity_type": "player" },
+      "user": "trader_player_1",
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
       "name": "planet.create - Positive",
       "command": "planet.create",
-      "data": { "sector_id": 1, "name": "NewWorld", "owner_entity_type": "player" },
+      "data": { "sector_id": 11, "name": "NewWorld", "owner_entity_type": "player" },
       "user": "trader_player_1",
+      "expect": { "status": "ok" },
+      "save": { "test_planet_id": "data.planet_id" }
+    },
+    {
+      "name": "Rig: Seed Planet Stock",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', @{test_planet_id}, 'ORE', 100);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed Citadel",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id) VALUES (@{test_planet_id}, 1, 500, @{trader_player_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Update Planet Citadel Level",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE planets SET citadel_level = 1 WHERE planet_id = @{test_planet_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.create - Negative (No Auth)",
       "command": "planet.create",
-      "data": { "sector_id": 1, "name": "NewWorld", "owner_entity_type": "player" },
+      "data": { "sector_id": 11, "name": "NewWorld", "owner_entity_type": "player" },
       "expect": { "status": "error", "error_code": 401 }
     },
     {
       "name": "planet.market.buy_order - Positive",
       "command": "planet.market.buy_order",
-      "data": { "planet_id": 1, "commodity": "ORE", "quantity": 10 },
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity_total": 10, "max_price": 100 },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.market.buy_order - Negative (No Auth)",
       "command": "planet.market.buy_order",
-      "data": { "planet_id": 1, "commodity": "ORE", "quantity": 10 },
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity_total": 10, "max_price": 100 },
       "expect": { "status": "error", "error_code": 401 }
     },
     {
       "name": "planet.market.sell - Positive",
       "command": "planet.market.sell",
-      "data": { "planet_id": 1, "commodity": "ORE", "quantity": 10 },
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 10 },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.market.sell - Negative (No Auth)",
       "command": "planet.market.sell",
-      "data": { "planet_id": 1, "commodity": "ORE", "quantity": 10 },
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 10 },
       "expect": { "status": "error", "error_code": 401 }
     },
     {
       "name": "planet.rename - Positive",
       "command": "planet.rename",
-      "data": { "planet_id": 1, "name": "RenamedWorld" },
+      "data": { "planet_id": "@{test_planet_id}", "new_name": "RenamedWorld" },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.rename - Negative (No Auth)",
       "command": "planet.rename",
-      "data": { "planet_id": 1, "name": "RenamedWorld" },
-      "expect": { "status": "error", "error_code": 401 }
-    },
-    {
-      "name": "planet.transfer_ownership - Positive",
-      "command": "planet.transfer_ownership",
-      "data": { "planet_id": 1, "target_id": 2, "target_type": "player" },
-      "user": "trader_player_1",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "planet.transfer_ownership - Negative (No Auth)",
-      "command": "planet.transfer_ownership",
-      "data": { "planet_id": 1, "target_id": 2, "target_type": "player" },
+      "data": { "planet_id": "@{test_planet_id}", "new_name": "RenamedWorld" },
       "expect": { "status": "error", "error_code": 401 }
     },
     {
       "name": "planet.withdraw - Positive",
       "command": "planet.withdraw",
-      "data": { "planet_id": 1, "amount": 100 },
+      "data": { "planet_id": "@{test_planet_id}", "amount": 100 },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.withdraw - Negative (No Auth)",
       "command": "planet.withdraw",
-      "data": { "planet_id": 1, "amount": 100 },
+      "data": { "planet_id": "@{test_planet_id}", "amount": 100 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "planet.transfer_ownership - Positive",
+      "command": "planet.transfer_ownership",
+      "data": { "planet_id": "@{test_planet_id}", "target_id": 2, "target_type": "player" },
+      "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "planet.transfer_ownership - Negative (No Auth)",
+      "command": "planet.transfer_ownership",
+      "data": { "planet_id": "@{test_planet_id}", "target_id": 2, "target_type": "player" },
       "expect": { "status": "error", "error_code": 401 }
     }
   ]

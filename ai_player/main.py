@@ -198,7 +198,15 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     filtered_state["adjacent_sectors_info"] = []
     filtered_state["has_port_in_current_sector"] = False
     filtered_state["current_port_commodities"] = []
-    filtered_state["valid_commodity_names"] = ["ORE", "ORG", "EQU", "COLONISTS"] # Explicitly list valid commodities
+    
+    # Dynamically set valid_commodity_names based on alignment
+    default_commodities = ["ORE", "ORG", "EQU", "COLONISTS"]
+    player_alignment = filtered_state["player_info"].get("alignment", 0) if filtered_state.get("player_info") else 0
+
+    if player_alignment < -500: # Assuming negative alignment makes them "evil"
+        filtered_state["valid_commodity_names"] = default_commodities + ["SLAVES", "WEAPONS", "DRUGS"]
+    else:
+        filtered_state["valid_commodity_names"] = default_commodities
 
     # Use StateManager helper for valid goto sectors (handles blacklist)
     valid_gotos = state_manager.get_valid_goto_sectors()
@@ -1270,7 +1278,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
         # Diagnostic log for trade results
         if planner and command_name in ("trade.buy", "trade.sell"):
-             planner.handle_trade_response(command_name, response)
+             planner.handle_trade_response(sent_command, response) # Pass the full sent_command dict
 
         if request_id:
             state_manager.remove_pending_command(request_id)

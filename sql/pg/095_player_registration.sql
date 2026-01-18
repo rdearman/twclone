@@ -12,7 +12,7 @@ BEGIN
             players
         WHERE
             name = 'System') THEN
-    v_player_id := register_player ('System', 'BOT', 'Used Scout Marauder', TRUE);
+    v_player_id := register_player ('System', 'BOT', 'Used Scout Marauder', FALSE, 1, 1);
 END IF;
 END
 $$;
@@ -28,7 +28,7 @@ BEGIN
             players
         WHERE
             name = 'Federation Administrator') THEN
-    v_player_id := register_player ('Federation Administrator', 'BOT', 'Used Scout Marauder', TRUE);
+    v_player_id := register_player ('Federation Administrator', 'BOT', 'Used Scout Marauder', FALSE, 1, 1);
 END IF;
 END
 $$;
@@ -45,7 +45,7 @@ BEGIN
             players
         WHERE
             name = 'newguy') THEN
-    v_player_id := register_player ('newguy', 'pass123', 'Bit Banger', FALSE);
+    v_player_id := register_player ('newguy', 'pass123', 'Bit Banger', FALSE, 1, 2);
 END IF;
 END
 $$;
@@ -62,7 +62,7 @@ BEGIN
             players
         WHERE
             name = 'ai_qa_bot') THEN
-    v_player_id := register_player ('ai_qa_bot', 'quality', 'Used Scout Marauder', TRUE);
+    v_player_id := register_player ('ai_qa_bot', 'quality', 'Used Scout Marauder', TRUE, 1, 3);
 END IF;
 END
 $$;

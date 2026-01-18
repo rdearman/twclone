@@ -60,16 +60,16 @@ class StateManager:
                     self.state["pending_schema_requests"] = {} # NEW: Clear pending schema requests on load
                     self.state["recent_sectors"] = [] # NEW: Clear recent sectors on load
                     self.state["pending_commands"] = {} # NEW: Clear pending commands on load
-                    self.state["port_trade_blacklist"] = [] # NEW: Clear port blacklist on load
-                    self.state["warp_blacklist"] = [] # NEW: Clear warp blacklist on load
+                    # self.state["port_trade_blacklist"] = [] # NEW: Clear port blacklist on load -- KEEP THIS TO AVOID BAD PORTS PERSISTING
+                    # self.state["warp_blacklist"] = [] # NEW: Clear warp blacklist on load -- KEEP THIS TO AVOID BAD WARPS PERSISTING
                     self.state["current_path"] = [] # NEW: Clear current path on load
                     self.state["last_action_result"] = None # NEW: Clear feedback on load
                     
                     # --- ADD THESE LINES TO CLEAR CACHES & FORCE BOOTSTRAP ---
                     logger.warning("Clearing cached world data to force re-exploration.")
-                    self.state["sector_data"] = {}
-                    self.state["port_info_by_sector"] = {}
-                    self.state["price_cache"] = {}
+                    # self.state["sector_data"] = {} -- KEEP THIS, PART OF UNIVERSE_MAP
+                    # self.state["port_info_by_sector"] = {} -- KEEP THIS, PART OF MARKET KNOWLEDGE
+                    # self.state["price_cache"] = {} -- KEEP THIS, PART OF MARKET KNOWLEDGE
                     
                     # Force re-fetch of player state
                     self.state["player_info"] = None
@@ -531,6 +531,21 @@ class StateManager:
             self.state["warp_blacklist"].append(sector_id)
             logger.info(f"Added sector {sector_id} to warp blacklist.")
             self.save_state()
+
+    def record_trade_failure(self, port_id, command_name, error_code, error_message):
+        """Records a trade command failure and updates blacklists as appropriate."""
+        logger.warning(f"Trade command '{command_name}' failed at port {port_id} with code {error_code}: {error_message}")
+        
+        # Add to port_trade_blacklist for specific errors
+        if error_code == 1701: # Port is not buying this commodity right now.
+            logger.info(f"Adding port {port_id} to trade blacklist due to error 1701.")
+            self.add_to_port_trade_blacklist(port_id)
+        elif error_code == 1405: # Port is full of this commodity.
+            logger.info(f"Adding port {port_id} to trade blacklist due to error 1405.")
+            self.add_to_port_trade_blacklist(port_id)
+        
+        # Call the generic command failure recorder for cooldowns
+        self.record_command_failure(command_name)
 
     def validate_state(self) -> bool:
         """

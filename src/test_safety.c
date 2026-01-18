@@ -7,7 +7,7 @@
 /* Mock Context */
 typedef struct
 {
-  json_t *captured;             /* Simulates the output buffer */
+  json_t *captured;		/* Simulates the output buffer */
 } mock_ctx_t;
 
 
@@ -120,4 +120,3 @@ main ()
   printf ("All checks passed.\n");
   return 0;
 }
-

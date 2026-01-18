@@ -1,0 +1,21 @@
+{
+  "test_suite_name": "Session Disconnect Command",
+  "description": "Tests the session.disconnect command",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "disconnect_user",
+      "password": "password"
+    },
+    {
+      "name": "Test session.disconnect command",
+      "user": "disconnect_user",
+      "command": "session.disconnect",
+      "expect": { "status": "ok", "type": "system.goodbye" },
+      "asserts": [
+        { "path": "data.message", "op": "==", "value": "Goodbye" }
+      ]
+    }
+  ]
+}

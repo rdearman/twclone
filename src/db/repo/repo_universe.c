@@ -99,7 +99,7 @@ int repo_universe_get_port_sector_by_id_name(db_t *db, int port_id, const char *
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q10 */
-    const char *q10 = "SELECT sector FROM ports WHERE id={1} AND name={2};";
+    const char *q10 = "SELECT sector_id FROM ports WHERE port_id={1} AND name={2};";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_text(name) }, 2, &res, &err) && db_res_step(res, &err)) {
         *sector_out = db_res_col_i32(res, 0, &err);
@@ -258,7 +258,7 @@ int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q24 */
-    const char *q24 = "SELECT 1 FROM ships WHERE ship_id = {1} AND transwarp_enabled = true LIMIT 1;";
+    const char *q24 = "SELECT 1 FROM ships WHERE ship_id = {1} AND has_transwarp = 1 LIMIT 1;";
     char sql[512]; sql_build(db, q24, sql, sizeof(sql));
     *enabled_out = 0;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {

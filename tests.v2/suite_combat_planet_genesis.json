@@ -8,6 +8,27 @@
       "password": "password"
     },
     {
+      "name": "Rig: Clear Citadels in Sector 1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM citadels WHERE planet_id IN (SELECT planet_id FROM planets WHERE sector_id = 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear Planets in Sector 1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM planets WHERE sector_id = 1 AND planet_id > 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Grant Genesis Torpedoes",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET genesis = 5 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{planet_tester_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Positive: Planet Genesis",
       "command": "planet.genesis",
       "data": { "sector_id": 500, "name": "NewWorld", "owner_entity_type": "player" },

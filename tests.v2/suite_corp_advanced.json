@@ -15,6 +15,13 @@
       "password": "password"
     },
     {
+      "name": "Rig: Give CEO Credits",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 1000000 WHERE owner_type='player' AND owner_id = @{ceo_user_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Setup: Create Corp",
       "command": "corp.create",
       "data": { "name": "AdvCorp" },

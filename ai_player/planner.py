@@ -32,17 +32,28 @@ class Planner:
         self.player_name = self.config.get("player_username", "unknown")
         self.current_stage = self.state_manager.get("stage", "start") # start, explore, survey, exploit
 
-    def handle_trade_response(self, cmd, resp):
-        """Temporary diagnostic for trade results."""
+    def handle_trade_response(self, sent_command: dict, resp: dict):
+        """Processes trade command responses and informs state manager of failures."""
+        command_name = sent_command.get("command", "unknown")
         error_data = resp.get("error") or {}
         logger.warning(
             "TRADE RESULT bot=%s cmd=%s status=%s code=%s msg=%s",
             self.player_name,
-            cmd,
+            command_name,
             resp.get("status"),
             error_data.get("code"),
             error_data.get("message"),
         )
+        
+        # NEW: Inform StateManager of trade failures for blacklisting
+        status = resp.get("status")
+        if status == "refused" and command_name in ["trade.buy", "trade.sell"]:
+            port_id = sent_command.get("data", {}).get("port_id") # Get port_id from the original command
+            
+            if port_id is not None:
+                error_code = error_data.get("code")
+                error_message = error_data.get("message")
+                self.state_manager.record_trade_failure(port_id, command_name, error_code, error_message)
 
     # --- Deterministic Trade Rules (NEW) ---
 
@@ -157,6 +168,9 @@ class Planner:
                 # 4. Request Server Path (Authoritative)
                 # If we are here, we don't have a valid adjacent next hop. Force move.pathfind.
                 if self._is_command_ready("move.pathfind", current_state.get("command_retry_info", {})):
+                    if target_sector is None: # Explicit check
+                        logger.error(f"Cannot generate move.pathfind command: target_sector is None for goal '{goal_str}'.")
+                        return None
                     logger.info(f"Target {target_sector} is distant or path unknown. Requesting authoritative pathfind.")
                     return {
                         "command": "move.pathfind", 
@@ -208,18 +222,22 @@ class Planner:
                         return None 
 
                 port_id = self._find_port_in_sector(current_state, current_sector)
+                if port_id is None: # Added check for None port_id
+                    logger.warning(f"Goal 'sell' failed: could not find port ID in sector {current_sector}.")
+                    return None
+                
                 if port_id in current_state.get("port_trade_blacklist", []):
                     logger.warning(f"Goal 'sell' failed: port {port_id} is in trade blacklist.")
                     return None
                 
                 commodity_to_sell = goal_target
 
-                # --- NEW: Filter illegal commodities early ---
-                LEGAL_COMMODITIES = {"ORE", "ORG", "EQU", "COLONISTS"} # Define legal commodities
-                if commodity_to_sell not in LEGAL_COMMODITIES:
-                    logger.warning(f"Rejecting sell goal for illegal commodity '{commodity_to_sell}'.")
+                # --- NEW: Filter based on LLM's allowed commodities (dynamic) ---
+                valid_commodities_for_llm = current_state.get("valid_commodity_names", [])
+                if commodity_to_sell not in valid_commodities_for_llm:
+                    logger.warning(f"Rejecting sell goal for commodity '{commodity_to_sell}': Not in LLM's allowed list ({valid_commodities_for_llm}).")
                     return None
-                # ---------------------------------------------
+                # -----------------------------------------------------------------
                 
                 # Validation: Check if port actually trades this commodity
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
@@ -287,12 +305,12 @@ class Planner:
                 
                 commodity_to_buy = goal_target
 
-                # --- NEW: Filter illegal commodities early ---
-                LEGAL_COMMODITIES = {"ORE", "ORG", "EQU", "COLONISTS"} # Define legal commodities
-                if commodity_to_buy not in LEGAL_COMMODITIES:
-                    logger.warning(f"Rejecting buy goal for illegal commodity '{commodity_to_buy}'.")
+                # --- NEW: Filter based on LLM's allowed commodities (dynamic) ---
+                valid_commodities_for_llm = current_state.get("valid_commodity_names", [])
+                if commodity_to_buy not in valid_commodities_for_llm:
+                    logger.warning(f"Rejecting buy goal for commodity '{commodity_to_buy}': Not in LLM's allowed list ({valid_commodities_for_llm}).")
                     return None
-                # ---------------------------------------------
+                # -----------------------------------------------------------------
                 
                 # Validation: Check if port actually trades this commodity
                 port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
@@ -1190,8 +1208,11 @@ class Planner:
 
         if field_name == "items":
             if command_name == "trade.buy":
-                commodity = canon_commodity(self._get_cheapest_commodity_to_buy(current_state))
-                if not commodity: return None
+                # The _get_cheapest_commodity_to_buy now returns the commodity with the highest potential profit
+                commodity = self._get_cheapest_commodity_to_buy(current_state)
+                if not commodity: 
+                    logger.warning("No profitable commodity found to buy. Cannot generate buy command.")
+                    return None
                 
                 free_holds = self._get_free_holds(current_state)
                 if free_holds <= 0:
@@ -1327,6 +1348,12 @@ class Planner:
         commodities_info = port_info.get("commodities", [])
 
         port_id = str(self._find_port_in_sector(current_state, current_sector))
+        
+        # NEW: Check port trade blacklist
+        if port_id in current_state.get("port_trade_blacklist", []):
+            logger.debug(f"Port {port_id} is in trade blacklist. Cannot sell here.")
+            return None
+
         port_sell_prices = current_state.get("price_cache", {}).get(port_id, {}).get("sell", {})
 
         best_commodity = None
@@ -1395,14 +1422,85 @@ class Planner:
         
         return best_commodity
 
-    def _get_cheapest_commodity_to_buy(self, current_state):
-        port_id = str(self._find_port_in_sector(current_state, current_state.get("player_location_sector")))
-        port_buy_prices = current_state.get("price_cache", {}).get(port_id, {}).get("buy", {})
+    def _calculate_potential_profit(self, commodity_code, buy_price, current_state):
+        """
+        Calculates the maximum potential profit for a given commodity bought at 'buy_price'.
+        Considers all known ports.
+        """
+        if buy_price is None or buy_price <= 0:
+            return -float('inf') # Cannot make profit if buy price is zero or unknown
+
+        max_potential_sell_price = 0
+        all_port_info = current_state.get("port_info_by_sector", {})
+        price_cache = current_state.get("price_cache", {})
+
+        for sector_id_str, port_data in all_port_info.items():
+            port_id = str(port_data.get("port_id"))
+            if port_id not in price_cache:
+                continue
+
+            port_sell_prices = price_cache[port_id].get("sell", {})
+            sell_price = port_sell_prices.get(commodity_code)
+
+            if sell_price is not None and sell_price > max_potential_sell_price:
+                max_potential_sell_price = sell_price
         
+        # If we didn't find any known sell price, it means we don't know where to sell it.
+        # Treat this as very low profit or unknown.
+        if max_potential_sell_price == 0:
+            return -float('inf') # Effectively, no known profitable route
+
+        return max_potential_sell_price - buy_price
+
+
+    def _get_cheapest_commodity_to_buy(self, current_state):
+        """
+        Finds the commodity at the current port that offers the highest potential profit
+        considering all known ports for selling.
+        """
+        current_sector = current_state.get("player_location_sector")
+        port_id = str(self._find_port_in_sector(current_state, current_sector))
+        
+        if not port_id:
+            return None
+
+        current_port_buy_prices = current_state.get("price_cache", {}).get(port_id, {}).get("buy", {})
+        current_port_commodities_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {}).get("commodities", [])
+
         best_commodity = None
-        lowest_price = float('inf')
-        for commodity, price in port_buy_prices.items():
-            if price and price < lowest_price: # Check for non-None price
-                lowest_price = price
-                best_commodity = commodity
-        return best_commodity
+        highest_potential_profit = -float('inf')
+
+        for comm_info in current_port_commodities_info:
+            commodity_code = canon_commodity(comm_info.get("commodity"))
+            if not commodity_code:
+                continue
+            
+            buy_price = current_port_buy_prices.get(commodity_code)
+            
+            # Check if current port actually sells this commodity (buy_price can't be None)
+            if buy_price is None or buy_price <= 0:
+                logger.debug(f"Commodity {commodity_code} not available for purchase or has zero/unknown buy price at port {port_id}.")
+                continue
+
+            # Check if this port's sell price for this commodity is 0, meaning it doesn't buy it.
+            # If so, and we can't find a profitable sell elsewhere, avoid buying it here unless desperate.
+            # For now, prioritize known profitable routes.
+            current_port_sell_price = current_state.get("price_cache", {}).get(port_id, {}).get("sell", {}).get(commodity_code)
+            if current_port_sell_price == 0:
+                logger.debug(f"Port {port_id} does not buy {commodity_code}. Will only consider if profitable elsewhere.")
+                # We will still calculate potential profit, but this note is important.
+
+            potential_profit = self._calculate_potential_profit(commodity_code, buy_price, current_state)
+
+            if potential_profit > highest_potential_profit:
+                highest_potential_profit = potential_profit
+                best_commodity = commodity_code
+        
+        # Only return a commodity if there's a strictly positive potential profit.
+        if best_commodity and highest_potential_profit > 0:
+            logger.info(f"Identified most profitable commodity to buy: {best_commodity} with potential profit: {highest_potential_profit}.")
+            return best_commodity
+        else:
+            logger.warning(f"No strictly profitable commodity found at port {port_id}. Avoiding purchase.")
+            return None
+

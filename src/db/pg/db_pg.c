@@ -238,7 +238,8 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
-    if (PQresultStatus(pg_res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, pg_res, err); PQclear(pg_res); return false; }
+    ExecStatusType status = PQresultStatus(pg_res);
+    if (status != PGRES_TUPLES_OK && status != PGRES_COMMAND_OK) { pg_map_error(impl->conn, pg_res, err); PQclear(pg_res); return false; }
     db_pg_res_impl_t *res_impl = calloc(1, sizeof(db_pg_res_impl_t));
     if (!res_impl) {
         err->code = ERR_DB_QUERY_FAILED;
@@ -281,6 +282,7 @@ static const char* pg_res_col_name_impl(const db_res_t *res, int col_idx) {
 static db_col_type_t pg_res_col_type_impl(const db_res_t *res, int col_idx) {
     Oid type = PQftype(((db_pg_res_impl_t*)res->impl)->pg_res, col_idx);
     switch (type) {
+        case 16: return DB_TYPE_INTEGER; // BOOL in PG
         case 20: case 23: return DB_TYPE_INTEGER;
         case 700: case 701: return DB_TYPE_FLOAT;
         case 25: case 1043: return DB_TYPE_TEXT;
@@ -290,6 +292,13 @@ static db_col_type_t pg_res_col_type_impl(const db_res_t *res, int col_idx) {
 
 static bool pg_res_col_is_null_impl(const db_res_t *res, int col_idx) {
     return PQgetisnull(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx);
+}
+
+static bool pg_res_col_bool_impl(const db_res_t *res, int col_idx, db_error_t *err) {
+    (void)err;
+    const char *val = PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx);
+    if (!val) return false;
+    return (val[0] == 't' || val[0] == '1' || val[0] == 'T' || strcasecmp(val, "true") == 0);
 }
 
 static int64_t pg_res_col_i64_impl(const db_res_t *res, int col_idx, db_error_t *err) {
@@ -419,6 +428,7 @@ static const db_vt_t pg_vt = {
     .res_step = pg_res_step_impl, .res_finalize = pg_res_finalize_impl, .res_cancel = pg_res_cancel_impl,
     .res_col_count = pg_res_col_count_impl, .res_col_name = pg_res_col_name_impl, .res_col_type = pg_res_col_type_impl,
     .res_col_is_null = pg_res_col_is_null_impl,
+    .res_col_bool = pg_res_col_bool_impl,
     .res_col_i64 = pg_res_col_i64_impl, .res_col_i32 = pg_res_col_i32_impl,
     .res_col_double = pg_res_col_double_impl, .res_col_text = pg_res_col_text_impl,
     .ship_repair_atomic = pg_ship_repair_atomic,	

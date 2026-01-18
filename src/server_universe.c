@@ -58,11 +58,12 @@ static int ori_owner_id = -1;
 static int ori_home_sector_id = -1;
 
 /* ============ ISS Helper Function Forward Declarations ============ */
-static int db_get_stardock_sector (db_t *db);
-static int db_get_iss_player (db_t *db, int *out_player_id, int *out_sector);
-static void iss_move_to (db_t *db, int sector_id, int warp_enabled, const char *reason);
-static int iss_try_consume_summon (db_t *db);
-static void iss_patrol_step (db_t *db);
+static int db_get_stardock_sector (db_t * db);
+static int db_get_iss_player (db_t * db, int *out_player_id, int *out_sector);
+static void iss_move_to (db_t * db, int sector_id, int warp_enabled,
+			 const char *reason);
+static int iss_try_consume_summon (db_t * db);
+static void iss_patrol_step (db_t * db);
 
 /* ============ Ferengi Event Logging ============ */
 /* Log events to engine_events table with formatted payload */
@@ -87,7 +88,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
   vsnprintf (payload, sizeof payload, fmt, ap);
   va_end (ap);
 
-  repo_universe_log_engine_event(g_fer_db, type, sector_id, payload);
+  repo_universe_log_engine_event (g_fer_db, type, sector_id, payload);
 }
 
 /* ============ Navigation Helper Functions ============ */
@@ -117,10 +118,10 @@ nav_next_hop (db_t *db, int start, int goal)
   {
     for (int i = 0; i < seen_n; ++i)
       {
-        if (seen[i].key == key)
-          {
-            return i;
-          }
+	if (seen[i].key == key)
+	  {
+	    return i;
+	  }
       }
     return -1;
   };
@@ -130,7 +131,7 @@ nav_next_hop (db_t *db, int start, int goal)
   {
     if (seen_n >= MAX_SEEN)
       {
-        return -1;
+	return -1;
       }
     seen[seen_n].key = key;
     seen[seen_n].prev = prev;
@@ -151,32 +152,32 @@ nav_next_hop (db_t *db, int start, int goal)
     {
       int cur = q[head++ % MAX_Q];
 
-      db_res_t *res = repo_universe_get_adjacent_sectors(db, cur, &err);
+      db_res_t *res = repo_universe_get_adjacent_sectors (db, cur, &err);
       if (!res)
-        {
-          /* Query failed; return 0 to indicate no path */
-          return 0;
-        }
+	{
+	  /* Query failed; return 0 to indicate no path */
+	  return 0;
+	}
 
       while (db_res_step (res, &err))
-        {
-          int nb = db_res_col_int (res, 0, &err);
+	{
+	  int nb = db_res_col_int (res, 0, &err);
 
-          if (seen_get (nb) != -1)
-            {
-              continue;
-            }
-          seen_put (nb, cur);
-          if (nb == goal)
-            {
-              found = nb;
-              break;
-            }
-          if ((tail - head) < (MAX_Q - 1))
-            {
-              q[tail++ % MAX_Q] = nb;
-            }
-        }
+	  if (seen_get (nb) != -1)
+	    {
+	      continue;
+	    }
+	  seen_put (nb, cur);
+	  if (nb == goal)
+	    {
+	      found = nb;
+	      break;
+	    }
+	  if ((tail - head) < (MAX_Q - 1))
+	    {
+	      q[tail++ % MAX_Q] = nb;
+	    }
+	}
 
       db_res_finalize (res);
     }
@@ -194,21 +195,21 @@ nav_next_hop (db_t *db, int start, int goal)
       int i = seen_get (step);
 
       if (i < 0)
-        {
-          break;
-        }
+	{
+	  break;
+	}
       prev = seen[i].prev;
       if (prev == -1)
-        {
-          break; /* step == start */
-        }
+	{
+	  break;		/* step == start */
+	}
       if (prev == start)
-        {
-          return step; /* first hop away from start */
-        }
+	{
+	  return step;		/* first hop away from start */
+	}
       step = prev;
     }
-  return step; /* neighbour fallback */
+  return step;			/* neighbour fallback */
 }
 
 /* Get random adjacent sector */
@@ -221,16 +222,16 @@ nav_random_neighbor (db_t *db, int sector)
     }
 
   int result = 0;
-  if (repo_universe_get_random_neighbor(db, sector, &result) == 0) {
+  if (repo_universe_get_random_neighbor (db, sector, &result) == 0)
+    {
       return result;
-  }
+    }
   return 0;
 }
 
 /* Forward statics */
-static void attach_sector_asset_counts (db_t *db,
-                                        int sector_id,
-                                        json_t *data_out);
+static void attach_sector_asset_counts (db_t * db,
+					int sector_id, json_t * data_out);
 
 
 int
@@ -243,10 +244,10 @@ no_zero_ship (db_t *db, int set_sector, int ship_id)
 
   if (set_sector > 0 && ship_id > 0)
     {
-      return repo_universe_update_ship_sector(db, ship_id, set_sector);
+      return repo_universe_update_ship_sector (db, ship_id, set_sector);
     }
 
-  return repo_universe_mass_randomize_zero_sector_ships(db);
+  return repo_universe_mass_randomize_zero_sector_ships (db);
 }
 
 
@@ -264,7 +265,7 @@ ori_move_all_ships (void)
   db_error_t err;
   db_error_clear (&err);
 
-  db_res_t *res = repo_universe_get_orion_ships(ori_db, ori_owner_id, &err);
+  db_res_t *res = repo_universe_get_orion_ships (ori_db, ori_owner_id, &err);
   if (!res)
     {
       LOGE ("ORI_MOVE: Failed to query Orion ships: %s", err.message);
@@ -282,34 +283,34 @@ ori_move_all_ships (void)
          60% chance to target Black Market home sector for resupply/patrol
          40% chance to target a random unprotected sector for piracy */
       if (new_target == 0 || new_target == current_sector)
-        {
-          if (rand () % 10 < 6 && ori_home_sector_id != -1)
-            {
-              new_target = ori_home_sector_id;
-            }
-          else
-            {
-              /* Random sector in unprotected range (11..999) */
-              new_target = (rand () % (999 - 11 + 1)) + 11;
-            }
-          /* Don't target the current sector */
-          if (new_target == current_sector)
-            {
-              new_target = (new_target % 999) + 1;
-            }
-        }
+	{
+	  if (rand () % 10 < 6 && ori_home_sector_id != -1)
+	    {
+	      new_target = ori_home_sector_id;
+	    }
+	  else
+	    {
+	      /* Random sector in unprotected range (11..999) */
+	      new_target = (rand () % (999 - 11 + 1)) + 11;
+	    }
+	  /* Don't target the current sector */
+	  if (new_target == current_sector)
+	    {
+	      new_target = (new_target % 999) + 1;
+	    }
+	}
 
       /* Update the target for the next tick */
       db_error_clear (&err);
-      if (repo_universe_update_ship_target(ori_db, ship_id, new_target) != 0)
-        {
-          LOGE ("ORI_MOVE: Failed to update target for ship %d", ship_id);
-        }
+      if (repo_universe_update_ship_target (ori_db, ship_id, new_target) != 0)
+	{
+	  LOGE ("ORI_MOVE: Failed to update target for ship %d", ship_id);
+	}
       else
-        {
-          LOGI ("ORI_MOVE: Ship %d targeting sector %d (from %d).",
-                ship_id, new_target, current_sector);
-        }
+	{
+	  LOGI ("ORI_MOVE: Ship %d targeting sector %d (from %d).",
+		ship_id, new_target, current_sector);
+	}
     }
 
   db_res_finalize (res);
@@ -328,7 +329,8 @@ ori_init_once (void)
   db_error_clear (&err);
 
   /* Step 1: Find the Orion Syndicate owner ID from corporation tag */
-  if (repo_universe_get_corp_owner_by_tag(ori_db, "ORION", &ori_owner_id) != 0)
+  if (repo_universe_get_corp_owner_by_tag (ori_db, "ORION", &ori_owner_id) !=
+      0)
     {
       LOGW ("ORI_INIT: Failed to find Orion Syndicate owner. Skipping.");
       ori_initialized = true;
@@ -337,13 +339,15 @@ ori_init_once (void)
 
   /* Step 2: Find the Black Market home sector ID (from Port ID 10) */
   db_error_clear (&err);
-  if (repo_universe_get_port_sector_by_id_name(ori_db, 10, "Orion Black Market Dock", &ori_home_sector_id) != 0)
+  if (repo_universe_get_port_sector_by_id_name
+      (ori_db, 10, "Orion Black Market Dock", &ori_home_sector_id) != 0)
     {
-      LOGW ("ORI_INIT: Failed to find Black Market sector. Movement will be random.");
+      LOGW
+	("ORI_INIT: Failed to find Black Market sector. Movement will be random.");
     }
 
   LOGI ("ORI_INIT: Orion Syndicate owner ID is %d, Home Sector is %d",
-        ori_owner_id, ori_home_sector_id);
+	ori_owner_id, ori_home_sector_id);
   ori_initialized = true;
   return 1;
 }
@@ -357,7 +361,7 @@ ori_tick (int64_t now_ms)
       return;
     }
   LOGI ("ORI_TICK: Running movement logic for Orion Syndicate... @%ld",
-        now_ms);
+	now_ms);
   ori_move_all_ships ();
   LOGI ("ORI_TICK: Complete.");
 }
@@ -367,14 +371,13 @@ json_t *
 make_player_object (int64_t player_id)
 {
   db_t *db = game_db_get_handle ();
-  json_t *player = json_object (); json_object_set_new (player,
-                                                        "id",
-                                                        json_integer (
-                                                          player_id));
+  json_t *player = json_object ();
+  json_object_set_new (player, "id", json_integer (player_id));
   char *pname = NULL;
   if (db_player_name (db, player_id, &pname) == 0 && pname)
     {
-      json_object_set_new (player, "name", json_string (pname)); free (pname);
+      json_object_set_new (player, "name", json_string (pname));
+      free (pname);
     }
   return player;
 }
@@ -382,13 +385,13 @@ make_player_object (int64_t player_id)
 
 int
 parse_sector_search_input (json_t *root,
-                           char **q_out,
-                           int *type_any, int *type_sector, int *type_port,
-                           int *limit_out, int *offset_out)
+			   char **q_out,
+			   int *type_any, int *type_sector, int *type_port,
+			   int *limit_out, int *offset_out)
 {
   *q_out = NULL;
   *type_any = *type_sector = *type_port = 0;
-  *limit_out = 20;  /* SEARCH_DEFAULT_LIMIT */
+  *limit_out = 20;		/* SEARCH_DEFAULT_LIMIT */
   *offset_out = 0;
   json_t *data = json_object_get (root, "data");
 
@@ -444,13 +447,13 @@ parse_sector_search_input (json_t *root,
     {
       int lim = (int) json_integer_value (jlimit);
       if (lim <= 0)
-        {
-          lim = 20;
-        }
-      if (lim > 100)  /* SEARCH_MAX_LIMIT */
-        {
-          lim = 100;
-        }
+	{
+	  lim = 20;
+	}
+      if (lim > 100)		/* SEARCH_MAX_LIMIT */
+	{
+	  lim = 100;
+	}
       *limit_out = lim;
     }
   /* cursor (offset) */
@@ -460,22 +463,22 @@ parse_sector_search_input (json_t *root,
     {
       *offset_out = (int) json_integer_value (jcur);
       if (*offset_out < 0)
-        {
-          *offset_out = 0;
-        }
+	{
+	  *offset_out = 0;
+	}
     }
   else if (json_is_string (jcur))
     {
       /* allow stringified integers too */
       const char *s = json_string_value (jcur);
       if (s && *s)
-        {
-          *offset_out = atoi (s);
-          if (*offset_out < 0)
-            {
-              *offset_out = 0;
-            }
-        }
+	{
+	  *offset_out = atoi (s);
+	  if (*offset_out < 0)
+	    {
+	      *offset_out = 0;
+	    }
+	}
     }
   return 0;
 }
@@ -490,83 +493,91 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
   char *q = NULL;
   int type_any = 0, type_sector = 0, type_port = 0;
   int limit = 0, offset = 0;
-  int prc = parse_sector_search_input (root, &q, &type_any, &type_sector, 
-                                        &type_port, &limit, &offset);
+  int prc = parse_sector_search_input (root, &q, &type_any, &type_sector,
+				       &type_port, &limit, &offset);
 
   if (prc != 0)
     {
       free (q);
-      send_response_error (ctx, root, ERR_BAD_REQUEST, "Expected data { ... }");
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+			   "Expected data { ... }");
       return 0;
     }
-  
+
   db_t *db = game_db_get_handle ();
   if (!db)
     {
       free (q);
-      send_response_error (ctx, root, ERR_SERVER_ERROR, "No database handle.");
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+			   "No database handle.");
       return 0;
     }
-  
+
   /* Build SQL query based on search type */
-  
+
   db_error_t err;
   db_res_t *res = NULL;
-  
-  int search_type = 0;
-  if (type_sector) search_type = 1;
-  else if (type_port) search_type = 2;
 
-  if ((res = repo_universe_search_index(db, q ? q : "", limit + 1, offset, search_type, &err)) == NULL)
+  int search_type = 0;
+  if (type_sector)
+    search_type = 1;
+  else if (type_port)
+    search_type = 2;
+
+  if ((res =
+       repo_universe_search_index (db, q ? q : "", limit + 1, offset,
+				   search_type, &err)) == NULL)
     {
       free (q);
-      send_response_error (ctx, root, ERR_SERVER_ERROR, "Search query failed");
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+			   "Search query failed");
       return 0;
     }
-  
+
   json_t *items = json_array ();
   int row_count = 0;
-  
+
   while (db_res_step (res, &err))
     {
       const char *kind = db_res_col_text (res, 0, &err);
-      int id = (int)db_res_col_i64 (res, 1, &err);
+      int id = (int) db_res_col_i64 (res, 1, &err);
       const char *name = db_res_col_text (res, 2, &err);
-      int sector_id = (int)db_res_col_i64 (res, 3, &err);
+      int sector_id = (int) db_res_col_i64 (res, 3, &err);
       const char *sector_name = db_res_col_text (res, 4, &err);
-      
+
       if (row_count < limit)
-        {
-          json_t *it = json_object ();
-          json_object_set_new (it, "kind", json_string (kind ? kind : ""));
-          json_object_set_new (it, "id", json_integer (id));
-          json_object_set_new (it, "name", json_string (name ? name : ""));
-          json_object_set_new (it, "sector_id", json_integer (sector_id));
-          json_object_set_new (it, "sector_name", 
-                              json_string (sector_name ? sector_name : ""));
-          json_array_append_new (items, it);
-        }
+	{
+	  json_t *it = json_object ();
+	  json_object_set_new (it, "kind", json_string (kind ? kind : ""));
+	  json_object_set_new (it, "id", json_integer (id));
+	  json_object_set_new (it, "name", json_string (name ? name : ""));
+	  json_object_set_new (it, "sector_id", json_integer (sector_id));
+	  json_object_set_new (it, "sector_name",
+			       json_string (sector_name ? sector_name : ""));
+	  json_array_append_new (items, it);
+	}
       row_count++;
       if (row_count >= limit + 1)
-        {
-          break;
-        }
+	{
+	  break;
+	}
     }
   db_res_finalize (res);
   free (q);
-  
+
   json_t *jdata = json_object ();
   json_object_set_new (jdata, "items", items);
-  
+
   if (row_count > limit)
     {
-      json_object_set_new (jdata, "next_cursor", json_integer (offset + limit));
+      json_object_set_new (jdata, "next_cursor",
+			   json_integer (offset + limit));
     }
   else
     {
       json_object_set_new (jdata, "next_cursor", json_null ());
     }
-  
+
   send_response_ok_take (ctx, root, "sector.search_results_v1", &jdata);
   return 0;
 }
@@ -575,13 +586,12 @@ cmd_sector_search (client_ctx_t *ctx, json_t *root)
 json_t *
 build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
 {
-  json_t *root = json_object (); if (!root)
+  json_t *root = json_object ();
+  if (!root)
     {
       return NULL;
     }
-  json_object_set_new (root,
-                       "server_tick",
-                       json_integer (g_server_tick));
+  json_object_set_new (root, "server_tick", json_integer (g_server_tick));
   json_t *basic = NULL;
 
 
@@ -599,43 +609,44 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
     {
       json_object_set_new (root, "adjacent_sectors", adj);
     }
-  json_t *ships = NULL; if (db_ships_at_sector_json (db,
-                                                     player_id,
-                                                     sector_id,
-                                                     &ships) == 0)
+  json_t *ships = NULL;
+  if (db_ships_at_sector_json (db, player_id, sector_id, &ships) == 0)
     {
-      json_object_set_new (root, "ships_present", ships ?: json_array ());
+      json_object_set_new (root, "ships_present", ships ? : json_array ());
     }
   json_t *ports = NULL;
 
 
   if (db_ports_at_sector_json (db, sector_id, &ports) == 0)
     {
-      json_object_set_new (root, "ports", ports ?: json_array ());
+      json_object_set_new (root, "ports", ports ? : json_array ());
     }
   json_t *planets = NULL;
 
 
   if (db_planets_at_sector_json (db, sector_id, &planets) == 0)
     {
-      json_object_set_new (root, "celestial_objects", planets ?: json_array ());
+      json_object_set_new (root, "celestial_objects",
+			   planets ? : json_array ());
     }
 
 
   attach_sector_asset_counts (db, sector_id, root);
-  (void)holo; return root;
+  (void) holo;
+  return root;
 }
 
 
 void
 cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = game_db_get_handle (); int ship_id = h_get_active_ship_id (db,
-                                                                        ctx->
-                                                                        player_id);
+  db_t *db = game_db_get_handle ();
+  int ship_id = h_get_active_ship_id (db,
+				      ctx->player_id);
   if (ship_id <= 0)
     {
-      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No ship"); return;
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No ship");
+      return;
     }
   int sid = db_get_ship_sector_id (db, ship_id);
   json_t *payload = build_sector_scan_json (db, sid, ctx->player_id, false);
@@ -643,7 +654,8 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 
   if (!payload)
     {
-      send_response_error (ctx, root, ERR_NOMEM, "OOM"); return;
+      send_response_error (ctx, root, ERR_NOMEM, "OOM");
+      return;
     }
   send_response_ok_take (ctx, root, "sector.scan", &payload);
 }
@@ -652,57 +664,59 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 void
 cmd_sector_scan_density (void *ctx_in, json_t *root)
 {
-  client_ctx_t *ctx = (client_ctx_t *)ctx_in;
-  
+  client_ctx_t *ctx = (client_ctx_t *) ctx_in;
+
   /* Get target sector from context or request data */
   int target_sector = ctx->sector_id;
-  json_t *jdata = json_object_get(root, "data");
-  json_t *jsec = (jdata && json_is_object(jdata)) ? 
-                 json_object_get(jdata, "sector_id") : NULL;
-  if (jsec && json_is_integer(jsec))
-    target_sector = (int)json_integer_value(jsec);
-  
+  json_t *jdata = json_object_get (root, "data");
+  json_t *jsec = (jdata && json_is_object (jdata)) ?
+    json_object_get (jdata, "sector_id") : NULL;
+  if (jsec && json_is_integer (jsec))
+    target_sector = (int) json_integer_value (jsec);
+
   if (target_sector <= 0)
     target_sector = ctx->sector_id;
-  
-  db_t *db = game_db_get_handle();
+
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
-      send_response_error(ctx, root, ERR_DB, "Database connection failed");
+      send_response_error (ctx, root, ERR_DB, "Database connection failed");
       return;
     }
-  
+
   db_error_t err;
   db_res_t *res = NULL;
-  json_t *payload = json_object();
-  json_t *sectors = json_array();
-  
-  if ((res = repo_universe_get_density_sector_list(db, target_sector, &err)) == NULL)
+  json_t *payload = json_object ();
+  json_t *sectors = json_array ();
+
+  if ((res =
+       repo_universe_get_density_sector_list (db, target_sector,
+					      &err)) == NULL)
     {
-      send_response_error(ctx, root, ERR_DB, "Failed to get sector list");
-      json_decref(payload);
-      json_decref(sectors);
+      send_response_error (ctx, root, ERR_DB, "Failed to get sector list");
+      json_decref (payload);
+      json_decref (sectors);
       return;
     }
-  
+
   /* For each sector, calculate total density */
-  while (db_res_step(res, &err))
+  while (db_res_step (res, &err))
     {
-      int sector_id = (int)db_res_col_i64(res, 0, &err);
-      
+      int sector_id = (int) db_res_col_i64 (res, 0, &err);
+
       int density = 0;
-      if (repo_universe_get_sector_density(db, sector_id, &density) == 0)
-        {
-          /* Include all sectors found, even with 0 density */
-          json_array_append_new (sectors, json_integer (sector_id));
-          json_array_append_new (sectors, json_integer (density));
-        }
+      if (repo_universe_get_sector_density (db, sector_id, &density) == 0)
+	{
+	  /* Include all sectors found, even with 0 density */
+	  json_array_append_new (sectors, json_integer (sector_id));
+	  json_array_append_new (sectors, json_integer (density));
+	}
     }
-  db_res_finalize(res);
-  
-  json_object_set_new(payload, "sectors", sectors);
-  
-  send_response_ok_take(ctx, root, "sector.density.scan", &payload);
+  db_res_finalize (res);
+
+  json_object_set_new (payload, "sectors", sectors);
+
+  send_response_ok_take (ctx, root, "sector.density.scan", &payload);
 }
 
 
@@ -714,7 +728,7 @@ h_warp_exists (db_t *db, int from, int to)
       return 0;
     }
   int has = 0;
-  repo_universe_warp_exists(db, from, to, &has);
+  repo_universe_warp_exists (db, from, to, &has);
   return has;
 }
 
@@ -728,11 +742,11 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
     }
 
   db_error_t err;
-  db_res_t *res = repo_universe_get_interdictors(db, sector_id, &err);
+  db_res_t *res = repo_universe_get_interdictors (db, sector_id, &err);
   if (!res)
     {
       LOGE ("h_check_interdiction: query failed: %s", err.message);
-      return 0; /* Fail open */
+      return 0;			/* Fail open */
     }
 
   int blocked = 0;
@@ -743,16 +757,16 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
 
       int p_corp_id = 0;
       if (owner_type && (strcasecmp (owner_type, "corp") == 0
-                         || strcasecmp (owner_type, "corporation") == 0))
-        {
-          p_corp_id = owner_id;
-        }
+			 || strcasecmp (owner_type, "corporation") == 0))
+	{
+	  p_corp_id = owner_id;
+	}
 
       if (is_asset_hostile (owner_id, p_corp_id, player_id, corp_id))
-        {
-          blocked = 1;
-          break;
-        }
+	{
+	  blocked = 1;
+	  break;
+	}
     }
 
   db_res_finalize (res);
@@ -769,7 +783,7 @@ sector_has_port (db_t *db, int sector)
     }
 
   int has_port = 0;
-  repo_universe_sector_has_port(db, sector, &has_port);
+  repo_universe_sector_has_port (db, sector, &has_port);
   return has_port;
 }
 
@@ -788,8 +802,7 @@ universe_shutdown (void)
 
 
 int
-cmd_move_describe_sector (client_ctx_t *ctx,
-                          json_t *root)
+cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
   if (!db)
@@ -810,29 +823,30 @@ cmd_move_describe_sector (client_ctx_t *ctx,
 
 
       if (j_sid && json_is_integer (j_sid))
-        {
-          sector_id = (int) json_integer_value (j_sid);
-        }
+	{
+	  sector_id = (int) json_integer_value (j_sid);
+	}
     }
 
   if (sector_id <= 0)
     {
-      send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Invalid sector_id");
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+			   "Invalid sector_id");
       return 0;
     }
 
   /* Helper already exists; use it. */
   json_t *payload = build_sector_scan_json (db, sector_id, ctx->player_id,
-                                            false);
+					    false);
 
 
   if (!payload)
     {
       /* This covers: sector not found, DB error, allocation failure. */
       send_response_error (ctx,
-                           root,
-                           ERR_NOT_FOUND,
-                           "Sector not found or could not be described");
+			   root,
+			   ERR_NOT_FOUND,
+			   "Sector not found or could not be described");
       return 0;
     }
 
@@ -854,7 +868,7 @@ validate_warp_rule (int from_sector, int to_sector)
     }
   if (from_sector == to_sector)
     {
-      return 0;             /* no-op warp is fine (cheap "success") */
+      return 0;			/* no-op warp is fine (cheap "success") */
     }
 
   db_t *db = game_db_get_handle ();
@@ -874,39 +888,46 @@ validate_warp_rule (int from_sector, int to_sector)
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = game_db_get_handle (); if (!db)
+  db_t *db = game_db_get_handle ();
+  if (!db)
     {
       return -1;
     }
   json_t *data = json_object_get (root, "data");
-  int to = (int)json_integer_value (json_object_get (data, "to_sector_id"));
-  
+  int to = 0;
+  if (!json_get_int_flexible (data, "to_sector_id", &to))
+    {
+      json_get_int_flexible (data, "sector_id", &to);
+    }
+
   /* Check warp link exists */
   if (!h_warp_exists (db, ctx->sector_id, to))
     {
-      send_response_error (ctx, root, REF_NO_WARP_LINK, "No link"); 
+      send_response_error (ctx, root, REF_NO_WARP_LINK, "No link");
       return 0;
     }
-  
+
   /* Check for hostile interdictors */
   if (h_check_interdiction (db, to, ctx->player_id, ctx->corp_id))
     {
-      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS, 
-                          "Warp interdicted by hostile planetary defences");
+      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
+			   "Warp interdicted by hostile planetary defences");
       return 0;
     }
-  
+
   /* Consume turn */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
   if (tc != TURN_CONSUME_SUCCESS)
     {
       return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
     }
-  
+
   if (db_player_set_sector (ctx->player_id, to) == 0)
     {
+      LOGD ("Player %d warped from %d to %d", ctx->player_id, ctx->sector_id, to);
       ctx->sector_id = to;
-      json_t *resp = json_object (); 
+      json_t *resp = json_object ();
+      json_object_set_new (resp, "sector_id", json_integer (to));
       json_object_set_new (resp, "to_sector_id", json_integer (to));
       send_response_ok_take (ctx, root, "move.result", &resp);
     }
@@ -942,9 +963,9 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (to <= 0)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_INVALID_SCHEMA,
-                           "Target sector 'to' not specified");
+			   root,
+			   ERR_INVALID_SCHEMA,
+			   "Target sector 'to' not specified");
       return 0;
     }
 
@@ -953,34 +974,40 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
 
 
-  if (repo_universe_get_max_sector_id(db, &max_id) != 0)
+  if (repo_universe_get_max_sector_id (db, &max_id) != 0)
     {
-      send_response_error (ctx, root, ERR_DB, "Failed to query universe size");
+      send_response_error (ctx, root, ERR_DB,
+			   "Failed to query universe size");
       return 0;
     }
 
   if (max_id <= 0)
     {
-      send_response_error (ctx, root, ERR_NOT_FOUND, "No sectors in universe");
+      send_response_error (ctx, root, ERR_NOT_FOUND,
+			   "No sectors in universe");
       return 0;
     }
 
   if (from <= 0 || from > max_id || to <= 0 || to > max_id)
     {
-      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
+      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND,
+			   "Sector not found");
       return 0;
     }
 
-  size_t N = (size_t)max_id + 1;
+  size_t N = (size_t) max_id + 1;
   unsigned char *avoid = calloc (N, 1);
   unsigned char *seen = calloc (N, 1);
-  int *prev = malloc (N * sizeof(int));
-  int *queue = malloc (N * sizeof(int));
+  int *prev = malloc (N * sizeof (int));
+  int *queue = malloc (N * sizeof (int));
 
 
   if (!avoid || !seen || !prev || !queue)
     {
-      free (avoid); free (seen); free (prev); free (queue);
+      free (avoid);
+      free (seen);
+      free (prev);
+      free (queue);
       send_response_error (ctx, root, ERR_NOMEM, "Out of memory");
       return 0;
     }
@@ -1001,11 +1028,14 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       json_object_set_new (out, "path", steps);
       json_object_set_new (out, "hops", json_integer (0));
       send_response_ok_take (ctx, root, "move.pathfind", &out);
-      free (avoid); free (seen); free (prev); free (queue);
+      free (avoid);
+      free (seen);
+      free (prev);
+      free (queue);
       return 0;
     }
 
-  int *head = malloc (N * sizeof(int));
+  int *head = malloc (N * sizeof (int));
   int *to_v = NULL;
   int *next = NULL;
   int edges = 0;
@@ -1016,59 +1046,70 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       head[i] = -1;
     }
 
-  if (repo_universe_get_warp_count(db, &edges) != 0)
+  if (repo_universe_get_warp_count (db, &edges) != 0)
     {
       // Memory cleanup
-      free (head); free (avoid); free (seen); free (prev); free (queue);
+      free (head);
+      free (avoid);
+      free (seen);
+      free (prev);
+      free (queue);
       send_response_error (ctx,
-                           root,
-                           ERR_DB,
-                           "Pathfind init failed (edge count)");
+			   root, ERR_DB, "Pathfind init failed (edge count)");
       return 0;
     }
 
   if (edges > 0)
     {
-      to_v = malloc ((size_t)edges * sizeof(int));
-      next = malloc ((size_t)edges * sizeof(int));
+      to_v = malloc ((size_t) edges * sizeof (int));
+      next = malloc ((size_t) edges * sizeof (int));
       if (!to_v || !next)
-        {
-          free (to_v); free (next); free (head);
-          free (avoid); free (seen); free (prev); free (queue);
-          send_response_error (ctx, root, ERR_NOMEM, "Out of memory");
-          return 0;
-        }
+	{
+	  free (to_v);
+	  free (next);
+	  free (head);
+	  free (avoid);
+	  free (seen);
+	  free (prev);
+	  free (queue);
+	  send_response_error (ctx, root, ERR_NOMEM, "Out of memory");
+	  return 0;
+	}
 
-      if ((res = repo_universe_get_all_warps(db, &err)) == NULL)
-        {
-          free (to_v); free (next); free (head);
-          free (avoid); free (seen); free (prev); free (queue);
-          send_response_error (ctx,
-                               root,
-                               ERR_DB,
-                               "Pathfind init failed (edge read)");
-          return 0;
-        }
+      if ((res = repo_universe_get_all_warps (db, &err)) == NULL)
+	{
+	  free (to_v);
+	  free (next);
+	  free (head);
+	  free (avoid);
+	  free (seen);
+	  free (prev);
+	  free (queue);
+	  send_response_error (ctx,
+			       root,
+			       ERR_DB, "Pathfind init failed (edge read)");
+	  return 0;
+	}
       int e = 0;
 
 
       while (db_res_step (res, &err))
-        {
-          if (e >= edges)
-            {
-              break;
-            }
-          int u = (int)db_res_col_i64 (res, 0, &err);
-          int v = (int)db_res_col_i64 (res, 1, &err);
+	{
+	  if (e >= edges)
+	    {
+	      break;
+	    }
+	  int u = (int) db_res_col_i64 (res, 0, &err);
+	  int v = (int) db_res_col_i64 (res, 1, &err);
 
 
-          if (u > 0 && u <= max_id && v > 0 && v <= max_id)
-            {
-              to_v[e] = v;
-              next[e] = head[u];
-              head[u] = e++;
-            }
-        }
+	  if (u > 0 && u <= max_id && v > 0 && v <= max_id)
+	    {
+	      to_v[e] = v;
+	      next[e] = head[u];
+	      head[u] = e++;
+	    }
+	}
       db_res_finalize (res);
     }
 
@@ -1086,39 +1127,44 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 
 
       for (int ei = head[u]; ei != -1; ei = next[ei])
-        {
-          int v = to_v[ei];
+	{
+	  int v = to_v[ei];
 
 
-          if (avoid[v] || seen[v])
-            {
-              continue;
-            }
-          seen[v] = 1;
-          prev[v] = u;
-          queue[qt++] = v;
-          if (v == to)
-            {
-              found = 1;
-              break;
-            }
-        }
+	  if (avoid[v] || seen[v])
+	    {
+	      continue;
+	    }
+	  seen[v] = 1;
+	  prev[v] = u;
+	  queue[qt++] = v;
+	  if (v == to)
+	    {
+	      found = 1;
+	      break;
+	    }
+	}
       if (found)
-        {
-          break;
-        }
+	{
+	  break;
+	}
     }
 
-  free (to_v); free (next); free (head);
+  free (to_v);
+  free (next);
+  free (head);
 
   if (!found)
     {
-      free (avoid); free (seen); free (prev); free (queue);
+      free (avoid);
+      free (seen);
+      free (prev);
+      free (queue);
       send_response_error (ctx, root, ERR_NOT_FOUND, "Path not found");
       return 0;
     }
 
-  int *stack = malloc (N * sizeof(int));
+  int *stack = malloc (N * sizeof (int));
   int sp = 0;
   int cur = to;
 
@@ -1127,19 +1173,22 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
     {
       stack[sp++] = cur;
       if (cur == from)
-        {
-          break;
-        }
+	{
+	  break;
+	}
       cur = prev[cur];
     }
 
   if (sp <= 0 || stack[sp - 1] != from)
     {
-      free (stack); free (avoid); free (seen); free (prev); free (queue);
+      free (stack);
+      free (avoid);
+      free (seen);
+      free (prev);
+      free (queue);
       send_response_error (ctx,
-                           root,
-                           ERR_SERVER_ERROR,
-                           "Path reconstruction failed");
+			   root,
+			   ERR_SERVER_ERROR, "Path reconstruction failed");
       return 0;
     }
 
@@ -1158,7 +1207,11 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   json_object_set_new (out, "hops", json_integer (sp - 1));
   send_response_ok_take (ctx, root, "move.pathfind", &out);
 
-  free (stack); free (avoid); free (seen); free (prev); free (queue);
+  free (stack);
+  free (avoid);
+  free (seen);
+  free (prev);
+  free (queue);
   return 0;
 }
 
@@ -1167,31 +1220,32 @@ static void
 attach_sector_asset_counts (db_t *db, int sid, json_t *out)
 {
   int ftrs = 0, armid = 0, limpet = 0;
-  db_res_t *res = NULL; db_error_t err;
-  
-  if ((res = repo_universe_get_asset_counts(db, sid, &err)) != NULL)
+  db_res_t *res = NULL;
+  db_error_t err;
+
+  if ((res = repo_universe_get_asset_counts (db, sid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
-        {
-          int type = db_res_col_i32 (res, 0, &err);
-          int qty = db_res_col_i32 (res,
-                                    1,
-                                    &err);
+	{
+	  int type = db_res_col_i32 (res, 0, &err);
+	  int qty = db_res_col_i32 (res,
+				    1,
+				    &err);
 
 
-          if (type == 2)
-            {
-              ftrs += qty;
-            }
-          else if (type == 1)
-            {
-              armid += qty;
-            }
-          else if (type == 4)
-            {
-              limpet += qty;
-            }
-        }
+	  if (type == 2)
+	    {
+	      ftrs += qty;
+	    }
+	  else if (type == 1)
+	    {
+	      armid += qty;
+	    }
+	  else if (type == 4)
+	    {
+	      limpet += qty;
+	    }
+	}
       db_res_finalize (res);
     }
   json_t *c = json_object ();
@@ -1208,11 +1262,12 @@ attach_sector_asset_counts (db_t *db, int sid, json_t *out)
 void
 cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sid, int pid)
 {
-  (void)fd;
-  db_t *db = game_db_get_handle();
+  (void) fd;
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
-      send_response_error (ctx, root, ERR_DB_CLOSED, "Database connection failed");
+      send_response_error (ctx, root, ERR_DB_CLOSED,
+			   "Database connection failed");
       return;
     }
 
@@ -1220,7 +1275,7 @@ cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sid, int pid)
   if (!payload)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
-                           "Out of memory building sector info");
+			   "Out of memory building sector info");
       return;
     }
 
@@ -1242,10 +1297,11 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
     {
       return 1;
     }
-  db_t *db = game_db_get_handle();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
-      send_response_error (ctx, root, ERR_DB_CLOSED, "Database connection failed");
+      send_response_error (ctx, root, ERR_DB_CLOSED,
+			   "Database connection failed");
       return 0;
     }
 
@@ -1260,10 +1316,12 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
   int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
   LOGI ("[move.scan] sector_id=%d\n", sector_id);
 
-  json_t *payload = build_sector_scan_json (db, sector_id, ctx->player_id, false);
+  json_t *payload =
+    build_sector_scan_json (db, sector_id, ctx->player_id, false);
   if (!payload)
     {
-      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND, "Sector not found");
+      send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND,
+			   "Sector not found");
       return 0;
     }
 
@@ -1279,23 +1337,25 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     {
       return 1;
     }
-  
-  db_t *db = game_db_get_handle();
+
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
-      send_response_error (ctx, root, ERR_DB_CLOSED, "Database connection failed");
+      send_response_error (ctx, root, ERR_DB_CLOSED,
+			   "Database connection failed");
       return 1;
     }
 
   h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
-  
+
   json_t *jdata = json_object_get (root, "data");
   json_t *jsector_id = json_object_get (jdata, "sector_id");
   json_t *jtext = json_object_get (jdata, "text");
 
   if (!json_is_integer (jsector_id) || !json_is_string (jtext))
     {
-      send_response_error (ctx, root, ERR_INVALID_SCHEMA, "Invalid request schema");
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+			   "Invalid request schema");
       return 1;
     }
 
@@ -1304,14 +1364,14 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   if (ctx->sector_id != req_sector_id)
     {
       send_response_error (ctx, root, REF_NOT_IN_SECTOR,
-                           "Player is not in the specified sector.");
+			   "Player is not in the specified sector.");
       return 1;
     }
 
   if (req_sector_id >= 1 && req_sector_id <= 10)
     {
       send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
-                           "Cannot set a beacon in FedSpace.");
+			   "Cannot set a beacon in FedSpace.");
       return 1;
     }
 
@@ -1320,18 +1380,19 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
     {
       beacon_text = "";
     }
-  
+
   if ((int) strlen (beacon_text) > 80)
     {
       send_response_error (ctx, root, REF_NOT_IN_SECTOR,
-                           "Beacon text is too long (max 80 characters).");
+			   "Beacon text is too long (max 80 characters).");
       return 1;
     }
 
   /* Update beacon */
-  if (repo_universe_set_beacon(db, req_sector_id, beacon_text) != 0)
+  if (repo_universe_set_beacon (db, req_sector_id, beacon_text) != 0)
     {
-      send_response_error (ctx, root, ERR_DB, "Database error updating beacon.");
+      send_response_error (ctx, root, ERR_DB,
+			   "Database error updating beacon.");
       return 1;
     }
 
@@ -1339,7 +1400,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
   if (!payload)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
-                           "Out of memory building sector info");
+			   "Out of memory building sector info");
       return 1;
     }
 
@@ -1351,7 +1412,7 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 int
 cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db = game_db_get_handle();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       send_response_error (ctx, root, ERR_DB_CLOSED, "No database handle");
@@ -1361,7 +1422,7 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   if (!ctx || ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
-                                   "Not authenticated", NULL);
+				   "Not authenticated", NULL);
       return 0;
     }
 
@@ -1370,17 +1431,16 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
   if (json_is_object (jdata))
     {
-      json_t *jto = json_object_get (jdata, "to_sector_id");
-      if (json_is_integer (jto))
-        {
-          to_sector_id = (int) json_integer_value (jto);
-        }
+      if (!json_get_int_flexible (jdata, "to_sector_id", &to_sector_id))
+	{
+	  json_get_int_flexible (jdata, "sector_id", &to_sector_id);
+	}
     }
 
   if (to_sector_id <= 0)
     {
       send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
-                                   "Target sector not specified", NULL);
+				   "Target sector not specified", NULL);
       return 0;
     }
 
@@ -1388,18 +1448,19 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   if (ship_id <= 0)
     {
       send_response_refused_steal (ctx, root, ERR_NO_ACTIVE_SHIP,
-                                   "No active ship found.", NULL);
+				   "No active ship found.", NULL);
       return 0;
     }
 
   /* Check transwarp capability */
   int has_transwarp = 0;
-  repo_universe_check_transwarp(db, ship_id, &has_transwarp);
+  repo_universe_check_transwarp (db, ship_id, &has_transwarp);
 
   if (!has_transwarp)
     {
       send_response_refused_steal (ctx, root, REF_TRANSWARP_UNAVAILABLE,
-                                   "Ship does not have transwarp capability.", NULL);
+				   "Ship does not have transwarp capability.",
+				   NULL);
       return 0;
     }
 
@@ -1407,21 +1468,24 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
   if (tc != TURN_CONSUME_SUCCESS)
     {
-      return handle_turn_consumption_error (ctx, tc, "move.transwarp", root, NULL);
+      return handle_turn_consumption_error (ctx, tc, "move.transwarp", root,
+					    NULL);
     }
 
   /* Update player sector */
-  if (repo_universe_update_player_sector(db, ctx->player_id, to_sector_id) != 0)
+  if (repo_universe_update_player_sector (db, ctx->player_id, to_sector_id) !=
+      0)
     {
-      send_response_error (ctx, root, ERR_DB, "Database error during transwarp");
+      send_response_error (ctx, root, ERR_DB,
+			   "Database error during transwarp");
       return 0;
     }
 
   ctx->sector_id = to_sector_id;
-  
-  json_t *data = json_object();
-  json_object_set_new(data, "sector_id", json_integer(to_sector_id));
-  json_object_set_new(data, "status", json_string("transwarp_complete"));
+
+  json_t *data = json_object ();
+  json_object_set_new (data, "sector_id", json_integer (to_sector_id));
+  json_object_set_new (data, "status", json_string ("transwarp_complete"));
 
   send_response_ok_take (ctx, root, "move.transwarp", &data);
   return 0;
@@ -1431,21 +1495,21 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 /* Ferengi Trading at Port - Core NPC trading logic */
 static int
 ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
-                       int sector_id)
+		       int sector_id)
 {
   if (!db || ship_id <= 0 || port_id <= 0)
     return 1;
 
   db_error_t err;
   char tx_group_id[UUID_STR_LEN];
-  h_generate_hex_uuid (tx_group_id, sizeof(tx_group_id));
+  h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
 
   int fer_ore = 0, fer_organics = 0, fer_equipment = 0;
   int fer_holds = 0;
 
   if (h_get_ship_cargo_and_holds (db, ship_id,
-                                  &fer_ore, &fer_organics, &fer_equipment,
-                                  &fer_holds, NULL, NULL, NULL, NULL) != 0)
+				  &fer_ore, &fer_organics, &fer_equipment,
+				  &fer_holds, NULL, NULL, NULL, NULL) != 0)
     {
       LOGW ("[fer] Failed to get ship %d cargo", ship_id);
       return 1;
@@ -1462,9 +1526,12 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
   int dummy_cap = 0;
   bool dummy_bool = false;
 
-  h_get_port_commodity_details (db, port_id, "ORE", &port_ore_qty, &dummy_cap, &dummy_bool, &dummy_bool);
-  h_get_port_commodity_details (db, port_id, "ORG", &port_org_qty, &dummy_cap, &dummy_bool, &dummy_bool);
-  h_get_port_commodity_details (db, port_id, "EQU", &port_equ_qty, &dummy_cap, &dummy_bool, &dummy_bool);
+  h_get_port_commodity_details (db, port_id, "ORE", &port_ore_qty, &dummy_cap,
+				&dummy_bool, &dummy_bool);
+  h_get_port_commodity_details (db, port_id, "ORG", &port_org_qty, &dummy_cap,
+				&dummy_bool, &dummy_bool);
+  h_get_port_commodity_details (db, port_id, "EQU", &port_equ_qty, &dummy_cap,
+				&dummy_bool, &dummy_bool);
 
   int port_ore_buy = h_calculate_port_buy_price (db, port_id, "ORE");
   int port_ore_sell = h_calculate_port_sell_price (db, port_id, "ORE");
@@ -1473,11 +1540,11 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
   int port_equ_buy = h_calculate_port_buy_price (db, port_id, "EQU");
   int port_equ_sell = h_calculate_port_sell_price (db, port_id, "EQU");
 
-  const char *commodities[] = {"ORE", "ORG", "EQU"};
-  int fer_hold_values[] = {fer_ore, fer_organics, fer_equipment};
-  int port_buy_prices[] = {port_ore_buy, port_org_buy, port_equ_buy};
-  int port_sell_prices[] = {port_ore_sell, port_org_sell, port_equ_sell};
-  int port_quantities[] = {port_ore_qty, port_org_qty, port_equ_qty};
+  const char *commodities[] = { "ORE", "ORG", "EQU" };
+  int fer_hold_values[] = { fer_ore, fer_organics, fer_equipment };
+  int port_buy_prices[] = { port_ore_buy, port_org_buy, port_equ_buy };
+  int port_sell_prices[] = { port_ore_sell, port_org_sell, port_equ_sell };
+  int port_quantities[] = { port_ore_qty, port_org_qty, port_equ_qty };
 
   int best_sell_idx = -1;
   int best_buy_idx = -1;
@@ -1485,19 +1552,22 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
   for (int c_idx = 0; c_idx < 3; ++c_idx)
     {
       if (fer_hold_values[c_idx] > 0 && port_buy_prices[c_idx] > 0)
-        {
-          if (best_sell_idx == -1 || port_buy_prices[c_idx] > port_buy_prices[best_sell_idx])
-            best_sell_idx = c_idx;
-        }
+	{
+	  if (best_sell_idx == -1
+	      || port_buy_prices[c_idx] > port_buy_prices[best_sell_idx])
+	    best_sell_idx = c_idx;
+	}
     }
 
   for (int c_idx = 0; c_idx < 3; ++c_idx)
     {
-      if (fer_empty_holds > 0 && port_quantities[c_idx] > 0 && port_sell_prices[c_idx] > 0)
-        {
-          if (best_buy_idx == -1 || port_sell_prices[c_idx] < port_sell_prices[best_buy_idx])
-            best_buy_idx = c_idx;
-        }
+      if (fer_empty_holds > 0 && port_quantities[c_idx] > 0
+	  && port_sell_prices[c_idx] > 0)
+	{
+	  if (best_buy_idx == -1
+	      || port_sell_prices[c_idx] < port_sell_prices[best_buy_idx])
+	    best_buy_idx = c_idx;
+	}
     }
 
   int rc = 0;
@@ -1508,42 +1578,51 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
       int price_per_unit = port_buy_prices[best_sell_idx];
       int max_sell_to_port = port_quantities[best_sell_idx] / 2;
       if (max_sell_to_port == 0)
-        max_sell_to_port = 1;
+	max_sell_to_port = 1;
 
-      int qty_to_trade = MIN (fer_hold_values[best_sell_idx], max_sell_to_port);
+      int qty_to_trade =
+	MIN (fer_hold_values[best_sell_idx], max_sell_to_port);
       long long port_balance = 0;
       db_get_port_bank_balance (db, port_id, &port_balance);
-      qty_to_trade = MIN (qty_to_trade, (int)(port_balance / price_per_unit));
+      qty_to_trade =
+	MIN (qty_to_trade, (int) (port_balance / price_per_unit));
 
       if (qty_to_trade > 0 && price_per_unit > 0)
-        {
-          long long total_credits = (long long)qty_to_trade * price_per_unit;
+	{
+	  long long total_credits = (long long) qty_to_trade * price_per_unit;
 
-          db_error_clear (&err);
-          rc = h_bank_transfer_unlocked (db, "port", port_id, "corp", g_fer_corp_id,
-                                         total_credits, "TRADE_SELL", tx_group_id);
-          if (rc == 0)
-            {
-              rc = h_update_ship_cargo (db, ship_id, commodity, -qty_to_trade, NULL);
-              if (rc == 0)
-                rc = h_market_move_port_stock (db, port_id, commodity, qty_to_trade);
-            }
+	  db_error_clear (&err);
+	  rc =
+	    h_bank_transfer_unlocked (db, "port", port_id, "corp",
+				      g_fer_corp_id, total_credits,
+				      "TRADE_SELL", tx_group_id);
+	  if (rc == 0)
+	    {
+	      rc =
+		h_update_ship_cargo (db, ship_id, commodity, -qty_to_trade,
+				     NULL);
+	      if (rc == 0)
+		rc =
+		  h_market_move_port_stock (db, port_id, commodity,
+					    qty_to_trade);
+	    }
 
-          if (rc == 0)
-            {
-              fer_event_json ("npc.trade", sector_id,
-                            "{ \"kind\":\"ferrengi_sell\", \"ship_id\":%d, \"port_id\":%d, "
-                            "\"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%"PRId64" }",
-                            ship_id, port_id, commodity, qty_to_trade, price_per_unit, total_credits);
-              LOGI ("[fer] Sold %d %s to Port %d for %lld credits.",
-                    qty_to_trade, commodity, port_id, total_credits);
-            }
-          else
-            {
-              LOGW ("[fer] Failed to sell %d %s to Port %d (rc=%d)",
-                    qty_to_trade, commodity, port_id, rc);
-            }
-        }
+	  if (rc == 0)
+	    {
+	      fer_event_json ("npc.trade", sector_id,
+			      "{ \"kind\":\"ferrengi_sell\", \"ship_id\":%d, \"port_id\":%d, "
+			      "\"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%"
+			      PRId64 " }", ship_id, port_id, commodity,
+			      qty_to_trade, price_per_unit, total_credits);
+	      LOGI ("[fer] Sold %d %s to Port %d for %lld credits.",
+		    qty_to_trade, commodity, port_id, total_credits);
+	    }
+	  else
+	    {
+	      LOGW ("[fer] Failed to sell %d %s to Port %d (rc=%d)",
+		    qty_to_trade, commodity, port_id, rc);
+	    }
+	}
     }
 
   if (rc == 0 && best_buy_idx != -1 && fer_empty_holds > 0)
@@ -1552,37 +1631,45 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
       int price_per_unit = port_sell_prices[best_buy_idx];
       int qty_to_trade = MIN (fer_empty_holds, port_quantities[best_buy_idx]);
       if (qty_to_trade <= 0)
-        qty_to_trade = 1;
+	qty_to_trade = 1;
 
-      long long total_credits = (long long)qty_to_trade * price_per_unit;
+      long long total_credits = (long long) qty_to_trade * price_per_unit;
 
-      if (qty_to_trade > 0 && total_credits > 0 && fer_credits >= total_credits)
-        {
-          db_error_clear (&err);
-          rc = h_bank_transfer_unlocked (db, "corp", g_fer_corp_id, "port", port_id,
-                                         total_credits, "TRADE_BUY", tx_group_id);
-          if (rc == 0)
-            {
-              rc = h_update_ship_cargo (db, ship_id, commodity, qty_to_trade, NULL);
-              if (rc == 0)
-                rc = h_market_move_port_stock (db, port_id, commodity, -qty_to_trade);
-            }
+      if (qty_to_trade > 0 && total_credits > 0
+	  && fer_credits >= total_credits)
+	{
+	  db_error_clear (&err);
+	  rc =
+	    h_bank_transfer_unlocked (db, "corp", g_fer_corp_id, "port",
+				      port_id, total_credits, "TRADE_BUY",
+				      tx_group_id);
+	  if (rc == 0)
+	    {
+	      rc =
+		h_update_ship_cargo (db, ship_id, commodity, qty_to_trade,
+				     NULL);
+	      if (rc == 0)
+		rc =
+		  h_market_move_port_stock (db, port_id, commodity,
+					    -qty_to_trade);
+	    }
 
-          if (rc == 0)
-            {
-              fer_event_json ("npc.trade", sector_id,
-                            "{ \"kind\":\"ferrengi_buy\", \"ship_id\":%d, \"port_id\":%d, "
-                            "\"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%"PRId64" }",
-                            ship_id, port_id, commodity, qty_to_trade, price_per_unit, total_credits);
-              LOGI ("[fer] Bought %d %s from Port %d for %lld credits.",
-                    qty_to_trade, commodity, port_id, total_credits);
-            }
-          else
-            {
-              LOGW ("[fer] Failed to buy %d %s from Port %d (rc=%d)",
-                    qty_to_trade, commodity, port_id, rc);
-            }
-        }
+	  if (rc == 0)
+	    {
+	      fer_event_json ("npc.trade", sector_id,
+			      "{ \"kind\":\"ferrengi_buy\", \"ship_id\":%d, \"port_id\":%d, "
+			      "\"commodity\":\"%s\", \"qty\":%d, \"price\":%d, \"total_credits\":%"
+			      PRId64 " }", ship_id, port_id, commodity,
+			      qty_to_trade, price_per_unit, total_credits);
+	      LOGI ("[fer] Bought %d %s from Port %d for %lld credits.",
+		    qty_to_trade, commodity, port_id, total_credits);
+	    }
+	  else
+	    {
+	      LOGW ("[fer] Failed to buy %d %s from Port %d (rc=%d)",
+		    qty_to_trade, commodity, port_id, rc);
+	    }
+	}
     }
 
   return rc;
@@ -1602,9 +1689,11 @@ fer_init_once (void)
       return 0;
     }
 
-  if (repo_universe_get_ferengi_corp_info(g_fer_db, &g_fer_corp_id, &g_fer_player_id) != 0)
+  if (repo_universe_get_ferengi_corp_info
+      (g_fer_db, &g_fer_corp_id, &g_fer_player_id) != 0)
     {
-      LOGW ("[fer] Ferengi Alliance corporation not found. Traders disabled.");
+      LOGW
+	("[fer] Ferengi Alliance corporation not found. Traders disabled.");
       return 0;
     }
 
@@ -1612,17 +1701,20 @@ fer_init_once (void)
     {
       g_fer_player_id = 1;
     }
-  LOGD ("[fer] Found Ferengi corp_id=%d, player_id=%d", g_fer_corp_id, g_fer_player_id);
+  LOGD ("[fer] Found Ferengi corp_id=%d, player_id=%d", g_fer_corp_id,
+	g_fer_player_id);
 
   int home = 0;
-  if (repo_universe_get_ferengi_homeworld_sector(g_fer_db, &home) != 0 || home <= 0)
+  if (repo_universe_get_ferengi_homeworld_sector (g_fer_db, &home) != 0
+      || home <= 0)
     {
       LOGW ("[fer] Ferengi homeworld not found; disabling traders");
       return 0;
     }
 
   int ship_type_id = 0;
-  if (repo_universe_get_ferengi_warship_type_id(g_fer_db, &ship_type_id) != 0 || ship_type_id == 0)
+  if (repo_universe_get_ferengi_warship_type_id (g_fer_db, &ship_type_id) != 0
+      || ship_type_id == 0)
     {
       LOGE ("[fer] No suitable shiptype found. Disabling.");
       return 0;
@@ -1641,15 +1733,16 @@ fer_tick (db_t *db, int64_t now_ms)
   if (!g_fer_inited)
     {
       if (!fer_init_once ())
-        {
-          return;
-        }
+	{
+	  return;
+	}
     }
-  
+
   if (!db)
     {
       db = g_fer_db;
-      if (!db) return;
+      if (!db)
+	return;
     }
 
   LOGD ("[fer] tick: traders system active");
@@ -1684,9 +1777,9 @@ iss_tick (db_t *db, int64_t now_ms)
   if (!g_iss_inited)
     {
       if (!iss_init_once ())
-        {
-          return;
-        }
+	{
+	  return;
+	}
     }
   if (iss_try_consume_summon (db))
     {
@@ -1705,7 +1798,7 @@ db_pick_adjacent (db_t *db, int sid)
     }
 
   int adjacent_id = 0;
-  repo_universe_get_random_wormhole_neighbor(db, sid, &adjacent_id);
+  repo_universe_get_random_wormhole_neighbor (db, sid, &adjacent_id);
   return adjacent_id;
 }
 
@@ -1717,7 +1810,7 @@ iss_init_once (void)
     {
       return 1;
     }
-  db_t *db = game_db_get_handle();
+  db_t *db = game_db_get_handle ();
   if (!db)
     {
       return 0;
@@ -1768,27 +1861,27 @@ h_handle_npc_encounters (db_t *db, client_ctx_t *ctx, int new_sector_id)
       json_t *payload = json_object ();
 
       if (!payload)
-        {
-          LOGE ("h_handle_npc_encounters: Out of memory for event payload.");
-          return;
-        }
-      json_object_set_new (payload, "player_id", json_integer (ctx->player_id));
-      json_object_set_new (payload, "sector_id", json_integer (new_sector_id));
+	{
+	  LOGE ("h_handle_npc_encounters: Out of memory for event payload.");
+	  return;
+	}
+      json_object_set_new (payload, "player_id",
+			   json_integer (ctx->player_id));
+      json_object_set_new (payload, "sector_id",
+			   json_integer (new_sector_id));
       json_object_set_new (payload, "npc_type", json_string ("Generic NPC"));
       json_object_set_new (payload, "message",
-                           json_string ("A generic NPC has been encountered!"));
+			   json_string
+			   ("A generic NPC has been encountered!"));
 
       db_log_engine_event (time (NULL),
-                           "npc.encounter",
-                           "player",
-                           ctx->player_id,
-                           new_sector_id,
-                           payload,
-                           NULL);
-      LOGI (
-        "h_handle_npc_encounters: Generic NPC encounter logged for player %d in sector %d.",
-        ctx->player_id,
-        new_sector_id);
+			   "npc.encounter",
+			   "player",
+			   ctx->player_id, new_sector_id, payload, NULL);
+      json_decref (payload);
+      LOGI
+	("h_handle_npc_encounters: Generic NPC encounter logged for player %d in sector %d.",
+	 ctx->player_id, new_sector_id);
     }
 }
 
@@ -1797,7 +1890,7 @@ h_handle_npc_encounters (db_t *db, client_ctx_t *ctx, int new_sector_id)
 int
 db_get_stardock_sector (db_t *db)
 {
-  (void)db;
+  (void) db;
   /* TODO: Query database for stardock sector */
   return 1;
 }
@@ -1805,9 +1898,11 @@ db_get_stardock_sector (db_t *db)
 int
 db_get_iss_player (db_t *db, int *out_player_id, int *out_sector)
 {
-  (void)db;
-  if (out_player_id) *out_player_id = 1;
-  if (out_sector) *out_sector = 1;
+  (void) db;
+  if (out_player_id)
+    *out_player_id = 1;
+  if (out_sector)
+    *out_sector = 1;
   /* TODO: Query database for ISS player */
   return 1;
 }
@@ -1815,14 +1910,17 @@ db_get_iss_player (db_t *db, int *out_player_id, int *out_sector)
 void
 iss_move_to (db_t *db, int sector_id, int warp_enabled, const char *reason)
 {
-  (void)db; (void)sector_id; (void)warp_enabled; (void)reason;
+  (void) db;
+  (void) sector_id;
+  (void) warp_enabled;
+  (void) reason;
   /* TODO: Move ISS to sector */
 }
 
 int
 iss_try_consume_summon (db_t *db)
 {
-  (void)db;
+  (void) db;
   /* TODO: Check if ISS should respond to summon */
   return 0;
 }
@@ -1830,7 +1928,6 @@ iss_try_consume_summon (db_t *db)
 void
 iss_patrol_step (db_t *db)
 {
-  (void)db;
+  (void) db;
   /* TODO: ISS patrol movement logic */
 }
-

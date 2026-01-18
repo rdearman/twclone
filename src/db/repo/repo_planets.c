@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int db_planets_apply_terra_sanctions(db_t *db, int player_id) {
     db_error_t err;
@@ -57,7 +58,7 @@ int db_planets_get_attack_info(db_t *db, int planet_id, int *sector_id, int *own
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q7 */
-    const char *q7 = "SELECT sector_id, owner_id, fighters FROM planets WHERE id={1};";
+    const char *q7 = "SELECT sector_id, owner_id, fighters FROM planets WHERE planet_id={1};";
     char sql[512]; sql_build(db, q7, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_id = db_res_col_int(res, 0, &err);
@@ -123,7 +124,7 @@ int db_planets_update_ship_fighters(db_t *db, int ship_id, int loss) {
 int db_planets_capture(db_t *db, int planet_id, int new_owner, const char *new_type) {
     db_error_t err;
     /* SQL_VERBATIM: Q12 */
-    const char *q12 = "UPDATE planets SET fighters=0, owner_id={1}, owner_type={2} WHERE id={3};";
+    const char *q12 = "UPDATE planets SET fighters=0, owner_id={1}, owner_type={2} WHERE planet_id={3};";
     char sql[512]; sql_build(db, q12, sql, sizeof(sql));
     if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(new_owner), db_bind_text(new_type), db_bind_i32(planet_id) }, 3, &err)) return 0;
     return -1;
@@ -410,7 +411,7 @@ int db_planets_get_type_id_by_code(db_t *db, const char *code, int *type_id) {
 int db_planets_create(db_t *db, int sector_id, const char *name, int owner_id, const char *owner_type, const char *class_str, int type_id, long long ts, int created_by, int64_t *new_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q33 */
-    const char *q33 = "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, TRUE);";
+    const char *q33 = "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, TRUE)";
     char sql[1024]; sql_build(db, q33, sql, sizeof(sql));
     db_bind_t params[] = {
         db_bind_i32 (sector_id), db_bind_text (name), db_bind_i32 (owner_id),
@@ -504,18 +505,17 @@ int db_planets_add_treasury_buy(db_t *db, int planet_id, long long amount) {
 
 int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int commodity_id, int qty, int price, int64_t *order_id) {
     db_error_t err;
-    const char *ts_epoch_str = sql_epoch_now(db);
+    int64_t now = (int64_t)time(NULL);
     /* SQL_VERBATIM: Q42 */
-    const char *q42 = "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ({1}, {2}, 'planet', {3}, {4}, 'buy', {5}, {6}, 'open', %s, {7}, 0)";
-    char sql_tmpl[1024], sql[1024];
-    snprintf(sql_tmpl, sizeof(sql_tmpl), q42, ts_epoch_str);
-    sql_build(db, sql_tmpl, sql, sizeof(sql));
+    const char *q42 = "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ({1}, {2}, 'planet', {3}, {4}, 'buy', {5}, {6}, 'open', {7}, {8}, 0)";
+    char sql[1024]; sql_build(db, q42, sql, sizeof(sql));
     db_bind_t params[] = {
         db_bind_text("player"), db_bind_i32(player_id),
         db_bind_i32(planet_id), db_bind_i32(commodity_id),
-        db_bind_i32(qty), db_bind_i32(price), db_bind_null()
+        db_bind_i32(qty), db_bind_i32(price),
+        db_bind_timestamp_text(now), db_bind_null()
     };
-    if (db_exec_insert_id(db, sql, params, 7, "id", order_id, &err)) return 0;
+    if (db_exec_insert_id(db, sql, params, 8, "commodity_orders_id", order_id, &err)) return 0;
     return -1;
 }
 
@@ -576,7 +576,7 @@ int db_planets_get_commodity_id_v2(db_t *db, const char *code, int *id) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q48 */
-    const char *q48 = "SELECT id FROM commodities WHERE code = {1} LIMIT 1;";
+    const char *q48 = "SELECT commodities_id FROM commodities WHERE code = {1} LIMIT 1;";
     char sql[512]; sql_build(db, q48, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_text(code) }, 1, &res, &err) && db_res_step(res, &err)) {
         *id = db_res_col_int(res, 0, &err);

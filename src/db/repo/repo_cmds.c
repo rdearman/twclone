@@ -58,7 +58,7 @@ int repo_cmds_get_login_info(db_t *db, const char *username, int32_t *player_id_
 int repo_cmds_register_player(db_t *db, const char *user, const char *pass, const char *ship_name, int64_t *player_id_out)
 {
     /* SQL_VERBATIM: Q3 */
-    const char *sql_reg = "SELECT register_player({1}, {2}, {3});";
+    const char *sql_reg = "SELECT register_player({1}, {2}, {3})";
     char sql_register[256];
     sql_build(db, sql_reg, sql_register, sizeof(sql_register));
 

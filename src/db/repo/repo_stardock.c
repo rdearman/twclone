@@ -407,7 +407,7 @@ int repo_stardock_get_graffiti_count(db_t *db, int64_t *out_count)
 int repo_stardock_delete_oldest_graffiti(db_t *db, int32_t limit)
 {
     /* SQL_VERBATIM: Q34 */
-    const char *sql = "DELETE FROM tavern_graffiti WHERE id IN (SELECT id FROM tavern_graffiti ORDER BY created_at ASC LIMIT {1});";
+    const char *sql = "DELETE FROM tavern_graffiti WHERE tavern_graffiti_id IN (SELECT tavern_graffiti_id FROM tavern_graffiti ORDER BY created_at ASC LIMIT {1});";
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;

@@ -66,17 +66,20 @@ class JsonSuiteRunner:
             val = obj
             if "*uuid*" in val:
                 val = val.replace("*uuid*", str(uuid.uuid4()))
+            if "@{timestamp}" in val:
+                val = val.replace("@{timestamp}", str(int(time.time())))
             
             # 1. Pattern-based expansion for macro arguments (local context)
-            # We ONLY want to replace things that look like @name
+        
+            # Support both @{var} and @var syntax
             def context_repl(m):
-                k = m.group(1)
+                k = m.group(1) or m.group(2)
                 # If k is in context, replace it. Macro args like @username are strings here.
                 if k in context:
                     return str(context[k])
                 return m.group(0)
             
-            val = re.sub(r"@([a-zA-Z0-9_-]+)", context_repl, val)
+            val = re.sub(r"@\{([a-zA-Z0-9_-]+)\}|@([a-zA-Z0-9_-]+)", context_repl, val)
 
             # 2. Pattern-based expansion for global variables
             if use_globals:
@@ -85,12 +88,12 @@ class JsonSuiteRunner:
                     limit -= 1
                     new_val = val
                     def global_repl(m):
-                        k = m.group(1)
+                        k = m.group(1) or m.group(2)
                         if k in self.vars:
                             return str(self.vars[k])
                         return m.group(0)
                     
-                    new_val = re.sub(r"@([a-zA-Z0-9_-]+)", global_repl, val)
+                    new_val = re.sub(r"@\{([a-zA-Z0-9_-]+)\}|@([a-zA-Z0-9_-]+)", global_repl, val)
                     if new_val == val: break
                     val = new_val
 
@@ -128,7 +131,10 @@ class JsonSuiteRunner:
         if not self._admin_client:
             self._admin_client = TWClient(self.host, self.port)
             self._admin_client.connect()
-            self._admin_client.login("admin", "password")
+            # Try System/BOT first as it's the standard bootstrap admin
+            if not self._admin_client.login("System", "BOT"):
+                # Fallback to admin/password
+                self._admin_client.login("admin", "password")
         return self._admin_client
 
     def run_suite(self, suite_path: str) -> bool:
@@ -169,6 +175,12 @@ class JsonSuiteRunner:
         # Pass 2: Resolve remaining globals
         test = self._expand_vars(test)
         
+        if "command" not in test:
+            if "comment" in test:
+                pass # Just a documentation step
+            print("PASS (Doc)")
+            return True
+
         if test.get("command") == "delay":
             time.sleep(test.get("data", {}).get("seconds", 0.1))
             print("DELAY")
@@ -305,13 +317,6 @@ class JsonSuiteRunner:
             print("XPASS (unexpected pass)")
         else:
             print("PASS")
-
-        if cmd_json.get("command") == "sys.raw_sql_exec" and user == "admin":
-            for c in self.user_clients.values():
-                if c.session_token:
-                    c.send_json({"command": "auth.refresh", "data": {"session_token": c.session_token}})
-                    r = c.recv_next_non_notice()
-                    if r.get("status") == "ok": c.session_token = r.get("data", {}).get("session_token")
 
         if user is None: client.close()
         return True

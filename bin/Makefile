@@ -107,7 +107,8 @@ PROGRAMS = $(bin_PROGRAMS)
 am__dirstamp = $(am__leading_dot)dirstamp
 am_bigbang_OBJECTS = ../src/bigbang_pg_main.$(OBJEXT) \
 	../src/db/db_api.$(OBJEXT) ../src/db/sql_driver.$(OBJEXT) \
-	../src/db/pg/db_pg.$(OBJEXT) ../src/common.$(OBJEXT) \
+	../src/db/pg/db_pg.$(OBJEXT) \
+	../src/db/mysql/db_mysql.$(OBJEXT) ../src/common.$(OBJEXT) \
 	../src/server_log.$(OBJEXT)
 bigbang_OBJECTS = $(am_bigbang_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -116,7 +117,8 @@ bigbang_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bigbang_LDFLAGS) \
 	$(LDFLAGS) -o $@
 am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/sql_driver.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
-	../src/game_db.$(OBJEXT) ../src/db/repo/repo_cmd.$(OBJEXT) \
+	../src/db/mysql/db_mysql.$(OBJEXT) ../src/game_db.$(OBJEXT) \
+	../src/db/repo/repo_cmd.$(OBJEXT) \
 	../src/db/repo/repo_cmds.$(OBJEXT) \
 	../src/db/repo/repo_citadel.$(OBJEXT) \
 	../src/db/repo/repo_config.$(OBJEXT) \
@@ -213,6 +215,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
 	../src/db/$(DEPDIR)/db_api.Po \
 	../src/db/$(DEPDIR)/sql_driver.Po \
+	../src/db/mysql/$(DEPDIR)/db_mysql.Po \
 	../src/db/pg/$(DEPDIR)/db_pg.Po \
 	../src/db/repo/$(DEPDIR)/repo_auth.Po \
 	../src/db/repo/$(DEPDIR)/repo_autopilot.Po \
@@ -289,7 +292,7 @@ AUTOMAKE = ${SHELL} '/home/rick/twclone/missing' automake-1.16
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2 -I/usr/include/postgresql
+CFLAGS = -g -O2
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -306,10 +309,10 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-01-15
-LDFLAGS =  -L/usr/lib/x86_64-linux-gnu
+ISODATE = 2026-01-17
+LDFLAGS = 
 LIBOBJS = 
-LIBS = -lpq -lpthread -lm 
+LIBS = -lpthread -lm 
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/rick/twclone/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
@@ -322,7 +325,7 @@ PACKAGE_TARNAME = twclone
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.0.2
 PATH_SEPARATOR = :
-PG_CONFIG = /usr/bin/pg_config
+PG_CONFIG = 
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 
@@ -382,13 +385,14 @@ top_srcdir = ..
 # 1. Define Sanitizer Flags
 SANITIZE_FLAGS = -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g
 
-# 2. Add the PostgreSQL include path explicitly
+# 2. Add the PostgreSQL and MySQL include paths explicitly
 # Replace /usr/include/postgresql with the result of 'pg_config --includedir' if different
 PG_INC = -I/usr/include/postgresql
+MYSQL_INC = -I/usr/include/mysql # Common MySQL include path
 
 # 3. Update AM_CFLAGS
-# added $(PG_INC) here
-AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+# added $(PG_INC) and $(MYSQL_INC) here
+AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) $(MYSQL_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
@@ -401,6 +405,7 @@ bigbang_SOURCES = \
         ../src/db/db_api.c \
         ../src/db/sql_driver.c \
         ../src/db/pg/db_pg.c \
+        ../src/db/mysql/db_mysql.c \
         ../src/common.c \
         ../src/server_log.c
 
@@ -413,6 +418,7 @@ server_SOURCES = \
 	../src/db/db_api.c \
 	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
+	../src/db/mysql/db_mysql.c \
 	../src/game_db.c \
 	../src/db/repo/repo_cmd.c \
 	../src/db/repo/repo_cmds.c \
@@ -575,6 +581,14 @@ clean-binPROGRAMS:
 	@: > ../src/db/pg/$(DEPDIR)/$(am__dirstamp)
 ../src/db/pg/db_pg.$(OBJEXT): ../src/db/pg/$(am__dirstamp) \
 	../src/db/pg/$(DEPDIR)/$(am__dirstamp)
+../src/db/mysql/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/mysql
+	@: > ../src/db/mysql/$(am__dirstamp)
+../src/db/mysql/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) ../src/db/mysql/$(DEPDIR)
+	@: > ../src/db/mysql/$(DEPDIR)/$(am__dirstamp)
+../src/db/mysql/db_mysql.$(OBJEXT): ../src/db/mysql/$(am__dirstamp) \
+	../src/db/mysql/$(DEPDIR)/$(am__dirstamp)
 ../src/common.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_log.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -725,6 +739,7 @@ mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 	-rm -f ../src/*.$(OBJEXT)
 	-rm -f ../src/db/*.$(OBJEXT)
+	-rm -f ../src/db/mysql/*.$(OBJEXT)
 	-rm -f ../src/db/pg/*.$(OBJEXT)
 	-rm -f ../src/db/repo/*.$(OBJEXT)
 
@@ -768,6 +783,7 @@ include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
 include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
 include ../src/db/$(DEPDIR)/db_api.Po # am--include-marker
 include ../src/db/$(DEPDIR)/sql_driver.Po # am--include-marker
+include ../src/db/mysql/$(DEPDIR)/db_mysql.Po # am--include-marker
 include ../src/db/pg/$(DEPDIR)/db_pg.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_auth.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_autopilot.Po # am--include-marker
@@ -940,6 +956,8 @@ distclean-generic:
 	-rm -f ../src/$(am__dirstamp)
 	-rm -f ../src/db/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../src/db/$(am__dirstamp)
+	-rm -f ../src/db/mysql/$(DEPDIR)/$(am__dirstamp)
+	-rm -f ../src/db/mysql/$(am__dirstamp)
 	-rm -f ../src/db/pg/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ../src/db/pg/$(am__dirstamp)
 	-rm -f ../src/db/repo/$(DEPDIR)/$(am__dirstamp)
@@ -990,6 +1008,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/db/$(DEPDIR)/db_api.Po
 	-rm -f ../src/db/$(DEPDIR)/sql_driver.Po
+	-rm -f ../src/db/mysql/$(DEPDIR)/db_mysql.Po
 	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_auth.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_autopilot.Po
@@ -1100,6 +1119,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
 	-rm -f ../src/db/$(DEPDIR)/db_api.Po
 	-rm -f ../src/db/$(DEPDIR)/sql_driver.Po
+	-rm -f ../src/db/mysql/$(DEPDIR)/db_mysql.Po
 	-rm -f ../src/db/pg/$(DEPDIR)/db_pg.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_auth.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_autopilot.Po

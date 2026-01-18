@@ -492,6 +492,22 @@ CREATE TABLE planets (
     FOREIGN KEY (type) REFERENCES planettypes (planettypes_id)
 );
 
+CREATE TABLE chat (
+    chat_id bigserial PRIMARY KEY,
+    sender_id bigint NOT NULL,
+    recipient_id bigint, -- NULL for broadcast
+    sector_id bigint,    -- NULL for global broadcast
+    message text NOT NULL,
+    sent_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id) REFERENCES players (player_id),
+    FOREIGN KEY (recipient_id) REFERENCES players (player_id),
+    FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)
+);
+
+CREATE INDEX idx_chat_recipient ON chat(recipient_id);
+CREATE INDEX idx_chat_sector ON chat(sector_id);
+CREATE INDEX idx_chat_sent_at ON chat(sent_at);
+
 ------------------ *******************************************
 CREATE TABLE citadel_requirements (
     planet_type_id bigint NOT NULL REFERENCES planettypes (planettypes_id) ON DELETE CASCADE,
@@ -563,8 +579,8 @@ CREATE TABLE mail (
     body text NOT NULL,
     sent_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     read_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    archived timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archived smallint NOT NULL DEFAULT 0,
+    deleted smallint NOT NULL DEFAULT 0,
     idempotency_key text,
     FOREIGN KEY (sender_id) REFERENCES players (player_id) ON DELETE CASCADE,
     FOREIGN KEY (recipient_id) REFERENCES players (player_id) ON DELETE CASCADE

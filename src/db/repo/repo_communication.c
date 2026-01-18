@@ -10,7 +10,7 @@ int repo_comm_create_system_notice(db_t *db, int64_t created_at, const char *tit
     db_error_t err;
     /* SQL_VERBATIM: Q1 */
     const char *q1 = "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
-    "VALUES ({1}, {2}, {3}, {4}, {5});";
+    "VALUES ({1}, {2}, {3}, {4}, {5})";
     char sql[256]; sql_build(db, q1, sql, sizeof(sql));
     db_bind_t params[5] = { db_bind_i64(created_at), db_bind_text(title), db_bind_text(body), db_bind_text(severity), expires_at > 0 ? db_bind_i64(expires_at) : db_bind_null() };
     if (!db_exec_insert_id (db, sql, params, 5, "system_notice_id", new_id_out, &err)) return err.code;
@@ -37,7 +37,7 @@ db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, 
 int repo_comm_mark_notice_seen(db_t *db, int notice_id, int player_id, int64_t seen_at) {
     db_error_t err;
     int64_t rows = 0;
-    db_bind_t params[] = { db_bind_i32(notice_id), db_bind_i32(player_id), db_bind_i64(seen_at) };
+    db_bind_t params[] = { db_bind_i32(notice_id), db_bind_i32(player_id), db_bind_timestamp_text(seen_at) };
 
     /* 1. Try Update first */
     const char *q_upd = "UPDATE notice_seen SET seen_at = {3} WHERE notice_id = {1} AND player_id = {2};";
@@ -61,7 +61,7 @@ int repo_comm_get_player_id_by_name(db_t *db, const char *name, int *player_id_o
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q4 */
-    const char *q4 = "SELECT id FROM players WHERE lower(name) = lower({1}) LIMIT 1;";
+    const char *q4 = "SELECT player_id FROM players WHERE lower(name) = lower({1}) LIMIT 1;";
     char sql[256]; sql_build(db, q4, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_text(name) }, 1, &res, &err) && db_res_step(res, &err)) {
         *player_id_out = db_res_col_i32(res, 0, &err);
@@ -107,7 +107,7 @@ int repo_comm_insert_mail(db_t *db, int sender_id, int recipient_id, const char 
     db_error_t err;
     /* SQL_VERBATIM: Q7 */
     const char *q7 = "INSERT INTO mail(sender_id, recipient_id, subject, body, idempotency_key) "
-    "VALUES({1},{2},{3},{4},{5});";
+    "VALUES({1},{2},{3},{4},{5})";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
     db_bind_t p[5] = { db_bind_i32(sender_id), db_bind_i32(recipient_id), subject ? db_bind_text(subject) : db_bind_null(), db_bind_text(body), idem ? db_bind_text(idem) : db_bind_null() };
     if (!db_exec_insert_id(db, sql, p, 5, "mail_id", new_id_out, &err)) return err.code;
@@ -196,5 +196,38 @@ db_res_t* repo_comm_list_subscriptions(db_t *db, int player_id, db_error_t *err)
     sql_build(db, q14, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, err);
+    return res;
+}
+
+int repo_comm_insert_chat(db_t *db, int sender_id, int recipient_id, int sector_id, const char *message, int64_t *new_id_out) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q15 */
+    const char *q15 = "INSERT INTO chat (sender_id, recipient_id, sector_id, message) VALUES ({1}, {2}, {3}, {4})";
+    char sql[512]; sql_build(db, q15, sql, sizeof(sql));
+    db_bind_t p[4] = {
+        db_bind_i32(sender_id),
+        recipient_id > 0 ? db_bind_i32(recipient_id) : db_bind_null(),
+        sector_id > 0 ? db_bind_i32(sector_id) : db_bind_null(),
+        db_bind_text(message)
+    };
+    if (!db_exec_insert_id(db, sql, p, 4, "chat_id", new_id_out, &err)) {
+        return err.code;
+    }
+    return 0;
+}
+
+db_res_t* repo_comm_list_chat(db_t *db, int player_id, int sector_id, int limit, db_error_t *err) {
+    /* SQL_VERBATIM: Q16 */
+    const char *q16 = 
+        "SELECT c.chat_id, c.sender_id, p.name as sender_name, c.recipient_id, r.name as recipient_name, c.sector_id, c.message, c.sent_at "
+        "FROM chat c "
+        "JOIN players p ON c.sender_id = p.player_id "
+        "LEFT JOIN players r ON c.recipient_id = r.player_id "
+        "WHERE (c.recipient_id IS NULL AND (c.sector_id IS NULL OR c.sector_id = {1})) "
+        "   OR c.recipient_id = {2} OR c.sender_id = {2} "
+        "ORDER BY c.chat_id DESC LIMIT {3};";
+    char sql[1024]; sql_build(db, q16, sql, sizeof(sql));
+    db_res_t *res = NULL;
+    db_query(db, sql, (db_bind_t[]){ db_bind_i32(sector_id), db_bind_i32(player_id), db_bind_i32(limit) }, 3, &res, err);
     return res;
 }

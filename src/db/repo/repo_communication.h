@@ -18,4 +18,8 @@ int repo_comm_delete_mail_bulk(db_t *db, int recipient_id, const int *mail_ids, 
 int repo_comm_get_subscription_count(db_t *db, int player_id, int *count_out);
 db_res_t* repo_comm_list_subscriptions(db_t *db, int player_id, db_error_t *err);
 
+/* Chat */
+int repo_comm_insert_chat(db_t *db, int sender_id, int recipient_id, int sector_id, const char *message, int64_t *new_id_out);
+db_res_t* repo_comm_list_chat(db_t *db, int player_id, int sector_id, int limit, db_error_t *err);
+
 #endif // REPO_COMMUNICATION_H

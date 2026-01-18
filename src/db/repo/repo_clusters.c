@@ -44,7 +44,7 @@ int repo_clusters_create(db_t *db, const char *name, const char *role, const cha
     /* SQL_VERBATIM: Q3 */
     const char *q3 = "INSERT INTO clusters (name, role, kind, center_sector, alignment, law_severity) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
     char sql[512]; sql_build(db, q3, sql, sizeof(sql));
-    if (db_exec_insert_id (db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(role), db_bind_text(kind), db_bind_i32(center_sector), db_bind_i32(alignment), db_bind_i32(law_severity) }, 6, "cluster_id", &new_id, &err)) {
+    if (db_exec_insert_id (db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(role), db_bind_text(kind), db_bind_i32(center_sector), db_bind_i32(alignment), db_bind_i32(law_severity) }, 6, "clusters_id", &new_id, &err)) {
         *cluster_id_out = (int)new_id;
         return 0;
     }
@@ -113,10 +113,10 @@ int repo_clusters_get_planet_sector(db_t *db, int num, int *sector_out) {
     char sql[256];
     if (num == 2) {
         /* SQL_VERBATIM: Q8 */
-        snprintf(sql, sizeof(sql), "SELECT sector FROM planets WHERE num=2");
+        snprintf(sql, sizeof(sql), "SELECT sector_id FROM planets WHERE num=2");
     } else {
         /* SQL_VERBATIM: Q9 */
-        snprintf(sql, sizeof(sql), "SELECT sector FROM planets WHERE num=3");
+        snprintf(sql, sizeof(sql), "SELECT sector_id FROM planets WHERE num=3");
     }
     if (db_query (db, sql, NULL, 0, &res, &err)) {
         if (db_res_step (res, &err)) {
@@ -148,7 +148,7 @@ int repo_clusters_pick_random_unclustered_sector(db_t *db, int *sector_id_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q11 */
-    const char *q11 = "SELECT id FROM sectors WHERE id > 10 AND id NOT IN (SELECT sector_id FROM cluster_sectors) ORDER BY RANDOM() LIMIT 1";
+    const char *q11 = "SELECT sector_id FROM sectors WHERE sector_id > 10 AND sector_id NOT IN (SELECT sector_id FROM cluster_sectors) ORDER BY RANDOM() LIMIT 1";
     if (db_query (db, q11, NULL, 0, &res, &err)) {
         if (db_res_step (res, &err)) {
             *sector_id_out = db_res_col_i32 (res, 0, &err);
@@ -164,7 +164,7 @@ int repo_clusters_pick_random_unclustered_sector(db_t *db, int *sector_id_out) {
 db_res_t* repo_clusters_get_all(db_t *db, db_error_t *err) {
     db_res_t *res = NULL;
     /* SQL_VERBATIM: Q12 */
-    db_query(db, "SELECT id, name FROM clusters", NULL, 0, &res, err);
+    db_query(db, "SELECT clusters_id, name FROM clusters", NULL, 0, &res, err);
     return res;
 }
 
@@ -172,7 +172,7 @@ int repo_clusters_get_avg_price(db_t *db, int cluster_id, const char *commodity,
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q13 */
-    const char *q13 = "SELECT AVG(price) FROM port_trade pt JOIN ports p ON p.port_id = pt.port_id JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id WHERE cs.cluster_id = {1} AND pt.commodity = {2}";
+    const char *q13 = "SELECT AVG(price) FROM port_trade pt JOIN ports p ON p.port_id = pt.port_id JOIN cluster_sectors cs ON cs.sector_id = p.sector_id WHERE cs.cluster_id = {1} AND pt.commodity = {2}";
     char sql[1024]; sql_build(db, q13, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_text(commodity) }, 2, &res, &err)) {
         if (db_res_step (res, &err)) {
@@ -204,7 +204,7 @@ int repo_clusters_update_commodity_index(db_t *db, int cluster_id, const char *c
 int repo_clusters_drift_port_prices(db_t *db, int mid_price, const char *commodity, int cluster_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q15 */
-    const char *q15 = "UPDATE port_trade SET price = CAST(price + 0.1 * ({1} - price) AS INTEGER) WHERE commodity = {2} AND port_id IN ( SELECT p.port_id FROM ports p JOIN cluster_sectors cs ON cs.sector_id_id = p.sector_id WHERE cs.cluster_id = {3} )";
+    const char *q15 = "UPDATE port_trade SET price = CAST(price + 0.1 * ({1} - price) AS INTEGER) WHERE commodity = {2} AND port_id IN ( SELECT p.port_id FROM ports p JOIN cluster_sectors cs ON cs.sector_id = p.sector_id WHERE cs.cluster_id = {3} )";
     char sql[1024]; sql_build(db, q15, sql, sizeof(sql));
     if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32(mid_price), db_bind_text(commodity), db_bind_i32(cluster_id) }, 3, &err)) return err.code;
     return 0;
@@ -272,7 +272,7 @@ int repo_clusters_upsert_player_status(db_t *db, int cluster_id, int player_id, 
 db_res_t* repo_clusters_get_all_ports(db_t *db, db_error_t *err) {
     db_res_t *res = NULL;
     /* SQL_VERBATIM: Q19 */
-    db_query(db, "SELECT id, sector FROM ports", NULL, 0, &res, err);
+    db_query(db, "SELECT port_id, sector_id FROM ports", NULL, 0, &res, err);
     return res;
 }
 
@@ -280,7 +280,7 @@ int repo_clusters_get_alignment(db_t *db, int sector_id, int *alignment_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q20 */
-    const char *q20 = "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.id WHERE cs.sector_id_id = {1} LIMIT 1";
+    const char *q20 = "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.clusters_id WHERE cs.sector_id = {1} LIMIT 1";
     char sql[512]; sql_build(db, q20, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err)) {
         if (db_res_step (res, &err)) {

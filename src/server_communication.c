@@ -34,7 +34,7 @@ matches_pattern (const char *topic, const char *pattern)
   const char *star = strchr (pattern, '*');
   if (!star)
     {
-      return strcasecmp (topic, pattern) == 0;  /* exact */
+      return strcasecmp (topic, pattern) == 0;	/* exact */
     }
   /* suffix wildcard: "prefix.*" */
   size_t plen = (size_t) (star - pattern);
@@ -92,17 +92,17 @@ is_allowed_topic (const char *t)
   for (int i = 0; allowed[i]; ++i)
     {
       if (matches_pattern (t, allowed[i]))
-        {
-          return 1;
-        }
+	{
+	  return 1;
+	}
     }
   return 0;
 }
 
 
-extern void attach_rate_limit_meta (json_t *env, client_ctx_t *ctx);
-extern void rl_tick (client_ctx_t *ctx);
-extern void send_all_json (int fd, json_t *obj);
+extern void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
+extern void rl_tick (client_ctx_t * ctx);
+extern void send_all_json (int fd, json_t * obj);
 
 typedef struct sub_node
 {
@@ -120,45 +120,45 @@ static sub_map_t *g_submaps = NULL;
 
 static void
 broadcast_system_notice (int notice_id,
-                         const char *title,
-                         const char *body,
-                         const char *severity,
-                         time_t created_at, time_t expires_at)
+			 const char *title,
+			 const char *body,
+			 const char *severity,
+			 time_t created_at, time_t expires_at)
 {
   json_t *data = json_object ();
   json_object_set_new (data, "id", json_integer (notice_id));
   json_object_set_new (data, "title", json_string (title ? title : ""));
   json_object_set_new (data, "body", json_string (body ? body : ""));
   json_object_set_new (data, "severity",
-                       json_string (severity ? severity : "info"));
+		       json_string (severity ? severity : "info"));
   json_object_set_new (data, "created_at", json_integer ((int) created_at));
   json_object_set_new (data, "expires_at", json_integer ((int) expires_at));
   if (!data)
     {
       return;
     }
-  for (sub_map_t *m = g_submaps; m; m = m->next)
+  for (sub_map_t * m = g_submaps; m; m = m->next)
     {
       json_t *env = json_object ();
 
 
       if (!env)
-        {
-          continue;
-        }
+	{
+	  continue;
+	}
       json_object_set_new (env, "status", json_string ("ok"));
       json_object_set_new (env, "type", json_string ("system.notice_v1"));
-      json_object_set (env, "data", data);      /* shared; incref below */
+      json_object_set (env, "data", data);	/* shared; incref below */
       json_t *meta = json_object ();
 
 
       if (meta)
-        {
-          json_object_set_new (meta, "topic", json_string ("system.notice"));
-          json_object_set_new (meta, "mandatory", json_true ());
-          json_object_set_new (meta, "persistent", json_true ());
-          json_object_set_new (env, "meta", meta);
-        }
+	{
+	  json_object_set_new (meta, "topic", json_string ("system.notice"));
+	  json_object_set_new (meta, "mandatory", json_true ());
+	  json_object_set_new (meta, "persistent", json_true ());
+	  json_object_set_new (env, "meta", meta);
+	}
       attach_rate_limit_meta (env, m->ctx);
       rl_tick (m->ctx);
       send_all_json (m->ctx->fd, env);
@@ -175,9 +175,9 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
       auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_PERMISSION_DENIED,
-                                   "Permission denied", NULL);
+				   root,
+				   ERR_PERMISSION_DENIED,
+				   "Permission denied", NULL);
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -190,13 +190,13 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
   if (!title || !body)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_BAD_REQUEST, "title and body are required");
+			   root,
+			   ERR_BAD_REQUEST, "title and body are required");
       return 0;
     }
   if (!sev
       || (strcasecmp (sev, "info") && strcasecmp (sev, "warn")
-          && strcasecmp (sev, "error")))
+	  && strcasecmp (sev, "error")))
     {
       sev = "info";
     }
@@ -212,17 +212,20 @@ cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
 
   int64_t notice_id = 0;
   time_t now = time (NULL);
-  int64_t expires_at = (exp && json_is_integer (exp)) ? json_integer_value (exp) : 0;
+  int64_t expires_at = (exp
+			&& json_is_integer (exp)) ? json_integer_value (exp) :
+    0;
 
-  if (repo_comm_create_system_notice(db, (int64_t)now, title, body, sev, expires_at, &notice_id) != 0)
+  if (repo_comm_create_system_notice
+      (db, (int64_t) now, title, body, sev, expires_at, &notice_id) != 0)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
 
   /* Immediate push to online users */
-  broadcast_system_notice ((int)notice_id, title, body, sev, now,
-                           now + (24 * 60 * 60));
+  broadcast_system_notice ((int) notice_id, title, body, sev, now,
+			   now + (24 * 60 * 60));
 
   /* Build reply */
   json_t *resp = json_object ();
@@ -255,9 +258,9 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
 
 
       if (jlim && json_is_integer (jlim))
-        {
-          limit = (int) json_integer_value (jlim);
-        }
+	{
+	  limit = (int) json_integer_value (jlim);
+	}
     }
 
   db_t *db = game_db_get_handle ();
@@ -275,14 +278,16 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
   json_t *resp = NULL;
   int rc = 0;
 
-  const char *now_expr = sql_now_timestamptz(db);
+  const char *now_expr = sql_now_timestamptz (db);
   if (!now_expr)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
 
-  if ((res = repo_comm_list_notices(db, now_expr, ctx->player_id, include_expired ? 1 : 0, limit, &err)) == NULL)
+  if ((res =
+       repo_comm_list_notices (db, now_expr, ctx->player_id,
+			       include_expired ? 1 : 0, limit, &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       rc = 0;
@@ -300,11 +305,11 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
       const char *sv = db_res_col_text (res, 3, &err);
       int64_t created = db_res_col_i64 (res, 4, &err);
       int64_t expires = db_res_col_is_null (res, 5) ? 0 : db_res_col_i64 (res,
-                                                                          5,
-                                                                          &err);
+									  5,
+									  &err);
       int64_t seen_at = db_res_col_is_null (res, 6) ? 0 : db_res_col_i64 (res,
-                                                                          6,
-                                                                          &err);
+									  6,
+									  &err);
 
       json_t *row = json_object ();
 
@@ -316,13 +321,13 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (row, "created_at", json_integer (created));
 
       if (expires > 0)
-        {
-          json_object_set_new (row, "expires_at", json_integer (expires));
-        }
+	{
+	  json_object_set_new (row, "expires_at", json_integer (expires));
+	}
       if (seen_at > 0)
-        {
-          json_object_set_new (row, "seen_at", json_integer (seen_at));
-        }
+	{
+	  json_object_set_new (row, "seen_at", json_integer (seen_at));
+	}
       json_array_append_new (items, row);
     }
 
@@ -366,7 +371,7 @@ cmd_notice_ack (client_ctx_t *ctx, json_t *root)
 
   time_t now = time (NULL);
 
-  if (repo_comm_mark_notice_seen(db, id, ctx->player_id, (int64_t)now) != 0)
+  if (repo_comm_mark_notice_seen (db, id, ctx->player_id, (int64_t) now) != 0)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
@@ -394,9 +399,9 @@ is_ascii_printable (const char *s)
   for (const unsigned char *p = (const unsigned char *)s; *p; ++p)
     {
       if (*p < 0x20 || *p > 0x7E)
-        {
-          return 0;
-        }
+	{
+	  return 0;
+	}
     }
   return 1;
 }
@@ -429,11 +434,11 @@ static int
 bc_cb (int player_id, void *arg)
 {
   struct bc_ctx *bc = (struct bc_ctx *) arg;
-  if (send_to_player (player_id, bc->event_type, json_incref (bc->data)) == 0)
+  if (send_to_player (player_id, bc->event_type, bc->data) == 0)
     {
       bc->deliveries++;
     }
-  return 0;                     // continue
+  return 0;			// continue
 }
 
 
@@ -473,29 +478,26 @@ server_broadcast_to_sector (int sid, const char *name, json_t *payload)
   if (!payload_copy)
     {
       LOGE
-      (
-        "server_broadcast_to_sector: Failed to deep copy payload for sector %d.",
-        sid);
+	("server_broadcast_to_sector: Failed to deep copy payload for sector %d.",
+	 sid);
       return -1;
     }
   // This function acts as a wrapper to comm_publish_sector_event, ensuring sector-specific filtering
   comm_publish_sector_event (sid, name, payload_copy);
-  return 0;                     // Success
+  return 0;			// Success
 }
 
 
 void
 comm_broadcast_message (comm_scope_t scope,
-                        long long id,
-                        const char *msg,
-                        json_t *extra)
+			long long id, const char *msg, json_t *extra)
 {
   if (!msg || !*msg)
     {
       if (extra)
-        {
-          json_decref (extra);
-        }
+	{
+	  json_decref (extra);
+	}
       return;
     }
   char topic[64] = { 0 };
@@ -503,24 +505,24 @@ comm_broadcast_message (comm_scope_t scope,
 
   switch (scope)
     {
-      case COMM_SCOPE_GLOBAL:
-        snprintf (topic, sizeof (topic), "broadcast.global");
-        break;
-      case COMM_SCOPE_SECTOR:
-        snprintf (topic, sizeof (topic), "sector.%lld", id);
-        break;
-      case COMM_SCOPE_CORP:
-        snprintf (topic, sizeof (topic), "corp.%lld", id);
-        break;
-      case COMM_SCOPE_PLAYER:
-        snprintf (topic, sizeof (topic), "player.%lld", id);
-        break;
-      default:
-        if (extra)
-          {
-            json_decref (extra);
-          }
-        return;
+    case COMM_SCOPE_GLOBAL:
+      snprintf (topic, sizeof (topic), "broadcast.global");
+      break;
+    case COMM_SCOPE_SECTOR:
+      snprintf (topic, sizeof (topic), "sector.%lld", id);
+      break;
+    case COMM_SCOPE_CORP:
+      snprintf (topic, sizeof (topic), "corp.%lld", id);
+      break;
+    case COMM_SCOPE_PLAYER:
+      snprintf (topic, sizeof (topic), "player.%lld", id);
+      break;
+    default:
+      if (extra)
+	{
+	  json_decref (extra);
+	}
+      return;
     }
   /* Prebuild common data object; clone per recipient if needed */
   json_t *base = json_object ();
@@ -528,21 +530,20 @@ comm_broadcast_message (comm_scope_t scope,
 
   json_object_set_new (base, "message", json_string (msg));
   json_object_set_new (base, "scope",
-                       json_string ((scope == COMM_SCOPE_GLOBAL) ? "global" :
-                                    (scope ==
-                                     COMM_SCOPE_SECTOR) ? "sector" :
-                                    (scope ==
-                                     COMM_SCOPE_CORP) ? "corp" : "player"));
-  json_object_set_new (base, "scope_id",
-                       json_integer ((json_int_t) id));
+		       json_string ((scope == COMM_SCOPE_GLOBAL) ? "global" :
+				    (scope ==
+				     COMM_SCOPE_SECTOR) ? "sector" :
+				    (scope ==
+				     COMM_SCOPE_CORP) ? "corp" : "player"));
+  json_object_set_new (base, "scope_id", json_integer ((json_int_t) id));
 
 
   if (!base)
     {
       if (extra)
-        {
-          json_decref (extra);
-        }
+	{
+	  json_decref (extra);
+	}
       return;
     }
   if (extra)
@@ -554,39 +555,39 @@ comm_broadcast_message (comm_scope_t scope,
 
 
       while (it)
-        {
-          k = json_object_iter_key (it);
-          v = json_object_iter_value (it);
-          json_object_set (base, k, v);
-          it = json_object_iter_next (extra, it);
-        }
+	{
+	  k = json_object_iter_key (it);
+	  v = json_object_iter_value (it);
+	  json_object_set (base, k, v);
+	  it = json_object_iter_next (extra, it);
+	}
       json_decref (extra);
     }
   /* Fan-out to subscribers of the computed topic */
-  for (sub_map_t *m = g_submaps; m; m = m->next)
+  for (sub_map_t * m = g_submaps; m; m = m->next)
     {
       int deliver = 0;
 
 
-      for (sub_node_t *n = m->head; n; n = n->next)
-        {
-          if (matches_pattern (topic, n->topic))
-            {
-              deliver = 1;
-              break;
-            }
-        }
+      for (sub_node_t * n = m->head; n; n = n->next)
+	{
+	  if (matches_pattern (topic, n->topic))
+	    {
+	      deliver = 1;
+	      break;
+	    }
+	}
       if (!deliver)
-        {
-          continue;
-        }
+	{
+	  continue;
+	}
       json_t *env = json_object ();
 
 
       if (!env)
-        {
-          continue;
-        }
+	{
+	  continue;
+	}
       json_t *data = json_deep_copy (base);
 
 
@@ -597,10 +598,10 @@ comm_broadcast_message (comm_scope_t scope,
 
 
       if (meta)
-        {
-          json_object_set_new (meta, "topic", json_string (topic));
-          json_object_set_new (env, "meta", meta);
-        }
+	{
+	  json_object_set_new (meta, "topic", json_string (topic));
+	  json_object_set_new (env, "meta", meta);
+	}
       attach_rate_limit_meta (env, m->ctx);
       rl_tick (m->ctx);
       send_all_json (m->ctx->fd, env);
@@ -616,9 +617,9 @@ comm_publish_sector_event (int sid, const char *name, json_t *data)
   if (sid <= 0 || !name || !*name)
     {
       if (data)
-        {
-          json_decref (data);
-        }
+	{
+	  json_decref (data);
+	}
       return;
     }
 
@@ -629,9 +630,9 @@ comm_publish_sector_event (int sid, const char *name, json_t *data)
   if (!db)
     {
       if (data)
-        {
-          json_decref (data);
-        }
+	{
+	  json_decref (data);
+	}
       return;
     }
 
@@ -644,7 +645,8 @@ comm_publish_sector_event (int sid, const char *name, json_t *data)
 
 
   struct bc_ctx bc = {.event_type = name,.data = data,
-                      .deliveries = 0};
+    .deliveries = 0
+  };
 
 
   /* db_for_each_subscriber finds players subscribed to 'topic' (exact or wildcard) */
@@ -679,25 +681,25 @@ push_unseen_notices_for_player (client_ctx_t *ctx, int pid)
 
 
       if (!it || !json_is_object (it))
-        {
-          continue;
-        }
+	{
+	  continue;
+	}
       int id = (int) json_integer_value (json_object_get (it, "id"));
       const char *ttl = json_string_value (json_object_get (it, "title"));
       const char *bod = json_string_value (json_object_get (it, "body"));
       const char *sev = json_string_value (json_object_get (it, "severity"));
       int created =
-        (int) json_integer_value (json_object_get (it, "created_at"));
+	(int) json_integer_value (json_object_get (it, "created_at"));
       int expires =
-        (int) json_integer_value (json_object_get (it, "expires_at"));
+	(int) json_integer_value (json_object_get (it, "expires_at"));
       /* Send a single envelope to this ctx only */
       json_t *env = json_object ();
 
 
       if (!env)
-        {
-          continue;
-        }
+	{
+	  continue;
+	}
       json_object_set_new (env, "status", json_string ("ok"));
       json_object_set_new (env, "type", json_string ("system.notice_v1"));
       json_t *data = json_object ();
@@ -707,25 +709,25 @@ push_unseen_notices_for_player (client_ctx_t *ctx, int pid)
       json_object_set_new (data, "title", json_string (ttl ? ttl : ""));
       json_object_set_new (data, "body", json_string (bod ? bod : ""));
       json_object_set_new (data, "severity",
-                           json_string (sev ? sev : "info"));
+			   json_string (sev ? sev : "info"));
       json_object_set_new (data, "created_at", json_integer (created));
       json_object_set_new (data, "expires_at", json_integer (expires));
 
 
       if (data)
-        {
-          json_object_set_new (env, "data", data);
-        }
+	{
+	  json_object_set_new (env, "data", data);
+	}
       json_t *meta = json_object ();
 
 
       if (meta)
-        {
-          json_object_set_new (meta, "topic", json_string ("system.notice"));
-          json_object_set_new (meta, "mandatory", json_true ());
-          json_object_set_new (meta, "persistent", json_true ());
-          json_object_set_new (env, "meta", meta);
-        }
+	{
+	  json_object_set_new (meta, "topic", json_string ("system.notice"));
+	  json_object_set_new (meta, "mandatory", json_true ());
+	  json_object_set_new (meta, "persistent", json_true ());
+	  json_object_set_new (env, "meta", meta);
+	}
       attach_rate_limit_meta (env, ctx);
       rl_tick (ctx);
       send_all_json (ctx->fd, env);
@@ -754,7 +756,7 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
   if (!title || !body)
     {
       send_response_error (ctx, root, REF_NOT_IN_SECTOR,
-                           "Missing title/body");
+			   "Missing title/body");
       return 1;
     }
   db_t *db = game_db_get_handle ();
@@ -766,7 +768,8 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   int id =
-    db_notice_create (db, title, body, sev ? sev : "info", (time_t) expires_at);
+    db_notice_create (db, title, body, sev ? sev : "info",
+		      (time_t) expires_at);
 
 
   if (id < 0)
@@ -779,7 +782,7 @@ cmd_admin_notice_create (client_ctx_t *ctx, json_t *root)
 
 
   broadcast_system_notice (id, title, body, sev ? sev : "info", now,
-                           (time_t) expires_at);
+			   (time_t) expires_at);
   json_t *ok = json_object ();
 
 
@@ -797,9 +800,9 @@ cmd_notice_dismiss (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_IMPLEMENTED,
-                                   "Auth required", NULL);
+				   root,
+				   ERR_NOT_IMPLEMENTED,
+				   "Auth required", NULL);
       return 1;
     }
   json_t *data = json_object_get (root, "data");
@@ -852,9 +855,9 @@ require_auth (client_ctx_t *ctx, json_t *root)
       return 1;
     }
   send_response_refused_steal (ctx,
-                               root,
-                               ERR_SECTOR_NOT_FOUND,
-                               "Not authenticated", NULL);
+			       root,
+			       ERR_SECTOR_NOT_FOUND,
+			       "Not authenticated", NULL);
   return 0;
 }
 
@@ -873,11 +876,59 @@ int
 cmd_chat_send (client_ctx_t *ctx, json_t *root)
 {
   if (!require_auth (ctx, root))
+    return 0;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return 0;
+
+  json_t *data = json_object_get (root, "data");
+  if (!data)
     {
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing data");
       return 0;
     }
-  // TODO: parse {channel?, text}, persist/deliver
-  return niy (ctx, root, "chat.send");
+
+  const char *to_player = json_string_value (json_object_get (data, "to_player"));
+  int to_id = (int) json_integer_value (json_object_get (data, "to_id"));
+  const char *message = json_string_value (json_object_get (data, "message"));
+
+  if (!message || !*message)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Message required");
+      return 0;
+    }
+
+  if (to_id <= 0 && to_player)
+    {
+      repo_comm_get_player_id_by_name (db, to_player, &to_id);
+    }
+
+  if (to_id <= 0)
+    {
+      send_response_error (ctx, root, 1900, "Recipient not found");
+      return 0;
+    }
+
+  int64_t chat_id = 0;
+  int rc = repo_comm_insert_chat (db, ctx->player_id, to_id, 0, message, &chat_id);
+  if (rc != 0)
+    {
+      LOGE ("cmd_chat_send: Failed to save chat: rc=%d", rc);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Failed to save chat");
+      return 0;
+    }
+
+  /* Deliver to recipient if online */
+  json_t *evt = json_object ();
+  json_object_set_new (evt, "chat_id", json_integer (chat_id));
+  json_object_set_new (evt, "sender_id", json_integer (ctx->player_id));
+  json_object_set_new (evt, "message", json_string (message));
+  server_deliver_to_player (to_id, "chat.private_v1", evt);
+  json_decref (evt);
+
+  send_response_ok_take (ctx, root, "chat.sent", NULL);
+  return 0;
 }
 
 
@@ -885,11 +936,43 @@ int
 cmd_chat_broadcast (client_ctx_t *ctx, json_t *root)
 {
   if (!require_auth (ctx, root))
+    return 0;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return 0;
+
+  json_t *data = json_object_get (root, "data");
+  if (!data)
     {
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing data");
       return 0;
     }
-  // TODO: admin/mod ACL, broadcast message
-  return niy (ctx, root, "chat.broadcast");
+
+  const char *message = json_string_value (json_object_get (data, "message"));
+  if (!message || !*message)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Message required");
+      return 0;
+    }
+
+  int64_t chat_id = 0;
+  int rc = repo_comm_insert_chat (db, ctx->player_id, 0, 0, message, &chat_id);
+  if (rc != 0)
+    {
+      LOGE ("cmd_chat_broadcast: Failed to save chat: rc=%d", rc);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Failed to save chat");
+      return 0;
+    }
+
+  /* Broadcast to online users */
+  json_t *extra = json_object ();
+  json_object_set_new (extra, "chat_id", json_integer (chat_id));
+  json_object_set_new (extra, "sender_id", json_integer (ctx->player_id));
+  comm_broadcast_message (COMM_SCOPE_GLOBAL, 0, message, extra);
+
+  send_response_ok_take (ctx, root, "chat.broadcast_v1", NULL);
+  return 0;
 }
 
 
@@ -897,11 +980,57 @@ int
 cmd_chat_history (client_ctx_t *ctx, json_t *root)
 {
   if (!require_auth (ctx, root))
+    return 0;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return 0;
+
+  json_t *data = json_object_get (root, "data");
+  int limit = 50;
+  if (data)
     {
+      json_t *jlim = json_object_get (data, "limit");
+      if (jlim && json_is_integer (jlim))
+	limit = (int) json_integer_value (jlim);
+    }
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  if ((res =
+       repo_comm_list_chat (db, ctx->player_id, ctx->sector_id, limit,
+			    &err)) == NULL)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
     }
-  // TODO: parse {channel?, before?, limit?}, return messages
-  return niy (ctx, root, "chat.history");
+
+  json_t *items = json_array ();
+  while (db_res_step (res, &err))
+    {
+      json_t *row = json_object ();
+      json_object_set_new (row, "id", json_integer (db_res_col_i32 (res, 0, &err)));
+      json_object_set_new (row, "sender_id", json_integer (db_res_col_i32 (res, 1, &err)));
+      json_object_set_new (row, "sender_name", json_string (db_res_col_text (res, 2, &err)));
+      if (!db_res_col_is_null (res, 3))
+	{
+	  json_object_set_new (row, "recipient_id", json_integer (db_res_col_i32 (res, 3, &err)));
+	  json_object_set_new (row, "recipient_name", json_string (db_res_col_text (res, 4, &err)));
+	}
+      if (!db_res_col_is_null (res, 5))
+	{
+	  json_object_set_new (row, "sector_id", json_integer (db_res_col_i32 (res, 5, &err)));
+	}
+      json_object_set_new (row, "message", json_string (db_res_col_text (res, 6, &err)));
+      json_object_set_new (row, "sent_at", json_string (db_res_col_text (res, 7, &err)));
+      json_array_append_new (items, row);
+    }
+  db_res_finalize (res);
+
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "messages", items);
+  send_response_ok_take (ctx, root, "chat.history_v1", &resp);
+  return 0;
 }
 
 
@@ -926,14 +1055,18 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   if (!data)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_INVALID_SCHEMA, "Invalid request schema");
+			   root,
+			   ERR_INVALID_SCHEMA, "Invalid request schema");
       return 0;
     }
   /* Parse inputs */
   const char *to_name = NULL, *subject = NULL, *body = NULL, *idem = NULL;
   int to_id = 0;
   json_t *j_to_id = json_object_get (data, "to_id");
+  if (!j_to_id)
+    {
+      j_to_id = json_object_get (data, "recipient_id");
+    }
 
 
   if (j_to_id && json_is_integer (j_to_id))
@@ -972,9 +1105,9 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   if ((!to_name && to_id <= 0) || !body)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_MISSING_FIELD,
-                           "Missing required field: to/to_id and body");
+			   root,
+			   ERR_MISSING_FIELD,
+			   "Missing required field: to/to_id and body");
       return 0;
     }
   /* Resolve recipient by name if needed */
@@ -982,25 +1115,27 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
 
   if (to_id <= 0 && to_name)
     {
-      if (repo_comm_get_player_id_by_name(db, to_name, &to_id) != 0 || to_id <= 0)
-        {
-          send_response_error (ctx, root, 1900, "Recipient not found");
-          return 0;
-        }
+      if (repo_comm_get_player_id_by_name (db, to_name, &to_id) != 0
+	  || to_id <= 0)
+	{
+	  send_response_error (ctx, root, 1900, "Recipient not found");
+	  return 0;
+	}
     }
   /* Check if recipient has blocked the sender */
   {
     int blocked = 0;
-    if (repo_comm_check_player_blocked(db, to_id, ctx->player_id, &blocked) != 0)
+    if (repo_comm_check_player_blocked (db, to_id, ctx->player_id, &blocked)
+	!= 0)
       {
-        blocked = 0;
+	blocked = 0;
       }
     if (blocked)
       {
-        send_response_error (ctx,
-                             root,
-                             ERR_HARDWARE_NOT_AVAILABLE, "Muted or blocked");
-        return 0;
+	send_response_error (ctx,
+			     root,
+			     ERR_HARDWARE_NOT_AVAILABLE, "Muted or blocked");
+	return 0;
       }
   }
   /* Idempotency */
@@ -1009,24 +1144,25 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
 
   if (idem && *idem)
     {
-      repo_comm_get_mail_id_by_idem(db, idem, to_id, &mail_id);
+      repo_comm_get_mail_id_by_idem (db, idem, to_id, &mail_id);
     }
   /* Insert if not already present */
   if (mail_id == 0)
     {
-      if (repo_comm_insert_mail(db, ctx->player_id, to_id, subject, body, idem, &mail_id) != 0)
-        {
-          /* Re-check idempotency in case of race */
-          if (idem && *idem)
-            {
-              repo_comm_get_mail_id_by_idem(db, idem, to_id, &mail_id);
-            }
-          if (mail_id == 0)
-            {
-              send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
-              return 0;
-            }
-        }
+      if (repo_comm_insert_mail
+	  (db, ctx->player_id, to_id, subject, body, idem, &mail_id) != 0)
+	{
+	  /* Re-check idempotency in case of race */
+	  if (idem && *idem)
+	    {
+	      repo_comm_get_mail_id_by_idem (db, idem, to_id, &mail_id);
+	    }
+	  if (mail_id == 0)
+	    {
+	      send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
+	      return 0;
+	    }
+	}
     }
   /* Respond */
   json_t *resp = json_object ();
@@ -1058,16 +1194,16 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
 
 
       if (jlim && json_is_integer (jlim))
-        {
-          limit = (int) json_integer_value (jlim);
-        }
+	{
+	  limit = (int) json_integer_value (jlim);
+	}
       json_t *jaft = json_object_get (data, "after_id");
 
 
       if (jaft && json_is_integer (jaft))
-        {
-          after_id = (int) json_integer_value (jaft);
-        }
+	{
+	  after_id = (int) json_integer_value (jaft);
+	}
     }
   if (limit <= 0 || limit > 200)
     {
@@ -1077,7 +1213,9 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
   db_error_t err;
 
-  if ((res = repo_comm_list_inbox(db, ctx->player_id, after_id, limit, &err)) == NULL)
+  if ((res =
+       repo_comm_list_inbox (db, ctx->player_id, after_id, limit,
+			     &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       return 0;
@@ -1091,17 +1229,17 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
     {
       int id = db_res_col_i32 (res, 0, &err);
       int thread_id = db_res_col_is_null (res, 1) ? 0 : db_res_col_i32 (res,
-                                                                        1,
-                                                                        &err);
+									1,
+									&err);
       int sender_id = db_res_col_i32 (res, 2, &err);
       const char *sender_name = db_res_col_text (res, 3, &err);
       const char *subject = db_res_col_text (res, 4, &err);
       const char *sent_at = db_res_col_text (res, 5, &err);
       const char *read_at = db_res_col_is_null (res,
-                                                6) ? NULL :
-                            db_res_col_text (res,
-                                             6,
-                                             &err);
+						6) ? NULL :
+	db_res_col_text (res,
+			 6,
+			 &err);
 
       json_t *row = json_object ();
 
@@ -1110,17 +1248,17 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
       json_object_set_new (row, "thread_id", json_integer (thread_id));
       json_object_set_new (row, "sender_id", json_integer (sender_id));
       json_object_set_new (row, "sender_name",
-                           json_string (sender_name ? sender_name : ""));
+			   json_string (sender_name ? sender_name : ""));
       json_object_set_new (row, "subject",
-                           json_string (subject ? subject : ""));
+			   json_string (subject ? subject : ""));
       json_object_set_new (row, "sent_at",
-                           json_string (sent_at ? sent_at : ""));
+			   json_string (sent_at ? sent_at : ""));
 
 
       if (read_at)
-        {
-          json_object_set_new (row, "read_at", json_string (read_at));
-        }
+	{
+	  json_object_set_new (row, "read_at", json_string (read_at));
+	}
       json_array_append_new (items, row);
       last_id = id;
     }
@@ -1129,7 +1267,7 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_object ();
 
 
-  json_object_set (resp, "items", items);
+  json_object_set_new (resp, "items", items);
 
 
   if (json_array_size (items) == (size_t) limit)
@@ -1142,8 +1280,7 @@ cmd_mail_inbox (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_mail_read (client_ctx_t *ctx,
-               json_t *root)
+cmd_mail_read (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
   if (!db)
@@ -1157,8 +1294,8 @@ cmd_mail_read (client_ctx_t *ctx,
   if (!data)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_INVALID_SCHEMA, "Invalid request schema");
+			   root,
+			   ERR_INVALID_SCHEMA, "Invalid request schema");
       return 0;
     }
   int id = (int) json_integer_value (json_object_get (data, "id"));
@@ -1167,17 +1304,18 @@ cmd_mail_read (client_ctx_t *ctx,
   if (id <= 0)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_MISSING_FIELD, "Missing required field: id");
+			   root,
+			   ERR_MISSING_FIELD, "Missing required field: id");
       return 0;
     }
   LOGI ("cmd_mail_read: reading mail id %d for player %d", id,
-        ctx->player_id);
+	ctx->player_id);
   /* Load and verify ownership */
   db_res_t *res = NULL;
   db_error_t err;
 
-  if ((res = repo_comm_get_mail_details(db, id, ctx->player_id, &err)) == NULL)
+  if ((res =
+       repo_comm_get_mail_details (db, id, ctx->player_id, &err)) == NULL)
     {
       LOGE ("cmd_mail_read: query failed: %s", err.message);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
@@ -1189,24 +1327,24 @@ cmd_mail_read (client_ctx_t *ctx,
       LOGI ("cmd_mail_read: mail not found or not owner");
       db_res_finalize (res);
       send_response_error (ctx,
-                           root,
-                           1900, "Recipient not found or message not yours");
+			   root,
+			   1900, "Recipient not found or message not yours");
       return 0;
     }
 
   LOGI ("cmd_mail_read: mail found, processing...");
   int thread_id = db_res_col_is_null (res, 1) ? 0 : db_res_col_i32 (res, 1,
-                                                                    &err);
+								    &err);
   int sender_id = db_res_col_i32 (res, 2, &err);
   const char *tmp_sender_name = db_res_col_text (res, 3, &err);
   const char *tmp_subject = db_res_col_text (res, 4, &err);
   const char *tmp_body = db_res_col_text (res, 5, &err);
   const char *tmp_sent_at = db_res_col_text (res, 6, &err);
   const char *tmp_read_at = db_res_col_is_null (res,
-                                                7) ? NULL :
-                            db_res_col_text (res,
-                                             7,
-                                             &err);
+						7) ? NULL :
+    db_res_col_text (res,
+		     7,
+		     &err);
 
   char *sender_name = strdup (tmp_sender_name ? tmp_sender_name : "");
   char *subject = strdup (tmp_subject ? tmp_subject : "");
@@ -1226,7 +1364,7 @@ cmd_mail_read (client_ctx_t *ctx,
 
       strftime (iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime (&now));
 
-      repo_comm_mark_mail_read(db, id, iso);
+      repo_comm_mark_mail_read (db, id, iso);
     }
 
   json_t *resp = json_object ();
@@ -1235,8 +1373,7 @@ cmd_mail_read (client_ctx_t *ctx,
   json_object_set_new (resp, "id", json_integer (id));
   json_object_set_new (resp, "thread_id", json_integer (thread_id));
   json_object_set_new (resp, "sender_id", json_integer (sender_id));
-  json_object_set_new (resp, "sender_name",
-                       json_string (sender_name));
+  json_object_set_new (resp, "sender_name", json_string (sender_name));
   json_object_set_new (resp, "subject", json_string (subject));
   json_object_set_new (resp, "body", json_string (body));
   json_object_set_new (resp, "sent_at", json_string (sent_at));
@@ -1286,9 +1423,9 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
   if (!ids || !json_is_array (ids))
     {
       send_response_error (ctx,
-                           root,
-                           ERR_INVALID_SCHEMA,
-                           "Invalid request schema: ids[] required");
+			   root,
+			   ERR_INVALID_SCHEMA,
+			   "Invalid request schema: ids[] required");
       return 0;
     }
   /* Build a parameterised IN (...) safely (<= 200 ids) */
@@ -1307,13 +1444,12 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
   if (n > 200)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_TOO_MANY_BULK_ITEMS,
-                           "Too many bulk items");
+			   root,
+			   ERR_TOO_MANY_BULK_ITEMS, "Too many bulk items");
       return 0;
     }
 
-  int *id_array = malloc (n * sizeof(int));
+  int *id_array = malloc (n * sizeof (int));
   if (!id_array)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "out of memory");
@@ -1327,7 +1463,8 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
 
   int64_t rows_affected = 0;
 
-  if (repo_comm_delete_mail_bulk(db, ctx->player_id, id_array, (int)n, &rows_affected) != 0)
+  if (repo_comm_delete_mail_bulk
+      (db, ctx->player_id, id_array, (int) n, &rows_affected) != 0)
     {
       free (id_array);
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
@@ -1351,26 +1488,26 @@ comm_clear_subscriptions (client_ctx_t *ctx)
   for (; *pp; pp = &(*pp)->next)
     {
       if ((*pp)->ctx == ctx)
-        {
-          sub_map_t *dead = *pp;
+	{
+	  sub_map_t *dead = *pp;
 
 
-          *pp = dead->next;
-          sub_node_t *n = dead->head;
+	  *pp = dead->next;
+	  sub_node_t *n = dead->head;
 
 
-          while (n)
-            {
-              sub_node_t *next = n->next;
+	  while (n)
+	    {
+	      sub_node_t *next = n->next;
 
 
-              free (n->topic);
-              free (n);
-              n = next;
-            }
-          free (dead);
-          return;
-        }
+	      free (n->topic);
+	      free (n);
+	      n = next;
+	    }
+	  free (dead);
+	  return;
+	}
     }
 }
 
@@ -1389,7 +1526,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
-                           "data must be object");
+			   "data must be object");
       return 0;
     }
   json_t *v = json_object_get (data, "topic");
@@ -1398,7 +1535,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
   if (!json_is_string (v))
     {
       send_response_error (ctx, root, ERR_MISSING_FIELD,
-                           "missing field: topic");
+			   "missing field: topic");
       return 0;
     }
   const char *topic = json_string_value (v);
@@ -1417,12 +1554,12 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
   if (v)
     {
       if (!json_is_string (v))
-        {
-          send_response_error (ctx,
-                               root,
-                               ERR_INVALID_ARG, "filter_json must be string");
-          return 0;
-        }
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_INVALID_ARG, "filter_json must be string");
+	  return 0;
+	}
       filter_json = json_string_value (v);
       /* sanity-parse filter JSON so we don't store garbage */
       json_error_t jerr;
@@ -1430,13 +1567,13 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
 
       if (!probe)
-        {
-          send_response_error (ctx,
-                               root,
-                               ERR_INVALID_ARG,
-                               "filter_json is not valid JSON");
-          return 0;
-        }
+	{
+	  send_response_error (ctx,
+			       root,
+			       ERR_INVALID_ARG,
+			       "filter_json is not valid JSON");
+	  return 0;
+	}
       json_decref (probe);
     }
   /* Cap check */
@@ -1450,7 +1587,7 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
     }
 
   int have = 0;
-  if (repo_comm_get_subscription_count(db, ctx->player_id, &have) != 0)
+  if (repo_comm_get_subscription_count (db, ctx->player_id, &have) != 0)
     {
       send_response_error (ctx, root, ERR_UNKNOWN, "db error");
       return 0;
@@ -1462,19 +1599,19 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
 
       json_object_set_new (meta, "max",
-                           json_integer (MAX_SUBSCRIPTIONS_PER_PLAYER));
+			   json_integer (MAX_SUBSCRIPTIONS_PER_PLAYER));
       json_object_set_new (meta, "have", json_integer (have));
 
 
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_LIMIT_EXCEEDED,
-                                   "too many subscriptions", meta);
+				   root,
+				   ERR_LIMIT_EXCEEDED,
+				   "too many subscriptions", meta);
       return 0;
     }
   /* Upsert subscription */
   int rc = db_subscribe_upsert (db, ctx->player_id, topic, filter_json,
-                                0 /*locked */ );
+				0 /*locked */ );
 
 
   if (rc != 0)
@@ -1507,7 +1644,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
-                           "data must be object");
+			   "data must be object");
       return 0;
     }
   json_t *v = json_object_get (data, "topic");
@@ -1516,7 +1653,7 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
   if (!json_is_string (v))
     {
       send_response_error (ctx, root, ERR_MISSING_FIELD,
-                           "missing field: topic");
+			   "missing field: topic");
       return 0;
     }
   const char *topic = json_string_value (v);
@@ -1545,17 +1682,16 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
   if (rc == +1 || was_locked)
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   1456 /* REF_SAFE_ZONE_ONLY used in org */,
-                                   "subscription locked by policy",
-                                   NULL);
+				   root,
+				   1456 /* REF_SAFE_ZONE_ONLY used in org */ ,
+				   "subscription locked by policy", NULL);
       return 0;
     }
   if (rc != 0)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_USER_NOT_FOUND, "subscription not found");
+			   root,
+			   ERR_USER_NOT_FOUND, "subscription not found");
       return 0;
     }
   json_t *resp = json_object ();
@@ -1590,7 +1726,7 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
   db_res_t *res = NULL;
   db_error_t err;
 
-  if ((res = repo_comm_list_subscriptions(db, ctx->player_id, &err)) == NULL)
+  if ((res = repo_comm_list_subscriptions (db, ctx->player_id, &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_UNKNOWN, "db error");
       return 0;
@@ -1606,30 +1742,30 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
       int enabled = db_res_col_i32 (res, 2, &err);
       const char *tmp_deliv = db_res_col_text (res, 3, &err);
       const char *tmp_flt = db_res_col_is_null (res,
-                                                4) ? NULL :
-                            db_res_col_text (res,
-                                             4,
-                                             &err);
+						4) ? NULL :
+	db_res_col_text (res,
+			 4,
+			 &err);
 
       json_t *row = json_object ();
 
 
       json_object_set_new (row,
-                           "topic", json_string (tmp_topic ? tmp_topic : ""));
+			   "topic", json_string (tmp_topic ? tmp_topic : ""));
       json_object_set_new (row, "locked", json_integer (locked));
       json_object_set_new (row, "enabled", json_integer (enabled));
       json_object_set_new (row, "delivery",
-                           json_string (tmp_deliv ? tmp_deliv : "push"));
+			   json_string (tmp_deliv ? tmp_deliv : "push"));
       if (tmp_flt)
-        {
-          json_t *filter_obj = json_loads (tmp_flt, 0, NULL);
+	{
+	  json_t *filter_obj = json_loads (tmp_flt, 0, NULL);
 
 
-          if (filter_obj)
-            {
-              json_object_set_new (row, "filter", filter_obj);
-            }
-        }
+	  if (filter_obj)
+	    {
+	      json_object_set_new (row, "filter", filter_obj);
+	    }
+	}
       json_array_append_new (items, row);
     }
   db_res_finalize (res);
@@ -1649,7 +1785,7 @@ topic_desc (const char *pattern)
   if (strcasecmp (pattern, "sector.*") == 0)
     {
       return
-        "All sector-scoped events; use sector.{id} pattern, e.g., sector.42";
+	"All sector-scoped events; use sector.{id} pattern, e.g., sector.42";
     }
   if (strcasecmp (pattern, "system.notice") == 0)
     {
@@ -1687,41 +1823,41 @@ catalog_topics_json (void)
     {
       const char *pat = ALLOWED_TOPICS[i];
       int is_wc = (strlen (pat) >= 2 && pat[strlen (pat) - 1] == '*'
-                   && pat[strlen (pat) - 2] == '.');
+		   && pat[strlen (pat) - 2] == '.');
       json_t *obj = json_object ();
 
 
       if (!obj)
-        {
-          json_decref (arr);
-          return NULL;
-        }
+	{
+	  json_decref (arr);
+	  return NULL;
+	}
       json_object_set_new (obj, "pattern", json_string (pat));
       json_object_set_new (obj, "kind",
-                           json_string (is_wc ? "wildcard" : "exact"));
+			   json_string (is_wc ? "wildcard" : "exact"));
       const char *desc = topic_desc (pat);
 
 
       if (desc && *desc)
-        {
-          json_object_set_new (obj, "desc", json_string (desc));
-        }
+	{
+	  json_object_set_new (obj, "desc", json_string (desc));
+	}
       if (is_wc)
-        {
-          /* make example: replace trailing ".*" with ".42" */
-          size_t n = strlen (pat);
-          char example[128];
+	{
+	  /* make example: replace trailing ".*" with ".42" */
+	  size_t n = strlen (pat);
+	  char example[128];
 
 
-          if (n < sizeof (example))
-            {
-              memcpy (example, pat, n - 1);     // copy up to '*'
-              example[n - 1] = '4';
-              example[n] = '2';
-              example[n + 1] = '\0';
-              json_object_set_new (obj, "example", json_string (example));      // e.g., "sector.42"
-            }
-        }
+	  if (n < sizeof (example))
+	    {
+	      memcpy (example, pat, n - 1);	// copy up to '*'
+	      example[n - 1] = '4';
+	      example[n] = '2';
+	      example[n + 1] = '\0';
+	      json_object_set_new (obj, "example", json_string (example));	// e.g., "sector.42"
+	    }
+	}
       json_array_append_new (arr, obj);
     }
   return arr;
@@ -1737,7 +1873,7 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
   if (!topics)
     {
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
-                           "Allocation failure");
+			   "Allocation failure");
       return 0;
     }
   json_t *data = json_object ();
@@ -1750,7 +1886,7 @@ cmd_subscribe_catalog (client_ctx_t *ctx, json_t *root)
     {
       json_decref (topics);
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
-                           "Allocation failure");
+			   "Allocation failure");
       return 0;
     }
   send_response_ok_take (ctx, root, "subscribe.catalog_v1", &data);
@@ -1765,9 +1901,9 @@ require_admin (client_ctx_t *ctx, json_t *root)
       auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_PERMISSION_DENIED,
-                                   "Permission denied", NULL);
+				   root,
+				   ERR_PERMISSION_DENIED,
+				   "Permission denied", NULL);
       return 0;
     }
   return 1;
@@ -1788,9 +1924,9 @@ cmd_admin_notice (client_ctx_t *ctx, json_t *root)
   if (!data || !json_is_object (data))
     {
       send_response_error (ctx,
-                           root,
-                           ERR_INVALID_ARG,
-                           "Missing or invalid data for admin.notice");
+			   root,
+			   ERR_INVALID_ARG,
+			   "Missing or invalid data for admin.notice");
       return 0;
     }
 
@@ -1810,14 +1946,14 @@ cmd_admin_notice (client_ctx_t *ctx, json_t *root)
   if (!title || !body)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_MISSING_FIELD,
-                           "Title and body are required for admin.notice");
+			   root,
+			   ERR_MISSING_FIELD,
+			   "Title and body are required for admin.notice");
       return 0;
     }
 
   broadcast_system_notice (0, title, body, severity ? severity : "info",
-                           time (NULL), ttl_seconds_json);
+			   time (NULL), ttl_seconds_json);
   send_response_ok_take (ctx, root, "admin.notice", NULL);
   return 0;
 }
@@ -1837,9 +1973,9 @@ cmd_admin_shutdown_warning (client_ctx_t *ctx, json_t *root)
   if (!data || !json_is_object (data))
     {
       send_response_error (ctx,
-                           root,
-                           ERR_INVALID_ARG,
-                           "Missing or invalid data for admin.shutdown_warning");
+			   root,
+			   ERR_INVALID_ARG,
+			   "Missing or invalid data for admin.shutdown_warning");
       return 0;
     }
 
@@ -1856,18 +1992,17 @@ cmd_admin_shutdown_warning (client_ctx_t *ctx, json_t *root)
   if (!body || countdown_seconds_json <= 0)
     {
       send_response_error (ctx,
-                           root,
-                           ERR_MISSING_FIELD,
-                           "Body and countdown_seconds (positive integer) are required for admin.shutdown_warning");
+			   root,
+			   ERR_MISSING_FIELD,
+			   "Body and countdown_seconds (positive integer) are required for admin.shutdown_warning");
       return 0;
     }
 
   // Use a fixed title and critical severity for shutdown warnings
   broadcast_system_notice (0,
-                           "SERVER SHUTDOWN IMMINENT",
-                           body,
-                           "critical", time (NULL), countdown_seconds_json);
+			   "SERVER SHUTDOWN IMMINENT",
+			   body,
+			   "critical", time (NULL), countdown_seconds_json);
   send_response_ok_take (ctx, root, "admin.shutdown_warning", NULL);
   return 0;
 }
-

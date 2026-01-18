@@ -88,13 +88,14 @@ def main():
             align = u.get("alignment", 0)
             
             sql = f"""
-            INSERT INTO players (name, passwd, credits, sector_id, type, alignment, commission_id, loggedin)
-            VALUES ('{u['username']}', '{u['password']}', {credits}, {sector}, {ptype}, {align}, 1, now())
+            INSERT INTO players (name, passwd, credits, sector_id, type, alignment, commission_id, loggedin, is_npc)
+            VALUES ('{u['username']}', '{u['password']}', {credits}, {sector}, {ptype}, {align}, 1, now(), false)
             ON CONFLICT (name) DO UPDATE SET 
                 credits = {credits}, 
                 sector_id = {sector}, 
                 type = {ptype}, 
-                alignment = {align};
+                alignment = {align},
+                is_npc = false;
             """
             execute_sql(sql, **db_config)
 
@@ -102,6 +103,14 @@ def main():
             pid = get_player_id(u['username'], **db_config)
             if pid:
                 sql = f"INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ({pid}, 1000, now()) ON CONFLICT (player_id) DO UPDATE SET turns_remaining = 1000;"
+                execute_sql(sql, **db_config)
+                
+                # Seed bank account for player
+                sql = f"""
+                INSERT INTO bank_accounts (owner_type, owner_id, balance, currency, is_active)
+                VALUES ('player', {pid}, {credits}, 'CRD', 1)
+                ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = {credits};
+                """
                 execute_sql(sql, **db_config)
 
     # 5. Corporations
@@ -111,6 +120,15 @@ def main():
             owner_id = get_player_id(c["owner_username"], **db_config)
             if owner_id:
                 sql = f"INSERT INTO corporations (corporation_id, name, owner_id) VALUES ({c['corporation_id']}, '{c['name']}', {owner_id}) ON CONFLICT (corporation_id) DO NOTHING;"
+                execute_sql(sql, **db_config)
+                
+                # Seed bank account for corporation
+                corp_credits = c.get("credits", 1000000)
+                sql = f"""
+                INSERT INTO bank_accounts (owner_type, owner_id, balance, currency, is_active)
+                VALUES ('corp', {c['corporation_id']}, {corp_credits}, 'CRD', 1)
+                ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = {corp_credits};
+                """
                 execute_sql(sql, **db_config)
 
     # 6. Shiptypes

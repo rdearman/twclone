@@ -11,6 +11,28 @@
       "password": "password"
     },
     {
+      "name": "Rig: Find Target Port",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT p.sector_id, p.port_id FROM ports p JOIN port_trade pt ON pt.port_id = p.port_id WHERE p.sector_id > 10 LIMIT 1;" },
+      "user": "admin",
+      "save": { "target_port_sector_id": "data.rows.0.0", "target_port_id": "data.rows.0.1" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set Evil Alignment",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment = -501 WHERE player_id = @{combat_ace_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed Fighters, Mines and ORE",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters = 100, mines = 100, ore = 100 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{combat_ace_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Combat Status",
       "command": "combat.status",
       "user": "combat_ace",
@@ -87,16 +109,59 @@
       ]
     },
     {
+      "name": "Rig: Find Target Planet",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT planet_id, sector_id FROM planets WHERE sector_id > 10 LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "target_planet_id": "data.rows.0.0", "target_planet_sector_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Seed Planet Fighters",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE planets SET fighters = 50 WHERE planet_id = @{target_planet_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move to Planet Sector (Player)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = @{target_planet_sector_id} WHERE player_id = @{combat_ace_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move to Planet Sector (Ship)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = @{target_planet_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{combat_ace_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Attack Planet",
       "command": "combat.attack_planet",
-      "data": { "planet_id": 900 },
+      "data": { "planet_id": "@{target_planet_id}" },
       "user": "combat_ace",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move to Port Sector (Player)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = @{target_port_sector_id} WHERE player_id = @{combat_ace_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move to Port Sector (Ship)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = @{target_port_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{combat_ace_player_id});" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Port Rob (Success)",
       "command": "port.rob",
-      "data": { "sector_id": 1, "port_id": 1, "mode": "credits" },
+      "data": { "sector_id": "@{target_port_sector_id}", "port_id": "@{target_port_id}", "mode": "credits" },
       "user": "combat_ace",
       "expect": { "status": "ok" }
     }

@@ -3600,7 +3600,7 @@ db_notice_create (db_t *db,
     }
   db_error_t err;
   const char *sql =
-    "INSERT INTO system_notice (title, body, severity, expires_at) VALUES ({1}, {2}, {3}, {4});";
+    "INSERT INTO system_notice (title, body, severity, expires_at) VALUES ({1}, {2}, {3}, {4})";
   int64_t id = 0;
 
 

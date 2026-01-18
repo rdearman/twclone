@@ -14,7 +14,7 @@ int repo_auth_insert_pref_if_missing(db_t *db, int player_id, const char *key, c
 int repo_auth_get_podded_status(db_t *db, int player_id, char *status_out, size_t status_sz, int64_t *big_sleep_until_out);
 int repo_auth_get_unread_news_count(db_t *db, int player_id, int *count_out);
 int repo_auth_upsert_system_sub(db_t *db, int player_id);
-int repo_auth_register_player(db_t *db, const char *name, const char *pass, const char *ship_name, int spawn_sid, int64_t *player_id_out);
+int repo_auth_register_player(db_t *db, const char *name, const char *pass, const char *ship_name, int spawn_sid, int64_t *player_id_out, db_error_t *err);
 int repo_auth_insert_initial_turns(db_t *db, const char *now_ts, int player_id);
 int repo_auth_update_player_credits(db_t *db, int credits, int player_id);
 int repo_auth_upsert_news_sub(db_t *db, int player_id);

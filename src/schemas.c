@@ -50,7 +50,7 @@ validate_json_schema (json_t *schema, json_t *payload, char **why)
   if (!schema || !payload)
     {
       if (why)
-        *why = why_dup ("schema or payload is NULL");
+	*why = why_dup ("schema or payload is NULL");
       return -1;
     }
 
@@ -59,7 +59,7 @@ validate_json_schema (json_t *schema, json_t *payload, char **why)
   if (!type_field)
     {
       if (why)
-        *why = why_dup ("schema missing 'type' field");
+	*why = why_dup ("schema missing 'type' field");
       return -1;
     }
 
@@ -67,7 +67,7 @@ validate_json_schema (json_t *schema, json_t *payload, char **why)
   if (!expected_type)
     {
       if (why)
-        *why = why_dup ("schema 'type' is not a string");
+	*why = why_dup ("schema 'type' is not a string");
       return -1;
     }
 
@@ -75,174 +75,187 @@ validate_json_schema (json_t *schema, json_t *payload, char **why)
   if (strcmp (expected_type, "object") == 0)
     {
       if (!json_is_object (payload))
-        {
-          if (why)
-            *why = why_dup ("expected object, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected object, got different type");
+	  return -1;
+	}
 
       /* Check required properties */
       json_t *required = json_object_get (schema, "required");
       if (required && json_is_array (required))
-        {
-          size_t i;
-          json_t *key;
-          json_array_foreach (required, i, key)
-            {
-              const char *prop = json_string_value (key);
-              if (!prop)
-                continue;
+	{
+	  size_t i;
+	  json_t *key;
+	  json_array_foreach (required, i, key)
+	  {
+	    const char *prop = json_string_value (key);
+	    if (!prop)
+	      continue;
 
-              if (!json_object_get (payload, prop))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "missing required property: %s", prop);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-            }
-        }
+	    if (!json_object_get (payload, prop))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "missing required property: %s", prop);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	  }
+	}
 
       /* Check properties types */
       json_t *properties = json_object_get (schema, "properties");
       if (properties && json_is_object (properties))
-        {
-          const char *key;
-          json_t *value;
-          json_object_foreach (payload, key, value)
-            {
-              json_t *prop_schema = json_object_get (properties, key);
-              if (!prop_schema)
-                continue; /* additionalProperties handling - for now allow */
+	{
+	  const char *key;
+	  json_t *value;
+	  json_object_foreach (payload, key, value)
+	  {
+	    json_t *prop_schema = json_object_get (properties, key);
+	    if (!prop_schema)
+	      continue;		/* additionalProperties handling - for now allow */
 
-              json_t *prop_type = json_object_get (prop_schema, "type");
-              if (!prop_type)
-                continue;
+	    json_t *prop_type = json_object_get (prop_schema, "type");
+	    if (!prop_type)
+	      continue;
 
-              const char *prop_type_str = json_string_value (prop_type);
-              if (!prop_type_str)
-                continue;
+	    const char *prop_type_str = json_string_value (prop_type);
+	    if (!prop_type_str)
+	      continue;
 
-              /* Type validation */
-              if (strcmp (prop_type_str, "string") == 0 && !json_is_string (value))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "property '%s' must be string", key);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-              else if (strcmp (prop_type_str, "integer") == 0 && !json_is_integer (value))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "property '%s' must be integer", key);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-              else if (strcmp (prop_type_str, "number") == 0 && !json_is_number (value))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "property '%s' must be number", key);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-              else if (strcmp (prop_type_str, "boolean") == 0 && !json_is_boolean (value))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "property '%s' must be boolean", key);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-              else if (strcmp (prop_type_str, "array") == 0 && !json_is_array (value))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "property '%s' must be array", key);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-              else if (strcmp (prop_type_str, "object") == 0 && !json_is_object (value))
-                {
-                  if (why)
-                    {
-                      char buf[256];
-                      snprintf (buf, sizeof (buf), "property '%s' must be object", key);
-                      *why = why_dup (buf);
-                    }
-                  return -1;
-                }
-            }
-        }
+	    /* Type validation */
+	    if (strcmp (prop_type_str, "string") == 0
+		&& !json_is_string (value))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "property '%s' must be string", key);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	    else if (strcmp (prop_type_str, "integer") == 0
+		     && !json_is_integer (value))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "property '%s' must be integer", key);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	    else if (strcmp (prop_type_str, "number") == 0
+		     && !json_is_number (value))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "property '%s' must be number", key);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	    else if (strcmp (prop_type_str, "boolean") == 0
+		     && !json_is_boolean (value))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "property '%s' must be boolean", key);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	    else if (strcmp (prop_type_str, "array") == 0
+		     && !json_is_array (value))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "property '%s' must be array", key);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	    else if (strcmp (prop_type_str, "object") == 0
+		     && !json_is_object (value))
+	      {
+		if (why)
+		  {
+		    char buf[256];
+		    snprintf (buf, sizeof (buf),
+			      "property '%s' must be object", key);
+		    *why = why_dup (buf);
+		  }
+		return -1;
+	      }
+	  }
+	}
     }
   else if (strcmp (expected_type, "array") == 0)
     {
       if (!json_is_array (payload))
-        {
-          if (why)
-            *why = why_dup ("expected array, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected array, got different type");
+	  return -1;
+	}
     }
   else if (strcmp (expected_type, "string") == 0)
     {
       if (!json_is_string (payload))
-        {
-          if (why)
-            *why = why_dup ("expected string, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected string, got different type");
+	  return -1;
+	}
     }
   else if (strcmp (expected_type, "integer") == 0)
     {
       if (!json_is_integer (payload))
-        {
-          if (why)
-            *why = why_dup ("expected integer, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected integer, got different type");
+	  return -1;
+	}
     }
   else if (strcmp (expected_type, "number") == 0)
     {
       if (!json_is_number (payload))
-        {
-          if (why)
-            *why = why_dup ("expected number, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected number, got different type");
+	  return -1;
+	}
     }
   else if (strcmp (expected_type, "boolean") == 0)
     {
       if (!json_is_boolean (payload))
-        {
-          if (why)
-            *why = why_dup ("expected boolean, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected boolean, got different type");
+	  return -1;
+	}
     }
   else if (strcmp (expected_type, "null") == 0)
     {
       if (!json_is_null (payload))
-        {
-          if (why)
-            *why = why_dup ("expected null, got different type");
-          return -1;
-        }
+	{
+	  if (why)
+	    *why = why_dup ("expected null, got different type");
+	  return -1;
+	}
     }
 
   if (why)
@@ -265,7 +278,7 @@ static pthread_mutex_t g_schema_mu = PTHREAD_MUTEX_INITIALIZER;
 typedef struct schema_entry
 {
   const char *key;
-  json_t *schema;               /* cache owns this ref */
+  json_t *schema;		/* cache owns this ref */
 
 
   json_t *(*builder) (void);
@@ -493,7 +506,7 @@ schema_placeholder (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/placeholder.json"));
+		       json_string ("ge://schema/placeholder.json"));
   json_object_set_new (root, "$comment", json_string ("Not yet implemented"));
   json_object_set_new (root, "type", json_string ("object"));
   return root;
@@ -517,20 +530,20 @@ schema_get (const char *key)
 
 
       if (strcasecmp (e->key, key) == 0)
-        {
-          if (!e->schema)
-            {
-              if (e->builder)
-                {
-                  e->schema = e->builder ();
-                }
-            }
-          json_t *out = e->schema ? json_incref (e->schema) : NULL;
+	{
+	  if (!e->schema)
+	    {
+	      if (e->builder)
+		{
+		  e->schema = e->builder ();
+		}
+	    }
+	  json_t *out = e->schema ? json_incref (e->schema) : NULL;
 
 
-          pthread_mutex_unlock (&g_schema_mu);
-          return out;
-        }
+	  pthread_mutex_unlock (&g_schema_mu);
+	  return out;
+	}
     }
 
   pthread_mutex_unlock (&g_schema_mu);
@@ -548,10 +561,10 @@ schema_shutdown (void)
        i++)
     {
       if (g_schema_table[i].schema)
-        {
-          json_decref (g_schema_table[i].schema);
-          g_schema_table[i].schema = NULL;
-        }
+	{
+	  json_decref (g_schema_table[i].schema);
+	  g_schema_table[i].schema = NULL;
+	}
     }
   pthread_mutex_unlock (&g_schema_mu);
 }
@@ -639,17 +652,17 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
   if (!type || !*type)
     {
       if (why)
-        {
-          *why = why_dup ("command type missing");
-        }
+	{
+	  *why = why_dup ("command type missing");
+	}
       return -1;
     }
   if (!payload || !json_is_object (payload))
     {
       if (why)
-        {
-          *why = why_dup ("payload must be an object");
-        }
+	{
+	  *why = why_dup ("payload must be an object");
+	}
       return -1;
     }
   /* 1. GET THE SCHEMA from your registry */
@@ -659,9 +672,9 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
   if (!schema)
     {
       if (why)
-        {
-          *why = why_dup ("Unknown command type");
-        }
+	{
+	  *why = why_dup ("Unknown command type");
+	}
       return -1;
     }
 
@@ -675,7 +688,7 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
 
 
   LOGD ("[VALIDATOR] Checking 'sector.set_beacon' with payload: %s",
-        dump ? dump : "(null)");
+	dump ? dump : "(null)");
   free (dump);
 
   /* ===================================================================
@@ -704,17 +717,17 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
   if (!type || !*type)
     {
       if (why)
-        {
-          *why = why_dup ("type missing");
-        }
+	{
+	  *why = why_dup ("type missing");
+	}
       return -1;
     }
   if (!payload || !json_is_object (payload))
     {
       if (why)
-        {
-          *why = why_dup ("payload not object");
-        }
+	{
+	  *why = why_dup ("payload not object");
+	}
       return -1;
     }
   /* --- s2s.health.check --- */
@@ -730,13 +743,13 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
 
 
       if (!since || !json_is_integer (since))
-        {
-          if (why)
-            {
-              *why = why_dup ("since_ts");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("since_ts");
+	    }
+	  return -1;
+	}
       /* Optional: filters or page_size ints later */
       return 0;
     }
@@ -744,95 +757,95 @@ s2s_validate_payload (const char *type, json_t *payload, char **why)
   if (strcasecmp (type, "s2s.health.ack") == 0)
     {
       if (!json_is_string (json_object_get (payload, "role")))
-        {
-          if (why)
-            {
-              *why = why_dup ("role");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("role");
+	    }
+	  return -1;
+	}
       if (!json_is_string (json_object_get (payload, "version")))
-        {
-          if (why)
-            {
-              *why = why_dup ("version");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("version");
+	    }
+	  return -1;
+	}
       if (!json_is_integer (json_object_get (payload, "uptime_s")))
-        {
-          if (why)
-            {
-              *why = why_dup ("uptime_s");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("uptime_s");
+	    }
+	  return -1;
+	}
       return 0;
     }
   /* --- s2s.command.push --- */
   if (strcasecmp (type, "s2s.command.push") == 0)
     {
       if (!json_is_string (json_object_get (payload, "cmd_type")))
-        {
-          if (why)
-            {
-              *why = why_dup ("cmd_type");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("cmd_type");
+	    }
+	  return -1;
+	}
       if (!json_is_string (json_object_get (payload, "idem_key")))
-        {
-          if (why)
-            {
-              *why = why_dup ("idem_key");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("idem_key");
+	    }
+	  return -1;
+	}
       json_t *pl = json_object_get (payload, "payload");
 
 
       if (!pl || !json_is_object (pl))
-        {
-          if (why)
-            {
-              *why = why_dup ("payload");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("payload");
+	    }
+	  return -1;
+	}
       /* optional: correlation_id (string), priority (int), due_at (int) */
       json_t *cid = json_object_get (payload, "correlation_id");
 
 
       if (cid && !json_is_string (cid))
-        {
-          if (why)
-            {
-              *why = why_dup ("correlation_id");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("correlation_id");
+	    }
+	  return -1;
+	}
       json_t *prio = json_object_get (payload, "priority");
 
 
       if (prio && !json_is_integer (prio))
-        {
-          if (why)
-            {
-              *why = why_dup ("priority");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("priority");
+	    }
+	  return -1;
+	}
       json_t *due = json_object_get (payload, "due_at");
 
 
       if (due && !json_is_integer (due))
-        {
-          if (why)
-            {
-              *why = why_dup ("due_at");
-            }
-          return -1;
-        }
+	{
+	  if (why)
+	    {
+	      *why = why_dup ("due_at");
+	    }
+	  return -1;
+	}
       return 0;
     }
   /* Unknown types: let dispatcher decide; treat as OK here. */
@@ -855,10 +868,10 @@ schema_envelope (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/envelope.json"));
+		       json_string ("ge://schema/envelope.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -882,8 +895,8 @@ schema_envelope (void)
 
   json_object_set_new (root, "additionalProperties", json_boolean (1));
   json_object_set_new (root, "description",
-                       json_string
-                         ("Minimal envelope (server validates more internally)"));
+		       json_string
+		       ("Minimal envelope (server validates more internally)"));
   return root;
 }
 
@@ -915,10 +928,10 @@ schema_auth_login (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/auth.login.json"));
+		       json_string ("ge://schema/auth.login.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
   json_object_set_new (data_schema, "required", data_required);
@@ -934,10 +947,10 @@ schema_trade_buy (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/trade.buy.json"));
+		       json_string ("ge://schema/trade.buy.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -1067,10 +1080,10 @@ schema_sector_set_beacon (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/sector.set_beacon.json"));
+		       json_string ("ge://schema/sector.set_beacon.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_props);
 
@@ -1100,10 +1113,10 @@ schema_auth_register (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/auth.register.json"));
+		       json_string ("ge://schema/auth.register.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -1168,10 +1181,10 @@ schema_auth_logout (void)
 {
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/auth.logout.json"));
+		       json_string ("ge://schema/auth.logout.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", json_object ());
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
@@ -1184,10 +1197,10 @@ schema_auth_refresh (void)
 {
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/auth.refresh.json"));
+		       json_string ("ge://schema/auth.refresh.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", json_object ());
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
@@ -1206,12 +1219,13 @@ schema_auth_mfa_totp_verify (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/auth.mfa.totp.verify.json"));
+		       json_string ("ge://schema/auth.mfa.totp.verify.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("code"));
   json_object_set_new (root, "required", required);
@@ -1225,10 +1239,10 @@ schema_admin_notice (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/admin.notice.json"));
+		       "$id", json_string ("ge://schema/admin.notice.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   return root;
 }
@@ -1239,11 +1253,11 @@ schema_admin_shutdown_warning (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string
-                         ("ge://schema/admin.shutdown_warning.json"));
+		       json_string
+		       ("ge://schema/admin.shutdown_warning.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   return root;
 }
@@ -1255,9 +1269,10 @@ schema_system_capabilities (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/system.capabilities.json"));
+		       json_string ("ge://schema/system.capabilities.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1278,10 +1293,10 @@ schema_move_warp (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/move_warp.json"));
+		       json_string ("ge://schema/move_warp.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_props);
 
@@ -1329,11 +1344,11 @@ schema_system_describe_schema (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string
-                         ("ge://schema/system.describe_schema.json"));
+		       json_string
+		       ("ge://schema/system.describe_schema.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -1358,10 +1373,10 @@ schema_system_hello (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/system.hello.json"));
+		       "$id", json_string ("ge://schema/system.hello.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -1397,9 +1412,10 @@ schema_system_disconnect (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/system.disconnect.json"));
+		       json_string ("ge://schema/system.disconnect.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1413,10 +1429,10 @@ schema_session_ping (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/session.ping.json"));
+		       "$id", json_string ("ge://schema/session.ping.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -1432,10 +1448,10 @@ schema_session_hello (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/session.hello.json"));
+		       json_string ("ge://schema/session.hello.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -1451,9 +1467,10 @@ schema_session_disconnect (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/session.disconnect.json"));
+		       json_string ("ge://schema/session.disconnect.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1473,12 +1490,13 @@ schema_ship_inspect (void)
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/ship.inspect.json"));
+		       "$id", json_string ("ge://schema/ship.inspect.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("ship_id"));
   json_object_set_new (root, "required", required);
@@ -1499,12 +1517,13 @@ schema_ship_rename (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.rename.json"));
+		       json_string ("ge://schema/ship.rename.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("name"));
   json_object_set_new (root, "required", required);
@@ -1525,12 +1544,13 @@ schema_ship_reregister (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.reregister.json"));
+		       json_string ("ge://schema/ship.reregister.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("name"));
   json_object_set_new (root, "required", required);
@@ -1550,12 +1570,13 @@ schema_ship_claim (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.claim.json"));
+		       json_string ("ge://schema/ship.claim.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("ship_id"));
   json_object_set_new (root, "required", required);
@@ -1570,10 +1591,10 @@ schema_ship_status (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.status.json"));
+		       json_string ("ge://schema/ship.status.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
   json_t *props = json_object ();
@@ -1641,17 +1662,17 @@ json_t *
 schema_ship_transfer_cargo (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *commodity_id_prop = json_object ();
   json_object_set_new (commodity_id_prop, "type", json_string ("integer"));
   json_object_set_new (commodity_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "commodity_id", commodity_id_prop);
-  
+
   json_t *quantity_prop = json_object ();
   json_object_set_new (quantity_prop, "type", json_string ("integer"));
   json_object_set_new (quantity_prop, "minimum", json_integer (1));
   json_object_set_new (props, "quantity", quantity_prop);
-  
+
   json_t *target_ship_id_prop = json_object ();
   json_object_set_new (target_ship_id_prop, "type", json_string ("integer"));
   json_object_set_new (target_ship_id_prop, "minimum", json_integer (1));
@@ -1659,12 +1680,13 @@ schema_ship_transfer_cargo (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.transfer_cargo.json"));
+		       json_string ("ge://schema/ship.transfer_cargo.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("commodity_id"));
   json_array_append_new (required, json_string ("quantity"));
@@ -1679,12 +1701,12 @@ json_t *
 schema_ship_jettison (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *commodity_id_prop = json_object ();
   json_object_set_new (commodity_id_prop, "type", json_string ("integer"));
   json_object_set_new (commodity_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "commodity_id", commodity_id_prop);
-  
+
   json_t *quantity_prop = json_object ();
   json_object_set_new (quantity_prop, "type", json_string ("integer"));
   json_object_set_new (quantity_prop, "minimum", json_integer (1));
@@ -1692,12 +1714,13 @@ schema_ship_jettison (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.jettison.json"));
+		       json_string ("ge://schema/ship.jettison.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("commodity_id"));
   json_array_append_new (required, json_string ("quantity"));
@@ -1711,19 +1734,20 @@ json_t *
 schema_ship_upgrade (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *upgrade_type_prop = json_object ();
   json_object_set_new (upgrade_type_prop, "type", json_string ("string"));
   json_object_set_new (props, "upgrade_type", upgrade_type_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/ship.upgrade.json"));
+		       "$id", json_string ("ge://schema/ship.upgrade.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("upgrade_type"));
   json_object_set_new (root, "required", required);
@@ -1737,9 +1761,10 @@ schema_ship_repair (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.repair.json"));
+		       json_string ("ge://schema/ship.repair.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1752,9 +1777,10 @@ schema_ship_self_destruct (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/ship.self_destruct.json"));
+		       json_string ("ge://schema/ship.self_destruct.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1768,9 +1794,10 @@ schema_port_info (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/port.info.json"));
+		       json_string ("ge://schema/port.info.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1798,10 +1825,10 @@ schema_port_status (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/port.status.json"));
+		       json_string ("ge://schema/port.status.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -1855,10 +1882,10 @@ schema_port_describe (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/port.describe.json"));
+		       json_string ("ge://schema/port.describe.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -1958,10 +1985,10 @@ schema_port_rob (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/port.rob.json"));
+		       json_string ("ge://schema/port.rob.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
   json_object_set_new (data_schema, "required", data_required);
@@ -1978,9 +2005,10 @@ schema_trade_port_info (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/trade.port_info.json"));
+		       json_string ("ge://schema/trade.port_info.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -1993,10 +2021,10 @@ schema_trade_sell (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/trade.sell.json"));
+		       json_string ("ge://schema/trade.sell.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -2128,10 +2156,10 @@ schema_trade_quote (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/trade.quote.json"));
+		       json_string ("ge://schema/trade.quote.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_props);
 
@@ -2155,11 +2183,11 @@ json_t *
 schema_trade_jettison (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *commodity_prop = json_object ();
   json_object_set_new (commodity_prop, "type", json_string ("string"));
   json_object_set_new (props, "commodity", commodity_prop);
-  
+
   json_t *quantity_prop = json_object ();
   json_object_set_new (quantity_prop, "type", json_string ("integer"));
   json_object_set_new (quantity_prop, "minimum", json_integer (1));
@@ -2167,12 +2195,13 @@ schema_trade_jettison (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/trade.jettison.json"));
+		       json_string ("ge://schema/trade.jettison.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("commodity"));
   json_array_append_new (required, json_string ("quantity"));
@@ -2186,7 +2215,7 @@ json_t *
 schema_trade_offer (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *trade_id_prop = json_object ();
   json_object_set_new (trade_id_prop, "type", json_string ("integer"));
   json_object_set_new (trade_id_prop, "minimum", json_integer (1));
@@ -2194,12 +2223,13 @@ schema_trade_offer (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/trade.offer.json"));
+		       json_string ("ge://schema/trade.offer.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("trade_id"));
   json_object_set_new (root, "required", required);
@@ -2212,7 +2242,7 @@ json_t *
 schema_trade_accept (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *trade_id_prop = json_object ();
   json_object_set_new (trade_id_prop, "type", json_string ("integer"));
   json_object_set_new (trade_id_prop, "minimum", json_integer (1));
@@ -2220,12 +2250,13 @@ schema_trade_accept (void)
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/trade.accept.json"));
+		       "$id", json_string ("ge://schema/trade.accept.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("trade_id"));
   json_object_set_new (root, "required", required);
@@ -2238,7 +2269,7 @@ json_t *
 schema_trade_cancel (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *trade_id_prop = json_object ();
   json_object_set_new (trade_id_prop, "type", json_string ("integer"));
   json_object_set_new (trade_id_prop, "minimum", json_integer (1));
@@ -2246,12 +2277,13 @@ schema_trade_cancel (void)
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/trade.cancel.json"));
+		       "$id", json_string ("ge://schema/trade.cancel.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("trade_id"));
   json_object_set_new (root, "required", required);
@@ -2265,10 +2297,10 @@ schema_trade_history (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/trade.history.json"));
+		       json_string ("ge://schema/trade.history.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "required", json_array ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -2354,7 +2386,7 @@ schema_port_update (void)
 
 
   json_object_set_new (commodity_item_schema, "properties",
-                       commodity_item_props);
+		       commodity_item_props);
 
 
   json_t *commodity_item_required = json_array ();
@@ -2367,11 +2399,11 @@ schema_port_update (void)
   json_array_append_new (commodity_item_required, json_string ("capacity"));
   json_array_append_new (commodity_item_required, json_string ("illegal"));
   json_object_set_new (commodity_item_schema,
-                       "required", commodity_item_required);
+		       "required", commodity_item_required);
 
 
   json_object_set_new (commodity_item_schema,
-                       "additionalProperties", json_boolean (0));
+		       "additionalProperties", json_boolean (0));
 
 
   json_t *port_properties = json_object ();
@@ -2469,10 +2501,10 @@ schema_port_update (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/port.update.json"));
+		       json_string ("ge://schema/port.update.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -2497,7 +2529,7 @@ json_t *
 schema_move_describe_sector (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *sector_id_prop = json_object ();
   json_object_set_new (sector_id_prop, "type", json_string ("integer"));
   json_object_set_new (sector_id_prop, "minimum", json_integer (1));
@@ -2505,12 +2537,13 @@ schema_move_describe_sector (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/move.describe_sector.json"));
+		       json_string ("ge://schema/move.describe_sector.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("sector_id"));
   json_object_set_new (root, "required", required);
@@ -2524,10 +2557,10 @@ schema_move_scan (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/move.scan.json"));
+		       json_string ("ge://schema/move.scan.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   return root;
@@ -2538,12 +2571,12 @@ json_t *
 schema_move_pathfind (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *from_prop = json_object ();
   json_object_set_new (from_prop, "type", json_string ("integer"));
   json_object_set_new (from_prop, "minimum", json_integer (1));
   json_object_set_new (props, "from_sector_id", from_prop);
-  
+
   json_t *to_prop = json_object ();
   json_object_set_new (to_prop, "type", json_string ("integer"));
   json_object_set_new (to_prop, "minimum", json_integer (1));
@@ -2551,12 +2584,13 @@ schema_move_pathfind (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/move.pathfind.json"));
+		       json_string ("ge://schema/move.pathfind.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("from_sector_id"));
   json_array_append_new (required, json_string ("to_sector_id"));
@@ -2570,7 +2604,7 @@ json_t *
 schema_move_autopilot_start (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *to_prop = json_object ();
   json_object_set_new (to_prop, "type", json_string ("integer"));
   json_object_set_new (to_prop, "minimum", json_integer (1));
@@ -2578,12 +2612,13 @@ schema_move_autopilot_start (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/move.autopilot.start.json"));
+		       json_string ("ge://schema/move.autopilot.start.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("to_sector_id"));
   json_object_set_new (root, "required", required);
@@ -2597,9 +2632,10 @@ schema_move_autopilot_stop (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/move.autopilot.stop.json"));
+		       json_string ("ge://schema/move.autopilot.stop.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -2612,11 +2648,11 @@ schema_move_autopilot_status (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string
-                         ("ge://schema/move.autopilot.status.json"));
+		       json_string
+		       ("ge://schema/move.autopilot.status.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -2641,10 +2677,10 @@ schema_sector_info (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/sector.info.json"));
+		       json_string ("ge://schema/sector.info.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
   json_object_set_new (data_schema, "required", json_array ());
@@ -2658,19 +2694,20 @@ json_t *
 schema_sector_search (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *query_prop = json_object ();
   json_object_set_new (query_prop, "type", json_string ("string"));
   json_object_set_new (props, "query", query_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/sector.search.json"));
+		       json_string ("ge://schema/sector.search.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("query"));
   json_object_set_new (root, "required", required);
@@ -2684,9 +2721,10 @@ schema_sector_scan_density (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/sector.scan.density.json"));
+		       json_string ("ge://schema/sector.scan.density.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -2699,9 +2737,10 @@ schema_sector_scan (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/sector.scan.json"));
+		       json_string ("ge://schema/sector.scan.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -2714,7 +2753,7 @@ json_t *
 schema_planet_genesis (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *name_prop = json_object ();
   json_object_set_new (name_prop, "type", json_string ("string"));
   json_object_set_new (name_prop, "minLength", json_integer (1));
@@ -2722,12 +2761,13 @@ schema_planet_genesis (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.genesis.json"));
+		       json_string ("ge://schema/planet.genesis.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("name"));
   json_object_set_new (root, "required", required);
@@ -2740,7 +2780,7 @@ json_t *
 schema_planet_info (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
@@ -2748,12 +2788,13 @@ schema_planet_info (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.info.json"));
+		       json_string ("ge://schema/planet.info.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_object_set_new (root, "required", required);
@@ -2766,12 +2807,12 @@ json_t *
 schema_planet_rename (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "planet_id", planet_id_prop);
-  
+
   json_t *name_prop = json_object ();
   json_object_set_new (name_prop, "type", json_string ("string"));
   json_object_set_new (name_prop, "minLength", json_integer (1));
@@ -2779,12 +2820,13 @@ schema_planet_rename (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.rename.json"));
+		       json_string ("ge://schema/planet.rename.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_array_append_new (required, json_string ("name"));
@@ -2798,7 +2840,7 @@ json_t *
 schema_planet_land (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
@@ -2806,12 +2848,13 @@ schema_planet_land (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.land.json"));
+		       json_string ("ge://schema/planet.land.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_object_set_new (root, "required", required);
@@ -2825,9 +2868,10 @@ schema_planet_launch (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.launch.json"));
+		       json_string ("ge://schema/planet.launch.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -2839,12 +2883,12 @@ json_t *
 schema_planet_transfer_ownership (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "planet_id", planet_id_prop);
-  
+
   json_t *new_owner_id_prop = json_object ();
   json_object_set_new (new_owner_id_prop, "type", json_string ("integer"));
   json_object_set_new (new_owner_id_prop, "minimum", json_integer (1));
@@ -2852,14 +2896,15 @@ schema_planet_transfer_ownership (void)
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id",
-                       json_string
-                         ("ge://schema/planet.transfer_ownership.json"));
+		       "$id",
+		       json_string
+		       ("ge://schema/planet.transfer_ownership.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_array_append_new (required, json_string ("new_owner_id"));
@@ -2873,7 +2918,7 @@ json_t *
 schema_planet_harvest (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
@@ -2881,12 +2926,13 @@ schema_planet_harvest (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.harvest.json"));
+		       json_string ("ge://schema/planet.harvest.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_object_set_new (root, "required", required);
@@ -2899,16 +2945,16 @@ json_t *
 schema_planet_deposit (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "planet_id", planet_id_prop);
-  
+
   json_t *commodity_prop = json_object ();
   json_object_set_new (commodity_prop, "type", json_string ("string"));
   json_object_set_new (props, "commodity", commodity_prop);
-  
+
   json_t *quantity_prop = json_object ();
   json_object_set_new (quantity_prop, "type", json_string ("integer"));
   json_object_set_new (quantity_prop, "minimum", json_integer (1));
@@ -2916,12 +2962,13 @@ schema_planet_deposit (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.deposit.json"));
+		       json_string ("ge://schema/planet.deposit.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_array_append_new (required, json_string ("commodity"));
@@ -2936,16 +2983,16 @@ json_t *
 schema_planet_withdraw (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *planet_id_prop = json_object ();
   json_object_set_new (planet_id_prop, "type", json_string ("integer"));
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "planet_id", planet_id_prop);
-  
+
   json_t *commodity_prop = json_object ();
   json_object_set_new (commodity_prop, "type", json_string ("string"));
   json_object_set_new (props, "commodity", commodity_prop);
-  
+
   json_t *quantity_prop = json_object ();
   json_object_set_new (quantity_prop, "type", json_string ("integer"));
   json_object_set_new (quantity_prop, "minimum", json_integer (1));
@@ -2953,12 +3000,13 @@ schema_planet_withdraw (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/planet.withdraw.json"));
+		       json_string ("ge://schema/planet.withdraw.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_array_append_new (required, json_string ("commodity"));
@@ -3019,11 +3067,11 @@ schema_planet_genesis_create (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string
-                         ("ge://schema/planet.genesis_create.json"));
+		       json_string
+		       ("ge://schema/planet.genesis_create.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
   json_object_set_new (data_schema, "required", data_required);
@@ -3037,7 +3085,7 @@ json_t *
 schema_citadel_build (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *sector_id_prop = json_object ();
   json_object_set_new (sector_id_prop, "type", json_string ("integer"));
   json_object_set_new (sector_id_prop, "minimum", json_integer (1));
@@ -3045,12 +3093,13 @@ schema_citadel_build (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/citadel.build.json"));
+		       json_string ("ge://schema/citadel.build.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("sector_id"));
   json_object_set_new (root, "required", required);
@@ -3063,7 +3112,7 @@ json_t *
 schema_citadel_upgrade (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *citadel_id_prop = json_object ();
   json_object_set_new (citadel_id_prop, "type", json_string ("integer"));
   json_object_set_new (citadel_id_prop, "minimum", json_integer (1));
@@ -3071,12 +3120,13 @@ schema_citadel_upgrade (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/citadel.upgrade.json"));
+		       json_string ("ge://schema/citadel.upgrade.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("citadel_id"));
   json_object_set_new (root, "required", required);
@@ -3090,7 +3140,7 @@ json_t *
 schema_combat_attack (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *target_id_prop = json_object ();
   json_object_set_new (target_id_prop, "type", json_string ("integer"));
   json_object_set_new (target_id_prop, "minimum", json_integer (1));
@@ -3098,12 +3148,13 @@ schema_combat_attack (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/combat.attack.json"));
+		       json_string ("ge://schema/combat.attack.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("target_ship_id"));
   json_object_set_new (root, "required", required);
@@ -3117,11 +3168,11 @@ schema_combat_deploy_fighters (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string
-                         ("ge://schema/combat.deploy_fighters.json"));
+		       json_string
+		       ("ge://schema/combat.deploy_fighters.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -3171,7 +3222,7 @@ json_t *
 schema_combat_lay_mines (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *quantity_prop = json_object ();
   json_object_set_new (quantity_prop, "type", json_string ("integer"));
   json_object_set_new (quantity_prop, "minimum", json_integer (1));
@@ -3179,12 +3230,13 @@ schema_combat_lay_mines (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/combat.lay_mines.json"));
+		       json_string ("ge://schema/combat.lay_mines.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("quantity"));
   json_object_set_new (root, "required", required);
@@ -3198,9 +3250,10 @@ schema_combat_sweep_mines (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/combat.sweep_mines.json"));
+		       json_string ("ge://schema/combat.sweep_mines.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -3213,9 +3266,10 @@ schema_combat_status (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/combat.status.json"));
+		       json_string ("ge://schema/combat.status.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -3228,10 +3282,10 @@ schema_fighters_recall (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/fighters.recall.json"));
+		       json_string ("ge://schema/fighters.recall.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -3275,10 +3329,10 @@ schema_combat_deploy_mines (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/combat.deploy_mines.json"));
+		       json_string ("ge://schema/combat.deploy_mines.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -3336,10 +3390,10 @@ schema_mines_recall (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/mines.recall.json"));
+		       "$id", json_string ("ge://schema/mines.recall.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -3384,10 +3438,10 @@ schema_deploy_fighters_list (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/deploy.fighters.list.json"));
+		       json_string ("ge://schema/deploy.fighters.list.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -3403,10 +3457,10 @@ schema_deploy_mines_list (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/deploy.mines.list.json"));
+		       json_string ("ge://schema/deploy.mines.list.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -3422,11 +3476,11 @@ json_t *
 schema_chat_send (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *channel_prop = json_object ();
   json_object_set_new (channel_prop, "type", json_string ("string"));
   json_object_set_new (props, "channel", channel_prop);
-  
+
   json_t *message_prop = json_object ();
   json_object_set_new (message_prop, "type", json_string ("string"));
   json_object_set_new (message_prop, "minLength", json_integer (1));
@@ -3434,12 +3488,13 @@ schema_chat_send (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/chat.send.json"));
+		       json_string ("ge://schema/chat.send.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("channel"));
   json_array_append_new (required, json_string ("message"));
@@ -3453,7 +3508,7 @@ json_t *
 schema_chat_broadcast (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *message_prop = json_object ();
   json_object_set_new (message_prop, "type", json_string ("string"));
   json_object_set_new (message_prop, "minLength", json_integer (1));
@@ -3461,12 +3516,13 @@ schema_chat_broadcast (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/chat.broadcast.json"));
+		       json_string ("ge://schema/chat.broadcast.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("message"));
   json_object_set_new (root, "required", required);
@@ -3479,11 +3535,11 @@ json_t *
 schema_chat_history (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *channel_prop = json_object ();
   json_object_set_new (channel_prop, "type", json_string ("string"));
   json_object_set_new (props, "channel", channel_prop);
-  
+
   json_t *limit_prop = json_object ();
   json_object_set_new (limit_prop, "type", json_string ("integer"));
   json_object_set_new (limit_prop, "minimum", json_integer (1));
@@ -3492,9 +3548,10 @@ schema_chat_history (void)
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/chat.history.json"));
+		       "$id", json_string ("ge://schema/chat.history.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -3532,10 +3589,10 @@ schema_mail_send (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/mail.send.json"));
+		       json_string ("ge://schema/mail.send.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -3561,10 +3618,10 @@ schema_mail_inbox (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/mail.inbox.json"));
+		       json_string ("ge://schema/mail.inbox.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -3580,10 +3637,10 @@ schema_mail_read (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/mail.read.json"));
+		       json_string ("ge://schema/mail.read.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -3618,7 +3675,7 @@ json_t *
 schema_mail_delete (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *mail_id_prop = json_object ();
   json_object_set_new (mail_id_prop, "type", json_string ("integer"));
   json_object_set_new (mail_id_prop, "minimum", json_integer (1));
@@ -3626,12 +3683,13 @@ schema_mail_delete (void)
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/mail.delete.json"));
+		       json_string ("ge://schema/mail.delete.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("mail_id"));
   json_object_set_new (root, "required", required);
@@ -3677,10 +3735,10 @@ schema_sys_notice_create (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/sys.notice.create.json"));
+		       json_string ("ge://schema/sys.notice.create.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -3705,10 +3763,10 @@ schema_notice_list (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/notice.list.json"));
+		       json_string ("ge://schema/notice.list.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -3732,10 +3790,10 @@ schema_notice_ack (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/notice.ack.json"));
+		       json_string ("ge://schema/notice.ack.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -3758,11 +3816,11 @@ schema_insurance_policies_list (void)
 {
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
-                       json_string
-                         ("ge://schema/insurance.policies.list.json"));
+		       json_string
+		       ("ge://schema/insurance.policies.list.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", json_object ());
   json_object_set_new (data_schema, "required", json_array ());
@@ -3814,11 +3872,11 @@ schema_insurance_policies_buy (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string
-                         ("ge://schema/insurance.policies.buy.json"));
+		       json_string
+		       ("ge://schema/insurance.policies.buy.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -3854,17 +3912,17 @@ schema_insurance_claim_file (void)
 
   json_object_set_new (incident_desc_prop, "type", json_string ("string"));
   json_object_set_new (data_properties,
-                       "incident_description", incident_desc_prop);
+		       "incident_description", incident_desc_prop);
 
 
   json_t *data_schema = json_object ();
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/insurance.claim.file.json"));
+		       json_string ("ge://schema/insurance.claim.file.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
 
@@ -3888,10 +3946,10 @@ schema_fine_list (void)
 {
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/fine.list.json"));
+		       json_string ("ge://schema/fine.list.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", json_object ());
   json_object_set_new (data_schema, "required", json_array ());
@@ -3905,10 +3963,10 @@ schema_fine_pay (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/fine.pay.json"));
+		       json_string ("ge://schema/fine.pay.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
 
@@ -3954,10 +4012,10 @@ schema_news_read (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/news.read.json"));
+		       json_string ("ge://schema/news.read.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -3973,19 +4031,20 @@ json_t *
 schema_subscribe_add (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *event_type_prop = json_object ();
   json_object_set_new (event_type_prop, "type", json_string ("string"));
   json_object_set_new (props, "event_type", event_type_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/subscribe.add.json"));
+		       json_string ("ge://schema/subscribe.add.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("event_type"));
   json_object_set_new (root, "required", required);
@@ -3998,19 +4057,20 @@ json_t *
 schema_subscribe_remove (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *event_type_prop = json_object ();
   json_object_set_new (event_type_prop, "type", json_string ("string"));
   json_object_set_new (props, "event_type", event_type_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/subscribe.remove.json"));
+		       json_string ("ge://schema/subscribe.remove.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("event_type"));
   json_object_set_new (root, "required", required);
@@ -4024,9 +4084,10 @@ schema_subscribe_list (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/subscribe.list.json"));
+		       json_string ("ge://schema/subscribe.list.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -4039,10 +4100,10 @@ schema_subscribe_catalog (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/subscribe.catalog.json"));
+		       json_string ("ge://schema/subscribe.catalog.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   // Empty properties object
@@ -4058,7 +4119,7 @@ json_t *
 schema_bulk_execute (void)
 {
   json_t *props = json_object ();
-  
+
   json_t *commands_prop = json_object ();
   json_object_set_new (commands_prop, "type", json_string ("array"));
   json_object_set_new (commands_prop, "minItems", json_integer (1));
@@ -4066,12 +4127,13 @@ schema_bulk_execute (void)
 
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/bulk.execute.json"));
+		       "$id", json_string ("ge://schema/bulk.execute.json"));
   json_object_set_new (root, "$schema",
-                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
-  
+
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("commands"));
   json_object_set_new (root, "required", required);
@@ -4102,12 +4164,12 @@ schema_player_set_trade_account_preference (void)
 
 
   json_object_set_new (data_schema,
-                       "$id",
-                       json_string
-                         ("ge://schema/player.set_trade_account_preference.json"));
+		       "$id",
+		       json_string
+		       ("ge://schema/player.set_trade_account_preference.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_props);
 
@@ -4130,10 +4192,10 @@ schema_player_my_info (void)
 {
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/player.my_info.json"));
+		       json_string ("ge://schema/player.my_info.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", json_object ());
   // Empty properties object
@@ -4150,10 +4212,10 @@ schema_player_info (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/player.info.json"));
+		       json_string ("ge://schema/player.info.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
 
   json_t *props = json_object ();
@@ -4257,7 +4319,7 @@ json_t *
 schema_player_list_online_request (void)
 {
   json_t *properties = json_object ();
-  json_t *required = json_array ();     // No required fields for flexibility
+  json_t *required = json_array ();	// No required fields for flexibility
 
 
   // offset property
@@ -4305,11 +4367,11 @@ schema_player_list_online_request (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string
-                         ("ge://schema/player.list_online.request.json"));
+		       json_string
+		       ("ge://schema/player.list_online.request.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", properties);
   json_object_set_new (data_schema, "required", required);
@@ -4362,7 +4424,7 @@ schema_player_list_online_response (void)
 
 
   // players property (array of player objects)
-  json_t *player_item_schema = schema_player_info ();   // Reuse existing player info schema
+  json_t *player_item_schema = schema_player_info ();	// Reuse existing player info schema
 
 
   json_t *players_prop = json_object ();
@@ -4378,11 +4440,11 @@ schema_player_list_online_response (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string
-                         ("ge://schema/player.list_online.response.json"));
+		       json_string
+		       ("ge://schema/player.list_online.response.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", properties);
   json_object_set_new (data_schema, "required", required);
@@ -4398,10 +4460,10 @@ schema_bank_balance (void)
 {
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/bank.balance.json"));
+		       json_string ("ge://schema/bank.balance.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", json_object ());
   json_object_set_new (data_schema, "required", json_array ());
@@ -4415,10 +4477,10 @@ schema_bank_history (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root,
-                       "$id", json_string ("ge://schema/bank.history.json"));
+		       "$id", json_string ("ge://schema/bank.history.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "required", json_array ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -4521,10 +4583,10 @@ schema_bank_leaderboard (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/bank.leaderboard.json"));
+		       json_string ("ge://schema/bank.leaderboard.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
   json_object_set_new (data_schema, "required", json_array ());
@@ -4538,10 +4600,10 @@ schema_hardware_list (void)
 {
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
-                       json_string ("ge://schema/hardware.list.json"));
+		       json_string ("ge://schema/hardware.list.json"));
   json_object_set_new (root, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "required", json_array ());
@@ -4587,14 +4649,13 @@ schema_hardware_buy (void)
 
 
   json_object_set_new (data_schema, "$id",
-                       json_string ("ge://schema/hardware.buy.json"));
+		       json_string ("ge://schema/hardware.buy.json"));
   json_object_set_new (data_schema, "$schema",
-                       json_string
-                         ("https://json-schema.org/draft/2020-12/schema"));
+		       json_string
+		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
   json_object_set_new (data_schema, "properties", data_properties);
   json_object_set_new (data_schema, "required", data_required);
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
   return data_schema;
 }
-

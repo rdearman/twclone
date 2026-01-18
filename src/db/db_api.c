@@ -11,6 +11,7 @@
 
 // Include specific backend open functions
 #include "pg/db_pg.h"
+#include "mysql/db_mysql.h" // Include MySQL backend header
 
 /**
  * @brief Helper to set error with category
@@ -150,6 +151,16 @@ db_t *db_open(const db_config_t *cfg, db_error_t *err) {
                 return NULL;
             }
             db->impl = db_pg_open_internal(db, cfg, err); // Pass db_t for internal setup
+            break;
+        case DB_BACKEND_MYSQL:
+            // Placeholder: MySQL connection string would go here
+            if (!cfg->pg_conninfo) { // Using pg_conninfo for now as a generic conn_str
+                err->code = ERR_DB_CONFIG;
+                strncpy(err->message, "db_open: MySQL conninfo is NULL", sizeof(err->message));
+                free(db);
+                return NULL;
+            }
+	    db->impl = db_mysql_open_internal(db, cfg, err);
             break;
         case DB_BACKEND_UNKNOWN:
         default:

@@ -38,7 +38,7 @@
     {
       "name": "Setup: Move Players to FedSpace (Sector 1)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector_id = 1 WHERE player_id IN (@attacker_player_player_id, @defender_player_player_id);" },
+      "data": { "sql": "UPDATE players SET sector_id = 1 WHERE player_id IN (@{attacker_player_player_id}, @{defender_player_player_id});" },
       "user": "admin"
     },
     {

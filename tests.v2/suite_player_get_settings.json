@@ -1,0 +1,65 @@
+{
+  "test_suite_name": "Player Get Settings",
+  "description": "Tests the player.get_settings command comprehensively",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "get_settings_user",
+      "password": "password"
+    },
+    {
+      "name": "Test player.get_settings with various data types",
+      "user": "get_settings_user",
+      "sequence": [
+        {
+          "command": "player.set_prefs",
+          "data": { "lang": "fr", "theme": "dark", "numeric_pref": 123, "bool_pref": true },
+          "expect": { "status": "ok" }
+        },
+        {
+          "command": "nav.bookmark.add",
+          "data": { "name": "home_sector", "sector_id": 50 },
+          "expect": { "status": "ok" }
+        },
+        {
+          "command": "nav.bookmark.add",
+          "data": { "name": "trade_hub", "sector_id": 100 },
+          "expect": { "status": "ok" }
+        },
+        {
+          "command": "nav.avoid.add",
+          "data": { "sector_id": 20 },
+          "expect": { "status": "ok" }
+        },
+        {
+          "command": "nav.avoid.add",
+          "data": { "sector_id": 30 },
+          "expect": { "status": "ok" }
+        },
+        {
+          "command": "subscribe.add",
+          "data": { "event_type": "player.attacked" },
+          "expect": { "status": "ok" }
+        },
+        {
+          "command": "player.get_settings",
+          "expect": { "status": "ok" },
+          "asserts": [
+            { "path": "data.prefs.lang", "op": "==", "value": "fr" },
+            { "path": "data.prefs.theme", "op": "==", "value": "dark" },
+            { "path": "data.prefs.numeric_pref", "op": "==", "value": "123" },
+            { "path": "data.prefs.bool_pref", "op": "==", "value": "1" },
+            { "path": "data.bookmarks[0].name", "op": "==", "value": "home_sector" },
+            { "path": "data.bookmarks[0].sector_id", "op": "==", "value": 50 },
+            { "path": "data.bookmarks[1].name", "op": "==", "value": "trade_hub" },
+            { "path": "data.bookmarks[1].sector_id", "op": "==", "value": 100 },
+            { "path": "data.avoid", "op": "contains", "value": 20 },
+            { "path": "data.avoid", "op": "contains", "value": 30 },
+            { "path": "data.subscriptions[0].topic", "op": "==", "value": "player.attacked" }
+          ]
+        }
+      ]
+    }
+  ]
+}

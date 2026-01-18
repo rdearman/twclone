@@ -208,7 +208,7 @@ int repo_engine_cleanup_expired_limpets(db_t *db, const char *deployed_as_epoch,
 
 db_res_t* repo_engine_get_active_interest_accounts(db_t *db, db_error_t *err) {
     /* SQL_VERBATIM: Q17 */
-    const char *q17 = "SELECT id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
+    const char *q17 = "SELECT bank_accounts_id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
     db_res_t *res = NULL;
     db_query(db, q17, NULL, 0, &res, err);
     return res;

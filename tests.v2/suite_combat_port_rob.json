@@ -8,25 +8,49 @@
       "password": "password"
     },
     {
-      "name": "Rig: Position combat_ace at Port 2",
+      "name": "Rig: Find Target Port",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT port_id, sector_id FROM ports LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "target_port_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Position combat_ace player at Port",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM ports WHERE port_id = 2) WHERE name = 'combat_ace' RETURNING sector_id;"
+        "sql": "UPDATE players SET sector_id = @{target_sector_id} WHERE name = 'combat_ace';"
       },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position combat_ace ship at Port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{target_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'combat_ace');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set Evil Alignment",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment = -501 WHERE name = 'combat_ace';" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Positive: Rob Port Credits",
       "command": "port.rob",
-      "data": { "sector_id": 1, "port_id": 2, "mode": "credits" },
+      "data": { "sector_id": "@target_sector_id", "port_id": "@target_port_id", "mode": "credits" },
       "user": "combat_ace",
       "expect": { "status": "ok" }
     },
     {
       "name": "Negative: Rob Port Missing Auth",
       "command": "port.rob",
-      "data": { "sector_id": 1, "port_id": 2, "mode": "credits" },
+      "data": { "sector_id": "@target_sector_id", "port_id": "@target_port_id", "mode": "credits" },
       "expect": { "status": "error", "error_code": 401 }
     }
   ]

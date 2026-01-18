@@ -8,6 +8,68 @@
       "password": "password"
     },
     {
+      "name": "Rig: Find Adjacent Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT to_sector FROM sector_warps WHERE from_sector = 1 LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "adjacent_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Create Warp link if missing",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 2) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position mover_warp player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'mover_warp';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position mover_warp ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'mover_warp');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Create Warp Links",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 2), (2, 1) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position mover_warp player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'mover_warp';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position mover_warp ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'mover_warp');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Positive: Warp to Adjacent Sector",
       "command": "move.warp",
       "data": { "to_sector_id": 2 },

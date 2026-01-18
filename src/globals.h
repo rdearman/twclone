@@ -27,7 +27,13 @@ extern atomic_int_fast64_t g_server_tick;
 extern atomic_int_fast64_t g_warps_performed;
 
 #define HASH_LENGTH 500
-enum listtype { player, planet, port, ship };
-struct list { void *item; enum listtype type; struct list *listptr; };
+enum listtype
+{ player, planet, port, ship };
+struct list
+{
+  void *item;
+  enum listtype type;
+  struct list *listptr;
+};
 
 #endif

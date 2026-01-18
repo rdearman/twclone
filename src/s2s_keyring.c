@@ -1,5 +1,5 @@
 #include <time.h>
-#include <openssl/evp.h>        // EVP_DecodeBlock
+#include <openssl/evp.h>	// EVP_DecodeBlock
 #include <ctype.h>
 #include <string.h>
 #include <stdio.h>
@@ -20,10 +20,9 @@
 
 int
 s2s_keyring_generate_key (db_t *db,
-                          const char *key_id_in,
-                          const char *key_b64_in)
+			  const char *key_id_in, const char *key_b64_in)
 {
-  return repo_s2s_create_key(db, key_id_in, key_b64_in);
+  return repo_s2s_create_key (db, key_id_in, key_b64_in);
 }
 
 
@@ -34,9 +33,9 @@ b64_compact (const char *in, char *out, size_t out_cap)
   for (const char *p = in; *p && w + 1 < out_cap; ++p)
     {
       if (!isspace ((unsigned char) *p))
-        {
-          out[w++] = *p;
-        }
+	{
+	  out[w++] = *p;
+	}
     }
   out[w] = '\0';
 }
@@ -44,7 +43,7 @@ b64_compact (const char *in, char *out, size_t out_cap)
 
 static int
 b64_decode_strict (const char *in, unsigned char *out, size_t out_cap,
-                   size_t *out_len)
+		   size_t *out_len)
 {
   char tmp[512];
   b64_compact (in, tmp, sizeof (tmp));
@@ -65,8 +64,8 @@ b64_decode_strict (const char *in, unsigned char *out, size_t out_cap,
       return -1;
     }
   size_t pad = (in_len >= 1 && tmp[in_len - 1] == '=') + (in_len >= 2
-                                                          && tmp[in_len -
-                                                                 2] == '=');
+							  && tmp[in_len -
+								 2] == '=');
   size_t actual = (size_t) wrote - pad;
 
 
@@ -97,21 +96,21 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
 
   if (env_b64 && *env_b64)
     {
-      memset (out_key, 0, sizeof(*out_key));
+      memset (out_key, 0, sizeof (*out_key));
       strncpy (out_key->key_id,
-               (env_id && *env_id) ? env_id : "env0",
-               sizeof(out_key->key_id) - 1);
+	       (env_id && *env_id) ? env_id : "env0",
+	       sizeof (out_key->key_id) - 1);
 
       size_t key_len = 0;
 
 
       if (b64_decode_strict (env_b64,
-                             out_key->key,
-                             sizeof(out_key->key),
-                             &key_len) != 0 || key_len == 0)
-        {
-          return -1;
-        }
+			     out_key->key,
+			     sizeof (out_key->key),
+			     &key_len) != 0 || key_len == 0)
+	{
+	  return -1;
+	}
 
       out_key->key_len = key_len;
       return 0;
@@ -123,46 +122,47 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
       char kid[128];
       char kb64[512];
 
-      if (repo_s2s_get_default_key(db, kid, sizeof(kid), kb64, sizeof(kb64)) == 0)
-        {
-          memset (out_key, 0, sizeof(*out_key));
-          strncpy (out_key->key_id, kid, sizeof(out_key->key_id) - 1);
+      if (repo_s2s_get_default_key
+	  (db, kid, sizeof (kid), kb64, sizeof (kb64)) == 0)
+	{
+	  memset (out_key, 0, sizeof (*out_key));
+	  strncpy (out_key->key_id, kid, sizeof (out_key->key_id) - 1);
 
-          size_t key_len = 0;
+	  size_t key_len = 0;
 
-          if (b64_decode_strict (kb64,
-                                 out_key->key,
-                                 sizeof(out_key->key),
-                                 &key_len) != 0 || key_len == 0)
-            {
-              LOGE ("[s2s] base64 decode failed for key_id='%s'\n",
-                    out_key->key_id);
-              return -1;
-            }
+	  if (b64_decode_strict (kb64,
+				 out_key->key,
+				 sizeof (out_key->key),
+				 &key_len) != 0 || key_len == 0)
+	    {
+	      LOGE ("[s2s] base64 decode failed for key_id='%s'\n",
+		    out_key->key_id);
+	      return -1;
+	    }
 
-          out_key->key_len = key_len;
-          return 0;
-        }
+	  out_key->key_len = key_len;
+	  return 0;
+	}
 
       /* No active key found */
       if (attempt == 0)
-        {
-          /* Attempt generation/recovery once */
-          const char *new_key_id = "default_auto_gen_1";
-          const char *new_key_b64 =
-            "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=";
+	{
+	  /* Attempt generation/recovery once */
+	  const char *new_key_id = "default_auto_gen_1";
+	  const char *new_key_b64 =
+	    "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=";
 
 
-          if (s2s_keyring_generate_key (db, new_key_id, new_key_b64) != 0)
-            {
-              LOGE (
-                "[s2s] FATAL: S2S key generation failed. Cannot proceed.\n");
-              return -1;
-            }
+	  if (s2s_keyring_generate_key (db, new_key_id, new_key_b64) != 0)
+	    {
+	      LOGE
+		("[s2s] FATAL: S2S key generation failed. Cannot proceed.\n");
+	      return -1;
+	    }
 
-          /* loop and retry */
-          continue;
-        }
+	  /* loop and retry */
+	  continue;
+	}
 
       /* Second attempt also found nothing */
       return -1;

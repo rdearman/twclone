@@ -45,7 +45,7 @@ json_t *schema_keys (void);
  * @param why A pointer to a char* that will be set to an error message on failure.
  * @return 0 on success, -1 on failure.
  */
-int schema_validate_payload (const char *type, json_t *payload, char **why);
+int schema_validate_payload (const char *type, json_t * payload, char **why);
 
 /**
  * @brief (S2S) Manually validate an inter-server (s2s) payload.
@@ -55,7 +55,7 @@ int schema_validate_payload (const char *type, json_t *payload, char **why);
  * @param why A pointer to a char* that will be set to an error message on failure.
  * @return 0 on success, -1 on failure.
  */
-int s2s_validate_payload (const char *type, json_t *payload, char **why);
+int s2s_validate_payload (const char *type, json_t * payload, char **why);
 
 /* --- Registry Hooks (Implemented in server_loop.c) --- */
 json_t *loop_get_schema_for_command (const char *name);

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "../../server_log.h"
 
 int repo_auth_get_player_type_flags(db_t *db, int player_id, int *type_out, int *flags_out) {
     db_res_t *res = NULL;
@@ -169,13 +170,31 @@ int repo_auth_upsert_system_sub(db_t *db, int player_id) {
     return 0;
 }
 
-int repo_auth_register_player(db_t *db, const char *name, const char *pass, const char *ship_name, int spawn_sid, int64_t *player_id_out) {
-    db_error_t err;
+int repo_auth_register_player(db_t *db, const char *name, const char *pass, const char *ship_name, int spawn_sid, int64_t *player_id_out, db_error_t *err_out) {
+    db_res_t *res = NULL;
     /* SQL_VERBATIM: Q10 */
     const char *q10 = "SELECT register_player({1}, {2}, {3}, false, {4});";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
-    if (!db_exec_insert_id (db, sql, (db_bind_t[]){db_bind_text (name), db_bind_text (pass), db_bind_text (ship_name), db_bind_i32 (spawn_sid)}, 4, "player_id", player_id_out, &err)) return err.code;
+
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_text(name), db_bind_text(pass), db_bind_text(ship_name), db_bind_i32(spawn_sid)}, 4, &res, err_out)) {
+        goto cleanup;
+    }
+
+    if (!db_res_step(res, err_out)) {
+        goto cleanup;
+    }
+
+    *player_id_out = db_res_col_i64(res, 0, err_out);
+    if (err_out->code != 0) {
+        goto cleanup;
+    }
+
+    db_res_finalize(res);
     return 0;
+
+cleanup:
+    if (res) db_res_finalize(res);
+    return err_out->code ? err_out->code : -1;
 }
 
 int repo_auth_insert_initial_turns(db_t *db, const char *now_ts, int player_id) {

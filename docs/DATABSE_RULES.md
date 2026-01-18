@@ -234,6 +234,7 @@ Forbidden in repo SQL:
 >
 > 1. **No dialect SQL in repo files**
 > 2. **Time comes from C, not SQL**
+   * **Columns may use native time types** (e.g., Postgres `timestamptz`). The *value* is produced in C and bound via driver conversions; repo SQL must not call backend time functions or casts.
 > 3. **Upserts, IDs, locking go through DB primitives**
 >
 > If you feel clever, stop — you are probably breaking portability.

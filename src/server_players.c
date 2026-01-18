@@ -30,8 +30,10 @@
 #include "db/sql_driver.h"
 
 /* Constants */
-enum { MAX_BOOKMARKS = 64, MAX_BM_NAME = 64 };
-enum { MAX_AVOIDS = 64 };
+enum
+{ MAX_BOOKMARKS = 64, MAX_BM_NAME = 64 };
+enum
+{ MAX_AVOIDS = 64 };
 
 static const char *DEFAULT_PLAYER_FIELDS[] = {
   "id", "username", "credits", "sector", "faction", NULL
@@ -46,9 +48,9 @@ int
 cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 {
   send_response_error (ctx,
-                       root,
-                       ERR_NOT_IMPLEMENTED,
-                       "Not implemented: cmd_player_list_online");
+		       root,
+		       ERR_NOT_IMPLEMENTED,
+		       "Not implemented: cmd_player_list_online");
   return 0;
 }
 
@@ -57,9 +59,9 @@ int
 cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 {
   send_response_error (ctx,
-                       root,
-                       ERR_NOT_IMPLEMENTED,
-                       "Not implemented: cmd_player_rankings");
+		       root,
+		       ERR_NOT_IMPLEMENTED,
+		       "Not implemented: cmd_player_rankings");
   return 0;
 }
 
@@ -79,9 +81,9 @@ is_ascii_printable (const char *s)
   for (const unsigned char *p = (const unsigned char *)s; *p; ++p)
     {
       if (*p < 0x20 || *p > 0x7E)
-        {
-          return 0;
-        }
+	{
+	  return 0;
+	}
     }
   return 1;
 }
@@ -114,10 +116,10 @@ is_valid_key (const char *s, size_t max)
 
 
       if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' ||
-            c == '_' || c == '-'))
-        {
-          return 0;
-        }
+	    c == '_' || c == '-'))
+	{
+	  return 0;
+	}
     }
   return 1;
 }
@@ -128,13 +130,11 @@ is_valid_key (const char *s, size_t max)
 
 static int
 h_db_prefs_set_one (int player_id,
-                    const char *key,
-                    const char *type,
-                    const char *value)
+		    const char *key, const char *type, const char *value)
 {
   LOGD ("h_db_prefs_set_one: pid=%d key=%s val=%s", player_id, key, value);
   db_t *db = game_db_get_handle ();
-  return repo_players_set_pref(db, player_id, key, type, value);
+  return repo_players_set_pref (db, player_id, key, type, value);
 }
 
 
@@ -142,7 +142,7 @@ static int
 h_db_bookmark_upsert (int player_id, const char *name, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  return repo_players_upsert_bookmark(db, player_id, name, sector_id);
+  return repo_players_upsert_bookmark (db, player_id, name, sector_id);
 }
 
 
@@ -150,7 +150,7 @@ static int
 h_db_bookmark_remove (int player_id, const char *name)
 {
   db_t *db = game_db_get_handle ();
-  return repo_players_delete_bookmark(db, player_id, name);
+  return repo_players_delete_bookmark (db, player_id, name);
 }
 
 
@@ -158,7 +158,7 @@ static int
 h_db_avoid_add (int player_id, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  return repo_players_add_avoid(db, player_id, sector_id);
+  return repo_players_add_avoid (db, player_id, sector_id);
 }
 
 
@@ -166,7 +166,7 @@ static int
 h_db_avoid_remove (int player_id, int sector_id)
 {
   db_t *db = game_db_get_handle ();
-  return repo_players_delete_avoid(db, player_id, sector_id);
+  return repo_players_delete_avoid (db, player_id, sector_id);
 }
 
 
@@ -174,18 +174,18 @@ static int
 h_db_subscribe_disable (int player_id, const char *topic)
 {
   db_t *db = game_db_get_handle ();
-  return repo_players_disable_subscription(db, player_id, topic);
+  return repo_players_disable_subscription (db, player_id, topic);
 }
 
 
 static int
 h_db_subscribe_upsert (int player_id,
-                       const char *topic,
-                       const char *delivery,
-                       const char *filter)
+		       const char *topic,
+		       const char *delivery, const char *filter)
 {
   db_t *db = game_db_get_handle ();
-  return repo_players_upsert_subscription(db, player_id, topic, delivery, filter);
+  return repo_players_upsert_subscription (db, player_id, topic, delivery,
+					   filter);
 }
 
 
@@ -200,15 +200,17 @@ prefs_as_object (int64_t pid)
   db_error_t err;
 
   json_t *obj = json_object ();
-  if ((res = repo_players_get_prefs(db, pid, &err)) != NULL)
+  if ((res = repo_players_get_prefs (db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
-        {
-          const char *k = db_res_col_text (res, 0, &err);
-          const char *v = db_res_col_text (res, 2, &err);
-          LOGD ("prefs_as_object: found key=%s val=%s", k ? k : "NULL", v ? v : "NULL");
-          json_object_set_new (obj, k ? k : "unknown", json_string (v ? v : ""));
-        }
+	{
+	  const char *k = db_res_col_text (res, 0, &err);
+	  const char *v = db_res_col_text (res, 2, &err);
+	  LOGD ("prefs_as_object: found key=%s val=%s", k ? k : "NULL",
+		v ? v : "NULL");
+	  json_object_set_new (obj, k ? k : "unknown",
+			       json_string (v ? v : ""));
+	}
       db_res_finalize (res);
     }
   return obj;
@@ -223,22 +225,22 @@ prefs_as_array (int64_t pid)
   db_error_t err;
 
   json_t *arr = json_array ();
-  if ((res = repo_players_get_prefs(db, pid, &err)) != NULL)
+  if ((res = repo_players_get_prefs (db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
-        {
-          const char *k = db_res_col_text (res, 0, &err);
-          const char *t = db_res_col_text (res, 1, &err);
-          const char *v = db_res_col_text (res, 2, &err);
-          json_t *pref_obj = json_object ();
+	{
+	  const char *k = db_res_col_text (res, 0, &err);
+	  const char *t = db_res_col_text (res, 1, &err);
+	  const char *v = db_res_col_text (res, 2, &err);
+	  json_t *pref_obj = json_object ();
 
 
-          json_object_set_new (pref_obj, "key", json_string (k ? k : ""));
-          json_object_set_new (pref_obj, "type",
-                               json_string (t ? t : "string"));
-          json_object_set_new (pref_obj, "value", json_string (v ? v : ""));
-          json_array_append_new (arr, pref_obj);
-        }
+	  json_object_set_new (pref_obj, "key", json_string (k ? k : ""));
+	  json_object_set_new (pref_obj, "type",
+			       json_string (t ? t : "string"));
+	  json_object_set_new (pref_obj, "value", json_string (v ? v : ""));
+	  json_array_append_new (arr, pref_obj);
+	}
       db_res_finalize (res);
     }
   return arr;
@@ -252,19 +254,20 @@ bookmarks_as_array (int64_t pid)
   db_res_t *res = NULL;
   db_error_t err;
   json_t *arr = json_array ();
-  if ((res = repo_players_get_bookmarks(db, pid, &err)) != NULL)
+  if ((res = repo_players_get_bookmarks (db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
-        {
-          const char *name = db_res_col_text (res, 0, &err);
-          json_t *bm_obj = json_object ();
+	{
+	  const char *name = db_res_col_text (res, 0, &err);
+	  json_t *bm_obj = json_object ();
 
 
-          json_object_set_new (bm_obj, "name", json_string (name ? name : ""));
-          json_object_set_new (bm_obj, "sector_id",
-                               json_integer (db_res_col_i32 (res, 1, &err)));
-          json_array_append_new (arr, bm_obj);
-        }
+	  json_object_set_new (bm_obj, "name",
+			       json_string (name ? name : ""));
+	  json_object_set_new (bm_obj, "sector_id",
+			       json_integer (db_res_col_i32 (res, 1, &err)));
+	  json_array_append_new (arr, bm_obj);
+	}
       db_res_finalize (res);
     }
   return arr;
@@ -278,13 +281,14 @@ avoid_as_array (int64_t pid)
   db_res_t *res = NULL;
   db_error_t err;
   json_t *arr = json_array ();
-  if ((res = repo_players_get_avoids(db, pid, &err)) != NULL)
+  if ((res = repo_players_get_avoids (db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
-        {
-          json_array_append_new (arr,
-                                 json_integer (db_res_col_i32 (res, 0, &err)));
-        }
+	{
+	  json_array_append_new (arr,
+				 json_integer (db_res_col_i32
+					       (res, 0, &err)));
+	}
       db_res_finalize (res);
     }
   return arr;
@@ -298,38 +302,31 @@ subscriptions_as_array (int64_t pid)
   db_res_t *res = NULL;
   db_error_t err;
   json_t *arr = json_array ();
-  if ((res = repo_players_get_subscriptions(db, pid, &err)) != NULL)
+  if ((res = repo_players_get_subscriptions (db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
-        {
-          json_t *one = json_object ();
+	{
+	  json_t *one = json_object ();
 
 
-          json_object_set_new (one,
-                               "topic",
-                               json_string (db_res_col_text (res,
-                                                             0,
-                                                             &err)));
-          json_object_set_new (one, "locked", json_boolean (db_res_col_int (res,
-                                                                            1,
-                                                                            &err)));
-          json_object_set_new (one, "enabled",
-                               json_boolean (db_res_col_int (res,
-                                                             2,
-                                                             &err)));
-          json_object_set_new (one, "delivery",
-                               json_string (db_res_col_text (res,
-                                                             3,
-                                                             &err)));
-          const char *f = db_res_col_text (res, 4, &err);
+	  json_object_set_new (one,
+			       "topic",
+			       json_string (db_res_col_text (res, 0, &err)));
+	  json_object_set_new (one, "locked",
+			       json_boolean (db_res_col_int (res, 1, &err)));
+	  json_object_set_new (one, "enabled",
+			       json_boolean (db_res_col_int (res, 2, &err)));
+	  json_object_set_new (one, "delivery",
+			       json_string (db_res_col_text (res, 3, &err)));
+	  const char *f = db_res_col_text (res, 4, &err);
 
 
-          if (f)
-            {
-              json_object_set_new (one, "filter", json_string (f));
-            }
-          json_array_append_new (arr, one);
-        }
+	  if (f)
+	    {
+	      json_object_set_new (one, "filter", json_string (f));
+	    }
+	  json_array_append_new (arr, one);
+	}
       db_res_finalize (res);
     }
   return arr;
@@ -351,54 +348,72 @@ h_set_prefs (client_ctx_t *ctx, json_t *prefs)
   if (json_is_array (items))
     {
       LOGD ("h_set_prefs: found items array");
-      size_t idx; json_t *item;
-      json_array_foreach (items, idx, item) {
-        const char *key = json_string_value (json_object_get (item, "key"));
-        json_t *val = json_object_get (item, "value");
-        if (key && val) {
-           LOGD ("h_set_prefs: item key=%s", key);
-           char buf[512] = {0};
-           const char *sval = "";
-           if (json_is_string (val)) { sval = json_string_value (val); }
-           else if (json_is_integer (val)) { snprintf(buf, sizeof(buf), "%lld", (long long)json_integer_value(val)); sval = buf; }
-           else if (json_is_boolean (val)) { sval = json_is_true(val) ? "1" : "0"; }
-           else continue;
-           h_db_prefs_set_one (ctx->player_id, key, "string", sval);
-        }
+      size_t idx;
+      json_t *item;
+      json_array_foreach (items, idx, item)
+      {
+	const char *key = json_string_value (json_object_get (item, "key"));
+	json_t *val = json_object_get (item, "value");
+	if (key && val)
+	  {
+	    LOGD ("h_set_prefs: item key=%s", key);
+	    char buf[512] = { 0 };
+	    const char *sval = "";
+	    if (json_is_string (val))
+	      {
+		sval = json_string_value (val);
+	      }
+	    else if (json_is_integer (val))
+	      {
+		snprintf (buf, sizeof (buf), "%lld",
+			  (long long) json_integer_value (val));
+		sval = buf;
+	      }
+	    else if (json_is_boolean (val))
+	      {
+		sval = json_is_true (val) ? "1" : "0";
+	      }
+	    else
+	      continue;
+	    h_db_prefs_set_one (ctx->player_id, key, "string", sval);
+	  }
       }
       return 0;
     }
 
-  const char *key; json_t *val;
+  const char *key;
+  json_t *val;
 
 
-  json_object_foreach (prefs, key, val) {
+  json_object_foreach (prefs, key, val)
+  {
     LOGD ("h_set_prefs: foreach key=%s", key);
     if (!is_valid_key (key, 64))
       {
-        LOGD ("h_set_prefs: invalid key %s", key);
-        continue;
+	LOGD ("h_set_prefs: invalid key %s", key);
+	continue;
       }
-    char buf[512] = {0};
+    char buf[512] = { 0 };
     const char *sval = "";
 
 
     if (json_is_string (val))
       {
-        sval = json_string_value (val);
+	sval = json_string_value (val);
       }
     else if (json_is_integer (val))
       {
-        snprintf (buf, sizeof(buf), "%lld",
-                  (long long)json_integer_value (val)); sval = buf;
+	snprintf (buf, sizeof (buf), "%lld",
+		  (long long) json_integer_value (val));
+	sval = buf;
       }
     else if (json_is_boolean (val))
       {
-        sval = json_is_true (val) ? "1" : "0";
+	sval = json_is_true (val) ? "1" : "0";
       }
     else
       {
-        continue;
+	continue;
       }
     h_db_prefs_set_one (ctx->player_id, key, "string", sval);
   }
@@ -416,15 +431,17 @@ h_set_bookmarks (client_ctx_t *ctx, json_t *list)
 
   /* 1. Clear old (Simplified: Removing items present in list first to avoid dupe errors or just upsert)
      Original logic seemed to remove existing from JSON. We'll stick to Upsert logic. */
-  size_t idx; json_t *val;
+  size_t idx;
+  json_t *val;
 
 
-  json_array_foreach (list, idx, val) {
+  json_array_foreach (list, idx, val)
+  {
     const char *name = json_string_value (json_object_get (val, "name"));
     int sid = json_integer_value (json_object_get (val, "sector_id"));
     if (name && sid > 0)
       {
-        h_db_bookmark_upsert (ctx->player_id, name, sid);
+	h_db_bookmark_upsert (ctx->player_id, name, sid);
       }
   }
   return 0;
@@ -438,13 +455,15 @@ h_set_avoids (client_ctx_t *ctx, json_t *list)
     {
       return -1;
     }
-  size_t idx; json_t *val;
+  size_t idx;
+  json_t *val;
 
 
-  json_array_foreach (list, idx, val) {
+  json_array_foreach (list, idx, val)
+  {
     if (json_is_integer (val))
       {
-        h_db_avoid_add (ctx->player_id, json_integer_value (val));
+	h_db_avoid_add (ctx->player_id, json_integer_value (val));
       }
   }
   return 0;
@@ -458,26 +477,27 @@ h_set_subscriptions (client_ctx_t *ctx, json_t *list)
     {
       return -1;
     }
-  size_t idx; json_t *val;
+  size_t idx;
+  json_t *val;
 
 
-  json_array_foreach (list, idx, val) {
+  json_array_foreach (list, idx, val)
+  {
     if (json_is_string (val))
       {
-        h_db_subscribe_upsert (ctx->player_id,
-                               json_string_value (val),
-                               NULL,
-                               NULL);
+	h_db_subscribe_upsert (ctx->player_id,
+			       json_string_value (val), NULL, NULL);
       }
     else if (json_is_object (val))
       {
-        const char *topic = json_string_value (json_object_get (val, "topic"));
+	const char *topic =
+	  json_string_value (json_object_get (val, "topic"));
 
 
-        if (topic)
-          {
-            h_db_subscribe_upsert (ctx->player_id, topic, NULL, NULL);
-          }
+	if (topic)
+	  {
+	    h_db_subscribe_upsert (ctx->player_id, topic, NULL, NULL);
+	  }
       }
   }
   return 0;
@@ -505,10 +525,11 @@ cmd_player_get_settings (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (data, "prefs", prefs_as_array (ctx->player_id));
-  json_object_set_new (data, "bookmarks", bookmarks_as_array (ctx->player_id));
+  json_object_set_new (data, "bookmarks",
+		       bookmarks_as_array (ctx->player_id));
   json_object_set_new (data, "avoid", avoid_as_array (ctx->player_id));
   json_object_set_new (data, "subscriptions",
-                       subscriptions_as_array (ctx->player_id));
+		       subscriptions_as_array (ctx->player_id));
   send_response_ok_take (ctx, root, "player.settings_v1", &data);
   return 0;
 }
@@ -523,13 +544,14 @@ cmd_player_set_settings (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *data = json_object_get (root,
-                                  "data");
+				  "data");
 
 
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
-                           "data object required"); return 0;
+			   "data object required");
+      return 0;
     }
 
   if (json_object_get (data, "prefs"))
@@ -652,7 +674,7 @@ cmd_nav_bookmark_add (client_ctx_t *ctx, json_t *root)
   else
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
-                           "Invalid name or sector");
+			   "Invalid name or sector");
     }
 }
 
@@ -664,9 +686,10 @@ cmd_nav_bookmark_remove (client_ctx_t *ctx, json_t *root)
     {
       return;
     }
-  const char *name = json_string_value (json_object_get (json_object_get (root,
-                                                                          "data"),
-                                                         "name"));
+  const char *name =
+    json_string_value (json_object_get (json_object_get (root,
+							 "data"),
+					"name"));
 
 
   if (name)
@@ -715,7 +738,8 @@ cmd_player_set_avoids (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
       return 0;
     }
-  h_set_avoids (ctx, json_object_get (json_object_get (root, "data"), "avoid"));
+  h_set_avoids (ctx,
+		json_object_get (json_object_get (root, "data"), "avoid"));
   return cmd_player_get_avoids (ctx, root);
 }
 
@@ -728,8 +752,9 @@ cmd_nav_avoid_add (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
       return;
     }
-  int sid = json_integer_value (json_object_get (json_object_get (root, "data"),
-                                                 "sector_id"));
+  int sid =
+    json_integer_value (json_object_get (json_object_get (root, "data"),
+					 "sector_id"));
 
 
   if (sid > 0)
@@ -756,8 +781,9 @@ cmd_nav_avoid_remove (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
       return;
     }
-  int sid = json_integer_value (json_object_get (json_object_get (root, "data"),
-                                                 "sector_id"));
+  int sid =
+    json_integer_value (json_object_get (json_object_get (root, "data"),
+					 "sector_id"));
 
 
   if (sid > 0)
@@ -797,7 +823,8 @@ int
 cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
 {
   json_t *out = json_object ();
-  json_object_set_new (out, "topics", subscriptions_as_array (ctx->player_id));
+  json_object_set_new (out, "topics",
+		       subscriptions_as_array (ctx->player_id));
   send_response_ok_take (ctx, root, "player.subscriptions", &out);
   return 0;
 }
@@ -826,9 +853,109 @@ cmd_player_set_topics (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_get_notes (client_ctx_t *ctx, json_t *root)
 {
-  json_t *out = json_object ();
-  json_object_set_new (out, "notes", json_array ()); /* Placeholder from original */
-  send_response_ok_take (ctx, root, "player.notes", &out);
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  db_res_t *res = NULL;
+  db_error_t err;
+  json_t *data = json_object_get (root, "data");
+  const char *scope = json_string_value (json_object_get (data, "scope"));
+
+  if (db_note_list (db, ctx->player_id, scope, &res) != 0)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
+      return 0;
+    }
+
+  json_t *items = json_array ();
+  while (db_res_step (res, &err))
+    {
+      json_t *row = json_object ();
+      json_object_set_new (row, "scope",
+			   json_string (db_res_col_text (res, 0, &err)));
+      json_object_set_new (row, "key",
+			   json_string (db_res_col_text (res, 1, &err)));
+      json_object_set_new (row, "note",
+			   json_string (db_res_col_text (res, 2, &err)));
+      json_array_append_new (items, row);
+    }
+  db_res_finalize (res);
+
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "notes", items);
+  send_response_ok_take (ctx, root, "player.notes_v1", &resp);
+  return 0;
+}
+
+
+int
+cmd_player_set_note (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  const char *scope = json_string_value (json_object_get (data, "scope"));
+  const char *key = json_string_value (json_object_get (data, "key"));
+  const char *note = json_string_value (json_object_get (data, "note"));
+
+  if (!scope || !key || !note)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+			   "scope, key, and note required");
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (db_note_set (db, ctx->player_id, scope, key, note) != 0)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
+      return 0;
+    }
+
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "ok", json_true ());
+  send_response_ok_take (ctx, root, "player.note.set_v1", &resp);
+  return 0;
+}
+
+
+int
+cmd_player_delete_note (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  const char *scope = json_string_value (json_object_get (data, "scope"));
+  const char *key = json_string_value (json_object_get (data, "key"));
+
+  if (!scope || !key)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "scope and key required");
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (db_note_delete (db, ctx->player_id, scope, key) != 0)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
+      return 0;
+    }
+
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "ok", json_true ());
+  send_response_ok_take (ctx, root, "player.note.deleted_v1", &resp);
   return 0;
 }
 
@@ -840,10 +967,9 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   if (ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
-                                   root,
-                                   ERR_NOT_AUTHENTICATED,
-                                   "Not authenticated",
-                                   NULL);
+				   root,
+				   ERR_NOT_AUTHENTICATED,
+				   "Not authenticated", NULL);
       return 0;
     }
   db_t *db = game_db_get_handle ();
@@ -851,48 +977,49 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
   db_error_t err;
 
 
-  if ((res = repo_players_get_my_info(db, ctx->player_id, &err)) != NULL)
+  if ((res = repo_players_get_my_info (db, ctx->player_id, &err)) != NULL)
     {
       if (db_res_step (res, &err))
-        {
-          const char *name = db_res_col_text (res, 0, &err);
-          long long credits = db_res_col_i64 (res, 1, &err);
-          int turns = db_res_col_int (res, 2, &err);
-          int sector = db_res_col_int (res, 3, &err);
-          int ship_id = db_res_col_int (res, 4, &err);
-          int align = db_res_col_int (res, 5, &err);
-          long long exp = db_res_col_i64 (res, 6, &err);
-          int corp_id = db_res_col_int (res, 7, &err);
+	{
+	  const char *name = db_res_col_text (res, 0, &err);
+	  long long credits = db_res_col_i64 (res, 1, &err);
+	  int turns = db_res_col_int (res, 2, &err);
+	  int sector = db_res_col_int (res, 3, &err);
+	  int ship_id = db_res_col_int (res, 4, &err);
+	  int align = db_res_col_int (res, 5, &err);
+	  long long exp = db_res_col_i64 (res, 6, &err);
+	  int corp_id = db_res_col_int (res, 7, &err);
 
-          json_t *player_obj = json_object ();
-
-
-          json_object_set_new (player_obj, "id", json_integer (ctx->player_id));
-          json_object_set_new (player_obj, "username",
-                               json_string (name ? name : "Unknown"));
-
-          char credits_str[64];
+	  json_t *player_obj = json_object ();
 
 
-          snprintf (credits_str, sizeof(credits_str), "%lld.00", credits);
-          json_object_set_new (player_obj, "credits",
-                               json_string (credits_str));
-          json_object_set_new (player_obj, "turns_remaining",
-                               json_integer (turns));
-          json_object_set_new (player_obj, "sector", json_integer (sector));
-          json_object_set_new (player_obj, "ship_id", json_integer (ship_id));
-          json_object_set_new (player_obj, "corp_id", json_integer (corp_id));
-          json_object_set_new (player_obj, "alignment", json_integer (align));
-          json_object_set_new (player_obj, "experience", json_integer (exp));
+	  json_object_set_new (player_obj, "id",
+			       json_integer (ctx->player_id));
+	  json_object_set_new (player_obj, "username",
+			       json_string (name ? name : "Unknown"));
 
-          /* Reuse h_player_build_title_payload (make sure it's non-static or copied) */
-          /* We will use a simplified version here if the helper isn't available */
-          json_t *pinfo = json_object ();
+	  char credits_str[64];
 
 
-          json_object_set_new (pinfo, "player", player_obj);
-          send_response_ok_take (ctx, root, "player.info", &pinfo);
-        }
+	  snprintf (credits_str, sizeof (credits_str), "%lld.00", credits);
+	  json_object_set_new (player_obj, "credits",
+			       json_string (credits_str));
+	  json_object_set_new (player_obj, "turns_remaining",
+			       json_integer (turns));
+	  json_object_set_new (player_obj, "sector", json_integer (sector));
+	  json_object_set_new (player_obj, "ship_id", json_integer (ship_id));
+	  json_object_set_new (player_obj, "corp_id", json_integer (corp_id));
+	  json_object_set_new (player_obj, "alignment", json_integer (align));
+	  json_object_set_new (player_obj, "experience", json_integer (exp));
+
+	  /* Reuse h_player_build_title_payload (make sure it's non-static or copied) */
+	  /* We will use a simplified version here if the helper isn't available */
+	  json_t *pinfo = json_object ();
+
+
+	  json_object_set_new (pinfo, "player", player_obj);
+	  send_response_ok_take (ctx, root, "player.info", &pinfo);
+	}
       db_res_finalize (res);
     }
   return 0;
@@ -911,7 +1038,8 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
-      send_response_error (ctx, root, ERR_INVALID_SCHEMA, "data object required");
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+			   "data object required");
       return 0;
     }
 
@@ -937,31 +1065,33 @@ cmd_player_set_trade_account_preference (client_ctx_t *ctx, json_t *root)
   else if (json_is_string (pref))
     {
       const char *s = json_string_value (pref);
-      if (strcasecmp (s, "bank") == 0 || strcasecmp (s, "1") == 0 || strcasecmp (s, "true") == 0)
-        {
-          prefer_bank = true;
-          valid = true;
-        }
-      else if (strcasecmp (s, "petty_cash") == 0 || strcasecmp (s, "0") == 0 || strcasecmp (s, "false") == 0)
-        {
-          prefer_bank = false;
-          valid = true;
-        }
+      if (strcasecmp (s, "bank") == 0 || strcasecmp (s, "1") == 0
+	  || strcasecmp (s, "true") == 0)
+	{
+	  prefer_bank = true;
+	  valid = true;
+	}
+      else if (strcasecmp (s, "petty_cash") == 0 || strcasecmp (s, "0") == 0
+	       || strcasecmp (s, "false") == 0)
+	{
+	  prefer_bank = false;
+	  valid = true;
+	}
     }
 
   if (valid)
     {
       h_db_prefs_set_one (ctx->player_id,
-                          "trade.prefer_bank",
-                          "bool",
-                          prefer_bank ? "1" : "0");
+			  "trade.prefer_bank",
+			  "bool", prefer_bank ? "1" : "0");
       json_t *resp = json_object ();
       json_object_set_new (resp, "ok", json_true ());
       send_response_ok_take (ctx, root, "player.prefs.updated", &resp);
     }
   else
     {
-      send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid preference value. Expected boolean, 0/1, or 'bank'/'petty_cash'");
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+			   "Invalid preference value. Expected boolean, 0/1, or 'bank'/'petty_cash'");
     }
 
   return 0;
@@ -983,7 +1113,7 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
   db_error_clear (&err);
 
 
-  if ((res = repo_players_get_title_info(db, player_id, &err)) == NULL)
+  if ((res = repo_players_get_title_info (db, player_id, &err)) == NULL)
     {
       return -1;
     }
@@ -998,9 +1128,9 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
       return -1;
     }
 
-  align = (int)db_res_col_i32 (res, 0, &err);
+  align = (int) db_res_col_i32 (res, 0, &err);
   exp = db_res_col_i64 (res, 1, &err);
-  comm_id = (int)db_res_col_i32 (res, 2, &err);
+  comm_id = (int) db_res_col_i32 (res, 2, &err);
   db_res_finalize (res);
 
   char *band_code = NULL, *band_name = NULL;
@@ -1008,18 +1138,15 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
 
 
   db_alignment_band_for_value (db, align, NULL, &band_code, &band_name,
-                               &is_good, &is_evil, &can_iss, &can_rob);
+			       &is_good, &is_evil, &can_iss, &can_rob);
 
   int det_comm_id = 0, comm_is_evil = 0;
   char *comm_title = NULL;
 
 
   db_commission_for_player (db,
-                            is_evil,
-                            exp,
-                            &det_comm_id,
-                            &comm_title,
-                            &comm_is_evil);
+			    is_evil,
+			    exp, &det_comm_id, &comm_title, &comm_is_evil);
 
   if (comm_id != det_comm_id)
     {
@@ -1031,7 +1158,7 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
 
 
   json_object_set_new (obj, "title",
-                       json_string (comm_title ? comm_title : "Unknown"));
+		       json_string (comm_title ? comm_title : "Unknown"));
   json_object_set_new (obj, "commission", json_integer (comm_id));
   json_object_set_new (obj, "alignment", json_integer (align));
   json_object_set_new (obj, "experience", json_integer (exp));
@@ -1040,9 +1167,9 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
 
 
   json_object_set_new (band, "code",
-                       json_string (band_code ? band_code : "UNKNOWN"));
+		       json_string (band_code ? band_code : "UNKNOWN"));
   json_object_set_new (band, "name",
-                       json_string (band_name ? band_name : "Unknown"));
+		       json_string (band_name ? band_name : "Unknown"));
   json_object_set_new (band, "is_good", json_boolean (is_good));
   json_object_set_new (band, "is_evil", json_boolean (is_evil));
   json_object_set_new (band, "can_buy_iss", json_boolean (can_iss));
@@ -1069,17 +1196,17 @@ h_player_build_title_payload (db_t *db, int player_id, json_t **out_json)
 
 int
 h_send_message_to_player (db_t *db,
-                          int recipient_id,
-                          int sender_id,
-                          const char *subject,
-                          const char *message)
+			  int recipient_id,
+			  int sender_id,
+			  const char *subject, const char *message)
 {
   if (!db || !subject || !message)
     {
       return 1;
     }
 
-  return repo_players_send_mail(db, sender_id, recipient_id, subject, message) == 0 ? 0 : 1;
+  return repo_players_send_mail (db, sender_id, recipient_id, subject,
+				 message) == 0 ? 0 : 1;
 }
 
 
@@ -1111,7 +1238,7 @@ h_get_cargo_space_free (db_t *db, int player_id, int *free_out)
       return -1;
     }
 
-  return repo_players_get_cargo_free(db, player_id, free_out);
+  return repo_players_get_cargo_free (db, player_id, free_out);
 }
 
 
@@ -1124,7 +1251,7 @@ h_player_is_npc (db_t *db, int player_id)
     }
 
   int is_npc = 0;
-  if (repo_players_is_npc(db, player_id, &is_npc) == 0)
+  if (repo_players_is_npc (db, player_id, &is_npc) == 0)
     {
       return is_npc;
     }
@@ -1141,28 +1268,32 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
     }
 
   int ship_type_id = 0, holds = 0, fighters = 0, shields = 0;
-  if (repo_players_get_shiptype_by_name(db, "Scout Marauder", &ship_type_id, &holds, &fighters, &shields) != 0)
+  if (repo_players_get_shiptype_by_name
+      (db, "Scout Marauder", &ship_type_id, &holds, &fighters, &shields) != 0)
     {
       return -1;
     }
 
   int ship_id = 0;
-  if (repo_players_insert_ship(db, "Starter Ship", ship_type_id, holds, fighters, shields, sector_id, &ship_id) != 0)
+  if (repo_players_insert_ship
+      (db, "Starter Ship", ship_type_id, holds, fighters, shields, sector_id,
+       &ship_id) != 0)
     {
       return -1;
     }
 
-  if (repo_players_set_ship_ownership(db, ship_id, player_id) != 0)
+  if (repo_players_set_ship_ownership (db, ship_id, player_id) != 0)
     {
       return -1;
     }
 
-  if (repo_players_update_ship_and_sector(db, player_id, ship_id, sector_id) != 0)
+  if (repo_players_update_ship_and_sector (db, player_id, ship_id, sector_id)
+      != 0)
     {
       return -1;
     }
 
-  if (repo_players_update_podded_status(db, player_id, "alive") != 0)
+  if (repo_players_update_podded_status (db, player_id, "alive") != 0)
     {
       return -1;
     }
@@ -1179,7 +1310,7 @@ h_get_player_petty_cash (db_t *db, int player_id, long long *bal)
       return -1;
     }
 
-  return repo_players_get_credits(db, player_id, bal);
+  return repo_players_get_credits (db, player_id, bal);
 }
 
 
@@ -1188,12 +1319,12 @@ h_deduct_ship_credits (db_t *db, int player_id, int amount, int *new_balance)
 {
   long long new_balance_ll = 0;
   int rc = h_deduct_credits (db,
-                             "player",
-                             player_id,
-                             amount,
-                             "WITHDRAWAL",
-                             NULL,
-                             &new_balance_ll);
+			     "player",
+			     player_id,
+			     amount,
+			     "WITHDRAWAL",
+			     NULL,
+			     &new_balance_ll);
   if (rc == 0 && new_balance)
     {
       *new_balance = (int) new_balance_ll;
@@ -1204,31 +1335,32 @@ h_deduct_ship_credits (db_t *db, int player_id, int amount, int *new_balance)
 
 int
 h_deduct_player_petty_cash_unlocked (db_t *db,
-                                     int player_id,
-                                     long long amount,
-                                     long long *new_balance_out)
+				     int player_id,
+				     long long amount,
+				     long long *new_balance_out)
 {
   if (!db || amount < 0)
     {
       return -1;
     }
 
-  return repo_players_deduct_credits_returning(db, player_id, amount, new_balance_out);
+  return repo_players_deduct_credits_returning (db, player_id, amount,
+						new_balance_out);
 }
 
 
 int
 h_add_player_petty_cash (db_t *db,
-                         int player_id,
-                         long long amount,
-                         long long *new_balance_out)
+			 int player_id,
+			 long long amount, long long *new_balance_out)
 {
   if (!db || amount < 0)
     {
       return -1;
     }
 
-  return repo_players_add_credits_returning(db, player_id, amount, new_balance_out);
+  return repo_players_add_credits_returning (db, player_id, amount,
+					     new_balance_out);
 }
 
 
@@ -1243,9 +1375,10 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
   int player_id = ctx->player_id;
 
   int turns_remaining = 0;
-  if (repo_players_get_turns(db, player_id, &turns_remaining) != 0)
+  if (repo_players_get_turns (db, player_id, &turns_remaining) != 0)
     {
-      LOGE ("h_consume_player_turn: failed to get turns for player_id=%d", player_id);
+      LOGE ("h_consume_player_turn: failed to get turns for player_id=%d",
+	    player_id);
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
 
@@ -1254,7 +1387,7 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
       return TURN_CONSUME_ERROR_NO_TURNS;
     }
 
-  if (repo_players_consume_turns(db, player_id, turns) != 0)
+  if (repo_players_consume_turns (db, player_id, turns) != 0)
     {
       return TURN_CONSUME_ERROR_DB_FAIL;
     }
@@ -1264,23 +1397,9 @@ h_consume_player_turn (db_t *db, client_ctx_t *ctx, int turns)
 
 
 int
-
-
 handle_turn_consumption_error (client_ctx_t *ctx,
-
-
-                               TurnConsumeResult res,
-
-
-                               const char *cmd,
-
-
-                               json_t *root,
-
-
-                               json_t *meta)
-
-
+			       TurnConsumeResult res,
+			       const char *cmd, json_t *root, json_t *meta)
 {
   const char *reason_str = NULL;
 
@@ -1289,49 +1408,49 @@ handle_turn_consumption_error (client_ctx_t *ctx,
 
 
     {
-      case TURN_CONSUME_ERROR_DB_FAIL:
+    case TURN_CONSUME_ERROR_DB_FAIL:
 
 
-        reason_str = "db_failure";
+      reason_str = "db_failure";
 
 
-        break;
+      break;
 
 
-      case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
+    case TURN_CONSUME_ERROR_PLAYER_NOT_FOUND:
 
 
-        reason_str = "player_not_found";
+      reason_str = "player_not_found";
 
 
-        break;
+      break;
 
 
-      case TURN_CONSUME_ERROR_NO_TURNS:
+    case TURN_CONSUME_ERROR_NO_TURNS:
 
 
-        reason_str = "no_turns_remaining";
+      reason_str = "no_turns_remaining";
 
 
-        break;
+      break;
 
 
-      case TURN_CONSUME_ERROR_INVALID_AMOUNT:
+    case TURN_CONSUME_ERROR_INVALID_AMOUNT:
 
 
-        reason_str = "invalid_amount";
+      reason_str = "invalid_amount";
 
 
-        break;
+      break;
 
 
-      default:
+    default:
 
 
-        reason_str = "unknown_error";
+      reason_str = "unknown_error";
 
 
-        break;
+      break;
     }
 
 
@@ -1346,24 +1465,13 @@ handle_turn_consumption_error (client_ctx_t *ctx,
 
 
       json_object_set_new (meta_obj, "command",
-
-
-                           json_string (cmd ? cmd : "unknown"));
+			   json_string (cmd ? cmd : "unknown"));
 
 
       send_response_refused_steal (ctx,
-
-
-                                   root,
-
-
-                                   ERR_REF_NO_TURNS,
-
-
-                                   "Insufficient turns.",
-
-
-                                   NULL);
+				   root,
+				   ERR_REF_NO_TURNS,
+				   "Insufficient turns.", NULL);
 
 
       json_decref (meta_obj);
@@ -1376,10 +1484,9 @@ handle_turn_consumption_error (client_ctx_t *ctx,
 
 int
 h_player_apply_progress (db_t *db,
-                         int player_id,
-                         long long delta_xp,
-                         int delta_align,
-                         const char *reason)
+			 int player_id,
+			 long long delta_xp,
+			 int delta_align, const char *reason)
 {
   if (!db || player_id <= 0)
     {
@@ -1389,20 +1496,23 @@ h_player_apply_progress (db_t *db,
   int cur_align = 0;
   long long cur_xp = 0;
 
-  if (repo_players_get_align_exp(db, player_id, &cur_align, &cur_xp) != 0)
+  if (repo_players_get_align_exp (db, player_id, &cur_align, &cur_xp) != 0)
     {
       return -1;
     }
 
   // Calculate new values
   long long new_xp = cur_xp + delta_xp;
-  if (new_xp < 0) new_xp = 0;
+  if (new_xp < 0)
+    new_xp = 0;
 
   int new_align = cur_align + delta_align;
-  if (new_align > 2000) new_align = 2000;
-  if (new_align < -2000) new_align = -2000;
+  if (new_align > 2000)
+    new_align = 2000;
+  if (new_align < -2000)
+    new_align = -2000;
 
-  if (repo_players_update_align_exp(db, player_id, new_align, new_xp) != 0)
+  if (repo_players_update_align_exp (db, player_id, new_align, new_xp) != 0)
     {
       return -1;
     }
@@ -1411,8 +1521,7 @@ h_player_apply_progress (db_t *db,
   db_player_update_commission (db, player_id);
 
   LOGD ("Player %d progress updated. Reason: %s",
-        player_id,
-        reason ? reason : "N/A");
+	player_id, reason ? reason : "N/A");
 
   return 0;
 }
@@ -1427,7 +1536,7 @@ h_get_player_sector (db_t *db, int player_id)
     }
 
   int sector = 0;
-  if (repo_players_get_sector(db, player_id, &sector) == 0)
+  if (repo_players_get_sector (db, player_id, &sector) == 0)
     {
       return sector;
     }
@@ -1437,16 +1546,17 @@ h_get_player_sector (db_t *db, int player_id)
 
 int
 h_add_player_petty_cash_unlocked (db_t *db,
-                                  int player_id,
-                                  long long amount,
-                                  long long *new_balance_out)
+				  int player_id,
+				  long long amount,
+				  long long *new_balance_out)
 {
   if (!db || amount < 0)
     {
       return -1;
     }
 
-  return repo_players_add_credits_returning(db, player_id, amount, new_balance_out);
+  return repo_players_add_credits_returning (db, player_id, amount,
+					     new_balance_out);
 }
 
 
@@ -1455,14 +1565,15 @@ h_add_player_petty_cash_unlocked (db_t *db,
 
 int
 h_player_petty_cash_add (db_t *db, int player_id, long long delta,
-                         long long *new_balance_out)
+			 long long *new_balance_out)
 {
   if (!db || player_id <= 0 || !new_balance_out)
     {
       return ERR_DB_MISUSE;
     }
 
-  int rc = repo_players_update_credits_safe(db, player_id, delta, new_balance_out);
+  int rc =
+    repo_players_update_credits_safe (db, player_id, delta, new_balance_out);
   if (rc == 0)
     {
       return 0;
@@ -1470,12 +1581,12 @@ h_player_petty_cash_add (db_t *db, int player_id, long long delta,
 
   /* Could be: player missing OR insufficient funds. Distinguish minimally. */
   int exists = 0;
-  if (repo_players_check_exists(db, player_id, &exists) == 0)
+  if (repo_players_check_exists (db, player_id, &exists) == 0)
     {
-      if (!exists) return ERR_DB_NOT_FOUND;
+      if (!exists)
+	return ERR_DB_NOT_FOUND;
       return ERR_DB_CONSTRAINT;
     }
 
   return rc;
 }
-

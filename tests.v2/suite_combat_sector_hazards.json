@@ -17,15 +17,42 @@
       "password": "password"
     },
     {
+      "name": "Rig: Create Warp Links",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 5555), (5555, 1) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position hazard_victim player at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'hazard_victim';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position hazard_victim ship at Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Victim Status Before Entry",
       "command": "combat.status",
       "user": "hazard_victim",
       "expect": { "status": "ok" },
-      "save": { "hull_initial": "data.ship.hull", "shields_initial": "data.ship.shields", "fighters_initial": "data.ship.fighters" }
+      "save": { "hull_initial": "data.hull" }
     },
     {
       "name": "Victim Warps to Hazard Sector (Multi-Hazard Entry)",
-      "command": "ship.warp",
+      "command": "move.warp",
       "data": { "sector_id": 5555 },
       "user": "hazard_victim",
       "expect": { "status": "ok" },
@@ -39,19 +66,22 @@
       "user": "hazard_victim",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.ship.hull", "op": "<", "value": "@hull_initial" }
+        { "path": "data.hull", "op": "<", "value": "@hull_initial" }
       ]
     },
     {
       "name": "Verify Multiple Damage Sources",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(DISTINCT event_type) as hazard_types FROM engine_events WHERE player_id = @hazard_victim_player_id AND event_type LIKE 'combat.%';" },
+      "data": { "sql": "SELECT COUNT(DISTINCT type) as hazard_types FROM engine_events WHERE actor_player_id = @{hazard_victim_player_id} AND type LIKE 'combat.hit%';" },
       "user": "admin",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": ">=", "value": 1 }
+      ]
     },
     {
       "name": "Victim Warps Out Then Back",
-      "command": "ship.warp",
+      "command": "move.warp",
       "data": { "sector_id": 1 },
       "user": "hazard_victim",
       "expect": { "status": "ok" }

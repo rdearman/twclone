@@ -1,0 +1,76 @@
+{
+  "test_suite_name": "Subscription Commands",
+  "description": "Tests subscribe.catalog, subscribe.list, subscribe.remove commands",
+  "tests": [
+    {
+      "name": "Setup: User",
+      "setup": "macro_auth_user",
+      "username": "sub_user",
+      "password": "password"
+    },
+    {
+      "name": "Test subscribe.catalog command",
+      "user": "sub_user",
+      "command": "subscribe.catalog",
+      "expect": { "status": "ok", "type": "subscribe.catalog_v1" },
+      "asserts": [
+        { "path": "data.topics", "op": "exists" },
+        { "path": "data.topics", "op": "is_array" },
+        { "path": "data.topics[?(@.pattern == 'system.notice')]", "op": "len_gt", "value": 0 },
+        { "path": "data.topics[?(@.pattern == 'sector.*')]", "op": "len_gt", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test subscribe.list command with no subscriptions",
+      "user": "sub_user",
+      "command": "subscribe.list",
+      "expect": { "status": "ok", "type": "subscribe.list" },
+      "asserts": [
+        { "path": "data.topics", "op": "is_array" },
+        { "path": "data.topics", "op": "len_eq", "value": 0 }
+      ]
+    },
+    {
+      "name": "Add a subscription",
+      "user": "sub_user",
+      "command": "subscribe.add",
+      "data": { "topic": "player.attacked" },
+      "expect": { "status": "ok", "type": "subscribe.added" }
+    },
+    {
+      "name": "Test subscribe.list command with one subscription",
+      "user": "sub_user",
+      "command": "subscribe.list",
+      "expect": { "status": "ok", "type": "subscribe.list" },
+      "asserts": [
+        { "path": "data.topics", "op": "len_eq", "value": 1 },
+        { "path": "data.topics[0].topic", "op": "==", "value": "player.attacked" },
+        { "path": "data.topics[0].locked", "op": "==", "value": 0 },
+        { "path": "data.topics[0].enabled", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Remove a subscription",
+      "user": "sub_user",
+      "command": "subscribe.remove",
+      "data": { "topic": "player.attacked" },
+      "expect": { "status": "ok", "type": "subscribe.removed" }
+    },
+    {
+      "name": "Test subscribe.list command after removing subscription",
+      "user": "sub_user",
+      "command": "subscribe.list",
+      "expect": { "status": "ok", "type": "subscribe.list" },
+      "asserts": [
+        { "path": "data.topics", "op": "len_eq", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test subscribe.remove for non-existent topic",
+      "user": "sub_user",
+      "command": "subscribe.remove",
+      "data": { "topic": "non_existent_topic" },
+      "expect": { "status": "error", "error_code": 1900 }
+    }
+  ]
+}
