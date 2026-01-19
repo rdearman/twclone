@@ -5,13 +5,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int repo_universe_log_engine_event(db_t *db, const char *type, int sector_id, const char *payload) {
     db_error_t err;
+    int64_t now_ts = (int64_t)time(NULL);
     /* SQL_VERBATIM: Q1 */
-    const char *q1 = "INSERT INTO engine_events(type, sector_id, payload, ts) VALUES ({1}, {2}, {3}, NOW())";
+    const char *q1 = "INSERT INTO engine_events(type, sector_id, payload, ts) VALUES ({1}, {2}, {3}, {4})";
     char sql[1024]; sql_build(db, q1, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(type), db_bind_i32(sector_id), db_bind_text(payload) }, 3, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(type), db_bind_i32(sector_id), db_bind_text(payload), db_bind_timestamp_text(now_ts) }, 4, &err)) return err.code;
     return 0;
 }
 

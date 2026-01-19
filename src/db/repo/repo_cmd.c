@@ -3608,7 +3608,7 @@ db_notice_create (db_t *db,
                          (db_bind_t[]){db_bind_text (title),
                                        db_bind_text (body),
                                        db_bind_text (severity),
-                                       db_bind_i64 (expires_at)}, 4, "system_notice_id", &id, &err))
+                                       db_bind_timestamp_text (expires_at)}, 4, "system_notice_id", &id, &err))
     {
       return (int)id;
     }

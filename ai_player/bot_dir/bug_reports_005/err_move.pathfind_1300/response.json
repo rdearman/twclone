@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-f069e407",
+    "ts": "2026-01-19T00:00:10Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1300,
+        "message": "Target sector 'to' not specified"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

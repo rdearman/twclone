@@ -79,6 +79,7 @@ static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
         } else {
             strlcpy(err->message, "PostgreSQL query failed without a message.", sizeof(err->message));
         }
+        LOGE("PostgreSQL Query Error: SQLSTATE=%s, message=%s", sqlstate ? sqlstate : "unknown", err->message);
     } else if (conn) {
         err->backend_code = PQstatus(conn);
         err->code = ERR_DB_CONNECT;
@@ -89,6 +90,7 @@ static void pg_map_error(PGconn *conn, PGresult *pg_res, db_error_t *err) {
         } else {
             strlcpy(err->message, "PostgreSQL connection failed without a message.", sizeof(err->message));
         }
+        LOGE("PostgreSQL Connection Error: %s", err->message);
     } else {
         err->code = ERR_UNKNOWN;
         err->category = DB_ERR_CAT_UNKNOWN;

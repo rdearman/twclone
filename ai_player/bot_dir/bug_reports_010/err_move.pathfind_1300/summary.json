@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_move.pathfind_1300",
+    "first_seen": "20260119_000943_768",
+    "command": "move.pathfind",
+    "error_code": 1300,
+    "error_message": "Target sector 'to' not specified"
+}

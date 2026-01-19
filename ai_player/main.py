@@ -204,9 +204,12 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     player_alignment = filtered_state["player_info"].get("alignment", 0) if filtered_state.get("player_info") else 0
 
     if player_alignment < -500: # Assuming negative alignment makes them "evil"
-        filtered_state["valid_commodity_names"] = default_commodities + ["SLAVES", "WEAPONS", "DRUGS"]
+        valid_comms = default_commodities + ["SLAVES", "WEAPONS", "DRUGS"]
     else:
-        filtered_state["valid_commodity_names"] = default_commodities
+        valid_comms = default_commodities
+    
+    filtered_state["valid_commodity_names"] = valid_comms
+    state_manager.set("valid_commodity_names", valid_comms)
 
     # Use StateManager helper for valid goto sectors (handles blacklist)
     valid_gotos = state_manager.get_valid_goto_sectors()

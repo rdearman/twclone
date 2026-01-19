@@ -237,7 +237,7 @@ int db_ports_get_header_by_id(db_t *db, int port_id, json_t **port_obj, int *por
         const char *name = db_res_col_text(res, 2, &err);
         json_object_set_new(*port_obj, "name", json_string(name ? name : ""));
         json_object_set_new(*port_obj, "sector", json_integer(db_res_col_i32(res, 3, &err)));
-        int size = db_res_col_int(res, 4, &err);
+        int size = db_res_col_i32(res, 4, &err);
         json_object_set_new(*port_obj, "size", json_integer(size));
         if (port_size) *port_size = size;
         json_object_set_new(*port_obj, "techlevel", json_integer(db_res_col_i32(res, 5, &err)));
@@ -263,7 +263,7 @@ int db_ports_get_header_by_sector(db_t *db, int sector_id, json_t **port_obj, in
         const char *name = db_res_col_text(res, 2, &err);
         json_object_set_new(*port_obj, "name", json_string(name ? name : ""));
         json_object_set_new(*port_obj, "sector", json_integer(db_res_col_i32(res, 3, &err)));
-        int size = db_res_col_int(res, 4, &err);
+        int size = db_res_col_i32(res, 4, &err);
         json_object_set_new(*port_obj, "size", json_integer(size));
         if (port_size) *port_size = size;
         json_object_set_new(*port_obj, "techlevel", json_integer(db_res_col_i32(res, 5, &err)));

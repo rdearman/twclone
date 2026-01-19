@@ -233,7 +233,14 @@ class Planner:
                 commodity_to_sell = goal_target
 
                 # --- NEW: Filter based on LLM's allowed commodities (dynamic) ---
-                valid_commodities_for_llm = current_state.get("valid_commodity_names", [])
+                valid_commodities_for_llm = current_state.get("valid_commodity_names")
+                if valid_commodities_for_llm is None:
+                    # Fallback logic if not in state
+                    player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
+                    valid_commodities_for_llm = ["ORE", "ORG", "EQU", "COLONISTS"]
+                    if player_alignment < -500:
+                        valid_commodities_for_llm += ["SLAVES", "WEAPONS", "DRUGS"]
+
                 if commodity_to_sell not in valid_commodities_for_llm:
                     logger.warning(f"Rejecting sell goal for commodity '{commodity_to_sell}': Not in LLM's allowed list ({valid_commodities_for_llm}).")
                     return None
@@ -306,7 +313,14 @@ class Planner:
                 commodity_to_buy = goal_target
 
                 # --- NEW: Filter based on LLM's allowed commodities (dynamic) ---
-                valid_commodities_for_llm = current_state.get("valid_commodity_names", [])
+                valid_commodities_for_llm = current_state.get("valid_commodity_names")
+                if valid_commodities_for_llm is None:
+                    # Fallback logic if not in state
+                    player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
+                    valid_commodities_for_llm = ["ORE", "ORG", "EQU", "COLONISTS"]
+                    if player_alignment < -500:
+                        valid_commodities_for_llm += ["SLAVES", "WEAPONS", "DRUGS"]
+
                 if commodity_to_buy not in valid_commodities_for_llm:
                     logger.warning(f"Rejecting buy goal for commodity '{commodity_to_buy}': Not in LLM's allowed list ({valid_commodities_for_llm}).")
                     return None

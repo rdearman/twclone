@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-95068abd",
+    "ts": "2026-01-19T01:02:30Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1300,
+        "message": "Target sector 'to' not specified"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

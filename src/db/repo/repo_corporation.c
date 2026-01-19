@@ -185,7 +185,7 @@ int repo_corp_get_player_ship_type_name(db_t *db, int player_id, char *name_buff
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q12 */
-    const char *q12 = "SELECT st.name FROM players p JOIN ships s ON p.ship_id = s.id JOIN shiptypes st ON s.type_id = st.id WHERE p.id = {1};";
+    const char *q12 = "SELECT st.name FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE p.player_id = {1};";
     char sql[512]; sql_build(db, q12, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         const char *name = db_res_col_text(res, 0, &err);

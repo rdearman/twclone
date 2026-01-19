@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int repo_comm_create_system_notice(db_t *db, int64_t created_at, const char *title, const char *body, const char *severity, int64_t expires_at, int64_t *new_id_out) {
     db_error_t err;
@@ -12,7 +13,13 @@ int repo_comm_create_system_notice(db_t *db, int64_t created_at, const char *tit
     const char *q1 = "INSERT INTO system_notice (created_at, title, body, severity, expires_at) "
     "VALUES ({1}, {2}, {3}, {4}, {5})";
     char sql[256]; sql_build(db, q1, sql, sizeof(sql));
-    db_bind_t params[5] = { db_bind_i64(created_at), db_bind_text(title), db_bind_text(body), db_bind_text(severity), expires_at > 0 ? db_bind_i64(expires_at) : db_bind_null() };
+    db_bind_t params[5] = { 
+        db_bind_timestamp_text(created_at), 
+        db_bind_text(title), 
+        db_bind_text(body), 
+        db_bind_text(severity), 
+        expires_at > 0 ? db_bind_timestamp_text(expires_at) : db_bind_null() 
+    };
     if (!db_exec_insert_id (db, sql, params, 5, "system_notice_id", new_id_out, &err)) return err.code;
     return 0;
 }
@@ -105,12 +112,20 @@ int repo_comm_get_mail_id_by_idem(db_t *db, const char *idem, int recipient_id, 
 
 int repo_comm_insert_mail(db_t *db, int sender_id, int recipient_id, const char *subject, const char *body, const char *idem, int64_t *new_id_out) {
     db_error_t err;
+    int64_t now_ts = (int64_t)time(NULL);
     /* SQL_VERBATIM: Q7 */
-    const char *q7 = "INSERT INTO mail(sender_id, recipient_id, subject, body, idempotency_key) "
-    "VALUES({1},{2},{3},{4},{5})";
+    const char *q7 = "INSERT INTO mail(sender_id, recipient_id, subject, body, idempotency_key, sent_at) "
+    "VALUES({1},{2},{3},{4},{5},{6})";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
-    db_bind_t p[5] = { db_bind_i32(sender_id), db_bind_i32(recipient_id), subject ? db_bind_text(subject) : db_bind_null(), db_bind_text(body), idem ? db_bind_text(idem) : db_bind_null() };
-    if (!db_exec_insert_id(db, sql, p, 5, "mail_id", new_id_out, &err)) return err.code;
+    db_bind_t p[6] = { 
+        db_bind_i32(sender_id), 
+        db_bind_i32(recipient_id), 
+        subject ? db_bind_text(subject) : db_bind_null(), 
+        db_bind_text(body), 
+        idem ? db_bind_text(idem) : db_bind_null(),
+        db_bind_timestamp_text(now_ts)
+    };
+    if (!db_exec_insert_id(db, sql, p, 6, "mail_id", new_id_out, &err)) return err.code;
     return 0;
 }
 
@@ -138,12 +153,12 @@ db_res_t* repo_comm_get_mail_details(db_t *db, int mail_id, int recipient_id, db
     return res;
 }
 
-int repo_comm_mark_mail_read(db_t *db, int mail_id, const char *read_at_iso) {
+int repo_comm_mark_mail_read(db_t *db, int mail_id, int64_t read_at) {
     db_error_t err;
     /* SQL_VERBATIM: Q11 */
     const char *q11 = "UPDATE mail SET read_at={1} WHERE mail_id={2};";
     char sql[256]; sql_build(db, q11, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(read_at_iso), db_bind_i32(mail_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(read_at), db_bind_i32(mail_id) }, 2, &err)) return err.code;
     return 0;
 }
 

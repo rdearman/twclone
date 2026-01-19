@@ -13,7 +13,7 @@ int repo_comm_get_mail_id_by_idem(db_t *db, const char *idem, int recipient_id, 
 int repo_comm_insert_mail(db_t *db, int sender_id, int recipient_id, const char *subject, const char *body, const char *idem, int64_t *new_id_out);
 db_res_t* repo_comm_list_inbox(db_t *db, int recipient_id, int after_id, int limit, db_error_t *err);
 db_res_t* repo_comm_get_mail_details(db_t *db, int mail_id, int recipient_id, db_error_t *err);
-int repo_comm_mark_mail_read(db_t *db, int mail_id, const char *read_at_iso);
+int repo_comm_mark_mail_read(db_t *db, int mail_id, int64_t read_at);
 int repo_comm_delete_mail_bulk(db_t *db, int recipient_id, const int *mail_ids, int n_ids, int64_t *rows_affected);
 int repo_comm_get_subscription_count(db_t *db, int player_id, int *count_out);
 db_res_t* repo_comm_list_subscriptions(db_t *db, int player_id, db_error_t *err);

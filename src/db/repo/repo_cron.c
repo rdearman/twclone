@@ -72,11 +72,13 @@ db_cron_get_max_sector_id (db_t *db, int *max_id)
   db_error_clear (&err);
   *max_id = 0;
 
-  if (db_query (db, "SELECT MAX(sector_id) FROM sectors;", NULL, 0, &res, &err))
+  char sql[256];
+  sql_build(db, "SELECT MAX(sector_id) FROM sectors;", sql, sizeof(sql));
+  if (db_query (db, sql, NULL, 0, &res, &err))
     {
       if (db_res_step (res, &err))
         {
-          *max_id = (int) db_res_col_i32 (res, 0, &err);
+          *max_id = (int) db_res_col_i64 (res, 0, &err);
         }
       db_res_finalize (res);
       return 0;

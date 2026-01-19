@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int repo_players_set_pref(db_t *db, int player_id, const char *key, const char *type, const char *value) {
     db_error_t err;
@@ -336,10 +337,11 @@ int repo_players_get_turns(db_t *db, int player_id, int *turns_out) {
 
 int repo_players_consume_turns(db_t *db, int player_id, int turns) {
     db_error_t err;
+    int64_t now_ts = (int64_t)time(NULL);
     /* SQL_VERBATIM: Q27 */
-    const char *q27 = "UPDATE turns SET turns_remaining = turns_remaining - {1}, last_update = NOW() WHERE player_id = {2} AND turns_remaining >= {1};";
+    const char *q27 = "UPDATE turns SET turns_remaining = turns_remaining - {1}, last_update = {3} WHERE player_id = {2} AND turns_remaining >= {1};";
     char sql[512]; sql_build(db, q27, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(turns), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(turns), db_bind_i32(player_id), db_bind_timestamp_text(now_ts) }, 3, &err)) return err.code;
     return 0;
 }
 

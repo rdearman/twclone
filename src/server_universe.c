@@ -957,7 +957,10 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (data)
     {
       json_get_int_flexible (data, "from", &from);
-      json_get_int_flexible (data, "to", &to);
+      if (!json_get_int_flexible (data, "to", &to))
+	{
+	  json_get_int_flexible (data, "sector_id", &to);
+	}
     }
 
   if (to <= 0)

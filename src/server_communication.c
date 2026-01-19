@@ -1358,13 +1358,7 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
   /* Mark read if needed */
   if (!read_at)
     {
-      time_t now = time (NULL);
-      char iso[32];
-
-
-      strftime (iso, sizeof iso, "%Y-%m-%dT%H:%M:%SZ", gmtime (&now));
-
-      repo_comm_mark_mail_read (db, id, iso);
+      repo_comm_mark_mail_read (db, id, (int64_t) time (NULL));
     }
 
   json_t *resp = json_object ();

@@ -326,7 +326,7 @@ int repo_stardock_insert_lottery_ticket(db_t *db, const char *draw_date, int32_t
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_text(draw_date), db_bind_i32(player_id), db_bind_i32(number), db_bind_i64(cost), db_bind_i32(purchased_at) }, 5, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_text(draw_date), db_bind_i32(player_id), db_bind_i32(number), db_bind_i64(cost), db_bind_timestamp_text(purchased_at) }, 5, &err)) {
         return 0;
     }
     return err.code;
@@ -365,7 +365,7 @@ int repo_stardock_insert_deadpool_bet(db_t *db, int32_t bettor_id, int32_t targe
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(bettor_id), db_bind_i32(target_id), db_bind_i64(amount), db_bind_i32(odds_bp), db_bind_i32(placed_at), db_bind_i32(expires_at) }, 6, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(bettor_id), db_bind_i32(target_id), db_bind_i64(amount), db_bind_i32(odds_bp), db_bind_timestamp_text(placed_at), db_bind_timestamp_text(expires_at) }, 6, &err)) {
         return 0;
     }
     return err.code;
@@ -378,7 +378,7 @@ int repo_stardock_insert_graffiti(db_t *db, int32_t player_id, const char *text,
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(text), db_bind_i32(created_at) }, 3, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(text), db_bind_timestamp_text(created_at) }, 3, &err)) {
         return 0;
     }
     return err.code;

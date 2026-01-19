@@ -219,8 +219,14 @@ universe_pathfind_get_sectors (db_t *db, int start_sector, int end_sector,
 
   if (max_sector_id <= 0)
     {
-      max_sector_id = 2000;
+      max_sector_id = 10000;
     }
+
+  if (start_sector > max_sector_id)
+    max_sector_id = start_sector;
+  if (end_sector > max_sector_id)
+    max_sector_id = end_sector;
+
   int *parent = calloc (max_sector_id + 1, sizeof (int));
 
 
