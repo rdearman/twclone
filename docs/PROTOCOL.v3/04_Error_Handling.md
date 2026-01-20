@@ -34,7 +34,7 @@ When a request fails (`status` != "ok"), the `error` field is populated:
 | 1403 | Invalid topic           | Subscription topic does not exist. |
 | 1405 | Topic is locked         | Cannot unsubscribe from this topic. |
 | 1406 | Path not found          | Navigation/Autopilot could not find a route. |
-| 1407 | Rate limited            | Too many requests. |
+| 1407 | Refused / Forbidden     | Request refused (permissions, rate limit, policy). |
 | 1503 | Database error          | Internal storage failure. |
 
 ## 3. S2S Error Handling
