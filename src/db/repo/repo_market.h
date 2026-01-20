@@ -99,16 +99,16 @@ int db_insert_commodity_trade (db_t *db,
                                );
 
 // Helper to list open orders for a specific port (read-only, for diagnostics)
-// Returns a JSON array of order objects (caller owns reference)
-json_t *db_list_port_orders (db_t *db, int port_id);
+// Returns 0 on success, populating out_orders.
+int db_list_port_orders (db_t *db, int port_id, json_t **out_orders);
 
 // Helper to list orders for a specific actor (read-only, for diagnostics)
-// Returns a JSON array of order objects (caller owns reference)
-json_t *db_list_actor_orders (db_t *db, const char *actor_type,
-                              int actor_id);
+// Returns 0 on success, populating out_orders.
+int db_list_actor_orders (db_t *db, const char *actor_type,
+                              int actor_id, json_t **out_orders);
 
 // Helper to summarize orders by commodity (read-only, for diagnostics)
-// Returns a JSON object (caller owns reference)
-json_t * db_orders_summary (db_t *db, int filter_commodity_id);
+// Returns 0 on success, populating out_summary.
+int db_orders_summary (db_t *db, int filter_commodity_id, json_t **out_summary);
 
 #endif // DATABASE_MARKET_H

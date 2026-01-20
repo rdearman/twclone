@@ -1087,8 +1087,16 @@ engine_main_loop (int shutdown_fd)
 		sql_epoch_param_to_timestamptz (db_handle);
 	      char ts_expr1[64];
 	      char ts_expr2[64];
-	      snprintf (ts_expr1, sizeof (ts_expr1), ts_fmt_inner, "{2}");
-	      snprintf (ts_expr2, sizeof (ts_expr2), ts_fmt_inner, "{3}");
+	      if (ts_fmt_inner)
+		{
+		  snprintf (ts_expr1, sizeof (ts_expr1), ts_fmt_inner, "{2}");
+		  snprintf (ts_expr2, sizeof (ts_expr2), ts_fmt_inner, "{3}");
+		}
+	      else
+		{
+		  strncpy (ts_expr1, "{2}", sizeof (ts_expr1));
+		  strncpy (ts_expr2, "{3}", sizeof (ts_expr2));
+		}
 
 	      repo_engine_update_cron_task_schedule (db_handle, ts_expr1,
 						     ts_expr2, id, now_s,

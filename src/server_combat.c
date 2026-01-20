@@ -25,10 +25,6 @@
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 
-static const double OFFENSE_SCALE = 0.05;
-static const double DEFENSE_SCALE = 0.05;
-static const int DAMAGE_PER_FIGHTER = 1;
-
 typedef struct
 {
   int id;
@@ -90,18 +86,6 @@ niy (client_ctx_t *ctx, json_t *root, const char *which)
   return 0;
 }
 
-static bool
-is_fedspace_sector (int sector_id)
-{
-  return (sector_id >= 1 && sector_id <= 10);
-}
-
-static bool
-is_msl_sector (db_t *db, int sector_id)
-{
-  return db_combat_is_msl_sector (db, sector_id);
-}
-
 bool
 is_asset_hostile (int asset_player_id, int asset_corp_id, int ship_player_id,
 		  int ship_corp_id)
@@ -122,6 +106,10 @@ armid_stack_is_active (const sector_asset_t *row, time_t now)
     return true;
   return row->ttl > now;
 }
+
+/* Forward declarations */
+static void apply_armid_damage_to_ship (ship_t *ship, int total_damage,
+                                        armid_damage_breakdown_t *breakdown);
 
 int
 apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)

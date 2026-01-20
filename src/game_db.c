@@ -44,7 +44,7 @@ game_db_init (void)
 
 #ifdef DB_BACKEND_PG
   g_main_backend = DB_BACKEND_POSTGRES;
-  if (g_cfg.pg_conn_str)
+  if (g_cfg.pg_conn_str[0] != '\0')
     {
       strlcpy (g_main_conninfo, g_cfg.pg_conn_str, sizeof (g_main_conninfo));
       LOGI
@@ -124,9 +124,10 @@ game_db_after_fork_child (void)
   if (db)
     {
       // We are the child. The parent still has its handle. We must close ours
-      // to avoid sharing file descriptors, then set the TLS value to NULL so
-      // this child process's main thread will create a new one on next access.
-      db_connection_destructor (db);
+      // to avoid sharing file descriptors and ensure we don't send a Terminate
+      // packet that would kill the parent's connection.
+      LOGI ("Closing inherited DB handle %p for thread (child-safe).", (void *) db);
+      db_close_child (db);
       pthread_setspecific (g_db_handle_key, NULL);
     }
 }

@@ -196,8 +196,14 @@ db_cron_msl_insert (db_t *db, int sector_id, int *added_count_ptr)
   db_error_t err;
   db_error_clear (&err);
   
+  const char *ignore = sql_insert_ignore_clause(db);
+  if (!ignore) ignore = ""; // Fallback for safety, though unsupported backends will fail gracefully
+
+  char sql_tmpl[512];
+  snprintf(sql_tmpl, sizeof(sql_tmpl), "INSERT INTO msl_sectors (sector_id) VALUES ({1}) %s;", ignore);
+
   char sql[512];
-  sql_build(db, "INSERT INTO msl_sectors (sector_id) VALUES ({1});", sql, sizeof(sql));
+  sql_build(db, sql_tmpl, sql, sizeof(sql));
 
   if (db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &err))
     {
@@ -772,11 +778,15 @@ db_cron_robbery_clear_busts (db_t *db, int64_t now_s)
 
 
 
-  char sql[512];
+    char sql[512];
 
-  if (sql_build(db, "UPDATE port_busts SET active = 0 WHERE active = 1 AND ( (bust_type = 'fake') OR (bust_type = 'real' AND last_bust_at < {1}) );", sql, sizeof(sql)) != 0) return -1;
 
-  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_timestamp_text (cutoff_s) }, 1, &err)) return -1;
+
+    if (sql_build(db, "UPDATE port_busts SET active = FALSE WHERE active = TRUE AND ( (bust_type = 'fake') OR (bust_type = 'real' AND last_bust_at < {1}) );", sql, sizeof(sql)) != 0) return -1;
+
+
+
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_timestamp_text (cutoff_s) }, 1, &err)) return -1;
 
   return 0;
 
@@ -788,9 +798,21 @@ int
 
 db_cron_reset_daily_turns (db_t *db, int turns)
 
+
+
+
+
 {
 
+  (void) turns;
+
+
+
+
+
   if (!db) return -1;
+
+
 
   db_error_t err;
 
@@ -826,7 +848,7 @@ db_cron_autouncloak_ships (db_t *db, int64_t uncloak_threshold_s)
 
   if (sql_ts_to_epoch_expr(db, "cloaked", cloaked_epoch, sizeof(cloaked_epoch)) != 0) return -1;
 
-  char sql_tmpl[256], sql[256];
+  char sql_tmpl[512], sql[512];
 
   snprintf(sql_tmpl, sizeof(sql_tmpl), "UPDATE ships SET cloaked = NULL WHERE cloaked IS NOT NULL AND %s < {1};", cloaked_epoch);
 
@@ -1120,9 +1142,9 @@ db_cron_planet_get_market_data_json (db_t *db, json_t **out_array)
 
     "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
 
-    "JOIN commodities c ON pp.commodity_code = c.code "
+        "JOIN commodities c ON pp.commodity_code = c.code "
 
-    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) AND c.illegal = 0;";
+        "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0) AND c.illegal = FALSE;";
 
 
 
@@ -1182,25 +1204,87 @@ db_cron_planet_get_market_data_json (db_t *db, json_t **out_array)
 
 int
 
+
+
 db_cron_broadcast_cleanup (db_t *db, int64_t now_s)
+
+
 
 {
 
+
+
   if (!db) return -1;
 
+
+
   db_error_t err;
+
+
 
   db_error_clear (&err);
 
 
 
-  char sql[256];
 
-  if (sql_build(db, "DELETE FROM broadcasts WHERE ttl_expires_at IS NOT NULL AND ttl_expires_at <= {1};", sql, sizeof(sql)) != 0) return -1;
 
-  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_timestamp_text (now_s) }, 1, &err)) return -1;
+
+
+  const char *ts_fmt = sql_epoch_param_to_timestamptz(db);
+
+
+
+  if (!ts_fmt) return -1;
+
+
+
+
+
+
+
+  char ts_expr[64];
+
+
+
+  snprintf(ts_expr, sizeof(ts_expr), ts_fmt, "{1}");
+
+
+
+
+
+
+
+  char sql_tmpl[512];
+
+
+
+  snprintf(sql_tmpl, sizeof(sql_tmpl), "DELETE FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= %s;", ts_expr);
+
+
+
+
+
+
+
+  char sql[512];
+
+
+
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0) return -1;
+
+
+
+  
+
+
+
+  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64 (now_s) }, 1, &err)) return -1;
+
+
 
   return 0;
+
+
 
 }
 
@@ -1238,15 +1322,15 @@ db_cron_traps_process (db_t *db, int64_t now_s)
 
   char sql_insert_tmpl[512], sql_insert[512];
 
-  snprintf(sql_insert_tmpl, sizeof(sql_insert_tmpl),
+    snprintf(sql_insert_tmpl, sizeof(sql_insert_tmpl),
 
-    "INSERT INTO engine_commands(type, payload, created_at, due_at) "
+      "INSERT INTO engine_commands(type, payload, created_at, due_at) "
 
-    "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
+      "SELECT 'trap.trigger', %s('trap_id',id), %s, %s "
 
-    "FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND %s <= {1};",
+      "FROM traps WHERE armed=TRUE AND trigger_at IS NOT NULL AND %s <= {1};",
 
-    json_obj_fn, now_expr, now_expr, trigger_at_epoch);
+      json_obj_fn, now_expr, now_expr, trigger_at_epoch);
 
   if (sql_build(db, sql_insert_tmpl, sql_insert, sizeof(sql_insert)) != 0) return -1;
 
@@ -1260,7 +1344,7 @@ db_cron_traps_process (db_t *db, int64_t now_s)
 
   snprintf(sql_delete_tmpl, sizeof(sql_delete_tmpl),
 
-    "DELETE FROM traps WHERE armed=1 AND trigger_at IS NOT NULL AND %s <= {1};",
+    "DELETE FROM traps WHERE armed=TRUE AND trigger_at IS NOT NULL AND %s <= {1};",
 
     trigger_at_epoch);
 
@@ -1876,9 +1960,11 @@ db_cron_deadpool_expire_bets (db_t *db, int64_t now_s)
 
   
 
-  char sql[256];
+    char sql[256];
 
-  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'expired', resolved_at = {1} WHERE resolved = 0 AND expires_at <= {2}", sql, sizeof(sql)) != 0) return -1;
+  
+
+    if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = TRUE, result = 'expired', resolved_at = {1} WHERE resolved = FALSE AND expires_at <= {2}", sql, sizeof(sql)) != 0) return -1;
 
 
 
@@ -1964,7 +2050,7 @@ db_cron_deadpool_get_bets_json (db_t *db, int target_id, json_t **out_array)
 
   char sql[512];
 
-  if (sql_build(db, "SELECT tavern_deadpool_bets_id AS id, bettor_id, amount, odds_bp FROM tavern_deadpool_bets WHERE target_id = {1} AND resolved = 0", sql, sizeof(sql)) != 0) return -1;
+  if (sql_build(db, "SELECT tavern_deadpool_bets_id AS id, bettor_id, amount, odds_bp FROM tavern_deadpool_bets WHERE target_id = {1} AND resolved = FALSE", sql, sizeof(sql)) != 0) return -1;
 
 
 
@@ -2016,7 +2102,7 @@ db_cron_deadpool_update_bet (db_t *db, int bet_id, const char *result, int64_t r
 
   char sql[512];
 
-  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = {1}, resolved_at = {2} WHERE tavern_deadpool_bets_id = {3}", sql, sizeof(sql)) != 0) return -1;
+  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = TRUE, result = {1}, resolved_at = {2} WHERE tavern_deadpool_bets_id = {3}", sql, sizeof(sql)) != 0) return -1;
 
   if (!db_exec (db, sql, (db_bind_t[]){ db_bind_text (result), db_bind_timestamp_text (resolved_at), db_bind_i32 (bet_id) }, 3, &err)) return -1;
 
@@ -2040,7 +2126,7 @@ db_cron_deadpool_update_lost_bets (db_t *db, int target_id, int64_t resolved_at)
 
   char sql[512];
 
-  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = 1, result = 'lost', resolved_at = {1} WHERE target_id = {2} AND resolved = 0", sql, sizeof(sql)) != 0) return -1;
+  if (sql_build(db, "UPDATE tavern_deadpool_bets SET resolved = TRUE, result = 'lost', resolved_at = {1} WHERE target_id = {2} AND resolved = FALSE", sql, sizeof(sql)) != 0) return -1;
 
   if (!db_exec (db, sql, (db_bind_t[]){ db_bind_timestamp_text (resolved_at), db_bind_i32 (target_id) }, 2, &err)) return -1;
 
@@ -2276,7 +2362,7 @@ db_cron_shield_regen (db_t *db, int percent)
 
   char sql[512];
 
-  if (sql_build(db, "UPDATE ships SET shields = LEAST(installed_shields, shields + ((installed_shields * {1}) / 100)) WHERE destroyed = 0 AND installed_shields > 0 AND shields < installed_shields;", sql, sizeof(sql)) != 0) return -1;
+  if (sql_build(db, "UPDATE ships SET shields = LEAST(installed_shields, shields + ((installed_shields * {1}) / 100)) WHERE destroyed = FALSE AND installed_shields > 0 AND shields < installed_shields;", sql, sizeof(sql)) != 0) return -1;
 
   if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (percent) }, 1, &err)) return -1;
 

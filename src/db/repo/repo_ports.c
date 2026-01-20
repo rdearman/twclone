@@ -203,9 +203,9 @@ int db_ports_get_trade_history_cursor(db_t *db, int player_id, int limit, int64_
 int db_ports_set_ported_status(db_t *db, int ship_id, int port_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q11 */
-    const char *q11 = "UPDATE ships SET ported = {1}, onplanet = 0 WHERE ship_id = {2};";
+    const char *q11 = "UPDATE ships SET ported = {1}, onplanet = FALSE WHERE ship_id = {2};";
     char sql[512]; sql_build(db, q11, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_i32(ship_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_bool(port_id > 0), db_bind_i32(ship_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -216,7 +216,7 @@ int db_ports_get_ported_status(db_t *db, int ship_id, int *port_id) {
     const char *q12 = "SELECT ported FROM ships WHERE ship_id = {1}";
     char sql[256]; sql_build(db, q12, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        *port_id = db_res_col_int(res, 0, &err);
+        *port_id = db_res_col_bool(res, 0, &err) ? 1 : 0;
         db_res_finalize(res);
         return 0;
     }
@@ -326,7 +326,7 @@ int db_ports_check_active_bust(db_t *db, int port_id, int player_id, bool *activ
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q18 */
-    const char *q18 = "SELECT 1 FROM port_busts WHERE port_id={1} AND player_id={2} AND active=1";
+    const char *q18 = "SELECT 1 FROM port_busts WHERE port_id={1} AND player_id={2} AND active=TRUE";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_i64(player_id) }, 2, &res, &err)) {
         *active = db_res_step(res, &err);
@@ -404,7 +404,7 @@ int db_ports_insert_fake_bust(db_t *db, int port_id, int player_id) {
     int64_t now_ts = time(NULL);
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE port_busts SET last_bust_at={1}, bust_type='fake', active=1 WHERE port_id={2} AND player_id={3};";
+    const char *q_upd = "UPDATE port_busts SET last_bust_at={1}, bust_type='fake', active=TRUE WHERE port_id={2} AND player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     db_bind_t upd_params[] = { db_bind_timestamp_text(now_ts), db_bind_i32(port_id), db_bind_i32(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
@@ -431,7 +431,7 @@ int db_ports_update_last_rob_attempt(db_t *db, int player_id, int port_id) {
     int64_t now_ts = time(NULL);
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=0 WHERE player_id={3};";
+    const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=FALSE WHERE player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     db_bind_t upd_params[] = { db_bind_i32(port_id), db_bind_timestamp_text(now_ts), db_bind_i32(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
@@ -508,7 +508,7 @@ int db_ports_update_last_rob_success(db_t *db, int player_id, int port_id) {
     int64_t now_ts = time(NULL);
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=1 WHERE player_id={3};";
+    const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=TRUE WHERE player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     db_bind_t upd_params[] = { db_bind_i32(port_id), db_bind_timestamp_text(now_ts), db_bind_i32(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
@@ -535,7 +535,7 @@ int db_ports_insert_real_bust(db_t *db, int port_id, int player_id) {
     int64_t now_ts = time(NULL);
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE port_busts SET last_bust_at={1}, bust_type='real', active=1 WHERE port_id={2} AND player_id={3};";
+    const char *q_upd = "UPDATE port_busts SET last_bust_at={1}, bust_type='real', active=TRUE WHERE port_id={2} AND player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     db_bind_t upd_params[] = { db_bind_timestamp_text(now_ts), db_bind_i32(port_id), db_bind_i32(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
@@ -598,7 +598,7 @@ int db_ports_update_last_rob_fail(db_t *db, int player_id, int port_id) {
     int64_t now_ts = time(NULL);
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=0 WHERE player_id={3};";
+    const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=FALSE WHERE player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     db_bind_t upd_params[] = { db_bind_i32(port_id), db_bind_timestamp_text(now_ts), db_bind_i32(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;

@@ -208,6 +208,15 @@ extern "C"
     int illegal_allowed_neutral;
     int max_ship_name_length;	/* Used in stardock */
     int num_sectors;		/* Added to match DB config */
+    int density;		/* Added to match bigbang.json */
+    int port_ratio;		/* Added to match bigbang.json */
+    double planet_ratio;	/* Added to match bigbang.json */
+    int port_size;		/* Added to match bigbang.json */
+    int tech_level;		/* Added to match bigbang.json */
+    int port_credits;		/* Added to match bigbang.json */
+    int min_tunnels;		/* Added to match bigbang.json */
+    int min_tunnel_len;		/* Added to match bigbang.json */
+    int escape_pod_shiptype_id;	/* Added to match bigbang.json 'death.escape_pod_shiptype_id' */
     int planet_treasury_interest_rate_bps;	/* Added to match DB config */
     int64_t bank_min_balance_for_interest;	/* Added to match DB config */
     int64_t bank_max_daily_interest_per_account;	/* Added to match DB config */
@@ -223,7 +232,6 @@ extern "C"
   int cmd_system_capabilities (client_ctx_t * ctx, json_t * root);
   int cmd_system_describe_schema (client_ctx_t * ctx, json_t * root);	// optional, if you expose it
   int cmd_session_ping (client_ctx_t * ctx, json_t * root);
-  int cmd_session_hello (client_ctx_t * ctx, json_t * root);
   int cmd_system_hello (client_ctx_t * ctx, json_t * root);
   int cmd_session_disconnect (client_ctx_t * ctx, json_t * root);
 #endif

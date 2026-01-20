@@ -19,7 +19,7 @@
       "command": "hardware.buy",
       "data": { "code": "INVALID", "quantity": 1 },
       "user": "shipyard_tester",
-      "expect": { "status": "error", "error_code": 1802 }
+      "expect": { "status": "error", "error_code": 1812 }
     },
     {
       "name": "Negative: Hardware Buy Missing Auth",

@@ -2154,6 +2154,7 @@ h_corp_is_publicly_traded (db_t *db, int corp_id, bool *is_publicly_traded)
 int
 h_daily_corp_tax (db_t *db, int64_t now_s)
 {
+  (void) now_s;
   if (!db)
     {
       return ERR_INVALID_ARG;

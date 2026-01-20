@@ -89,6 +89,7 @@
     {"ship_id": 1018, "name": "MoverShip", "type_id": 1, "owner_username": "mover_user", "sector_id": 1},
     {"ship_id": 1019, "name": "ObserverShip", "type_id": 1, "owner_username": "observer_user", "sector_id": 1},
       {"ship_id": 1020, "name": "ActorShip", "type_id": 1, "owner_username": "actor_user", "sector_id": 2},
+      {"ship_id": 1021, "name": "TraderOneShip", "type_id": 1, "owner_username": "trader_player_1", "sector_id": 2, "genesis": 5},
       {"ship_id": 9001, "name": "CLAIMShip", "type_id": 1, "owner_username": "", "sector_id": 2, "ore": 5}
   ],
   "deployed_assets": [

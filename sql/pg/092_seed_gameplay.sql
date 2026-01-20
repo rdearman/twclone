@@ -381,7 +381,7 @@ BEGIN
             UPDATE
                 public.ships
             SET
-                destroyed = 1
+                destroyed = TRUE
             WHERE
                 id = p_victim_ship_id;
             -- detach ship from player active ship slot (only if currently set to this ship)
@@ -456,7 +456,7 @@ BEGIN
                     v_escape_pod_shiptype_id := v_cfg_val::bigint;
                     -- spawn escape pod ship (keep this INSERT minimal; relies on defaults / nullable cols)
                     INSERT INTO public.ships (name, type_id, sector_id, destroyed)
-                        VALUES ('Escape Pod', v_escape_pod_shiptype_id, 1, 0)
+                        VALUES ('Escape Pod', v_escape_pod_shiptype_id, 1, FALSE)
                     RETURNING
                         ship_id INTO escape_pod_ship_id;
                     -- assign as active ship
@@ -539,7 +539,7 @@ ON CONFLICT (key) DO NOTHING;
 
 -- S2S Keys
 INSERT INTO s2s_keys(key_id, key_b64, is_default_tx, active, created_ts)
-VALUES ('k0', 'c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==', 1, TRUE, CURRENT_TIMESTAMP)
+VALUES ('k0', 'c3VwZXJzZWNyZXRrZXlzZWNyZXRrZXlzZWNyZXQxMjM0NTY3OA==', TRUE, TRUE, CURRENT_TIMESTAMP)
 ON CONFLICT (key_id) DO NOTHING;
 
 -- Config: Escape Pod Ship Type (placeholder, updated by bigbang after ship types are loaded)

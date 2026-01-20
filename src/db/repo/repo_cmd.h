@@ -83,7 +83,7 @@ int db_notice_create (db_t *db,
                       const char *body,
                       const char *severity,
                       time_t expires_at);
-json_t *db_notice_list_unseen_for_player (db_t *db, int player_id);
+int db_notice_list_unseen_for_player (db_t *db, int player_id, json_t **out_array);
 int db_notice_mark_seen (db_t *db, int notice_id, int player_id);
 int db_commands_accept (db_t *db,
                         const char *cmd_type,
@@ -364,5 +364,11 @@ int db_get_port_commodity_quantity (db_t *db,
                                     int port_id,
                                     const char *commodity_code,
                                     int *quantity_out);
+
+/* Session management */
+void db_close_thread (void);
+int db_session_create (int player_id, const char *token, long long expires_at);
+int db_session_revoke (const char *token);
+int db_session_refresh (const char *token, int ttl, char new_tok[65], int *out_pid);
 
 #endif /* DATABASE_CMD_H */

@@ -2,10 +2,24 @@
   "name": "Bucket 1 Remainder - Insurance, Nav, and News",
   "tests": [
     {
-      "name": "Setup: trader_player_1",
+      "name": "Macro: Login User",
       "setup": "macro_auth_user",
       "username": "trader_player_1",
       "password": "password"
+    },
+    {
+      "name": "Rig: Move Player to Sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 11 WHERE player_id = @{trader_player_1_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Ship to Sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = 11 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{trader_player_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     },
     {
       "name": "insurance.policies.list - Positive",
@@ -47,14 +61,14 @@
     {
       "name": "sector.set_beacon - Positive",
       "command": "sector.set_beacon",
-      "data": { "sector_id": 1, "text": "Fedspace" },
+      "data": { "sector_id": 11, "text": "New Frontier" },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "sector.set_beacon - Negative (No Auth)",
       "command": "sector.set_beacon",
-      "data": { "sector_id": 1, "text": "Fedspace" },
+      "data": { "sector_id": 11, "text": "New Frontier" },
       "expect": { "status": "error", "error_code": 401 }
     },
     {

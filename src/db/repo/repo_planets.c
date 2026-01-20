@@ -173,11 +173,11 @@ int db_planets_get_owner_info(db_t *db, int planet_id, int *owner_id, char **own
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q16 */
-    const char *q16 = "SELECT planet_id, owner_id, owner_type FROM planets WHERE planet_id = {1};";
+    const char *q16 = "SELECT owner_id, owner_type FROM planets WHERE planet_id = {1};";
     char sql[512]; sql_build(db, q16, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        *owner_id = db_res_col_i32(res, 1, &err);
-        const char *ot = db_res_col_text(res, 2, &err);
+        *owner_id = db_res_col_i32(res, 0, &err);
+        const char *ot = db_res_col_text(res, 1, &err);
         *owner_type = ot ? strdup(ot) : NULL;
         db_res_finalize(res);
         return 0;

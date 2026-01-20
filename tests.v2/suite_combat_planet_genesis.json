@@ -17,7 +17,7 @@
     {
       "name": "Rig: Clear Planets in Sector 1",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "DELETE FROM planets WHERE sector_id = 1 AND planet_id > 1;" },
+      "data": { "sql": "DELETE FROM planets WHERE sector_id = 1 AND planet_id > 1 AND planet_id != 200;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

@@ -108,13 +108,13 @@ CREATE TABLE ships (
     drugs bigint DEFAULT 0,
     flags bigint,
     cloaking_devices bigint,
-    has_transwarp bigint NOT NULL DEFAULT 0,
-    has_planet_scanner bigint NOT NULL DEFAULT 0,
-    has_long_range_scanner bigint NOT NULL DEFAULT 0,
+    has_transwarp boolean NOT NULL DEFAULT FALSE,
+    has_planet_scanner boolean NOT NULL DEFAULT FALSE,
+    has_long_range_scanner boolean NOT NULL DEFAULT FALSE,
     cloaked timestamp,
-    ported bigint,
-    onplanet bigint,
-    destroyed bigint DEFAULT 0,
+    ported boolean NOT NULL DEFAULT FALSE,
+    onplanet boolean NOT NULL DEFAULT FALSE,
+    destroyed boolean NOT NULL DEFAULT FALSE,
     hull bigint NOT NULL DEFAULT 100,
     perms bigint NOT NULL DEFAULT 731,
     CONSTRAINT check_current_cargo_limit CHECK ((colonists + equipment + organics + ore) <= holds),
@@ -312,19 +312,19 @@ CREATE TABLE tavern_names (
 CREATE TABLE taverns (
     sector_id BIGINT AUTO_INCREMENT PRIMARY KEY REFERENCES sectors (sector_id),
     name_id bigint NOT NULL REFERENCES tavern_names (tavern_names_id),
-    enabled bigint NOT NULL DEFAULT 1
+    enabled boolean NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE tavern_settings (
     tavern_settings_id BIGINT AUTO_INCREMENT PRIMARY KEY CHECK (tavern_settings_id = 1),
     max_bet_per_transaction bigint NOT NULL DEFAULT 5000,
     daily_max_wager bigint NOT NULL DEFAULT 50000,
-    enable_dynamic_wager_limit bigint NOT NULL DEFAULT 0,
+    enable_dynamic_wager_limit boolean NOT NULL DEFAULT FALSE,
     graffiti_max_posts bigint NOT NULL DEFAULT 100,
     notice_expires_days bigint NOT NULL DEFAULT 7,
     buy_round_cost bigint NOT NULL DEFAULT 1000,
     buy_round_alignment_gain bigint NOT NULL DEFAULT 5,
-    loan_shark_enabled bigint NOT NULL DEFAULT 1
+    loan_shark_enabled boolean NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE tavern_lottery_state (
@@ -351,7 +351,7 @@ CREATE TABLE tavern_deadpool_bets (
     odds_bp bigint NOT NULL,
     placed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    resolved bigint NOT NULL DEFAULT 0,
+    resolved boolean NOT NULL DEFAULT FALSE,
     resolved_at bigint,
     result TEXT
 );
@@ -602,9 +602,9 @@ CREATE TABLE subscriptions (
     event_type TEXT NOT NULL,
     delivery TEXT NOT NULL,
     filter_json TEXT,
-    ephemeral bigint NOT NULL DEFAULT 0,
-    locked BIGINT NOT NULL DEFAULT 0,
-    enabled bigint NOT NULL DEFAULT 1,
+    ephemeral boolean NOT NULL DEFAULT FALSE,
+    locked boolean NOT NULL DEFAULT FALSE,
+    enabled boolean NOT NULL DEFAULT TRUE,
     UNIQUE (player_id, event_type),
     FOREIGN KEY (player_id) REFERENCES players (player_id) ON DELETE CASCADE
 );
@@ -726,7 +726,7 @@ CREATE TABLE stardock_assets (
 CREATE TABLE shipyard_inventory (
     port_id bigint NOT NULL REFERENCES ports (port_id),
     ship_type_id bigint NOT NULL REFERENCES shiptypes (shiptypes_id),
-    enabled bigint NOT NULL DEFAULT 1,
+    enabled boolean NOT NULL DEFAULT TRUE,
     PRIMARY KEY (port_id, ship_type_id)
 );
 
@@ -753,7 +753,7 @@ CREATE TABLE commodities (
     commodities_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     code TEXT UNIQUE NOT NULL,
     `name` TEXT NOT NULL,
-    illegal bigint NOT NULL DEFAULT 0,
+    illegal boolean NOT NULL DEFAULT FALSE,
     base_price bigint NOT NULL DEFAULT 0 CHECK (base_price >= 0),
     volatility bigint NOT NULL DEFAULT 0 CHECK (volatility >= 0)
 );
@@ -819,7 +819,7 @@ CREATE TABLE port_busts (
     player_id bigint NOT NULL,
     last_bust_at TIMESTAMP NOT NULL,
     bust_type TEXT NOT NULL,
-    active bigint NOT NULL DEFAULT 1,
+    active boolean NOT NULL DEFAULT TRUE,
     PRIMARY KEY (port_id, player_id),
     FOREIGN KEY (port_id) REFERENCES ports (port_id),
     FOREIGN KEY (player_id) REFERENCES players (player_id)
@@ -829,7 +829,7 @@ CREATE TABLE player_last_rob (
     player_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     port_id bigint NOT NULL,
     last_attempt_at TIMESTAMP NOT NULL,
-    was_success bigint NOT NULL
+    was_success boolean NOT NULL
 );
 
 CREATE TABLE currencies (
@@ -898,7 +898,7 @@ CREATE TABLE traps (
     sector_id bigint NOT NULL,
     owner_player_id bigint,
     kind TEXT NOT NULL,
-    armed bigint NOT NULL DEFAULT 0,
+    armed boolean NOT NULL DEFAULT FALSE,
     arming_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP,
     trigger_at TIMESTAMP,
@@ -914,7 +914,7 @@ CREATE TABLE bank_accounts (
     interest_rate_bp bigint NOT NULL DEFAULT 0,
     last_interest_tick bigint,
     tx_alert_threshold bigint DEFAULT 0,
-    is_active bigint NOT NULL DEFAULT 1
+    is_active boolean NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE bank_transactions (
@@ -940,7 +940,7 @@ CREATE TABLE bank_fee_schedules (
     owner_type TEXT,
     currency TEXT NOT NULL DEFAULT 'CRD',
     `value` bigint NOT NULL,
-    is_percentage bigint NOT NULL DEFAULT 0 CHECK (is_percentage IN (0, 1)),
+    is_percentage boolean NOT NULL DEFAULT FALSE,
     min_tx_amount bigint DEFAULT 0,
     max_tx_amount bigint,
     effective_from bigint NOT NULL,
@@ -963,7 +963,7 @@ CREATE TABLE bank_orders (
     kind TEXT NOT NULL CHECK (kind IN ('recurring', 'once')),
     schedule TEXT NOT NULL,
     next_run_at TIMESTAMP,
-    enabled bigint NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    enabled boolean NOT NULL DEFAULT TRUE,
     amount bigint NOT NULL CHECK (amount > 0),
     currency TEXT NOT NULL DEFAULT 'CRD' REFERENCES currencies (code),
     to_entity TEXT NOT NULL CHECK (to_entity IN ('player', 'corp', 'gov', 'npc')),
@@ -973,7 +973,7 @@ CREATE TABLE bank_orders (
 
 CREATE TABLE bank_flags (
     player_id BIGINT AUTO_INCREMENT PRIMARY KEY REFERENCES players (player_id) ON DELETE CASCADE,
-    is_frozen bigint NOT NULL DEFAULT 0 CHECK (is_frozen IN (0, 1)),
+    is_frozen boolean NOT NULL DEFAULT FALSE,
     risk_tier TEXT NOT NULL DEFAULT 'normal' CHECK (risk_tier IN ('normal', 'elevated', 'high', 'blocked'))
 );
 
@@ -1413,20 +1413,20 @@ CREATE TABLE anomaly_reports (
     severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
     subject TEXT NOT NULL,
     details TEXT NOT NULL,
-    resolved bigint NOT NULL DEFAULT 0 CHECK (resolved IN (0, 1))
+    resolved boolean NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE economy_policies (
     economy_policies_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     `name` TEXT NOT NULL UNIQUE,
     config_json TEXT NOT NULL,
-    active bigint NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+    active boolean NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE s2s_keys (
     key_id TEXT PRIMARY KEY,
     key_b64 TEXT NOT NULL,
-    is_default_tx bigint NOT NULL DEFAULT 0,
+    is_default_tx boolean NOT NULL DEFAULT FALSE,
     active boolean DEFAULT TRUE,
     created_ts TIMESTAMP NOT NULL
 );

@@ -24,12 +24,12 @@ ON CONFLICT (code)
     DO NOTHING;
 -- 4. Commodities
 INSERT INTO commodities (code, name, base_price, volatility, illegal)
-    VALUES ('ORE', 'Ore', 100, 20, 0),
-    ('ORG', 'Organics', 150, 30, 0),
-    ('EQU', 'Equipment', 200, 25, 0),
-    ('SLV', 'Slaves', 1000, 50, 1),
-    ('WPN', 'Weapons', 750, 40, 1),
-    ('DRG', 'Drugs', 500, 60, 1)
+    VALUES ('ORE', 'Ore', 100, 20, FALSE),
+    ('ORG', 'Organics', 150, 30, FALSE),
+    ('EQU', 'Equipment', 200, 25, FALSE),
+    ('SLV', 'Slaves', 1000, 50, TRUE),
+    ('WPN', 'Weapons', 750, 40, TRUE),
+    ('DRG', 'Drugs', 500, 60, TRUE)
 ON CONFLICT (code)
     DO NOTHING;
 -- 5. Ship Roles

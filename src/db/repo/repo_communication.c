@@ -193,7 +193,7 @@ int repo_comm_get_subscription_count(db_t *db, int player_id, int *count_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q13 */
-    const char *q13 = "SELECT COUNT(*) FROM subscriptions WHERE player_id={1} AND enabled=1;";
+    const char *q13 = "SELECT COUNT(*) FROM subscriptions WHERE player_id={1} AND enabled=TRUE;";
     char sql[256]; sql_build(db, q13, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *count_out = db_res_col_i32(res, 0, &err);

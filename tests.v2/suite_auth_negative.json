@@ -18,8 +18,8 @@
       "expect": {  "status": "error", "error_code": 401  }
     },
     {
-      "name": "session.hello - Invalid Payload (Observed: ok)",
-      "command": "session.hello",
+      "name": "system.hello - Invalid Payload (Observed: ok)",
+      "command": "system.hello",
       "data": { "invalid": "payload" },
       "expect": { "status": "ok" }
     },

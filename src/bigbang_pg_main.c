@@ -177,8 +177,13 @@ sync_config_to_db (PGconn *c, json_t *jcfg)
       }
     else if (json_is_string (val))
       {
-	type = "string";
-	strncpy (buf, json_string_value (val), sizeof (buf));
+        const char *s = json_string_value (val);
+        if (s) {
+            strncpy (buf, s, sizeof (buf) - 1);
+            buf[sizeof (buf) - 1] = '\0';
+        } else {
+            continue;
+        }
       }
     else
       {
@@ -769,7 +774,7 @@ main (int argc, char **argv)
     }
 
   srand (time (NULL));
-  server_log_init_file ("./bigbang.log", "[bigbang]", 1, LOG_INFO);
+  server_log_init_file ("./twclone.log", "[bigbang]", 1, LOG_INFO);
 
   // 1) Lifecycle: Create DB
   PGconn *admin = PQconnectdb (admin_cs);
@@ -799,7 +804,8 @@ main (int argc, char **argv)
     }
   else
     {
-      strncpy (app_cs, app_cs_tmpl, sizeof (app_cs));
+      strncpy (app_cs, app_cs_tmpl, sizeof (app_cs) - 1);
+      app_cs[sizeof(app_cs) - 1] = '\0';
     }
 
   PGconn *app = PQconnectdb (app_cs);
@@ -882,6 +888,9 @@ main (int argc, char **argv)
   exec_sql (app, "SELECT generate_clusters(10)", "generate_clusters");
 
   int max_ports = (sectors * port_ratio) / 100;
+  (void) max_ports;
+  (void) bigbang_create_tunnels;
+  (void) fetch_int;
 
 
   snprintf (buf, sizeof (buf), "SELECT generate_ports(%d)", sectors);	// wait, current SP takes target_sectors

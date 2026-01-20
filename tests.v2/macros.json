@@ -5,7 +5,7 @@
       "command": "auth.login",
       "data": { "username": "System", "passwd": "BOT" },
       "user": "admin",
-      "save": { "session": "data.session_token", "admin_player_id": "data.player_id" },
+      "save": { "session": "data.session_token", "admin_session": "data.session_token", "admin_player_id": "data.player_id" },
       "stop_on_fail": true
     }
   ],

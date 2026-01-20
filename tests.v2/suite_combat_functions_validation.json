@@ -5,8 +5,8 @@
   "description": "Validates that restored combat functions (toll fighters, quasar, sector hazards) are compiled and server is operational",
   "tests": [
     {
-      "name": "Server Running - Check Status",
-      "command": "session.hello",
+      "name": "Handshake",
+      "command": "system.hello",
       "expect": { "status": "ok" }
     },
     {

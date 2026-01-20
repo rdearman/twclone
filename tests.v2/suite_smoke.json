@@ -12,7 +12,7 @@
     },
     {
       "name": "System Hello",
-      "command": "session.hello",
+      "command": "system.hello",
       "expect": { "status": "ok" }
     },
     {

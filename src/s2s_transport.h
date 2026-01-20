@@ -13,7 +13,7 @@ typedef struct s2s_conn s2s_conn_t;
 /* Key ring item for HMAC */
 typedef struct
 {
-  char key_id[32];		/* short ID string */
+  char key_id[128];		/* short ID string */
   uint8_t key[64];		/* HMAC key bytes */
   size_t key_len;		/* bytes used from key[] */
 } s2s_key_t;

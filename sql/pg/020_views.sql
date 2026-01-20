@@ -128,14 +128,14 @@ LEFT JOIN planets p ON p.sector_id = s.sector_id
 GROUP BY s.sector_id;
 
 CREATE OR REPLACE VIEW player_locations AS
-SELECT
+ SELECT
  p.player_id AS player_id,
  p.name AS player_name,
  sh.sector_id AS sector_id,
  sh.ship_id AS ship_id,
  CASE
- WHEN sh.ported = 1 THEN 'docked_at_port'
- WHEN sh.onplanet = 1 THEN 'landed_on_planet'
+ WHEN sh.ported = TRUE THEN 'docked_at_port'
+ WHEN sh.onplanet = TRUE THEN 'landed_on_planet'
  WHEN sh.sector_id IS NOT NULL THEN 'in_space'
  ELSE 'unknown'
  END AS location_kind,

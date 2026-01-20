@@ -4,13 +4,13 @@
   "tests": [
     {
       "name": "Setup: Auth Lord",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "planet_lord",
       "password": "password"
     },
     {
       "name": "Setup: Auth Heir",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "planet_heir",
       "password": "password"
     },
@@ -36,7 +36,8 @@
         "target_type": "player"
       },
       "expect": {
-        "status": "planet.transfer.success"
+        "status": "ok",
+        "type": "planet.transfer_ownership.success"
       }
     }
   ]

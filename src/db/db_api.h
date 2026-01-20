@@ -126,6 +126,14 @@ db_t * db_open (const db_config_t *cfg, db_error_t *err);
 void   db_close (db_t *db);
 
 /**
+ * @brief Closes a database connection in a child process after a fork.
+ *        This version avoids sending protocol-level termination messages
+ *        that might affect the parent process's connection.
+ * @param db The database handle to close. Safe to call with NULL.
+ */
+void   db_close_child (db_t *db);
+
+/**
  * @brief Returns the type of the backend for the given database handle.
  * @param db The database handle.
  * @return The backend type (e.g., DB_BACKEND_POSTGRES).
@@ -159,6 +167,81 @@ bool db_tx_begin    (db_t *db, db_tx_flags_t flags, db_error_t *err);
  */
 bool db_tx_commit   (db_t *db, db_error_t *err);
 
+// -----------------------------------------------------------------------------
+// Bind Parameters
+// -----------------------------------------------------------------------------
+
+typedef enum
+{
+  DB_BIND_NULL = 0,         // SQL NULL value
+  DB_BIND_I64,              // 64-bit signed integer
+  DB_BIND_U64,              // 64-bit unsigned integer
+  DB_BIND_I32,              // 32-bit signed integer
+  DB_BIND_U32,              // 32-bit unsigned integer
+  DB_BIND_BOOL,             // Boolean value (typically 0 or 1 integer in DB)
+  DB_BIND_TEXT,             // UTF-8, NUL-terminated string
+  DB_BIND_BLOB,             // Binary data
+  DB_BIND_TIMESTAMP         // 64-bit epoch -> ISO-8601 UTC string
+} db_bind_type_t;
+
+// Structure for a single parameter to be bound to a query
+typedef struct
+{
+  db_bind_type_t type;
+
+  union
+  {
+    int64_t   i64;
+    uint64_t  u64;
+    int32_t   i32;
+    uint32_t  u32;
+    bool      b;
+    int64_t   timestamp;
+
+    struct
+    {
+      const char *ptr;  // NUL-terminated string
+      size_t      len;  // Optional; if 0 driver may strlen(ptr). Ignored for NULL-terminated.
+    } text;
+
+    struct
+    {
+      const void *ptr;  // Pointer to binary data
+      size_t      len;  // Length of binary data in bytes
+    } blob;
+  } v;
+} db_bind_t;
+
+// Convenience constructors for db_bind_t
+static inline db_bind_t db_bind_null (void) { db_bind_t b = { .type = DB_BIND_NULL }; return b; }
+static inline db_bind_t db_bind_i64  (int64_t x) { db_bind_t b = { .type = DB_BIND_I64, .v.i64 = x }; return b; }
+static inline db_bind_t db_bind_u64  (uint64_t x) { db_bind_t b = { .type = DB_BIND_U64, .v.u64 = x }; return b; }
+static inline db_bind_t db_bind_i32  (int32_t x) { db_bind_t b = { .type = DB_BIND_I32, .v.i32 = x }; return b; }
+static inline db_bind_t db_bind_u32  (uint32_t x) { db_bind_t b = { .type = DB_BIND_U32, .v.u32 = x }; return b; }
+static inline db_bind_t db_bind_bool (bool x) { db_bind_t b = { .type = DB_BIND_BOOL, .v.b = x }; return b; }
+static inline db_bind_t db_bind_timestamp_text (int64_t x) { db_bind_t b = { .type = DB_BIND_TIMESTAMP, .v.timestamp = x }; return b; }
+
+static inline db_bind_t
+db_bind_text (const char *s)
+{
+  db_bind_t b = { .type = DB_BIND_TEXT, .v.text = { .ptr = s, .len = 0 } };
+  return b;
+}
+
+static inline db_bind_t
+db_bind_text_n (const char *s, size_t n)
+{
+  db_bind_t b = { .type = DB_BIND_TEXT, .v.text = { .ptr = s, .len = n } };
+  return b;
+}
+
+static inline db_bind_t
+db_bind_blob (const void *p, size_t n)
+{
+  db_bind_t b = { .type = DB_BIND_BLOB, .v.blob = { .ptr = p, .len = n } };
+  return b;
+}
+
 /**
  * @brief Rolls back the current database transaction.
  * @param db The database handle.
@@ -166,6 +249,66 @@ bool db_tx_commit   (db_t *db, db_error_t *err);
  * @return true on success, false on failure.
  */
 bool db_tx_rollback (db_t *db, db_error_t *err);
+
+/**
+ * @brief Executes a SQL query and returns a result set.
+ * @param db The database handle.
+ * @param sql The SQL query string.
+ * @param params Array of bind parameters.
+ * @param n_params Number of bind parameters.
+ * @param out_res Pointer to store the result set handle.
+ * @param err Pointer to an error structure.
+ * @return true on success, false on failure.
+ */
+bool db_query(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err);
+
+/**
+ * @brief Executes a SQL statement that does not return a result set (INSERT, UPDATE, DELETE).
+ * @param db The database handle.
+ * @param sql The SQL statement string.
+ * @param params Array of bind parameters.
+ * @param n_params Number of bind parameters.
+ * @param err Pointer to an error structure.
+ * @return true on success, false on failure.
+ */
+bool db_exec(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_error_t *err);
+
+/**
+ * @brief Executes a SQL statement and returns the number of rows affected.
+ * @param db The database handle.
+ * @param sql The SQL statement string.
+ * @param params Array of bind parameters.
+ * @param n_params Number of bind parameters.
+ * @param out_rows_affected Pointer to store the number of affected rows.
+ * @param err Pointer to an error structure.
+ * @return true on success, false on failure.
+ */
+bool db_exec_rows_affected(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_rows_affected, db_error_t *err);
+
+/**
+ * @brief Executes an INSERT statement and returns the generated ID.
+ * @param db The database handle.
+ * @param sql The SQL statement string.
+ * @param params Array of bind parameters.
+ * @param n_params Number of bind parameters.
+ * @param id_col The name of the ID column (for returning clause if needed).
+ * @param out_id Pointer to store the generated ID.
+ * @param err Pointer to an error structure.
+ * @return true on success, false on failure.
+ */
+bool db_exec_insert_id(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, const char *id_col, int64_t *out_id, db_error_t *err);
+
+/**
+ * @brief Executes an INSERT/UPDATE with RETURNING clause and returns result set.
+ * @param db The database handle.
+ * @param sql The SQL statement string.
+ * @param params Array of bind parameters.
+ * @param n_params Number of bind parameters.
+ * @param out_res Pointer to store the result set handle.
+ * @param err Pointer to an error structure.
+ * @return true on success, false on failure.
+ */
+bool db_exec_returning (db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err);
 
 // -----------------------------------------------------------------------------
 // Result Set Inspection

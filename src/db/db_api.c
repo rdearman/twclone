@@ -187,6 +187,16 @@ void db_close(db_t *db) {
     free(db);
 }
 
+void db_close_child(db_t *db) {
+    if (!db) return;
+    if (db->vt && db->vt->close_child) {
+        db->vt->close_child(db); // Call backend-specific child cleanup
+    } else if (db->vt && db->vt->close) {
+        db->vt->close(db); // Fallback to normal close if no child-specific handler (RISKY for forks)
+    }
+    free(db);
+}
+
 db_backend_t db_backend(const db_t *db) {
     if (!db) return DB_BACKEND_UNKNOWN;
     return db->backend;

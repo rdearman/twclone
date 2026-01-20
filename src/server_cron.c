@@ -940,6 +940,7 @@ h_planet_growth (db_t *db, int64_t now_s)
 int
 h_planet_market_tick (db_t *db, int64_t now_s)
 {
+  (void) now_s;
   json_t *planets = NULL;
   if (db_cron_planet_get_market_data_json (db, &planets) != 0)
     {

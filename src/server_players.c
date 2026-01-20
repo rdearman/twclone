@@ -35,10 +35,6 @@ enum
 enum
 { MAX_AVOIDS = 64 };
 
-static const char *DEFAULT_PLAYER_FIELDS[] = {
-  "id", "username", "credits", "sector", "faction", NULL
-};
-
 /* Externs */
 extern client_node_t *g_clients;
 extern pthread_mutex_t g_clients_mu;
@@ -58,10 +54,9 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: cmd_player_rankings");
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "rankings", json_array ());
+  send_response_ok_take (ctx, root, "player.rankings.response", &payload);
   return 0;
 }
 
@@ -69,31 +64,6 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 /* ==================================================================== */
 /* STATIC HELPER DEFINITIONS                                            */
 /* ==================================================================== */
-
-
-static int
-is_ascii_printable (const char *s)
-{
-  if (!s)
-    {
-      return 0;
-    }
-  for (const unsigned char *p = (const unsigned char *)s; *p; ++p)
-    {
-      if (*p < 0x20 || *p > 0x7E)
-	{
-	  return 0;
-	}
-    }
-  return 1;
-}
-
-
-static int
-len_leq (const char *s, size_t m)
-{
-  return s && strlen (s) <= m;
-}
 
 
 static int
@@ -171,14 +141,6 @@ h_db_avoid_remove (int player_id, int sector_id)
 
 
 static int
-h_db_subscribe_disable (int player_id, const char *topic)
-{
-  db_t *db = game_db_get_handle ();
-  return repo_players_disable_subscription (db, player_id, topic);
-}
-
-
-static int
 h_db_subscribe_upsert (int player_id,
 		       const char *topic,
 		       const char *delivery, const char *filter)
@@ -198,22 +160,40 @@ prefs_as_object (int64_t pid)
   db_t *db = game_db_get_handle ();
   db_res_t *res = NULL;
   db_error_t err;
+  json_t *root = json_object ();
 
-  json_t *obj = json_object ();
+
   if ((res = repo_players_get_prefs (db, pid, &err)) != NULL)
     {
       while (db_res_step (res, &err))
 	{
 	  const char *k = db_res_col_text (res, 0, &err);
+	  const char *t = db_res_col_text (res, 1, &err);
 	  const char *v = db_res_col_text (res, 2, &err);
-	  LOGD ("prefs_as_object: found key=%s val=%s", k ? k : "NULL",
-		v ? v : "NULL");
-	  json_object_set_new (obj, k ? k : "unknown",
-			       json_string (v ? v : ""));
+
+
+	  if (!k || !v)
+	    continue;
+
+	  if (t && strcmp (t, "bool") == 0)
+	    {
+	      json_object_set_new (root, k,
+				   json_boolean (atoi (v) ||
+						 strcasecmp (v,
+						     "true") == 0));
+	    }
+	  else if (t && strcmp (t, "int") == 0)
+	    {
+	      json_object_set_new (root, k, json_integer (atoll (v)));
+	    }
+	  else
+	    {
+	      json_object_set_new (root, k, json_string (v));
+	    }
 	}
       db_res_finalize (res);
     }
-  return obj;
+  return root;
 }
 
 

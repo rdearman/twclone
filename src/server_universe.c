@@ -67,6 +67,7 @@ static void iss_patrol_step (db_t * db);
 
 /* ============ Ferengi Event Logging ============ */
 /* Log events to engine_events table with formatted payload */
+#if 0
 static void
 fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 {
@@ -90,6 +91,7 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 
   repo_universe_log_engine_event (g_fer_db, type, sector_id, payload);
 }
+#endif
 
 /* ============ Navigation Helper Functions ============ */
 
@@ -1028,7 +1030,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       json_t *out = json_object ();
 
 
-      json_object_set_new (out, "path", steps);
+      json_object_set_new (out, "steps", steps);
       json_object_set_new (out, "hops", json_integer (0));
       send_response_ok_take (ctx, root, "move.pathfind", &out);
       free (avoid);
@@ -1206,7 +1208,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   json_t *out = json_object ();
 
 
-  json_object_set_new (out, "path", steps);
+  json_object_set_new (out, "steps", steps);
   json_object_set_new (out, "hops", json_integer (sp - 1));
   send_response_ok_take (ctx, root, "move.pathfind", &out);
 
@@ -1266,6 +1268,7 @@ void
 cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sid, int pid)
 {
   (void) fd;
+  (void) pid;
   db_t *db = game_db_get_handle ();
   if (!db)
     {
@@ -1496,10 +1499,12 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
 
 /* Ferengi Trading at Port - Core NPC trading logic */
+#if 0
 static int
 ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
 		       int sector_id)
 {
+  (void) trader_id;
   if (!db || ship_id <= 0 || port_id <= 0)
     return 1;
 
@@ -1546,6 +1551,7 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
   const char *commodities[] = { "ORE", "ORG", "EQU" };
   int fer_hold_values[] = { fer_ore, fer_organics, fer_equipment };
   int port_buy_prices[] = { port_ore_buy, port_org_buy, port_equ_buy };
+
   int port_sell_prices[] = { port_ore_sell, port_org_sell, port_equ_sell };
   int port_quantities[] = { port_ore_qty, port_org_qty, port_equ_qty };
 
@@ -1677,6 +1683,7 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
 
   return rc;
 }
+#endif
 
 
 int

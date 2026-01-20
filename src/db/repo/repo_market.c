@@ -556,11 +556,12 @@ db_insert_commodity_trade (db_t *db,
 
 
 // Helper to list orders for a specific actor (read-only, for diagnostics)
-// Returns a JSON array of order objects (caller owns reference)
-json_t *
-db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
+// Returns 0 on success, populating out_orders.
+int
+db_list_actor_orders (db_t *db, const char *actor_type, int actor_id, json_t **out_orders)
 {
-  json_t *orders = json_array ();
+  *out_orders = json_array ();
+  json_t *orders = *out_orders;
   db_error_t err;
   db_error_clear (&err);
 
@@ -578,7 +579,7 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
 
   char sql[512];
   if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
-    return ERR_DB; /* or your project error */
+    return ERR_SERVER_ERROR;
 
   db_res_t *res = NULL;
 
@@ -590,7 +591,7 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
         err.message,
         err.code,
         err.backend_code);
-      return NULL;
+      return ERR_DB;
     }
 
 
@@ -620,8 +621,7 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
         {
           /* out of memory: bail cleanly */
           db_res_finalize (res);
-          json_decref (orders);
-          return NULL;
+          return ERR_SERVER_ERROR;
         }
 
       json_object_set_new (obj, "order_id", json_integer (id));
@@ -645,31 +645,31 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id)
       LOGE ("db_list_actor_orders: step failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
       db_res_finalize (res);
-      json_decref (orders);
-      return NULL;
+      return ERR_DB;
     }
 
   db_res_finalize (res);
-  return orders;
+  return 0;
 }
 
 
 // Helper to list open orders for a specific port (read-only, for diagnostics)
-// Returns a JSON array of order objects (caller owns reference)
-json_t *
-db_list_port_orders (db_t *db, int port_id)
+// Returns 0 on success, populating out_orders.
+int
+db_list_port_orders (db_t *db, int port_id, json_t **out_orders)
 {
-  return db_list_actor_orders (db, "port", port_id);
+  return db_list_actor_orders (db, "port", port_id, out_orders);
 }
 
 
-json_t *
-db_orders_summary (db_t *db, int filter_commodity_id)
+int
+db_orders_summary (db_t *db, int filter_commodity_id, json_t **out_summary)
 {
-  json_t *summary = json_object ();
+  *out_summary = json_object ();
+  json_t *summary = *out_summary;
   if (!summary)
     {
-      return NULL;
+      return ERR_SERVER_ERROR;
     }
 
   db_error_t err;
@@ -698,10 +698,9 @@ db_orders_summary (db_t *db, int filter_commodity_id)
       n_params = 1;
     }
 
-  /* build */
-  char sql[256];
+  char sql[512];
   if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
-    return ERR_DB;
+    return ERR_SERVER_ERROR;
 
   db_res_t *res = NULL;
 
@@ -710,8 +709,7 @@ db_orders_summary (db_t *db, int filter_commodity_id)
     {
       LOGE ("db_orders_summary: query failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
-      json_decref (summary);
-      return NULL;
+      return ERR_DB;
     }
 
   while (db_res_step (res, &err))
@@ -754,11 +752,10 @@ db_orders_summary (db_t *db, int filter_commodity_id)
       LOGE ("db_orders_summary: step failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
       db_res_finalize (res);
-      json_decref (summary);
-      return NULL;
+      return ERR_DB;
     }
 
   db_res_finalize (res);
-  return summary;
+  return 0;
 }
 

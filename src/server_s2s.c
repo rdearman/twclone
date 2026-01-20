@@ -1,3 +1,4 @@
+#include "db/repo/repo_cmd.h"
 #include <jansson.h>
 #include <string.h>
 #include <strings.h>

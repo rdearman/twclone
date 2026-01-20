@@ -126,7 +126,7 @@ s2s_load_default_key (db_t *db, s2s_key_t *out_key)
 	  (db, kid, sizeof (kid), kb64, sizeof (kb64)) == 0)
 	{
 	  memset (out_key, 0, sizeof (*out_key));
-	  strncpy (out_key->key_id, kid, sizeof (out_key->key_id) - 1);
+	  snprintf (out_key->key_id, sizeof (out_key->key_id), "%s", kid);
 
 	  size_t key_len = 0;
 

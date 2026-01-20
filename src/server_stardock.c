@@ -288,7 +288,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 
     json_object_set_new (res, "sector_id", json_integer (sector_id));
     json_object_set_new (res, "location_type", json_string (location_type));
-    json_object_set (res, "items", items_array);
+    json_object_set_new (res, "items", items_array);
 
 
     send_response_ok_take (ctx, root, "hardware.list_v1", &res);
@@ -669,7 +669,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   json_object_set_new (resp, "quantity", json_integer (quantity));
   json_object_set_new (resp, "credits_spent",
 		       json_integer ((json_int_t) total_cost));
-  json_object_set (resp, "ship", ship_obj);
+  json_object_set_new (resp, "ship", ship_obj);
 
 
   send_response_ok_take (ctx, root, "hardware.purchase_v1", &resp);
@@ -2981,7 +2981,7 @@ cmd_tavern_barcharts_get_prices_summary (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "status",
 		       json_string ("Market summary acquired."));
-  json_object_set (response_data, "prices", prices_array);
+  json_object_set_new (response_data, "prices", prices_array);
   json_object_set_new (response_data, "cost", json_integer (summary_cost));
 
 

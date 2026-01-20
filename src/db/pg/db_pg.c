@@ -5,6 +5,7 @@
 #include <libpq-fe.h>
 #include <pthread.h>
 #include <time.h>
+#include <unistd.h>
 
 // local includes
 #include "db_pg.h"
@@ -103,9 +104,9 @@ static char* pg_bind_param_to_string(const db_bind_t *param) {
     char *buf = NULL;
     switch (param->type) {
         case DB_BIND_NULL: return NULL;
-        case DB_BIND_I64: asprintf(&buf, "%lld", (long long)param->v.i64); break;
-        case DB_BIND_I32: asprintf(&buf, "%d", param->v.i32); break;
-        case DB_BIND_BOOL: asprintf(&buf, "%s", param->v.b ? "t" : "f"); break;
+        case DB_BIND_I64: if (asprintf(&buf, "%lld", (long long)param->v.i64) < 0) buf = NULL; break;
+        case DB_BIND_I32: if (asprintf(&buf, "%d", param->v.i32) < 0) buf = NULL; break;
+        case DB_BIND_BOOL: if (asprintf(&buf, "%s", param->v.b ? "t" : "f") < 0) buf = NULL; break;
         case DB_BIND_TIMESTAMP: {
             struct tm tm;
             time_t t = (time_t)param->v.timestamp;
@@ -199,7 +200,11 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     bool free_sql = false;
 
     if (id_col && !strcasestr(sql, "RETURNING")) {
-        asprintf(&sql_with_returning, "%s RETURNING %s", sql, id_col);
+        if (asprintf(&sql_with_returning, "%s RETURNING %s", sql, id_col) < 0) {
+            err->code = ERR_DB_QUERY_FAILED;
+            strlcpy(err->message, "Memory allocation failed for RETURNING clause", sizeof(err->message));
+            return false;
+        }
         free_sql = true;
     }
 
@@ -304,10 +309,20 @@ static bool pg_res_col_bool_impl(const db_res_t *res, int col_idx, db_error_t *e
 }
 
 static int64_t pg_res_col_i64_impl(const db_res_t *res, int col_idx, db_error_t *err) {
-    (void)err; return atoll(PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx));
+    (void)err;
+    const char *val = PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx);
+    if (!val) return 0;
+    if (val[0] == 't') return 1;
+    if (val[0] == 'f') return 0;
+    return atoll(val);
 }
 static int32_t pg_res_col_i32_impl(const db_res_t *res, int col_idx, db_error_t *err) {
-    (void)err; return atoi(PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx));
+    (void)err;
+    const char *val = PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx);
+    if (!val) return 0;
+    if (val[0] == 't') return 1;
+    if (val[0] == 'f') return 0;
+    return atoi(val);
 }
 static double pg_res_col_double_impl(const db_res_t *res, int col_idx, db_error_t *err) {
     (void)err; return atof(PQgetvalue(((db_pg_res_impl_t*)res->impl)->pg_res, res->current_row, col_idx));
@@ -421,8 +436,29 @@ static bool pg_exec_returning_impl(db_t *db, const char *sql, const db_bind_t *p
 }
 
 
+static void pg_close_child_impl(db_t *db) {
+    db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
+    if (impl) {
+        if (impl->conn) {
+            // In a child process, we want to close the connection *resource* (FD)
+            // without sending a protocol-level "Terminate" message, because the
+            // parent process shares the same connection on the server side.
+            // Closing the FD here just decrements the OS refcount (parent still has it).
+            int sock = PQsocket(impl->conn);
+            if (sock >= 0) {
+                close(sock);
+            }
+            // Now we call PQfinish to free the memory. It will try to write to the
+            // closed FD, fail (EBADF), and just clean up the memory.
+            PQfinish(impl->conn);
+        }
+        free(impl);
+    }
+}
+
 static const db_vt_t pg_vt = {
     .close = pg_close_impl,
+    .close_child = pg_close_child_impl,
     .tx_begin = pg_tx_begin_impl, .tx_commit = pg_tx_commit_impl, .tx_rollback = pg_tx_rollback_impl,
     .exec = pg_exec_impl, .exec_rows_affected = pg_exec_rows_affected_impl, .exec_insert_id = pg_exec_insert_id_impl,
     .query = pg_query_impl,

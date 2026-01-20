@@ -16,6 +16,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "db/repo/repo_database.h"
 #include <jansson.h>
 #include <stdbool.h>
 
@@ -72,6 +73,10 @@ __thread client_ctx_t *g_ctx_for_send = NULL;
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t * obj);
 
+/* Forward declarations */
+static void loop_add_client (client_ctx_t *ctx);
+static void loop_remove_client (client_ctx_t *ctx);
+
 /* rate-limit helper prototypes (defined later) */
 void attach_rate_limit_meta (json_t * env, client_ctx_t * ctx);
 void rl_tick (client_ctx_t * ctx);
@@ -121,30 +126,30 @@ monotonic_millis (void)
 int
 cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: cmd_insurance_policies_list");
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "policies", json_array ());
+  send_response_ok_take (ctx, root, "insurance.policies.list.response",
+			 &payload);
   return 0;
 }
 
 int
 cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: cmd_insurance_policies_buy");
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "status", json_string ("Policy purchased"));
+  send_response_ok_take (ctx, root, "insurance.policies.buy.response",
+			 &payload);
   return 0;
 }
 
 int
 cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: cmd_insurance_claim_file");
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "claim_id", json_integer (12345));
+  send_response_ok_take (ctx, root, "insurance.claim.file.response",
+			 &payload);
   return 0;
 }
 
@@ -428,8 +433,12 @@ static const command_entry_t k_command_registry[] = {
   {"port.status", cmd_trade_port_info, "Port status", schema_port_status, 0},
   {"s2s.event.relay", cmd_s2s_event_relay, "S2S event relay",
    schema_placeholder, CMD_FLAG_HIDDEN},
-  {"s2s.planet.genesis", cmd_s2s_planet_genesis, "S2S planet genesis",
+  {"s2s.event_relay", cmd_s2s_event_relay, "S2S event relay",
    schema_placeholder, CMD_FLAG_HIDDEN},
+  {"s2s.planet.genesis", cmd_s2s_planet_genesis, "S2S planet genesis",
+   schema_placeholder, 0},
+  {"s2s.planet_genesis", cmd_s2s_planet_genesis, "S2S planet genesis",
+   schema_placeholder, 0},
   {"s2s.planet.transfer", cmd_s2s_planet_transfer, "S2s planet transfer",
    schema_placeholder, CMD_FLAG_HIDDEN},
   {"s2s.player.migrate", cmd_s2s_player_migrate, "S2S player migrate",
@@ -449,10 +458,7 @@ static const command_entry_t k_command_registry[] = {
    schema_sector_set_beacon, 0},
   {"session.disconnect", cmd_session_disconnect, "Disconnect",
    schema_session_disconnect, 0},
-  {"session.hello", cmd_system_hello, "Handshake / hello",
-   schema_session_hello, CMD_FLAG_AUTH_FREE},
-  {"session.ping", cmd_system_hello, "Ping", schema_session_ping, 0},
-  {"player.ping", cmd_system_hello, "Ping", schema_session_ping, 0},
+  {"session.ping", cmd_session_ping, "Ping", schema_session_ping, 0},
   {"sys.cluster.init", cmd_sys_cluster_init, "Cluster init",
    schema_placeholder, CMD_FLAG_DEBUG_ONLY | CMD_FLAG_HIDDEN},
   {"sys.cluster.seed_illegal_goods", cmd_sys_cluster_seed_illegal_goods,

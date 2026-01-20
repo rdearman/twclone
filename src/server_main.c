@@ -340,6 +340,11 @@ main (void)
   LOGI ("starting up");
   sysop_start (&g_running);
 
+  /* Suppress unused function warnings */
+  (void) s2s_control_thread;
+  extern void ferengi_trade_at_port (void);
+  (void) ferengi_trade_at_port;
+
   /* 0.0) Bootstrap Config (DB Connection) */
   if (load_bootstrap_config ("bigbang.json") != 0)
     {

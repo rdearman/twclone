@@ -165,21 +165,21 @@ BEGIN
      */
     SELECT c.code, c.base_price INTO v_code_ore, v_base_ore
       FROM commodities c
-     WHERE c.illegal = 0
+     WHERE c.illegal = FALSE
        AND (upper(c.code) = 'ORE' OR lower(c.code) = 'ore')
      ORDER BY (upper(c.code) = 'ORE') DESC
      LIMIT 1;
 
     SELECT c.code, c.base_price INTO v_code_org, v_base_org
       FROM commodities c
-     WHERE c.illegal = 0
+     WHERE c.illegal = FALSE
        AND (upper(c.code) = 'ORG' OR lower(c.code) = 'organics')
      ORDER BY (upper(c.code) = 'ORG') DESC
      LIMIT 1;
 
     SELECT c.code, c.base_price INTO v_code_equ, v_base_equ
       FROM commodities c
-     WHERE c.illegal = 0
+     WHERE c.illegal = FALSE
        AND (upper(c.code) = 'EQU' OR lower(c.code) = 'equipment')
      ORDER BY (upper(c.code) = 'EQU') DESC
      LIMIT 1;
@@ -314,7 +314,7 @@ BEGIN
 
     /* Create bank accounts for the new ports */
     INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
-    SELECT 'port', np.port_id, 'CRD', 50000, 0, 1
+    SELECT 'port', np.port_id, 'CRD', 50000, 0, TRUE
     FROM new_ports np;
 
     PERFORM bigbang_unlock(v_lock_key);
@@ -371,7 +371,7 @@ BEGIN
     -- Create bank account for Stardock
     IF v_port_id IS NOT NULL THEN
         INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
-        VALUES ('port', v_port_id, 'CRD', 1000000, 0, 1)
+        VALUES ('port', v_port_id, 'CRD', 1000000, 0, TRUE)
         ON CONFLICT DO NOTHING;
     END IF;
     -- Seed Stardock Assets
@@ -385,7 +385,7 @@ BEGIN
         SELECT
             v_port_id,
             shiptypes_id,
-            1
+            TRUE
         FROM
             shiptypes
         WHERE
@@ -838,7 +838,7 @@ BEGIN
 
     IF v_port_id IS NOT NULL THEN
          INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
-         VALUES ('port', v_port_id, 'CRD', 1000000, 0, 1)
+         VALUES ('port', v_port_id, 'CRD', 1000000, 0, TRUE)
          ON CONFLICT DO NOTHING;
     END IF;
 END;
@@ -888,7 +888,7 @@ BEGIN
 
         -- Insert Ship (Ownerless by default as we don't insert into ship_ownership)
         INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id, 10, 1, 1, 0)
+        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id, 10, 1, 1, FALSE)
         RETURNING ship_id INTO v_ship_id;
 
         -- Optional: Add random cargo? (Old code didn't, but we could)

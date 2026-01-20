@@ -6,10 +6,18 @@
 
 int repo_session_lookup(db_t *db, const char *token, int32_t *out_player_id, int64_t *out_expires)
 {
-    /* SQL_VERBATIM: Q1 */
-    const char *sql = "SELECT player_id, expires FROM sessions WHERE token = {1} LIMIT 1;";
-    char sql_converted[256];
-    sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    char epoch_expr[128];
+    if (sql_ts_to_epoch_expr(db, "expires", epoch_expr, sizeof(epoch_expr)) != 0) {
+        return -1;
+    }
+
+    char sql_template[512];
+    snprintf(sql_template, sizeof(sql_template), 
+             "SELECT player_id, %s FROM sessions WHERE token = {1} LIMIT 1;", 
+             epoch_expr);
+
+    char sql_converted[512];
+    sql_build(db, sql_template, sql_converted, sizeof(sql_converted));
 
     db_res_t *res = NULL;
     db_error_t err;

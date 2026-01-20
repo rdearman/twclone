@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-61c1d58b",
+    "ts": "2026-01-19T22:57:46Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1101,
+        "message": "Invalid login"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

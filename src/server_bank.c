@@ -823,68 +823,72 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
 
 
-  if (!json_is_object (data))
+  if (data && !json_is_object (data))
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
 			   "data must be object");
       return 0;
     }
   int limit = 20;
-  json_t *j_limit = json_object_get (data, "limit");
-
-
-  if (json_is_integer (j_limit))
-    {
-      limit = (int) json_integer_value (j_limit);
-    }
-  if (limit <= 0 || limit > 50)
-    {
-      limit = 20;
-    }
-
   const char *tx_type_filter = NULL;
-  json_t *j_tx_type = json_object_get (data, "tx_type");
-
-
-  if (json_is_string (j_tx_type))
-    {
-      tx_type_filter = json_string_value (j_tx_type);
-    }
-
   long long start_date = 0;
-  json_t *j_start = json_object_get (data, "start_date");
-
-
-  if (json_is_integer (j_start))
-    {
-      start_date = json_integer_value (j_start);
-    }
-
   long long end_date = 0;
-  json_t *j_end = json_object_get (data, "end_date");
-
-
-  if (json_is_integer (j_end))
-    {
-      end_date = json_integer_value (j_end);
-    }
-
   long long min_amount = 0;
-  json_t *j_min = json_object_get (data, "min_amount");
-
-
-  if (json_is_integer (j_min))
-    {
-      min_amount = json_integer_value (j_min);
-    }
-
   long long max_amount = 0;
-  json_t *j_max = json_object_get (data, "max_amount");
 
-
-  if (json_is_integer (j_max))
+  if (data)
     {
-      max_amount = json_integer_value (j_max);
+      json_t *j_limit = json_object_get (data, "limit");
+
+
+      if (json_is_integer (j_limit))
+	{
+	  limit = (int) json_integer_value (j_limit);
+	}
+      if (limit <= 0 || limit > 50)
+	{
+	  limit = 20;
+	}
+
+      json_t *j_tx_type = json_object_get (data, "tx_type");
+
+
+      if (json_is_string (j_tx_type))
+	{
+	  tx_type_filter = json_string_value (j_tx_type);
+	}
+
+      json_t *j_start = json_object_get (data, "start_date");
+
+
+      if (json_is_integer (j_start))
+	{
+	  start_date = json_integer_value (j_start);
+	}
+
+      json_t *j_end = json_object_get (data, "end_date");
+
+
+      if (json_is_integer (j_end))
+	{
+	  end_date = json_integer_value (j_end);
+	}
+
+      json_t *j_min = json_object_get (data, "min_amount");
+
+
+      if (json_is_integer (j_min))
+	{
+	  min_amount = json_integer_value (j_min);
+	}
+
+      json_t *j_max = json_object_get (data, "max_amount");
+
+
+      if (json_is_integer (j_max))
+	{
+	  max_amount = json_integer_value (j_max);
+	}
     }
 
   json_t *transactions_array = NULL;
@@ -924,7 +928,7 @@ cmd_bank_history (client_ctx_t *ctx, json_t *root)
   json_t *payload = json_object ();
 
 
-  json_object_set (payload, "history", transactions_array);
+  json_object_set_new (payload, "history", transactions_array);
   json_object_set_new (payload, "has_next_page", json_false ());
 
   send_response_ok_take (ctx, root, "bank.history.response", &payload);
@@ -1129,7 +1133,16 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *data = json_object_get (root, "data");
+  if (!data || !json_is_object(data))
+    {
+      send_response_refused_steal (ctx,
+				   root,
+				   ERR_INVALID_ARG,
+				   "Invalid arguments", NULL);
+      return 0;
+    }
   json_t *j_to = json_object_get (data, "to_player_id");
+  if (!j_to) j_to = json_object_get (data, "recipient_id");
   json_t *j_amt = json_object_get (data, "amount");
 
 
@@ -1495,6 +1508,11 @@ cmd_fine_pay (client_ctx_t *ctx, json_t *root)
 	      check_failed = 1;
 	    }
 	}
+      else
+        {
+          send_response_error (ctx, root, 404, "Fine not found.");
+          check_failed = 1;
+        }
       db_res_finalize (res_fine);
     }
   else

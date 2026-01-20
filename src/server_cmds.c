@@ -2,6 +2,7 @@
 /* src/server_cmds.c */
 #include <string.h>
 #include <strings.h>
+#include "db/db_api.h"
 #include <jansson.h>
 #include <time.h>
 #include <stdlib.h>
@@ -993,10 +994,9 @@ cmd_sys_econ_planet_status (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response, "stock", stock_arr);
 
   // 3. Open Orders
-  json_t *orders = db_list_actor_orders (db, "planet", planet_id);
-
-
-  json_object_set_new (response, "orders", orders);
+  json_t *orders = NULL;
+  db_list_actor_orders (db, "planet", planet_id, &orders);
+  json_object_set_new (response, "orders", orders ? orders : json_array());
 
   // 4. Bank Balance
   long long balance = 0;
@@ -1097,10 +1097,11 @@ cmd_sys_econ_port_status (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response, "stock", stock_arr);
 
   // 3. Open Orders
-  json_t *orders = db_list_port_orders (db, port_id);
+  json_t *orders = NULL;
+  db_list_port_orders (db, port_id, &orders);
 
 
-  json_object_set_new (response, "orders", orders);
+  json_object_set_new (response, "orders", orders ? orders : json_array());
 
   send_response_ok_take (ctx, root, "sys.econ.port_status", &response);
   return 0;
@@ -1141,7 +1142,8 @@ cmd_sys_econ_orders_summary (client_ctx_t *ctx, json_t *root)
 	}
     }
 
-  json_t *summary = db_orders_summary (db, commodity_id);
+  json_t *summary = NULL;
+  db_orders_summary (db, commodity_id, &summary);
 
 
   send_response_ok_take (ctx, root, "sys.econ.orders_summary", &summary);

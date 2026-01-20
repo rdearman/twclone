@@ -29,12 +29,12 @@ ON CONFLICT (code)
     DO NOTHING;
 -- 4. Commodities
 INSERT INTO commodities (commodities_id, code, name, base_price, volatility, illegal)
-    VALUES (1, 'ORE', 'Ore', 100, 20, 0),
-    (2, 'ORG', 'Organics', 150, 30, 0),
-    (3, 'EQU', 'Equipment', 200, 25, 0),
-    (4, 'SLV', 'Slaves', 1000, 50, 1),
-    (5, 'WPN', 'Weapons', 750, 40, 1),
-    (6, 'DRG', 'Drugs', 500, 60, 1)
+    VALUES (1, 'ORE', 'Ore', 100, 20, FALSE),
+    (2, 'ORG', 'Organics', 150, 30, FALSE),
+    (3, 'EQU', 'Equipment', 200, 25, FALSE),
+    (4, 'SLV', 'Slaves', 1000, 50, TRUE),
+    (5, 'WPN', 'Weapons', 750, 40, TRUE),
+    (6, 'DRG', 'Drugs', 500, 60, TRUE)
 ON CONFLICT (code)
     DO NOTHING;
 -- 5. Ship Roles
@@ -201,7 +201,7 @@ INSERT INTO tavern_names (name, enabled, weight)
 ON CONFLICT (name)
     DO NOTHING;
 INSERT INTO tavern_settings (tavern_settings_id, max_bet_per_transaction, daily_max_wager, enable_dynamic_wager_limit, graffiti_max_posts, notice_expires_days, buy_round_cost, buy_round_alignment_gain, loan_shark_enabled)
-    VALUES (1, 5000, 50000, 0, 100, 7, 1000, 5, 1)
+    VALUES (1, 5000, 50000, FALSE, 100, 7, 1000, 5, TRUE)
 ON CONFLICT (tavern_settings_id)
     DO NOTHING;
 -- 12. Hardware Items

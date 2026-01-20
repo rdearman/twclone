@@ -608,9 +608,49 @@ apply_db (db_t *db)
 	      cfg_parse_int (val, type, &g_cfg.combat.neutral_band);
 	    }
 	  /* --- NEW KEYS --- */
-	  else if (strcmp (key, "num_sectors") == 0)
+	  else if (strcmp (key, "num_sectors") == 0 || strcmp (key, "sectors") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.num_sectors);
+	    }
+	  else if (strcmp (key, "density") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.density);
+	    }
+	  else if (strcmp (key, "port_ratio") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.port_ratio);
+	    }
+	  else if (strcmp (key, "planet_ratio") == 0)
+	    {
+	      cfg_parse_double (val, type, &g_cfg.planet_ratio);
+	    }
+	  else if (strcmp (key, "port_size") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.port_size);
+	    }
+	  else if (strcmp (key, "tech_level") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.tech_level);
+	    }
+	  else if (strcmp (key, "port_credits") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.port_credits);
+	    }
+	  else if (strcmp (key, "min_tunnels") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.min_tunnels);
+	    }
+	  else if (strcmp (key, "min_tunnel_len") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.min_tunnel_len);
+	    }
+	  else if (strcmp (key, "limpet_ttl_days") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.mines.limpet.limpet_ttl_days);
+	    }
+	  else if (strcmp (key, "death.escape_pod_shiptype_id") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.escape_pod_shiptype_id);
 	    }
 	  else if (strcmp (key, "planet_treasury_interest_rate_bps") == 0)
 	    {
@@ -822,16 +862,19 @@ make_session_hello_payload (int is_authed, int player_id, int sector_id)
 int
 cmd_system_hello (client_ctx_t *ctx, json_t *root)
 {
-  json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
-						ctx->player_id,
-						ctx->sector_id);
-  if (payload)
-    {
-      json_object_set (payload, "capabilities", g_capabilities);
-      json_object_set_new (payload, "server_version",
-			   json_string ("tw-server/3.0.0"));
-      send_response_ok_take (ctx, root, "system.welcome", &payload);
-    }
+  json_t *payload = json_object ();
+  json_t *limits = json_object ();
+
+
+  json_object_set_new (limits, "max_frame_size", json_integer (131072));
+  json_object_set_new (limits, "max_req_per_min", json_integer (200));
+
+  json_object_set (payload, "capabilities", g_capabilities);
+  json_object_set_new (payload, "limits", limits);
+  json_object_set_new (payload, "server_version",
+		       json_string ("tw-server/3.0.0"));
+
+  send_response_ok_take (ctx, root, "system.welcome", &payload);
   return 0;
 }
 
@@ -855,21 +898,6 @@ cmd_session_ping (client_ctx_t *ctx, json_t *root)
   json_t *echo =
     json_is_object (jdata) ? json_incref (jdata) : json_object ();
   send_response_ok_take (ctx, root, "session.pong", &echo);
-  return 0;
-}
-
-
-int
-cmd_session_hello (client_ctx_t *ctx, json_t *root)
-{
-//   const char *req_id = json_string_value (json_object_get (root, "id"));
-  json_t *payload = make_session_hello_payload ((ctx->player_id > 0),
-						ctx->player_id,
-						ctx->sector_id);
-  // Use ONE helper that builds a proper envelope including reply_to + status.
-  // If your send_enveloped_ok doesn't add reply_to, fix it (next section).
-  send_response_ok_take (ctx, root, "session.hello", &payload);
-  payload = NULL;
   return 0;
 }
 

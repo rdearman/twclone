@@ -1,4 +1,11 @@
 #include "db/repo/repo_auth.h"
+#include "db/repo/repo_engine.h"
+#include "db/repo/repo_universe.h"
+#include "db/repo/repo_session.h"
+#include "db/repo/repo_bank.h"
+#include "db/repo/repo_players.h"
+#include "repo_cmd.h"
+#include "common.h"
 /* src/server_auth.c */
 #include <string.h>
 #include <jansson.h>
@@ -195,7 +202,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 
       long long current_ts = time (NULL);
       char podded_status[32] = { 0 };
-      long long big_sleep_until = 0;
+      int64_t big_sleep_until = 0;
 
       if (repo_auth_get_podded_status
 	  (db, pid, podded_status, sizeof (podded_status),

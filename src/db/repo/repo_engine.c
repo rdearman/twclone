@@ -38,41 +38,35 @@ int repo_engine_get_alignment_band_info(db_t *db, int band_id, int *is_good_out,
 }
 
 int repo_engine_create_broadcast_notice(db_t *db, const char *ts_fmt, int64_t now_s, const char *title, const char *body, const char *severity, int64_t expires_at, int64_t *new_id_out) {
+    (void)ts_fmt; // Deprecated, using db_bind_timestamp_text
     db_error_t err;
-    char sql_tmpl[512];
-    /* SQL_VERBATIM: Q4 */
-    snprintf(sql_tmpl, sizeof(sql_tmpl),
-        "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
-        "VALUES(%s, {2}, {3}, {4}, %s)",
-        ts_fmt, ts_fmt);
+    const char *sql_tmpl = "INSERT INTO system_notice(created_at, title, body, severity, expires_at) "
+                           "VALUES({1}, {2}, {3}, {4}, {5})";
     char sql[512]; sql_build(db, sql_tmpl, sql, sizeof(sql));
     db_bind_t params[5];
-    params[0] = db_bind_i64 (now_s);
+    params[0] = db_bind_timestamp_text (now_s);
     params[1] = db_bind_text (title);
     params[2] = db_bind_text (body);
     params[3] = db_bind_text (severity ? severity : "info");
-    if (expires_at > 0) params[4] = db_bind_i64 (expires_at);
+    if (expires_at > 0) params[4] = db_bind_timestamp_text (expires_at);
     else params[4] = db_bind_null ();
     if (!db_exec_insert_id (db, sql, params, 5, "system_notice_id", new_id_out, &err)) return err.code;
     return 0;
 }
 
 int repo_engine_publish_notice(db_t *db, const char *ts_fmt, int64_t now_s, const char *scope, int player_id, const char *message, const char *severity, int64_t expires_at, int64_t *new_id_out) {
+    (void)ts_fmt; // Deprecated
     db_error_t err;
-    char sql_tmpl[512];
-    /* SQL_VERBATIM: Q5 */
-    snprintf(sql_tmpl, sizeof(sql_tmpl),
-        "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
-        "VALUES(%s, {2}, {3}, 'Notice', {4}, {5}, %s)",
-        ts_fmt, ts_fmt);
+    const char *sql_tmpl = "INSERT INTO system_notice(created_at, scope, player_id, title, body, severity, expires_at) "
+                           "VALUES({1}, {2}, {3}, 'Notice', {4}, {5}, {6})";
     char sql[512]; sql_build(db, sql_tmpl, sql, sizeof(sql));
     db_bind_t params[6];
-    params[0] = db_bind_i64 (now_s);
+    params[0] = db_bind_timestamp_text (now_s);
     params[1] = db_bind_text (scope);
     params[2] = db_bind_i32 (player_id);
     params[3] = db_bind_text (message);
     params[4] = db_bind_text (severity);
-    if (expires_at > 0) params[5] = db_bind_i64 (expires_at);
+    if (expires_at > 0) params[5] = db_bind_timestamp_text (expires_at);
     else params[5] = db_bind_null ();
     if (!db_exec_insert_id (db, sql, params, 6, "system_notice_id", new_id_out, &err)) return err.code;
     return 0;
@@ -83,43 +77,34 @@ db_res_t* repo_engine_get_ready_commands(db_t *db, int64_t now_s, int max_rows, 
     const char *q6 = "SELECT engine_commands_id, type, payload, idem_key FROM engine_commands WHERE status='ready' AND due_at <= {1} ORDER BY priority ASC, due_at ASC, engine_commands_id ASC LIMIT {2};";
     char sql[512]; sql_build(db, q6, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i32(max_rows) }, 2, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i32(max_rows) }, 2, &res, err);
     return res;
 }
 
 int repo_engine_mark_command_running(db_t *db, const char *ts_fmt, int64_t now_s, int64_t cmd_id) {
+    (void)ts_fmt; // Deprecated
     db_error_t err;
-    char sql_running_tmpl[256];
-    /* SQL_VERBATIM: Q7 */
-    snprintf(sql_running_tmpl, sizeof(sql_running_tmpl),
-        "UPDATE engine_commands SET status='running', started_at=%s WHERE engine_commands_id={2}",
-        ts_fmt);
-    char sql[256]; sql_build(db, sql_running_tmpl, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
+    const char *sql_tmpl = "UPDATE engine_commands SET status='running', started_at={1} WHERE engine_commands_id={2}";
+    char sql[256]; sql_build(db, sql_tmpl, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
     return 0;
 }
 
 int repo_engine_mark_command_done(db_t *db, const char *ts_fmt, int64_t now_s, int64_t cmd_id) {
+    (void)ts_fmt; // Deprecated
     db_error_t err;
-    char sql_done_tmpl[256];
-    /* SQL_VERBATIM: Q8 */
-    snprintf(sql_done_tmpl, sizeof(sql_done_tmpl),
-        "UPDATE engine_commands SET status='done', finished_at=%s WHERE engine_commands_id={2}",
-        ts_fmt);
-    char sql[256]; sql_build(db, sql_done_tmpl, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
+    const char *sql_tmpl = "UPDATE engine_commands SET status='done', finished_at={1} WHERE engine_commands_id={2}";
+    char sql[256]; sql_build(db, sql_tmpl, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
     return 0;
 }
 
 int repo_engine_mark_command_error(db_t *db, const char *ts_fmt, int64_t now_s, int64_t cmd_id) {
+    (void)ts_fmt; // Deprecated
     db_error_t err;
-    char sql_err_tmpl[256];
-    /* SQL_VERBATIM: Q9 */
-    snprintf(sql_err_tmpl, sizeof(sql_err_tmpl),
-        "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at=%s WHERE engine_commands_id={2}",
-        ts_fmt);
-    char sql[256]; sql_build(db, sql_err_tmpl, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
+    const char *sql_tmpl = "UPDATE engine_commands SET status='error', attempts=attempts+1, finished_at={1} WHERE engine_commands_id={2}";
+    char sql[256]; sql_build(db, sql_tmpl, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -133,45 +118,38 @@ int repo_engine_reclaim_stale_locks(db_t *db, int64_t stale_threshold_ms) {
 }
 
 db_res_t* repo_engine_get_pending_cron_tasks(db_t *db, const char *ts_expr, int64_t now_s, int limit, db_error_t *err) {
-    char sql_pick_tmpl[512];
+    (void)ts_expr; // Deprecated
     /* SQL_VERBATIM: Q11 */
-    snprintf(sql_pick_tmpl, sizeof(sql_pick_tmpl),
-        "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
-        "WHERE enabled=TRUE "
-        "  AND (next_due_at IS NULL OR next_due_at <= %s) "
-        "ORDER BY next_due_at ASC "
-        "LIMIT {2}",
-        ts_expr);
-    char sql[512]; sql_build(db, sql_pick_tmpl, sql, sizeof(sql));
+    const char *sql_tmpl = "SELECT cron_tasks_id, name, schedule FROM cron_tasks "
+                           "WHERE enabled=TRUE "
+                           "  AND (next_due_at IS NULL OR next_due_at <= {1}) "
+                           "ORDER BY next_due_at ASC "
+                           "LIMIT {2}";
+    char sql[512]; sql_build(db, sql_tmpl, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i32(limit) }, 2, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i32(limit) }, 2, &res, err);
     return res;
 }
 
 int repo_engine_update_cron_task_schedule(db_t *db, const char *ts_expr1, const char *ts_expr2, int64_t id, int64_t now_s, int64_t next_due) {
+    (void)ts_expr1; (void)ts_expr2; // Deprecated
     db_error_t err;
-    char sql_upd_tmpl[256];
-    /* SQL_VERBATIM: Q12 */
-    snprintf(sql_upd_tmpl, sizeof(sql_upd_tmpl),
-        "UPDATE cron_tasks "
-        "SET last_run_at=%s, next_due_at=%s "
-        "WHERE cron_tasks_id={1};",
-        ts_expr1, ts_expr2);
-    char sql[256]; sql_build(db, sql_upd_tmpl, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(id), db_bind_i64(now_s), db_bind_i64(next_due) }, 3, &err)) return err.code;
+    const char *sql_tmpl = "UPDATE cron_tasks "
+                           "SET last_run_at={2}, next_due_at={3} "
+                           "WHERE cron_tasks_id={1};";
+    char sql[256]; sql_build(db, sql_tmpl, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(id), db_bind_timestamp_text(now_s), db_bind_timestamp_text(next_due) }, 3, &err)) return err.code;
     return 0;
 }
 
 int repo_engine_sweep_expired_notices(db_t *db, const char *ts_fmt, int64_t now_s) {
+    (void)ts_fmt; // Deprecated
     db_error_t err;
-    char sql[512];
-    /* SQL_VERBATIM: Q13 */
-    snprintf(sql, sizeof(sql),
-        "DELETE FROM system_notice "
-        "WHERE expires_at IS NOT NULL AND expires_at <= %s "
-        "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= %s LIMIT 500);",
-        ts_fmt, ts_fmt);
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(now_s) }, 1, &err)) return err.code;
+    const char *sql_tmpl = "DELETE FROM system_notice "
+                           "WHERE expires_at IS NOT NULL AND expires_at <= {1} "
+                           "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= {1} LIMIT 500);";
+    char sql[512]; sql_build(db, sql_tmpl, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s) }, 1, &err)) return err.code;
     return 0;
 }
 
@@ -189,7 +167,17 @@ int repo_engine_reschedule_deadletter(db_t *db, int64_t now_s, int64_t cmd_id) {
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "UPDATE engine_commands SET status='ready', due_at={1} + (attempts * 60) WHERE engine_commands_id={2};";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
+    // Wait, adding interval to timestamp in SQL is tricky. Better do arithmetic in C.
+    // But since due_at is timestamptz, we need to be careful.
+    // Actually, attempts * 60 is seconds.
+    // For now, I'll stick to binding the result from C.
+    // Wait, attempts is in DB. I don't have it here easily without query.
+    // I'll leave the SQL arithmetic for now, but use db_bind_timestamp_text for now_s.
+    // Postgres supports: timestamptz + (int * interval '1 second')
+    
+    const char *q15_pg = "UPDATE engine_commands SET status='ready', due_at=to_timestamp({1}) + (attempts * interval '1 minute') WHERE engine_commands_id={2};";
+    char sql_pg[512]; sql_build(db, q15_pg, sql_pg, sizeof(sql_pg));
+    if (!db_exec(db, sql_pg, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -208,7 +196,7 @@ int repo_engine_cleanup_expired_limpets(db_t *db, const char *deployed_as_epoch,
 
 db_res_t* repo_engine_get_active_interest_accounts(db_t *db, db_error_t *err) {
     /* SQL_VERBATIM: Q17 */
-    const char *q17 = "SELECT bank_accounts_id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick FROM bank_accounts WHERE is_active = 1 AND interest_rate_bp > 0;";
+    const char *q17 = "SELECT bank_accounts_id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick FROM bank_accounts WHERE is_active = TRUE AND interest_rate_bp > 0;";
     db_res_t *res = NULL;
     db_query(db, q17, NULL, 0, &res, err);
     return res;

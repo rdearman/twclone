@@ -113,7 +113,7 @@ BEGIN
     RETURN (404, 'ship not found'::text, NULL::bigint);
   END IF;
 
-  UPDATE ships SET destroyed = 1 WHERE ship_id = p_ship_id;
+  UPDATE ships SET destroyed = TRUE WHERE ship_id = p_ship_id;
   UPDATE players SET ship_id = NULL WHERE ship_id = p_ship_id;
 
   RETURN (0, 'ok'::text, NULL::bigint);

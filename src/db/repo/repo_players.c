@@ -13,12 +13,12 @@ int repo_players_set_pref(db_t *db, int player_id, const char *key, const char *
     db_bind_t params[] = { db_bind_i32(player_id), db_bind_text(key), db_bind_text(type), db_bind_text(value) };
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE player_prefs SET type = {3}, value = {4} WHERE player_id = {1} AND key = {2}";
+    const char *q_upd = "UPDATE player_prefs SET type = {3}, value = {4} WHERE player_prefs_id = {1} AND key = {2}";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     if (db_exec_rows_affected(db, sql_upd, params, 4, &rows, &err) && rows > 0) return 0;
 
     /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO player_prefs (player_id, key, type, value) VALUES ({1}, {2}, {3}, {4})";
+    const char *q_ins = "INSERT INTO player_prefs (player_prefs_id, key, type, value) VALUES ({1}, {2}, {3}, {4})";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     if (!db_exec(db, sql_ins, params, 4, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
@@ -87,9 +87,9 @@ int repo_players_delete_avoid(db_t *db, int player_id, int sector_id) {
 int repo_players_disable_subscription(db_t *db, int player_id, const char *topic) {
     db_error_t err;
     /* SQL_VERBATIM: Q6 */
-    const char *q6 = "UPDATE player_subscriptions SET enabled = 0 WHERE player_id = {1} AND topic = {2}";
+    const char *q6 = "UPDATE player_subscriptions SET enabled = {3} WHERE player_id = {1} AND topic = {2}";
     char sql[512]; sql_build(db, q6, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(topic) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(topic), db_bind_bool(false) }, 3, &err)) return err.code;
     return 0;
 }
 
@@ -104,12 +104,12 @@ int repo_players_upsert_subscription(db_t *db, int player_id, const char *topic,
     };
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE player_subscriptions SET enabled = 1, delivery = {3}, filter = {4} WHERE player_id = {1} AND topic = {2}";
+    const char *q_upd = "UPDATE player_subscriptions SET enabled = TRUE, delivery = {3}, filter = {4} WHERE player_id = {1} AND topic = {2}";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     if (db_exec_rows_affected(db, sql_upd, params, 4, &rows, &err) && rows > 0) return 0;
 
     /* 2. Try Insert */
-    const char *q_ins = "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, 1, {3}, {4})";
+    const char *q_ins = "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, TRUE, {3}, {4})";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     if (!db_exec(db, sql_ins, params, 4, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -122,7 +122,7 @@ int repo_players_upsert_subscription(db_t *db, int player_id, const char *topic,
 
 db_res_t* repo_players_get_prefs(db_t *db, int player_id, db_error_t *err) {
     /* SQL_VERBATIM: Q9 */
-    const char *q9 = "SELECT key, type, value FROM player_prefs WHERE player_id = {1}";
+    const char *q9 = "SELECT key, type, value FROM player_prefs WHERE player_prefs_id = {1}";
     char sql[512]; sql_build(db, q9, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, err);
@@ -247,7 +247,7 @@ int repo_players_insert_ship(db_t *db, const char *name, int type_id, int holds,
 int repo_players_set_ship_ownership(db_t *db, int ship_id, int player_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q20 */
-    const char *q20 = "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES ({1}, {2}, 1, 1);";
+    const char *q20 = "INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) VALUES ({1}, {2}, 1, TRUE);";
     char sql[512]; sql_build(db, q20, sql, sizeof(sql));
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(ship_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
     return 0;

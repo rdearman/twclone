@@ -111,14 +111,14 @@
     {
       "name": "planet.transfer_ownership - Positive",
       "command": "planet.transfer_ownership",
-      "data": { "planet_id": "@{test_planet_id}", "target_id": 2, "target_type": "player" },
+      "data": { "planet_id": "@{test_planet_id}", "target_id": "@{admin_player_id}", "target_type": "player" },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.transfer_ownership - Negative (No Auth)",
       "command": "planet.transfer_ownership",
-      "data": { "planet_id": "@{test_planet_id}", "target_id": 2, "target_type": "player" },
+      "data": { "planet_id": "@{test_planet_id}", "target_id": "@{admin_player_id}", "target_type": "player" },
       "expect": { "status": "error", "error_code": 401 }
     }
   ]

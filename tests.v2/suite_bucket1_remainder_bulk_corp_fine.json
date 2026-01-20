@@ -8,6 +8,13 @@
       "password": "password"
     },
     {
+      "name": "Rig: Join Corp 100",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO corp_members (corporation_id, player_id, role) VALUES (100, @{trader_player_1_player_id}, 'Member') ON CONFLICT DO NOTHING;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "bulk.execute - Positive",
       "command": "bulk.execute",
       "data": { "commands": [ { "command": "player.my_info", "data": {} } ] },

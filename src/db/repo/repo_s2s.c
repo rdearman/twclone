@@ -17,7 +17,7 @@ repo_s2s_create_key (db_t *db, const char *key_id, const char *key_b64)
   char sql_tmpl[512];
   snprintf(sql_tmpl, sizeof(sql_tmpl),
     "INSERT INTO s2s_keys (key_id, key_b64, active, created_ts, is_default_tx) "
-    "VALUES ({1}, {2}, true, %s, 0);",
+    "VALUES ({1}, {2}, {4}, %s, 0);",
     now_expr);
 
   char SQL_INSERT[512];
@@ -31,11 +31,12 @@ repo_s2s_create_key (db_t *db, const char *key_id, const char *key_b64)
   db_bind_t params[] = {
     db_bind_text (key_id),
     db_bind_text (key_b64),
-    db_bind_i64 ((long long)now)
+    db_bind_i64 ((long long)now),
+    db_bind_bool(true)
   };
 
   db_error_t err;
-  if (!db_exec (db, SQL_INSERT, params, 3, &err))
+  if (!db_exec (db, SQL_INSERT, params, 4, &err))
     {
       LOGE ("REPO_S2S: Failed to execute insert: %s\n", err.message);
       return -1;
@@ -48,14 +49,14 @@ int
 repo_s2s_get_default_key (db_t *db, char *out_key_id, size_t key_id_size, char *out_key_b64, size_t key_b64_size)
 {
   const char *sql =
-    "SELECT key_id, key_b64 FROM s2s_keys WHERE active = TRUE ORDER BY created_ts DESC LIMIT 1";
+    "SELECT key_id, key_b64 FROM s2s_keys WHERE active = {1} ORDER BY created_ts DESC LIMIT 1";
 
   db_error_t err;
   db_error_clear (&err);
 
   db_res_t *res = NULL;
 
-  if (!db_query (db, sql, NULL, 0, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_bool(true) }, 1, &res, &err))
     {
       LOGE ("repo_s2s_get_default_key: query failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);

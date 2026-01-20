@@ -6,6 +6,7 @@ import os
 import sys
 
 def execute_sql(sql, dbname="twclone", user="postgres", password=None, host="localhost"):
+    print(f"EXEC: {sql.strip()[:100]}...")
     env = os.environ.copy()
     if password:
         env["PGPASSWORD"] = password
@@ -16,7 +17,7 @@ def execute_sql(sql, dbname="twclone", user="postgres", password=None, host="loc
     
     if result.returncode != 0:
         print(f"ERROR executing SQL:\n{sql}\nError: {result.stderr}")
-        return False
+        sys.exit(1)
     return True
 
 def get_player_id(username, dbname="twclone", user="postgres", password=None, host="localhost"):
@@ -46,8 +47,9 @@ def main():
 
     if args.reset:
         print("Resetting test data...")
-        # Specific cleanup if needed, but upserts handle most of it
-        pass
+        execute_sql("ALTER TABLE corp_members DISABLE TRIGGER corp_one_leader_guard;", **db_config)
+        execute_sql("TRUNCATE sessions, corp_members, citadels, planets, ships, ship_ownership, bank_accounts, turns, players, corporations, sector_assets, entity_stock CASCADE;", **db_config)
+
 
     # 1. Config
     if "config" in rig:
@@ -77,6 +79,11 @@ def main():
                 name = '{p['name']}';
             """
             execute_sql(sql, **db_config)
+
+            if p['type'] == 10:
+                # Ensure it's in taverns table too
+                sql = f"INSERT INTO taverns (sector_id, name_id, enabled) VALUES ({p['sector_id']}, 3, 1) ON CONFLICT (sector_id) DO NOTHING;"
+                execute_sql(sql, **db_config)
 
     # 4. Users
     if "users" in rig:
@@ -120,6 +127,10 @@ def main():
             owner_id = get_player_id(c["owner_username"], **db_config)
             if owner_id:
                 sql = f"INSERT INTO corporations (corporation_id, name, owner_id) VALUES ({c['corporation_id']}, '{c['name']}', {owner_id}) ON CONFLICT (corporation_id) DO NOTHING;"
+                execute_sql(sql, **db_config)
+                
+                # Add owner to corp_members
+                sql = f"INSERT INTO corp_members (corporation_id, player_id, role) VALUES ({c['corporation_id']}, {owner_id}, 'Leader') ON CONFLICT (corporation_id, player_id) DO UPDATE SET role = 'Leader';"
                 execute_sql(sql, **db_config)
                 
                 # Seed bank account for corporation
@@ -201,9 +212,17 @@ def main():
                 sql = f"""
                 INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, created_by)
                 VALUES ({p['planet_id']}, {p['num']}, {p['sector_id']}, '{p['name']}', {owner_id}, 'player', '{p['class']}', {owner_id})
-                ON CONFLICT (planet_id) DO NOTHING;
+                ON CONFLICT (planet_id) DO UPDATE SET
+                    num = EXCLUDED.num,
+                    sector_id = EXCLUDED.sector_id,
+                    name = EXCLUDED.name,
+                    owner_id = EXCLUDED.owner_id,
+                    owner_type = EXCLUDED.owner_type,
+                    class = EXCLUDED.class,
+                    created_by = EXCLUDED.created_by;
                 """
                 execute_sql(sql, **db_config)
+                print(f"DEBUG: Planet {p['planet_id']} inserted/updated successfully.")
                 
                 if "citadel" in p:
                     c = p["citadel"]
@@ -243,6 +262,7 @@ def main():
                 execute_sql(sql, **db_config)
 
     print("Rigging Complete.")
+    execute_sql("ALTER TABLE corp_members ENABLE TRIGGER corp_one_leader_guard;", **db_config)
 
 if __name__ == "__main__":
     main()

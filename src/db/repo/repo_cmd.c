@@ -1348,6 +1348,7 @@ db_update_player_podded_status (db_t *db,
                                 const char *status,
                                 long long until)
 {
+  (void) until;
   if (!db)
     {
       return ERR_DB_CLOSED;
@@ -1454,7 +1455,6 @@ h_get_cluster_alignment (db_t *db, int cid, int *out_align)
       rc = err.code;
     }
 
-cleanup:
   if (res)
     db_res_finalize (res);
   return rc;
@@ -1862,9 +1862,9 @@ db_player_set_last_rob_attempt (int pid, int lpid, long long lts)
 
 
     /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0);";
+    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, FALSE);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(pid), db_bind_i32(lpid), db_bind_i64(lts) };
+    db_bind_t ins_params[] = { db_bind_i32(pid), db_bind_i32(lpid), db_bind_timestamp_text(lts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -1897,7 +1897,7 @@ db_port_add_bust_record (int port_id, int pid, long long ts, const char *type)
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type) VALUES ({1}, {2}, {3}, {4});";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(port_id), db_bind_i32(pid), db_bind_i64(ts), db_bind_text(type) };
+    db_bind_t ins_params[] = { db_bind_i32(port_id), db_bind_i32(pid), db_bind_timestamp_text(ts), db_bind_text(type) };
     if (!db_exec(db, sql_ins, ins_params, 4, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -1922,7 +1922,7 @@ db_port_get_active_busts (int port_id, json_t **out)
   db_error_t err = {0};
   int rc = -1;
   const char *sql =
-    "SELECT player_id, bust_type, last_bust_at FROM port_busts WHERE port_id = {1} AND active = 1;";
+    "SELECT player_id, bust_type, last_bust_at FROM port_busts WHERE port_id = {1} AND active = TRUE;";
 
   char sql_converted[256];
   sql_build(db, sql, sql_converted, sizeof(sql_converted));
@@ -3562,7 +3562,7 @@ db_ships_inspectable_at_sector_json (db_t *db,
     "        OR EXISTS ( SELECT 1 "
     "            FROM ship_ownership "
     "            WHERE ship_id = ships.ship_id "
-    "              AND is_primary = TRUE "
+    "              AND is_primary = {3} "
     "              AND player_id = {2} )); ";
 
   char sql_converted[512];
@@ -3570,8 +3570,8 @@ db_ships_inspectable_at_sector_json (db_t *db,
 
   if (db_query (db,
                 sql_converted,
-                (db_bind_t[]){db_bind_i32 (sector_id), db_bind_i32 (player_id)},
-                2,
+                (db_bind_t[]){db_bind_i32 (sector_id), db_bind_i32 (player_id), db_bind_bool(true)},
+                3,
                 &res,
                 &err))
     {
@@ -3616,13 +3616,14 @@ db_notice_create (db_t *db,
 }
 
 
-json_t *
-db_notice_list_unseen_for_player (db_t *db, int player_id)
+int
+db_notice_list_unseen_for_player (db_t *db, int player_id, json_t **out_array)
 {
-  if (!db)
+  if (!db || !out_array)
     {
-      return json_array ();
+      return ERR_INVALID_ARG;
     }
+  *out_array = NULL;
   db_res_t *res = NULL; db_error_t err;
   
   const char *sql_template =
@@ -3636,12 +3637,12 @@ db_notice_list_unseen_for_player (db_t *db, int player_id)
 
   if (db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1, &res, &err))
     {
-      json_t *arr = NULL; stmt_to_json_array (res, &arr, &err);
-
-
-      db_res_finalize (res); return arr ?: json_array ();
+      stmt_to_json_array (res, out_array, &err);
+      db_res_finalize (res);
+      if (!*out_array) *out_array = json_array();
+      return 0;
     }
-  return json_array ();
+  return err.code;
 }
 
 
@@ -3767,6 +3768,7 @@ db_sector_scan_snapshot (db_t *db, int sid, json_t **out)
 int
 db_create_initial_ship (db_t *db, int pid, const char *name, int sid)
 {
+  (void) name;
   db_error_t err;
   db_res_t *res = NULL;
   const char *sql = "SELECT * FROM ship_create_initial({1}, {2});";
@@ -4154,7 +4156,7 @@ db_is_sector_fedspace (db_t *db, int sector_id)
   db_res_t *res = NULL;
   db_error_t err;
   const char *sql =
-    "SELECT 1 FROM sectors WHERE sector_id = {1} AND is_fedspace = 1;";
+    "SELECT 1 FROM sectors WHERE sector_id = {1} AND is_fedspace = TRUE;";
   int is_fed = 0;
 
   char sql_converted[256];
@@ -4290,7 +4292,7 @@ db_get_ship_owner_id (db_t *db, int ship_id, int *out_pid, int *out_cid)
 
 
   if (db_query (db,
-                "SELECT player_id, corporation_id FROM ship_ownership WHERE ship_id = {1} AND is_primary = 1;",
+                "SELECT player_id, corporation_id FROM ship_ownership WHERE ship_id = {1} AND is_primary = TRUE;",
                 (db_bind_t[]){db_bind_i32 (ship_id)},
                 1,
                 &res,
@@ -4595,10 +4597,10 @@ db_ship_rename_if_owner (db_t *db,
 
 
   if (!db_exec (db,
-                "UPDATE ships SET name = {1} WHERE ship_id = {2} AND EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = {2} AND player_id = {3} AND is_primary = TRUE);",
+                "UPDATE ships SET name = {1} WHERE ship_id = {2} AND EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = {2} AND player_id = {3} AND is_primary = {4});",
                 (db_bind_t[]){db_bind_text (new_name), db_bind_i32 (ship_id),
-                              db_bind_i32 (player_id)},
-                3,
+                              db_bind_i32 (player_id), db_bind_bool(true)},
+                4,
                 &err))
     {
       return err.code;
@@ -5041,13 +5043,32 @@ db_session_revoke (const char *token)
 int
 db_session_refresh (const char *token, int ttl, char new_tok[65], int *out_exp)
 {
+  (void) token;
+  (void) ttl;
+  (void) new_tok;
+  (void) out_exp;
   return 0;
 }
 
 
+#include "repo_cmd.h"
+#include "repo_config.h"
+#include "db/sql_driver.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <jansson.h>
+#include "../../server_log.h"
+
 long long
 h_get_config_int_unlocked (db_t *db, const char *key, long long def)
 {
+  char buf[64];
+  if (repo_config_get_value (db, key, buf, sizeof (buf)) == 0)
+    {
+      return atoll (buf);
+    }
   return def;
 }
 
@@ -5055,6 +5076,9 @@ h_get_config_int_unlocked (db_t *db, const char *key, long long def)
 int
 db_port_is_shipyard (db_t *db, int sector_id, bool *out)
 {
+  (void) db;
+  (void) sector_id;
+  (void) out;
   return 0;
 }
 
@@ -5062,6 +5086,9 @@ db_port_is_shipyard (db_t *db, int sector_id, bool *out)
 int
 db_ship_get_hull (db_t *db, int ship_id, int *out)
 {
+  (void) db;
+  (void) ship_id;
+  (void) out;
   return 0;
 }
 

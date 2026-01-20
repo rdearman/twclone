@@ -6,10 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+extern int repo_bank_get_balance_by_account_id(db_t *db, int account_id, long long *balance_out);
+
 int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long long *new_balance_out) {
     db_error_t err;
     int64_t rows = 0;
-    int account_id = 0;
+    int fetched_account_id = 0;
 
     if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err)) return -err.code;
 
@@ -17,7 +19,7 @@ int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long 
     /* SQL_VERBATIM: Q1_UPD */
     const char *q_upd = "UPDATE bank_accounts SET balance = balance + {2} "
                         "WHERE owner_type = 'player' AND owner_id = {1} "
-                        "AND currency = 'CRD' AND is_active = 1 "
+                        "AND currency = 'CRD' AND is_active = TRUE "
                         "AND (balance + {2}) >= 0;";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     if (!db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
@@ -33,8 +35,8 @@ int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long 
         }
         /* SQL_VERBATIM: Q1_INS */
         const char *q_ins = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
-                            "SELECT 'player', {1}, 'CRD', {2}, 1 "
-                            "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'player' AND owner_id = {1} AND currency = 'CRD' AND is_active = 1);";
+                            "SELECT 'player', {1}, 'CRD', {2}, TRUE "
+                            "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'player' AND owner_id = {1} AND currency = 'CRD' AND is_active = TRUE);";
         char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
         if (!db_exec_rows_affected(db, sql_ins, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
             db_tx_rollback(db, NULL);
@@ -43,15 +45,15 @@ int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long 
     }
 
     /* 3. Get ID and Balance */
-    if (repo_bank_get_account_id(db, "player", player_id, &account_id) != 0 ||
-        repo_bank_get_balance_by_account_id(db, account_id, new_balance_out) != 0) {
+    if (repo_bank_get_account_id(db, "player", player_id, &fetched_account_id) != 0 ||
+        repo_bank_get_balance_by_account_id(db, fetched_account_id, new_balance_out) != 0) {
         db_tx_rollback(db, NULL);
         return -1;
     }
 
     if (!db_tx_commit(db, &err)) return -err.code;
 
-    return account_id;
+    return 0;
 }
 
 int repo_bank_check_account_active(db_t *db, int player_id, int *exists_out) {
@@ -59,7 +61,7 @@ int repo_bank_check_account_active(db_t *db, int player_id, int *exists_out) {
     db_error_t err;
     /* SQL_VERBATIM: Q2 */
     const char *q2 = "SELECT 1 FROM bank_accounts "
-    "WHERE owner_type='player' AND owner_id={1} AND currency='CRD' AND is_active=1 "
+    "WHERE owner_type='player' AND owner_id={1} AND currency='CRD' AND is_active=TRUE "
     "LIMIT 1;";
     char sql[256]; sql_build(db, q2, sql, sizeof(sql));
     *exists_out = 0;
@@ -89,7 +91,7 @@ int repo_bank_get_balance(db_t *db, const char *owner_type, int owner_id, long l
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q4 */
-    const char *q4 = "SELECT balance FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2} AND is_active = 1;";
+    const char *q4 = "SELECT balance FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2} AND is_active = TRUE;";
     char sql[256]; sql_build(db, q4, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         *balance_out = db_res_col_i64(res, 0, &err);
@@ -158,6 +160,7 @@ int repo_bank_add_credits_returning(db_t *db, int account_id, long long amount, 
 
 int repo_bank_insert_transaction(db_t *db, const char *sql_template, int account_id, const char *tx_type, const char *direction, long long amount, long long balance_after, const char *tx_group_id, const char *now_epoch) {
     db_error_t err;
+    (void)direction;
     char sql[512];
     snprintf(sql, sizeof(sql), sql_template, now_epoch);
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(account_id), db_bind_text(tx_type), db_bind_i64(amount), db_bind_i64(balance_after), db_bind_text(tx_group_id) }, 5, &err)) return err.code;
@@ -181,7 +184,7 @@ int repo_bank_deduct_credits_returning(db_t *db, int account_id, long long amoun
 int repo_bank_create_account_if_not_exists(db_t *db, const char *owner_type, int owner_id, long long initial_balance) {
     db_error_t err;
     /* SQL_VERBATIM: Q11 */
-    const char *q11 = "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ({1}, {2}, {3}, 0, 1);";
+    const char *q11 = "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ({1}, {2}, {3}, 0, TRUE);";
     char sql[256]; sql_build(db, q11, sql, sizeof(sql));
     if (!db_exec (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id), db_bind_i64(initial_balance) }, 3, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -306,7 +309,7 @@ int repo_bank_get_transactions(db_t *db, const char *owner_type, int owner_id, i
         strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
         params[idx++] = db_bind_i64 (max);
     }
-    strncat (sql, "ORDER BY ts DESC, id DESC LIMIT ", sizeof(sql) - strlen (sql) - 1);
+    strncat (sql, "ORDER BY ts DESC, bank_transactions_id DESC LIMIT ", sizeof(sql) - strlen (sql) - 1);
     char buf[16]; snprintf (buf, sizeof(buf), "$%d;", idx + 1);
     strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
     params[idx++] = db_bind_i32 (limit);

@@ -34,6 +34,17 @@ static void mysql_close(db_t *db)
   db->impl = NULL;
 }
 
+static void mysql_close_child(db_t *db)
+{
+  /* MySQL backend child close stub.
+   * In a real implementation, this would close the socket fd without sending QUIT.
+   * For now, just freeing the memory is sufficient.
+   */
+  if (!db) return;
+  free(db->impl);
+  db->impl = NULL;
+}
+
 static bool mysql_tx_begin(db_t *db, db_tx_flags_t flags, db_error_t *err)
 { (void)db; (void)flags; return mysql_not_impl(err, "MySQL: tx_begin not implemented"); }
 
@@ -112,6 +123,7 @@ static bool mysql_ship_repair_atomic(db_t *db, int player_id, int ship_id, int c
 
 static const db_vt_t MYSQL_VT = {
   .close = mysql_close,
+  .close_child = mysql_close_child,
   .tx_begin = mysql_tx_begin,
   .tx_commit = mysql_tx_commit,
   .tx_rollback = mysql_tx_rollback,

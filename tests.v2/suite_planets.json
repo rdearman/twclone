@@ -2,9 +2,23 @@
   "tests": [
     {
       "name": "Setup: User",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "planet_tester_1",
       "password": "password"
+    },
+    {
+      "name": "Rig: Clear Sector 500 Citadels",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM citadels WHERE planet_id IN (SELECT planet_id FROM planets WHERE sector_id = 500);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear Sector 500 Planets",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM planets WHERE sector_id = 500;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Create Planet (T2-01)",

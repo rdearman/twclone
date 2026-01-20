@@ -83,11 +83,11 @@ int repo_engine_quarantine(db_t *db, int64_t id, int64_t ts, const char *type, c
     int64_t rows = 0;
     db_bind_t params[] = {
         db_bind_i64(id),
-        db_bind_i64(ts),
+        db_bind_timestamp_text(ts),
         db_bind_text(type ? type : ""),
         db_bind_text(payload ? payload : ""),
         db_bind_text(err_msg ? err_msg : "unknown error"),
-        db_bind_i32(now_s)
+        db_bind_timestamp_text((int64_t)now_s)
     };
 
     /* 1. Try Update first */
@@ -166,7 +166,7 @@ int repo_engine_fetch_events(db_t *db, int64_t last_id, int priority_only, const
                  "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                  "FROM engine_events "
                  "WHERE engine_events_id > {1} "
-                 "  AND ({2} = 0 OR type IN (SELECT trim(json_array_elements_text({3})))) "
+                 "  AND ({2} = FALSE OR type IN (SELECT trim(json_array_elements_text({3})))) "
                  "ORDER BY engine_events_id ASC LIMIT {4};");
         sql_build(db, expanded_sql_tmpl, expanded_sql, sizeof(expanded_sql));
     } else {
@@ -177,14 +177,14 @@ int repo_engine_fetch_events(db_t *db, int64_t last_id, int priority_only, const
                  "SELECT engine_events_id as id, ts, type, actor_player_id, sector_id, payload "
                  "FROM engine_events "
                  "WHERE engine_events_id > {1} "
-                 "  AND ({2} = 0 OR type IN (SELECT trim(value) FROM json_each({3}))) "
+                 "  AND ({2} = FALSE OR type IN (SELECT trim(value) FROM json_each({3}))) "
                  "ORDER BY engine_events_id ASC LIMIT {4};");
         sql_build(db, expanded_sql_tmpl, expanded_sql, sizeof(expanded_sql));
     }
 
     db_bind_t params[] = {
         db_bind_i64(last_id),
-        db_bind_i32(priority_only ? 1 : 0),
+        db_bind_bool(priority_only),
         db_bind_text(prio_json),
         db_bind_i32(limit)
     };

@@ -51,10 +51,10 @@ db_subscribe_upsert (db_t *db,
                      int locked)
 {
   if (!db) return -1;
-  const char *q_upd = "UPDATE subscriptions SET filter_json = {3}, locked = {4}, enabled = 1 "
+  const char *q_upd = "UPDATE subscriptions SET filter_json = {3}, locked = {4}, enabled = {5} "
                       "WHERE player_id = {1} AND event_type = {2};";
   const char *q_ins = "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) "
-                      "VALUES ({1}, {2}, {3}, {4}, 1);";
+                      "VALUES ({1}, {2}, {3}, {4}, {5});";
   
   char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
   char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
@@ -63,10 +63,11 @@ db_subscribe_upsert (db_t *db,
       db_bind_i64(pid),
       db_bind_text(topic),
       db_bind_text(filter),
-      db_bind_i32(locked)
+      db_bind_i32(locked),
+      db_bind_bool(true)
   };
 
-  return h_upsert(db, sql_upd, sql_ins, params, 4);
+  return h_upsert(db, sql_upd, sql_ins, params, 5);
 }
 
 
@@ -79,12 +80,12 @@ db_subscribe_disable (db_t *db, int64_t pid, const char *topic, int *locked_out)
     }
   char sql[512];
   sql_build (db,
-             "UPDATE subscriptions SET enabled = 0 WHERE player_id = {1} AND event_type = {2} AND locked = 0;",
+             "UPDATE subscriptions SET enabled = {3} WHERE player_id = {1} AND event_type = {2} AND locked = FALSE;",
              sql, sizeof (sql));
   if (!db_exec (db,
                 sql,
-                (db_bind_t[]){db_bind_i64 (pid), db_bind_text (topic)},
-                2,
+                (db_bind_t[]){db_bind_i64 (pid), db_bind_text (topic), db_bind_bool(false)},
+                3,
                 &err))
     {
       return -1;
@@ -334,12 +335,12 @@ db_for_each_subscriber (db_t *db, const char *event, player_id_cb cb, void *arg)
     }
   char sql[512];
   sql_build (db,
-             "SELECT DISTINCT player_id FROM subscriptions WHERE event_type = {1} AND enabled = 1;",
+             "SELECT DISTINCT player_id FROM subscriptions WHERE event_type = {1} AND enabled = {2};",
              sql, sizeof (sql));
   if (db_query (db,
                 sql,
-                (db_bind_t[]){db_bind_text (event)},
-                1,
+                (db_bind_t[]){db_bind_text (event), db_bind_bool(true)},
+                2,
                 &res,
                 &err))
     {
@@ -365,7 +366,7 @@ db_prefs_get_all (db_t *db, int64_t pid, db_res_t **it)
     }
   char sql[512];
   sql_build (db,
-             "SELECT key, value FROM player_prefs WHERE player_id = {1};",
+             "SELECT key, value FROM player_prefs WHERE player_prefs_id = {1};",
              sql, sizeof (sql));
   if (!db_query (db,
                  sql,
@@ -389,7 +390,7 @@ db_prefs_get_one (db_t *db, int64_t pid, const char *key, char **out)
     }
   char sql[512];
   sql_build (db,
-             "SELECT value FROM player_prefs WHERE player_id = {1} AND key = {2} LIMIT 1;",
+             "SELECT value FROM player_prefs WHERE player_prefs_id = {1} AND key = {2} LIMIT 1;",
              sql, sizeof (sql));
   if (db_query (db,
                 sql,
@@ -416,8 +417,8 @@ db_prefs_set_one (db_t *db,
                   const char *val)
 {
   if (!db) return -1;
-  const char *q_upd = "UPDATE player_prefs SET value = {3} WHERE player_id = {1} AND key = {2};";
-  const char *q_ins = "INSERT INTO player_prefs (player_id, key, value) VALUES ({1}, {2}, {3});";
+  const char *q_upd = "UPDATE player_prefs SET value = {3} WHERE player_prefs_id = {1} AND key = {2};";
+  const char *q_ins = "INSERT INTO player_prefs (player_prefs_id, key, type, value) VALUES ({1}, {2}, 'string', {3});";
 
   char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
   char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));

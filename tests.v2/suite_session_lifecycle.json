@@ -5,13 +5,8 @@
   "description": "Tests session management",
   "tests": [
     {
-      "name": "session.hello - Initialize session",
-      "command": "session.hello",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "session.ping - Ping session",
-      "command": "session.ping",
+      "name": "system.hello - Initialize session",
+      "command": "system.hello",
       "expect": { "status": "ok" }
     },
     {
@@ -21,7 +16,7 @@
       "password": "password"
     },
     {
-      "name": "session.ping - Ping authenticated session",
+      "name": "session.ping - Ping session",
       "command": "session.ping",
       "user": "session_lifecycle_user",
       "expect": { "status": "ok" }

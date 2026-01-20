@@ -213,6 +213,7 @@ int repo_corp_demote_ceo(db_t *db, int corp_id, int player_id) {
 }
 
 int repo_corp_insert_member_ignore(db_t *db, int corp_id, int player_id, const char *role) {
+    (void)role;
     db_error_t err;
     const char *conflict_clause = sql_insert_ignore_clause(db);
     if (!conflict_clause) return -1;
@@ -255,6 +256,7 @@ int repo_corp_create(db_t *db, const char *name, int owner_id, int64_t *new_corp
 }
 
 int repo_corp_insert_member(db_t *db, int corp_id, int player_id, const char *role) {
+    (void)role;
     db_error_t err;
     /* SQL_VERBATIM: Q18 */
     const char *q18 = "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Leader');";
@@ -297,6 +299,7 @@ int repo_corp_get_invite_expiry(db_t *db, int corp_id, int player_id, long long 
 }
 
 int repo_corp_insert_member_basic(db_t *db, int corp_id, int player_id, const char *role) {
+    (void)role;
     db_error_t err;
     /* SQL_VERBATIM: Q22 */
     const char *q22 = "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Member');";

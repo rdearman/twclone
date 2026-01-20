@@ -7,6 +7,20 @@
       "username": "trader_player_1",
       "password": "password"
     },
+    {
+      "name": "Rig: Move Player to Sector 1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{trader_player_1_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Ship to Sector 1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{trader_player_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
     { "name": "ship.claim - Positive", "command": "ship.claim", "data": { "ship_id": 9001 }, "user": "trader_player_1", "expect": { "status": "ok" } },
     { "name": "ship.claim - Negative (No Auth)", "command": "ship.claim", "data": { "ship_id": 9001 }, "expect": { "status": "error", "error_code": 401 } },
     { "name": "ship.info - Positive", "command": "ship.info", "data": { "ship_id": 9001 }, "user": "trader_player_1", "expect": { "status": "ok" } },

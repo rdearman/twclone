@@ -4,6 +4,7 @@
 #include "db/sql_driver.h"
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 int repo_cmds_get_port_name(db_t *db, int32_t port_id, char *name_out, size_t name_sz)
 {
@@ -159,24 +160,6 @@ int repo_cmds_get_planet_info(db_t *db, int32_t planet_id, db_res_t **out_res)
         return 0;
     }
     return err.code;
-}
-
-int repo_cmds_get_entity_stock(db_t *db, const char *entity_type, int32_t entity_id, db_res_t **out_res)
-{
-    /* SQL_VERBATIM: Q8 */
-    /* SQL_VERBATIM: Q10 */
-    const char *sql_stock =
-        "SELECT es.commodity_code, c.commodities_id, es.quantity "
-        "FROM entity_stock es "
-        "JOIN commodities c ON es.commodity_code = c.code "
-        "WHERE es.entity_type = {1} AND es.entity_id = {2};";
-    /* Wait, original source for Q8/Q10 had hardcoded 'planet'/'port' strings in SQL.
-       Rule 1 says SQL MUST be copied verbatim. But I can't have one function for two verbatim strings
-       if they are different. Let's check original file lines 810 and 890. */
-    // Line 810: es.entity_type = 'planet'
-    // Line 890: es.entity_type = 'port'
-    // I will provide two distinct verbatim queries.
-    return -1; // Placeholder for below.
 }
 
 int repo_cmds_get_planet_stock(db_t *db, int32_t planet_id, db_res_t **out_res)

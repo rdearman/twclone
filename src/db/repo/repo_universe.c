@@ -260,7 +260,7 @@ int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q24 */
-    const char *q24 = "SELECT 1 FROM ships WHERE ship_id = {1} AND has_transwarp = 1 LIMIT 1;";
+    const char *q24 = "SELECT 1 FROM ships WHERE ship_id = {1} AND has_transwarp = TRUE LIMIT 1;";
     char sql[512]; sql_build(db, q24, sql, sizeof(sql));
     *enabled_out = 0;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {

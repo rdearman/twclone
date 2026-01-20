@@ -665,7 +665,8 @@ push_unseen_notices_for_player (client_ctx_t *ctx, int pid)
     {
       return;
     }
-  json_t *arr = db_notice_list_unseen_for_player (db, pid);
+  json_t *arr = NULL;
+  db_notice_list_unseen_for_player (db, pid, &arr);
 
 
   if (!arr)
