@@ -1909,39 +1909,37 @@ db_cron_lottery_get_winners_json (db_t *db, const char *date_str, int winning_nu
 
 
 int
-
 db_cron_lottery_update_state (db_t *db, const char *date_str, int winning_number, long long jackpot, long long carried_over)
-
 {
-
   if (!db || !date_str) return -1;
-
   db_error_t err;
-
   db_error_clear (&err);
 
-  char sql[512];
-
-  if (sql_build(db, "INSERT INTO tavern_lottery_state (draw_date, winning_number, jackpot, carried_over) VALUES ({1}, {2}, {3}, {4});", sql, sizeof(sql)) != 0) return -1;
-
-  
-
   db_bind_t params[4];
-
   params[0] = db_bind_text (date_str);
-
   params[1] = (winning_number > 0) ? db_bind_i32 (winning_number) : db_bind_null ();
-
   params[2] = db_bind_i64 (jackpot);
-
   params[3] = db_bind_i64 (carried_over);
 
+  /* 1. Try Update first */
+  const char *sql_upd = "UPDATE tavern_lottery_state SET winning_number = {2}, jackpot = {3}, carried_over = {4} WHERE draw_date = {1};";
+  char sql[512]; sql_build(db, sql_upd, sql, sizeof(sql));
+  int64_t rows = 0;
+  if (db_exec_rows_affected(db, sql, params, 4, &rows, &err) && rows > 0) return 0;
 
-
-  if (!db_exec (db, sql, params, 4, &err)) return -1;
+  /* 2. Try Insert if update affected 0 rows */
+  const char *sql_ins = "INSERT INTO tavern_lottery_state (draw_date, winning_number, jackpot, carried_over) VALUES ({1}, {2}, {3}, {4});";
+  sql_build(db, sql_ins, sql, sizeof(sql));
+  if (!db_exec(db, sql, params, 4, &err)) {
+      /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+      if (err.code == ERR_DB_CONSTRAINT) {
+          sql_build(db, sql_upd, sql, sizeof(sql));
+          if (db_exec(db, sql, params, 4, &err)) return 0;
+      }
+      return -1;
+  }
 
   return 0;
-
 }
 
 

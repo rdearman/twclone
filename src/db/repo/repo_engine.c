@@ -142,14 +142,14 @@ int repo_engine_update_cron_task_schedule(db_t *db, const char *ts_expr1, const 
     return 0;
 }
 
-int repo_engine_sweep_expired_notices(db_t *db, const char *ts_fmt, int64_t now_s) {
+int repo_engine_sweep_expired_notices(db_t *db, const char *ts_fmt, int64_t now_s, int64_t *out_count) {
     (void)ts_fmt; // Deprecated
     db_error_t err;
     const char *sql_tmpl = "DELETE FROM system_notice "
                            "WHERE expires_at IS NOT NULL AND expires_at <= {1} "
                            "AND system_notice_id IN (SELECT system_notice_id FROM system_notice WHERE expires_at IS NOT NULL AND expires_at <= {1} LIMIT 500);";
     char sql[512]; sql_build(db, sql_tmpl, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s) }, 1, &err)) return err.code;
+    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s) }, 1, out_count, &err)) return err.code;
     return 0;
 }
 

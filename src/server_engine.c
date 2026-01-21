@@ -1214,15 +1214,29 @@ static int
 engine_notice_ttl_sweep (db_t *db, int64_t now_ms)
 {
   int64_t now_s = now_ms / 1000;
+  if (!try_lock (db, "system_notice_ttl", now_s))
+    {
+      return 0;
+    }
+
   /* delete ephemerals whose ttl expired; bounded batch */
 
   const char *ts_fmt = sql_epoch_param_to_timestamptz (db);
   if (!ts_fmt)
     {
+      unlock (db, "system_notice_ttl");
       return -1;
     }
 
-  return repo_engine_sweep_expired_notices (db, ts_fmt, now_s) == 0 ? 0 : 1;
+  int64_t deleted = 0;
+  int rc = repo_engine_sweep_expired_notices (db, ts_fmt, now_s, &deleted);
+  if (rc == 0 && deleted > 0)
+    {
+      LOGI ("system_notice_ttl: deleted %lld expired notices", (long long)deleted);
+    }
+
+  unlock (db, "system_notice_ttl");
+  return rc == 0 ? 0 : 1;
 }
 
 
@@ -1309,6 +1323,7 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
       (db, "deployed_at", deployed_as_epoch, sizeof deployed_as_epoch) != 0)
     {
       LOGE ("limpet_ttl_cleanup: Failed to build epoch expression");
+      unlock (db, "limpet_ttl_cleanup");
       return -1;
     }
 
@@ -1316,10 +1331,12 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
       (db, deployed_as_epoch, ASSET_LIMPET_MINE, expiry_threshold_s) != 0)
     {
       LOGE ("limpet_ttl_cleanup: Failed to delete expired limpets");
+      unlock (db, "limpet_ttl_cleanup");
       return -1;
     }
 
   LOGI ("limpet_ttl_cleanup: Expired Limpet mines cleanup completed.");
+  unlock (db, "limpet_ttl_cleanup");
   return 0;
 }
 

@@ -1,0 +1,53 @@
+{
+  "name": "SysOp World & Audit Test",
+  "version": "1.0.0",
+  "description": "Tests for MOTD, Port Restock, and Audit Logs",
+  "tests": [
+    {
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+        "name": "Set MOTD",
+        "command": "sysop.motd.set",
+        "data": { "motd": "Welcome to the test universe!" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "Verify MOTD in Config",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "SELECT value FROM config WHERE key = 'motd'" },
+        "user": "admin",
+        "expect": { "status": "ok", "data": { "rows": [["Welcome to the test universe!"]] } }
+    },
+    {
+        "name": "Queue Port Restock",
+        "command": "sysop.port.restock",
+        "data": { "port_id": 10 },
+        "user": "admin",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "Verify Restock Job Queued",
+        "command": "sysop.jobs.list",
+        "user": "admin",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "jobs": "*[type=port.restock]"
+            }
+        }
+    },
+    {
+        "name": "View Audit Tail",
+        "command": "sysop.audit.tail",
+        "user": "admin",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "items": "*[cmd_type=sysop.motd.set]"
+            }
+        }
+    }
+  ]
+}
