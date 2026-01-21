@@ -1314,6 +1314,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
   if (db_cron_get_all_commodities_json (db, &commodities) != 0)
     {
       LOGE ("h_daily_market_settlement: Failed to get commodities");
+      unlock (db, "daily_market_settlement");
       return -1;
     }
 
@@ -1396,6 +1397,17 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 
 	    if (trade_qty > 0)
 	      {
+		db_error_t err;
+		db_error_clear (&err);
+		if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+		  {
+		    LOGE
+		      ("h_daily_market_settlement: Failed to start transaction: %s",
+		       err.message);
+		    break;
+		  }
+
+		bool trade_ok = true;
 		int trade_price = sell->price;
 		long long total_cost = (long long) trade_qty * trade_price;
 
@@ -1403,99 +1415,142 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		int buyer_acct = 0;
 
 
-		h_get_account_id_unlocked (db,
-					   buy->actor_type,
-					   buy->actor_id, &buyer_acct);
+		if (h_get_account_id_unlocked (db,
+					       buy->actor_type,
+					       buy->actor_id,
+					       &buyer_acct) != 0)
+		  trade_ok = false;
+
 		int seller_acct = 0;
 
 
-		h_get_account_id_unlocked (db,
-					   sell->actor_type,
-					   sell->actor_id, &seller_acct);
+		if (trade_ok && h_get_account_id_unlocked (db,
+							   sell->actor_type,
+							   sell->actor_id,
+							   &seller_acct) != 0)
+		  trade_ok = false;
 
 		long long new_bal;
 
 
-		h_deduct_credits_unlocked (db,
-					   buyer_acct,
-					   total_cost,
-					   "TRADE_BUY",
-					   "MARKET_SETTLEMENT", &new_bal);
-		h_add_credits_unlocked (db,
-					seller_acct,
-					total_cost,
-					"TRADE_SELL",
-					"MARKET_SETTLEMENT", &new_bal);
+		if (trade_ok && h_deduct_credits_unlocked (db,
+							   buyer_acct,
+							   total_cost,
+							   "TRADE_BUY",
+							   "MARKET_SETTLEMENT",
+							   &new_bal) != 0)
+		  trade_ok = false;
 
-		if (strcmp (sell->actor_type, "port") == 0)
-		  {
-		    h_market_move_port_stock (db,
-					      sell->actor_id,
-					      commodity_code, -trade_qty);
-		  }
-		else if (strcmp (sell->actor_type, "planet") == 0)
-		  {
-		    h_market_move_planet_stock (db,
-						sell->actor_id,
-						commodity_code, -trade_qty);
-		  }
+		if (trade_ok && h_add_credits_unlocked (db,
+						       seller_acct,
+						       total_cost,
+						       "TRADE_SELL",
+						       "MARKET_SETTLEMENT",
+						       &new_bal) != 0)
+		  trade_ok = false;
 
-		if (strcmp (buy->actor_type, "port") == 0)
+		if (trade_ok && strcmp (sell->actor_type, "port") == 0)
 		  {
-		    h_market_move_port_stock (db,
-					      buy->actor_id,
-					      commodity_code, trade_qty);
+		    if (h_market_move_port_stock (db,
+						  sell->actor_id,
+						  commodity_code,
+						  -trade_qty) != 0)
+		      trade_ok = false;
 		  }
-		else if (strcmp (buy->actor_type, "planet") == 0)
+		else if (trade_ok && strcmp (sell->actor_type, "planet") == 0)
 		  {
-		    h_market_move_planet_stock (db,
-						buy->actor_id,
-						commodity_code, trade_qty);
+		    if (h_market_move_planet_stock (db,
+						    sell->actor_id,
+						    commodity_code,
+						    -trade_qty) != 0)
+		      trade_ok = false;
 		  }
 
-		db_insert_commodity_trade (db,
-					   buy->id,
-					   sell->id,
-					   trade_qty,
-					   trade_price,
-					   buy->actor_type,
-					   buy->actor_id,
-					   sell->actor_type,
-					   sell->actor_id, 0, 0);
-
-		/* Checked arithmetic to prevent overflow */
-		if (__builtin_add_overflow
-		    (buy->filled_quantity, trade_qty, &buy->filled_quantity))
+		if (trade_ok && strcmp (buy->actor_type, "port") == 0)
 		  {
-		    LOGE ("Integer overflow in buy order filled_quantity");
+		    if (h_market_move_port_stock (db,
+						  buy->actor_id,
+						  commodity_code,
+						  trade_qty) != 0)
+		      trade_ok = false;
+		  }
+		else if (trade_ok && strcmp (buy->actor_type, "planet") == 0)
+		  {
+		    if (h_market_move_planet_stock (db,
+						    buy->actor_id,
+						    commodity_code,
+						    trade_qty) != 0)
+		      trade_ok = false;
+		  }
+
+		if (trade_ok && db_insert_commodity_trade (db,
+							   buy->id,
+							   sell->id,
+							   trade_qty,
+							   trade_price,
+							   buy->actor_type,
+							   buy->actor_id,
+							   sell->actor_type,
+							   sell->actor_id,
+							   0, 0) != 0)
+		  trade_ok = false;
+
+		if (trade_ok)
+		  {
+		    /* Checked arithmetic to prevent overflow */
+		    if (__builtin_add_overflow
+			(buy->filled_quantity, trade_qty,
+			 &buy->filled_quantity))
+		      {
+			LOGE ("Integer overflow in buy order filled_quantity");
+			trade_ok = false;
+		      }
+		    if (trade_ok && __builtin_add_overflow
+			(sell->filled_quantity, trade_qty,
+			 &sell->filled_quantity))
+		      {
+			LOGE
+			  ("Integer overflow in sell order filled_quantity");
+			trade_ok = false;
+		      }
+		  }
+
+		if (trade_ok)
+		  {
+		    const char *b_status = (buy->filled_quantity >=
+					    buy->quantity) ? "filled" :
+		      "partial";
+
+
+		    if (db_update_commodity_order (db,
+						   buy->id,
+						   buy->quantity,
+						   buy->filled_quantity,
+						   b_status) != 0)
+		      trade_ok = false;
+
+		    const char *s_status = (sell->filled_quantity >=
+					    sell->quantity) ? "filled" :
+		      "partial";
+
+
+		    if (trade_ok && db_update_commodity_order (db,
+							       sell->id,
+							       sell->quantity,
+							       sell->filled_quantity,
+							       s_status) != 0)
+		      trade_ok = false;
+		  }
+
+		if (trade_ok)
+		  {
+		    db_tx_commit (db, &err);
+		  }
+		else
+		  {
+		    db_tx_rollback (db, &err);
 		    break;
 		  }
-		if (__builtin_add_overflow
-		    (sell->filled_quantity, trade_qty,
-		     &sell->filled_quantity))
-		  {
-		    LOGE ("Integer overflow in sell order filled_quantity");
-		    break;
-		  }
-
-		const char *b_status = (buy->filled_quantity >=
-					buy->quantity) ? "filled" : "partial";
-
-
-		db_update_commodity_order (db,
-					   buy->id,
-					   buy->quantity,
-					   buy->filled_quantity, b_status);
-
-		const char *s_status = (sell->filled_quantity >=
-					sell->quantity) ? "filled" :
-		  "partial";
-
-
-		db_update_commodity_order (db,
-					   sell->id,
-					   sell->quantity,
-					   sell->filled_quantity, s_status);
 
 		if (buy->filled_quantity >= buy->quantity ||
 		    max_affordable == 0)
@@ -1554,6 +1609,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
       LOGE ("h_daily_market_settlement: Failed to expire orders");
     }
 
+  unlock (db, "daily_market_settlement");
   return 0;
 }
 

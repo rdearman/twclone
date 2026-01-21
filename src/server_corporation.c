@@ -2160,6 +2160,11 @@ h_daily_corp_tax (db_t *db, int64_t now_s)
       return ERR_INVALID_ARG;
     }
 
+  if (!try_lock (db, "daily_corp_tax", now_s))
+    {
+      return 0;
+    }
+
   db_res_t *res_corps = NULL;
   db_error_t err;
 
@@ -2168,6 +2173,7 @@ h_daily_corp_tax (db_t *db, int64_t now_s)
     {
       LOGE ("h_daily_corp_tax: Failed to fetch corporations: %s",
 	    err.message);
+      unlock (db, "daily_corp_tax");
       return err.code;
     }
 
@@ -2198,6 +2204,7 @@ h_daily_corp_tax (db_t *db, int64_t now_s)
 	}
     }
   db_res_finalize (res_corps);
+  unlock (db, "daily_corp_tax");
   return 0;
 }
 
@@ -2210,6 +2217,11 @@ h_dividend_payout (db_t *db, int64_t now_s)
       return ERR_INVALID_ARG;
     }
 
+  if (!try_lock (db, "dividend_payout", now_s))
+    {
+      return 0;
+    }
+
   db_res_t *res_unpaid = NULL;
   db_error_t err;
 
@@ -2218,6 +2230,7 @@ h_dividend_payout (db_t *db, int64_t now_s)
     {
       LOGE ("h_dividend_payout: Failed to fetch unpaid dividends: %s",
 	    err.message);
+      unlock (db, "dividend_payout");
       return err.code;
     }
 
@@ -2335,5 +2348,6 @@ h_dividend_payout (db_t *db, int64_t now_s)
 	}
     }
   db_res_finalize (res_unpaid);
+  unlock (db, "dividend_payout");
   return 0;
 }

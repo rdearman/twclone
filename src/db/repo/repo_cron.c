@@ -1992,11 +1992,11 @@ db_cron_deadpool_get_events_json (db_t *db, json_t **out_array)
 
   db_error_clear (&err);
 
-  const char *sql = "SELECT payload FROM engine_events WHERE type = 'ship.destroyed' AND ts > (SELECT COALESCE(MAX(resolved_at), CURRENT_TIMESTAMP - INTERVAL '1 day') FROM tavern_deadpool_bets WHERE result IS NOT NULL AND result != 'expired');";
+      int64_t one_day_ago = (int64_t)time(NULL) - 86400;
 
+      const char *sql = "SELECT payload FROM engine_events WHERE type = 'ship.destroyed' AND ts > (SELECT COALESCE(MAX(resolved_at), {1}) FROM tavern_deadpool_bets WHERE result IS NOT NULL AND result != 'expired');";
 
-
-  if (db_query (db, sql, NULL, 0, &res, &err))
+      db_query (db, sql, (db_bind_t[]){ db_bind_timestamp_text(one_day_ago) }, 1, &res, &err);
 
     {
 

@@ -17,7 +17,7 @@ db_res_t* repo_engine_get_pending_cron_tasks(db_t *db, const char *ts_expr, int6
 int repo_engine_update_cron_task_schedule(db_t *db, const char *ts_expr1, const char *ts_expr2, int64_t id, int64_t now_s, int64_t next_due);
 int repo_engine_sweep_expired_notices(db_t *db, const char *ts_fmt, int64_t now_s);
 db_res_t* repo_engine_get_retryable_commands(db_t *db, int max_retries, db_error_t *err);
-int repo_engine_reschedule_deadletter(db_t *db, int64_t now_s, int64_t cmd_id);
+int repo_engine_reschedule_deadletter(db_t *db, int64_t now_s, int64_t cmd_id, int attempts);
 int repo_engine_cleanup_expired_limpets(db_t *db, const char *deployed_as_epoch, int asset_type, int64_t threshold_s);
 db_res_t* repo_engine_get_active_interest_accounts(db_t *db, db_error_t *err);
 int repo_engine_update_last_interest_tick(db_t *db, int current_epoch_day, int account_id);

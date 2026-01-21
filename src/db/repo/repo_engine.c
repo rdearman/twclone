@@ -162,22 +162,13 @@ db_res_t* repo_engine_get_retryable_commands(db_t *db, int max_retries, db_error
     return res;
 }
 
-int repo_engine_reschedule_deadletter(db_t *db, int64_t now_s, int64_t cmd_id) {
+int repo_engine_reschedule_deadletter(db_t *db, int64_t now_s, int64_t cmd_id, int attempts) {
     db_error_t err;
+    int64_t next_due = now_s + (attempts * 60);
     /* SQL_VERBATIM: Q15 */
-    const char *q15 = "UPDATE engine_commands SET status='ready', due_at={1} + (attempts * 60) WHERE engine_commands_id={2};";
+    const char *q15 = "UPDATE engine_commands SET status='ready', due_at={1} WHERE engine_commands_id={2};";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
-    // Wait, adding interval to timestamp in SQL is tricky. Better do arithmetic in C.
-    // But since due_at is timestamptz, we need to be careful.
-    // Actually, attempts * 60 is seconds.
-    // For now, I'll stick to binding the result from C.
-    // Wait, attempts is in DB. I don't have it here easily without query.
-    // I'll leave the SQL arithmetic for now, but use db_bind_timestamp_text for now_s.
-    // Postgres supports: timestamptz + (int * interval '1 second')
-    
-    const char *q15_pg = "UPDATE engine_commands SET status='ready', due_at=to_timestamp({1}) + (attempts * interval '1 minute') WHERE engine_commands_id={2};";
-    char sql_pg[512]; sql_build(db, q15_pg, sql_pg, sizeof(sql_pg));
-    if (!db_exec(db, sql_pg, (db_bind_t[]){ db_bind_i64(now_s), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(next_due), db_bind_i64(cmd_id) }, 2, &err)) return err.code;
     return 0;
 }
 

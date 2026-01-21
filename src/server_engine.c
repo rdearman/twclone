@@ -89,7 +89,7 @@ typedef struct
 } CronHandler;
 /* registry */
 static const CronHandler CRON_REGISTRY[] = {
-  {"daily_turn_reset", h_reset_turns_for_player},
+  {"daily_turn_reset", h_daily_turn_reset},
   {"fedspace_cleanup", h_fedspace_cleanup},
   {"autouncloak_sweeper", h_autouncloak_sweeper},
   {"terra_replenish", h_terra_replenish},
@@ -1230,6 +1230,10 @@ static int
 sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
 {
   int64_t now_s = now_ms / 1000;
+  if (!try_lock (db, "deadletter_retry", now_s))
+    {
+      return 0;
+    }
   int retried_count = 0;
   int final_rc = 0;
   // Select error commands ready for retry
@@ -1243,14 +1247,16 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
       LOGE
 	("sweeper_engine_deadletter_retry: Failed to select: %s",
 	 err.message);
+      unlock (db, "deadletter_retry");
       return -1;
     }
 
   while (db_res_step (res, &err))
     {
       int64_t cmd_id = db_res_col_i64 (res, 0, &err);
+      int attempts = db_res_col_i32 (res, 1, &err);
 
-      if (repo_engine_reschedule_deadletter (db, now_s, cmd_id) != 0)
+      if (repo_engine_reschedule_deadletter (db, now_s, cmd_id, attempts) != 0)
 	{
 	  LOGE
 	    ("sweeper_engine_deadletter_retry: Failed to update command %ld",
@@ -1270,6 +1276,7 @@ sweeper_engine_deadletter_retry (db_t *db, int64_t now_ms)
 	 retried_count);
     }
 
+  unlock (db, "deadletter_retry");
   return final_rc;
 }
 
