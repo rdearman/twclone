@@ -51,6 +51,7 @@
 #include "repo_cmd.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
+#include "server_sysop.h"
 
 typedef int (*command_handler_fn) (client_ctx_t * ctx, json_t * root);
 
@@ -390,6 +391,31 @@ static const command_entry_t k_command_registry[] = {
    "Transfer planet ownership", schema_planet_transfer_ownership, 0},
   {"planet.withdraw", cmd_planet_withdraw, "Withdraw from a planet",
    schema_planet_withdraw, 0},
+
+  /* --- SysOp Config v1 --- */
+  {"sysop.config.list", cmd_sysop_config_list, "List system configuration", schema_placeholder, 0},
+  {"sysop.config.get", cmd_sysop_config_get, "Get system configuration value", schema_placeholder, 0},
+  {"sysop.config.set", cmd_sysop_config_set, "Set system configuration value", schema_placeholder, 0},
+  {"sysop.config.history", cmd_sysop_config_history, "Get configuration history", schema_placeholder, 0},
+
+  {"sysop.players.search", cmd_sysop_players_search, "Search players", schema_placeholder, 0},
+  {"sysop.player.get", cmd_sysop_player_get, "Get player details", schema_placeholder, 0},
+  {"sysop.player.kick", cmd_sysop_player_kick, "Kick a player", schema_placeholder, 0},
+  {"sysop.player.sessions.get", cmd_sysop_player_sessions_get, "Get player sessions", schema_placeholder, 0},
+  {"sysop.universe.summary", cmd_sysop_universe_summary, "Universe summary", schema_placeholder, 0},
+
+  {"sysop.engine_status.get", cmd_sysop_engine_status_get, "Get engine status", schema_placeholder, 0},
+  {"sysop.jobs.list", cmd_sysop_jobs_list, "List engine jobs", schema_placeholder, 0},
+  {"sysop.jobs.get", cmd_sysop_jobs_get, "Get job details", schema_placeholder, 0},
+  {"sysop.jobs.retry", cmd_sysop_jobs_retry, "Retry a job", schema_placeholder, 0},
+  {"sysop.jobs.cancel", cmd_sysop_jobs_cancel, "Cancel a job", schema_placeholder, 0},
+
+  {"sysop.notice.create", cmd_sysop_notice_create, "Create a system notice", schema_placeholder, 0},
+  {"sysop.notice.delete", cmd_sysop_notice_delete, "Delete a system notice", schema_placeholder, 0},
+  {"sysop.broadcast.send", cmd_sysop_broadcast_send, "Send a global broadcast", schema_placeholder, 0},
+  {"sysop.logs.tail", cmd_sysop_logs_tail, "Tail system logs", schema_placeholder, 0},
+  {"sysop.logs.clear", cmd_sysop_logs_clear, "Clear system logs", schema_placeholder, 0},
+
   {"player.get_avoids", cmd_player_get_avoids, "Get player avoids",
    schema_placeholder, 0},
   {"player.get_bookmarks", cmd_player_get_bookmarks, "Get player bookmarks",
@@ -714,7 +740,7 @@ loop_get_all_schema_keys (void)
 static void
 server_broadcast_to_all_online (json_t *data)
 {
-  server_broadcast_event ("system.notice", json_incref (data));
+  server_broadcast_event ("system.notice", data);
   json_decref (data);
 }
 

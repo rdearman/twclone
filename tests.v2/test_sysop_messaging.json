@@ -1,0 +1,32 @@
+{
+  "name": "SysOp Messaging Test",
+  "version": "1.0.0",
+  "description": "Tests for SysOp Notices and Broadcasts",
+  "tests": [
+    {
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+        "name": "Create Notice",
+        "command": "sysop.notice.create",
+        "data": { "title": "SysOp Notice", "body": "Phase 4 implementation test", "severity": "warn" },
+        "user": "admin",
+        "expect": { "status": "ok" },
+        "save": { "test_notice_id": "data.id" }
+    },
+    {
+        "name": "Delete Notice",
+        "command": "sysop.notice.delete",
+        "data": { "notice_id": "@{test_notice_id}" },
+        "user": "admin",
+        "expect": { "status": "ok", "data": { "notice_id": "@{test_notice_id}" } }
+    },
+    {
+        "name": "Send Broadcast",
+        "command": "sysop.broadcast.send",
+        "data": { "message": "Global SysOp Broadcast Test" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+    }
+  ]
+}

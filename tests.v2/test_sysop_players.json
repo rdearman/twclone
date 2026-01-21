@@ -1,0 +1,81 @@
+{
+  "name": "SysOp Player Ops Test",
+  "version": "1.0.0",
+  "description": "Tests for SysOp Player Ops (search, get, kick, sessions)",
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "username": "sysop_admin",
+      "password": "password"
+    },
+    {
+        "name": "Make User SysOp",
+        "comment": "Requires raw SQL execution by bootstrap admin",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "UPDATE players SET type = 1 WHERE name = 'sysop_admin'" },
+        "user": "admin",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "Create Target User",
+        "setup": "macro_auth_user",
+        "username": "target_user",
+        "password": "password"
+    },
+    {
+      "name": "Search Players (SysOp)",
+      "command": "sysop.players.search",
+      "data": { "query": "target" },
+      "user": "sysop_admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "players": "*[name=target_user]"
+        }
+      },
+      "save": { "target_id": "data.players.0.player_id" }
+    },
+    {
+      "name": "Get Player (SysOp)",
+      "command": "sysop.player.get",
+      "data": { "player_id": "@{target_id}" },
+      "user": "sysop_admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "player": {
+            "name": "target_user"
+          }
+        }
+      }
+    },
+    {
+      "name": "Get Player Sessions (SysOp)",
+      "command": "sysop.player.sessions.get",
+      "data": { "player_id": "@{target_id}" },
+      "user": "sysop_admin",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Kick Player (SysOp)",
+      "command": "sysop.player.kick",
+      "data": { "player_id": "@{target_id}", "reason": "Test kick" },
+      "user": "sysop_admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+            "kicked_count": 1
+        }
+      }
+    },
+    {
+        "name": "Verify Player Disconnected",
+        "command": "player.my_info",
+        "user": "target_user",
+        "expect": { "status": "error" },
+        "comment": "Should fail due to disconnect/socket close or session invalidation if implemented"
+    }
+  ]
+}

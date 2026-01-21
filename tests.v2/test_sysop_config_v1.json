@@ -1,0 +1,81 @@
+{
+  "name": "SysOp Config v1 Test",
+  "version": "1.0.0",
+  "description": "Tests for SysOp Config v1 (list, get, set)",
+  "tests": [
+    {
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "List Config (Allowed Keys)",
+      "command": "sysop.config.list",
+      "user": "admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "items": [
+            { "key": "turnsperday", "type": "int" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Get Config (Valid Key)",
+      "command": "sysop.config.get",
+      "data": { "key": "turnsperday" },
+      "user": "admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "key": "turnsperday",
+          "type": "int"
+        }
+      }
+    },
+    {
+      "name": "Set Config (Valid Key)",
+      "command": "sysop.config.set",
+      "data": { "key": "turnsperday", "value": "500", "confirm": true, "note": "Testing sysop set" },
+      "user": "admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+            "key": "turnsperday",
+            "new_value": "500"
+        }
+      }
+    },
+    {
+      "name": "Verify Set Config",
+      "command": "sysop.config.get",
+      "data": { "key": "turnsperday" },
+      "user": "admin",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "key": "turnsperday",
+          "value": 500
+        }
+      }
+    },
+    {
+      "name": "Set Config (Invalid Key)",
+      "command": "sysop.config.set",
+      "data": { "key": "sectors", "value": "1000", "confirm": true },
+      "user": "admin",
+      "expect": {
+        "status": "refused"
+      }
+    },
+    {
+      "name": "Set Config (Value not a scalar)",
+      "command": "sysop.config.set",
+      "data": { "key": "turnsperday", "value": [], "confirm": true },
+      "user": "admin",
+      "expect": {
+        "status": "error",
+        "code": 1302
+      }
+    }
+  ]
+}

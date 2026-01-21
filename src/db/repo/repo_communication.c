@@ -24,6 +24,15 @@ int repo_comm_create_system_notice(db_t *db, int64_t created_at, const char *tit
     return 0;
 }
 
+int repo_comm_delete_system_notice(db_t *db, int notice_id) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q_COMM_DELETE_NOTICE */
+    const char *q_del = "DELETE FROM system_notice WHERE system_notice_id = {1};";
+    char sql[256]; sql_build(db, q_del, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(notice_id) }, 1, &err)) return err.code;
+    return 0;
+}
+
 db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, int include_expired, int limit, db_error_t *err) {
     char sql[512];
     /* SQL_VERBATIM: Q2 */

@@ -935,51 +935,53 @@ m4trace:configure.ac:35: -1- _AM_SUBST_NOTMAKE([am__fastdepCC_TRUE])
 m4trace:configure.ac:35: -1- _AM_SUBST_NOTMAKE([am__fastdepCC_FALSE])
 m4trace:configure.ac:38: -1- m4_pattern_allow([^HAVE_LIBM$])
 m4trace:configure.ac:39: -1- m4_pattern_allow([^HAVE_LIBPTHREAD$])
-m4trace:configure.ac:48: -1- m4_pattern_allow([^PG_CONFIG$])
-m4trace:configure.ac:55: -1- m4_pattern_allow([^HAVE_LIBPQ$])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_stdio_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:40: -1- m4_pattern_allow([^HAVE_LIBREADLINE$])
+m4trace:configure.ac:41: -1- m4_pattern_allow([^HAVE_LIBHISTORY$])
+m4trace:configure.ac:50: -1- m4_pattern_allow([^PG_CONFIG$])
+m4trace:configure.ac:57: -1- m4_pattern_allow([^HAVE_LIBPQ$])
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_stdio_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" stdio.h ]AS_TR_SH([stdio.h]) AS_TR_CPP([HAVE_stdio.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_stdlib_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_stdlib_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" stdlib.h ]AS_TR_SH([stdlib.h]) AS_TR_CPP([HAVE_stdlib.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_string_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_string_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" string.h ]AS_TR_SH([string.h]) AS_TR_CPP([HAVE_string.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_inttypes_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_inttypes_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" inttypes.h ]AS_TR_SH([inttypes.h]) AS_TR_CPP([HAVE_inttypes.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_stdint_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_stdint_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" stdint.h ]AS_TR_SH([stdint.h]) AS_TR_CPP([HAVE_stdint.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_strings_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_strings_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" strings.h ]AS_TR_SH([strings.h]) AS_TR_CPP([HAVE_strings.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_sys_stat_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_sys_stat_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" sys/stat.h ]AS_TR_SH([sys/stat.h]) AS_TR_CPP([HAVE_sys/stat.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_sys_types_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_sys_types_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" sys/types.h ]AS_TR_SH([sys/types.h]) AS_TR_CPP([HAVE_sys/types.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- AC_DEFUN([_AC_Header_unistd_h], [m4_divert_text([INIT_PREPARE],
+m4trace:configure.ac:58: -1- AC_DEFUN([_AC_Header_unistd_h], [m4_divert_text([INIT_PREPARE],
   [AS_VAR_APPEND([ac_header_]]_AC_LANG_ABBREV[[_list],
   [" unistd.h ]AS_TR_SH([unistd.h]) AS_TR_CPP([HAVE_unistd.h])["])])_AC_HEADERS_EXPANSION(_AC_LANG_ABBREV)])
-m4trace:configure.ac:56: -1- m4_pattern_allow([^STDC_HEADERS$])
-m4trace:configure.ac:57: -1- m4_pattern_allow([^DB_BACKEND_PG$])
-m4trace:configure.ac:60: -1- AM_CONDITIONAL([ENABLE_POSTGRES], [test "x$enable_postgres" = "xyes"])
-m4trace:configure.ac:60: -1- m4_pattern_allow([^ENABLE_POSTGRES_TRUE$])
-m4trace:configure.ac:60: -1- m4_pattern_allow([^ENABLE_POSTGRES_FALSE$])
-m4trace:configure.ac:60: -1- _AM_SUBST_NOTMAKE([ENABLE_POSTGRES_TRUE])
-m4trace:configure.ac:60: -1- _AM_SUBST_NOTMAKE([ENABLE_POSTGRES_FALSE])
-m4trace:configure.ac:71: -1- m4_pattern_allow([^LIB@&t@OBJS$])
-m4trace:configure.ac:71: -1- m4_pattern_allow([^LTLIBOBJS$])
-m4trace:configure.ac:71: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
-m4trace:configure.ac:71: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
-m4trace:configure.ac:71: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
-m4trace:configure.ac:71: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
-m4trace:configure.ac:71: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
-m4trace:configure.ac:71: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
-m4trace:configure.ac:71: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
-m4trace:configure.ac:71: -1- AM_RUN_LOG([cd "$am_dirpart" \
+m4trace:configure.ac:58: -1- m4_pattern_allow([^STDC_HEADERS$])
+m4trace:configure.ac:59: -1- m4_pattern_allow([^DB_BACKEND_PG$])
+m4trace:configure.ac:62: -1- AM_CONDITIONAL([ENABLE_POSTGRES], [test "x$enable_postgres" = "xyes"])
+m4trace:configure.ac:62: -1- m4_pattern_allow([^ENABLE_POSTGRES_TRUE$])
+m4trace:configure.ac:62: -1- m4_pattern_allow([^ENABLE_POSTGRES_FALSE$])
+m4trace:configure.ac:62: -1- _AM_SUBST_NOTMAKE([ENABLE_POSTGRES_TRUE])
+m4trace:configure.ac:62: -1- _AM_SUBST_NOTMAKE([ENABLE_POSTGRES_FALSE])
+m4trace:configure.ac:73: -1- m4_pattern_allow([^LIB@&t@OBJS$])
+m4trace:configure.ac:73: -1- m4_pattern_allow([^LTLIBOBJS$])
+m4trace:configure.ac:73: -1- AM_CONDITIONAL([am__EXEEXT], [test -n "$EXEEXT"])
+m4trace:configure.ac:73: -1- m4_pattern_allow([^am__EXEEXT_TRUE$])
+m4trace:configure.ac:73: -1- m4_pattern_allow([^am__EXEEXT_FALSE$])
+m4trace:configure.ac:73: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_TRUE])
+m4trace:configure.ac:73: -1- _AM_SUBST_NOTMAKE([am__EXEEXT_FALSE])
+m4trace:configure.ac:73: -1- _AC_AM_CONFIG_HEADER_HOOK(["$ac_file"])
+m4trace:configure.ac:73: -1- _AM_OUTPUT_DEPENDENCY_COMMANDS
+m4trace:configure.ac:73: -1- AM_RUN_LOG([cd "$am_dirpart" \
       && sed -e '/# am--include-marker/d' "$am_filepart" \
         | $MAKE -f - am--depfiles])

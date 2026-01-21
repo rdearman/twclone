@@ -142,6 +142,7 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/repo/repo_ships.$(OBJEXT) \
 	../src/db/repo/repo_session.$(OBJEXT) \
 	../src/db/repo/repo_stardock.$(OBJEXT) \
+	../src/db/repo/repo_sysop.$(OBJEXT) \
 	../src/db/repo/repo_universe.$(OBJEXT) \
 	../src/db/repo/repo_clusters.$(OBJEXT) \
 	../src/db/repo/repo_warp.$(OBJEXT) \
@@ -161,7 +162,7 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/server_news.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
 	../src/server_players.$(OBJEXT) ../src/server_ports.$(OBJEXT) \
 	../src/server_s2s.$(OBJEXT) ../src/server_ships.$(OBJEXT) \
-	../src/server_stardock.$(OBJEXT) \
+	../src/server_stardock.$(OBJEXT) ../src/server_sysop.$(OBJEXT) \
 	../src/server_universe.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT)
@@ -210,6 +211,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/server_s2s.Po \
 	../src/$(DEPDIR)/server_ships.Po \
 	../src/$(DEPDIR)/server_stardock.Po \
+	../src/$(DEPDIR)/server_sysop.Po \
 	../src/$(DEPDIR)/server_universe.Po \
 	../src/$(DEPDIR)/server_warp_post_processing.Po \
 	../src/$(DEPDIR)/sysop_interaction.Po \
@@ -242,6 +244,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/db/repo/$(DEPDIR)/repo_session.Po \
 	../src/db/repo/$(DEPDIR)/repo_ships.Po \
 	../src/db/repo/$(DEPDIR)/repo_stardock.Po \
+	../src/db/repo/$(DEPDIR)/repo_sysop.Po \
 	../src/db/repo/$(DEPDIR)/repo_universe.Po \
 	../src/db/repo/$(DEPDIR)/repo_warp.Po
 am__mv = mv -f
@@ -309,10 +312,10 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-01-17
+ISODATE = 2026-01-21
 LDFLAGS = 
 LIBOBJS = 
-LIBS = -lpthread -lm 
+LIBS = -lhistory -lreadline -lpthread -lm 
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/rick/twclone/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
@@ -396,7 +399,7 @@ AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
-server_LDADD = -ljansson -lcrypto -lpthread -lm -lpq
+server_LDADD = -ljansson -lcrypto -lpthread -lm -lpq -lreadline -lhistory
 AUTOMAKE_OPTIONS = subdir-objects
 
 # BigBang sources (PostgreSQL Only)
@@ -410,7 +413,7 @@ bigbang_SOURCES = \
         ../src/server_log.c
 
 bigbang_LDFLAGS = -ljansson -lpq
-bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm -lreadline -lhistory $(server_LDADD)
 
 # Server sources (now with DB abstraction)
 server_SOURCES = \
@@ -444,6 +447,7 @@ server_SOURCES = \
 	../src/db/repo/repo_ships.c \
 	../src/db/repo/repo_session.c \
 	../src/db/repo/repo_stardock.c \
+	../src/db/repo/repo_sysop.c \
 	../src/db/repo/repo_universe.c \
 	../src/db/repo/repo_clusters.c \
 	../src/db/repo/repo_warp.c \
@@ -476,6 +480,7 @@ server_SOURCES = \
 	../src/server_s2s.c \
 	../src/server_ships.c \
 	../src/server_stardock.c \
+	../src/server_sysop.c \
 	../src/server_universe.c \
 	../src/server_warp_post_processing.c \
 	../src/sysop_interaction.c
@@ -660,6 +665,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/db/repo/repo_stardock.$(OBJEXT):  \
 	../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_sysop.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_universe.$(OBJEXT):  \
 	../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
@@ -724,6 +731,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_stardock.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_sysop.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_universe.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_warp_post_processing.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -778,6 +787,7 @@ include ../src/$(DEPDIR)/server_ports.Po # am--include-marker
 include ../src/$(DEPDIR)/server_s2s.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
 include ../src/$(DEPDIR)/server_stardock.Po # am--include-marker
+include ../src/$(DEPDIR)/server_sysop.Po # am--include-marker
 include ../src/$(DEPDIR)/server_universe.Po # am--include-marker
 include ../src/$(DEPDIR)/server_warp_post_processing.Po # am--include-marker
 include ../src/$(DEPDIR)/sysop_interaction.Po # am--include-marker
@@ -810,6 +820,7 @@ include ../src/db/repo/$(DEPDIR)/repo_ports.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_session.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_ships.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_stardock.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_sysop.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_universe.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_warp.Po # am--include-marker
 
@@ -1003,6 +1014,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_stardock.Po
+	-rm -f ../src/$(DEPDIR)/server_sysop.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
@@ -1035,6 +1047,7 @@ distclean: distclean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_sysop.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_universe.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_warp.Po
 	-rm -f Makefile
@@ -1114,6 +1127,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_stardock.Po
+	-rm -f ../src/$(DEPDIR)/server_sysop.Po
 	-rm -f ../src/$(DEPDIR)/server_universe.Po
 	-rm -f ../src/$(DEPDIR)/server_warp_post_processing.Po
 	-rm -f ../src/$(DEPDIR)/sysop_interaction.Po
@@ -1146,6 +1160,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_sysop.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_universe.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_warp.Po
 	-rm -f Makefile

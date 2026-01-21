@@ -406,13 +406,30 @@ send_all_json (int fd, json_t *obj)
     {
       g_ctx_for_send->responses_sent++;
     }
-  char *s = json_dumps (obj, JSON_COMPACT);
+  
+  char *s;
+  if (fd == -1) 
+    {
+      s = json_dumps (obj, JSON_INDENT(2) | JSON_SORT_KEYS | JSON_ENCODE_ANY);
+    }
+  else
+    {
+      s = json_dumps (obj, JSON_COMPACT);
+    }
 
 
   if (s)
     {
-      (void) send_all (fd, s, strlen (s));
-      (void) send_all (fd, "\n", 1);
+      if (fd == -1)
+        {
+          printf("%s\n", s);
+          fflush(stdout);
+        }
+      else
+        {
+          (void) send_all (fd, s, strlen (s));
+          (void) send_all (fd, "\n", 1);
+        }
       free (s);
     }
 }

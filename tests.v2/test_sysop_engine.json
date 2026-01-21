@@ -1,0 +1,58 @@
+{
+  "name": "SysOp Engine & Jobs Test",
+  "version": "1.0.0",
+  "description": "Tests for SysOp Engine Status and Job Management",
+  "tests": [
+    {
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+        "name": "Get Engine Status",
+        "command": "sysop.engine_status.get",
+        "user": "admin",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "List Jobs",
+        "command": "sysop.jobs.list",
+        "user": "admin",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "Insert Test Job",
+        "command": "sys.raw_sql_exec",
+        "data": { "sql": "INSERT INTO engine_commands (type, payload, status) VALUES ('test.job', '{\"foo\":\"bar\"}', 'ready') RETURNING engine_commands_id" },
+        "user": "admin",
+        "expect": { "status": "ok" },
+        "save": { "test_job_id": "data.rows.0.0" }
+    },
+    {
+        "name": "Get Job Details",
+        "command": "sysop.jobs.get",
+        "data": { "job_id": "@{test_job_id}" },
+        "user": "admin",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "job": {
+                    "type": "test.job"
+                }
+            }
+        }
+    },
+    {
+        "name": "Cancel Job",
+        "command": "sysop.jobs.cancel",
+        "data": { "job_id": "@{test_job_id}" },
+        "user": "admin",
+        "expect": { "status": "ok", "data": { "status": "cancelled" } }
+    },
+    {
+        "name": "Retry Job",
+        "command": "sysop.jobs.retry",
+        "data": { "job_id": "@{test_job_id}" },
+        "user": "admin",
+        "expect": { "status": "ok", "data": { "status": "ready" } }
+    }
+  ]
+}

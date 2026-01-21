@@ -4498,6 +4498,116 @@ else case e in @%:@(
 esac
 fi
 
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for readline in -lreadline" >&5
+printf %s "checking for readline in -lreadline... " >&6; }
+if test ${ac_cv_lib_readline_readline+y}
+then :
+  printf %s "(cached) " >&6
+else case e in @%:@(
+  e) ac_check_lib_save_LIBS=$LIBS
+LIBS="-lreadline  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.
+   The 'extern "C"' is for builds by C++ compilers;
+   although this is not generally supported in C code supporting it here
+   has little cost and some practical benefit (sr 110532).  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char readline (void);
+int
+main (void)
+{
+return readline ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_readline_readline=yes
+else case e in @%:@(
+  e) ac_cv_lib_readline_readline=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_readline_readline" >&5
+printf "%s\n" "$ac_cv_lib_readline_readline" >&6; }
+if test "x$ac_cv_lib_readline_readline" = xyes
+then :
+  printf "%s\n" "@%:@define HAVE_LIBREADLINE 1" >>confdefs.h
+
+  LIBS="-lreadline $LIBS"
+
+else case e in @%:@(
+  e) { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"Readline not found" >&5
+printf "%s\n" "$as_me: WARNING: \"Readline not found" >&2;} ;;
+esac
+fi
+
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for add_history in -lhistory" >&5
+printf %s "checking for add_history in -lhistory... " >&6; }
+if test ${ac_cv_lib_history_add_history+y}
+then :
+  printf %s "(cached) " >&6
+else case e in @%:@(
+  e) ac_check_lib_save_LIBS=$LIBS
+LIBS="-lhistory  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.
+   The 'extern "C"' is for builds by C++ compilers;
+   although this is not generally supported in C code supporting it here
+   has little cost and some practical benefit (sr 110532).  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char add_history (void);
+int
+main (void)
+{
+return add_history ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_lib_history_add_history=yes
+else case e in @%:@(
+  e) ac_cv_lib_history_add_history=no ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS ;;
+esac
+fi
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_history_add_history" >&5
+printf "%s\n" "$ac_cv_lib_history_add_history" >&6; }
+if test "x$ac_cv_lib_history_add_history" = xyes
+then :
+  printf "%s\n" "@%:@define HAVE_LIBHISTORY 1" >>confdefs.h
+
+  LIBS="-lhistory $LIBS"
+
+else case e in @%:@(
+  e) { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: \"History library not found.\"" >&5
+printf "%s\n" "$as_me: WARNING: \"History library not found.\"" >&2;} ;;
+esac
+fi
+
 
 @%:@ Check whether --enable-postgres was given.
 if test ${enable_postgres+y}

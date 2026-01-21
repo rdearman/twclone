@@ -238,6 +238,13 @@ server_log_close (void)
 }
 
 
+const char *
+server_log_get_path (void)
+{
+  return g_path;
+}
+
+
 /* ---- emitters ---- */
 void
 server_log_vprintf (int priority, const char *fmt, va_list ap)

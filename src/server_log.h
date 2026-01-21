@@ -27,6 +27,8 @@ extern "C"
   void server_log_set_prefix (const char *prefix);
 /* Close log resources (optional). */
   void server_log_close (void);
+/* Get current log path (for tailing) */
+  const char *server_log_get_path (void);
 /* Core + convenience */
   void server_log_printf (int priority, const char *fmt, ...)
     __attribute__((format (printf, 2, 3)));

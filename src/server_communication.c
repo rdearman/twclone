@@ -171,8 +171,7 @@ broadcast_system_notice (int notice_id,
 int
 cmd_sys_notice_create (client_ctx_t *ctx, json_t *root)
 {
-  if (ctx->player_id <= 0 ||
-      auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+  if (ctx->player_id < 0 || (ctx->player_id > 0 && auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP))
     {
       send_response_refused_steal (ctx,
 				   root,

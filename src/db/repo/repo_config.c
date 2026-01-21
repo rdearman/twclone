@@ -1,6 +1,7 @@
 #define TW_DB_INTERNAL 1
 #include "db_int.h"
 #include "db/repo/repo_config.h"
+#include "db/sql_driver.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -34,6 +35,21 @@ int repo_config_get_value(db_t *db, const char *key, char *out_val, size_t out_s
         db_res_finalize(res);
     }
     return -1;
+}
+
+int repo_config_set_value(db_t *db, const char *key, const char *val)
+{
+    db_error_t err;
+    /* SQL_VERBATIM: Q_CFG_SET */
+    const char *sql = "UPDATE config SET value={2} WHERE key={1};";
+    
+    char sql_buf[512];
+    sql_build(db, sql, sql_buf, sizeof(sql_buf));
+    
+    if (!db_exec(db, sql_buf, (db_bind_t[]){ db_bind_text(key), db_bind_text(val) }, 2, &err)) {
+        return err.code;
+    }
+    return 0;
 }
 
 int repo_config_get_default_s2s_key(db_t *db, db_res_t **out_res)

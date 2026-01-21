@@ -28,12 +28,16 @@ uname -v = #91-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 18 14:14:30 UTC 2025
 /bin/universe          = unknown
 
 PATH: /usr/local/bin/
+PATH: /home/rick/.cargo/bin/
+PATH: /home/rick/.cargo/bin/
+PATH: /home/rick/flutter/bin/
 PATH: /usr/local/bin/
+PATH: /usr/local/bin/
+PATH: /home/rick/.grit/bin/
+PATH: /home/rick/.cargo/bin/
 PATH: /home/rick/.nvm/versions/node/v20.10.0/bin/
 PATH: /home/rick/anaconda3/bin/
 PATH: /home/rick/.sdkman/candidates/kotlin/current/bin/
-PATH: /home/rick/.grit/bin/
-PATH: /home/rick/.cargo/bin/
 PATH: /usr/local/sbin/
 PATH: /usr/local/bin/
 PATH: /usr/sbin/
@@ -175,81 +179,89 @@ configure:4447: checking for pthread_create in -lpthread
 configure:4476: gcc -o conftest -g -O2   conftest.c -lpthread  -lm  >&5
 configure:4476: $? = 0
 configure:4488: result: yes
-configure:4738: checking for ctype.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for errno.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for math.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for netdb.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for netinet/in.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for pthread.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for stdio.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for stdlib.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for string.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for sys/ipc.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for sys/msg.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for sys/poll.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for sys/socket.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for sys/time.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for sys/types.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for termios.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for time.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4738: checking for unistd.h
-configure:4738: gcc -c -g -O2  conftest.c >&5
-configure:4738: $? = 0
-configure:4738: result: yes
-configure:4858: checking that generated files are newer than configure
-configure:4864: result: done
-configure:4891: creating ./config.status
+configure:4501: checking for readline in -lreadline
+configure:4530: gcc -o conftest -g -O2   conftest.c -lreadline  -lpthread -lm  >&5
+configure:4530: $? = 0
+configure:4542: result: yes
+configure:4556: checking for add_history in -lhistory
+configure:4585: gcc -o conftest -g -O2   conftest.c -lhistory  -lreadline -lpthread -lm  >&5
+configure:4585: $? = 0
+configure:4597: result: yes
+configure:4848: checking for ctype.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for errno.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for math.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for netdb.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for netinet/in.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for pthread.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for stdio.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for stdlib.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for string.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for sys/ipc.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for sys/msg.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for sys/poll.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for sys/socket.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for sys/time.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for sys/types.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for termios.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for time.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4848: checking for unistd.h
+configure:4848: gcc -c -g -O2  conftest.c >&5
+configure:4848: $? = 0
+configure:4848: result: yes
+configure:4968: checking that generated files are newer than configure
+configure:4974: result: done
+configure:5001: creating ./config.status
 
 ## ---------------------- ##
 ## Running config.status. ##
@@ -266,13 +278,13 @@ generated by GNU Autoconf 2.72.  Invocation command line was
 
 on desktop
 
-config.status:872: creating Makefile
-config.status:872: creating bin/Makefile
-config.status:872: creating autoconf.h
-config.status:1101: executing depfiles commands
-config.status:1178: cd bin       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
+config.status:874: creating Makefile
+config.status:874: creating bin/Makefile
+config.status:874: creating autoconf.h
+config.status:1103: executing depfiles commands
+config.status:1180: cd bin       && sed -e '/# am--include-marker/d' Makefile         | make -f - am--depfiles
 make: Nothing to be done for 'am--depfiles'.
-config.status:1183: $? = 0
+config.status:1185: $? = 0
 
 ## ---------------- ##
 ## Cache variables. ##
@@ -315,8 +327,10 @@ ac_cv_header_termios_h=yes
 ac_cv_header_time_h=yes
 ac_cv_header_unistd_h=yes
 ac_cv_host=x86_64-pc-linux-gnu
+ac_cv_lib_history_add_history=yes
 ac_cv_lib_m_pow=yes
 ac_cv_lib_pthread_pthread_create=yes
+ac_cv_lib_readline_readline=yes
 ac_cv_objext=o
 ac_cv_path_install='/usr/bin/install -c'
 ac_cv_path_mkdir=/usr/bin/mkdir
@@ -367,10 +381,10 @@ INSTALL_DATA='${INSTALL} -m 644'
 INSTALL_PROGRAM='${INSTALL}'
 INSTALL_SCRIPT='${INSTALL}'
 INSTALL_STRIP_PROGRAM='$(install_sh) -c -s'
-ISODATE='2026-01-17'
+ISODATE='2026-01-21'
 LDFLAGS=''
 LIBOBJS=''
-LIBS='-lpthread -lm '
+LIBS='-lhistory -lreadline -lpthread -lm '
 LTLIBOBJS=''
 MAKEINFO='${SHELL} '\''/home/rick/twclone/missing'\'' makeinfo'
 MKDIR_P='/usr/bin/mkdir -p'
@@ -452,6 +466,8 @@ target_alias=''
 #define VERSION "0.0.2"
 #define HAVE_LIBM 1
 #define HAVE_LIBPTHREAD 1
+#define HAVE_LIBREADLINE 1
+#define HAVE_LIBHISTORY 1
 #define HAVE_CTYPE_H 1
 #define HAVE_ERRNO_H 1
 #define HAVE_MATH_H 1

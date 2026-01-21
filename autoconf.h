@@ -13,6 +13,9 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 /* #undef HAVE_INTTYPES_H */
 
+/* Define to 1 if you have the 'history' library (-lhistory). */
+#define HAVE_LIBHISTORY 1
+
 /* Define to 1 if you have the 'm' library (-lm). */
 #define HAVE_LIBM 1
 
@@ -21,6 +24,9 @@
 
 /* Define to 1 if you have the 'pthread' library (-lpthread). */
 #define HAVE_LIBPTHREAD 1
+
+/* Define to 1 if you have the 'readline' library (-lreadline). */
+#define HAVE_LIBREADLINE 1
 
 /* Define to 1 if you have the <math.h> header file. */
 #define HAVE_MATH_H 1

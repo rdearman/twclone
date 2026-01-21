@@ -20,7 +20,7 @@ AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I
 AM_LDFLAGS = $(SANITIZE_FLAGS)
 
 
-server_LDADD   	= -ljansson -lcrypto -lpthread -lm -lpq
+server_LDADD   	= -ljansson -lcrypto -lpthread -lm -lpq -lreadline -lhistory
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
@@ -38,7 +38,7 @@ bigbang_SOURCES = \
         ../src/common.c \
         ../src/server_log.c
 bigbang_LDFLAGS = -ljansson -lpq
-bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm $(server_LDADD)
+bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm -lreadline -lhistory $(server_LDADD)
 
 
 # Server sources (now with DB abstraction)
@@ -73,6 +73,7 @@ server_SOURCES = \
 	../src/db/repo/repo_ships.c \
 	../src/db/repo/repo_session.c \
 	../src/db/repo/repo_stardock.c \
+	../src/db/repo/repo_sysop.c \
 	../src/db/repo/repo_universe.c \
 	../src/db/repo/repo_clusters.c \
 	../src/db/repo/repo_warp.c \
@@ -105,6 +106,7 @@ server_SOURCES = \
 	../src/server_s2s.c \
 	../src/server_ships.c \
 	../src/server_stardock.c \
+	../src/server_sysop.c \
 	../src/server_universe.c \
 	../src/server_warp_post_processing.c \
 	../src/sysop_interaction.c

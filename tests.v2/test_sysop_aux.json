@@ -1,0 +1,49 @@
+{
+  "name": "SysOp Auxiliary & CLI Test",
+  "version": "1.0.0",
+  "description": "Tests for auxiliary SysOp commands: universe summary, logs tail, logs clear",
+  "tests": [
+    {
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+        "name": "Universe Summary",
+        "command": "sysop.universe.summary",
+        "user": "admin",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "world": { "sectors": "int" }
+            }
+        }
+    },
+    {
+        "name": "Logs Tail",
+        "command": "sysop.logs.tail",
+        "user": "admin",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "lines": "array"
+            }
+        }
+    },
+    {
+        "name": "Logs Clear",
+        "command": "sysop.logs.clear",
+        "user": "admin",
+        "expect": { "status": "ok" }
+    },
+    {
+        "name": "Verify Logs Cleared",
+        "command": "sysop.logs.tail",
+        "user": "admin",
+        "expect": {
+            "status": "ok",
+            "data": {
+                "lines": []
+            }
+        }
+    }
+  ]
+}
