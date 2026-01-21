@@ -1,0 +1,27 @@
+-- Generated from PostgreSQL 092 seed gameplay.sql -> MySQL
+-- Seeding cron_tasks for MySQL
+INSERT INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES
+  ('daily_turn_reset', 'daily@03:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('terra_replenish', 'daily@04:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('planet_growth', 'every:10m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('fedspace_cleanup', 'every:2m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('autouncloak_sweeper', 'every:15m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('npc_step', 'every:30s', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('broadcast_ttl_cleanup', 'every:5m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('daily_news_compiler', 'daily@06:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('traps_process', 'every:1m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('cleanup_old_news', 'daily@07:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('limpet_ttl_cleanup', 'every:5m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('daily_lottery_draw', 'daily@23:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('deadpool_resolution_cron', 'daily@01:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('tavern_notice_expiry_cron', 'daily@07:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('loan_shark_interest_cron', 'daily@00:00Z', NULL, CURRENT_TIMESTAMP, 0, NULL),
+  ('dividend_payout', 'daily@05:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('daily_stock_price_recalculation', 'daily@04:30Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('daily_market_settlement', 'daily@05:30Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('daily_bank_interest_tick', 'daily@00:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('port_economy', 'every:1h', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('system_notice_ttl', 'daily@00:05Z', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('shield_regen', 'every:1m', NULL, CURRENT_TIMESTAMP, 1, '{"regen_percent":5}'),
+  ('deadletter_retry', 'every:1m', NULL, CURRENT_TIMESTAMP, 1, NULL),
+  ('daily_corp_tax', 'daily@05:00Z', NULL, CURRENT_TIMESTAMP, 1, NULL);

@@ -1198,6 +1198,7 @@ h_port_economy_tick (db_t *db, int64_t now_s)
     {
       return 0;
     }
+  LOGI ("port_economy_tick: Starting port economy update.");
 
   json_t *ports_data = NULL;
   if (db_cron_port_get_economy_data_json (db, &ports_data) != 0)

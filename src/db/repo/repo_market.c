@@ -42,32 +42,20 @@ db_insert_commodity_order (db_t *db,
   params[5] = db_bind_text (side);
   params[6] = db_bind_i32 (quantity);
   params[7] = db_bind_i32 (price);
-  params[8] = db_bind_i64 (now);
+  params[8] = db_bind_timestamp_text (now);
   params[9] = (expires_at > 0)
-    ? db_bind_i64 (expires_at)
+    ? db_bind_timestamp_text (expires_at)
     : db_bind_null ();
-
-  const char *now_expr = sql_now_expr(db);
-  if (!now_expr)
-    {
-      LOGE ("db_insert_commodity_order: Unsupported database backend");
-      return -1;
-    }
 
   const char *sql_tmpl =
     "INSERT INTO commodity_orders ("
     "actor_type, actor_id, location_type, location_id, commodity_id, side, "
     "quantity, filled_quantity, price, ts, expires_at) "
-    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, %s, %s)";
-
-  char sql_with_conv[512];
-
-  if (snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, now_expr, now_expr) >= (int)sizeof(sql_with_conv))
-    return ERR_DB;
+    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, 0, {8}, {9}, {10})";
 
   char sql_final[512];
 
-  if (sql_build(db, sql_with_conv, sql_final, sizeof(sql_final)) != 0)
+  if (sql_build(db, sql_tmpl, sql_final, sizeof(sql_final)) != 0)
     return ERR_DB_INTERNAL;
 
  
@@ -146,7 +134,7 @@ db_cancel_commodity_orders_for_actor_and_commodity (db_t *db,
 
   const char *sql_tmpl =
     "UPDATE commodity_orders SET status = 'cancelled' "
-    " WHERE actor_type = {1} actor_id = {2}  AND commodity_id = {3} AND side = {4} AND status = 'open';";
+    " WHERE actor_type = {1} AND actor_id = {2}  AND commodity_id = {3} AND side = {4} AND status = 'open';";
   
   char sql[256];
 
@@ -504,13 +492,6 @@ db_insert_commodity_trade (db_t *db,
   db_error_t err;
   db_error_clear(&err);
 
-  const char *now_expr = sql_now_expr(db);
-  if (!now_expr)
-    {
-      LOGE ("db_insert_commodity_trade: Unsupported database backend");
-      return -1;
-    }
-
   int64_t now = time(NULL);
   db_bind_t params[11];
 
@@ -518,7 +499,7 @@ db_insert_commodity_trade (db_t *db,
   params[1]  = db_bind_i32 (sell_order_id);        /* {2} */
   params[2]  = db_bind_i32 (quantity);             /* {3} */
   params[3]  = db_bind_i32 (price);                /* {4} */
-  params[4]  = db_bind_i64 (now);                  /* {5}  <-- NEW */
+  params[4]  = db_bind_timestamp_text (now);       /* {5} */
   params[5]  = db_bind_text(buyer_actor_type);     /* {6} */
   params[6]  = db_bind_i32 (buyer_actor_id);       /* {7} */
   params[7]  = db_bind_text(seller_actor_type);    /* {8} */
@@ -531,15 +512,10 @@ db_insert_commodity_trade (db_t *db,
     "buy_order_id, sell_order_id, quantity, price, ts, "
     "buyer_actor_type, buyer_actor_id, seller_actor_type, seller_actor_id, "
     "settlement_tx_buy, settlement_tx_sell) "
-    "VALUES ({1}, {2}, {3}, {4}, %s, {6}, {7}, {8}, {9}, {10}, {11})";
-
-  char sql_with_conv[512];
-  int n = snprintf(sql_with_conv, sizeof(sql_with_conv), sql_tmpl, now_expr);
-  if (n < 0 || (size_t)n >= sizeof(sql_with_conv))
-    return -1;
+    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11})";
 
   char sql[512];
-  if (sql_build(db, sql_with_conv, sql, sizeof(sql)) != 0)
+  if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
     return -1;
 
   
