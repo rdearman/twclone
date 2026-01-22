@@ -144,10 +144,15 @@ int repo_auth_get_podded_status(db_t *db, int player_id, char *status_out, size_
 int repo_auth_get_unread_news_count(db_t *db, int player_id, int *count_out) {
     db_res_t *res = NULL;
     db_error_t err;
+    char last_read_epoch[256];
+    if (sql_ts_to_epoch_expr(db, "last_news_read_timestamp", last_read_epoch, sizeof(last_read_epoch)) != 0) return -1;
+
     /* SQL_VERBATIM: Q8 */
-    const char *q8 = "SELECT COUNT(*) FROM news_feed WHERE timestamp > (SELECT last_news_read_timestamp FROM players WHERE player_id = {1});";
-    char sql[512]; sql_build(db, q8, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    char sql[512];
+    snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM news_feed WHERE published_ts > (SELECT %s FROM players WHERE player_id = {1});", last_read_epoch);
+    char sql_built[512]; sql_build(db, sql, sql_built, sizeof(sql_built));
+
+    if (db_query (db, sql_built, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *count_out = (int)db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -158,12 +163,20 @@ int repo_auth_get_unread_news_count(db_t *db, int player_id, int *count_out) {
 
 int repo_auth_upsert_system_sub(db_t *db, int player_id) {
     db_error_t err;
-    /* SQL_VERBATIM: Q9 */
-    const char *q9 = "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) VALUES({1},'system.*','push',TRUE);";
-    char sql[512]; sql_build(db, q9, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) {
+    int64_t rows = 0;
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE subscriptions SET enabled=TRUE WHERE player_id={1} AND event_type='system.*';";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO subscriptions(player_id,event_type,delivery,enabled) VALUES({1},'system.*','push',TRUE);";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
-            return 0; // DO NOTHING
+            if (db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) return 0;
         }
         return err.code;
     }
@@ -199,13 +212,29 @@ cleanup:
 
 int repo_auth_insert_initial_turns(db_t *db, const char *now_ts, int player_id) {
     db_error_t err;
-    char sql_turns_tmpl[512];
-    /* SQL_VERBATIM: Q11 */
-    snprintf(sql_turns_tmpl, sizeof(sql_turns_tmpl),
-        "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ({1}, 750, %s);",
-        now_ts);
-    char sql[512]; sql_build (db, sql_turns_tmpl, sql, sizeof (sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (player_id) }, 1, &err)) return err.code;
+    int64_t rows = 0;
+
+    /* 1. Try Update first */
+    const char *q_upd = "UPDATE turns SET turns_remaining = 750, last_update = %s WHERE player_id = {1};";
+    char sql_upd[512]; 
+    char sql_upd_tmpl[512];
+    snprintf(sql_upd_tmpl, sizeof(sql_upd_tmpl), q_upd, now_ts);
+    sql_build(db, sql_upd_tmpl, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &rows, &err) && rows > 0) return 0;
+
+    /* 2. Try Insert if update affected 0 rows */
+    const char *q_ins = "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ({1}, 750, %s);";
+    char sql_ins[512];
+    char sql_ins_tmpl[512];
+    snprintf(sql_ins_tmpl, sizeof(sql_ins_tmpl), q_ins, now_ts);
+    sql_build(db, sql_ins_tmpl, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) {
+        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
+        if (err.code == ERR_DB_CONSTRAINT) {
+            if (db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) return 0;
+        }
+        return err.code;
+    }
     return 0;
 }
 

@@ -432,7 +432,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
     }
 
   h_send_message_to_player (db, pid,
-			    0,
+			    1,
 			    "Welcome to TWClone!", get_welcome_message (pid));
 
   char tok[65];

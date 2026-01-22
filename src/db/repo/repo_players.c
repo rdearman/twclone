@@ -176,10 +176,12 @@ db_res_t* repo_players_get_title_info(db_t *db, int player_id, db_error_t *err) 
 
 int repo_players_send_mail(db_t *db, int sender_id, int recipient_id, const char *subject, const char *message) {
     db_error_t err;
+    /* Map sender_id 0 to System (1) to satisfy FK constraint */
+    int sid = (sender_id <= 0) ? 1 : sender_id;
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES ({1}, {2}, {3}, {4});";
     char sql[1024]; sql_build(db, q15, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(sender_id), db_bind_i32(recipient_id), db_bind_text(subject), db_bind_text(message) }, 4, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(sid), db_bind_i32(recipient_id), db_bind_text(subject), db_bind_text(message) }, 4, &err)) return err.code;
     return 0;
 }
 

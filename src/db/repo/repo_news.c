@@ -7,11 +7,15 @@
 
 int repo_news_get_unread(db_t *db, int32_t player_id, db_res_t **out_res)
 {
+    char last_read_epoch[256];
+    if (sql_ts_to_epoch_expr(db, "last_news_read_timestamp", last_read_epoch, sizeof(last_read_epoch)) != 0) return -1;
+
     /* SQL_VERBATIM: Q1 */
-    const char *sql =
+    char sql[512];
+    snprintf(sql, sizeof(sql),
         "SELECT news_id, published_ts, news_category, article_text, author_id "
-        "FROM news_feed WHERE published_ts > (SELECT last_news_read_timestamp FROM players WHERE player_id = {1}) "
-        "ORDER BY published_ts DESC LIMIT 100;";
+        "FROM news_feed WHERE published_ts > (SELECT %s FROM players WHERE player_id = {1}) "
+        "ORDER BY published_ts DESC LIMIT 100;", last_read_epoch);
 
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));

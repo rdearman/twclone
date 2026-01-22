@@ -6,6 +6,7 @@
 #include <time.h>
 #include <jansson.h>
 #include <stdbool.h>
+#include "globals.h"
 #include "repo_cron.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
@@ -334,6 +335,8 @@ db_cron_try_lock (db_t *db, const char *name, int64_t now_s)
 
 
 
+  /* 1. Cleanup expired locks */
+
   char sql_del[512];
 
   sql_build(db, "DELETE FROM locks WHERE lock_name={1} AND until_ms < {2};", sql_del, sizeof(sql_del));
@@ -342,41 +345,71 @@ db_cron_try_lock (db_t *db, const char *name, int64_t now_s)
 
 
 
-  char sql_ins[512];
-
-  sql_build(db, "INSERT INTO locks(lock_name, owner, until_ms) VALUES({1}, 'server', {2});", sql_ins, sizeof(sql_ins));
-
-  db_exec (db, sql_ins, (db_bind_t[]){ db_bind_text (name), db_bind_i64 (until_ms) }, 2, &err);
-
-
+  /* 2. Check if lock is currently held by someone else */
 
   char sql_check[512];
 
-  sql_build(db, "SELECT owner FROM locks WHERE lock_name={1};", sql_check, sizeof(sql_check));
+  sql_build(db, "SELECT owner, until_ms FROM locks WHERE lock_name={1};", sql_check, sizeof(sql_check));
 
   db_res_t *res = NULL;
 
-  int ok = 0;
+  bool held_by_other = false;
 
-  if (db_query (db, sql_check, (db_bind_t[]){ db_bind_text (name) }, 1, &res, &err))
+  if (db_query (db, sql_check, (db_bind_t[]){ db_bind_text (name) }, 1, &res, &err)) {
 
-    {
-
-      if (db_res_step (res, &err))
-
-        {
+      if (db_res_step (res, &err)) {
 
           const char *o = db_res_col_text (res, 0, &err);
 
-          ok = (o && strcmp (o, "server") == 0);
+          int64_t u = db_res_col_i64 (res, 1, &err);
 
-        }
+          if (o && strcmp(o, g_engine_uuid) != 0 && u >= now_ms) {
+
+              held_by_other = true;
+
+          }
+
+      }
 
       db_res_finalize (res);
 
-    }
+  }
 
-  return ok;
+  if (held_by_other) return 0;
+
+
+
+  /* 3. Attempt to acquire/refresh lock */
+
+  char sql_ins[512];
+
+  sql_build(db, "INSERT INTO locks(lock_name, owner, until_ms) VALUES({1}, {2}, {3});", sql_ins, sizeof(sql_ins));
+
+  db_bind_t ins_params[] = { db_bind_text (name), db_bind_text(g_engine_uuid), db_bind_i64 (until_ms) };
+
+  if (!db_exec (db, sql_ins, ins_params, 3, &err)) {
+
+      if (err.code == ERR_DB_CONSTRAINT) {
+
+          /* Double check if we own it (concurrent write) */
+
+          sql_build(db, "UPDATE locks SET until_ms = {3} WHERE lock_name={1} AND owner={2};", sql_ins, sizeof(sql_ins));
+
+          int64_t rows = 0;
+
+          if (db_exec_rows_affected(db, sql_ins, ins_params, 3, &rows, &err) && rows > 0) return 1;
+
+          return 0;
+
+      }
+
+      return 0;
+
+  }
+
+
+
+  return 1;
 
 }
 
@@ -421,23 +454,14 @@ db_cron_get_lock_until (db_t *db, const char *name)
 int
 
 db_cron_unlock (db_t *db, const char *name)
-
 {
-
   if (!db || !name) return -1;
-
   db_error_t err;
-
   db_error_clear (&err);
-
   char SQL[512];
-
-  sql_build(db, "DELETE FROM locks WHERE lock_name={1} AND owner='server';", SQL, sizeof(SQL));
-
-  db_exec (db, SQL, (db_bind_t[]){ db_bind_text (name) }, 1, &err);
-
+  sql_build(db, "DELETE FROM locks WHERE lock_name={1} AND owner={2};", SQL, sizeof(SQL));
+  db_exec (db, SQL, (db_bind_t[]){ db_bind_text (name), db_bind_text(g_engine_uuid) }, 2, &err);
   return 0;
-
 }
 
 

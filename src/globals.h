@@ -11,6 +11,7 @@ extern int msgidout;
 extern int shutdown_flag;
 extern time_t next_process;
 extern armid_mine_config_t g_armid_config;
+extern char g_engine_uuid[33];
 
 
 typedef struct

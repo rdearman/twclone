@@ -10,6 +10,7 @@ int msgidout = 0;
 int shutdown_flag = 0;
 time_t next_process = 0;
 armid_mine_config_t g_armid_config = { 0 };
+char g_engine_uuid[33] = { 0 };
 xp_align_config_t g_xp_align = {.trade_xp_ratio = 10 };
 
 atomic_int_fast64_t g_server_tick = 0;

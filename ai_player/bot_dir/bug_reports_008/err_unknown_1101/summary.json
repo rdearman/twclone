@@ -1,7 +1,0 @@
-{
-    "bug_id": "err_unknown_1101",
-    "first_seen": "20260119_225832_056",
-    "command": "unknown",
-    "error_code": 1101,
-    "error_message": "Invalid login"
-}

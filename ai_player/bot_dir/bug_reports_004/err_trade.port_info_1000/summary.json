@@ -1,6 +1,6 @@
 {
     "bug_id": "err_trade.port_info_1000",
-    "first_seen": "20260118_235452_789",
+    "first_seen": "20260122_021053_431",
     "command": "trade.port_info",
     "error_code": 1000,
     "error_message": "Database error."

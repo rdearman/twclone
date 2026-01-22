@@ -268,7 +268,9 @@ int repo_corp_insert_member(db_t *db, int corp_id, int player_id, const char *ro
 int repo_corp_create_bank_account(db_t *db, int corp_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q19 */
-    const char *q19 = "INSERT INTO bank_accounts (owner_type, owner_id, currency) VALUES ('corp', {1}, 'CRD');";
+    const char *q19 = "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) "
+                      "SELECT 'corp', {1}, 'CRD', 0, TRUE "
+                      "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1} AND currency = 'CRD' AND is_active = TRUE);";
     char sql[512]; sql_build(db, q19, sql, sizeof(sql));
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &err)) return err.code;
     return 0;

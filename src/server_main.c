@@ -26,6 +26,8 @@
 #include "server_log.h"		// Explicitly include server_log.h
 #include "sysop_interaction.h"	// Explicitly include sysop_interaction.h
 #include "server_cron.h"
+#include "globals.h"
+#include "repo_cmd.h"
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
 static int s2s_listen_fd = -1;
@@ -331,6 +333,7 @@ int
 main (void)
 {
   srand ((unsigned) time (NULL));	// Seed random number generator once at program start
+  h_generate_hex_uuid (g_engine_uuid, sizeof (g_engine_uuid));
   int rc = 1;			// Initialize rc to 1 (failure)
 
 
