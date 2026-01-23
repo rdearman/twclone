@@ -13,11 +13,11 @@ int h_corp_is_publicly_traded (db_t * db, int corp_id,
 int h_get_corp_credit_rating (db_t * db, int corp_id, int *rating);
 int h_get_corp_bank_account_id (db_t * db, int corp_id);
 int h_get_player_corp_id (db_t * db, int player_id);
-int h_get_corp_stock_id (db_t * db, int corp_id, int *out_stock_id);
-int h_get_stock_info (db_t * db, int stock_id, char **out_ticker,
-		      int *out_corp_id, int *out_total_shares,
-		      int *out_par_value, int *out_current_price,
-		      long long *out_last_dividend_ts);
+int h_get_corp_equity_id (db_t * db, int corp_id, int *out_equity_id);
+int h_get_equity_info (db_t * db, int equity_id, char **out_ticker,
+		       int *out_corp_id, int *out_total_shares,
+		       int *out_par_value, int *out_current_price,
+		       long long *out_last_dividend_ts);
 int h_update_player_shares (db_t * db, int player_id, int stock_id,
 			    int quantity_change);
 
@@ -42,10 +42,11 @@ int cmd_corp_status (client_ctx_t * ctx, json_t * root);
 int cmd_corp_deposit (client_ctx_t * ctx, json_t * root);
 int cmd_corp_withdraw (client_ctx_t * ctx, json_t * root);
 int cmd_stock (client_ctx_t * ctx, json_t * root);
-int cmd_stock_ipo_register (client_ctx_t * ctx, json_t * root);
-int cmd_stock_buy (client_ctx_t * ctx, json_t * root);
-int cmd_stock_sell (client_ctx_t * ctx, json_t * root);
-int cmd_stock_dividend_set (client_ctx_t * ctx, json_t * root);
+int cmd_trade_equity (client_ctx_t * ctx, json_t * root);
+int cmd_trade_equity_ipo_register (client_ctx_t * ctx, json_t * root);
+int cmd_trade_equity_buy (client_ctx_t * ctx, json_t * root);
+int cmd_trade_equity_sell (client_ctx_t * ctx, json_t * root);
+int cmd_trade_equity_dividend_set (client_ctx_t * ctx, json_t * root);
 // Cron handler
 int h_daily_corp_tax (db_t * db, int64_t now_s);
 int h_dividend_payout (db_t * db, int64_t now_s);
