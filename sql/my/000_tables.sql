@@ -1024,7 +1024,7 @@ CREATE TABLE corp_shareholders (
 CREATE TABLE stock_orders (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     player_id bigint NOT NULL REFERENCES players (player_id) ON DELETE CASCADE,
-    stock_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
+    equity_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
     `type` TEXT NOT NULL CHECK (`type` IN ('buy', 'sell')),
     quantity bigint NOT NULL CHECK (quantity > 0),
     price bigint NOT NULL CHECK (price >= 0),
@@ -1034,7 +1034,7 @@ CREATE TABLE stock_orders (
 
 CREATE TABLE stock_trades (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    stock_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
+    equity_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
     buyer_id bigint NOT NULL REFERENCES players (player_id) ON DELETE CASCADE,
     seller_id bigint NOT NULL REFERENCES players (player_id) ON DELETE CASCADE,
     quantity bigint NOT NULL CHECK (quantity > 0),
@@ -1046,7 +1046,7 @@ CREATE TABLE stock_trades (
 
 CREATE TABLE stock_dividends (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    stock_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
+    equity_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
     amount_per_share bigint NOT NULL CHECK (amount_per_share >= 0),
     declared_ts TEXT NOT NULL,
     paid_ts TEXT
@@ -1059,9 +1059,9 @@ CREATE TABLE stock_indices (
 
 CREATE TABLE stock_index_members (
     index_id bigint NOT NULL REFERENCES stock_indices (id) ON DELETE CASCADE,
-    stock_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
+    equity_id bigint NOT NULL REFERENCES stocks (id) ON DELETE CASCADE,
     weight DOUBLE NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (index_id, stock_id)
+    PRIMARY KEY (index_id, equity_id)
 );
 
 CREATE TABLE insurance_funds (

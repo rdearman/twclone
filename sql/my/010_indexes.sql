@@ -111,7 +111,7 @@ CREATE INDEX idx_bank_fee_active ON bank_fee_schedules (tx_type(100), owner_type
 
 CREATE INDEX idx_corp_tx_corp_ts ON corp_tx (corp_id, ts);
 
-CREATE INDEX idx_stock_orders_stock ON stock_orders (stock_id, status(100));
+CREATE INDEX idx_stock_orders_stock ON stock_orders (equity_id, status(100));
 
 CREATE INDEX idx_policies_holder ON insurance_policies (holder_type(100), holder_id);
 

@@ -6,14 +6,14 @@ The Phase 4 update introduces a **market-driven economy** where ports actively p
 
 ## Core Mechanics
 
-### 1. Port Stock Targets
+### 1. Port Inventory Targets
 Each port now has a `max_capacity` calculated as `port.size * 1000`.
 Ports aim to maintain a `desired_stock` level:
 - **Stardock (Type 9):** 90% of capacity (`desired_level_ratio = 0.9`). High inventory ensures availability.
 - **Standard Ports:** 50% of capacity (`desired_level_ratio = 0.5`). Balanced approach.
 
 ### 2. Order Generation (`h_port_economy_tick`)
-Every hour (canonical tick), the system evaluates every port's stock for each commodity:
+Every hour (canonical tick), the system evaluates every port inventory for each commodity:
 - **Shortage:** If `current < desired`, the port places a **BUY** order.
 - **Surplus:** If `current > desired`, the port places a **SELL** order.
 - **Quantity:** The order size is determined by `shortage * base_restock_rate` (from `economy_curve`).
@@ -26,8 +26,8 @@ Once per day, the central market engine runs:
     -   **Stock:** Physically moves goods between the seller port and buyer port using `h_market_move_port_stock`.
     -   **Credits:** Transfers credits from buyer to seller.
 3.  **Constraints:**
-    -   Trades are capped by the seller's available stock and the buyer's available credits.
-    -   **Invariants:** Bank balances are never allowed to drop below zero. Port stock is strictly clamped between `0` and `max_capacity`.
+    -   Trades are capped by the seller's available inventory and the buyer's available credits.
+    -   **Invariants:** Bank balances are never allowed to drop below zero. Port inventory is strictly clamped between `0` and `max_capacity`.
 
 ## 4. NPC Arbitrage (Ferengi)
 
@@ -35,7 +35,7 @@ Ferengi traders act as **mobile arbitrage agents**. Unlike ports/planets, they d
 1.  **Roam:** Travel between ports in their sector (and adjacent sectors).
 2.  **Analyze:** Check local port prices against their cargo and known opportunities.
 3.  **Instant Trade:** Execute immediate BUY/SELL actions against the port's inventory (just like a player).
-    -   **Real Impact:** When a Ferengi buys ORE, the port's stock decreases, the port's cash increases, the Ferengi's cash decreases, and the Ferengi ship's cargo increases.
+    -   **Real Impact:** When a Ferengi buys ORE, the port inventory decreases, the port's cash increases, the Ferengi's cash decreases, and the Ferengi ship's cargo increases.
     -   **Persistence:** Ferengi cargo and bank balances are persistent in the DB (`ships` table and `bank_accounts`).
 
 ## 5. Faction-as-Corporation Model
@@ -65,7 +65,7 @@ Inspects a specific port's economic state.
   "id": 1,
   "name": "Earth Port",
   "size": 1000,
-  "stock": [
+  "inventory": [
     { "commodity_id": 1, "quantity": 50000 }
   ],
   "orders": [

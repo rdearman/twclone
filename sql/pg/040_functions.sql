@@ -27,7 +27,7 @@ $$;
 -- 1) Sectors
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION generate_sectors (target_count int)
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -81,7 +81,7 @@ $$;
 -- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION generate_ports (target_sectors int DEFAULT NULL)
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -328,7 +328,7 @@ $$;
 -- 2.5) Stardock
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION generate_stardock ()
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -403,7 +403,7 @@ $$;
 -- 3) Planets
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION generate_planets (target_count int)
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -474,7 +474,7 @@ $$;
 -- 4) seed_factions()
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION seed_factions ()
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -528,7 +528,7 @@ $$;
 -- 5) Clusters
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION generate_clusters (target_count int DEFAULT 10)
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -605,7 +605,7 @@ $$;
 -- 6) Taverns
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION generate_taverns (p_ratio_pct int DEFAULT 20)
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
@@ -648,12 +648,12 @@ $$;
 -- 7) Player Registration - Auto-create starter ship
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION register_player (p_username text, p_password text, p_ship_name text DEFAULT NULL, p_is_npc boolean DEFAULT FALSE, p_sector_id integer DEFAULT 1, p_player_type integer DEFAULT 2)
-    RETURNS bigint
+    RETURNS integer
     LANGUAGE plpgsql
     AS $$
 DECLARE
-    v_player_id bigint;
-    v_ship_id bigint;
+    v_player_id integer;
+    v_ship_id integer;
     v_ship_name text;
     v_starting_credits bigint;
     v_turns_per_day integer;
@@ -746,7 +746,7 @@ CREATE OR REPLACE FUNCTION setup_ferringhi_alliance ()
     LANGUAGE plpgsql
     AS $$
 DECLARE
-    v_ferringhi_sector bigint;
+    v_ferringhi_sector integer;
     v_ptype bigint;
     v_ferringhi_corp_id bigint;
 BEGIN
@@ -788,10 +788,10 @@ CREATE OR REPLACE FUNCTION setup_orion_syndicate ()
     LANGUAGE plpgsql
     AS $$
 DECLARE
-    v_orion_sector bigint;
+    v_orion_sector integer;
     v_ptype bigint;
     v_orion_corp_id bigint;
-    v_port_id bigint;
+    v_port_id integer;
 BEGIN
     -- Get Orion planet type
     SELECT planettypes_id INTO v_ptype
@@ -850,9 +850,9 @@ CREATE OR REPLACE FUNCTION spawn_initial_fleet ()
 DECLARE
     v_sector_count bigint;
     v_st_rec record;
-    v_sector_id bigint;
+    v_sector_id integer;
     v_name text;
-    v_ship_id bigint;
+    v_ship_id integer;
     v_exists boolean;
 BEGIN
     -- 1. Seed npc_shipnames if empty

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 # --- Configuration ---
 # You might want to move these to your config.json eventually
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "phi3:latest"
+DEFAULT_MODEL = "tinyllama:latest"
 REQUEST_TIMEOUT = 60  # 1 minute
 
 def parse_llm_json(response_text):
@@ -79,7 +79,10 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
         "model": model,
         "prompt": full_prompt,
         "stream": False,  # We want the full response at once
-        "format": "json"  # We asked the LLM to respond in JSON
+        "format": "json",  # We asked the LLM to respond in JSON
+        "options": {
+            "num_predict": 128  # Limit response length to save CPU
+        }
     }
 
     logger.debug(f"Sending prompt to Ollama model {model}...")

@@ -1378,7 +1378,10 @@ class Planner:
         capacity = max(1, current_state.get("ship_cargo_capacity", 1))
         current_vol = current_state.get("ship_current_cargo_volume", 0)
         holds_full_ratio = current_vol / capacity
-        allow_loss = holds_full_ratio > 0.8
+        # ONLY allow loss if we are absolutely full AND the commodity has no profitable sell price elsewhere
+        # or we've been carrying it for too long (TODO: add age to cargo).
+        # For now, let's disable automatic loss selling to see if bots survive longer.
+        allow_loss = False 
 
         for item in cargo_list:
             commodity_raw = item.get("commodity")
@@ -1412,15 +1415,15 @@ class Planner:
                             logger.debug(f"Restricting sell of {commodity}: originated from this port ({port_id}) and not profitable.")
                             continue
 
-                        # 4. Only allow loss if holds are full
-                        if profit_margin < 0 and not allow_loss:
+                        # 4. Strict profit check
+                        if profit_margin <= 0 and not allow_loss:
                             continue
 
                         if profit_margin >= highest_profit_margin:
                             highest_profit_margin = profit_margin
                             best_commodity = commodity
                             best_sell_price = sell_price
-                    # If we don't know purchase price, just sell at the highest price
+                    # If we don't know purchase price, only sell if price is high relative to others
                     elif sell_price > best_sell_price:
                         best_sell_price = sell_price
                         best_commodity = commodity

@@ -2,36 +2,68 @@
   "name": "Stocks Suite",
   "tests": [
     {
-      "name": "Setup: wall_street_wolf",
+      "name": "Setup: wolf_v8",
       "setup": "macro_auth_user",
-      "username": "wall_street_wolf",
+      "username": "wolf_v8",
       "password": "password"
     },
     {
-      "name": "Positive: Stock IPO Register",
-      "command": "stock.ipo.register",
-      "data": { "subcommand": "ipo.register", "ticker": "WOLF", "total_shares": 10000, "par_value": 10 },
-      "user": "wall_street_wolf",
-      "expect": { "status": "ok" },
-      "save": { "test_stock_id": "data.stock_id" }
+      "name": "Bootstrap Admin",
+      "setup": "macro_bootstrap_admin"
     },
     {
-      "name": "Negative: Stock IPO Missing Auth",
-      "command": "stock.ipo.register",
+      "name": "Admin: Give Credits to Wolf (Hand)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 1000000 WHERE name = 'wolf_v8';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Admin: Give Credits to Wolf (Bank)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 1000000 WHERE owner_type = 'player' AND owner_id = (SELECT player_id FROM players WHERE name = 'wolf_v8');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Corporation",
+      "command": "corp.create",
+      "data": { "name": "Wolf V8 Industries", "tag": "WLF8" },
+      "user": "wolf_v8",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Admin: Set Corp Credit Rating",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE corporations SET credit_rating = 500 WHERE owner_id = (SELECT player_id FROM players WHERE name = 'wolf_v8');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: Equity IPO Register",
+      "command": "equity.ipo_register",
+      "data": { "subcommand": "ipo.register", "ticker": "WLFC", "total_shares": 10000, "par_value": 10 },
+      "user": "wolf_v8",
+      "expect": { "status": "ok" },
+      "save": { "test_equity_id": "data.equity_id" }
+    },
+    {
+      "name": "Negative: Equity IPO Missing Auth",
+      "command": "equity.ipo_register",
       "data": { "subcommand": "ipo.register", "ticker": "WOLF2", "total_shares": 10000, "par_value": 10 },
       "expect": { "status": "error", "error_code": 401 }
     },
     {
-      "name": "Positive: Stock Buy",
-      "command": "stock.buy",
-      "data": { "subcommand": "buy", "stock_id": "@test_stock_id", "quantity": 10 },
-      "user": "wall_street_wolf",
+      "name": "Positive: Equity Buy",
+      "command": "equity.buy",
+      "data": { "subcommand": "buy", "equity_id": "@test_equity_id", "quantity": 10 },
+      "user": "wolf_v8",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Negative: Stock Buy Missing Auth",
-      "command": "stock.buy",
-      "data": { "subcommand": "buy", "stock_id": "@test_stock_id", "quantity": 10 },
+      "name": "Negative: Equity Buy Missing Auth",
+      "command": "equity.buy",
+      "data": { "subcommand": "buy", "equity_id": "@test_equity_id", "quantity": 10 },
       "expect": { "status": "error", "error_code": 401 }
     }
   ]

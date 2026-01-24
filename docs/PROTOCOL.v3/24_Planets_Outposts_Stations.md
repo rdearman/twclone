@@ -94,7 +94,7 @@ Event when a player lays mines (or collects).
 ## 4. Planet Market Integration
 
 ### `planet.market.sell`
-Sell surplus commodities from a player-owned planet to the global market. The planet must have sufficient stock. Proceeds are credited to the player's account.
+Sell surplus commodities from a player-owned planet to the global market. The planet must have sufficient inventory. Proceeds are credited to the player's account.
 
 **Request:**
 ```json

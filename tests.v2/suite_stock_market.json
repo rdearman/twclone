@@ -1,25 +1,52 @@
 {
-  "test_suite_name": "Stock Market Economy",
-  "description": "Validates stock purchase ledger integrity and dividend distribution",
+  "test_suite_name": "Stock Market Economy (Legacy Regression)",
+  "description": "Validates legacy stock command aliases and backward compatibility",
   "tests": [
     {
-      "name": "Setup: Auth CEO",
-      "setup": "macro_bootstrap_admin",
-      "username": "wall_street_wolf",
+      "name": "Setup User",
+      "setup": "macro_auth_user",
+      "username": "wolf_legacy_v2",
       "password": "password"
     },
     {
-      "name": "Stock: Buy Shares",
+      "name": "Bootstrap Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Admin: Give Credits",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 1000000 WHERE owner_type = 'player' AND owner_id = (SELECT player_id FROM players WHERE name = 'wolf_legacy_v2');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Corporation",
+      "command": "corp.create",
+      "data": { "name": "Legacy Wolf Corp V2", "tag": "LWLV" },
+      "user": "wolf_legacy_v2",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Admin: Set Credit Rating",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE corporations SET credit_rating = 500 WHERE owner_id = (SELECT player_id FROM players WHERE name = 'wolf_legacy_v2');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Legacy: Stock IPO Register",
+      "command": "stock.ipo.register",
+      "data": { "subcommand": "ipo.register", "ticker": "LWLV", "total_shares": 10000, "par_value": 10 },
+      "user": "wolf_legacy_v2",
+      "expect": { "status": "ok" },
+      "save": { "legacy_equity_id": "data.equity_id" }
+    },
+    {
+      "name": "Legacy: Stock Buy (Alias)",
       "command": "stock.buy",
-      "user": "wall_street_wolf",
-      "data": {
-        "subcommand": "buy",
-        "stock_id": 100,
-        "quantity": 100
-      },
-      "expect": {
-        "status": "ok"
-      }
+      "data": { "subcommand": "buy", "stock_id": "@legacy_equity_id", "quantity": 10 },
+      "user": "wolf_legacy_v2",
+      "expect": { "status": "ok" }
     }
   ]
 }

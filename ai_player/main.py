@@ -140,323 +140,89 @@ class GameConnection:
 
 def _get_filtered_game_state_for_llm(game_state, state_manager):
     """
-    Creates a filtered version of the game state for the LLM,
-    including only essential information to reduce token count and provide explicit guidance.
+    Creates a MINIMAL version of the game state for the LLM to prevent CPU stall and timeouts.
+    Includes only critical decision-making data.
     """
     filtered_state = {}
 
-    # Essential top-level info
-    filtered_state["session_id"] = game_state.get("session_id")
     current_sector_id = game_state.get("player_location_sector")
-    filtered_state["player_location_sector"] = current_sector_id
-    filtered_state["bank_balance"] = game_state.get("bank_balance")
+    filtered_state["current_sector"] = current_sector_id
+    
+    # Player & Ship (Essential only)
+    p_obj = (game_state.get("player_info") or {}).get("player", {})
+    s_obj = game_state.get("ship_info", {})
+    
+    filtered_state["player"] = {
+        "credits": p_obj.get("credits"),
+        "alignment": p_obj.get("alignment"),
+        "turns": p_obj.get("turns_remaining")
+    }
+    
+    cargo_summary = []
+    if s_obj and "cargo" in s_obj:
+        for item in s_obj["cargo"]:
+            if item.get("quantity", 0) > 0:
+                cargo_summary.append({
+                    "comm": item["commodity"],
+                    "qty": item["quantity"],
+                    "buy_price": item.get("purchase_price"),
+                    "origin": item.get("origin_port_id")
+                })
 
-    # Player Info (trimmed)
-    player_info_data = game_state.get("player_info", {})
-    if player_info_data and "player" in player_info_data:
-        player_obj = player_info_data.get("player", {})
-        filtered_state["player_info"] = {
-            "username": player_obj.get("username"),
-            "credits": player_obj.get("credits"),
-            "faction": player_obj.get("faction"),
-            "is_online": player_obj.get("is_online"),
-        }
+    filtered_state["ship"] = {
+        "holds_free": max(0, int(s_obj.get("holds", 0)) - sum(i.get("quantity", 0) for i in s_obj.get("cargo", []))),
+        "cargo": cargo_summary
+    }
 
-    # Ship Info (trimmed)
-    ship_info = game_state.get("ship_info", {})
-    if ship_info:
-        filtered_state["ship_info"] = {
-            "type": ship_info.get("type"),
-            "max_cargo": ship_info.get("max_cargo"),
-            "current_cargo_volume": ship_info.get("current_cargo_volume"),
-            "cargo": ship_info.get("cargo", {}), # Keep full cargo details
-            "location": ship_info.get("location"), # Keep location details
-            "modules": {
-                "warp_drive": ship_info.get("modules", {}).get("warp_drive")
-            }
-        }
-        filtered_state["ship_cargo_capacity"] = ship_info.get("max_cargo", 0)
-        filtered_state["ship_current_cargo_volume"] = ship_info.get("current_cargo_volume", 0)
-        # NEW: Density scanner info
-        filtered_state["has_density_scanner"] = bool(ship_info.get("modules", {}).get("density_scanner"))
-        
-    # Sector Data (current and adjacent only)
-    all_sector_data = game_state.get("sector_data", {})
+    # Current Location Details
     all_port_info = game_state.get("port_info_by_sector", {})
-
-    relevant_sector_ids = set()
-    current_sector_details = None
-    if current_sector_id is not None and str(current_sector_id) in all_sector_data:
-        relevant_sector_ids.add(str(current_sector_id))
-        current_sector_details = all_sector_data[str(current_sector_id)]
-        adj = current_sector_details.get("adjacent_sectors") or current_sector_details.get("adjacent") or []
-        for adj_sector_id in adj:
-            sid = adj_sector_id["to_sector"] if isinstance(adj_sector_id, dict) else adj_sector_id
-            relevant_sector_ids.add(str(sid))
+    curr_port = all_port_info.get(str(current_sector_id))
     
-    filtered_state["current_sector_info"] = {}
-    filtered_state["adjacent_sectors_info"] = []
-    filtered_state["has_port_in_current_sector"] = False
-    filtered_state["current_port_commodities"] = []
-    
-    # Dynamically set valid_commodity_names based on alignment
-    default_commodities = ["ORE", "ORG", "EQU", "COLONISTS"]
-    player_alignment = filtered_state["player_info"].get("alignment", 0) if filtered_state.get("player_info") else 0
-
-    if player_alignment < -500: # Assuming negative alignment makes them "evil"
-        valid_comms = default_commodities + ["SLAVES", "WEAPONS", "DRUGS"]
-    else:
-        valid_comms = default_commodities
-    
-    filtered_state["valid_commodity_names"] = valid_comms
-    state_manager.set("valid_commodity_names", valid_comms)
-
-    # Use StateManager helper for valid goto sectors (handles blacklist)
-    valid_gotos = state_manager.get_valid_goto_sectors()
-    filtered_state["valid_goto_sectors"] = valid_gotos
-
-    # Collect all known sector IDs from the universe map and sector_data
-    all_known_sectors = set()
-    for s_id_str in state_manager.get("universe_map", {}).keys():
-        try:
-            all_known_sectors.add(int(s_id_str))
-        except ValueError:
-            pass
-    for s_id_str in state_manager.get("sector_data", {}).keys():
-        try:
-            all_known_sectors.add(int(s_id_str))
-        except ValueError:
-            pass
-    filtered_state["all_known_sectors"] = sorted(list(all_known_sectors))
-
-    # Create a list of "Interesting Locations" to help the LLM navigate
-    known_ports = []
-    known_planets = [] # NEW: Track known planets
-    
-    for sector_id, port_data in all_port_info.items():
-        known_ports.append(int(sector_id))
-    
-    # Scan all sector data for planets
-    for sector_id, data in all_sector_data.items():
-        if data.get("has_planet"):
-            known_planets.append(int(sector_id))
-    
-    filtered_state["known_port_sectors"] = sorted(known_ports)
-    filtered_state["known_planet_sectors"] = sorted(list(set(known_planets))) # NEW: Expose to LLM
-
-    # --- NEW: Market Intelligence (Best Prices Globally) ---
-    market_intel = {}
-    price_cache = game_state.get("price_cache", {})
-    
-    for sector_id_str, port_data in all_port_info.items():
-        p_id_str = str(port_data.get("port_id"))
-        if p_id_str not in price_cache: continue
+    if curr_port:
+        port_id_str = str(curr_port.get("port_id"))
+        price_cache = game_state.get("price_cache", {}).get(port_id_str, {})
         
-        prices = price_cache[p_id_str]
-        for comm in ["ORE", "ORG", "EQU"]:
-            if comm not in market_intel:
-                market_intel[comm] = {"min_buy": None, "max_sell": None}
-            
-            bp = prices.get("buy", {}).get(comm)
-            if bp is not None:
-                if market_intel[comm]["min_buy"] is None or bp < market_intel[comm]["min_buy"]["price"]:
-                    market_intel[comm]["min_buy"] = {"price": bp, "sector": int(sector_id_str)}
-            
-            sp = prices.get("sell", {}).get(comm)
-            if sp is not None:
-                if market_intel[comm]["max_sell"] is None or sp > market_intel[comm]["max_sell"]["price"]:
-                    market_intel[comm]["max_sell"] = {"price": sp, "sector": int(sector_id_str)}
+        commodities = []
+        for c in curr_port.get("commodities", []):
+            code = canon_commodity(c.get("commodity"))
+            commodities.append({
+                "code": code,
+                "buy": price_cache.get("buy", {}).get(code),
+                "sell": price_cache.get("sell", {}).get(code)
+            })
+        filtered_state["current_port"] = {"id": curr_port.get("port_id"), "comms": commodities}
     
-    filtered_state["market_intelligence"] = market_intel
-    # ------------------------------------------------------
+    # Navigation hints (just IDs, no details)
+    sector_data = game_state.get("sector_data", {}).get(str(current_sector_id), {})
+    adj = sector_data.get("adjacent") or sector_data.get("adjacent_sectors") or []
+    filtered_state["adjacent_sectors"] = [s["to_sector"] if isinstance(s, dict) else s for s in adj]
+    
+    # Global Market Intelligence (Top 3 profitable routes only)
+    market_intel = game_state.get("market_intelligence", {})
+    # (Simplified pass-through of pre-calculated intel)
+    filtered_state["market_top_prices"] = market_intel
 
-    # Bootstrap check
-    if not all_known_sectors:
-         filtered_state["bootstrap_mode"] = True
-    elif not valid_gotos:
-         filtered_state["valid_goto_sectors"] = "NONE_YET" # Hint to LLM
-
-    # --- Feedback Loop ---
     filtered_state["last_action_result"] = game_state.get("last_action_result")
-    
-    # --- NEW: Check if we just scanned this sector ---
-    last_result = game_state.get("last_action_result", {})
-    # Default to False
-    filtered_state["scanned_current_sector"] = False
-    
-    if last_result and last_result.get("status") == "ok":
-        # Check if the last success was a density scan
-        if last_result.get("response_type") == "sector.density.scan":
-            # We assume the scan was for the current location (since we can only scan where we are)
-            filtered_state["scanned_current_sector"] = True
-    # -------------------------------------------------
-
-    if current_sector_details:
-        ships = current_sector_details.get("ships_present") or current_sector_details.get("ships") or []
-        my_ship_id = state_manager.get("ship_info", {}).get("id")
-        has_other_ships = any(s.get("ship_id") != my_ship_id and s.get("id") != my_ship_id for s in ships)
-
-        filtered_state["current_sector_info"] = {
-            "sector_id": current_sector_details.get("sector_id"),
-            "name": current_sector_details.get("name"),
-            "has_port": current_sector_details.get("has_port", False),
-            "has_planet": current_sector_details.get("has_planet", False),
-            "has_other_ships": has_other_ships
-        }
-        if current_sector_details.get("has_port"):
-            filtered_state["has_port_in_current_sector"] = True
-            current_port_data = all_port_info.get(str(current_sector_id))
-            if current_port_data:
-                # Retrieve prices from cache if available
-                port_id_str = str(current_port_data.get("port_id"))
-                price_cache = game_state.get("price_cache", {}).get(port_id_str, {})
-                buy_cache = price_cache.get("buy", {})
-                sell_cache = price_cache.get("sell", {})
-
-                commodities_list = []
-                for c in current_port_data.get("commodities", []):
-                    comm_name = canon_commodity(c.get("commodity"))
-                    if not comm_name: continue
-                    
-                    # Get price from cache, or default to Unknown
-                    buy_price = buy_cache.get(comm_name, "Unknown")
-                    sell_price = sell_cache.get(comm_name, "Unknown")
-                    
-                    commodities_list.append({
-                        "commodity": comm_name,
-                        "supply": c.get("supply", "Unknown"),
-                        "buy_price": buy_price,
-                        "sell_price": sell_price
-                    })
-                filtered_state["current_port_commodities"] = commodities_list
-        # NEW: Explicit flag for trading capability
-        filtered_state["can_trade_at_current_location"] = filtered_state["has_port_in_current_sector"]
-    
-    if current_sector_details:
-        adj = current_sector_details.get("adjacent_sectors") or current_sector_details.get("adjacent") or []
-        for item in adj:
-            # Robust extraction of sector ID
-            logger.debug(f"Processing adj item: {repr(item)} (type: {type(item)})")
-            if isinstance(item, dict):
-                sid = item.get("to_sector")
-            else:
-                sid = item
-            
-            if sid is None:
-                continue
-                
-            sid_str = str(sid)
-            if sid_str in all_sector_data:
-                sector_details = all_sector_data[sid_str]
-                adj_sector_info = {
-                    "sector_id": sector_details.get("sector_id"),
-                    "name": sector_details.get("name"),
-                    "has_port": sector_details.get("has_port", False)
-                }
-                # NEW: Add density info if available
-                if "density" in sector_details:
-                    adj_sector_info["density"] = sector_details["density"]
-                filtered_state["adjacent_sectors_info"].append(adj_sector_info)
+    filtered_state["valid_comms"] = state_manager.get("valid_commodity_names")
 
     return filtered_state
 
 PROMPT_CONTRACT_BLOCK = """
-Below is the complete snapshot of the current game state.
-Use this information EXACTLY as provided, and obey all constraints strictly.
+State: {game_state}
 
-------------------------------
-GAME STATE (JSON INPUT)
-{game_state}
-------------------------------
-
-## ALLOWED ACTIONS (YOU MAY ONLY USE THESE)
-
-You may output a plan consisting only of the following goal types:
-
-1. "goto: <sector_id>"
-     - Move the ship to a target sector.
-2. "scan: density"
-     - Perform a density scan.
-3. "buy: <COMMODITY>" / "sell: <COMMODITY>"
-     - Trade at a port.
-4. "combat: attack"
-     - Attack a target ship in the current sector.
-5. "planet: land"
-     - Land on a planet in the current sector.
-6. "planet: info"
-     - Scan the planet in the current sector.
-
-## HARD RULES (MUST FOLLOW)
-
-- If `scanned_current_sector` is true, you MUST NOT propose "scan: density". You MUST propose "goto:".
-- If `has_port`, `has_planet`, and `has_other_ships` are all FALSE for the current sector, you MUST NOT propose "buy:", "sell:", "planet:", or "combat:" actions. You MUST propose "goto: <sector_id>" to find a more interesting sector.
-- You may select ANY known sector for "goto:", not just adjacent ones.
-- You MUST select commodities ONLY from `valid_commodity_names`.
-- Do NOT trade SLAVES, WEAPONS, or DRUGS unless your alignment is Evil (check player_info).
-- If `can_trade_at_current_location` is false, you MUST NOT propose any "buy:" or "sell:" actions.
-- Only propose combat/planet actions if the game state shows ships/planets are present.
-- If `sector_data` for the current sector shows no ports, planets, or other ships, or if you have already performed a scan here, you MUST move to a different sector using "goto:".
-- If the port or warp action previously failed, the field `last_action_result` will contain an
-  error. Avoid repeating actions that will logically fail again.
-
-## OUTPUT FORMAT (STRICT — DO NOT VIOLATE)
-
-You MUST output a single JSON object with this structure:
-
-{{
-  "plan": [
-    "goto: <sector_id>",
-    "scan: density",
-    "buy: <COMMODITY>",
-    "sell: <COMMODITY>"
-  ]
-}}
-
+Goal: Maximize profit by flipping commodities.
 Rules:
+- NO "scan: density" if scanned_current_sector is true.
+- Use ONLY commodities in valid_comms.
+- "goto: <id>" to travel.
+- Only "buy:" or "sell:" if at a port.
 
-- The top-level value MUST be an object.
-- It MUST contain a key "plan".
-- "plan" MUST be an array.
-- Each element of "plan" MUST be a string representing a single goal.
-- Allowed goal formats are:
-    - "goto: <sector_id>"
-    - "scan: density"
-    - "buy: <COMMODITY_CODE>"
-    - "sell: <COMMODITY_CODE>"
-    - "combat: attack"
-    - "planet: land"
-    - "planet: info"
-- Do NOT include any other top-level keys.
-- Do NOT include natural language explanation.
-- IMPORTANT: Output ONLY the JSON object. Do not include any explanations, preambles, or markdown formatting (like ```json).
-
-### VALID EXAMPLES:
-{{ "plan": ["scan: density"] }}
-
-{{ "plan": ["goto: 5", "scan: density"] }}
-
-{{ "plan": ["goto: 7", "buy: ORE", "goto: 5", "sell: ORE"] }}
-
-{{ "plan": [] }}
-
-------------------------------
-
-NOW OUTPUT YOUR PLAN AS A JSON OBJECT AND NOTHING ELSE.
+Output JSON: {{"plan": ["goto: 5", "buy: ORE", "goto: 10", "sell: ORE"]}}
 """
 
-PROMPT_EXPLORE = """You are a master space explorer. Your goal is to find new sectors and ports.
-""" + PROMPT_CONTRACT_BLOCK
+PROMPT_EXPLORE = """Explorer goal: Find new sectors and ports. """ + PROMPT_CONTRACT_BLOCK
 
-PROMPT_STRATEGY = """You are a master space trader. Your goal is to maximize profit by "flipping" commodities.
-The most effective strategy is:
-1. Identify a port selling a commodity at a LOW price and another port buying it at a HIGH price.
-2. Travel to the low-price port and fill your holds.
-3. Travel to the high-price port and sell everything.
-4. Repeat this "flip" between the two ports as long as it remains profitable.
-
-Analyze the `profit_loss` in `last_action_result`. A negative value doesn't mean you should avoid the port; it means you need to find a DIFFERENT port that pays more for that commodity.
-Use your knowledge of `known_port_sectors` and `market_intelligence` to find the best buy/sell pairs.
-""" + PROMPT_CONTRACT_BLOCK
+PROMPT_STRATEGY = """Trader goal: Identify low-price buy and high-price sell sectors. Flip between them. """ + PROMPT_CONTRACT_BLOCK
 
 PROMPT_QA_OBJECTIVE = """You are a QA testing bot for a space game. Your current high-level objective is to "{qa_objective}".
 Based on this objective, provide a detailed strategic plan.

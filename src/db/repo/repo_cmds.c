@@ -100,14 +100,14 @@ int repo_cmds_upsert_turns(db_t *db, int64_t player_id)
     /* 1. Try Update first */
     const char *q_upd = "UPDATE turns SET turns_remaining = {1}, last_update = {2} WHERE player_id = {3};";
     char sql_upd[256]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i64(turns_per_day), db_bind_timestamp_text(now_ts), db_bind_i64(player_id) };
+    db_bind_t upd_params[] = { db_bind_i32(turns_per_day), db_bind_timestamp_text(now_ts), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO turns (player_id, turns_remaining, last_update) VALUES ({1}, {2}, {3});";
     char sql_ins[256]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(turns_per_day), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i32(turns_per_day), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {

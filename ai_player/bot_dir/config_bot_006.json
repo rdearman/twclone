@@ -1,7 +1,7 @@
 {
   "game_host": "127.0.0.1",
   "game_port": 1234,
-  "ollama_model": "phi3:latest",
+  "ollama_model": "tinyllama:latest",
   "log_file": "ai_player_006.log",
   "state_file": "state_006.json",
   "player_username": "ai_qa_bot_006",

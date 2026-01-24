@@ -26,7 +26,7 @@ db_cron_get_ship_info (db_t *db, int ship_id, int *sector_id, int *owner_id)
   db_error_t err;
   db_error_clear (&err);
 
-  if (db_query (db, sql, (db_bind_t[]){ db_bind_i64 (ship_id) }, 1, &res, &err))
+  if (db_query (db, sql, (db_bind_t[]){ db_bind_i32 (ship_id) }, 1, &res, &err))
     {
       if (db_res_step (res, &err))
         {
@@ -50,7 +50,7 @@ db_cron_tow_ship (db_t *db, int ship_id, int new_sector_id, int owner_id)
   char sql_ship[512];
   if (sql_build(db, "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};", sql_ship, sizeof(sql_ship)) != 0) return -1;
   
-  if (!db_exec (db, sql_ship, (db_bind_t[]){ db_bind_i64 (new_sector_id), db_bind_i64 (ship_id) }, 2, &err))
+  if (!db_exec (db, sql_ship, (db_bind_t[]){ db_bind_i32 (new_sector_id), db_bind_i32 (ship_id) }, 2, &err))
     return -1;
 
   if (owner_id > 0)
@@ -58,7 +58,7 @@ db_cron_tow_ship (db_t *db, int ship_id, int new_sector_id, int owner_id)
       char sql_player[512];
       if (sql_build(db, "UPDATE players SET sector_id = {1} WHERE player_id = {2};", sql_player, sizeof(sql_player)) != 0) return -1;
       
-      if (!db_exec (db, sql_player, (db_bind_t[]){ db_bind_i64 (new_sector_id), db_bind_i64 (owner_id) }, 2, &err))
+      if (!db_exec (db, sql_player, (db_bind_t[]){ db_bind_i32 (new_sector_id), db_bind_i32 (owner_id) }, 2, &err))
         return -1;
     }
   return 0;
@@ -98,7 +98,7 @@ db_cron_get_sector_warps (db_t *db, int sector_id, int **out_neighbors, int *out
   char sql[512];
   if (sql_build(db, "SELECT to_sector FROM sector_warps WHERE from_sector = {1};", sql, sizeof(sql)) != 0) return -1;
 
-  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i64 (sector_id) }, 1, &res, &err))
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &res, &err))
     return -1;
 
   int cap = 16;
@@ -206,7 +206,7 @@ db_cron_msl_insert (db_t *db, int sector_id, int *added_count_ptr)
   char sql[512];
   sql_build(db, sql_tmpl, sql, sizeof(sql));
 
-  if (db_exec (db, sql, (db_bind_t[]){ db_bind_i64 (sector_id) }, 1, &err))
+  if (db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (sector_id) }, 1, &err))
     {
       if (added_count_ptr) (*added_count_ptr)++;
       return 0;
@@ -293,7 +293,7 @@ db_cron_reset_turns_for_all_players (db_t *db, int max_turns, int64_t now_s, int
 
     {
 
-      if (db_exec (db, sql_update, (db_bind_t[]){ db_bind_i64 (max_turns), db_bind_timestamp_text (now_s), db_bind_i64 (pids[i]) }, 3, &err))
+      if (db_exec (db, sql_update, (db_bind_t[]){ db_bind_i32 (max_turns), db_bind_timestamp_text (now_s), db_bind_i32 (pids[i]) }, 3, &err))
 
         success_count++;
 
@@ -558,7 +558,7 @@ db_cron_delete_sector_asset (db_t *db, int player_id, int asset_type, int sector
 
   if (sql_build(db, "DELETE FROM sector_assets WHERE owner_id = {1} AND asset_type = {2} AND sector_id = {3} AND quantity = {4};", sql, sizeof(sql)) != 0) return -1;
 
-  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64 (player_id), db_bind_i64 (asset_type), db_bind_i64 (sector_id), db_bind_i64 (quantity) }, 4, &err)) return -1;
+  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (player_id), db_bind_i32 (asset_type), db_bind_i32 (sector_id), db_bind_i32 (quantity) }, 4, &err)) return -1;
 
   return 0;
 
@@ -628,7 +628,7 @@ db_cron_init_eligible_tows (db_t *db, int start_sec, int end_sec, int64_t stale_
 
 
 
-  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64 (start_sec), db_bind_i64 (end_sec), db_bind_timestamp_text (0), db_bind_timestamp_text (stale_cutoff) }, 4, &err)) return -1;
+  if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32 (start_sec), db_bind_i32 (end_sec), db_bind_timestamp_text (0), db_bind_timestamp_text (stale_cutoff) }, 4, &err)) return -1;
 
   return 0;
 
@@ -662,35 +662,63 @@ db_cron_get_eligible_tows_json (db_t *db, const char *reason, int limit, json_t 
 
 
 
-  if (strcmp(reason, "evil") == 0) {
+    if (strcmp(reason, "evil") == 0) {
 
-    sql_build(db, "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND alignment < 0 LIMIT {1};", sql, sizeof(sql));
 
-    params[0] = db_bind_i64(limit);
 
-  } else if (strcmp(reason, "fighters") == 0) {
+      sql_build(db, "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND alignment < 0 LIMIT {1};", sql, sizeof(sql));
 
-    sql_build(db, "SELECT ship_id FROM eligible_tows WHERE fighters > {1} LIMIT {2};", sql, sizeof(sql));
 
-    params[0] = db_bind_i64(49);
 
-    params[1] = db_bind_i64(limit);
+      params[0] = db_bind_i32(limit);
 
-    param_count = 2;
 
-  } else if (strcmp(reason, "exp") == 0) {
 
-    sql_build(db, "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND experience >= 1000 LIMIT {1};", sql, sizeof(sql));
+    } else if (strcmp(reason, "fighters") == 0) {
 
-    params[0] = db_bind_i64(limit);
 
-  } else if (strcmp(reason, "no_owner") == 0) {
 
-    sql_build(db, "SELECT ship_id FROM eligible_tows WHERE owner_id IS NULL LIMIT {1};", sql, sizeof(sql));
+      sql_build(db, "SELECT ship_id FROM eligible_tows WHERE fighters > {1} LIMIT {2};", sql, sizeof(sql));
 
-    params[0] = db_bind_i64(limit);
 
-  } else {
+
+      params[0] = db_bind_i32(49);
+
+
+
+      params[1] = db_bind_i32(limit);
+
+
+
+      param_count = 2;
+
+
+
+    } else if (strcmp(reason, "exp") == 0) {
+
+
+
+      sql_build(db, "SELECT ship_id FROM eligible_tows WHERE owner_id IS NOT NULL AND experience >= 1000 LIMIT {1};", sql, sizeof(sql));
+
+
+
+      params[0] = db_bind_i32(limit);
+
+
+
+    } else if (strcmp(reason, "no_owner") == 0) {
+
+
+
+      sql_build(db, "SELECT ship_id FROM eligible_tows WHERE owner_id IS NULL LIMIT {1};", sql, sizeof(sql));
+
+
+
+      params[0] = db_bind_i32(limit);
+
+
+
+    } else {
 
     return -1;
 

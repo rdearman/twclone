@@ -3,7 +3,7 @@
 -- Create starter ship for ai_qa_bot (NPC)
 DO $$
 DECLARE
-    v_player_id bigint;
+    v_player_id integer;
 BEGIN
     IF NOT EXISTS (
         SELECT
@@ -19,7 +19,7 @@ $$;
 
 DO $$
 DECLARE
-    v_player_id bigint;
+    v_player_id integer;
 BEGIN
     IF NOT EXISTS (
         SELECT
@@ -36,7 +36,7 @@ $$;
 -- Create starter ship for newguy (Human Player)
 DO $$
 DECLARE
-    v_player_id bigint;
+    v_player_id integer;
 BEGIN
     IF NOT EXISTS (
         SELECT
@@ -53,7 +53,7 @@ $$;
 -- Create starter ship for ai_qa_bot (NPC)
 DO $$
 DECLARE
-    v_player_id bigint;
+    v_player_id integer;
 BEGIN
     IF NOT EXISTS (
         SELECT

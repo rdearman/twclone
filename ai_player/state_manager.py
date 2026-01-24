@@ -457,20 +457,56 @@ class StateManager:
             if self.state.get('ship_info') is None:
                 self.state['ship_info'] = {}
 
-            # CRITICAL FIX: Trust server cargo if provided, otherwise preserve local
+            # Trust server cargo if provided, but PRESERVE local tracking data (prices, origins)
             server_cargo = player_data['ship'].get('cargo')
             local_cargo = (self.state.get('ship_info') or {}).get('cargo', [])
             
+            # Save local cargo metadata in a map for quick lookup during merge
+            # Key: commodity name, Value: list of batches with metadata
+            local_cargo_meta = {}
+            if isinstance(local_cargo, list):
+                for item in local_cargo:
+                    c = canon_commodity(item.get("commodity"))
+                    if c:
+                        if c not in local_cargo_meta:
+                            local_cargo_meta[c] = []
+                        local_cargo_meta[c].append(item)
+
             self.state['ship_info'] = player_data['ship']
             
             if server_cargo is not None:
-                # FIX: Verify server_cargo is valid (list of dicts). 
+                # Verify server_cargo is valid (list of dicts). 
                 # If server sends ["ORE"] (strings), IGNORE IT to prevent corruption.
                 if server_cargo and isinstance(server_cargo, list) and len(server_cargo) > 0 and isinstance(server_cargo[0], str):
                     logger.warning("Ignored simplified cargo list (strings) from server. Preserving local state.")
                     self.state['ship_info']['cargo'] = local_cargo
                 else:
-                    self.state['ship_info']['cargo'] = server_cargo
+                    # MERGE LOGIC: Enrich server cargo with local metadata
+                    merged_cargo = []
+                    for s_item in server_cargo:
+                        c = canon_commodity(s_item.get("commodity"))
+                        s_qty = s_item.get("quantity", 0)
+                        
+                        if c in local_cargo_meta and s_qty > 0:
+                            # We have local metadata for this commodity. 
+                            # If quantities match perfectly, just use local item.
+                            # If not, we still use local metadata but might need to adjust (TODO: smarter splitting)
+                            l_items = local_cargo_meta[c]
+                            l_qty_total = sum(i.get("quantity", 0) for i in l_items)
+                            
+                            if l_qty_total == s_qty:
+                                merged_cargo.extend(l_items)
+                            else:
+                                # Quantity mismatch. Trust server quantity but keep metadata if possible.
+                                # For now, take the first local batch and adjust its quantity.
+                                base_item = dict(l_items[0])
+                                base_item["quantity"] = s_qty
+                                merged_cargo.append(base_item)
+                        else:
+                            # No local metadata, use server item as-is
+                            merged_cargo.append(s_item)
+                    
+                    self.state['ship_info']['cargo'] = merged_cargo
             else:
                 self.state['ship_info']['cargo'] = local_cargo
 

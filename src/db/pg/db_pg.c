@@ -191,10 +191,10 @@ static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params,
         values[i] = pg_bind_param_to_string(&params[i]);
         switch (params[i].type) {
             case DB_BIND_BOOL: types[i] = BOOLOID; break;
-            case DB_BIND_I64:  types[i] = 0; break; 
-            case DB_BIND_I32:  types[i] = 0; break;
+            case DB_BIND_I64:  types[i] = INT8OID; break;
+            case DB_BIND_I32:  types[i] = INT4OID; break;
             case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
-            case DB_BIND_TEXT: types[i] = 0; break;
+            case DB_BIND_TEXT: types[i] = TEXTOID; break;
             case DB_BIND_JSON: types[i] = JSONOID; break;
             default: types[i] = 0; break; // Let PG infer
         }
@@ -247,10 +247,10 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
         values[i] = pg_bind_param_to_string(&params[i]);
         switch (params[i].type) {
             case DB_BIND_BOOL: types[i] = BOOLOID; break;
-            case DB_BIND_I64:  types[i] = 0; break;
-            case DB_BIND_I32:  types[i] = 0; break;
+            case DB_BIND_I64:  types[i] = INT8OID; break;
+            case DB_BIND_I32:  types[i] = INT4OID; break;
             case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
-            case DB_BIND_TEXT: types[i] = 0; break;
+            case DB_BIND_TEXT: types[i] = TEXTOID; break;
             case DB_BIND_JSON: types[i] = JSONOID; break;
             default: types[i] = 0; break;
         }
@@ -284,10 +284,10 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
         values[i] = pg_bind_param_to_string(&params[i]);
         switch (params[i].type) {
             case DB_BIND_BOOL: types[i] = BOOLOID; break;
-            case DB_BIND_I64:  types[i] = 0; break;
-            case DB_BIND_I32:  types[i] = 0; break;
+            case DB_BIND_I64:  types[i] = INT8OID; break;
+            case DB_BIND_I32:  types[i] = INT4OID; break;
             case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
-            case DB_BIND_TEXT: types[i] = 0; break;
+            case DB_BIND_TEXT: types[i] = TEXTOID; break;
             case DB_BIND_JSON: types[i] = JSONOID; break;
             default: types[i] = 0; break;
         }

@@ -200,7 +200,7 @@ int repo_auth_register_player(db_t *db, const char *name, const char *pass, cons
     const char *q10 = "SELECT register_player({1}, {2}, {3}, false, {4});";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
 
-    if (!db_query(db, sql, (db_bind_t[]){db_bind_text(name), db_bind_text(pass), db_bind_text(ship_name), db_bind_i64(spawn_sid)}, 4, &res, err_out)) {
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_text(name), db_bind_text(pass), db_bind_text(ship_name), db_bind_i32(spawn_sid)}, 4, &res, err_out)) {
         goto cleanup;
     }
 
