@@ -14,6 +14,14 @@
 #include "../../server_log.h"
 #include "../../errors.h"
 
+// PostgreSQL Type OIDs
+#define BOOLOID 16
+#define INT8OID 20
+#define INT4OID 23
+#define TEXTOID 25
+#define JSONOID 114
+#define TIMESTAMPTZOID 1184
+
 // GOAL C: Temporary serialization of DB calls with a mutex
 static pthread_mutex_t g_pg_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -120,6 +128,10 @@ static char* pg_bind_param_to_string(const db_bind_t *param) {
             if (param->v.text.ptr == NULL)
                 return NULL;
             return strdup(param->v.text.ptr);
+        case DB_BIND_JSON:
+            if (param->v.text.ptr == NULL)
+                return NULL;
+            return strdup(param->v.text.ptr);
         default: return NULL;
     }
     return buf;
@@ -168,18 +180,32 @@ static bool pg_tx_rollback_impl(db_t *db, db_error_t *err) {
 static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, int64_t *out_rows, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     char **values = calloc(n_params, sizeof(char*));
-    if (!values && n_params > 0) {
+    Oid *types = calloc(n_params, sizeof(Oid));
+    if ((!values || !types) && n_params > 0) {
         err->code = ERR_DB_QUERY_FAILED;
         snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        free(values); free(types);
         return false;
     }
-    for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
+    for (size_t i = 0; i < n_params; i++) {
+        values[i] = pg_bind_param_to_string(&params[i]);
+        switch (params[i].type) {
+            case DB_BIND_BOOL: types[i] = BOOLOID; break;
+            case DB_BIND_I64:  types[i] = 0; break; 
+            case DB_BIND_I32:  types[i] = 0; break;
+            case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
+            case DB_BIND_TEXT: types[i] = 0; break;
+            case DB_BIND_JSON: types[i] = JSONOID; break;
+            default: types[i] = 0; break; // Let PG infer
+        }
+    }
     pthread_mutex_lock(&g_pg_mutex);
-    PGresult *res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    PGresult *res = PQexecParams(impl->conn, sql, n_params, types, (const char* const*)values, NULL, NULL, 0);
     pthread_mutex_unlock(&g_pg_mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
+    free(types);
     if (PQresultStatus(res) != PGRES_COMMAND_OK && PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     if (out_rows) *out_rows = atoll(PQcmdTuples(res));
     PQclear(res); return true;
@@ -209,15 +235,28 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     }
 
     char **values = calloc(n_params, sizeof(char*));
-    if (!values && n_params > 0) {
+    Oid *types = calloc(n_params, sizeof(Oid));
+    if ((!values || !types) && n_params > 0) {
         err->code = ERR_DB_QUERY_FAILED;
         snprintf(err->message, sizeof(err->message), "Memory allocation failed");
         if (free_sql) free(sql_with_returning);
+        free(values); free(types);
         return false;
     }
-    for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
+    for (size_t i = 0; i < n_params; i++) {
+        values[i] = pg_bind_param_to_string(&params[i]);
+        switch (params[i].type) {
+            case DB_BIND_BOOL: types[i] = BOOLOID; break;
+            case DB_BIND_I64:  types[i] = 0; break;
+            case DB_BIND_I32:  types[i] = 0; break;
+            case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
+            case DB_BIND_TEXT: types[i] = 0; break;
+            case DB_BIND_JSON: types[i] = JSONOID; break;
+            default: types[i] = 0; break;
+        }
+    }
     pthread_mutex_lock(&g_pg_mutex);
-    PGresult *res = PQexecParams(impl->conn, sql_with_returning, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    PGresult *res = PQexecParams(impl->conn, sql_with_returning, n_params, types, (const char* const*)values, NULL, NULL, 0);
     pthread_mutex_unlock(&g_pg_mutex);
     
     if (free_sql) free(sql_with_returning);
@@ -225,6 +264,7 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
+    free(types);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     if (out_id) *out_id = atoll(PQgetvalue(res, 0, 0));
     PQclear(res); return true;
@@ -233,18 +273,32 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
 static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     char **values = calloc(n_params, sizeof(char*));
-    if (!values && n_params > 0) {
+    Oid *types = calloc(n_params, sizeof(Oid));
+    if ((!values || !types) && n_params > 0) {
         err->code = ERR_DB_QUERY_FAILED;
         snprintf(err->message, sizeof(err->message), "Memory allocation failed");
+        free(values); free(types);
         return false;
     }
-    for (size_t i = 0; i < n_params; i++) values[i] = pg_bind_param_to_string(&params[i]);
+    for (size_t i = 0; i < n_params; i++) {
+        values[i] = pg_bind_param_to_string(&params[i]);
+        switch (params[i].type) {
+            case DB_BIND_BOOL: types[i] = BOOLOID; break;
+            case DB_BIND_I64:  types[i] = 0; break;
+            case DB_BIND_I32:  types[i] = 0; break;
+            case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
+            case DB_BIND_TEXT: types[i] = 0; break;
+            case DB_BIND_JSON: types[i] = JSONOID; break;
+            default: types[i] = 0; break;
+        }
+    }
     pthread_mutex_lock(&g_pg_mutex);
-    PGresult *pg_res = PQexecParams(impl->conn, sql, n_params, NULL, (const char* const*)values, NULL, NULL, 0);
+    PGresult *pg_res = PQexecParams(impl->conn, sql, n_params, types, (const char* const*)values, NULL, NULL, 0);
     pthread_mutex_unlock(&g_pg_mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
+    free(types);
     ExecStatusType status = PQresultStatus(pg_res);
     if (status != PGRES_TUPLES_OK && status != PGRES_COMMAND_OK) { pg_map_error(impl->conn, pg_res, err); PQclear(pg_res); return false; }
     db_pg_res_impl_t *res_impl = calloc(1, sizeof(db_pg_res_impl_t));

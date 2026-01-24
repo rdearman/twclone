@@ -15,6 +15,7 @@ extern "C"
   int cmd_auth_refresh (client_ctx_t * ctx, json_t * root);
   const char *get_welcome_message (int player_id);
   int cmd_auth_mfa_totp_verify (client_ctx_t * ctx, json_t * root);
+  int cmd_auth_change_password (client_ctx_t * ctx, json_t * root);
 
 #define PLAYER_TYPE_SYSOP 1
 #define PLAYER_TYPE_PLAYER 2

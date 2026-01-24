@@ -12,7 +12,7 @@ int repo_corp_get_player_role(db_t *db, int player_id, int corp_id, char *role_b
     /* SQL_VERBATIM: Q1 */
     const char *q1 = "SELECT role FROM corp_members WHERE player_id = {1} AND corporation_id = {2};";
     char sql[512]; sql_build(db, q1, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(corp_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(corp_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         const char *role = db_res_col_text(res, 0, &err);
         if (role) {
             strncpy(role_buffer, role, buffer_size - 1);
@@ -34,7 +34,7 @@ int repo_corp_is_player_ceo(db_t *db, int player_id, int *out_corp_id) {
     /* SQL_VERBATIM: Q2 */
     const char *q2 = "SELECT corporation_id FROM corporations WHERE owner_id = {1};";
     char sql[512]; sql_build(db, q2, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         if (out_corp_id) *out_corp_id = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 1;
@@ -50,7 +50,7 @@ int repo_corp_get_player_corp_id(db_t *db, int player_id) {
     /* SQL_VERBATIM: Q3 */
     const char *q3 = "SELECT corporation_id FROM corp_members WHERE player_id = {1};";
     char sql[512]; sql_build(db, q3, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         corp_id = db_res_col_i32(res, 0, &err);
     }
     if (res) db_res_finalize(res);
@@ -64,7 +64,7 @@ int repo_corp_get_bank_account_id(db_t *db, int corp_id) {
     /* SQL_VERBATIM: Q4 */
     const char *q4 = "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};";
     char sql[512]; sql_build(db, q4, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         account_id = db_res_col_i32(res, 0, &err);
     }
     if (res) db_res_finalize(res);
@@ -77,7 +77,7 @@ int repo_corp_get_credit_rating(db_t *db, int corp_id, int *rating) {
     /* SQL_VERBATIM: Q5 */
     const char *q5 = "SELECT credit_rating FROM corporations WHERE corporation_id = {1};";
     char sql[512]; sql_build(db, q5, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         if (rating) *rating = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -86,14 +86,14 @@ int repo_corp_get_credit_rating(db_t *db, int corp_id, int *rating) {
     return ERR_DB_NOT_FOUND;
 }
 
-int repo_corp_get_stock_id(db_t *db, int corp_id, int *out_stock_id) {
+int repo_corp_get_equity_id(db_t *db, int corp_id, int *out_equity_id) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q6 */
     const char *q6 = "SELECT id FROM stocks WHERE corp_id = {1};";
     char sql[512]; sql_build(db, q6, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        if (out_stock_id) *out_stock_id = db_res_col_i32(res, 0, &err);
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+        if (out_equity_id) *out_equity_id = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
     }
@@ -101,13 +101,13 @@ int repo_corp_get_stock_id(db_t *db, int corp_id, int *out_stock_id) {
     return ERR_DB_NOT_FOUND;
 }
 
-int repo_corp_get_stock_info(db_t *db, int stock_id, char **out_ticker, int *out_corp_id, int *out_total_shares, int *out_par_value, int *out_current_price, long long *out_last_dividend_ts) {
+int repo_corp_get_equity_info(db_t *db, int equity_id, char **out_ticker, int *out_corp_id, int *out_total_shares, int *out_par_value, int *out_current_price, long long *out_last_dividend_ts) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q7 */
     const char *q7 = "SELECT ticker, corp_id, total_shares, par_value, current_price, last_dividend_ts FROM stocks WHERE id = {1};";
     char sql[512]; sql_build(db, q7, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(stock_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(equity_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         if (out_ticker) {
             const char *tmp = db_res_col_text(res, 0, &err);
             *out_ticker = tmp ? strdup(tmp) : NULL;
@@ -124,30 +124,34 @@ int repo_corp_get_stock_info(db_t *db, int stock_id, char **out_ticker, int *out
     return ERR_DB_NOT_FOUND;
 }
 
-int repo_corp_add_shares(db_t *db, int player_id, int stock_id, int quantity_change) {
+int repo_corp_add_shares(db_t *db, int player_id, int equity_id, int quantity_change) {
     db_error_t err;
-    const char *conflict_fmt = sql_conflict_target_fmt(db);
-    if (!conflict_fmt) return -1;
-    char conflict_clause[128];
-    snprintf(conflict_clause, sizeof(conflict_clause), conflict_fmt, "player_id, corp_id");
-    char sql_template[512];
-    /* SQL_VERBATIM: Q8 */
-    snprintf(sql_template, sizeof(sql_template),
-        "INSERT INTO corp_shareholders (player_id, corp_id, shares) "
-        "VALUES ({1}, (SELECT corp_id FROM stocks WHERE id = {2}), {3}) "
-        "%s UPDATE SET shares = shares + excluded.shares;",
-        conflict_clause);
-    char sql[512]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(stock_id), db_bind_i32(quantity_change) }, 3, &err)) return err.code;
+    /* Portable update-then-insert pattern */
+    const char *q_upd = "UPDATE corp_shareholders SET shares = shares + {1} WHERE player_id = {2} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {3});";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    int64_t rows = 0;
+    if (db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i64(quantity_change), db_bind_i64(player_id), db_bind_i64(equity_id) }, 3, &rows, &err) && rows > 0) {
+        return 0;
+    }
+
+    const char *q_ins = "INSERT INTO corp_shareholders (player_id, corp_id, shares) VALUES ({1}, (SELECT corp_id FROM stocks WHERE id = {2}), {3});";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(equity_id), db_bind_i64(quantity_change) }, 3, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            /* Race condition: retry update */
+            return repo_corp_add_shares(db, player_id, equity_id, quantity_change);
+        }
+        return err.code;
+    }
     return 0;
 }
 
-int repo_corp_deduct_shares(db_t *db, int player_id, int stock_id, int quantity_change, int64_t *rows_affected) {
+int repo_corp_deduct_shares(db_t *db, int player_id, int equity_id, int quantity_change, int64_t *rows_affected) {
     db_error_t err;
     /* SQL_VERBATIM: Q9 */
     const char *q9 = "UPDATE corp_shareholders SET shares = shares + {1} WHERE player_id = {2} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {3}) AND (shares + {4}) >= 0;";
     char sql[512]; sql_build(db, q9, sql, sizeof(sql));
-    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i32(quantity_change), db_bind_i32(player_id), db_bind_i32(stock_id), db_bind_i32(quantity_change) }, 4, rows_affected, &err)) return err.code;
+    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(quantity_change), db_bind_i64(player_id), db_bind_i64(equity_id), db_bind_i64(quantity_change) }, 4, rows_affected, &err)) return err.code;
     return 0;
 }
 
@@ -163,9 +167,9 @@ int repo_corp_check_member_role(db_t *db, int corp_id, int player_id, char *role
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q11 */
-    const char *q11 = "SELECT role FROM corp_members WHERE corp_id = {1} AND player_id = {2};";
+    const char *q11 = "SELECT role FROM corp_members WHERE corporation_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q11, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         const char *role = db_res_col_text(res, 0, &err);
         if (role) {
             strncpy(role_buffer, role, buffer_size - 1);
@@ -187,7 +191,7 @@ int repo_corp_get_player_ship_type_name(db_t *db, int player_id, char *name_buff
     /* SQL_VERBATIM: Q12 */
     const char *q12 = "SELECT st.name FROM players p JOIN ships s ON p.ship_id = s.ship_id JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE p.player_id = {1};";
     char sql[512]; sql_build(db, q12, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         const char *name = db_res_col_text(res, 0, &err);
         if (name) {
             strncpy(name_buffer, name, buffer_size - 1);
@@ -206,9 +210,9 @@ int repo_corp_get_player_ship_type_name(db_t *db, int player_id, char *name_buff
 int repo_corp_demote_ceo(db_t *db, int corp_id, int player_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q13 */
-    const char *q13 = "UPDATE corp_members SET role = 'Officer' WHERE corp_id = {1} AND player_id = {2} AND role = 'Leader';";
+    const char *q13 = "UPDATE corp_members SET role = 'Officer' WHERE corporation_id = {1} AND player_id = {2} AND role = 'Leader';";
     char sql[512]; sql_build(db, q13, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -220,20 +224,20 @@ int repo_corp_insert_member_ignore(db_t *db, int corp_id, int player_id, const c
     char sql_template[256];
     /* SQL_VERBATIM: Q14 */
     snprintf(sql_template, sizeof(sql_template),
-        "INSERT INTO corp_members (corp_id, player_id, role) "
+        "INSERT INTO corp_members (corporation_id, player_id, role) "
         "VALUES ({1}, {2}, 'Member') %s;",
         conflict_clause);
     char sql[256]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
 int repo_corp_promote_leader(db_t *db, int corp_id, int player_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q15 */
-    const char *q15 = "UPDATE corp_members SET role = 'Leader' WHERE corp_id = {1} AND player_id = {2};";
+    const char *q15 = "UPDATE corp_members SET role = 'Leader' WHERE corporation_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -242,7 +246,7 @@ int repo_corp_update_owner(db_t *db, int corp_id, int target_player_id) {
     /* SQL_VERBATIM: Q16 */
     const char *q16 = "UPDATE corporations SET owner_id = {1} WHERE corporation_id = {2};";
     char sql[512]; sql_build(db, q16, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(target_player_id), db_bind_i32(corp_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(target_player_id), db_bind_i64(corp_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -251,7 +255,7 @@ int repo_corp_create(db_t *db, const char *name, int owner_id, int64_t *new_corp
     /* SQL_VERBATIM: Q17 */
     const char *q17 = "INSERT INTO corporations (name, owner_id) VALUES ({1}, {2})";
     char sql[512]; sql_build(db, q17, sql, sizeof(sql));
-    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i32(owner_id) }, 2, "corporation_id", new_corp_id, &err)) return err.code;
+    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i64(owner_id) }, 2, "corporation_id", new_corp_id, &err)) return err.code;
     return 0;
 }
 
@@ -259,9 +263,9 @@ int repo_corp_insert_member(db_t *db, int corp_id, int player_id, const char *ro
     (void)role;
     db_error_t err;
     /* SQL_VERBATIM: Q18 */
-    const char *q18 = "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Leader');";
+    const char *q18 = "INSERT INTO corp_members (corporation_id, player_id, role) VALUES ({1}, {2}, 'Leader');";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -272,7 +276,7 @@ int repo_corp_create_bank_account(db_t *db, int corp_id) {
                       "SELECT 'corp', {1}, 'CRD', 0, TRUE "
                       "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1} AND currency = 'CRD' AND is_active = TRUE);";
     char sql[512]; sql_build(db, q19, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &err)) return err.code;
     return 0;
 }
 
@@ -281,7 +285,7 @@ int repo_corp_transfer_planets_to_corp(db_t *db, int corp_id, int player_id) {
     /* SQL_VERBATIM: Q20 */
     const char *q20 = "UPDATE planets SET owner_id = {1}, owner_type = 'corp' WHERE owner_id = {2} AND owner_type = 'player';";
     char sql[512]; sql_build(db, q20, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -289,9 +293,9 @@ int repo_corp_get_invite_expiry(db_t *db, int corp_id, int player_id, long long 
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q21 */
-    const char *q21 = "SELECT expires_at FROM corp_invites WHERE corp_id = {1} AND player_id = {2};";
+    const char *q21 = "SELECT expires_at FROM corp_invites WHERE corporation_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q21, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (expires_at) *expires_at = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -304,18 +308,18 @@ int repo_corp_insert_member_basic(db_t *db, int corp_id, int player_id, const ch
     (void)role;
     db_error_t err;
     /* SQL_VERBATIM: Q22 */
-    const char *q22 = "INSERT INTO corp_members (corp_id, player_id, role) VALUES ({1}, {2}, 'Member');";
+    const char *q22 = "INSERT INTO corp_members (corporation_id, player_id, role) VALUES ({1}, {2}, 'Member');";
     char sql[512]; sql_build(db, q22, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
 int repo_corp_delete_invite(db_t *db, int corp_id, int player_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q23 */
-    const char *q23 = "DELETE FROM corp_invites WHERE corp_id = {1} AND player_id = {2};";
+    const char *q23 = "DELETE FROM corp_invites WHERE corporation_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q23, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -332,16 +336,16 @@ db_res_t* repo_corp_roster(db_t *db, int corp_id, db_error_t *err) {
     const char *q25 = "SELECT cm.player_id, p.name, cm.role FROM corp_members cm JOIN players p ON cm.player_id = p.player_id WHERE cm.corporation_id = {1};";
     char sql[1024]; sql_build(db, q25, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, err);
     return res;
 }
 
 int repo_corp_delete_member(db_t *db, int corp_id, int player_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q26 */
-    const char *q26 = "DELETE FROM corp_members WHERE corp_id = {1} AND player_id = {2};";
+    const char *q26 = "DELETE FROM corp_members WHERE corporation_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q26, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -350,7 +354,7 @@ int repo_corp_transfer_planets_to_player(db_t *db, int corp_id) {
     /* SQL_VERBATIM: Q27 */
     const char *q27 = "UPDATE planets SET owner_id = 0, owner_type = 'player' WHERE owner_id = {1} AND owner_type = 'corp';";
     char sql[512]; sql_build(db, q27, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &err)) return err.code;
     return 0;
 }
 
@@ -359,7 +363,7 @@ int repo_corp_delete(db_t *db, int corp_id) {
     /* SQL_VERBATIM: Q28 */
     const char *q28 = "DELETE FROM corporations WHERE corporation_id = {1};";
     char sql[512]; sql_build(db, q28, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &err)) return err.code;
     return 0;
 }
 
@@ -367,9 +371,9 @@ int repo_corp_get_member_count(db_t *db, int corp_id, int *count) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q29 */
-    const char *q29 = "SELECT COUNT(*) FROM corp_members WHERE corp_id = {1};";
+    const char *q29 = "SELECT COUNT(*) FROM corp_members WHERE corporation_id = {1};";
     char sql[512]; sql_build(db, q29, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         if (count) *count = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -380,18 +384,23 @@ int repo_corp_get_member_count(db_t *db, int corp_id, int *count) {
 
 int repo_corp_upsert_invite(db_t *db, int corp_id, int player_id, long long invited_at, long long expires_at) {
     db_error_t err;
-    const char *conflict_fmt = sql_conflict_target_fmt(db);
-    if (!conflict_fmt) return -1;
-    char conflict_clause[128];
-    snprintf(conflict_clause, sizeof(conflict_clause), conflict_fmt, "corp_id, player_id");
-    char sql_template[512];
-    /* SQL_VERBATIM: Q32 */
-    snprintf(sql_template, sizeof(sql_template),
-        "INSERT INTO corp_invites (corp_id, player_id, invited_at, expires_at) VALUES ({1}, {2}, {3}, {4}) "
-        "%s UPDATE SET invited_at = excluded.invited_at, expires_at = excluded.expires_at;",
-        conflict_clause);
-    char sql[512]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_i32(player_id), db_bind_i64(invited_at), db_bind_i64(expires_at) }, 4, &err)) return err.code;
+    /* Portable update-then-insert pattern */
+    const char *q_upd = "UPDATE corp_invites SET invited_at = {3}, expires_at = {4} WHERE corp_id = {1} AND player_id = {2};";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    int64_t rows = 0;
+    if (db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id), db_bind_timestamp_text(invited_at), db_bind_timestamp_text(expires_at) }, 4, &rows, &err) && rows > 0) {
+        return 0;
+    }
+
+    const char *q_ins = "INSERT INTO corp_invites (corp_id, player_id, invited_at, expires_at) VALUES ({1}, {2}, {3}, {4});";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id), db_bind_timestamp_text(invited_at), db_bind_timestamp_text(expires_at) }, 4, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            /* Race condition: retry update */
+            return repo_corp_upsert_invite(db, corp_id, player_id, invited_at, expires_at);
+        }
+        return err.code;
+    }
     return 0;
 }
 
@@ -400,26 +409,26 @@ db_res_t* repo_corp_get_info(db_t *db, int corp_id, db_error_t *err) {
     const char *q33 = "SELECT name, tag, created_at, owner_id FROM corporations WHERE corporation_id = {1};";
     char sql[512]; sql_build(db, q33, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, err);
     return res;
 }
 
-int repo_corp_register_stock(db_t *db, int corp_id, const char *ticker, int total_shares, int par_value, int64_t *new_stock_id) {
+int repo_corp_register_equity(db_t *db, int corp_id, const char *ticker, int total_shares, int par_value, int64_t *new_equity_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q35 */
     const char *q35 = "INSERT INTO stocks (corp_id, ticker, total_shares, par_value, current_price) VALUES ({1}, {2}, {3}, {4}, {5})";
     char sql[512]; sql_build(db, q35, sql, sizeof(sql));
-    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_i32(corp_id), db_bind_text(ticker), db_bind_i32(total_shares), db_bind_i32(par_value), db_bind_i32(par_value) }, 5, "id", new_stock_id, &err)) return err.code;
+    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_text(ticker), db_bind_i64(total_shares), db_bind_i64(par_value), db_bind_i64(par_value) }, 5, "id", new_equity_id, &err)) return err.code;
     return 0;
 }
 
-int repo_corp_get_shares_owned(db_t *db, int player_id, int stock_id, int *shares) {
+int repo_corp_get_shares_owned(db_t *db, int player_id, int equity_id, int *shares) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q36 */
     const char *q36 = "SELECT shares FROM corp_shareholders WHERE player_id = {1} AND corp_id = (SELECT corp_id FROM stocks WHERE id = {2});";
     char sql[512]; sql_build(db, q36, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(stock_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(equity_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (shares) *shares = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -428,12 +437,12 @@ int repo_corp_get_shares_owned(db_t *db, int player_id, int stock_id, int *share
     return ERR_DB_NOT_FOUND;
 }
 
-int repo_corp_declare_dividend(db_t *db, int stock_id, int amount_per_share, long long declared_ts) {
+int repo_corp_declare_dividend(db_t *db, int equity_id, int amount_per_share, long long declared_ts) {
     db_error_t err;
     /* SQL_VERBATIM: Q37 */
-    const char *q37 = "INSERT INTO stock_dividends (stock_id, amount_per_share, declared_ts) VALUES ({1}, {2}, {3});";
+    const char *q37 = "INSERT INTO stock_dividends (equity_id, amount_per_share, declared_ts) VALUES ({1}, {2}, {3});";
     char sql[512]; sql_build(db, q37, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(stock_id), db_bind_i32(amount_per_share), db_bind_i64(declared_ts) }, 3, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(equity_id), db_bind_i64(amount_per_share), db_bind_i64(declared_ts) }, 3, &err)) return err.code;
     return 0;
 }
 
@@ -444,7 +453,7 @@ int repo_corp_is_public(db_t *db, int corp_id, bool *is_public) {
     const char *q38 = "SELECT 1 FROM stocks WHERE corp_id = {1};";
     char sql[512]; sql_build(db, q38, sql, sizeof(sql));
     *is_public = false;
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *is_public = true;
         db_res_finalize(res);
         return 0;
@@ -463,18 +472,18 @@ db_res_t* repo_corp_get_all_corps(db_t *db, db_error_t *err) {
 
 db_res_t* repo_corp_get_unpaid_dividends(db_t *db, db_error_t *err) {
     /* SQL_VERBATIM: Q40 */
-    const char *q40 = "SELECT id, stock_id, amount_per_share FROM stock_dividends WHERE paid_ts IS NULL;";
+    const char *q40 = "SELECT id, equity_id, amount_per_share FROM stock_dividends WHERE paid_ts IS NULL;";
     db_res_t *res = NULL;
     db_query(db, q40, NULL, 0, &res, err);
     return res;
 }
 
-db_res_t* repo_corp_get_stock_holders(db_t *db, int stock_id, db_error_t *err) {
+db_res_t* repo_corp_get_equity_holders(db_t *db, int equity_id, db_error_t *err) {
     /* SQL_VERBATIM: Q41 */
     const char *q41 = "SELECT player_id, shares FROM corp_shareholders WHERE corp_id = (SELECT corp_id FROM stocks WHERE id = {1}) AND shares > 0;";
     char sql[512]; sql_build(db, q41, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(stock_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(equity_id) }, 1, &res, err);
     return res;
 }
 
@@ -483,6 +492,6 @@ int repo_corp_mark_dividend_paid(db_t *db, int div_id, long long paid_ts) {
     /* SQL_VERBATIM: Q42 */
     const char *q42 = "UPDATE stock_dividends SET paid_ts = {1} WHERE id = {2};";
     char sql[512]; sql_build(db, q42, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(paid_ts), db_bind_i32(div_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(paid_ts), db_bind_i64(div_id) }, 2, &err)) return err.code;
     return 0;
 }

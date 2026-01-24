@@ -14,7 +14,7 @@ int repo_citadel_get_onplanet(db_t *db, int32_t ship_id, int32_t *planet_id_out)
 
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (planet_id_out) *planet_id_out = db_res_col_i32(res, 0, &err);
         }
@@ -33,7 +33,7 @@ int repo_citadel_get_planet_info(db_t *db, int32_t planet_id, db_res_t **out_res
     sql_build(db, sql_planet, sql_planet_converted, sizeof(sql_planet_converted));
 
     db_error_t err;
-    if (db_query(db, sql_planet_converted, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_planet_converted, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -48,7 +48,7 @@ int repo_citadel_get_status(db_t *db, int32_t planet_id, db_res_t **out_res)
     sql_build(db, sql_citadel, sql_citadel_converted, sizeof(sql_citadel_converted));
 
     db_error_t err;
-    if (db_query(db, sql_citadel_converted, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_citadel_converted, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -90,7 +90,7 @@ int repo_citadel_get_upgrade_reqs(db_t *db, int target_level, int32_t planet_typ
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(planet_type_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(planet_type_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -104,7 +104,7 @@ int repo_citadel_deduct_resources(db_t *db, int64_t ore, int64_t org, int64_t eq
     char sql_converted[512];
     sql_build(db, sql_update_planet, sql_converted, sizeof(sql_converted));
 
-    db_bind_t params[] = { db_bind_i64(ore), db_bind_i64(org), db_bind_i64(equip), db_bind_i32(planet_id) };
+    db_bind_t params[] = { db_bind_i64(ore), db_bind_i64(org), db_bind_i64(equip), db_bind_i64(planet_id) };
     db_error_t err;
     if (!db_exec(db, sql_converted, params, 4, &err)) {
         return err.code;
@@ -120,13 +120,13 @@ int repo_citadel_start_construction(db_t *db, int32_t planet_id, int32_t current
     /* 1. Try Update first */
     const char *q_upd = "UPDATE citadels SET construction_status='upgrading', target_level={1}, construction_start_time={2}, construction_end_time={3} WHERE planet_id = {4};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(target_level), db_bind_i64(start_time), db_bind_i64(end_time), db_bind_i32(planet_id) };
+    db_bind_t upd_params[] = { db_bind_i64(target_level), db_bind_i64(start_time), db_bind_i64(end_time), db_bind_i64(planet_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 4, &rows, &err) && rows > 0) return 0;
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ({1}, {2}, {3}, 'upgrading', {4}, {5}, {6});";
     char sql_ins[1024]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(planet_id), db_bind_i32(current_level), db_bind_i32(player_id), db_bind_i32(target_level), db_bind_i64(start_time), db_bind_i64(end_time) };
+    db_bind_t ins_params[] = { db_bind_i64(planet_id), db_bind_i64(current_level), db_bind_i64(player_id), db_bind_i64(target_level), db_bind_i64(start_time), db_bind_i64(end_time) };
 
     if (!db_exec(db, sql_ins, ins_params, 6, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */

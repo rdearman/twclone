@@ -180,6 +180,7 @@ typedef enum
   DB_BIND_U32,              // 32-bit unsigned integer
   DB_BIND_BOOL,             // Boolean value (typically 0 or 1 integer in DB)
   DB_BIND_TEXT,             // UTF-8, NUL-terminated string
+  DB_BIND_JSON,             // JSON string (driver may use native JSON types)
   DB_BIND_BLOB,             // Binary data
   DB_BIND_TIMESTAMP         // 64-bit epoch -> ISO-8601 UTC string
 } db_bind_type_t;
@@ -225,6 +226,13 @@ static inline db_bind_t
 db_bind_text (const char *s)
 {
   db_bind_t b = { .type = DB_BIND_TEXT, .v.text = { .ptr = s, .len = 0 } };
+  return b;
+}
+
+static inline db_bind_t
+db_bind_json (const char *s)
+{
+  db_bind_t b = { .type = DB_BIND_JSON, .v.text = { .ptr = s, .len = 0 } };
   return b;
 }
 

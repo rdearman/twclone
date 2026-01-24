@@ -247,6 +247,22 @@ cmd_system_cmd_list (client_ctx_t *ctx, json_t *root)
 	{
 	  json_object_set_new (o, "summary", json_string (tbl[i].summary));
 	}
+      
+      /* Add deprecation metadata */
+      json_object_set_new (o, "canonical", json_boolean (!tbl[i].is_deprecated));
+      if (tbl[i].is_deprecated) {
+          json_t *dep = json_object();
+          json_object_set_new(dep, "sunset_version", json_string("v2.0"));
+          if (tbl[i].replacement) {
+              json_object_set_new(dep, "replacement", json_string(tbl[i].replacement));
+          } else {
+              json_object_set_new(dep, "replacement", json_null());
+          }
+          json_object_set_new(o, "deprecated", dep);
+      } else {
+          json_object_set_new(o, "deprecated", json_null());
+      }
+
       json_array_append_new (arr, o);
     }
 

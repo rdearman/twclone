@@ -27,7 +27,7 @@ int repo_engine_get_alignment_band_info(db_t *db, int band_id, int *is_good_out,
     /* SQL_VERBATIM: Q3 */
     const char *q3 = "SELECT is_good, is_evil FROM alignment_band WHERE alignment_band_id = {1};";
     char sql[512]; sql_build(db, q3, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(band_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(band_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *is_good_out = db_res_col_i32(res, 0, &err);
         *is_evil_out = db_res_col_i32(res, 1, &err);
         db_res_finalize(res);
@@ -63,7 +63,7 @@ int repo_engine_publish_notice(db_t *db, const char *ts_fmt, int64_t now_s, cons
     db_bind_t params[6];
     params[0] = db_bind_timestamp_text (now_s);
     params[1] = db_bind_text (scope);
-    params[2] = db_bind_i32 (player_id);
+    params[2] = db_bind_i64 (player_id);
     params[3] = db_bind_text (message);
     params[4] = db_bind_text (severity);
     if (expires_at > 0) params[5] = db_bind_timestamp_text (expires_at);
@@ -77,7 +77,7 @@ db_res_t* repo_engine_get_ready_commands(db_t *db, int64_t now_s, int max_rows, 
     const char *q6 = "SELECT engine_commands_id, type, payload, idem_key FROM engine_commands WHERE status='ready' AND due_at <= {1} ORDER BY priority ASC, due_at ASC, engine_commands_id ASC LIMIT {2};";
     char sql[512]; sql_build(db, q6, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i32(max_rows) }, 2, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i64(max_rows) }, 2, &res, err);
     return res;
 }
 
@@ -127,7 +127,7 @@ db_res_t* repo_engine_get_pending_cron_tasks(db_t *db, const char *ts_expr, int6
                            "LIMIT {2}";
     char sql[512]; sql_build(db, sql_tmpl, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i32(limit) }, 2, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_timestamp_text(now_s), db_bind_i64(limit) }, 2, &res, err);
     return res;
 }
 
@@ -158,7 +158,7 @@ db_res_t* repo_engine_get_retryable_commands(db_t *db, int max_retries, db_error
     const char *q14 = "SELECT engine_commands_id, attempts FROM engine_commands WHERE status='error' AND attempts < {1} LIMIT 500;";
     char sql[512]; sql_build(db, q14, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(max_retries) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(max_retries) }, 1, &res, err);
     return res;
 }
 
@@ -181,7 +181,7 @@ int repo_engine_cleanup_expired_limpets(db_t *db, const char *deployed_as_epoch,
         "WHERE asset_type = {1} AND %s <= {2}",
         deployed_as_epoch);
     char sql[512]; sql_build(db, sql_delete_template, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(asset_type), db_bind_i64(threshold_s) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(asset_type), db_bind_i64(threshold_s) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -198,6 +198,6 @@ int repo_engine_update_last_interest_tick(db_t *db, int current_epoch_day, int a
     /* SQL_VERBATIM: Q18 */
     const char *q18 = "UPDATE bank_accounts SET last_interest_tick = {1} WHERE bank_accounts_id = {2};";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(current_epoch_day), db_bind_i32(account_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(current_epoch_day), db_bind_i64(account_id) }, 2, &err)) return err.code;
     return 0;
 }

@@ -1628,7 +1628,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       send_response_refused_steal (ctx,
 				   root,
 				   REF_NO_WARP_LINK,
-				   "Insufficient stock on planet.", NULL);
+				   "Insufficient inventory on planet.", NULL);
       return 0;
     }
 
@@ -1661,7 +1661,7 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx,
 			   root,
 			   ERR_SERVER_ERROR,
-			   "Failed to update planet stock.");
+			   "Failed to update planet inventory.");
       return 0;
     }
 
@@ -1829,7 +1829,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 	  send_response_refused_steal (ctx,
 				       root,
 				       REF_NO_WARP_LINK,
-				       "Insufficient stock for immediate illegal purchase.",
+				       "Insufficient inventory for immediate illegal purchase.",
 				       NULL);
 	  return 0;
 	}

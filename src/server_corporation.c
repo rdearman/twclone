@@ -62,26 +62,26 @@ h_get_corp_credit_rating (db_t *db, int corp_id, int *rating)
 
 
 int
-h_get_corp_stock_id (db_t *db, int corp_id, int *out_stock_id)
+h_get_corp_equity_id (db_t *db, int corp_id, int *out_equity_id)
 {
-  return repo_corp_get_stock_id (db, corp_id, out_stock_id);
+  return repo_corp_get_equity_id (db, corp_id, out_equity_id);
 }
 
 
 int
-h_get_stock_info (db_t *db, int stock_id, char **out_ticker,
+h_get_equity_info (db_t *db, int equity_id, char **out_ticker,
 		  int *out_corp_id, int *out_total_shares,
 		  int *out_par_value, int *out_current_price,
 		  long long *out_last_dividend_ts)
 {
-  return repo_corp_get_stock_info (db, stock_id, out_ticker, out_corp_id,
+  return repo_corp_get_equity_info (db, equity_id, out_ticker, out_corp_id,
 				   out_total_shares, out_par_value,
 				   out_current_price, out_last_dividend_ts);
 }
 
 
 int
-h_update_player_shares (db_t *db, int player_id, int stock_id,
+h_update_player_shares (db_t *db, int player_id, int equity_id,
 			int quantity_change)
 {
   if (quantity_change == 0)
@@ -93,7 +93,7 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
   if (quantity_change > 0)
     {
       int rc =
-	repo_corp_add_shares (db, player_id, stock_id, quantity_change);
+	repo_corp_add_shares (db, player_id, equity_id, quantity_change);
       if (rc != 0)
 	{
 	  LOGE ("h_update_player_shares: Failed to add shares: %d", rc);
@@ -104,7 +104,7 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
     {
       int64_t rows_affected = 0;
       int rc =
-	repo_corp_deduct_shares (db, player_id, stock_id, quantity_change,
+	repo_corp_deduct_shares (db, player_id, equity_id, quantity_change,
 				 &rows_affected);
 
       if (rc != 0)
@@ -117,7 +117,7 @@ h_update_player_shares (db_t *db, int player_id, int stock_id,
 	{
 	  LOGW
 	    ("h_update_player_shares: Player %d has insufficient shares for stock %d.",
-	     player_id, stock_id);
+	     player_id, equity_id);
 	  return ERR_DB_CONSTRAINT;
 	}
     }
@@ -384,10 +384,10 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
     }
 
   if (h_deduct_credits_unlocked (db,
-				 player_bank_account_id,
-				 creation_fee,
-				 "CORP_CREATION_FEE",
-				 NULL, &player_new_balance) != 0)
+                                 player_bank_account_id,
+                                 creation_fee,
+                                 "FEE",
+                                 NULL, &player_new_balance) != 0)
     {
       db_tx_rollback (db, NULL);
       send_response_refused_steal (ctx,
@@ -419,12 +419,6 @@ cmd_corp_create (client_ctx_t *ctx, json_t *root)
 
   int corp_id = (int) new_corp_id;
 
-  if (repo_corp_insert_member (db, corp_id, ctx->player_id, "Leader") != 0)
-    {
-      db_tx_rollback (db, NULL);
-      send_response_error (ctx, root, ERR_DB, "Failed to add CEO.");
-      return 0;
-    }
 
   if (repo_corp_create_bank_account (db, corp_id) != 0)
     {
@@ -1503,7 +1497,7 @@ cmd_corp_status (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
+cmd_equity_ipo_register (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
@@ -1542,10 +1536,10 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* Check if already publicly traded */
-  int stock_id = 0;
+  int equity_id = 0;
 
 
-  if (h_get_corp_stock_id (db, corp_id, &stock_id) == 0)
+  if (h_get_corp_equity_id (db, corp_id, &equity_id) == 0)
     {
       send_response_error (ctx,
 			   root,
@@ -1622,15 +1616,15 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 			   "Missing or invalid 'par_value'.");
       return 0;
     }
-  int64_t new_stock_id_64 = 0;
+  int64_t new_equity_id_64 = 0;
   int rc =
-    repo_corp_register_stock (db, corp_id, ticker, total_shares, par_value,
-			      &new_stock_id_64);
+    repo_corp_register_equity (db, corp_id, ticker, total_shares, par_value,
+			      &new_equity_id_64);
 
 
   if (rc != 0)
     {
-      LOGE ("cmd_stock_ipo_register: Failed to insert stock: %d", rc);
+      LOGE ("cmd_equity_ipo_register: Failed to insert stock: %d", rc);
       if (rc == ERR_DB_CONSTRAINT)
 	{
 	  send_response_error (ctx,
@@ -1647,17 +1641,17 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 	}
       return 0;
     }
-  int new_stock_id = (int) new_stock_id_64;
+  int new_equity_id = (int) new_equity_id_64;
 
-  // Distribute initial shares to the corporation itself (as a shareholder)
-  rc = h_update_player_shares (db, 0, new_stock_id, total_shares);	// player_id 0 for corporation
+  // Distribute initial shares to the corporation itself (using System player ID 1)
+  rc = h_update_player_shares (db, 1, new_equity_id, total_shares);	// player_id 1 for System/Treasury
 
 
   if (rc != 0)
     {
       LOGE
-	("cmd_stock_ipo_register: Failed to distribute initial shares to corp %d for stock %d: %d",
-	 corp_id, new_stock_id, rc);
+	("cmd_equity_ipo_register: Failed to distribute initial shares to corp %d for stock %d: %d",
+	 corp_id, new_equity_id, rc);
       // This is a critical error, consider rolling back or marking stock invalid
     }
   json_t *response_data = json_object ();
@@ -1667,8 +1661,8 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 		       json_string
 		       ("Corporation successfully registered for IPO."));
   json_object_set_new (response_data, "corp_id", json_integer (corp_id));
-  json_object_set_new (response_data, "stock_id",
-		       json_integer (new_stock_id));
+  json_object_set_new (response_data, "equity_id",
+		       json_integer (new_equity_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
   send_response_ok_take (ctx, root, "stock.ipo.register.success",
 			 &response_data);
@@ -1676,7 +1670,7 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (payload, "corp_id", json_integer (corp_id));
-  json_object_set_new (payload, "stock_id", json_integer (new_stock_id));
+  json_object_set_new (payload, "equity_id", json_integer (new_equity_id));
   json_object_set_new (payload, "ticker", json_string (ticker));
 
   db_log_engine_event (time (NULL), "stock.ipo.registered", "corp", corp_id,
@@ -1687,7 +1681,7 @@ cmd_stock_ipo_register (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_stock_buy (client_ctx_t *ctx, json_t *root)
+cmd_equity_buy (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
@@ -1713,15 +1707,16 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 			   "Missing data object.");
       return 0;
     }
-  int stock_id;
-
-
-  if (!json_get_int_flexible (data, "stock_id", &stock_id) || stock_id <= 0)
+  int equity_id = 0;
+  if (!json_get_int_flexible (data, "equity_id", &equity_id) || equity_id <= 0)
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_BAD_REQUEST, "Missing or invalid 'stock_id'.");
-      return 0;
+      if (!json_get_int_flexible (data, "stock_id", &equity_id) || equity_id <= 0)
+        {
+          send_response_error (ctx,
+                               root,
+                               ERR_BAD_REQUEST, "Missing or invalid 'equity_id'.");
+          return 0;
+        }
     }
   int quantity;
 
@@ -1739,7 +1734,7 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
   int par_value = 0;
   int current_price = 0;
   long long last_dividend_ts = 0;
-  int rc = h_get_stock_info (db, stock_id, &ticker, &corp_id, &total_shares,
+  int rc = h_get_equity_info (db, equity_id, &ticker, &corp_id, &total_shares,
 			     &par_value, &current_price, &last_dividend_ts);
 
 
@@ -1770,8 +1765,8 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 			 ctx->player_id, "corp", corp_id, total_cost);
   if (rc != 0)
     {
-      LOGE ("cmd_stock_buy: Bank transfer failed for player %d, stock %d: %d",
-	    ctx->player_id, stock_id, rc);
+      LOGE ("cmd_equity_buy: Bank transfer failed for player %d, stock %d: %d",
+	    ctx->player_id, equity_id, rc);
       send_response_error (ctx,
 			   root,
 			   ERR_SERVER_ERROR,
@@ -1780,12 +1775,12 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // Update player shares
-  rc = h_update_player_shares (db, ctx->player_id, stock_id, quantity);
+  rc = h_update_player_shares (db, ctx->player_id, equity_id, quantity);
   if (rc != 0)
     {
       LOGE
-	("cmd_stock_buy: Failed to update player shares for player %d, stock %d: %d",
-	 ctx->player_id, stock_id, rc);
+	("cmd_equity_buy: Failed to update player shares for player %d, stock %d: %d",
+	 ctx->player_id, equity_id, rc);
       // Critical error: funds transferred, but shares not updated. Manual intervention needed or complex rollback.
       send_response_error (ctx,
 			   root,
@@ -1799,7 +1794,7 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "message",
 		       json_string ("Shares purchased successfully."));
-  json_object_set_new (response_data, "stock_id", json_integer (stock_id));
+  json_object_set_new (response_data, "equity_id", json_integer (equity_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
   json_object_set_new (response_data, "quantity", json_integer (quantity));
   json_object_set_new (response_data, "total_cost",
@@ -1809,7 +1804,7 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (payload, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (payload, "stock_id", json_integer (stock_id));
+  json_object_set_new (payload, "equity_id", json_integer (equity_id));
   json_object_set_new (payload, "quantity", json_integer (quantity));
   json_object_set_new (payload, "cost", json_integer (total_cost));
 
@@ -1822,7 +1817,7 @@ cmd_stock_buy (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
+cmd_equity_dividend_set (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
@@ -1860,10 +1855,10 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 			   "Only corporation CEOs can set dividends.");
       return 0;
     }
-  int stock_id = 0;
+  int equity_id = 0;
 
 
-  if (h_get_corp_stock_id (db, corp_id, &stock_id) != 0)
+  if (h_get_corp_equity_id (db, corp_id, &equity_id) != 0)
     {
       send_response_error (ctx,
 			   root,
@@ -1885,8 +1880,8 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
     }
   // Get total shares to calculate total dividend payout
   int total_shares = 0;
-  int rc = h_get_stock_info (db,
-			     stock_id,
+  int rc = h_get_equity_info (db,
+			     equity_id,
 			     NULL,
 			     NULL,
 			     &total_shares,
@@ -1920,12 +1915,12 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
     }
 
   rc =
-    repo_corp_declare_dividend (db, stock_id, amount_per_share, time (NULL));
+    repo_corp_declare_dividend (db, equity_id, amount_per_share, time (NULL));
 
 
   if (rc != 0)
     {
-      LOGE ("cmd_stock_dividend_set: Failed to insert dividend: %d", rc);
+      LOGE ("cmd_equity_dividend_set: Failed to insert dividend: %d", rc);
       send_response_error (ctx,
 			   root,
 			   ERR_DB, "Database error declaring dividend.");
@@ -1936,7 +1931,7 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "message",
 		       json_string ("Dividend declared successfully."));
-  json_object_set_new (response_data, "stock_id", json_integer (stock_id));
+  json_object_set_new (response_data, "equity_id", json_integer (equity_id));
   json_object_set_new (response_data, "amount_per_share",
 		       json_integer (amount_per_share));
   json_object_set_new (response_data,
@@ -1947,7 +1942,7 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (payload, "corp_id", json_integer (corp_id));
-  json_object_set_new (payload, "stock_id", json_integer (stock_id));
+  json_object_set_new (payload, "equity_id", json_integer (equity_id));
   json_object_set_new (payload, "amount_per_share",
 		       json_integer (amount_per_share));
   json_object_set_new (payload, "total_payout", json_integer (total_payout));
@@ -1961,7 +1956,7 @@ cmd_stock_dividend_set (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_stock_sell (client_ctx_t *ctx, json_t *root)
+cmd_equity_sell (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id == 0)
     {
@@ -1987,15 +1982,16 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
 			   "Missing data object.");
       return 0;
     }
-  int stock_id;
-
-
-  if (!json_get_int_flexible (data, "stock_id", &stock_id) || stock_id <= 0)
+  int equity_id = 0;
+  if (!json_get_int_flexible (data, "equity_id", &equity_id) || equity_id <= 0)
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_BAD_REQUEST, "Missing or invalid 'stock_id'.");
-      return 0;
+      if (!json_get_int_flexible (data, "stock_id", &equity_id) || equity_id <= 0)
+        {
+          send_response_error (ctx,
+                               root,
+                               ERR_BAD_REQUEST, "Missing or invalid 'equity_id'.");
+          return 0;
+        }
     }
   int quantity;
 
@@ -2013,8 +2009,8 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
   int current_price = 0;
 
 
-  if (h_get_stock_info (db,
-			stock_id,
+  if (h_get_equity_info (db,
+			equity_id,
 			&ticker,
 			&corp_id, NULL, NULL, &current_price, NULL) != 0)
     {
@@ -2026,7 +2022,7 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
 
   // Verify shares owned
   int shares_owned = 0;
-  if (repo_corp_get_shares_owned (db, ctx->player_id, stock_id, &shares_owned)
+  if (repo_corp_get_shares_owned (db, ctx->player_id, equity_id, &shares_owned)
       != 0)
     {
       shares_owned = 0;
@@ -2056,11 +2052,11 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
     }
 
   // Update player shares
-  if (h_update_player_shares (db, ctx->player_id, stock_id, -quantity) != 0)
+  if (h_update_player_shares (db, ctx->player_id, equity_id, -quantity) != 0)
     {
       LOGE
-	("cmd_stock_sell: Failed to update player shares for player %d, stock %d",
-	 ctx->player_id, stock_id);
+	("cmd_equity_sell: Failed to update player shares for player %d, stock %d",
+	 ctx->player_id, equity_id);
       send_response_error (ctx, root, ERR_SERVER_ERROR,
 			   "Failed to update shares.");
       free (ticker);
@@ -2072,7 +2068,7 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (response_data, "message",
 		       json_string ("Shares sold successfully."));
-  json_object_set_new (response_data, "stock_id", json_integer (stock_id));
+  json_object_set_new (response_data, "equity_id", json_integer (equity_id));
   json_object_set_new (response_data, "ticker", json_string (ticker));
   json_object_set_new (response_data, "quantity", json_integer (quantity));
   json_object_set_new (response_data, "total_proceeds",
@@ -2083,7 +2079,7 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (payload, "player_id", json_integer (ctx->player_id));
-  json_object_set_new (payload, "stock_id", json_integer (stock_id));
+  json_object_set_new (payload, "equity_id", json_integer (equity_id));
   json_object_set_new (payload, "quantity", json_integer (quantity));
   json_object_set_new (payload, "proceeds", json_integer (total_proceeds));
   db_log_engine_event (time (NULL),
@@ -2097,7 +2093,7 @@ cmd_stock_sell (client_ctx_t *ctx, json_t *root)
 
 
 int
-cmd_stock (client_ctx_t *ctx, json_t *root)
+cmd_equity (client_ctx_t *ctx, json_t *root)
 {
   json_t *data = json_object_get (root, "data");
   if (!json_is_object (data))
@@ -2119,19 +2115,19 @@ cmd_stock (client_ctx_t *ctx, json_t *root)
     }
   if (strcasecmp (subcommand, "ipo.register") == 0)
     {
-      return cmd_stock_ipo_register (ctx, root);
+      return cmd_equity_ipo_register (ctx, root);
     }
   else if (strcasecmp (subcommand, "buy") == 0)
     {
-      return cmd_stock_buy (ctx, root);
+      return cmd_equity_buy (ctx, root);
     }
   else if (strcasecmp (subcommand, "sell") == 0)
     {
-      return cmd_stock_sell (ctx, root);
+      return cmd_equity_sell (ctx, root);
     }
   else if (strcasecmp (subcommand, "dividend.set") == 0)
     {
-      return cmd_stock_dividend_set (ctx, root);
+      return cmd_equity_dividend_set (ctx, root);
     }
   else
     {
@@ -2237,15 +2233,15 @@ h_dividend_payout (db_t *db, int64_t now_s)
   while (db_res_step (res_unpaid, &err))
     {
       int div_id = db_res_col_i32 (res_unpaid, 0, &err);
-      int stock_id = db_res_col_i32 (res_unpaid, 1, &err);
+      int equity_id = db_res_col_i32 (res_unpaid, 1, &err);
       int amount_per_share = db_res_col_i32 (res_unpaid, 2, &err);
 
       int corp_id = 0;
       int total_shares = 0;
 
 
-      if (h_get_stock_info (db,
-			    stock_id,
+      if (h_get_equity_info (db,
+			    equity_id,
 			    NULL,
 			    &corp_id, &total_shares, NULL, NULL, NULL) != 0)
 	{
@@ -2280,7 +2276,7 @@ h_dividend_payout (db_t *db, int64_t now_s)
 
 
 		  if ((res_holders =
-		       repo_corp_get_stock_holders (db, stock_id,
+		       repo_corp_get_equity_holders (db, equity_id,
 						    &err)) != NULL)
 		    {
 		      while (db_res_step (res_holders, &err))
@@ -2330,13 +2326,13 @@ h_dividend_payout (db_t *db, int64_t now_s)
 		  db_tx_commit (db, &err);
 		  LOGI
 		    ("Dividend payout for stock %d (div_id %d) completed. Total: %lld",
-		     stock_id, div_id, total_payout);
+		     equity_id, div_id, total_payout);
 		}
 	      else
 		{
 		  db_tx_rollback (db, NULL);
 		  LOGE ("Dividend payout failed for stock %d (div_id %d)",
-			stock_id, div_id);
+			equity_id, div_id);
 		}
 	    }
 	}
@@ -2344,7 +2340,7 @@ h_dividend_payout (db_t *db, int64_t now_s)
 	{
 	  LOGW
 	    ("Corp %d has insufficient funds for dividend payout of stock %d",
-	     corp_id, stock_id);
+	     corp_id, equity_id);
 	}
     }
   db_res_finalize (res_unpaid);

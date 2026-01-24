@@ -116,7 +116,7 @@ int repo_engine_get_ship_id(db_t *db, int32_t player_id, int32_t *ship_id_out)
     sql_build(db,
               "SELECT ship_id FROM players WHERE player_id = {1};",
               sql_get_ship_id, sizeof(sql_get_ship_id));
-    db_bind_t params[] = { db_bind_i32(player_id) };
+    db_bind_t params[] = { db_bind_i64(player_id) };
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -137,7 +137,7 @@ int repo_engine_get_ship_name(db_t *db, int32_t ship_id, char *name_out, size_t 
     sql_build(db,
               "SELECT name FROM ships WHERE ship_id = {1};",
               sql_get_ship_name, sizeof(sql_get_ship_name));
-    db_bind_t params[] = { db_bind_i32(ship_id) };
+    db_bind_t params[] = { db_bind_i64(ship_id) };
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -185,8 +185,8 @@ int repo_engine_fetch_events(db_t *db, int64_t last_id, int priority_only, const
     db_bind_t params[] = {
         db_bind_i64(last_id),
         db_bind_bool(priority_only),
-        db_bind_text(prio_json),
-        db_bind_i32(limit)
+        db_bind_json(prio_json),
+        db_bind_i64(limit)
     };
 
     db_error_t err;

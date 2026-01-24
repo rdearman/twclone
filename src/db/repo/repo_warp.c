@@ -29,7 +29,7 @@ int repo_warp_get_tunnel_end(db_t *db, int start_sector, int *end_sector_out) {
     /* SQL_VERBATIM: Q2 */
     const char *q = "SELECT to_sector FROM sector_warps WHERE from_sector = {1};";
     char sql_converted[256]; sql_build(db, q, sql_converted, sizeof(sql_converted));
-    if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i32(start_sector) }, 1, &st, &err) && db_res_step(st, &err)) {
+    if (db_query (db, sql_converted, (db_bind_t[]){ db_bind_i64(start_sector) }, 1, &st, &err) && db_res_step(st, &err)) {
         *end_sector_out = db_res_col_i32(st, 0, &err);
         db_res_finalize(st);
         return 0;
@@ -62,7 +62,7 @@ int repo_warp_delete_warp(db_t *db, int from_sector, int to_sector) {
     /* SQL_VERBATIM: Q4 */
     const char *sql_delete_warp = "DELETE FROM sector_warps WHERE from_sector = {1} AND to_sector = {2};";
     char sql_converted[256]; sql_build(db, sql_delete_warp, sql_converted, sizeof(sql_converted));
-    if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i32(from_sector), db_bind_i32(to_sector) }, 2, &err)) return err.code;
+    if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i64(from_sector), db_bind_i64(to_sector) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -71,7 +71,7 @@ int repo_warp_insert_warp(db_t *db, int from_sector, int to_sector) {
     /* SQL_VERBATIM: Q5 */
     const char *sql_insert_warp = "INSERT INTO sector_warps (from_sector, to_sector) VALUES ({1}, {2});";
     char sql_converted[256]; sql_build(db, sql_insert_warp, sql_converted, sizeof(sql_converted));
-    if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i32(from_sector), db_bind_i32(to_sector) }, 2, &err)) return err.code;
+    if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i64(from_sector), db_bind_i64(to_sector) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -112,6 +112,6 @@ int repo_warp_delete_warps_from_sector(db_t *db, int from_sector) {
     /* SQL_VERBATIM: Q9 */
     const char *sql_delete = "DELETE FROM sector_warps WHERE from_sector = {1};";
     char sql_converted[256]; sql_build(db, sql_delete, sql_converted, sizeof(sql_converted));
-    if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i32(from_sector) }, 1, &err)) return err.code;
+    if (!db_exec (db, sql_converted, (db_bind_t[]){ db_bind_i64(from_sector) }, 1, &err)) return err.code;
     return 0;
 }

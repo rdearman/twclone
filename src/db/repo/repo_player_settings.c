@@ -63,7 +63,7 @@ db_subscribe_upsert (db_t *db,
       db_bind_i64(pid),
       db_bind_text(topic),
       db_bind_text(filter),
-      db_bind_i32(locked),
+      db_bind_bool(locked),
       db_bind_bool(true)
   };
 

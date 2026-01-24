@@ -968,6 +968,15 @@ engine_main_loop (int shutdown_fd)
   for (;;)
     {
       engine_s2s_drain_once (conn);
+
+      /* CHECK FOR SHUTDOWN: Non-blocking poll on the shutdown pipe */
+      struct pollfd pfd_check = {.fd = shutdown_fd,.events = POLLIN };
+      if (poll (&pfd_check, 1, 0) > 0)
+	{
+	  LOGI ("[engine] early shutdown signal received.\n");
+	  break;
+	}
+
       uint64_t now_ms = monotonic_millis ();
 
 
@@ -1141,6 +1150,11 @@ engine_spawn (pid_t *out_pid, int *out_shutdown_fd)
   if (pid == 0)
     {
       /* --- CHILD PROCESS: engine --- */
+      /* Reset signal handlers to default so SIGTERM works */
+      signal(SIGINT, SIG_DFL);
+      signal(SIGTERM, SIG_DFL);
+      signal(SIGPIPE, SIG_IGN); /* Keep SIGPIPE ignored */
+
       game_db_after_fork_child ();	// GOAL B: Close inherited parent DB handles
       /* Close the write end; child only reads shutdown pipe */
       close (pipefd[1]);

@@ -411,7 +411,7 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  repo_auth_insert_initial_turns (db, now_ts, pid);
+  repo_auth_insert_initial_turns (db, now_ts, pid, cfg->turnsperday);
 
   ctx->sector_id = spawn_sid;
 
@@ -705,6 +705,64 @@ cmd_auth_mfa_totp_verify (client_ctx_t *ctx, json_t *root)
 			       root,
 			       ERR_CAPABILITY_DISABLED,
 			       "MFA is not enabled on this server", NULL);
+  return 0;
+}
+
+
+int
+cmd_auth_change_password (client_ctx_t *ctx, json_t *root)
+{
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      return AUTH_ERR_DB;
+    }
+
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, AUTH_ERR_INVALID_CRED, "Not logged in");
+      return 0;
+    }
+
+  json_t *jdata = json_object_get (root, "data");
+  const char *old_pass = NULL, *new_pass = NULL;
+
+  if (json_is_object (jdata))
+    {
+      old_pass = json_string_value (json_object_get (jdata, "old_password"));
+      new_pass = json_string_value (json_object_get (jdata, "new_password"));
+    }
+
+  if (!old_pass || !new_pass)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD,
+			   "Missing old_password or new_password");
+      return 0;
+    }
+
+  int valid = 0;
+  if (repo_auth_verify_password (db, ctx->player_id, old_pass, &valid) != 0)
+    {
+      send_response_error (ctx, root, AUTH_ERR_DB, "Database error");
+      return 0;
+    }
+
+  if (!valid)
+    {
+      send_response_error (ctx, root, AUTH_ERR_INVALID_CRED,
+			   "Invalid old password");
+      return 0;
+    }
+
+  if (repo_auth_update_password (db, ctx->player_id, new_pass) != 0)
+    {
+      send_response_error (ctx, root, AUTH_ERR_DB, "Failed to update password");
+      return 0;
+    }
+
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "success", json_boolean (1));
+  send_response_ok_take (ctx, root, "auth.change_password", &resp);
   return 0;
 }
 

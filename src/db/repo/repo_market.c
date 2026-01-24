@@ -35,13 +35,13 @@ db_insert_commodity_order (db_t *db,
   db_bind_t params[10];
 
   params[0] = db_bind_text (actor_type);
-  params[1] = db_bind_i32 (actor_id);
+  params[1] = db_bind_i64 (actor_id);
   params[2] = db_bind_text (location_type);
-  params[3] = db_bind_i32 (location_id);
-  params[4] = db_bind_i32 (commodity_id);
+  params[3] = db_bind_i64 (location_id);
+  params[4] = db_bind_i64 (commodity_id);
   params[5] = db_bind_text (side);
-  params[6] = db_bind_i32 (quantity);
-  params[7] = db_bind_i32 (price);
+  params[6] = db_bind_i64 (quantity);
+  params[7] = db_bind_i64 (price);
   params[8] = db_bind_timestamp_text (now);
   params[9] = (expires_at > 0)
     ? db_bind_timestamp_text (expires_at)
@@ -86,9 +86,9 @@ db_update_commodity_order (db_t *db,
   db_bind_t params[4];
 
 
-  params[0] = db_bind_i32 (order_id);
-  params[1] = db_bind_i32 (new_quantity);
-  params[2] = db_bind_i32 (new_filled_quantity);
+  params[0] = db_bind_i64 (order_id);
+  params[1] = db_bind_i64 (new_quantity);
+  params[2] = db_bind_i64 (new_filled_quantity);
   params[3] = db_bind_text (new_status);
 
 
@@ -128,8 +128,8 @@ db_cancel_commodity_orders_for_actor_and_commodity (db_t *db,
 
 
   params[0] = db_bind_text (actor_type);
-  params[1] = db_bind_i32 (actor_id);
-  params[2] = db_bind_i32 (commodity_id);
+  params[1] = db_bind_i64 (actor_id);
+  params[2] = db_bind_i64 (commodity_id);
   params[3] = db_bind_text (side);
 
   const char *sql_tmpl =
@@ -201,8 +201,8 @@ db_get_open_order (db_t *db,
 
 
   params[0] = db_bind_text (actor_type);
-  params[1] = db_bind_i32 (actor_id);
-  params[2] = db_bind_i32 (commodity_id);
+  params[1] = db_bind_i64 (actor_id);
+  params[2] = db_bind_i64 (commodity_id);
   params[3] = db_bind_text (side);
 
   const char *sql_tmpl =
@@ -328,7 +328,7 @@ db_load_open_orders_for_commodity (db_t *db,
   db_bind_t params[2];
 
 
-  params[0] = db_bind_i32 (commodity_id);
+  params[0] = db_bind_i64 (commodity_id);
   params[1] = db_bind_text (side);
 
 
@@ -495,17 +495,17 @@ db_insert_commodity_trade (db_t *db,
   int64_t now = time(NULL);
   db_bind_t params[11];
 
-  params[0]  = db_bind_i32 (buy_order_id);         /* {1} */
-  params[1]  = db_bind_i32 (sell_order_id);        /* {2} */
-  params[2]  = db_bind_i32 (quantity);             /* {3} */
-  params[3]  = db_bind_i32 (price);                /* {4} */
+  params[0]  = db_bind_i64 (buy_order_id);         /* {1} */
+  params[1]  = db_bind_i64 (sell_order_id);        /* {2} */
+  params[2]  = db_bind_i64 (quantity);             /* {3} */
+  params[3]  = db_bind_i64 (price);                /* {4} */
   params[4]  = db_bind_timestamp_text (now);       /* {5} */
   params[5]  = db_bind_text(buyer_actor_type);     /* {6} */
-  params[6]  = db_bind_i32 (buyer_actor_id);       /* {7} */
+  params[6]  = db_bind_i64 (buyer_actor_id);       /* {7} */
   params[7]  = db_bind_text(seller_actor_type);    /* {8} */
-  params[8]  = db_bind_i32 (seller_actor_id);      /* {9} */
-  params[9]  = db_bind_i32 (settlement_tx_buy);    /* {10} */
-  params[10] = db_bind_i32 (settlement_tx_sell);   /* {11} */
+  params[8]  = db_bind_i64 (seller_actor_id);      /* {9} */
+  params[9]  = db_bind_i64 (settlement_tx_buy);    /* {10} */
+  params[10] = db_bind_i64 (settlement_tx_sell);   /* {11} */
 
   const char *sql_tmpl =
     "INSERT INTO commodity_trades ("
@@ -544,7 +544,7 @@ db_list_actor_orders (db_t *db, const char *actor_type, int actor_id, json_t **o
   db_bind_t params[2];
 
   params[0] = db_bind_text(actor_type);  /* {1} */
-  params[1] = db_bind_i32(actor_id);     /* {2} */
+  params[1] = db_bind_i64(actor_id);     /* {2} */
 
   const char *sql_tmpl =
     "SELECT commodity_orders_id, side, commodity_id, quantity, filled_quantity, price, status, "
@@ -670,7 +670,7 @@ db_orders_summary (db_t *db, int filter_commodity_id, json_t **out_summary)
 
   if (filter_commodity_id > 0)
     {
-      params[0] = db_bind_i32(filter_commodity_id);  /* {1} */
+      params[0] = db_bind_i64(filter_commodity_id);  /* {1} */
       n_params = 1;
     }
 

@@ -21,7 +21,7 @@ int repo_news_get_unread(db_t *db, int32_t player_id, db_res_t **out_res)
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -41,7 +41,7 @@ int repo_news_get_recent(db_t *db, const char *epoch_expr, int32_t seconds_ago, 
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(seconds_ago) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(seconds_ago) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -60,7 +60,7 @@ int repo_news_update_last_read(db_t *db, const char *now_expr, int32_t player_id
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &err)) {
         return 0;
     }
     return err.code;
@@ -77,7 +77,7 @@ int repo_news_post(db_t *db, const char *epoch_expr, const char *category, const
     db_bind_t params[] = {
         db_bind_text(category),
         db_bind_text(body),
-        db_bind_i32(author_id)
+        db_bind_i64(author_id)
     };
 
     char sql_converted[512];

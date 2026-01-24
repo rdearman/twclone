@@ -15,9 +15,11 @@ int repo_auth_get_podded_status(db_t *db, int player_id, char *status_out, size_
 int repo_auth_get_unread_news_count(db_t *db, int player_id, int *count_out);
 int repo_auth_upsert_system_sub(db_t *db, int player_id);
 int repo_auth_register_player(db_t *db, const char *name, const char *pass, const char *ship_name, int spawn_sid, int64_t *player_id_out, db_error_t *err);
-int repo_auth_insert_initial_turns(db_t *db, const char *now_ts, int player_id);
+int repo_auth_insert_initial_turns(db_t *db, const char *now_ts, int player_id, int initial_turns);
 int repo_auth_update_player_credits(db_t *db, int credits, int player_id);
 int repo_auth_upsert_news_sub(db_t *db, int player_id);
 int repo_auth_check_username_exists(db_t *db, const char *username, int *exists_out);
+int repo_auth_verify_password(db_t *db, int player_id, const char *password, int *valid_out);
+int repo_auth_update_password(db_t *db, int player_id, const char *new_password);
 
 #endif // REPO_AUTH_H

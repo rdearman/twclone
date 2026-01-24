@@ -13,14 +13,14 @@ int db_ports_upsert_stock(db_t *db, const char *entity_type, int entity_id, cons
     /* 1. Try Update first */
     const char *q_upd = "UPDATE entity_stock SET quantity = {1}, last_updated_ts = {2} WHERE entity_type = {3} AND entity_id = {4} AND commodity_code = {5};";
     char sql_upd[1024]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(quantity), db_bind_i64(ts), db_bind_text(entity_type), db_bind_i32(entity_id), db_bind_text(commodity_code) };
+    db_bind_t upd_params[] = { db_bind_i64(quantity), db_bind_i64(ts), db_bind_text(entity_type), db_bind_i64(entity_id), db_bind_text(commodity_code) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 5, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ({1}, {2}, {3}, {4}, 0, {5});";
     char sql_ins[1024]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_text(entity_type), db_bind_i32(entity_id), db_bind_text(commodity_code), db_bind_i32(quantity), db_bind_i64(ts) };
+    db_bind_t ins_params[] = { db_bind_text(entity_type), db_bind_i64(entity_id), db_bind_text(commodity_code), db_bind_i64(quantity), db_bind_i64(ts) };
     if (!db_exec(db, sql_ins, ins_params, 5, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -38,7 +38,7 @@ int db_ports_get_buy_eligibility(db_t *db, int port_id, const char *commodity_co
     /* SQL_VERBATIM: Q2 */
     const char *q2 = "SELECT es.quantity, p.size * 1000 AS max_capacity FROM ports p JOIN entity_stock es ON p.port_id = es.entity_id WHERE es.entity_type = 'port' AND es.commodity_code = {2} AND p.port_id = {1} LIMIT 1;";
     char sql[1024]; sql_build(db, q2, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         *quantity = db_res_col_int(res, 0, &err);
         *max_capacity = db_res_col_int(res, 1, &err);
         db_res_finalize(res);
@@ -54,7 +54,7 @@ int db_ports_get_stock_quantity(db_t *db, const char *entity_type, int entity_id
     /* SQL_VERBATIM: Q3 */
     const char *q3 = "SELECT quantity FROM entity_stock WHERE entity_type = {1} AND entity_id = {2} AND commodity_code = {3};";
     char sql[512]; sql_build(db, q3, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(entity_type), db_bind_i32(entity_id), db_bind_text(commodity_code) }, 3, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(entity_type), db_bind_i64(entity_id), db_bind_text(commodity_code) }, 3, &res, &err) && db_res_step(res, &err)) {
         *quantity = db_res_col_int(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -85,7 +85,7 @@ int db_ports_get_price_info(db_t *db, int port_id, const char *commodity_code, i
     /* SQL_VERBATIM: Q5 */
     const char *q5 = "SELECT c.base_price, c.volatility,        es.quantity,        p.size * 1000 AS max_capacity,        p.techlevel,        ec.price_elasticity,        ec.volatility_factor FROM commodities c JOIN ports p ON p.port_id = {1} JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id WHERE c.code = {2} LIMIT 1;";
     char sql[1024]; sql_build(db, q5, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (base_price) *base_price = db_res_col_int(res, 0, &err);
         if (quantity) *quantity = db_res_col_int(res, 2, &err);
         if (max_capacity) *max_capacity = db_res_col_int(res, 3, &err);
@@ -120,7 +120,7 @@ int db_ports_get_port_sector(db_t *db, int port_id, int *sector_id) {
     /* SQL_VERBATIM: Q7 */
     const char *q7 = "SELECT sector_id FROM ports WHERE port_id = {1} LIMIT 1";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_id = db_res_col_int(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -135,7 +135,7 @@ int db_ports_get_market_move_info(db_t *db, int port_id, const char *commodity_c
     /* SQL_VERBATIM: Q8 */
     const char *q8 = "SELECT es.quantity, p.size * 1000 AS max_capacity FROM ports p LEFT JOIN entity_stock es   ON p.port_id = es.entity_id  AND es.entity_type = 'port'  AND es.commodity_code = {2} WHERE p.port_id = {1};";
     char sql[1024]; sql_build(db, q8, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (db_res_col_is_null(res, 0)) *current_quantity = 0;
         else *current_quantity = db_res_col_int(res, 0, &err);
         *max_capacity = db_res_col_int(res, 1, &err);
@@ -153,7 +153,7 @@ int db_ports_get_trade_history(db_t *db, int player_id, int limit, json_t **hist
     /* SQL_VERBATIM: Q9 */
     const char *q9 = "SELECT timestamp, trade_log_id as id, port_id, commodity, units, price_per_unit, action FROM trade_log WHERE player_id = {1} ORDER BY timestamp DESC, trade_log_id DESC LIMIT {2};";
     char sql[1024]; sql_build(db, q9, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(limit) }, 2, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(limit) }, 2, &res, &err)) {
         while (db_res_step(res, &err)) {
             json_t *row = json_object();
             json_object_set_new(row, "timestamp", json_integer(db_res_col_i64(res, 0, &err)));
@@ -180,7 +180,7 @@ int db_ports_get_trade_history_cursor(db_t *db, int player_id, int limit, int64_
     /* SQL_VERBATIM: Q10 */
     const char *q10 = "SELECT timestamp, trade_log_id as id, port_id, commodity, units, price_per_unit, action FROM trade_log WHERE player_id = {1} AND (timestamp < {3} OR (timestamp = {3} AND trade_log_id < {4})) ORDER BY timestamp DESC, trade_log_id DESC LIMIT {2};";
     char sql[1024]; sql_build(db, q10, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(limit), db_bind_i64(ts), db_bind_i64(id) }, 4, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(limit), db_bind_i64(ts), db_bind_i64(id) }, 4, &res, &err)) {
         while (db_res_step(res, &err)) {
             json_t *row = json_object();
             json_object_set_new(row, "timestamp", json_integer(db_res_col_i64(res, 0, &err)));
@@ -205,7 +205,7 @@ int db_ports_set_ported_status(db_t *db, int ship_id, int port_id) {
     /* SQL_VERBATIM: Q11 */
     const char *q11 = "UPDATE ships SET ported = {1}, onplanet = FALSE WHERE ship_id = {2};";
     char sql[512]; sql_build(db, q11, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_bool(port_id > 0), db_bind_i32(ship_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_bool(port_id > 0), db_bind_i64(ship_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -215,7 +215,7 @@ int db_ports_get_ported_status(db_t *db, int ship_id, int *port_id) {
     /* SQL_VERBATIM: Q12 */
     const char *q12 = "SELECT ported FROM ships WHERE ship_id = {1}";
     char sql[256]; sql_build(db, q12, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *port_id = db_res_col_bool(res, 0, &err) ? 1 : 0;
         db_res_finalize(res);
         return 0;
@@ -230,7 +230,7 @@ int db_ports_get_header_by_id(db_t *db, int port_id, json_t **port_obj, int *por
     /* SQL_VERBATIM: Q14 */
     const char *q14 = "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type FROM ports WHERE port_id = {1} LIMIT 1;";
     char sql[512]; sql_build(db, q14, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *port_obj = json_object();
         json_object_set_new(*port_obj, "id", json_integer(db_res_col_i32(res, 0, &err)));
         json_object_set_new(*port_obj, "number", json_integer(db_res_col_i32(res, 1, &err)));
@@ -256,7 +256,7 @@ int db_ports_get_header_by_sector(db_t *db, int sector_id, json_t **port_obj, in
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type FROM ports WHERE sector_id = {1} LIMIT 1;";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *port_obj = json_object();
         json_object_set_new(*port_obj, "id", json_integer(db_res_col_i32(res, 0, &err)));
         json_object_set_new(*port_obj, "number", json_integer(db_res_col_i32(res, 1, &err)));
@@ -283,7 +283,7 @@ int db_ports_get_commodities(db_t *db, int port_id, json_t **commodities_array) 
     /* SQL_VERBATIM: Q16 */
     const char *q16 = "SELECT es.commodity_code, es.quantity, es.price, c.illegal FROM entity_stock es JOIN commodities c ON es.commodity_code = c.code WHERE es.entity_type = 'port' AND es.entity_id = {1};";
     char sql[1024]; sql_build(db, q16, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err)) {
         while (db_res_step(res, &err)) {
             json_t *obj = json_object();
             const char *code = db_res_col_text(res, 0, &err);
@@ -406,14 +406,14 @@ int db_ports_insert_fake_bust(db_t *db, int port_id, int player_id) {
     /* 1. Try Update first */
     const char *q_upd = "UPDATE port_busts SET last_bust_at={1}, bust_type='fake', active=TRUE WHERE port_id={2} AND player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_timestamp_text(now_ts), db_bind_i32(port_id), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_timestamp_text(now_ts), db_bind_i64(port_id), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) VALUES ({1}, {2}, {3}, 'fake', 1);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(port_id), db_bind_i32(player_id), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(port_id), db_bind_i64(player_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -433,14 +433,14 @@ int db_ports_update_last_rob_attempt(db_t *db, int player_id, int port_id) {
     /* 1. Try Update first */
     const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=FALSE WHERE player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(port_id), db_bind_timestamp_text(now_ts), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_i64(port_id), db_bind_timestamp_text(now_ts), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(player_id), db_bind_i32(port_id), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(port_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -483,14 +483,14 @@ int db_ports_increase_suspicion(db_t *db, int cluster_id, int player_id, int sus
     /* 1. Try Update first */
     const char *q_upd = "UPDATE cluster_player_status SET suspicion = suspicion + {1} WHERE cluster_id = {2} AND player_id = {3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(susp_inc), db_bind_i32(cluster_id), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_i64(susp_inc), db_bind_i64(cluster_id), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion) VALUES ({1}, {2}, {3});";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(cluster_id), db_bind_i32(player_id), db_bind_i32(susp_inc) };
+    db_bind_t ins_params[] = { db_bind_i64(cluster_id), db_bind_i64(player_id), db_bind_i64(susp_inc) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -510,14 +510,14 @@ int db_ports_update_last_rob_success(db_t *db, int player_id, int port_id) {
     /* 1. Try Update first */
     const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=TRUE WHERE player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(port_id), db_bind_timestamp_text(now_ts), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_i64(port_id), db_bind_timestamp_text(now_ts), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 1);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(player_id), db_bind_i32(port_id), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(port_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -537,14 +537,14 @@ int db_ports_insert_real_bust(db_t *db, int port_id, int player_id) {
     /* 1. Try Update first */
     const char *q_upd = "UPDATE port_busts SET last_bust_at={1}, bust_type='real', active=TRUE WHERE port_id={2} AND player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_timestamp_text(now_ts), db_bind_i32(port_id), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_timestamp_text(now_ts), db_bind_i64(port_id), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) VALUES ({1}, {2}, {3}, 'real', 1);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(port_id), db_bind_i32(player_id), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(port_id), db_bind_i64(player_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -564,14 +564,14 @@ int db_ports_update_cluster_bust(db_t *db, int cluster_id, int player_id, int su
     /* 1. Try Update first */
     const char *q_upd = "UPDATE cluster_player_status SET suspicion = suspicion + {1}, bust_count = bust_count + 1, last_bust_at = {2} WHERE cluster_id = {3} AND player_id = {4};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(susp_inc), db_bind_timestamp_text(now_ts), db_bind_i32(cluster_id), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_i64(susp_inc), db_bind_timestamp_text(now_ts), db_bind_i64(cluster_id), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 4, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) VALUES ({1}, {2}, {3}, 1, {4});";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(cluster_id), db_bind_i32(player_id), db_bind_i32(susp_inc), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(cluster_id), db_bind_i64(player_id), db_bind_i64(susp_inc), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 4, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -600,14 +600,14 @@ int db_ports_update_last_rob_fail(db_t *db, int player_id, int port_id) {
     /* 1. Try Update first */
     const char *q_upd = "UPDATE player_last_rob SET port_id={1}, last_attempt_at={2}, was_success=FALSE WHERE player_id={3};";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(port_id), db_bind_timestamp_text(now_ts), db_bind_i32(player_id) };
+    db_bind_t upd_params[] = { db_bind_i64(port_id), db_bind_timestamp_text(now_ts), db_bind_i64(player_id) };
     if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
 
 
     /* 2. Try Insert if update affected 0 rows */
     const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i32(player_id), db_bind_i32(port_id), db_bind_timestamp_text(now_ts) };
+    db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(port_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
         /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -673,7 +673,7 @@ int db_ports_log_trade_sell(db_t *db, int player_id, int port_id, int sector_id,
     const char *q36 = "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, 'sell', %s);";
     char sql_tmpl[512], sql[512]; snprintf(sql_tmpl, sizeof(sql_tmpl), q36, now_ts);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(port_id), db_bind_i32(sector_id), db_bind_text(commodity), db_bind_i32(amount), db_bind_i32(buy_price) }, 6, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(port_id), db_bind_i64(sector_id), db_bind_text(commodity), db_bind_i64(amount), db_bind_i64(buy_price) }, 6, &err)) return 0;
     return -1;
 }
 
@@ -702,7 +702,7 @@ int db_ports_check_port_id_buy(db_t *db, int port_id, int *found_id) {
     /* SQL_VERBATIM: Q40 */
     const char *q40 = "SELECT port_id FROM ports WHERE port_id = {1} LIMIT 1;";
     char sql[256]; sql_build(db, q40, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *found_id = (int)db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -717,7 +717,7 @@ int db_ports_check_port_sector_buy(db_t *db, int sector_id, int *found_id) {
     /* SQL_VERBATIM: Q41 */
     const char *q41 = "SELECT port_id FROM ports WHERE sector_id = {1} LIMIT 1;";
     char sql[256]; sql_build(db, q41, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *found_id = (int)db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -733,7 +733,7 @@ int db_ports_log_trade_buy(db_t *db, int player_id, int port_id, int sector_id, 
     const char *q42 = "INSERT INTO trade_log (player_id, port_id, sector_id, commodity, units, price_per_unit, action, timestamp) VALUES ({1},{2},{3},{4},{5},{6},'buy',%s)";
     char sql_tmpl[512], sql[512]; snprintf(sql_tmpl, sizeof(sql_tmpl), q42, now_ts);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(port_id), db_bind_i32(sector_id), db_bind_text(commodity), db_bind_i32(amount), db_bind_i32(unit_price) }, 6, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(port_id), db_bind_i64(sector_id), db_bind_text(commodity), db_bind_i64(amount), db_bind_i64(unit_price) }, 6, &err)) return 0;
     return -1;
 }
 
@@ -742,7 +742,7 @@ int db_ports_apply_alignment_hit(db_t *db, int player_id) {
     /* SQL_VERBATIM: Q43 */
     const char *q43 = "UPDATE players SET alignment = alignment - 10 WHERE player_id = {1};";
     char sql[256]; sql_build(db, q43, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &err)) return 0;
     return -1;
 }
 
@@ -753,7 +753,7 @@ int db_ports_insert_idemp_buy(db_t *db, const char *key, int player_id, int sect
     const char *q44 = "INSERT INTO trade_idempotency (key, player_id, sector_id, request_json, response_json, created_at) VALUES ({1},{2},{3},{4},{5},%s);";
     char sql_tmpl[1024], sql[1024]; snprintf(sql_tmpl, sizeof(sql_tmpl), q44, now_ts);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i32(player_id), db_bind_i32(sector_id), db_bind_text(req_json), db_bind_text(resp_json) }, 5, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i64(player_id), db_bind_i64(sector_id), db_bind_text(req_json), db_bind_text(resp_json) }, 5, &err)) return 0;
     return -1;
 }
 
@@ -767,7 +767,7 @@ int db_ports_replay_idemp_buy(db_t *db, const char *key, int player_id, int sect
     /* SQL_VERBATIM: Q46 */
     const char *q46 = "SELECT response_json FROM trade_idempotency WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
     char sql[1024]; sql_build(db, q46, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i32(player_id), db_bind_i32(sector_id) }, 3, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i64(player_id), db_bind_i64(sector_id) }, 3, &res, &err) && db_res_step(res, &err)) {
         const char *resp = db_res_col_text(res, 0, &err);
         if (resp_json) *resp_json = resp ? strdup(resp) : NULL;
         db_res_finalize(res);
@@ -783,7 +783,7 @@ int db_ports_get_commodity_details(db_t *db, int port_id, const char *commodity_
     /* SQL_VERBATIM: Q47 */
     const char *q47 = "SELECT es.quantity, p.size * 1000 AS max_capacity,        (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS buys_commodity,        (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS sells_commodity FROM ports p LEFT JOIN entity_stock es   ON p.port_id = es.entity_id  AND es.entity_type = 'port'  AND es.commodity_code = {2} JOIN commodities c ON c.code = {2} WHERE p.port_id = {1};";
     char sql[1024]; sql_build(db, q47, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (quantity) {
             if (db_res_col_is_null(res, 0)) *quantity = 0;
             else *quantity = db_res_col_int(res, 0, &err);

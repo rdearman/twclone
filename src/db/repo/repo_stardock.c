@@ -13,7 +13,7 @@ int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_p
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             *out_port_id = (int32_t)db_res_col_i64(res, 0, &err);
             *out_type = (int32_t)db_res_col_i64(res, 1, &err);
@@ -33,7 +33,7 @@ int repo_stardock_get_ship_state(db_t *db, int32_t ship_id, db_res_t **out_res)
     char sql_converted[1024];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -77,7 +77,7 @@ int repo_stardock_get_ship_limit_info(db_t *db, int32_t ship_id, const char *col
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -91,7 +91,7 @@ int repo_stardock_update_ship_hardware(db_t *db, const char *col_name, int32_t q
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(quantity), db_bind_i32(ship_id) }, 2, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(ship_id) }, 2, &err)) {
         return 0;
     }
     return err.code;
@@ -109,7 +109,7 @@ int repo_stardock_check_shipyard_location(db_t *db, int32_t sector_id, int32_t p
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(sector_id), db_bind_i32(player_id) }, 2, &res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(player_id) }, 2, &res, &err)) {
         if (db_res_step(res, &err)) {
             *out_port_id = (int32_t)db_res_col_i64(res, 0, &err);
             db_res_finalize(res);
@@ -137,7 +137,7 @@ int repo_stardock_get_player_ship_info(db_t *db, int32_t player_id, db_res_t **o
     char sql_converted[1024];
     sql_build(db, sql_q12, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -152,7 +152,7 @@ int repo_stardock_get_shipyard_inventory(db_t *db, int32_t port_id, db_res_t **o
     char sql_converted[1024];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(port_id), db_bind_bool(true), db_bind_bool(true) }, 3, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(port_id), db_bind_bool(true), db_bind_bool(true) }, 3, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -165,7 +165,7 @@ int repo_stardock_get_shiptype_details(db_t *db, int32_t type_id, db_res_t **out
     char sql_converted[1024];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(type_id), db_bind_bool(true) }, 2, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(type_id), db_bind_bool(true) }, 2, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -178,7 +178,7 @@ int repo_stardock_upgrade_ship(db_t *db, int32_t new_type_id, const char *new_na
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(new_type_id), db_bind_text(new_name), db_bind_i64(cost), db_bind_i32(ship_id) }, 4, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(new_type_id), db_bind_text(new_name), db_bind_i64(cost), db_bind_i64(ship_id) }, 4, &err)) {
         return 0;
     }
     return err.code;
@@ -205,7 +205,7 @@ int repo_stardock_is_in_tavern(db_t *db, int32_t sector_id, bool *out_in_tavern)
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(sector_id), db_bind_bool(true) }, 2, &res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_bool(true) }, 2, &res, &err)) {
         *out_in_tavern = db_res_step(res, &err);
         db_res_finalize(res);
         return 0;
@@ -220,7 +220,7 @@ int repo_stardock_get_loan(db_t *db, int32_t player_id, db_res_t **out_res)
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -238,7 +238,7 @@ int repo_stardock_get_player_credits(db_t *db, int32_t player_id, int64_t *out_c
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             *out_credits = db_res_col_i64(res, 0, &err);
             db_res_finalize(res);
@@ -258,7 +258,7 @@ int repo_stardock_get_player_alignment(db_t *db, int32_t player_id, int64_t *out
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             *out_alignment = db_res_col_i64(res, 0, &err);
             db_res_finalize(res);
@@ -279,7 +279,7 @@ int repo_stardock_update_player_credits(db_t *db, int32_t player_id, int64_t amo
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(player_id) }, 2, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(player_id) }, 2, &err)) {
         return 0;
     }
     return err.code;
@@ -292,7 +292,7 @@ int repo_stardock_mark_loan_defaulted(db_t *db, int32_t player_id)
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &err)) {
         return 0;
     }
     return err.code;
@@ -305,7 +305,7 @@ int repo_stardock_update_loan_principal(db_t *db, int32_t player_id, int64_t new
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(new_principal), db_bind_i32(player_id) }, 2, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(new_principal), db_bind_i64(player_id) }, 2, &err)) {
         return 0;
     }
     return err.code;
@@ -318,7 +318,7 @@ int repo_stardock_insert_lottery_ticket(db_t *db, const char *draw_date, int32_t
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_text(draw_date), db_bind_i32(player_id), db_bind_i32(number), db_bind_i64(cost), db_bind_timestamp_text(purchased_at) }, 5, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_text(draw_date), db_bind_i64(player_id), db_bind_i64(number), db_bind_i64(cost), db_bind_timestamp_text(purchased_at) }, 5, &err)) {
         return 0;
     }
     return err.code;
@@ -344,7 +344,7 @@ int repo_stardock_get_player_lottery_tickets(db_t *db, int32_t player_id, const 
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(draw_date) }, 2, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id), db_bind_text(draw_date) }, 2, out_res, &err)) {
         return 0;
     }
     return err.code;
@@ -357,7 +357,7 @@ int repo_stardock_insert_deadpool_bet(db_t *db, int32_t bettor_id, int32_t targe
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(bettor_id), db_bind_i32(target_id), db_bind_i64(amount), db_bind_i32(odds_bp), db_bind_timestamp_text(placed_at), db_bind_timestamp_text(expires_at) }, 6, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(bettor_id), db_bind_i64(target_id), db_bind_i64(amount), db_bind_i64(odds_bp), db_bind_timestamp_text(placed_at), db_bind_timestamp_text(expires_at) }, 6, &err)) {
         return 0;
     }
     return err.code;
@@ -370,7 +370,7 @@ int repo_stardock_insert_graffiti(db_t *db, int32_t player_id, const char *text,
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(text), db_bind_timestamp_text(created_at) }, 3, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id), db_bind_text(text), db_bind_timestamp_text(created_at) }, 3, &err)) {
         return 0;
     }
     return err.code;
@@ -403,7 +403,7 @@ int repo_stardock_delete_oldest_graffiti(db_t *db, int32_t limit)
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(limit) }, 1, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(limit) }, 1, &err)) {
         return 0;
     }
     return err.code;
@@ -416,7 +416,7 @@ int repo_stardock_update_alignment(db_t *db, int32_t player_id, int32_t alignmen
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(alignment_gain), db_bind_i32(player_id) }, 2, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(alignment_gain), db_bind_i64(player_id) }, 2, &err)) {
         return 0;
     }
     return err.code;
@@ -429,7 +429,7 @@ int repo_stardock_insert_loan(db_t *db, int32_t player_id, int64_t principal, in
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(principal), db_bind_i32(interest_rate_bp), db_bind_timestamp_text(due_date) }, 4, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(principal), db_bind_i64(interest_rate_bp), db_bind_timestamp_text(due_date) }, 4, &err)) {
         return 0;
     }
     return err.code;
@@ -442,7 +442,7 @@ int repo_stardock_delete_loan(db_t *db, int32_t player_id)
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &err)) {
         return 0;
     }
     return err.code;
@@ -455,7 +455,7 @@ int repo_stardock_update_loan_repayment(db_t *db, int32_t player_id, int64_t new
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(new_principal), db_bind_i32(player_id) }, 2, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(new_principal), db_bind_i64(player_id) }, 2, &err)) {
         return 0;
     }
     return err.code;
@@ -496,7 +496,7 @@ int repo_stardock_update_raffle_on_win(db_t *db, int32_t player_id, int64_t winn
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(winnings), db_bind_i32(now) }, 3, &err)) {
+    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(winnings), db_bind_i64(now) }, 3, &err)) {
         return 0;
     }
     return err.code;

@@ -20,7 +20,7 @@ int repo_sysop_audit(db_t *db, int actor_id, const char *cmd_type, const char *p
 
     db_bind_t params[5];
     params[0] = db_bind_timestamp_text(now);
-    params[1] = db_bind_i32(actor_id);
+    params[1] = db_bind_i64(actor_id);
     params[2] = db_bind_text(cmd_type);
     params[3] = db_bind_text(payload);
     if (note)
@@ -43,7 +43,7 @@ db_res_t* repo_sysop_audit_tail(db_t *db, int limit, db_error_t *err) {
     sql_build(db, q, sql, sizeof(sql));
     
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(limit) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(limit) }, 1, &res, err);
     return res;
 }
 
@@ -64,7 +64,7 @@ db_res_t* repo_sysop_search_players(db_t *db, const char *query, int limit, db_e
     snprintf(like_query, sizeof(like_query), "%%%s%%", query);
 
     db_res_t *res = NULL;
-    db_query(db, sql_converted, (db_bind_t[]){ db_bind_text(like_query), db_bind_i32(limit) }, 2, &res, err);
+    db_query(db, sql_converted, (db_bind_t[]){ db_bind_text(like_query), db_bind_i64(limit) }, 2, &res, err);
     return res;
 }
 
@@ -80,7 +80,7 @@ db_res_t* repo_sysop_get_player_basic(db_t *db, int player_id, db_error_t *err) 
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_res_t *res = NULL;
-    db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, err);
+    db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, err);
     return res;
 }
 
@@ -98,7 +98,7 @@ db_res_t* repo_sysop_get_player_sessions(db_t *db, int player_id, int limit, db_
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_res_t *res = NULL;
-    db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(limit) }, 2, &res, err);
+    db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(limit) }, 2, &res, err);
     return res;
 }
 
@@ -156,7 +156,7 @@ db_res_t* repo_sysop_list_jobs(db_t *db, int limit, db_error_t *err) {
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_res_t *res = NULL;
-    db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(limit) }, 1, &res, err);
+    db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(limit) }, 1, &res, err);
     return res;
 }
 

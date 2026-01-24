@@ -22,7 +22,7 @@ int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long 
                         "AND currency = 'CRD' AND is_active = TRUE "
                         "AND (balance + {2}) >= 0;";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    if (!db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
+    if (!db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
         db_tx_rollback(db, NULL);
         return -err.code;
     }
@@ -38,7 +38,7 @@ int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long 
                             "SELECT 'player', {1}, 'CRD', {2}, TRUE "
                             "WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'player' AND owner_id = {1} AND currency = 'CRD' AND is_active = TRUE);";
         char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-        if (!db_exec_rows_affected(db, sql_ins, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
+        if (!db_exec_rows_affected(db, sql_ins, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(delta) }, 2, &rows, &err)) {
             db_tx_rollback(db, NULL);
             return -err.code;
         }
@@ -65,7 +65,7 @@ int repo_bank_check_account_active(db_t *db, int player_id, int *exists_out) {
     "LIMIT 1;";
     char sql[256]; sql_build(db, q2, sql, sizeof(sql));
     *exists_out = 0;
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *exists_out = 1;
         db_res_finalize(res);
         return 0;
@@ -93,7 +93,7 @@ int repo_bank_get_balance(db_t *db, const char *owner_type, int owner_id, long l
     /* SQL_VERBATIM: Q4 */
     const char *q4 = "SELECT balance FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2} AND is_active = TRUE;";
     char sql[256]; sql_build(db, q4, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i64(owner_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         *balance_out = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -108,7 +108,7 @@ int repo_bank_get_account_id(db_t *db, const char *owner_type, int owner_id, int
     /* SQL_VERBATIM: Q5 */
     const char *q5 = "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2}";
     char sql[256]; sql_build(db, q5, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i64(owner_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         *account_id_out = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -123,7 +123,7 @@ int repo_bank_get_balance_by_account_id(db_t *db, int account_id, long long *bal
     /* SQL_VERBATIM: Q18 */
     const char *q18 = "SELECT balance FROM bank_accounts WHERE bank_accounts_id = {1};";
     char sql[256]; sql_build(db, q18, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(account_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(account_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         if (balance_out) *balance_out = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -140,7 +140,7 @@ int repo_bank_create_system_notice(db_t *db, const char *now_ts, int player_id, 
         "INSERT INTO system_notice (created_at, scope, player_id, title, body, severity) VALUES (%s, 'player', {1}, 'Bank Alert', {2}, 'info');",
         now_ts);
     char sql[512]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_text(msg) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_text(msg) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -150,7 +150,7 @@ int repo_bank_add_credits_returning(db_t *db, int account_id, long long amount, 
     /* SQL_VERBATIM: Q7 */
     const char *q7 = "UPDATE bank_accounts SET balance = balance + {1} WHERE bank_accounts_id = {2};";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
-    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(account_id) }, 2, &rows, &err)) {
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(account_id) }, 2, &rows, &err)) {
         if (rows > 0) {
             return repo_bank_get_balance_by_account_id(db, account_id, new_balance_out);
         }
@@ -163,7 +163,7 @@ int repo_bank_insert_transaction(db_t *db, const char *sql_template, int account
     (void)direction;
     char sql[512];
     snprintf(sql, sizeof(sql), sql_template, now_epoch);
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(account_id), db_bind_text(tx_type), db_bind_i64(amount), db_bind_i64(balance_after), db_bind_text(tx_group_id) }, 5, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(account_id), db_bind_text(tx_type), db_bind_i64(amount), db_bind_i64(balance_after), db_bind_text(tx_group_id) }, 5, &err)) return err.code;
     return 0;
 }
 
@@ -173,7 +173,7 @@ int repo_bank_deduct_credits_returning(db_t *db, int account_id, long long amoun
     /* SQL_VERBATIM: Q9 */
     const char *q9 = "UPDATE bank_accounts SET balance = balance - {1} WHERE bank_accounts_id = {2} AND balance >= {1};";
     char sql[256]; sql_build(db, q9, sql, sizeof(sql));
-    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(account_id) }, 2, &rows, &err)) {
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(account_id) }, 2, &rows, &err)) {
         if (rows > 0) {
             return repo_bank_get_balance_by_account_id(db, account_id, new_balance_out);
         }
@@ -183,10 +183,21 @@ int repo_bank_deduct_credits_returning(db_t *db, int account_id, long long amoun
 
 int repo_bank_create_account_if_not_exists(db_t *db, const char *owner_type, int owner_id, long long initial_balance) {
     db_error_t err;
+    
+    /* Check if exists to avoid error log noise */
+    char sql_check[256];
+    sql_build(db, "SELECT 1 FROM bank_accounts WHERE owner_type = {1} AND owner_id = {2} AND currency = 'CRD' LIMIT 1;", sql_check, sizeof(sql_check));
+    db_res_t *res = NULL;
+    if (db_query(db, sql_check, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i64(owner_id) }, 2, &res, &err)) {
+        bool exists = db_res_step(res, &err);
+        db_res_finalize(res);
+        if (exists) return 0;
+    }
+
     /* SQL_VERBATIM: Q11 */
     const char *q11 = "INSERT INTO bank_accounts (owner_type, owner_id, balance, interest_rate_bp, is_active) VALUES ({1}, {2}, {3}, 0, TRUE);";
     char sql[256]; sql_build(db, q11, sql, sizeof(sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i32(owner_id), db_bind_i64(initial_balance) }, 3, &err)) {
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_text(owner_type), db_bind_i64(owner_id), db_bind_i64(initial_balance) }, 3, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) {
             // Treat duplicate key as success (DO NOTHING semantics)
             return 0;
@@ -201,7 +212,7 @@ int repo_bank_create_account_if_not_exists(db_t *db, const char *owner_type, int
 int repo_bank_set_frozen_status(db_t *db, int player_id, int is_frozen) {
     db_error_t err;
     int64_t rows = 0;
-    db_bind_t params[] = { db_bind_i32(player_id), db_bind_i32(is_frozen) };
+    db_bind_t params[] = { db_bind_i64(player_id), db_bind_i64(is_frozen) };
 
     /* 1. Try Update first */
     const char *q_upd = "UPDATE bank_flags SET is_frozen = {2} WHERE player_id = {1};";
@@ -227,7 +238,7 @@ int repo_bank_get_frozen_status(db_t *db, int player_id, int *out_frozen) {
     /* SQL_VERBATIM: Q14 */
     const char *q14 = "SELECT is_frozen FROM bank_flags WHERE player_id = {1};";
     char sql[256]; sql_build(db, q14, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *out_frozen = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -241,7 +252,7 @@ db_res_t* repo_bank_get_leaderboard(db_t *db, int limit, db_error_t *err) {
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "SELECT P.name, BA.balance FROM bank_accounts BA JOIN players P ON P.player_id = BA.owner_id WHERE BA.owner_type = 'player' ORDER BY BA.balance DESC LIMIT {1};";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(limit) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(limit) }, 1, &res, err);
     return res;
 }
 
@@ -250,7 +261,7 @@ db_res_t* repo_bank_get_fines(db_t *db, int player_id, db_error_t *err) {
     /* SQL_VERBATIM: Q16 */
     const char *q16 = "SELECT fines_id as id, reason, amount, issued_ts, status FROM fines WHERE recipient_type = 'player' AND recipient_id = {1} AND status != 'paid';";
     char sql[512]; sql_build(db, q16, sql, sizeof(sql));
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, err);
     return res;
 }
 
@@ -259,7 +270,7 @@ db_res_t* repo_bank_get_fine_details(db_t *db, int fine_id, db_error_t *err) {
     /* SQL_VERBATIM: Q17 */
     const char *q17 = "SELECT amount, recipient_id, status, recipient_type FROM fines WHERE fines_id = {1};";
     char sql[512]; sql_build(db, q17, sql, sizeof(sql));
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(fine_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(fine_id) }, 1, &res, err);
     return res;
 }
 
@@ -268,7 +279,7 @@ int repo_bank_update_fine(db_t *db, int fine_id, const char *new_status, long lo
     /* SQL_VERBATIM: Q18 */
     const char *q18 = "UPDATE fines SET status = {1}, amount = amount - {2} WHERE fines_id = {3};";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(new_status), db_bind_i64(amount_to_pay), db_bind_i32(fine_id) }, 3, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(new_status), db_bind_i64(amount_to_pay), db_bind_i64(fine_id) }, 3, &err)) return err.code;
     return 0;
 }
 
@@ -282,7 +293,7 @@ int repo_bank_get_transactions(db_t *db, const char *owner_type, int owner_id, i
 
     db_bind_t params[12]; int idx = 0;
     params[idx++] = db_bind_text (owner_type);
-    params[idx++] = db_bind_i32 (owner_id);
+    params[idx++] = db_bind_i64 (owner_id);
 
     if (filter && *filter) {
         char buf[32]; snprintf (buf, sizeof(buf), "AND tx_type = $%d ", idx + 1);
@@ -312,7 +323,7 @@ int repo_bank_get_transactions(db_t *db, const char *owner_type, int owner_id, i
     strncat (sql, "ORDER BY ts DESC, bank_transactions_id DESC LIMIT ", sizeof(sql) - strlen (sql) - 1);
     char buf[16]; snprintf (buf, sizeof(buf), "$%d;", idx + 1);
     strncat (sql, buf, sizeof(sql) - strlen (sql) - 1);
-    params[idx++] = db_bind_i32 (limit);
+    params[idx++] = db_bind_i64 (limit);
 
     char sql_converted[2048];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));

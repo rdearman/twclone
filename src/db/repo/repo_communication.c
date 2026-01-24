@@ -29,7 +29,7 @@ int repo_comm_delete_system_notice(db_t *db, int notice_id) {
     /* SQL_VERBATIM: Q_COMM_DELETE_NOTICE */
     const char *q_del = "DELETE FROM system_notice WHERE system_notice_id = {1};";
     char sql[256]; sql_build(db, q_del, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(notice_id) }, 1, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(notice_id) }, 1, &err)) return err.code;
     return 0;
 }
 
@@ -46,14 +46,14 @@ db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, 
         now_expr);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id), db_bind_i32(include_expired), db_bind_i32(limit) }, 3, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(include_expired), db_bind_i64(limit) }, 3, &res, err);
     return res;
 }
 
 int repo_comm_mark_notice_seen(db_t *db, int notice_id, int player_id, int64_t seen_at) {
     db_error_t err;
     int64_t rows = 0;
-    db_bind_t params[] = { db_bind_i32(notice_id), db_bind_i32(player_id), db_bind_timestamp_text(seen_at) };
+    db_bind_t params[] = { db_bind_i64(notice_id), db_bind_i64(player_id), db_bind_timestamp_text(seen_at) };
 
     /* 1. Try Update first */
     const char *q_upd = "UPDATE notice_seen SET seen_at = {3} WHERE notice_id = {1} AND player_id = {2};";
@@ -95,7 +95,7 @@ int repo_comm_check_player_blocked(db_t *db, int blocker_id, int blocked_id, int
     const char *q5 = "SELECT 1 FROM player_block WHERE blocker_id={1} AND blocked_id={2} LIMIT 1;";
     char sql[256]; sql_build(db, q5, sql, sizeof(sql));
     *is_blocked_out = 0;
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(blocker_id), db_bind_i32(blocked_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(blocker_id), db_bind_i64(blocked_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         *is_blocked_out = 1;
         db_res_finalize(res);
         return 0;
@@ -110,7 +110,7 @@ int repo_comm_get_mail_id_by_idem(db_t *db, const char *idem, int recipient_id, 
     /* SQL_VERBATIM: Q6 */
     const char *q6 = "SELECT mail_id FROM mail WHERE idempotency_key={1} AND recipient_id={2} LIMIT 1;";
     char sql[256]; sql_build(db, q6, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_text(idem), db_bind_i32(recipient_id) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_text(idem), db_bind_i64(recipient_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         *mail_id_out = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -127,8 +127,8 @@ int repo_comm_insert_mail(db_t *db, int sender_id, int recipient_id, const char 
     "VALUES({1},{2},{3},{4},{5},{6})";
     char sql[256]; sql_build(db, q7, sql, sizeof(sql));
     db_bind_t p[6] = { 
-        db_bind_i32(sender_id), 
-        db_bind_i32(recipient_id), 
+        db_bind_i64(sender_id), 
+        db_bind_i64(recipient_id), 
         subject ? db_bind_text(subject) : db_bind_null(), 
         db_bind_text(body), 
         idem ? db_bind_text(idem) : db_bind_null(),
@@ -147,7 +147,7 @@ db_res_t* repo_comm_list_inbox(db_t *db, int recipient_id, int after_id, int lim
     "  AND ({2}=0 OR m.mail_id<{2}) " "ORDER BY m.mail_id DESC " "LIMIT {3};";
     sql_build(db, q9, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(recipient_id), db_bind_i32(after_id), db_bind_i32(limit) }, 3, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(recipient_id), db_bind_i64(after_id), db_bind_i64(limit) }, 3, &res, err);
     return res;
 }
 
@@ -158,7 +158,7 @@ db_res_t* repo_comm_get_mail_details(db_t *db, int mail_id, int recipient_id, db
     "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id={1} AND m.recipient_id={2} AND m.deleted=0;";
     sql_build(db, q10, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(mail_id), db_bind_i32(recipient_id) }, 2, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(mail_id), db_bind_i64(recipient_id) }, 2, &res, err);
     return res;
 }
 
@@ -167,7 +167,7 @@ int repo_comm_mark_mail_read(db_t *db, int mail_id, int64_t read_at) {
     /* SQL_VERBATIM: Q11 */
     const char *q11 = "UPDATE mail SET read_at={1} WHERE mail_id={2};";
     char sql[256]; sql_build(db, q11, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(read_at), db_bind_i32(mail_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_timestamp_text(read_at), db_bind_i64(mail_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -186,9 +186,9 @@ int repo_comm_delete_mail_bulk(db_t *db, int recipient_id, const int *mail_ids, 
     db_bind_t *params = malloc ((n_ids + 1) * sizeof (db_bind_t));
     if (!params) return -1;
 
-    params[0] = db_bind_i32 (recipient_id);
+    params[0] = db_bind_i64 (recipient_id);
     for (int i = 0; i < n_ids; i++) {
-        params[i + 1] = db_bind_i32 (mail_ids[i]);
+        params[i + 1] = db_bind_i64 (mail_ids[i]);
     }
 
     db_error_t err;
@@ -204,7 +204,7 @@ int repo_comm_get_subscription_count(db_t *db, int player_id, int *count_out) {
     /* SQL_VERBATIM: Q13 */
     const char *q13 = "SELECT COUNT(*) FROM subscriptions WHERE player_id={1} AND enabled=TRUE;";
     char sql[256]; sql_build(db, q13, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *count_out = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -219,7 +219,7 @@ db_res_t* repo_comm_list_subscriptions(db_t *db, int player_id, db_error_t *err)
     const char *q14 = "SELECT event_type, locked, enabled, delivery, filter_json FROM subscriptions WHERE player_id = {1};";
     sql_build(db, q14, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, err);
     return res;
 }
 
@@ -229,9 +229,9 @@ int repo_comm_insert_chat(db_t *db, int sender_id, int recipient_id, int sector_
     const char *q15 = "INSERT INTO chat (sender_id, recipient_id, sector_id, message) VALUES ({1}, {2}, {3}, {4})";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
     db_bind_t p[4] = {
-        db_bind_i32(sender_id),
-        recipient_id > 0 ? db_bind_i32(recipient_id) : db_bind_null(),
-        sector_id > 0 ? db_bind_i32(sector_id) : db_bind_null(),
+        db_bind_i64(sender_id),
+        recipient_id > 0 ? db_bind_i64(recipient_id) : db_bind_null(),
+        sector_id > 0 ? db_bind_i64(sector_id) : db_bind_null(),
         db_bind_text(message)
     };
     if (!db_exec_insert_id(db, sql, p, 4, "chat_id", new_id_out, &err)) {
@@ -252,6 +252,6 @@ db_res_t* repo_comm_list_chat(db_t *db, int player_id, int sector_id, int limit,
         "ORDER BY c.chat_id DESC LIMIT {3};";
     char sql[1024]; sql_build(db, q16, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(sector_id), db_bind_i32(player_id), db_bind_i32(limit) }, 3, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(player_id), db_bind_i64(limit) }, 3, &res, err);
     return res;
 }

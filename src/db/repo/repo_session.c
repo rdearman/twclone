@@ -50,7 +50,7 @@ int repo_session_get_unseen_notices(db_t *db, int32_t max_rows, db_res_t **out_r
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_error_t err;
-    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(max_rows) }, 1, out_res, &err)) {
+    if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(max_rows) }, 1, out_res, &err)) {
         return 0;
     }
     return err.code;

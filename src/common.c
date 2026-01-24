@@ -437,7 +437,7 @@ get_tow_reason_string (int reason_code)
     case ERR_PORT_NOT_FOUND:
       return "Port not found.";
     case REF_PORT_OUT_OF_STOCK:
-      return "Port out of stock.";
+      return "Port inventory exhausted.";
     case REF_PRICE_SLIPPAGE:
       return "Price slippage occurred.";
     case REF_DOCKING_REFUSED:

@@ -65,7 +65,7 @@ int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out)
 
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (ship_id_out) *ship_id_out = db_res_col_i32(res, 0, &err);
         }
@@ -84,7 +84,7 @@ int repo_ships_get_towing_id(db_t *db, int32_t ship_id, int32_t *towing_id_out)
 
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (towing_id_out) *towing_id_out = db_res_col_i32(res, 0, &err);
         }
@@ -102,7 +102,7 @@ int repo_ships_clear_towing_id(db_t *db, int32_t ship_id)
     sql_build(db, sql_template, sql, sizeof sql);
 
     db_error_t err;
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &err)) {
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &err)) {
         return err.code;
     }
     return 0;
@@ -116,7 +116,7 @@ int repo_ships_clear_is_being_towed_by(db_t *db, int32_t ship_id)
     sql_build(db, sql_template, sql, sizeof sql);
 
     db_error_t err;
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &err)) {
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &err)) {
         return err.code;
     }
     return 0;
@@ -131,7 +131,7 @@ int repo_ships_get_is_being_towed_by(db_t *db, int32_t ship_id, int32_t *towed_b
 
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (towed_by_id_out) *towed_by_id_out = db_res_col_i32(res, 0, &err);
         }
@@ -149,7 +149,7 @@ int repo_ships_set_towing_id(db_t *db, int32_t ship_id, int32_t target_ship_id)
     sql_build(db, sql_template, sql, sizeof sql);
 
     db_error_t err;
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(target_ship_id), db_bind_i32(ship_id) }, 2, &err)) {
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(target_ship_id), db_bind_i64(ship_id) }, 2, &err)) {
         return err.code;
     }
     return 0;
@@ -163,7 +163,7 @@ int repo_ships_set_is_being_towed_by(db_t *db, int32_t target_ship_id, int32_t p
     sql_build(db, sql_template, sql, sizeof sql);
 
     db_error_t err;
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i32(player_ship_id), db_bind_i32(target_ship_id) }, 2, &err)) {
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_ship_id), db_bind_i64(target_ship_id) }, 2, &err)) {
         return err.code;
     }
     return 0;
@@ -190,7 +190,7 @@ int repo_ships_get_cargo_and_holds(db_t *db,
 
     db_res_t *res = NULL;
     db_error_t err;
-    if (db_query(db, sql_final, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err)) {
+    if (db_query(db, sql_final, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (ore) *ore = db_res_col_i32(res, 0, &err);
             if (organics) *organics = db_res_col_i32(res, 1, &err);
@@ -224,7 +224,7 @@ int repo_ships_update_cargo_column(db_t *db, int32_t ship_id, const char *col_na
     db_error_t err;
     if (!db_exec(db,
                  sql_up_converted,
-                 (db_bind_t[]){ db_bind_i32(new_qty), db_bind_i32(ship_id) },
+                 (db_bind_t[]){ db_bind_i64(new_qty), db_bind_i64(ship_id) },
                  2,
                  &err)) {
         return err.code;

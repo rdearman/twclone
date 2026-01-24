@@ -26,7 +26,7 @@ int repo_clusters_get_cluster_for_sector(db_t *db, int sector_id, int *cluster_i
     /* SQL_VERBATIM: Q2 */
     const char *q2 = "SELECT cluster_id FROM cluster_sectors WHERE sector_id = {1}";
     char sql[256]; sql_build(db, q2, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) {
         if (db_res_step (res, &err)) {
             *cluster_id_out = db_res_col_i32 (res, 0, &err);
         } else {
@@ -44,7 +44,7 @@ int repo_clusters_create(db_t *db, const char *name, const char *role, const cha
     /* SQL_VERBATIM: Q3 */
     const char *q3 = "INSERT INTO clusters (name, role, kind, center_sector, alignment, law_severity) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
     char sql[512]; sql_build(db, q3, sql, sizeof(sql));
-    if (db_exec_insert_id (db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(role), db_bind_text(kind), db_bind_i32(center_sector), db_bind_i32(alignment), db_bind_i32(law_severity) }, 6, "clusters_id", &new_id, &err)) {
+    if (db_exec_insert_id (db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(role), db_bind_text(kind), db_bind_i64(center_sector), db_bind_i64(alignment), db_bind_i64(law_severity) }, 6, "clusters_id", &new_id, &err)) {
         *cluster_id_out = (int)new_id;
         return 0;
     }
@@ -61,7 +61,7 @@ int repo_clusters_add_sector(db_t *db, int cluster_id, int sector_id) {
         "INSERT INTO cluster_sectors (cluster_id, sector_id) VALUES ({1}, {2}) %s",
         conflict_clause);
     char sql[256]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_i32(sector_id) }, 2, &err)) return err.code;
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(sector_id) }, 2, &err)) return err.code;
     return 0;
 }
 
@@ -70,7 +70,7 @@ db_res_t* repo_clusters_get_warps(db_t *db, int from_sector, db_error_t *err) {
     const char *q5 = "SELECT to_sector FROM sector_warps WHERE from_sector = {1}";
     char sql[512]; sql_build(db, q5, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i32(from_sector) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(from_sector) }, 1, &res, err);
     return res;
 }
 
@@ -81,7 +81,7 @@ int repo_clusters_check_sector_in_any_cluster(db_t *db, int sector_id, int *exis
     const char *q6 = "SELECT 1 FROM cluster_sectors WHERE sector_id = {1}";
     char sql[256]; sql_build(db, q6, sql, sizeof(sql));
     *exists_out = 0;
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) {
         if (db_res_step (res, &err)) {
             *exists_out = 1;
         }
@@ -174,7 +174,7 @@ int repo_clusters_get_avg_price(db_t *db, int cluster_id, const char *commodity,
     /* SQL_VERBATIM: Q13 */
     const char *q13 = "SELECT AVG(price) FROM port_trade pt JOIN ports p ON p.port_id = pt.port_id JOIN cluster_sectors cs ON cs.sector_id = p.sector_id WHERE cs.cluster_id = {1} AND pt.commodity = {2}";
     char sql[1024]; sql_build(db, q13, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_text(commodity) }, 2, &res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_text(commodity) }, 2, &res, &err)) {
         if (db_res_step (res, &err)) {
             *avg_price_out = db_res_col_double (res, 0, &err);
         }
@@ -197,7 +197,7 @@ int repo_clusters_update_commodity_index(db_t *db, int cluster_id, const char *c
         "%s UPDATE SET mid_price=excluded.mid_price, last_updated=CURRENT_TIMESTAMP",
         conflict_clause);
     char sql[512]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_text(commodity), db_bind_i32(mid_price) }, 3, &err)) return err.code;
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_text(commodity), db_bind_i64(mid_price) }, 3, &err)) return err.code;
     return 0;
 }
 
@@ -206,7 +206,7 @@ int repo_clusters_drift_port_prices(db_t *db, int mid_price, const char *commodi
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "UPDATE port_trade SET price = CAST(price + 0.1 * ({1} - price) AS INTEGER) WHERE commodity = {2} AND port_id IN ( SELECT p.port_id FROM ports p JOIN cluster_sectors cs ON cs.sector_id = p.sector_id WHERE cs.cluster_id = {3} )";
     char sql[1024]; sql_build(db, q15, sql, sizeof(sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32(mid_price), db_bind_text(commodity), db_bind_i32(cluster_id) }, 3, &err)) return err.code;
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(mid_price), db_bind_text(commodity), db_bind_i64(cluster_id) }, 3, &err)) return err.code;
     return 0;
 }
 
@@ -216,7 +216,7 @@ int repo_clusters_get_player_banned(db_t *db, int cluster_id, int player_id, int
     /* SQL_VERBATIM: Q16 */
     const char *q16 = "SELECT banned FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
     char sql[512]; sql_build(db, q16, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_i32(player_id) }, 2, &res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
         if (db_res_step (res, &err)) {
             *banned_out = db_res_col_i32 (res, 0, &err);
         } else {
@@ -234,7 +234,7 @@ int repo_clusters_get_player_suspicion_wanted(db_t *db, int cluster_id, int play
     /* SQL_VERBATIM: Q17 */
     const char *q17 = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
     char sql[512]; sql_build(db, q17, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_i32(player_id) }, 2, &res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
         if (db_res_step (res, &err)) {
             *suspicion_out = db_res_col_i32 (res, 0, &err);
             *wanted_out = db_res_col_i32 (res, 1, &err);
@@ -265,7 +265,7 @@ int repo_clusters_upsert_player_status(db_t *db, int cluster_id, int player_id, 
         "last_bust_at = CASE WHEN {8}=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;",
         conflict_clause);
     char sql[1024]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32(cluster_id), db_bind_i32(player_id), db_bind_i32(susp_inc), db_bind_i32(busted ? 1 : 0), db_bind_i32(busted), db_bind_i32(susp_inc), db_bind_i32(busted ? 1 : 0), db_bind_i32(busted) }, 8, &err)) return err.code;
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id), db_bind_i64(susp_inc), db_bind_i64(busted ? 1 : 0), db_bind_i64(busted), db_bind_i64(susp_inc), db_bind_i64(busted ? 1 : 0), db_bind_i64(busted) }, 8, &err)) return err.code;
     return 0;
 }
 
@@ -282,7 +282,7 @@ int repo_clusters_get_alignment(db_t *db, int sector_id, int *alignment_out) {
     /* SQL_VERBATIM: Q20 */
     const char *q20 = "SELECT c.alignment FROM clusters c JOIN cluster_sectors cs ON cs.cluster_id = c.clusters_id WHERE cs.sector_id = {1} LIMIT 1";
     char sql[512]; sql_build(db, q20, sql, sizeof(sql));
-    if (db_query (db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err)) {
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) {
         if (db_res_step (res, &err)) {
             *alignment_out = db_res_col_i32 (res, 0, &err);
         } else {
@@ -308,6 +308,6 @@ int repo_clusters_upsert_port_stock(db_t *db, int port_id, const char *commodity
         "%s UPDATE SET quantity = excluded.quantity, last_updated_ts = excluded.last_updated_ts;",
         conflict_clause);
     char sql[512]; sql_build(db, sql_template, sql, sizeof(sql));
-    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i32(port_id), db_bind_text(commodity), db_bind_i32(quantity), db_bind_i64(now_s) }, 4, &err)) return err.code;
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity), db_bind_i64(quantity), db_bind_i64(now_s) }, 4, &err)) return err.code;
     return 0;
 }

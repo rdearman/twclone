@@ -1982,7 +1982,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 	    {
 	      send_response_error (ctx,
 				   root,
-				   500, "Database error getting port stock.");
+				   500, "Database error getting port inventory.");
 	      free (canonical_commodity_code);
 	      goto fail_tx;
 	    }
@@ -2682,7 +2682,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	    goto fail_tx;
 	  }
       }
-      /* update port stock (+amount) */
+      /* update port inventory (+amount) */
       {
 	int new_port_qty = 0;
 
@@ -3329,7 +3329,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     }
   we_started_tx = 1;
 
-  /* 1) Post each line: update port stock + ship cargo + trade log */
+  /* 1) Post each line: update port inventory + ship cargo + trade log */
   for (size_t i = 0; i < n; i++)
     {
       const char *commodity = trade_lines[i].commodity;
@@ -3347,7 +3347,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       if (rc != 0)
 	{
 	  send_response_error (ctx, root, ERR_DB,
-			       "Failed to update port stock.");
+			       "Failed to update port inventory.");
 	  goto fail_tx;
 	}
 

@@ -15,6 +15,8 @@ typedef struct cmd_desc_s
 {
   const char *name;		// e.g. "move.warp"
   const char *summary;		// optional; may be ""
+  bool is_deprecated;
+  const char *replacement;
 } cmd_desc_t;
 #endif
 // Exported by server_loop.c (or weak-fallback elsewhere)

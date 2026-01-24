@@ -9,7 +9,7 @@
 
 int db_planets_apply_terra_sanctions(db_t *db, int player_id) {
     db_error_t err;
-    db_bind_t params[] = { db_bind_i32 (player_id) };
+    db_bind_t params[] = { db_bind_i64 (player_id) };
 
     /* SQL_VERBATIM: Q1 */
     const char *q1 = "DELETE FROM ships WHERE ship_id IN (  SELECT ship_id FROM ship_ownership WHERE player_id = {1});";
@@ -45,7 +45,7 @@ int db_planets_get_ship_sector(db_t *db, int ship_id, int *sector_id) {
     /* SQL_VERBATIM: Q6 */
     const char *q6 = "SELECT sector_id FROM ships WHERE ship_id={1};";
     char sql[512]; sql_build(db, q6, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_id = db_res_col_int(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -60,7 +60,7 @@ int db_planets_get_attack_info(db_t *db, int planet_id, int *sector_id, int *own
     /* SQL_VERBATIM: Q7 */
     const char *q7 = "SELECT sector_id, owner_id, fighters FROM planets WHERE planet_id={1};";
     char sql[512]; sql_build(db, q7, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_id = db_res_col_int(res, 0, &err);
         *owner_id = db_res_col_int(res, 1, &err);
         *fighters = db_res_col_int(res, 2, &err);
@@ -77,7 +77,7 @@ int db_planets_get_ship_fighters(db_t *db, int ship_id, int *fighters) {
     /* SQL_VERBATIM: Q8 */
     const char *q8 = "SELECT fighters FROM ships WHERE ship_id={1};";
     char sql[512]; sql_build(db, q8, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *fighters = db_res_col_int(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -92,7 +92,7 @@ int db_planets_get_citadel_defenses(db_t *db, int planet_id, int *level, int *sh
     /* SQL_VERBATIM: Q9 */
     const char *q9 = "SELECT level, planetary_shields, military_reaction_level FROM citadels WHERE planet_id={1};";
     char sql[512]; sql_build(db, q9, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *level = db_res_col_int(res, 0, &err);
         *shields = db_res_col_int(res, 1, &err);
         *reaction = db_res_col_int(res, 2, &err);
@@ -108,7 +108,7 @@ int db_planets_update_citadel_shields(db_t *db, int planet_id, int new_shields) 
     /* SQL_VERBATIM: Q10 */
     const char *q10 = "UPDATE citadels SET planetary_shields={1} WHERE planet_id={2};";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(new_shields), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(new_shields), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -117,7 +117,7 @@ int db_planets_update_ship_fighters(db_t *db, int ship_id, int loss) {
     /* SQL_VERBATIM: Q11 */
     const char *q11 = "UPDATE ships SET fighters = fighters - {1} WHERE ship_id = {2};";
     char sql[512]; sql_build(db, q11, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(loss), db_bind_i32(ship_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(loss), db_bind_i64(ship_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -126,7 +126,7 @@ int db_planets_capture(db_t *db, int planet_id, int new_owner, const char *new_t
     /* SQL_VERBATIM: Q12 */
     const char *q12 = "UPDATE planets SET fighters=0, owner_id={1}, owner_type={2} WHERE planet_id={3};";
     char sql[512]; sql_build(db, q12, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(new_owner), db_bind_text(new_type), db_bind_i32(planet_id) }, 3, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(new_owner), db_bind_text(new_type), db_bind_i64(planet_id) }, 3, &err)) return 0;
     return -1;
 }
 
@@ -135,7 +135,7 @@ int db_planets_lose_fighters(db_t *db, int planet_id, int loss) {
     /* SQL_VERBATIM: Q13 */
     const char *q13 = "UPDATE planets SET fighters = fighters - {1} WHERE planet_id = {2};";
     char sql[512]; sql_build(db, q13, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(loss), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(loss), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -160,7 +160,7 @@ int db_planets_get_sector(db_t *db, int planet_id, int *sector_id) {
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "SELECT sector_id FROM planets WHERE planet_id = {1}";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_id = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -175,7 +175,7 @@ int db_planets_get_owner_info(db_t *db, int planet_id, int *owner_id, char **own
     /* SQL_VERBATIM: Q16 */
     const char *q16 = "SELECT owner_id, owner_type FROM planets WHERE planet_id = {1};";
     char sql[512]; sql_build(db, q16, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *owner_id = db_res_col_i32(res, 0, &err);
         const char *ot = db_res_col_text(res, 1, &err);
         *owner_type = ot ? strdup(ot) : NULL;
@@ -191,7 +191,7 @@ int db_planets_rename(db_t *db, int planet_id, const char *new_name) {
     /* SQL_VERBATIM: Q17 */
     const char *q17 = "UPDATE planets SET name = {1} WHERE planet_id = {2};";
     char sql[512]; sql_build(db, q17, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(new_name), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(new_name), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -201,7 +201,7 @@ int db_planets_get_land_info(db_t *db, int planet_id, int *sector_id, int *owner
     /* SQL_VERBATIM: Q18 */
     const char *q18 = "SELECT sector_id, owner_id, owner_type FROM planets WHERE planet_id = {1};";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_id = db_res_col_i32(res, 0, &err);
         *owner_id = db_res_col_i32(res, 1, &err);
         const char *ot = db_res_col_text(res, 2, &err);
@@ -219,7 +219,7 @@ int db_planets_check_player_exists(db_t *db, int player_id, bool *exists) {
     /* SQL_VERBATIM: Q19 */
     const char *q19 = "SELECT player_id FROM players WHERE player_id={1}";
     char sql[512]; sql_build(db, q19, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(player_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err)) {
         *exists = db_res_step(res, &err);
         db_res_finalize(res);
         return 0;
@@ -233,7 +233,7 @@ int db_planets_check_corp_exists(db_t *db, int corp_id, bool *exists) {
     /* SQL_VERBATIM: Q20 */
     const char *q20 = "SELECT corporation_id FROM corporations WHERE corporation_id={1}";
     char sql[512]; sql_build(db, q20, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(corp_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err)) {
         *exists = db_res_step(res, &err);
         db_res_finalize(res);
         return 0;
@@ -246,7 +246,7 @@ int db_planets_transfer_ownership(db_t *db, int planet_id, int target_id, const 
     /* SQL_VERBATIM: Q21 */
     const char *q21 = "UPDATE planets SET owner_id = {1}, owner_type = {2} WHERE planet_id = {3};";
     char sql[512]; sql_build(db, q21, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(target_id), db_bind_text(target_type), db_bind_i32(planet_id) }, 3, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(target_id), db_bind_text(target_type), db_bind_i64(planet_id) }, 3, &err)) return 0;
     return -1;
 }
 
@@ -256,7 +256,7 @@ int db_planets_get_citadel_level(db_t *db, int planet_id, int *level) {
     /* SQL_VERBATIM: Q22 */
     const char *q22 = "SELECT level FROM citadels WHERE planet_id = {1};";
     char sql[512]; sql_build(db, q22, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *level = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -270,7 +270,7 @@ int db_planets_add_treasury(db_t *db, int planet_id, int amount) {
     /* SQL_VERBATIM: Q23 */
     const char *q23 = "UPDATE citadels SET treasury = treasury + {1} WHERE planet_id = {2};";
     char sql[512]; sql_build(db, q23, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(amount), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -280,7 +280,7 @@ int db_planets_get_treasury(db_t *db, int planet_id, long long *balance) {
     /* SQL_VERBATIM: Q24 */
     const char *q24 = "SELECT treasury FROM citadels WHERE planet_id = {1};";
     char sql[512]; sql_build(db, q24, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *balance = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -295,7 +295,7 @@ int db_planets_get_citadel_info(db_t *db, int planet_id, int *level, long long *
     /* SQL_VERBATIM: Q25 */
     const char *q25 = "SELECT level, treasury FROM citadels WHERE planet_id = {1};";
     char sql[512]; sql_build(db, q25, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *level = db_res_col_i32(res, 0, &err);
         *treasury = db_res_col_i64(res, 1, &err);
         db_res_finalize(res);
@@ -310,7 +310,7 @@ int db_planets_deduct_treasury(db_t *db, int planet_id, int amount) {
     /* SQL_VERBATIM: Q26 */
     const char *q26 = "UPDATE citadels SET treasury = treasury - {1} WHERE planet_id = {2};";
     char sql[512]; sql_build(db, q26, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(amount), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -336,7 +336,7 @@ int db_planets_is_msl_sector(db_t *db, int sector_id, bool *is_msl) {
     /* SQL_VERBATIM: Q28 */
     const char *q28 = "SELECT 1 FROM msl_sectors WHERE sector_id = {1};";
     char sql[512]; sql_build(db, q28, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) {
         *is_msl = db_res_step(res, &err);
         db_res_finalize(res);
         return 0;
@@ -350,7 +350,7 @@ int db_planets_count_in_sector(db_t *db, int sector_id, int *count) {
     /* SQL_VERBATIM: Q29 */
     const char *q29 = "SELECT COUNT(*) FROM planets WHERE sector_id = {1};";
     char sql[512]; sql_build(db, q29, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *count = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -365,7 +365,7 @@ int db_planets_get_ship_genesis(db_t *db, int ship_id, int *torps) {
     /* SQL_VERBATIM: Q30 */
     const char *q30 = "SELECT genesis FROM ships WHERE ship_id = {1};";
     char sql[512]; sql_build(db, q30, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *torps = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -414,9 +414,9 @@ int db_planets_create(db_t *db, int sector_id, const char *name, int owner_id, c
     const char *q33 = "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, TRUE)";
     char sql[1024]; sql_build(db, q33, sql, sizeof(sql));
     db_bind_t params[] = {
-        db_bind_i32 (sector_id), db_bind_text (name), db_bind_i32 (owner_id),
-        db_bind_text (owner_type), db_bind_text (class_str), db_bind_i32 (type_id),
-        db_bind_timestamp_text (ts), db_bind_i32 (created_by)
+        db_bind_i64 (sector_id), db_bind_text (name), db_bind_i64 (owner_id),
+        db_bind_text (owner_type), db_bind_text (class_str), db_bind_i64 (type_id),
+        db_bind_timestamp_text (ts), db_bind_i64 (created_by)
     };
     if (db_exec_insert_id(db, sql, params, 8, "planet_id", new_id, &err)) return 0;
     return -1;
@@ -427,7 +427,7 @@ int db_planets_consume_genesis(db_t *db, int ship_id) {
     /* SQL_VERBATIM: Q34 */
     const char *q34 = "UPDATE ships SET genesis = genesis - 1 WHERE ship_id = {1} AND genesis >= 1;";
     char sql[512]; sql_build(db, q34, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &err)) return 0;
     return -1;
 }
 
@@ -436,7 +436,7 @@ int db_planets_update_navhaz(db_t *db, int sector_id, int delta) {
     /* SQL_VERBATIM: Q35 */
     const char *q35 = "UPDATE sectors SET navhaz = GREATEST(0, COALESCE(navhaz, 0) + {1}) WHERE sector_id = {2};";
     char sql[512]; sql_build(db, q35, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(delta), db_bind_i32(sector_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(delta), db_bind_i64(sector_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -455,7 +455,7 @@ int db_planets_get_stock(db_t *db, int planet_id, const char *code, int *stock) 
     /* SQL_VERBATIM: Q37 */
     const char *q37 = "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id={1} AND commodity_code={2}";
     char sql[512]; sql_build(db, q37, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id), db_bind_text(code) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_text(code) }, 2, &res, &err) && db_res_step(res, &err)) {
         *stock = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -499,7 +499,7 @@ int db_planets_add_treasury_buy(db_t *db, int planet_id, long long amount) {
     /* SQL_VERBATIM: Q41 */
     const char *q41 = "UPDATE citadels SET treasury = treasury + {1} WHERE planet_id = {2}";
     char sql[512]; sql_build(db, q41, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -510,9 +510,9 @@ int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int comm
     const char *q42 = "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ({1}, {2}, 'planet', {3}, {4}, 'buy', {5}, {6}, 'open', {7}, {8}, 0)";
     char sql[1024]; sql_build(db, q42, sql, sizeof(sql));
     db_bind_t params[] = {
-        db_bind_text("player"), db_bind_i32(player_id),
-        db_bind_i32(planet_id), db_bind_i32(commodity_id),
-        db_bind_i32(qty), db_bind_i32(price),
+        db_bind_text("player"), db_bind_i64(player_id),
+        db_bind_i64(planet_id), db_bind_i64(commodity_id),
+        db_bind_i64(qty), db_bind_i64(price),
         db_bind_timestamp_text(now), db_bind_null()
     };
     if (db_exec_insert_id(db, sql, params, 8, "commodity_orders_id", order_id, &err)) return 0;
@@ -525,7 +525,7 @@ int db_planets_get_fuel_stock(db_t *db, int planet_id, int *stock) {
     /* SQL_VERBATIM: Q44 */
     const char *q44 = "SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id={1} AND commodity_code='FUE'";
     char sql[512]; sql_build(db, q44, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *stock = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
@@ -539,7 +539,7 @@ int db_planets_set_sector(db_t *db, int planet_id, int sector_id) {
     /* SQL_VERBATIM: Q45 */
     const char *q45 = "UPDATE planets SET sector_id={1} WHERE planet_id={2}";
     char sql[512]; sql_build(db, q45, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(sector_id), db_bind_i32(planet_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -549,7 +549,7 @@ int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, i
     /* SQL_VERBATIM: Q46 */
     const char *q46 = "SELECT es.quantity, pt.maxore, pt.maxorganics, pt.maxequipment FROM planets p JOIN planettypes pt ON p.type = pt.planettypes_id LEFT JOIN entity_stock es ON p.planet_id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = {2} WHERE p.planet_id = {1};";
     char sql[1024]; sql_build(db, q46, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i32(planet_id), db_bind_text(code) }, 2, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_text(code) }, 2, &res, &err) && db_res_step(res, &err)) {
         *current_qty = db_res_col_i32(res, 0, &err);
         *max_ore = db_res_col_i32(res, 1, &err);
         *max_org = db_res_col_i32(res, 2, &err);
@@ -568,7 +568,7 @@ int db_planets_upsert_stock(db_t *db, int planet_id, const char *code, int quant
     /* SQL_VERBATIM: Q47 */
     char sql[512];
     snprintf(sql, sizeof(sql), sql_fmt, epoch_expr, epoch_expr);
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i32(planet_id), db_bind_text(code), db_bind_i32(quantity) }, 3, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_text(code), db_bind_i64(quantity) }, 3, &err)) return 0;
     return -1;
 }
 
