@@ -202,7 +202,16 @@ cron_next_due_from (int64_t now_s, const char *schedule)
 	{
 	  return now_s + n * 60L;
 	}
-      return now_s + n;		/* default seconds */
+      if (end && (*end == 'h' || *end == 'H'))
+	{
+	  return now_s + n * 3600L;
+	}
+      if (end && (*end == 'd' || *end == 'D'))
+	{
+	  return now_s + n * 86400L;
+	}
+      /* Unknown or missing unit -> fallback to 60s for safety (never 1s) */
+      return now_s + 60;
     }
   if (strncmp (schedule, "daily@", 6) == 0)
     {
