@@ -205,8 +205,8 @@ play_login (const char *user, const char *pass, int *pid)
   if (rc == 0)
     {
       LOGD
-	("[play_login] Found user: %s (pid: %d, is_npc: %d). DB hashed pass: %s",
-	 user, (int) player_id, is_npc_flag, db_pass);
+	("[play_login] Found user: %s (pid: %d, is_npc: %d). DB hashed pass: [REDACTED]",
+	 user, (int) player_id, is_npc_flag);
 
       if (is_npc_flag)
 	{
@@ -220,8 +220,8 @@ play_login (const char *user, const char *pass, int *pid)
 
 
       LOGD
-	("[play_login] Comparing DB pass with provided pass (result: %d). Client pass (plain): %s",
-	 cmp_result, pass);
+	("[play_login] Comparing DB pass with provided pass (result: %d). Client pass: [REDACTED]",
+	 cmp_result);
 
       if (cmp_result)
 	{
