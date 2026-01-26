@@ -307,7 +307,7 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
     }
 
   //LOGD ("Debug: Fetching schema for '%s'", name);
-  JSON_AUTO schema_obj = schema_get (name);
+  json_t JSON_AUTO *schema_obj = schema_get (name);
 
 
   if (!schema_obj)
@@ -315,7 +315,7 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_NOT_FOUND, "Schema not found");
       return 0;
     }
-  JSON_AUTO response_data = json_object ();
+  json_t JSON_AUTO *response_data = json_object ();
 
 
   json_object_set_new (response_data, "name", json_string (name));

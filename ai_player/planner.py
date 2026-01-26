@@ -1427,7 +1427,7 @@ class Planner:
                     elif sell_price > best_sell_price:
                         best_sell_price = sell_price
                         best_commodity = commodity
-                        highest_profit_margin = 0
+                        highest_profit_margin = 0.01
         
         if best_commodity:
             if highest_profit_margin > 0:
@@ -1463,9 +1463,9 @@ class Planner:
                 max_potential_sell_price = sell_price
         
         # If we didn't find any known sell price, it means we don't know where to sell it.
-        # Treat this as very low profit or unknown.
+        # Treat this as a low-priority opportunity to discover price.
         if max_potential_sell_price == 0:
-            return -float('inf') # Effectively, no known profitable route
+            return 0.01 # Small positive value to encourage discovery buy if nothing else is profitable
 
         return max_potential_sell_price - buy_price
 

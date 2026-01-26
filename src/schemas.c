@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "server_log.h"
 #include "server_config.h"
+#include "server_envelope.h"
 
 
 /*
@@ -657,7 +658,16 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
 	}
       return -1;
     }
-  if (!payload || !json_is_object (payload))
+
+  // Handle NULL payload by treating it as an empty object
+  json_t JSON_AUTO *temp_payload = NULL; // Declared with JSON_AUTO for automatic cleanup
+  if (!payload)
+    {
+      temp_payload = json_object(); // Create an empty JSON object
+      payload = temp_payload; // Use the empty object for validation
+    }
+
+  if (!json_is_object(payload))
     {
       if (why)
 	{
@@ -683,13 +693,6 @@ schema_validate_payload (const char *type, json_t *payload, char **why)
    * === ADD YOUR DEBUG CODE HERE ===
    * We only want to print if the type matches
    */
-  /* Use the 'payload' variable, which exists in this function */
-  char *dump = json_dumps (payload, 0);
-
-
-  LOGD ("[VALIDATOR] Checking 'sector.set_beacon' with payload: %s",
-	dump ? dump : "(null)");
-  free (dump);
 
   /* ===================================================================
    */
@@ -1008,7 +1011,7 @@ schema_trade_buy (void)
   json_object_set_new (props, "sector_id", sector_id_prop);
 
 
-  JSON_AUTO item_schema = json_object ();
+  json_t JSON_AUTO *item_schema = json_object ();
 
 
   json_object_set_new (item_schema, "type", json_string ("object"));
@@ -1596,55 +1599,9 @@ schema_ship_status (void)
 		       json_string
 		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
-
-  json_t *props = json_object ();
-
-
-  json_object_set_new (root, "properties", props);
-
-  json_t *ship = json_object ();
-
-
-  json_object_set_new (props, "ship", ship);
-  json_object_set_new (ship, "type", json_string ("object"));
-
-  json_t *ship_props = json_object ();
-
-
-  json_object_set_new (ship, "properties", ship_props);
-
-  /* simple leaf properties */
-  json_t *id_prop = json_object ();
-
-
-  json_object_set_new (id_prop, "type", json_string ("integer"));
-  json_object_set_new (ship_props, "id", id_prop);
-
-
-  json_t *number_prop = json_object ();
-
-
-  json_object_set_new (number_prop, "type", json_string ("integer"));
-  json_object_set_new (ship_props, "number", number_prop);
-
-
-  json_t *name_prop = json_object ();
-
-
-  json_object_set_new (name_prop, "type", json_string ("string"));
-  json_object_set_new (ship_props, "name", name_prop);
-
-  /* TODO: add the rest of your properties here, one by one, same style */
-
-  /* required: ["ship"] */
-  json_t *required = json_array ();
-
-
-  json_array_append_new (required, json_string ("ship"));
-  json_object_set_new (root, "required", required);
-
-  json_object_set_new (root, "additionalProperties", 0);
-
+  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "required", json_array ());
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
 
@@ -2082,7 +2039,7 @@ schema_trade_sell (void)
   json_object_set_new (props, "account", account_prop);
 
 
-  JSON_AUTO item_schema = json_object ();
+  json_t JSON_AUTO *item_schema = json_object ();
 
 
   json_object_set_new (item_schema, "type", json_string ("object"));

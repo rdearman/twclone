@@ -324,23 +324,30 @@ stmt_to_json_array (db_res_t *st, json_t **out_array, db_error_t *err)
           db_col_type_t col_type = db_res_col_type (st, i);
           json_t *val = NULL;
 
-          switch (col_type)
+          if (db_res_col_is_null (st, i))
             {
-              case DB_TYPE_INTEGER:
-                val = json_integer (db_res_col_i64 (st, i, err));
-                break;
-              case DB_TYPE_FLOAT:
-                val = json_real (db_res_col_double (st, i, err));
-                break;
-              case DB_TYPE_TEXT:
-                val = json_string (db_res_col_text (st, i, err) ?: "");
-                break;
-              case DB_TYPE_NULL:
-                val = json_null ();
-                break;
-              default:
-                val = json_null ();
-                break;
+              val = json_null ();
+            }
+          else
+            {
+              switch (col_type)
+                {
+                case DB_TYPE_INTEGER:
+                  val = json_integer (db_res_col_i64 (st, i, err));
+                  break;
+                case DB_TYPE_FLOAT:
+                  val = json_real (db_res_col_double (st, i, err));
+                  break;
+                case DB_TYPE_TEXT:
+                  val = json_string (db_res_col_text (st, i, err) ?: "");
+                  break;
+                case DB_TYPE_NULL:
+                  val = json_null ();
+                  break;
+                default:
+                  val = json_null ();
+                  break;
+                }
             }
 
           if (!val)

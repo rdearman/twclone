@@ -97,5 +97,6 @@ int db_combat_select_mines_locked(db_t *db, int sector_id, int asset_type, json_
 int db_combat_debit_credits(db_t *db, int player_id, int amount);
 int db_combat_update_asset_quantity(db_t *db, int asset_id, int new_quantity);
 int db_combat_get_stardock_locations(db_t *db, int **out_sectors, int *out_count);
+int db_combat_remove_all_limpets_from_ship(db_t *db, int ship_id);
 
 #endif

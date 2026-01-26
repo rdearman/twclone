@@ -19,7 +19,7 @@ jsonp_cleanup (json_t **p)
 }
 
 
-#define JSON_AUTO __attribute__ ((cleanup (jsonp_cleanup))) json_t *
+#define JSON_AUTO __attribute__ ((cleanup (jsonp_cleanup)))
 #include "s2s_transport.h"	// for s2s_conn_t
 #include "common.h"
 void iso8601_utc (char out[32]);	// if you use timestamps in envelopes

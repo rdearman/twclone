@@ -3,6 +3,7 @@
     {
       "name": "system.hello - System hello",
       "command": "system.hello",
+      "data": { "client_version": "0.0.0" },
       "expect": { "status": "ok" }
     }
   ]

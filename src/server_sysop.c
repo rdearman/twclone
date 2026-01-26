@@ -241,7 +241,7 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
 
     // Audit
     char *audit_payload = json_dumps(j_data, 0);
-    repo_sysop_audit(db, ctx->player_id, "sysop.config.set", audit_payload, note, NULL);
+    repo_sysop_audit(db, ctx->player_id, "sysop.config.set", audit_payload, NULL);
     free(audit_payload);
 
     json_t *resp = json_object();
@@ -393,7 +393,7 @@ int cmd_sysop_player_kick(client_ctx_t *ctx, json_t *root) {
     // Audit
     db_t *db = game_db_get_handle();
     char *audit_payload = json_dumps(j_data, 0);
-    repo_sysop_audit(db, ctx->player_id, "sysop.player.kick", audit_payload, reason, NULL);
+    repo_sysop_audit(db, ctx->player_id, "sysop.player.kick", audit_payload, NULL);
     free(audit_payload);
 
     json_t *resp = json_object();
@@ -627,7 +627,7 @@ int cmd_sysop_jobs_retry(client_ctx_t *ctx, json_t *root) {
 
     // Audit
     char *audit_payload = json_dumps(j_data, 0);
-    repo_sysop_audit(db, ctx->player_id, "sysop.jobs.retry", audit_payload, NULL, NULL);
+    repo_sysop_audit(db, ctx->player_id, "sysop.jobs.retry", audit_payload, NULL);
     free(audit_payload);
 
     json_t *resp = json_object();
@@ -654,7 +654,7 @@ int cmd_sysop_jobs_cancel(client_ctx_t *ctx, json_t *root) {
 
     // Audit
     char *audit_payload = json_dumps(j_data, 0);
-    repo_sysop_audit(db, ctx->player_id, "sysop.jobs.cancel", audit_payload, NULL, NULL);
+    repo_sysop_audit(db, ctx->player_id, "sysop.jobs.cancel", audit_payload, NULL);
     free(audit_payload);
 
     json_t *resp = json_object();
@@ -673,7 +673,7 @@ int cmd_sysop_notice_create(client_ctx_t *ctx, json_t *root) {
         db_t *db = game_db_get_handle();
         json_t *j_data = json_object_get(root, "data");
         char *audit_payload = json_dumps(j_data, 0);
-        repo_sysop_audit(db, ctx->player_id, "sysop.notice.create", audit_payload, NULL, NULL);
+        repo_sysop_audit(db, ctx->player_id, "sysop.notice.create", audit_payload, NULL);
         free(audit_payload);
     }
     return rc;
@@ -701,7 +701,7 @@ int cmd_sysop_notice_delete(client_ctx_t *ctx, json_t *root) {
 
     // Audit
     char *audit_payload = json_dumps(j_data, 0);
-    repo_sysop_audit(db, ctx->player_id, "sysop.notice.delete", audit_payload, NULL, NULL);
+    repo_sysop_audit(db, ctx->player_id, "sysop.notice.delete", audit_payload, NULL);
     free(audit_payload);
 
     json_t *resp = json_object();
@@ -732,7 +732,7 @@ int cmd_sysop_broadcast_send(client_ctx_t *ctx, json_t *root) {
     // Audit
     db_t *db = game_db_get_handle();
     char *audit_payload = json_dumps(j_data, 0);
-    repo_sysop_audit(db, ctx->player_id, "sysop.broadcast.send", audit_payload, NULL, NULL);
+    repo_sysop_audit(db, ctx->player_id, "sysop.broadcast.send", audit_payload, NULL);
     free(audit_payload);
 
     send_response_ok_take(ctx, root, "sysop.broadcast.send", NULL);
@@ -800,7 +800,7 @@ int cmd_sysop_logs_clear(client_ctx_t *ctx, json_t *root) {
     server_log_reopen();
 
     char *audit_payload = json_dumps(json_object_get(root, "data"), 0);
-    repo_sysop_audit(game_db_get_handle(), ctx->player_id, "sysop.logs.clear", audit_payload, NULL, NULL);
+    repo_sysop_audit(game_db_get_handle(), ctx->player_id, "sysop.logs.clear", audit_payload, NULL);
     free(audit_payload);
 
     send_response_ok_take(ctx, root, "sysop.logs.clear", NULL);

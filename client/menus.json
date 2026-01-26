@@ -349,6 +349,28 @@
           }
         },
         {
+          "key": "k",
+          "label": "(K) Ranks",
+          "action": {
+            "rpc": {
+              "command": "player.rankings",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "c",
+          "label": "(C) Ship Catalogue",
+          "action": {
+            "rpc": {
+              "command": "shipyard.list",
+              "data": {}
+            },
+            "post": "pretty_print_shipyard_list"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {

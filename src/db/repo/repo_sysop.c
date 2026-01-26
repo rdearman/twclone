@@ -7,28 +7,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int repo_sysop_audit(db_t *db, int actor_id, const char *cmd_type, const char *payload, const char *note, int64_t *new_id_out) {
+int repo_sysop_audit(db_t *db, int actor_id, const char *cmd_type, const char *details_param, int64_t *new_id_out) {
     db_error_t err;
     /* timestamp handled in C */
     time_t now = time(NULL);
     
-    const char *sql_tmpl = "INSERT INTO engine_audit (ts, actor_player_id, cmd_type, payload, note) "
-                           "VALUES ({1}, {2}, {3}, {4}, {5})";
+    const char *sql_tmpl = "INSERT INTO engine_audit (ts, actor_player_id, cmd_type, details) "
+                           "VALUES ({1}, {2}, {3}, {4})";
     
     char sql[512];
     sql_build(db, sql_tmpl, sql, sizeof(sql));
 
-    db_bind_t params[5];
-    params[0] = db_bind_timestamp_text(now);
+    db_bind_t params[4];
+    params[0] = db_bind_i64(now);
     params[1] = db_bind_i64(actor_id);
     params[2] = db_bind_text(cmd_type);
-    params[3] = db_bind_text(payload);
-    if (note)
-        params[4] = db_bind_text(note);
-    else
-        params[4] = db_bind_null();
+    params[3] = db_bind_text(details_param);
 
-    if (!db_exec_insert_id(db, sql, params, 5, "engine_audit_id", new_id_out, &err)) {
+
+    if (!db_exec_insert_id(db, sql, params, 4, "engine_audit_id", new_id_out, &err)) {
         return err.code;
     }
     return 0;
@@ -36,7 +33,7 @@ int repo_sysop_audit(db_t *db, int actor_id, const char *cmd_type, const char *p
 
 db_res_t* repo_sysop_audit_tail(db_t *db, int limit, db_error_t *err) {
     /* SQL_VERBATIM: Q_SYSOP_1 */
-    const char *q = "SELECT engine_audit_id, ts, actor_player_id, cmd_type, payload, note "
+    const char *q = "SELECT engine_audit_id, ts, actor_player_id, cmd_type, details "
                     "FROM engine_audit ORDER BY engine_audit_id DESC LIMIT {1}";
     
     char sql[512];

@@ -20,6 +20,7 @@ void free_trade_lines (TradeLine * lines, size_t n);
 
 #include "db/repo/repo_database.h"
 #include "db/repo/repo_ports.h"
+#include "db/repo/repo_combat.h"
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
@@ -1061,6 +1062,24 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
 	{
 	  send_response_error (ctx, root, ERR_DB, "Database error.");
 	  return -1;
+	}
+
+      /* StarDock Decontamination - #354 */
+      if (new_ported_status > 0)
+	{
+	  json_t *port_obj = NULL;
+	  int port_size = 0;
+	  if (db_ports_get_header_by_id (db, new_ported_status, &port_obj,
+					 &port_size) == 0)
+	    {
+	      int port_type =
+		(int) json_integer_value (json_object_get (port_obj, "type"));
+	      if (port_type == 9)
+		{
+		  db_combat_remove_all_limpets_from_ship (db, player_ship_id);
+		}
+	      json_decref (port_obj);
+	    }
 	}
 
       /* Generate System Notice if successfully docked at a port */

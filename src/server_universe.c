@@ -1,4 +1,5 @@
 #include "db/repo/repo_universe.h"
+#include "db/repo/repo_players.h"
 /* src/server_universe.c */
 #include <time.h>
 #include <stdio.h>
@@ -28,6 +29,7 @@
 #include "server_players.h"
 #include "server_log.h"
 #include "server_combat.h"
+#include "db/repo/repo_combat.h"
 #include "repo_cmd.h"
 #include "server_ships.h"
 #include "server_corporation.h"
@@ -955,6 +957,19 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   int from = ctx->sector_id;
   int to = -1;
 
+  /* TURN CHECK - #461 parity fix */
+  int turns_remaining = 0;
+  if (repo_players_get_turns (db, ctx->player_id, &turns_remaining) != 0)
+    {
+      turns_remaining = 0;	/* Fallback to 0 if check fails */
+    }
+
+  if (turns_remaining <= 0)
+    {
+      send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS,
+			   "You have no turns remaining.");
+      return 0;
+    }
 
   if (data)
     {
@@ -1337,6 +1352,85 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
 
 
 int
+cmd_sector_mine_disrupt (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || !root)
+    {
+      return 1;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_CLOSED,
+			   "Database connection failed");
+      return 1;
+    }
+
+  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
+
+  /* Use a transaction to ensure atomic removal */
+  db_error_t err;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Failed to begin transaction.");
+      return 1;
+    }
+
+  int removed_count = 0;
+  int mine_types[] = { 1, 4 };	/* Armid, Limpet */
+
+  for (size_t i = 0; i < sizeof (mine_types) / sizeof (mine_types[0]); ++i)
+    {
+      json_t *mines = NULL;
+      if (db_combat_select_mines_locked (db, ctx->sector_id, mine_types[i],
+					 &mines) == 0 && mines)
+	{
+	  size_t index;
+	  json_t *mine_obj;
+	  json_array_foreach (mines, index, mine_obj)
+	  {
+	    int owner_id =
+	      (int) json_integer_value (json_object_get (mine_obj, "player"));
+	    int corp_id =
+	      (int)
+	      json_integer_value (json_object_get (mine_obj, "corporation"));
+	    int asset_id =
+	      (int) json_integer_value (json_object_get (mine_obj, "id"));
+
+	    bool is_owner = (owner_id == ctx->player_id);
+	    if (!is_owner && corp_id > 0 && corp_id == ctx->corp_id)
+	      {
+		is_owner = true;	/* Corp member can disrupt corp mines */
+	      }
+
+	    if (is_owner)
+	      {
+		if (db_combat_delete_sector_asset (db, asset_id) == 0)
+		  {
+		    removed_count++;
+		  }
+	      }
+	  }
+	  json_decref (mines);
+	}
+    }
+
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB, "Failed to commit transaction.");
+      return 1;
+    }
+
+  json_t *data = json_object ();
+  json_object_set_new (data, "removed_count", json_integer (removed_count));
+  send_response_ok_take (ctx, root, "sector.mine_disrupt.response", &data);
+  return 0;
+}
+
+
+int
 cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 {
   if (!ctx || !root)
@@ -1394,13 +1488,34 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
       return 1;
     }
 
-  /* Update beacon */
-  if (repo_universe_set_beacon (db, req_sector_id, beacon_text) != 0)
-    {
-      send_response_error (ctx, root, ERR_DB,
-			   "Database error updating beacon.");
-      return 1;
-    }
+  /* Update beacon with collision rule - #251 */
+  json_t *existing_basic = NULL;
+  bool collision = false;
+  if (db_sector_basic_json(db, req_sector_id, &existing_basic) == 0 && existing_basic) {
+      json_t *jexisting = json_object_get(existing_basic, "beacon");
+      if (jexisting && !json_is_null(jexisting)) {
+          const char *existing_text = json_string_value(jexisting);
+          if (existing_text && strlen(existing_text) > 0) {
+              collision = true;
+          }
+      }
+      json_decref(existing_basic);
+  }
+
+  if (collision) {
+      /* BOTH beacons destroyed */
+      if (repo_universe_set_beacon(db, req_sector_id, NULL) != 0) {
+          send_response_error(ctx, root, ERR_DB, "Database error during beacon collision.");
+          return 1;
+      }
+  } else {
+      if (repo_universe_set_beacon (db, req_sector_id, beacon_text) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB,
+    			   "Database error updating beacon.");
+          return 1;
+        }
+  }
 
   json_t *payload = build_sector_info_json (db, req_sector_id);
   if (!payload)

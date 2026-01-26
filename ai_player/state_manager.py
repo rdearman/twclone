@@ -52,7 +52,6 @@ class StateManager:
                     
                     # --- THIS IS THE FIX ---
                     # ***CRITICAL: Reset transient and cached data on load***
-                    self.state["strategy_plan"] = []
                     self.state["command_retry_info"] = {} 
                     self.state["session_id"] = None # Always force re-login
                     self.state["command_schemas"] = {} # Always force schema refetch
@@ -60,22 +59,16 @@ class StateManager:
                     self.state["pending_schema_requests"] = {} # NEW: Clear pending schema requests on load
                     self.state["recent_sectors"] = [] # NEW: Clear recent sectors on load
                     self.state["pending_commands"] = {} # NEW: Clear pending commands on load
-                    # self.state["port_trade_blacklist"] = [] # NEW: Clear port blacklist on load -- KEEP THIS TO AVOID BAD PORTS PERSISTING
-                    # self.state["warp_blacklist"] = [] # NEW: Clear warp blacklist on load -- KEEP THIS TO AVOID BAD WARPS PERSISTING
                     self.state["current_path"] = [] # NEW: Clear current path on load
                     self.state["last_action_result"] = None # NEW: Clear feedback on load
                     
-                    # --- ADD THESE LINES TO CLEAR CACHES & FORCE BOOTSTRAP ---
-                    logger.warning("Clearing cached world data to force re-exploration.")
-                    # self.state["sector_data"] = {} -- KEEP THIS, PART OF UNIVERSE_MAP
-                    # self.state["port_info_by_sector"] = {} -- KEEP THIS, PART OF MARKET KNOWLEDGE
-                    # self.state["price_cache"] = {} -- KEEP THIS, PART OF MARKET KNOWLEDGE
-                    
-                    # Force re-fetch of player state
-                    self.state["player_info"] = None
-                    self.state["ship_info"] = None
-                    self.state["player_location_sector"] = None
-                    self.state["needs_bootstrap"] = True
+                    # Caches and persistent state are preserved to allow resuming.
+                    # self.state["strategy_plan"] = [] -- KEEP THIS
+                    # self.state["player_info"] = None -- KEEP THIS
+                    # self.state["ship_info"] = None -- KEEP THIS
+                    # self.state["player_location_sector"] = None -- KEEP THIS
+                    # self.state["needs_bootstrap"] = True -- KEEP THIS
+
                     # --- END FIX ---
 
         except json.JSONDecodeError:

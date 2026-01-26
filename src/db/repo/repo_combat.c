@@ -567,13 +567,14 @@ int db_combat_add_ship_fighters(db_t *db, int ship_id, int amount) {
 
 int db_combat_select_mines_locked(db_t *db, int sector_id, int asset_type, json_t **out_array) {
     if (!db || !out_array) return -1;
-    *out_array = json_array();
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql_tmpl[512], sql[512];
-    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT sector_assets_id as id, quantity, owner_id as player, corporation_id as corporation, ttl FROM sector_assets WHERE sector_id = {1} AND asset_type = {2} AND quantity > 0 %s ORDER BY sector_assets_id ASC;", sql_for_update_skip_locked(db));
+    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT sector_assets_id as id, quantity, owner_id as player, corporation_id as corporation, ttl FROM sector_assets WHERE sector_id = {1} AND asset_type = {2} AND quantity > 0 ORDER BY sector_assets_id ASC %s;", sql_for_update_skip_locked(db));
     sql_build(db, sql_tmpl, sql, sizeof(sql));
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(asset_type) }, 2, &res, &err)) return -1;
+    
+    *out_array = json_array();
     while(db_res_step(res, &err)) {
         json_t *obj = json_object();
         json_object_set_new(obj, "id", json_integer(db_res_col_i32(res, 0, &err)));
@@ -625,4 +626,20 @@ int db_combat_get_stardock_locations(db_t *db, int **out_sectors, int *out_count
     db_res_finalize (res);
     *out_sectors = arr; *out_count = count;
     return (err.code == 0) ? 0 : -1;
+}
+
+int
+db_combat_remove_all_limpets_from_ship (db_t *db, int ship_id)
+{
+  db_error_t err;
+  const char *sql_tmpl = "DELETE FROM limpet_attached WHERE ship_id = {1};";
+  char sql[256];
+  sql_build (db, sql_tmpl, sql, sizeof (sql));
+  if (!db_exec (db, sql, (db_bind_t[])
+		{
+		db_bind_i64 (ship_id)}, 1, &err))
+    {
+      return -1;
+    }
+  return 0;
 }

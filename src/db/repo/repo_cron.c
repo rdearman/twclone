@@ -1478,9 +1478,11 @@ db_cron_port_get_economy_data_json (db_t *db, json_t **out_array)
 
           json_object_set_new(obj, "current_quantity", json_integer(db_res_col_i32(res, 4, &err)));
 
-          json_object_set_new(obj, "base_restock_rate", json_real(db_res_col_double(res, 5, &err)));
+                    json_object_set_new(obj, "base_restock_rate", json_real(db_res_col_double(res, 5, &err)));
 
-          json_object_set_new(obj, "commodity_id", json_integer(db_res_col_i32(res, 7, &err)));
+                    json_object_set_new(obj, "target_stock", json_integer(db_res_col_i32(res, 6, &err)));
+
+                    json_object_set_new(obj, "commodity_id", json_integer(db_res_col_i32(res, 7, &err)));
 
           json_array_append_new(*out_array, obj);
 

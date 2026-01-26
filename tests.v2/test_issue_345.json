@@ -1,0 +1,102 @@
+{
+  "name": "Issue #345 - sector.mine_disrupt",
+  "tests": [
+    {
+      "name": "Setup: Login User",
+      "setup": "macro_auth_user",
+      "username": "mine_user",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Move Player to Sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 11 WHERE player_id = @{mine_user_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear existing mines in sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id = 11 AND (asset_type = 1 OR asset_type = 4);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Deploy mine via SQL",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (11, @{mine_user_player_id}, 1, 10, NOW());" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify mine is present",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT count(*) FROM sector_assets WHERE sector_id = 11 AND asset_type = 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Disrupt mines",
+      "command": "sector.mine_disrupt",
+      "data": {},
+      "user": "mine_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.removed_count", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Verify mine is removed",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT count(*) FROM sector_assets WHERE sector_id = 11 AND asset_type = 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Setup: Login Other User",
+      "setup": "macro_auth_user",
+      "username": "other_mine_user",
+      "password": "password"
+    },
+    {
+      "name": "Deploy mine for primary user via SQL",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (11, @{mine_user_player_id}, 1, 10, NOW());" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Other User to Sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 11 WHERE player_id = @{other_mine_user_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Other user attempts to disrupt - Should remove 0",
+      "command": "sector.mine_disrupt",
+      "data": {},
+      "user": "other_mine_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.removed_count", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Verify mine is still present",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT count(*) FROM sector_assets WHERE sector_id = 11 AND asset_type = 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

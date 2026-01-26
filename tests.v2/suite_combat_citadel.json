@@ -47,7 +47,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET onplanet = @{target_planet_id}, sector_id = @{target_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'planet_gov');"
+        "sql": "UPDATE ships SET onplanet = TRUE, sector_id = @{target_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'planet_gov');"
       },
       "expect": { "status": "ok" }
     },

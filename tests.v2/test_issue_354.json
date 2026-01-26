@@ -1,0 +1,73 @@
+{
+  "name": "Issue #354 - Limpet removal on StarDock entry",
+  "tests": [
+    {
+      "name": "Setup: Login User",
+      "setup": "macro_auth_user",
+      "username": "limpet_user",
+      "password": "password"
+    },
+    {
+      "name": "Find StarDock Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT sector_id FROM ports WHERE type = 9 LIMIT 1;" },
+      "user": "admin",
+      "save": { "stardock_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Move Player to StarDock Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = @stardock_sector WHERE player_id = @{limpet_user_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Ship to StarDock Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = @stardock_sector WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{limpet_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Undock if docked",
+      "command": "dock.status",
+      "data": { "action": "undock" },
+      "user": "limpet_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Attach limpet via SQL",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO limpet_attached (ship_id, owner_player_id, created_ts) VALUES ((SELECT ship_id FROM players WHERE player_id = @{limpet_user_player_id}), 1, NOW());" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify limpet is attached",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT count(*) FROM limpet_attached WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{limpet_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Dock at StarDock - Should trigger decontamination",
+      "command": "dock.status",
+      "data": { "action": "dock" },
+      "user": "limpet_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify limpet is removed",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT count(*) FROM limpet_attached WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{limpet_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    }
+  ]
+}

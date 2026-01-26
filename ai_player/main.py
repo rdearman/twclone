@@ -836,11 +836,11 @@ def main(config_path="config.json"):
             # --- Bootstrap Check (NEW) ---
             bootstrap_cmd = planner.ensure_minimum_world_state(game_state)
             if bootstrap_cmd:
-                # Check if we already sent this bootstrap command recently to avoid loop
-                # (e.g. if we sent sector.info, we wait for response)
-                # But planner.ensure... is stateless, so we need to be careful.
-                # Ideally, we trust the response loop to update state.
-                # We will send it.
+                command_name = bootstrap_cmd["command"]
+                if not planner._is_command_ready(command_name, game_state.get("command_retry_info", {})):
+                    logger.debug(f"Bootstrap command '{command_name}' is on cooldown. Waiting.")
+                    time.sleep(1)
+                    continue
                 
                 idempotency_key = str(uuid.uuid4())
                 full_command = {

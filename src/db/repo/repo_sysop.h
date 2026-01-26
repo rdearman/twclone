@@ -20,7 +20,7 @@ extern "C" {
  * @param new_id_out  Optional pointer to receive the new audit ID
  * @return            0 on success, or DB error code
  */
-int repo_sysop_audit(db_t *db, int actor_id, const char *cmd_type, const char *payload, const char *note, int64_t *new_id_out);
+int repo_sysop_audit(db_t *db, int actor_id, const char *cmd_type, const char *details_param, int64_t *new_id_out);
 
 /*
  * repo_sysop_audit_tail

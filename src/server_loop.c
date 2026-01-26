@@ -91,6 +91,7 @@ extern int cmd_bounty_post_hitlist (client_ctx_t * ctx, json_t * root);
 extern int cmd_player_set_trade_account_preference (client_ctx_t * ctx,
 						    json_t * root);
 extern int cmd_move_transwarp (client_ctx_t * ctx, json_t * root);
+extern int cmd_sector_mine_disrupt (client_ctx_t * ctx, json_t * root);
 extern int cmd_insurance_policies_list (client_ctx_t * ctx, json_t * root);
 extern int cmd_insurance_policies_buy (client_ctx_t * ctx, json_t * root);
 extern int cmd_insurance_claim_file (client_ctx_t * ctx, json_t * root);
@@ -479,6 +480,8 @@ static const command_entry_t k_command_registry[] = {
    "S2S replication heartbeat", schema_placeholder, CMD_FLAG_HIDDEN, false, NULL},
   {"sector.info", cmd_move_describe_sector, "Describe current sector",
    schema_sector_info, 0, false, NULL},
+  {"sector.mine_disrupt", cmd_sector_mine_disrupt, "Disrupt (remove) owned mines",
+   schema_placeholder, 0, false, NULL},
   {"sector.scan", w_sector_scan, "Scan a sector", schema_sector_scan, 0, false, NULL},
   {"sector.scan.density", w_sector_scan_density, "Scan sector density",
    schema_sector_scan_density, 0, false, NULL},
@@ -1066,6 +1069,23 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
 	      return -1;
 	    }
 #endif
+
+	  /* SCHEMA VALIDATION */
+	  json_t *data = json_object_get (root, "data");
+	  char *why = NULL;
+	  if (k_command_registry[i].schema != schema_placeholder &&
+	      schema_validate_payload (k_command_registry[i].name, data, &why) !=
+	      0)
+	    {
+	      int err_code = ERR_INVALID_SCHEMA;
+	      if (why && strstr (why, "missing"))
+		{
+		  err_code = ERR_MISSING_FIELD;
+		}
+	      send_response_error (ctx, root, err_code, why ? why : "Invalid request schema");
+	      free (why);
+	      return 0;		/* Error handled */
+	    }
 
 	  /* AUTH GATE — SINGLE SOURCE OF TRUTH */
 	  if (!(k_command_registry[i].flags & CMD_FLAG_AUTH_FREE))

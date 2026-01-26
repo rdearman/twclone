@@ -1,0 +1,62 @@
+{
+  "name": "Issue #251 - Beacon Collision Rule",
+  "tests": [
+    {
+      "name": "Setup: Login User",
+      "setup": "macro_auth_user",
+      "username": "beacon_user",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Move Player to Sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 11 WHERE player_id = @{beacon_user_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Ship to Sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = 11 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{beacon_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear existing beacon in sector 11",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE sectors SET beacon = NULL WHERE sector_id = 11;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "First beacon - Should be set",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": 11, "text": "Beacon One" },
+      "user": "beacon_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.beacon", "op": "==", "value": "Beacon One" }
+      ]
+    },
+    {
+      "name": "Second beacon - Should trigger collision and destroy both",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": 11, "text": "Beacon Two" },
+      "user": "beacon_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.beacon", "op": "==", "value": null }
+      ]
+    },
+    {
+      "name": "Verify beacon is still null via sector.info",
+      "command": "sector.info",
+      "data": { "sector_id": 11 },
+      "user": "beacon_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.beacon", "op": "==", "value": null }
+      ]
+    }
+  ]
+}
