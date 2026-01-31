@@ -21,6 +21,7 @@ void free_trade_lines (TradeLine * lines, size_t n);
 #include "db/repo/repo_database.h"
 #include "db/repo/repo_ports.h"
 #include "db/repo/repo_combat.h"
+#include "db/repo/repo_players.h"
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
@@ -1085,6 +1086,11 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
       /* Generate System Notice if successfully docked at a port */
       if (new_ported_status > 0)
 	{
+	  /* Record player knowledge and visit */
+	  repo_players_record_port_knowledge (db, ctx->player_id,
+					      new_ported_status);
+	  repo_players_record_visit (db, ctx->player_id, ctx->sector_id);
+
 	  db_get_ship_name (db, player_ship_id, &ship_name);
 	  db_get_port_name (db, new_ported_status, &port_name);
 	  db_player_name (db, ctx->player_id, &player_name);
@@ -1318,6 +1324,13 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Record player knowledge and visit */
+  repo_players_record_port_knowledge (db, ctx->player_id, port_id_val);
+  if (sector_id > 0)
+    {
+      repo_players_record_visit (db, ctx->player_id, sector_id);
+    }
+
   /* --- Retrieve commodities from entity_stock --- */
   {
     if (db_ports_get_commodities (db, port_id_val, &commodities_array) != 0)
@@ -1519,7 +1532,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     {
       send_response_refused_steal (ctx,
 				   root,
-				   REF_NO_WARP_LINK,
+				   REF_NOT_ENOUGH_COMMODITY,
 				   "You do not carry enough of that commodity to jettison.",
 				   NULL);
       return 0;
@@ -2416,6 +2429,10 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	  return 0;
 	}
     }
+
+  /* Record player knowledge */
+  repo_players_record_port_knowledge (db, ctx->player_id, port_id);
+
   player_ship_id = h_get_active_ship_id (db, ctx->player_id);
   ctx->ship_id = player_ship_id;
   h_decloak_ship (db, player_ship_id);
@@ -2600,7 +2617,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	{
 	  send_response_refused_steal (ctx,
 				       root,
-				       REF_NO_WARP_LINK,
+				       REF_NOT_ENOUGH_COMMODITY,
 				       "You do not carry enough of that commodity.",
 				       NULL);
 	  free (canonical_commodity_code);
@@ -2692,11 +2709,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	  {
 	    if (rc == ERR_DB_CONSTRAINT)
 	      {
-		send_response_refused_steal (ctx,
-					     root,
-					     REF_NO_WARP_LINK,
-					     "You do not carry enough of that commodity (atomic check).",
-					     NULL);
+			  send_response_refused_steal (ctx,
+						       root,
+						       REF_NOT_ENOUGH_COMMODITY,
+						       "You do not carry enough of that commodity (atomic check).",
+						       NULL);
+		
 	      }
 	    goto fail_tx;
 	  }
@@ -3151,6 +3169,9 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	  goto cleanup;
 	}
     }
+
+  /* Record player knowledge */
+  repo_players_record_port_knowledge (db, ctx->player_id, port_id);
 
   /* Parse trade lines */
   rc = parse_trade_lines (jitems, &trade_lines, &n);

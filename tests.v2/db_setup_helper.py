@@ -65,7 +65,7 @@ class DBSetupHelper:
             env["PGPASSWORD"] = self.conn_params["password"]
         
         # Build psql command
-        cmd = ["psql"]
+        cmd = ["psql", "-t", "-A"]
         if "host" in self.conn_params:
             cmd.extend(["-h", self.conn_params["host"]])
         if "port" in self.conn_params:

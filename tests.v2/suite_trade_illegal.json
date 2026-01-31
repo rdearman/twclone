@@ -1,0 +1,109 @@
+{
+  "name": "Illegal Trade Visibility",
+  "tests": [
+    {
+      "name": "Setup: good_trader",
+      "setup": "macro_auth_user",
+      "username": "good_trader",
+      "password": "password"
+    },
+    {
+      "name": "Setup: evil_trader",
+      "setup": "macro_auth_user",
+      "username": "evil_trader",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Set Good Alignment",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment = 500 WHERE name = 'good_trader';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set Evil Alignment",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment = -500 WHERE name = 'evil_trader';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move good_trader to Sector 564 (Port 224)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 564 WHERE name = 'good_trader';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move good_trader ship to Sector 564 (Port 224)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = 564 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'good_trader');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move evil_trader to Sector 564 (Port 224)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = 564 WHERE name = 'evil_trader';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move evil_trader ship to Sector 564 (Port 224)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET sector_id = 564 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'evil_trader');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "good_trader sees no illegal goods",
+      "command": "trade.port_info",
+      "data": { "port_id": 224 },
+      "user": "good_trader",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "port": {
+            "commodities": [
+              { "code": "EQU" },
+              { "code": "ORE" },
+              { "code": "ORG" }
+            ]
+          }
+        }
+      },
+      "not_expect": {
+        "data": {
+          "port": {
+            "commodities": [
+              { "code": "SLV" },
+              { "code": "WPN" },
+              { "code": "DRG" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "evil_trader sees illegal goods",
+      "command": "trade.port_info",
+      "data": { "port_id": 224 },
+      "user": "evil_trader",
+      "expect": {
+        "status": "ok",
+        "data": {
+          "port": {
+            "commodities": [
+              { "code": "EQU" },
+              { "code": "ORE" },
+              { "code": "ORG" },
+              { "code": "SLV" },
+              { "code": "WPN" },
+              { "code": "DRG" }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

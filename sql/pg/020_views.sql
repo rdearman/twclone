@@ -134,12 +134,12 @@ CREATE OR REPLACE VIEW player_locations AS
  sh.sector_id AS sector_id,
  sh.ship_id AS ship_id,
  CASE
- WHEN sh.ported = TRUE THEN 'docked_at_port'
+ WHEN sh.ported > 0 THEN 'docked_at_port'
  WHEN sh.onplanet = TRUE THEN 'landed_on_planet'
  WHEN sh.sector_id IS NOT NULL THEN 'in_space'
  ELSE 'unknown'
  END AS location_kind,
- sh.ported AS is_ported,
+ (sh.ported > 0) AS is_ported,
  sh.onplanet AS is_onplanet
 FROM players p
 LEFT JOIN ships sh ON sh.ship_id = p.ship_id;
@@ -215,7 +215,7 @@ JOIN sector_warps AS w2
  AND w1.to_sector = w2.from_sector
 GROUP BY a, b;
 
-CREATE OR REPLACE VIEW player_info_v1 AS SELECT p.player_id AS player_id, p.name AS player_name, p.number AS player_number, sh.sector_id AS sector_id, sctr.name AS sector_name, p.credits AS petty_cash, p.alignment AS alignment, p.experience AS experience, p.ship_id AS ship_number, sh.ship_id AS ship_id, sh.name AS ship_name, sh.type_id AS ship_type_id, st.name AS ship_type_name, st.maxholds AS ship_holds_capacity, sh.holds AS ship_holds_current, sh.fighters AS ship_fighters, sh.mines AS ship_mines, sh.limpets AS ship_limpets, sh.genesis AS ship_genesis, sh.photons AS ship_photons, sh.beacons AS ship_beacons, sh.colonists AS ship_colonists, sh.equipment AS ship_equipment, sh.organics AS ship_organics, sh.ore AS ship_ore, sh.ported AS ship_ported, sh.onplanet AS ship_onplanet, (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth FROM players p LEFT JOIN ships sh ON sh.ship_id = p.ship_id LEFT JOIN shiptypes st ON st.shiptypes_id = sh.type_id LEFT JOIN sectors sctr ON sctr.sector_id = sh.sector_id;
+CREATE OR REPLACE VIEW player_info_v1 AS SELECT p.player_id AS player_id, p.name AS player_name, p.number AS player_number, sh.sector_id AS sector_id, sctr.name AS sector_name, p.credits AS petty_cash, p.alignment AS alignment, p.experience AS experience, p.ship_id AS ship_number, sh.ship_id AS ship_id, sh.name AS ship_name, sh.type_id AS ship_type_id, st.name AS ship_type_name, st.maxholds AS ship_holds_capacity, sh.holds AS ship_holds_current, sh.fighters AS ship_fighters, sh.mines AS ship_mines, sh.limpets AS ship_limpets, sh.genesis AS ship_genesis, sh.photons AS ship_photons, sh.beacons AS ship_beacons, sh.colonists AS ship_colonists, sh.equipment AS ship_equipment, sh.organics AS ship_organics, sh.ore AS ship_ore, (sh.ported > 0) AS ship_ported, sh.onplanet AS ship_onplanet, (COALESCE(p.credits,0) + COALESCE(sh.fighters,0)*2) AS approx_worth FROM players p LEFT JOIN ships sh ON sh.ship_id = p.ship_id LEFT JOIN shiptypes st ON st.shiptypes_id = sh.type_id LEFT JOIN sectors sctr ON sctr.sector_id = sh.sector_id;
 
 CREATE OR REPLACE VIEW sector_search_index AS SELECT 'sector' AS kind, s.sector_id AS id, s.name AS name, s.sector_id AS sector_id, s.name AS sector_name, s.name AS search_term_1 FROM sectors s UNION ALL SELECT 'port' AS kind, p.port_id AS id, p.name AS name, p.sector_id AS sector_id, s.name AS sector_name, p.name AS search_term_1 FROM ports p JOIN sectors s ON s.sector_id = p.sector_id;
 

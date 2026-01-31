@@ -234,10 +234,11 @@ QA_OBJECTIVES = [
     "test planet landing",
     "test ship upgrades",
     "test mining operations",
-    "test bounty hunting"
+    "test bounty hunting",
+    "test illegal trading"
 ]
 
-def _get_fallback_plan(game_state, state_manager):
+def _get_fallback_plan(game_state, state_manager, planner):
     """
     Provides a simple fallback plan when the LLM fails to respond.
     Prioritizes surveying, then selling cargo, then buying if empty, then exploration.
@@ -264,47 +265,48 @@ def _get_fallback_plan(game_state, state_manager):
     
     # 1. Sell Logic: If we have cargo, find where to sell it
     if sellable_items:
-        # Check if current port buys it
+        # Check if current port buys it PROFITABLY
         if sector_data.get("has_port"):
-            port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+            port_id = str(planner._find_port_in_sector(game_state, current_sector))
+            port_sell_prices = game_state.get("price_cache", {}).get(port_id, {}).get("sell", {})
+            
             for item in sellable_items:
                 commodity = canon_commodity(item.get("commodity"))
-                traded_comms = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
-                if commodity in traded_comms:
-                    logger.info(f"Fallback: At a port that buys {commodity}. Setting goal to SELL.")
+                purchase_price = item.get("purchase_price")
+                sell_price = port_sell_prices.get(commodity)
+                
+                if sell_price is not None and purchase_price is not None and sell_price > purchase_price:
+                    logger.info(f"Fallback: Profitable sell opportunity for {commodity} at current port ({sell_price} > {purchase_price}).")
                     return [f"sell: {commodity}"]
         
-        # Current port doesn't buy it or no port here. Find nearest port that DOES buy it.
-        best_dest = None
+        # Find nearest port that DOES buy it profitably
         for item in sellable_items:
             commodity = canon_commodity(item.get("commodity"))
-            for s_id, p_info in game_state.get("port_info_by_sector", {}).items():
-                traded = [canon_commodity(c.get("commodity")) for c in p_info.get("commodities", [])]
-                if commodity in traded:
-                    # Found a port that buys it! 
-                    # For now, just pick the first one found. TODO: Actual distance check.
-                    best_dest = int(s_id)
-                    logger.info(f"Fallback: Found port that buys {commodity} in sector {best_dest}. Going there.")
-                    return [f"goto: {best_dest}", f"sell: {commodity}"]
+            purchase_price = item.get("purchase_price")
+            if purchase_price is None: continue
 
-    # 2. Buy Logic: If we have space and credits, and are at a port, buy something
+            for s_id, p_info in game_state.get("port_info_by_sector", {}).items():
+                p_id_str = str(p_info.get("port_id"))
+                sell_price = game_state.get("price_cache", {}).get(p_id_str, {}).get("sell", {}).get(commodity)
+                
+                if sell_price is not None and sell_price > purchase_price:
+                    target_sector = int(s_id)
+                    logger.info(f"Fallback: Found profitable sell for {commodity} in sector {target_sector} ({sell_price} > {purchase_price}). Going there.")
+                    return [f"goto: {target_sector}", f"sell: {commodity}"]
+
+    # 2. Buy Logic: If we have space and credits, and are at a port, buy something PROFITABLE
     if sector_data.get("has_port"):
         credits = float(game_state.get("player_info", {}).get("player", {}).get("credits", 0))
         holds_free = ship_info.get("holds", 0) - sum(i.get("quantity", 0) for i in cargo)
         
         if credits > 100 and holds_free > 0:
-             port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector))
-             if port_info and port_info.get("commodities"):
-                 # Pick a random commodity traded at this port
-                 comm_list = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
-                 comm_list = [c for c in comm_list if c]
-                 if comm_list:
-                     target_comm = random.choice(comm_list)
-                     logger.info(f"Fallback: At port with credits. Setting goal to BUY {target_comm}.")
-                     return [f"buy: {target_comm}"]
-             
-             logger.info("Fallback: At port with credits. Setting goal to BUY ORE (default).")
-             return ["buy: ORE"]
+             # Use planner's profit-aware buy logic
+             target_comm = planner._get_cheapest_commodity_to_buy(game_state)
+             if target_comm:
+                 logger.info(f"Fallback: Found profitable buy opportunity: {target_comm}.")
+                 return [f"buy: {target_comm}"]
+             else:
+                 logger.info("Fallback: No profitable buy opportunities at this port.")
 
     # 3. Intelligence Logic: If empty, go to the nearest unsurveyed port
     unsurveyed_ports = []
@@ -888,7 +890,7 @@ def main(config_path="config.json"):
                         strategy_plan = new_plan
                     else:
                         logger.warning(f"LLM failed to provide a valid plan for QA Objective '{current_qa_objective}'. Using fallback plan.")
-                        fallback_plan = _get_fallback_plan(game_state, state_manager)
+                        fallback_plan = _get_fallback_plan(game_state, state_manager, planner)
                         state_manager.set("strategy_plan", fallback_plan)
                         strategy_plan = fallback_plan
                         # Do not clear the objective yet, let the fallback help achieve it or progress
@@ -909,7 +911,7 @@ def main(config_path="config.json"):
                             else:
                                 logger.warning(f"LLM provided an invalid plan: {new_plan}. Using fallback plan.")
                                 # Fallback: Create a simple exploration plan
-                                fallback_plan = _get_fallback_plan(game_state, state_manager)
+                                fallback_plan = _get_fallback_plan(game_state, state_manager, planner)
                                 state_manager.set("strategy_plan", fallback_plan)
                                 strategy_plan = fallback_plan
                                 time.sleep(2) # Wait a moment before continuing
@@ -1073,9 +1075,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if response_type == "trade.sell_receipt_v1":
                     sold_items = response_data.get("lines", [])
                     port_id = sent_command.get("data", {}).get("port_id") if sent_command else None
+                    credits_remaining = response_data.get("credits_remaining")
                     profit = 0
                     if port_id:
-                        profit = state_manager.update_cargo_after_sell(sold_items, port_id)
+                        profit = state_manager.update_cargo_after_sell(sold_items, port_id, credits_remaining=credits_remaining)
                         reward = profit / 1000.0 # Normalize profit for the reward
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.sell.")
@@ -1094,8 +1097,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 elif response_type == "trade.buy_receipt_v1":
                     bought_items = response_data.get("lines", [])
                     port_id = sent_command.get("data", {}).get("port_id") if sent_command else None
+                    credits_remaining = response_data.get("credits_remaining")
                     if port_id:
-                        state_manager.update_cargo_after_buy(bought_items, port_id)
+                        state_manager.update_cargo_after_buy(bought_items, port_id, credits_remaining=credits_remaining)
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.buy.")
                 
@@ -1298,7 +1302,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     time.sleep(1) # Cool down to avoid tight loop
                     break # Stop processing further responses in this batch
 
-                if sent_command and command_name == "move.warp" and error_code == 1402:
+                if sent_command and command_name == "move.warp" and error_code == 1453:
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")
                     if to_sector_id is not None:
                         logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. RE-SYNCING location.")
@@ -1323,7 +1327,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
                 if sent_command and command_name == "move.warp":
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")
-                    if error_code == 1402 and to_sector_id is not None:
+                    if error_code == 1453 and to_sector_id is not None:
                         logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. Blacklisting for future attempts.")
                         state_manager.add_to_warp_blacklist(to_sector_id)
                 

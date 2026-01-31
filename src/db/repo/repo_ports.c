@@ -205,7 +205,7 @@ int db_ports_set_ported_status(db_t *db, int ship_id, int port_id) {
     /* SQL_VERBATIM: Q11 */
     const char *q11 = "UPDATE ships SET ported = {1}, onplanet = FALSE WHERE ship_id = {2};";
     char sql[512]; sql_build(db, q11, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_bool(port_id > 0), db_bind_i64(ship_id) }, 2, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_i64(ship_id) }, 2, &err)) return 0;
     return -1;
 }
 
@@ -216,7 +216,7 @@ int db_ports_get_ported_status(db_t *db, int ship_id, int *port_id) {
     const char *q12 = "SELECT ported FROM ships WHERE ship_id = {1}";
     char sql[256]; sql_build(db, q12, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        *port_id = db_res_col_bool(res, 0, &err) ? 1 : 0;
+        *port_id = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
     }

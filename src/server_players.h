@@ -20,6 +20,7 @@ int cmd_player_delete_note (client_ctx_t * ctx, json_t * root);
 int cmd_player_my_info (client_ctx_t * ctx, json_t * root);
 int cmd_player_list_online (client_ctx_t * ctx, json_t * root);
 int cmd_player_rankings (client_ctx_t * ctx, json_t * root);
+int cmd_player_computer_recommend_routes (client_ctx_t * ctx, json_t * root);
 
 void cmd_nav_bookmark_add (client_ctx_t * ctx, json_t * root);
 void cmd_nav_bookmark_remove (client_ctx_t * ctx, json_t * root);

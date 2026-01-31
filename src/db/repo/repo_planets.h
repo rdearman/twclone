@@ -131,6 +131,14 @@ int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, i
 
 /* Q47: Upsert Entity Stock */
 int db_planets_upsert_stock(db_t *db, int planet_id, const char *code, int quantity);
+int db_planets_add_colonists_unassigned(db_t *db, int planet_id, int quantity);
+int db_planets_get_colonists_unassigned(db_t *db, int planet_id, int64_t *count);
+int db_planets_add_ore_on_hand(db_t *db, int planet_id, int quantity);
+int db_planets_add_organics_on_hand(db_t *db, int planet_id, int quantity);
+int db_planets_add_equipment_on_hand(db_t *db, int planet_id, int quantity);
+int db_planets_get_ore_on_hand(db_t *db, int planet_id, int64_t *count);
+int db_planets_get_organics_on_hand(db_t *db, int planet_id, int64_t *count);
+int db_planets_get_equipment_on_hand(db_t *db, int planet_id, int64_t *count);
 
 /* Q48: Commodity ID lookup (legacy) */
 int db_planets_get_commodity_id_v2(db_t *db, const char *code, int *id);

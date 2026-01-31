@@ -96,8 +96,8 @@ CREATE TABLE ships (
     probes bigint NOT NULL DEFAULT 0,
     photons bigint,
     sector_id bigint,
-    shields bigint DEFAULT 1,
-    installed_shields bigint DEFAULT 1,
+    shields integer DEFAULT 1,
+    installed_shields integer DEFAULT 1,
     beacons bigint,
     colonists bigint,
     equipment bigint,
@@ -111,8 +111,8 @@ CREATE TABLE ships (
     has_transwarp boolean NOT NULL DEFAULT FALSE,
     has_planet_scanner boolean NOT NULL DEFAULT FALSE,
     has_long_range_scanner boolean NOT NULL DEFAULT FALSE,
-    cloaked timestamp,
-    ported boolean NOT NULL DEFAULT FALSE,
+    cloaked timestamp NULL,
+    ported bigint DEFAULT 0,
     onplanet boolean NOT NULL DEFAULT FALSE,
     destroyed boolean NOT NULL DEFAULT FALSE,
     hull bigint NOT NULL DEFAULT 100,
@@ -1507,5 +1507,26 @@ CREATE TABLE eligible_tows (
     fighters bigint,
     alignment bigint,
     experience bigint
+);
+
+-- Player Knowledge Tables (Computer System)
+CREATE TABLE player_known_ports (
+    player_id BIGINT NOT NULL,
+    port_id BIGINT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (player_id, port_id),
+    FOREIGN KEY (player_id) REFERENCES players(player_id) ON DELETE CASCADE,
+    FOREIGN KEY (port_id) REFERENCES ports(port_id) ON DELETE CASCADE
+);
+
+CREATE TABLE player_visited_sectors (
+    player_id BIGINT NOT NULL,
+    sector_id BIGINT NOT NULL,
+    visit_count INT NOT NULL DEFAULT 1,
+    first_visited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_visited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (player_id, sector_id),
+    FOREIGN KEY (player_id) REFERENCES players(player_id) ON DELETE CASCADE,
+    FOREIGN KEY (sector_id) REFERENCES sectors(sector_id) ON DELETE CASCADE
 );
 

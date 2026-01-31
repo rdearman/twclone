@@ -127,6 +127,7 @@ json_t *schema_planet_withdraw (void);
 json_t *schema_planet_genesis_create (void);
 json_t *schema_player_set_trade_account_preference (void);
 json_t *schema_player_my_info (void);
+json_t *schema_player_computer_recommend_routes (void);
 json_t *schema_player_info (void);
 json_t *schema_bank_balance (void);
 json_t *schema_bank_history (void);

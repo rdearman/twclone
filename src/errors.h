@@ -125,6 +125,7 @@
 #define REASON_HIGH_EXP         1492
 #define REASON_NO_OWNER         1493
 #define REASON_OVERCROWDING     1494
+#define REF_NOT_ENOUGH_COMMODITY 1495
 
 
 /* Location Errors (1500-1599) */

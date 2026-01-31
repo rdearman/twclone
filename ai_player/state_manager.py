@@ -37,6 +37,7 @@ class StateManager:
             "last_action_result": None, # NEW: Feedback loop for LLM
             "last_quotes": {},          # NEW: Deterministic trade rule support
             "command_sent_in_response_loop": False, # NEW: To prevent double-sending
+            "last_port_trade": None,    # NEW: To prevent immediate buy-back or sell-back
         }
         self.load_state()
 
@@ -316,8 +317,18 @@ class StateManager:
             
         self.save_state()
 
-    def update_cargo_after_buy(self, items_bought, port_id):
+    def set_credits(self, credits):
+        """Updates the credits in player_info."""
+        if self.state["player_info"] and "player" in self.state["player_info"]:
+            self.state["player_info"]["player"]["credits"] = str(credits)
+            logger.info(f"Updated credits to {credits}.")
+            self.save_state()
+
+    def update_cargo_after_buy(self, items_bought, port_id, credits_remaining=None):
         """Updates cargo list after a successful buy, including purchase price."""
+        if credits_remaining is not None:
+            self.set_credits(credits_remaining)
+
         if 'ship_info' not in self.state or self.state['ship_info'] is None:
             self.state['ship_info'] = {'cargo': []}
         
@@ -355,11 +366,21 @@ class StateManager:
                     "purchase_price": purchase_price,
                     "origin_port_id": port_id
                 })
+            
+            # Record last trade
+            self.state["last_port_trade"] = {
+                "port_id": port_id,
+                "commodity": commodity,
+                "type": "buy"
+            }
         logger.info(f"Cargo updated after buy: {self.state['ship_info']['cargo']}")
         self.save_state()
 
-    def update_cargo_after_sell(self, items_sold, port_id):
+    def update_cargo_after_sell(self, items_sold, port_id, credits_remaining=None):
         """Updates cargo list after a successful sell and returns total profit."""
+        if credits_remaining is not None:
+            self.set_credits(credits_remaining)
+
         if 'ship_info' not in self.state or self.state['ship_info'] is None or 'cargo' not in self.state['ship_info']:
             return 0
 
@@ -405,6 +426,13 @@ class StateManager:
             
             # Combine the remaining parts of sold commodity with the other items
             self.state['ship_info']['cargo'] = other_items + new_cargo_list
+            
+            # Record last trade
+            self.state["last_port_trade"] = {
+                "port_id": port_id,
+                "commodity": commodity_sold,
+                "type": "sell"
+            }
 
         logger.info(f"Cargo updated after sell. Profit: {total_profit}. New cargo: {self.state['ship_info']['cargo']}")
         self.save_state()
@@ -434,14 +462,16 @@ class StateManager:
             # Update location from player info
             if 'sector' in p_obj:
                 new_sector = p_obj['sector']
-                # FIX: Only update if we don't have a location yet. 
-                # Ship location is authoritative; Player location might be stale/home.
-                if self.state['player_location_sector'] is None:
+                # Update location and recents
+                if self.state['player_location_sector'] != new_sector:
                     self.state['player_location_sector'] = new_sector
                     self.state['recent_sectors'] = (self.state.get('recent_sectors', []) + [new_sector])[-10:]
-                    logger.info(f"Player location initialized to sector {new_sector} (from player_info)")
-                elif self.state['player_location_sector'] != new_sector:
-                    logger.debug(f"Ignoring player_info sector {new_sector} as we are already at {self.state['player_location_sector']}")
+                    self.state['last_port_trade'] = None # RESET on move
+                    logger.info(f"Player location updated to sector {new_sector} (from player_info). Last trade cleared.")
+
+            # Explicitly sync credits if provided
+            if 'credits' in p_obj:
+                self.set_credits(p_obj['credits'])
 
             turns_str = f" Turns remaining: {p_obj.get('turns_remaining')}" if p_obj.get('turns_remaining') is not None else ""
             logger.info(f"Player info updated.{turns_str}")

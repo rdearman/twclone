@@ -648,6 +648,17 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Task A: Block landing on Earth for evil players */
+  int alignment = 0;
+  db_player_get_alignment (db, ctx->player_id, &alignment);
+  if (alignment < 0 && planet_sector == 1)
+    {
+      send_response_refused_steal (ctx, root, REASON_EVIL_ALIGN,
+				   "Earth refuses landing to criminals.",
+				   NULL);
+      return 0;
+    }
+
   // Atmosphere Quasar Check (C3)
   if (planet_id != 1)		// Skip Terra
     {
@@ -898,17 +909,24 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
     }
 
   int planet_id = 0;
-  int amount = 0;
+  int quantity = 0;
+  const char *commodity = json_string_value (json_object_get (data, "commodity"));
 
+  if (!json_get_int_flexible (data, "quantity", &quantity) || quantity <= 0)
+    {
+      // Fallback to legacy 'amount'
+      if (!json_get_int_flexible (data, "amount", &quantity) || quantity <= 0)
+        {
+           send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid or missing quantity/amount.");
+           return 0;
+        }
+    }
 
-  json_unpack (data, "{s:i, s:i}", "planet_id", &planet_id, "amount",
-	       &amount);
-
-  if (planet_id <= 0 || amount <= 0)
+  if (!json_get_int_flexible (data, "planet_id", &planet_id) || planet_id <= 0)
     {
       send_response_error (ctx,
 			   root,
-			   ERR_INVALID_ARG, "Invalid planet_id or amount.");
+			   ERR_INVALID_ARG, "Invalid planet_id.");
       return 0;
     }
 
@@ -950,17 +968,83 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int citadel_level = 0;
-  db_planets_get_citadel_level (db, planet_id, &citadel_level);
-
-  if (citadel_level < 1)
+  /* Handle Treasury (CREDITS) */
+  if (!commodity || strcasecmp (commodity, "CREDITS") == 0)
     {
-      send_response_refused_steal (ctx,
-				   root,
-				   REF_TURN_COST_EXCEEDS,
-				   "No citadel or insufficient level for treasury.",
-				   NULL);
+      int citadel_level = 0;
+      db_planets_get_citadel_level (db, planet_id, &citadel_level);
+
+      if (citadel_level < 1)
+	{
+	  send_response_refused_steal (ctx,
+				       root,
+				       REF_TURN_COST_EXCEEDS,
+				       "No citadel or insufficient level for treasury.",
+				       NULL);
+	  return 0;
+	}
+
+      db_error_t err;
+      if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+	{
+	  send_response_error (ctx, root, ERR_SERVER_ERROR, "Database busy.");
+	  return 0;
+	}
+
+      long long new_player_balance = 0;
+
+
+      if (h_deduct_player_petty_cash_unlocked (db,
+					       ctx->player_id,
+					       quantity, &new_player_balance) != 0)
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_refused_steal (ctx,
+				       root,
+				       REF_NO_WARP_LINK,
+				       "Insufficient credits.", NULL);
+	  return 0;
+	}
+
+      if (db_planets_add_treasury (db, planet_id, quantity) != 0)
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_error (ctx,
+			       root, ERR_SERVER_ERROR, "Database update failed.");
+	  return 0;
+	}
+
+      if (!db_tx_commit (db, &err))
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_error (ctx,
+			       root,
+			       ERR_SERVER_ERROR, "Transaction commit failed.");
+	  return 0;
+	}
+
+      long long new_treasury = 0;
+      db_planets_get_treasury (db, planet_id, &new_treasury);
+
+      json_t *resp = json_object ();
+
+
+      json_object_set_new (resp, "planet_id", json_integer (planet_id));
+      json_object_set_new (resp, "planet_treasury_balance",
+			   json_integer (new_treasury));
+      json_object_set_new (resp, "player_credits",
+			   json_integer (new_player_balance));
+
+      send_response_ok_take (ctx, root, "planet.deposit", &resp);
       return 0;
+    }
+
+  /* Handle Commodities */
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+       send_response_error (ctx, root, ERR_NO_ACTIVE_SHIP, "No active ship found.");
+       return 0;
     }
 
   db_error_t err;
@@ -970,49 +1054,72 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  long long new_player_balance = 0;
+  int alignment = 0;
+  db_player_get_alignment (db, ctx->player_id, &alignment);
 
+  const char *target_commodity = commodity;
+  /* Slave -> Colonist conversion for evil players */
+  if (strcasecmp (commodity, "SLAVES") == 0 && alignment < 0)
+    {
+      target_commodity = "COLONISTS";
+    }
 
-  if (h_deduct_player_petty_cash_unlocked (db,
-					   ctx->player_id,
-					   amount, &new_player_balance) != 0)
+  /* Deduct from ship */
+  int rc = h_update_ship_cargo (db, ship_id, commodity, -quantity, NULL);
+  if (rc != 0)
     {
       db_tx_rollback (db, NULL);
-      send_response_refused_steal (ctx,
-				   root,
-				   REF_NO_WARP_LINK,
-				   "Insufficient credits.", NULL);
+      send_response_error (ctx, root, rc, "Insufficient cargo on ship.");
       return 0;
     }
 
-  if (db_planets_add_treasury (db, planet_id, amount) != 0)
+  /* Add to planet */
+  int prc = 0;
+  if (strcasecmp (target_commodity, "COLONISTS") == 0)
+    {
+      prc = db_planets_add_colonists_unassigned (db, planet_id, quantity);
+    }
+  else if (strcasecmp (target_commodity, "ORE") == 0)
+    {
+      prc = db_planets_add_ore_on_hand (db, planet_id, quantity);
+    }
+  else if (strcasecmp (target_commodity, "ORG") == 0 || strcasecmp (target_commodity, "ORGANICS") == 0)
+    {
+      prc = db_planets_add_organics_on_hand (db, planet_id, quantity);
+    }
+  else if (strcasecmp (target_commodity, "EQU") == 0 || strcasecmp (target_commodity, "EQUIPMENT") == 0)
+    {
+      prc = db_planets_add_equipment_on_hand (db, planet_id, quantity);
+    }
+  else
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx,
-			   root, ERR_SERVER_ERROR, "Database update failed.");
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Unsupported commodity for deposit.");
+      return 0;
+    }
+
+  if (prc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Planet update failed.");
       return 0;
     }
 
   if (!db_tx_commit (db, &err))
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "Transaction commit failed.");
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Transaction commit failed.");
       return 0;
     }
 
-  long long new_treasury = 0;
-  db_planets_get_treasury (db, planet_id, &new_treasury);
-
   json_t *resp = json_object ();
-
-
   json_object_set_new (resp, "planet_id", json_integer (planet_id));
-  json_object_set_new (resp, "planet_treasury_balance",
-		       json_integer (new_treasury));
-  json_object_set_new (resp, "player_credits",
-		       json_integer (new_player_balance));
+  json_object_set_new (resp, "commodity", json_string (commodity));
+  json_object_set_new (resp, "quantity", json_integer (quantity));
+  if (strcasecmp (target_commodity, commodity) != 0)
+    {
+      json_object_set_new (resp, "converted_to", json_string (target_commodity));
+    }
 
   send_response_ok_take (ctx, root, "planet.deposit", &resp);
   return 0;
@@ -1043,17 +1150,24 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
     }
 
   int planet_id = 0;
-  int amount = 0;
+  int quantity = 0;
+  const char *commodity = json_string_value (json_object_get (data, "commodity"));
 
+  if (!json_get_int_flexible (data, "quantity", &quantity) || quantity <= 0)
+    {
+      // Fallback to legacy 'amount'
+      if (!json_get_int_flexible (data, "amount", &quantity) || quantity <= 0)
+        {
+          send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid or missing quantity/amount.");
+          return 0;
+        }
+    }
 
-  json_unpack (data, "{s:i, s:i}", "planet_id", &planet_id, "amount",
-	       &amount);
-
-  if (planet_id <= 0 || amount <= 0)
+  if (!json_get_int_flexible (data, "planet_id", &planet_id) || planet_id <= 0)
     {
       send_response_error (ctx,
 			   root,
-			   ERR_INVALID_ARG, "Invalid planet_id or amount.");
+			   ERR_INVALID_ARG, "Invalid planet_id.");
       return 0;
     }
 
@@ -1106,28 +1220,136 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int citadel_level = 0;
-  long long current_treasury = 0;
-  db_planets_get_citadel_info (db, planet_id, &citadel_level,
-			       &current_treasury);
-
-  if (citadel_level < 1)
+  /* Handle Treasury (CREDITS) */
+  if (!commodity || strcasecmp (commodity, "CREDITS") == 0)
     {
-      send_response_refused_steal (ctx,
-				   root,
-				   REF_TURN_COST_EXCEEDS,
-				   "No citadel or insufficient level for treasury.",
-				   NULL);
+      int citadel_level = 0;
+      long long current_treasury = 0;
+      db_planets_get_citadel_info (db, planet_id, &citadel_level,
+				   &current_treasury);
+
+      if (citadel_level < 1)
+	{
+	  send_response_refused_steal (ctx,
+				       root,
+				       REF_TURN_COST_EXCEEDS,
+				       "No citadel or insufficient level for treasury.",
+				       NULL);
+	  return 0;
+	}
+
+      if (current_treasury < quantity)
+	{
+	  send_response_refused_steal (ctx,
+				       root,
+				       REF_NO_WARP_LINK,
+				       "Insufficient treasury funds.", NULL);
+	  return 0;
+	}
+
+      db_error_t err;
+      if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+	{
+	  send_response_error (ctx, root, ERR_SERVER_ERROR, "Database busy.");
+	  return 0;
+	}
+
+      if (db_planets_deduct_treasury (db, planet_id, quantity) != 0)
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_error (ctx, root, ERR_SERVER_ERROR, "Database error.");
+	  return 0;
+	}
+
+      long long new_player_balance = 0;
+
+
+      if (h_add_player_petty_cash_unlocked (db,
+					    ctx->player_id,
+					    quantity, &new_player_balance) != 0)
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_error (ctx,
+			       root,
+			       ERR_SERVER_ERROR, "Failed to credit player.");
+	  return 0;
+	}
+
+      if (!db_tx_commit (db, &err))
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_error (ctx,
+			       root,
+			       ERR_SERVER_ERROR, "Transaction commit failed.");
+	  return 0;
+	}
+
+      json_t *resp = json_object ();
+
+
+      json_object_set_new (resp, "planet_id", json_integer (planet_id));
+      json_object_set_new (resp, "planet_treasury_balance",
+			   json_integer (current_treasury - quantity));
+      json_object_set_new (resp, "player_credits",
+			   json_integer (new_player_balance));
+
+      send_response_ok_take (ctx, root, "planet.withdraw", &resp);
       return 0;
     }
 
-  if (current_treasury < amount)
+  /* Handle Commodities */
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
     {
-      send_response_refused_steal (ctx,
-				   root,
-				   REF_NO_WARP_LINK,
-				   "Insufficient treasury funds.", NULL);
-      return 0;
+       send_response_error (ctx, root, ERR_NO_ACTIVE_SHIP, "No active ship found.");
+       return 0;
+    }
+
+  int alignment = 0;
+  db_player_get_alignment (db, ctx->player_id, &alignment);
+
+  const char *target_commodity = commodity;
+  /* Colonist -> Slave conversion for evil players */
+  if (strcasecmp (commodity, "COLONISTS") == 0 && alignment < 0)
+    {
+       target_commodity = "SLAVES";
+    }
+
+  /* Check planet stock */
+  int64_t planet_qty = 0;
+  int prc = 0;
+  if (strcasecmp (commodity, "COLONISTS") == 0)
+    {
+      prc = db_planets_get_colonists_unassigned (db, planet_id, &planet_qty);
+    }
+  else if (strcasecmp (commodity, "ORE") == 0)
+    {
+      prc = db_planets_get_ore_on_hand (db, planet_id, &planet_qty);
+    }
+  else if (strcasecmp (commodity, "ORG") == 0 || strcasecmp (commodity, "ORGANICS") == 0)
+    {
+      prc = db_planets_get_organics_on_hand (db, planet_id, &planet_qty);
+    }
+  else if (strcasecmp (commodity, "EQU") == 0 || strcasecmp (commodity, "EQUIPMENT") == 0)
+    {
+      prc = db_planets_get_equipment_on_hand (db, planet_id, &planet_qty);
+    }
+  else
+    {
+       send_response_error (ctx, root, ERR_INVALID_ARG, "Unsupported commodity for withdrawal.");
+       return 0;
+    }
+
+  if (prc != 0)
+    {
+       send_response_error (ctx, root, ERR_SERVER_ERROR, "Failed to check planet stock.");
+       return 0;
+    }
+
+  if (planet_qty < quantity)
+    {
+       send_response_refused_steal (ctx, root, REF_NOT_ENOUGH_COMMODITY, "Insufficient stock on planet.", NULL);
+       return 0;
     }
 
   db_error_t err;
@@ -1137,44 +1359,55 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  if (db_planets_deduct_treasury (db, planet_id, amount) != 0)
+  /* Deduct from planet */
+  if (strcasecmp (commodity, "COLONISTS") == 0)
+    {
+      prc = db_planets_add_colonists_unassigned (db, planet_id, -quantity);
+    }
+  else if (strcasecmp (commodity, "ORE") == 0)
+    {
+      prc = db_planets_add_ore_on_hand (db, planet_id, -quantity);
+    }
+  else if (strcasecmp (commodity, "ORG") == 0 || strcasecmp (commodity, "ORGANICS") == 0)
+    {
+      prc = db_planets_add_organics_on_hand (db, planet_id, -quantity);
+    }
+  else if (strcasecmp (commodity, "EQU") == 0 || strcasecmp (commodity, "EQUIPMENT") == 0)
+    {
+      prc = db_planets_add_equipment_on_hand (db, planet_id, -quantity);
+    }
+
+  if (prc != 0)
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx, root, ERR_SERVER_ERROR, "Database error.");
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Planet update failed.");
       return 0;
     }
 
-  long long new_player_balance = 0;
-
-
-  if (h_add_player_petty_cash_unlocked (db,
-					ctx->player_id,
-					amount, &new_player_balance) != 0)
+  /* Add to ship (this also checks for holds) */
+  int rc = h_update_ship_cargo (db, ship_id, target_commodity, quantity, NULL);
+  if (rc != 0)
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "Failed to credit player.");
+      send_response_error (ctx, root, rc, "Insufficient holds or ship update failed.");
       return 0;
     }
 
   if (!db_tx_commit (db, &err))
     {
       db_tx_rollback (db, NULL);
-      send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "Transaction commit failed.");
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Transaction commit failed.");
       return 0;
     }
 
   json_t *resp = json_object ();
-
-
   json_object_set_new (resp, "planet_id", json_integer (planet_id));
-  json_object_set_new (resp, "planet_treasury_balance",
-		       json_integer (current_treasury - amount));
-  json_object_set_new (resp, "player_credits",
-		       json_integer (new_player_balance));
+  json_object_set_new (resp, "commodity", json_string (commodity));
+  json_object_set_new (resp, "quantity", json_integer (quantity));
+  if (strcasecmp (target_commodity, commodity) != 0)
+    {
+      json_object_set_new (resp, "converted_to", json_string (target_commodity));
+    }
 
   send_response_ok_take (ctx, root, "planet.withdraw", &resp);
   return 0;

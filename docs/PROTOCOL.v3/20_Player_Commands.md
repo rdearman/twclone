@@ -16,6 +16,37 @@ Get player rankings.
 **Args**: `{ "by": "net_worth", "limit": 10 }`
 **Response**: `{ "rankings": [...] }`
 
+### `player.computer.recommend_routes`
+Request recommended trade loops based on personally visited ports and their known buy/sell profiles. This does not use global market data (prices/stock).
+**Args**:
+```json
+{
+  "max_hops_between": 10,
+  "max_hops_from_player": 20,
+  "require_two_way": false,
+  "limit": 10
+}
+```
+**Response**: `player.computer.trade_routes`
+```json
+{
+  "routes": [
+    {
+      "port_a_id": 123,
+      "port_b_id": 456,
+      "sector_a_id": 10,
+      "sector_b_id": 15,
+      "hops_between": 2,
+      "hops_from_player": 5,
+      "is_two_way": true
+    }
+  ],
+  "pathing_model": "full_graph",
+  "truncated": false,
+  "pairs_checked": 45
+}
+```
+
 ## 2. Settings & Preferences
 
 ### `player.get_settings`

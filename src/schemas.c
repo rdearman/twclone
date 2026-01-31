@@ -351,6 +351,7 @@ extern json_t *schema_planet_withdraw (void);
 extern json_t *schema_planet_genesis_create (void);
 extern json_t *schema_player_set_trade_account_preference (void);
 extern json_t *schema_player_my_info (void);
+extern json_t *schema_player_computer_recommend_routes (void);
 extern json_t *schema_player_info (void);
 extern json_t *schema_bank_balance (void);
 extern json_t *schema_bank_history (void);
@@ -459,6 +460,8 @@ static schema_entry_t g_schema_table[] = {
   {"player.set_trade_account_preference", NULL,
    schema_player_set_trade_account_preference},
   {"player.my_info", NULL, schema_player_my_info},
+  {"player.computer.recommend_routes", NULL,
+   schema_player_computer_recommend_routes},
   {"player.info", NULL, schema_player_info},
   {"bank.balance", NULL, schema_bank_balance},
   {"bank.history", NULL, schema_bank_history},
@@ -4160,6 +4163,42 @@ schema_player_my_info (void)
   // No required properties
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
   return data_schema;
+}
+
+
+json_t *
+schema_player_computer_recommend_routes (void)
+{
+  json_t *root = json_object ();
+  json_object_set_new (root, "$id",
+		       json_string
+		       ("ge://schema/player.computer.recommend_routes.json"));
+  json_object_set_new (root, "type", json_string ("object"));
+
+  json_t *props = json_object ();
+  json_object_set_new (root, "properties", props);
+
+  json_t *max_hops_between = json_object ();
+  json_object_set_new (max_hops_between, "type", json_string ("integer"));
+  json_object_set_new (max_hops_between, "default", json_integer (10));
+  json_object_set_new (props, "max_hops_between", max_hops_between);
+
+  json_t *max_hops_from_player = json_object ();
+  json_object_set_new (max_hops_from_player, "type", json_string ("integer"));
+  json_object_set_new (max_hops_from_player, "default", json_integer (20));
+  json_object_set_new (props, "max_hops_from_player", max_hops_from_player);
+
+  json_t *require_two_way = json_object ();
+  json_object_set_new (require_two_way, "type", json_string ("boolean"));
+  json_object_set_new (require_two_way, "default", json_false ());
+  json_object_set_new (props, "require_two_way", require_two_way);
+
+  json_t *limit = json_object ();
+  json_object_set_new (limit, "type", json_string ("integer"));
+  json_object_set_new (limit, "default", json_integer (10));
+  json_object_set_new (props, "limit", limit);
+
+  return root;
 }
 
 

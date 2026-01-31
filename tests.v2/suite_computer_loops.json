@@ -1,0 +1,113 @@
+{
+  "test_suite_name": "Computer Trade Loops Knowledge",
+  "description": "Validates that trade loops are only recommended after docking at ports",
+  "tests": [
+    {
+      "name": "Setup: Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register loop_player",
+      "command": "auth.register",
+      "user": "loop_player",
+      "register_if_missing": true,
+      "data": {
+        "username": "loop_player",
+        "passwd": "password"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Login loop_player",
+      "command": "auth.login",
+      "user": "loop_player",
+      "data": {
+        "username": "loop_player",
+        "passwd": "password"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Initial Route Request (Empty)",
+      "command": "player.computer.recommend_routes",
+      "user": "loop_player",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "data": {
+          "routes": []
+        }
+      }
+    },
+    {
+      "name": "Teleport to Sector 14",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 14 WHERE name = 'loop_player'"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh loop_player session (sector update)",
+      "command": "auth.login",
+      "user": "loop_player",
+      "data": { "username": "loop_player", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Dock at Port 2 (Sector 14)",
+      "command": "dock.status",
+      "user": "loop_player",
+      "data": { "action": "dock" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Route Request (Still Empty - only 1 port known)",
+      "command": "player.computer.recommend_routes",
+      "user": "loop_player",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "data": {
+          "routes": []
+        }
+      }
+    },
+    {
+      "name": "Warp to Sector 1570 (Port 618)",
+      "command": "move.warp",
+      "user": "loop_player",
+      "data": { "to_sector_id": 1570 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Dock at Port 618 (Sector 1570)",
+      "command": "dock.status",
+      "user": "loop_player",
+      "data": { "action": "dock" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Route Request (Should show loop between 2 and 618)",
+      "command": "player.computer.recommend_routes",
+      "user": "loop_player",
+      "data": { "require_two_way": true },
+      "expect": {
+        "status": "ok",
+        "data": {
+          "routes": [
+            {
+              "port_a_id": 2,
+              "port_b_id": 618,
+              "sector_a_id": 14,
+              "sector_b_id": 1570,
+              "hops_between": 1,
+              "is_two_way": true
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

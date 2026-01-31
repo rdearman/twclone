@@ -371,6 +371,21 @@
           }
         },
         {
+          "key": "l",
+          "label": "(L) Trade Loop Recommendations",
+          "action": {
+            "rpc": {
+              "command": "player.computer.recommend_routes",
+              "data": {
+                "max_hops_between": "<prompt:int:Max hops between ports: [10]>",
+                "require_two_way": "<prompt:bool:Require 2-way trade (y/n): [n]>",
+                "limit": "<prompt:int:Result limit: [10]>"
+              }
+            },
+            "post": "pretty_print_trade_routes"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {

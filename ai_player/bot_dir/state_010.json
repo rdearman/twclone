@@ -1,0 +1,7325 @@
+{
+    "session_id": "bd1d55fa499d429ce6188e3a95c049ef",
+    "player_info": {
+        "player": {
+            "player_id": 20,
+            "current_sector": 1430,
+            "unread_news_count": 0,
+            "session_token": "bd1d55fa499d429ce6188e3a95c049ef",
+            "id": 20,
+            "username": "ai_qa_bot_010",
+            "credits": "3642.00",
+            "turns_remaining": 999999,
+            "sector": 1436,
+            "ship_id": 38,
+            "corp_id": 0,
+            "alignment": 1,
+            "experience": 0
+        }
+    },
+    "ship_info": {
+        "id": 38,
+        "name": "ai_qa_bot_010's ship",
+        "type_id": 2,
+        "holds": 10,
+        "fighters": 1,
+        "shields": 1,
+        "onplanet": 0,
+        "ported": 0,
+        "cargo": [
+            {
+                "commodity": "ORG",
+                "quantity": 10,
+                "purchase_price": 157,
+                "origin_port_id": 324
+            }
+        ]
+    },
+    "player_location_sector": 1288,
+    "sector_data": {
+        "1436": {
+            "server_tick": 731206,
+            "sector_id": 1436,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 921
+                },
+                {
+                    "to_sector": 989
+                },
+                {
+                    "to_sector": 1506
+                },
+                {
+                    "to_sector": 1585
+                },
+                {
+                    "to_sector": 1837
+                },
+                {
+                    "to_sector": 1940
+                },
+                {
+                    "to_sector": 2390
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769794159.4541276,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 921
+                },
+                {
+                    "to_sector": 989
+                },
+                {
+                    "to_sector": 1506
+                },
+                {
+                    "to_sector": 1585
+                },
+                {
+                    "to_sector": 1837
+                },
+                {
+                    "to_sector": 1940
+                },
+                {
+                    "to_sector": 2390
+                }
+            ]
+        },
+        "1506": {
+            "server_tick": 731847,
+            "sector_id": 1506,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 30
+                },
+                {
+                    "to_sector": 1209
+                },
+                {
+                    "to_sector": 1421
+                },
+                {
+                    "to_sector": 1436
+                },
+                {
+                    "to_sector": 2194
+                },
+                {
+                    "to_sector": 2370
+                },
+                {
+                    "to_sector": 2468
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769794223.6274197,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 30
+                },
+                {
+                    "to_sector": 1209
+                },
+                {
+                    "to_sector": 1421
+                },
+                {
+                    "to_sector": 1436
+                },
+                {
+                    "to_sector": 2194
+                },
+                {
+                    "to_sector": 2370
+                },
+                {
+                    "to_sector": 2468
+                }
+            ]
+        },
+        "30": {
+            "server_tick": 732487,
+            "sector_id": 30,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 132
+                },
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 568
+                },
+                {
+                    "to_sector": 1110
+                },
+                {
+                    "to_sector": 1438
+                },
+                {
+                    "to_sector": 1461
+                },
+                {
+                    "to_sector": 1506
+                },
+                {
+                    "to_sector": 2011
+                },
+                {
+                    "to_sector": 2380
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769794287.8058434,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 132
+                },
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 568
+                },
+                {
+                    "to_sector": 1110
+                },
+                {
+                    "to_sector": 1438
+                },
+                {
+                    "to_sector": 1461
+                },
+                {
+                    "to_sector": 1506
+                },
+                {
+                    "to_sector": 2011
+                },
+                {
+                    "to_sector": 2380
+                }
+            ]
+        },
+        "236": {
+            "server_tick": 778759,
+            "sector_id": 236,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 30
+                },
+                {
+                    "to_sector": 217
+                },
+                {
+                    "to_sector": 573
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 1778
+                },
+                {
+                    "to_sector": 1900
+                },
+                {
+                    "to_sector": 2051
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769798928.4852886,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 30
+                },
+                {
+                    "to_sector": 217
+                },
+                {
+                    "to_sector": 573
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 1778
+                },
+                {
+                    "to_sector": 1900
+                },
+                {
+                    "to_sector": 2051
+                }
+            ]
+        },
+        "881": {
+            "server_tick": 779405,
+            "sector_id": 881,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 267
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 1277
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 354,
+                    "name": "Dualith",
+                    "type": 7
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769798993.2817633,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 267
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 1277
+                }
+            ]
+        },
+        "1277": {
+            "server_tick": 758272,
+            "sector_id": 1277,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 482
+                },
+                {
+                    "to_sector": 796
+                },
+                {
+                    "to_sector": 836
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 897
+                },
+                {
+                    "to_sector": 911
+                },
+                {
+                    "to_sector": 1226
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 526,
+                    "name": "Kectred",
+                    "type": 5
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796874.8161564,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 482
+                },
+                {
+                    "to_sector": 796
+                },
+                {
+                    "to_sector": 836
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 897
+                },
+                {
+                    "to_sector": 911
+                },
+                {
+                    "to_sector": 1226
+                }
+            ]
+        },
+        "1226": {
+            "server_tick": 738927,
+            "sector_id": 1226,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 185
+                },
+                {
+                    "to_sector": 920
+                },
+                {
+                    "to_sector": 940
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1536
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769794933.9912865,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 185
+                },
+                {
+                    "to_sector": 920
+                },
+                {
+                    "to_sector": 940
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1536
+                }
+            ]
+        },
+        "920": {
+            "server_tick": 738276,
+            "sector_id": 920,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 97
+                },
+                {
+                    "to_sector": 662
+                },
+                {
+                    "to_sector": 1226
+                },
+                {
+                    "to_sector": 1798
+                },
+                {
+                    "to_sector": 1900
+                },
+                {
+                    "to_sector": 2047
+                },
+                {
+                    "to_sector": 2483
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 372,
+                    "name": "Ybendajira",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769794868.7446923,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 97
+                },
+                {
+                    "to_sector": 662
+                },
+                {
+                    "to_sector": 1226
+                },
+                {
+                    "to_sector": 1798
+                },
+                {
+                    "to_sector": 1900
+                },
+                {
+                    "to_sector": 2047
+                },
+                {
+                    "to_sector": 2483
+                }
+            ]
+        },
+        "911": {
+            "server_tick": 741503,
+            "sector_id": 911,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 12
+                },
+                {
+                    "to_sector": 299
+                },
+                {
+                    "to_sector": 417
+                },
+                {
+                    "to_sector": 603
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1891
+                },
+                {
+                    "to_sector": 2086
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 369,
+                    "name": "Afoerd",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769795192.4481976,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 12
+                },
+                {
+                    "to_sector": 299
+                },
+                {
+                    "to_sector": 417
+                },
+                {
+                    "to_sector": 603
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1891
+                },
+                {
+                    "to_sector": 2086
+                }
+            ]
+        },
+        "836": {
+            "server_tick": 745370,
+            "sector_id": 836,
+            "name": "Acamar",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 297
+                },
+                {
+                    "to_sector": 557
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1555
+                },
+                {
+                    "to_sector": 1891
+                },
+                {
+                    "to_sector": 2128
+                },
+                {
+                    "to_sector": 2413
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769795580.3036146,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 297
+                },
+                {
+                    "to_sector": 557
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1555
+                },
+                {
+                    "to_sector": 1891
+                },
+                {
+                    "to_sector": 2128
+                },
+                {
+                    "to_sector": 2413
+                }
+            ]
+        },
+        "2128": {
+            "server_tick": 744719,
+            "sector_id": 2128,
+            "name": "Sagitta",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 444
+                },
+                {
+                    "to_sector": 773
+                },
+                {
+                    "to_sector": 836
+                },
+                {
+                    "to_sector": 1306
+                },
+                {
+                    "to_sector": 1428
+                },
+                {
+                    "to_sector": 1919
+                },
+                {
+                    "to_sector": 2148
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 859,
+                    "name": "Cefianor",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769795515.038086,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 444
+                },
+                {
+                    "to_sector": 773
+                },
+                {
+                    "to_sector": 836
+                },
+                {
+                    "to_sector": 1306
+                },
+                {
+                    "to_sector": 1428
+                },
+                {
+                    "to_sector": 1919
+                },
+                {
+                    "to_sector": 2148
+                }
+            ]
+        },
+        "796": {
+            "server_tick": 757621,
+            "sector_id": 796,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 351
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1474
+                },
+                {
+                    "to_sector": 1488
+                },
+                {
+                    "to_sector": 1998
+                },
+                {
+                    "to_sector": 2073
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796809.522507,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 351
+                },
+                {
+                    "to_sector": 1277
+                },
+                {
+                    "to_sector": 1474
+                },
+                {
+                    "to_sector": 1488
+                },
+                {
+                    "to_sector": 1998
+                },
+                {
+                    "to_sector": 2073
+                }
+            ]
+        },
+        "1488": {
+            "server_tick": 756970,
+            "sector_id": 1488,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 157
+                },
+                {
+                    "to_sector": 491
+                },
+                {
+                    "to_sector": 511
+                },
+                {
+                    "to_sector": 603
+                },
+                {
+                    "to_sector": 796
+                },
+                {
+                    "to_sector": 942
+                },
+                {
+                    "to_sector": 1263
+                },
+                {
+                    "to_sector": 1295
+                },
+                {
+                    "to_sector": 1960
+                },
+                {
+                    "to_sector": 2310
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796744.217536,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 157
+                },
+                {
+                    "to_sector": 491
+                },
+                {
+                    "to_sector": 511
+                },
+                {
+                    "to_sector": 603
+                },
+                {
+                    "to_sector": 796
+                },
+                {
+                    "to_sector": 942
+                },
+                {
+                    "to_sector": 1263
+                },
+                {
+                    "to_sector": 1295
+                },
+                {
+                    "to_sector": 1960
+                },
+                {
+                    "to_sector": 2310
+                }
+            ]
+        },
+        "491": {
+            "server_tick": 756320,
+            "sector_id": 491,
+            "name": "Alpha Phe",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 205
+                },
+                {
+                    "to_sector": 1135
+                },
+                {
+                    "to_sector": 1346
+                },
+                {
+                    "to_sector": 1488
+                },
+                {
+                    "to_sector": 1505
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796678.899693,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 205
+                },
+                {
+                    "to_sector": 1135
+                },
+                {
+                    "to_sector": 1346
+                },
+                {
+                    "to_sector": 1488
+                },
+                {
+                    "to_sector": 1505
+                }
+            ]
+        },
+        "1135": {
+            "server_tick": 755669,
+            "sector_id": 1135,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 282
+                },
+                {
+                    "to_sector": 344
+                },
+                {
+                    "to_sector": 491
+                },
+                {
+                    "to_sector": 594
+                },
+                {
+                    "to_sector": 1894
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 469,
+                    "name": "Prittish",
+                    "type": 5
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796613.6025565,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 282
+                },
+                {
+                    "to_sector": 344
+                },
+                {
+                    "to_sector": 491
+                },
+                {
+                    "to_sector": 594
+                },
+                {
+                    "to_sector": 1894
+                }
+            ]
+        },
+        "594": {
+            "server_tick": 752447,
+            "sector_id": 594,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 69
+                },
+                {
+                    "to_sector": 367
+                },
+                {
+                    "to_sector": 978
+                },
+                {
+                    "to_sector": 988
+                },
+                {
+                    "to_sector": 1135
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796290.3057702,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 69
+                },
+                {
+                    "to_sector": 367
+                },
+                {
+                    "to_sector": 978
+                },
+                {
+                    "to_sector": 988
+                },
+                {
+                    "to_sector": 1135
+                }
+            ]
+        },
+        "367": {
+            "server_tick": 751797,
+            "sector_id": 367,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 88
+                },
+                {
+                    "to_sector": 120
+                },
+                {
+                    "to_sector": 594
+                },
+                {
+                    "to_sector": 857
+                },
+                {
+                    "to_sector": 1388
+                },
+                {
+                    "to_sector": 1557
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 144,
+                    "name": "Aodus",
+                    "type": 3
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796225.0658529,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 88
+                },
+                {
+                    "to_sector": 120
+                },
+                {
+                    "to_sector": 594
+                },
+                {
+                    "to_sector": 857
+                },
+                {
+                    "to_sector": 1388
+                },
+                {
+                    "to_sector": 1557
+                }
+            ]
+        },
+        "344": {
+            "server_tick": 755018,
+            "sector_id": 344,
+            "name": "Xi UMa",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 220
+                },
+                {
+                    "to_sector": 321
+                },
+                {
+                    "to_sector": 520
+                },
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 1135
+                },
+                {
+                    "to_sector": 1425
+                },
+                {
+                    "to_sector": 1619
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 138,
+                    "name": "Abioejioe",
+                    "type": 3
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769796548.3025296,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 220
+                },
+                {
+                    "to_sector": 321
+                },
+                {
+                    "to_sector": 520
+                },
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 1135
+                },
+                {
+                    "to_sector": 1425
+                },
+                {
+                    "to_sector": 1619
+                }
+            ]
+        },
+        "822": {
+            "server_tick": 781935,
+            "sector_id": 822,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 258
+                },
+                {
+                    "to_sector": 583
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 1191
+                },
+                {
+                    "to_sector": 1556
+                },
+                {
+                    "to_sector": 1711
+                },
+                {
+                    "to_sector": 2239
+                },
+                {
+                    "to_sector": 2261
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 324,
+                    "name": "Ocilard",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799247.1282723,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 258
+                },
+                {
+                    "to_sector": 583
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 1191
+                },
+                {
+                    "to_sector": 1556
+                },
+                {
+                    "to_sector": 1711
+                },
+                {
+                    "to_sector": 2239
+                },
+                {
+                    "to_sector": 2261
+                }
+            ]
+        },
+        "267": {
+            "server_tick": 765987,
+            "sector_id": 267,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 494
+                },
+                {
+                    "to_sector": 534
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 1040
+                },
+                {
+                    "to_sector": 1825
+                },
+                {
+                    "to_sector": 1833
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769797648.8254259,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 494
+                },
+                {
+                    "to_sector": 534
+                },
+                {
+                    "to_sector": 881
+                },
+                {
+                    "to_sector": 1040
+                },
+                {
+                    "to_sector": 1825
+                },
+                {
+                    "to_sector": 1833
+                }
+            ]
+        },
+        "1825": {
+            "server_tick": 765335,
+            "sector_id": 1825,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 20
+                },
+                {
+                    "to_sector": 267
+                },
+                {
+                    "to_sector": 575
+                },
+                {
+                    "to_sector": 764
+                },
+                {
+                    "to_sector": 930
+                },
+                {
+                    "to_sector": 986
+                },
+                {
+                    "to_sector": 2186
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769797583.5064256,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 20
+                },
+                {
+                    "to_sector": 267
+                },
+                {
+                    "to_sector": 575
+                },
+                {
+                    "to_sector": 764
+                },
+                {
+                    "to_sector": 930
+                },
+                {
+                    "to_sector": 986
+                },
+                {
+                    "to_sector": 2186
+                }
+            ]
+        },
+        "2186": {
+            "server_tick": 764684,
+            "sector_id": 2186,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 35
+                },
+                {
+                    "to_sector": 592
+                },
+                {
+                    "to_sector": 1825
+                },
+                {
+                    "to_sector": 2166
+                },
+                {
+                    "to_sector": 2275
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 876,
+                    "name": "Agreawyn",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769797518.2041276,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 35
+                },
+                {
+                    "to_sector": 592
+                },
+                {
+                    "to_sector": 1825
+                },
+                {
+                    "to_sector": 2166
+                },
+                {
+                    "to_sector": 2275
+                }
+            ]
+        },
+        "1778": {
+            "server_tick": 774250,
+            "sector_id": 1778,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 219
+                },
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 373
+                },
+                {
+                    "to_sector": 380
+                },
+                {
+                    "to_sector": 607
+                },
+                {
+                    "to_sector": 1020
+                },
+                {
+                    "to_sector": 2207
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769798476.128795,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 219
+                },
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 373
+                },
+                {
+                    "to_sector": 380
+                },
+                {
+                    "to_sector": 607
+                },
+                {
+                    "to_sector": 1020
+                },
+                {
+                    "to_sector": 2207
+                }
+            ]
+        },
+        "219": {
+            "server_tick": 773599,
+            "sector_id": 219,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 166
+                },
+                {
+                    "to_sector": 273
+                },
+                {
+                    "to_sector": 407
+                },
+                {
+                    "to_sector": 883
+                },
+                {
+                    "to_sector": 1430
+                },
+                {
+                    "to_sector": 1539
+                },
+                {
+                    "to_sector": 1767
+                },
+                {
+                    "to_sector": 1778
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769798410.8094637,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 166
+                },
+                {
+                    "to_sector": 273
+                },
+                {
+                    "to_sector": 407
+                },
+                {
+                    "to_sector": 883
+                },
+                {
+                    "to_sector": 1430
+                },
+                {
+                    "to_sector": 1539
+                },
+                {
+                    "to_sector": 1767
+                },
+                {
+                    "to_sector": 1778
+                }
+            ]
+        },
+        "1430": {
+            "server_tick": 772948,
+            "sector_id": 1430,
+            "name": "Beta Peg",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 219
+                },
+                {
+                    "to_sector": 359
+                },
+                {
+                    "to_sector": 513
+                },
+                {
+                    "to_sector": 722
+                },
+                {
+                    "to_sector": 2170
+                },
+                {
+                    "to_sector": 2272
+                },
+                {
+                    "to_sector": 2346
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 581,
+                    "name": "Cadirerli",
+                    "type": 5
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769798345.4912574,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 219
+                },
+                {
+                    "to_sector": 359
+                },
+                {
+                    "to_sector": 513
+                },
+                {
+                    "to_sector": 722
+                },
+                {
+                    "to_sector": 2170
+                },
+                {
+                    "to_sector": 2272
+                },
+                {
+                    "to_sector": 2346
+                }
+            ]
+        },
+        "573": {
+            "server_tick": 778108,
+            "sector_id": 573,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 91
+                },
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 1474
+                },
+                {
+                    "to_sector": 2021
+                },
+                {
+                    "to_sector": 2481
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 227,
+                    "name": "Aeacadf",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769798863.1546345,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 91
+                },
+                {
+                    "to_sector": 236
+                },
+                {
+                    "to_sector": 1474
+                },
+                {
+                    "to_sector": 2021
+                },
+                {
+                    "to_sector": 2481
+                }
+            ]
+        },
+        "2261": {
+            "server_tick": 782576,
+            "sector_id": 2261,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 46
+                },
+                {
+                    "to_sector": 96
+                },
+                {
+                    "to_sector": 467
+                },
+                {
+                    "to_sector": 617
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 957
+                },
+                {
+                    "to_sector": 1686
+                },
+                {
+                    "to_sector": 2231
+                },
+                {
+                    "to_sector": 2472
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799311.343671,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 46
+                },
+                {
+                    "to_sector": 96
+                },
+                {
+                    "to_sector": 467
+                },
+                {
+                    "to_sector": 617
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 957
+                },
+                {
+                    "to_sector": 1686
+                },
+                {
+                    "to_sector": 2231
+                },
+                {
+                    "to_sector": 2472
+                }
+            ]
+        },
+        "96": {
+            "server_tick": 783215,
+            "sector_id": 96,
+            "name": "Leo",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 65
+                },
+                {
+                    "to_sector": 186
+                },
+                {
+                    "to_sector": 231
+                },
+                {
+                    "to_sector": 247
+                },
+                {
+                    "to_sector": 479
+                },
+                {
+                    "to_sector": 545
+                },
+                {
+                    "to_sector": 618
+                },
+                {
+                    "to_sector": 1542
+                },
+                {
+                    "to_sector": 1794
+                },
+                {
+                    "to_sector": 1857
+                },
+                {
+                    "to_sector": 1900
+                },
+                {
+                    "to_sector": 1990
+                },
+                {
+                    "to_sector": 2091
+                },
+                {
+                    "to_sector": 2261
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799375.5016587,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 65
+                },
+                {
+                    "to_sector": 186
+                },
+                {
+                    "to_sector": 231
+                },
+                {
+                    "to_sector": 247
+                },
+                {
+                    "to_sector": 479
+                },
+                {
+                    "to_sector": 545
+                },
+                {
+                    "to_sector": 618
+                },
+                {
+                    "to_sector": 1542
+                },
+                {
+                    "to_sector": 1794
+                },
+                {
+                    "to_sector": 1857
+                },
+                {
+                    "to_sector": 1900
+                },
+                {
+                    "to_sector": 1990
+                },
+                {
+                    "to_sector": 2091
+                },
+                {
+                    "to_sector": 2261
+                }
+            ]
+        },
+        "231": {
+            "server_tick": 784507,
+            "sector_id": 231,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 96
+                },
+                {
+                    "to_sector": 166
+                },
+                {
+                    "to_sector": 600
+                },
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 1678
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 90,
+                    "name": "L'Dreuebe",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799505.0665436,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 96
+                },
+                {
+                    "to_sector": 166
+                },
+                {
+                    "to_sector": 600
+                },
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 1678
+                }
+            ]
+        },
+        "922": {
+            "server_tick": 785147,
+            "sector_id": 922,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 231
+                },
+                {
+                    "to_sector": 344
+                },
+                {
+                    "to_sector": 1354
+                },
+                {
+                    "to_sector": 1410
+                },
+                {
+                    "to_sector": 2068
+                },
+                {
+                    "to_sector": 2393
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799569.2866933,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 231
+                },
+                {
+                    "to_sector": 344
+                },
+                {
+                    "to_sector": 1354
+                },
+                {
+                    "to_sector": 1410
+                },
+                {
+                    "to_sector": 2068
+                },
+                {
+                    "to_sector": 2393
+                }
+            ]
+        },
+        "1410": {
+            "server_tick": 785788,
+            "sector_id": 1410,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 226
+                },
+                {
+                    "to_sector": 464
+                },
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 1967
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799633.505566,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 226
+                },
+                {
+                    "to_sector": 464
+                },
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 1967
+                }
+            ]
+        },
+        "464": {
+            "server_tick": 787079,
+            "sector_id": 464,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 632
+                },
+                {
+                    "to_sector": 1376
+                },
+                {
+                    "to_sector": 1410
+                },
+                {
+                    "to_sector": 1526
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 177,
+                    "name": "Kaiond",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799763.083333,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 632
+                },
+                {
+                    "to_sector": 1376
+                },
+                {
+                    "to_sector": 1410
+                },
+                {
+                    "to_sector": 1526
+                }
+            ]
+        },
+        "632": {
+            "server_tick": 787719,
+            "sector_id": 632,
+            "name": "Telescopium",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 464
+                },
+                {
+                    "to_sector": 874
+                },
+                {
+                    "to_sector": 1126
+                },
+                {
+                    "to_sector": 1191
+                },
+                {
+                    "to_sector": 1297
+                },
+                {
+                    "to_sector": 1575
+                },
+                {
+                    "to_sector": 1949
+                },
+                {
+                    "to_sector": 2044
+                },
+                {
+                    "to_sector": 2434
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799827.3256886,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 464
+                },
+                {
+                    "to_sector": 874
+                },
+                {
+                    "to_sector": 1126
+                },
+                {
+                    "to_sector": 1191
+                },
+                {
+                    "to_sector": 1297
+                },
+                {
+                    "to_sector": 1575
+                },
+                {
+                    "to_sector": 1949
+                },
+                {
+                    "to_sector": 2044
+                },
+                {
+                    "to_sector": 2434
+                }
+            ]
+        },
+        "1191": {
+            "server_tick": 789011,
+            "sector_id": 1191,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 35
+                },
+                {
+                    "to_sector": 632
+                },
+                {
+                    "to_sector": 674
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 865
+                },
+                {
+                    "to_sector": 1153
+                },
+                {
+                    "to_sector": 1335
+                },
+                {
+                    "to_sector": 1380
+                },
+                {
+                    "to_sector": 1744
+                },
+                {
+                    "to_sector": 1988
+                },
+                {
+                    "to_sector": 2068
+                },
+                {
+                    "to_sector": 2242
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 492,
+                    "name": "Nedon",
+                    "type": 6
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769799956.9237883,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 35
+                },
+                {
+                    "to_sector": 632
+                },
+                {
+                    "to_sector": 674
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 865
+                },
+                {
+                    "to_sector": 1153
+                },
+                {
+                    "to_sector": 1335
+                },
+                {
+                    "to_sector": 1380
+                },
+                {
+                    "to_sector": 1744
+                },
+                {
+                    "to_sector": 1988
+                },
+                {
+                    "to_sector": 2068
+                },
+                {
+                    "to_sector": 2242
+                }
+            ]
+        },
+        "35": {
+            "server_tick": 789652,
+            "sector_id": 35,
+            "name": "Menkib",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 122
+                },
+                {
+                    "to_sector": 227
+                },
+                {
+                    "to_sector": 415
+                },
+                {
+                    "to_sector": 892
+                },
+                {
+                    "to_sector": 1191
+                },
+                {
+                    "to_sector": 1426
+                },
+                {
+                    "to_sector": 1551
+                },
+                {
+                    "to_sector": 2039
+                },
+                {
+                    "to_sector": 2138
+                },
+                {
+                    "to_sector": 2186
+                },
+                {
+                    "to_sector": 2264
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800021.170816,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 122
+                },
+                {
+                    "to_sector": 227
+                },
+                {
+                    "to_sector": 415
+                },
+                {
+                    "to_sector": 892
+                },
+                {
+                    "to_sector": 1191
+                },
+                {
+                    "to_sector": 1426
+                },
+                {
+                    "to_sector": 1551
+                },
+                {
+                    "to_sector": 2039
+                },
+                {
+                    "to_sector": 2138
+                },
+                {
+                    "to_sector": 2186
+                },
+                {
+                    "to_sector": 2264
+                }
+            ]
+        },
+        "122": {
+            "server_tick": 790944,
+            "sector_id": 122,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 35
+                },
+                {
+                    "to_sector": 818
+                },
+                {
+                    "to_sector": 1503
+                },
+                {
+                    "to_sector": 1622
+                },
+                {
+                    "to_sector": 2243
+                },
+                {
+                    "to_sector": 2397
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 48,
+                    "name": "Galealgrin",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800150.780144,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 35
+                },
+                {
+                    "to_sector": 818
+                },
+                {
+                    "to_sector": 1503
+                },
+                {
+                    "to_sector": 1622
+                },
+                {
+                    "to_sector": 2243
+                },
+                {
+                    "to_sector": 2397
+                }
+            ]
+        },
+        "1503": {
+            "server_tick": 791584,
+            "sector_id": 1503,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 122
+                },
+                {
+                    "to_sector": 246
+                },
+                {
+                    "to_sector": 360
+                },
+                {
+                    "to_sector": 588
+                },
+                {
+                    "to_sector": 1284
+                },
+                {
+                    "to_sector": 1313
+                },
+                {
+                    "to_sector": 1524
+                },
+                {
+                    "to_sector": 1643
+                },
+                {
+                    "to_sector": 1701
+                },
+                {
+                    "to_sector": 2132
+                },
+                {
+                    "to_sector": 2291
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800215.0115924,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 122
+                },
+                {
+                    "to_sector": 246
+                },
+                {
+                    "to_sector": 360
+                },
+                {
+                    "to_sector": 588
+                },
+                {
+                    "to_sector": 1284
+                },
+                {
+                    "to_sector": 1313
+                },
+                {
+                    "to_sector": 1524
+                },
+                {
+                    "to_sector": 1643
+                },
+                {
+                    "to_sector": 1701
+                },
+                {
+                    "to_sector": 2132
+                },
+                {
+                    "to_sector": 2291
+                }
+            ]
+        },
+        "246": {
+            "server_tick": 792876,
+            "sector_id": 246,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 159
+                },
+                {
+                    "to_sector": 563
+                },
+                {
+                    "to_sector": 611
+                },
+                {
+                    "to_sector": 1073
+                },
+                {
+                    "to_sector": 1503
+                },
+                {
+                    "to_sector": 2208
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 95,
+                    "name": "Lothautoa",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800344.6334796,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 159
+                },
+                {
+                    "to_sector": 563
+                },
+                {
+                    "to_sector": 611
+                },
+                {
+                    "to_sector": 1073
+                },
+                {
+                    "to_sector": 1503
+                },
+                {
+                    "to_sector": 2208
+                }
+            ]
+        },
+        "1073": {
+            "server_tick": 794169,
+            "sector_id": 1073,
+            "name": "Sadalsuud",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 99
+                },
+                {
+                    "to_sector": 108
+                },
+                {
+                    "to_sector": 224
+                },
+                {
+                    "to_sector": 246
+                },
+                {
+                    "to_sector": 877
+                },
+                {
+                    "to_sector": 1219
+                },
+                {
+                    "to_sector": 1801
+                },
+                {
+                    "to_sector": 1938
+                },
+                {
+                    "to_sector": 2049
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 438,
+                    "name": "Girawa",
+                    "type": 7
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800474.258293,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 99
+                },
+                {
+                    "to_sector": 108
+                },
+                {
+                    "to_sector": 224
+                },
+                {
+                    "to_sector": 246
+                },
+                {
+                    "to_sector": 877
+                },
+                {
+                    "to_sector": 1219
+                },
+                {
+                    "to_sector": 1801
+                },
+                {
+                    "to_sector": 1938
+                },
+                {
+                    "to_sector": 2049
+                }
+            ]
+        },
+        "877": {
+            "server_tick": 795461,
+            "sector_id": 877,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 753
+                },
+                {
+                    "to_sector": 1073
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 2334
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 351,
+                    "name": "Lilaxilli",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800603.894478,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 753
+                },
+                {
+                    "to_sector": 1073
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 2334
+                }
+            ]
+        },
+        "2334": {
+            "server_tick": 796102,
+            "sector_id": 2334,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 100
+                },
+                {
+                    "to_sector": 301
+                },
+                {
+                    "to_sector": 348
+                },
+                {
+                    "to_sector": 877
+                },
+                {
+                    "to_sector": 1428
+                },
+                {
+                    "to_sector": 1610
+                },
+                {
+                    "to_sector": 2497
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800668.135584,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 100
+                },
+                {
+                    "to_sector": 301
+                },
+                {
+                    "to_sector": 348
+                },
+                {
+                    "to_sector": 877
+                },
+                {
+                    "to_sector": 1428
+                },
+                {
+                    "to_sector": 1610
+                },
+                {
+                    "to_sector": 2497
+                }
+            ]
+        },
+        "2497": {
+            "server_tick": 797393,
+            "sector_id": 2497,
+            "name": "Acrab",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 572
+                },
+                {
+                    "to_sector": 2334
+                },
+                {
+                    "to_sector": 2357
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 1008,
+                    "name": "Aduelith",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800797.7705534,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 572
+                },
+                {
+                    "to_sector": 2334
+                },
+                {
+                    "to_sector": 2357
+                }
+            ]
+        },
+        "2357": {
+            "server_tick": 798685,
+            "sector_id": 2357,
+            "name": "Lynx",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 716
+                },
+                {
+                    "to_sector": 1118
+                },
+                {
+                    "to_sector": 1217
+                },
+                {
+                    "to_sector": 1864
+                },
+                {
+                    "to_sector": 2051
+                },
+                {
+                    "to_sector": 2287
+                },
+                {
+                    "to_sector": 2497
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 948,
+                    "name": "Bytuawan",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769800927.4196887,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 716
+                },
+                {
+                    "to_sector": 1118
+                },
+                {
+                    "to_sector": 1217
+                },
+                {
+                    "to_sector": 1864
+                },
+                {
+                    "to_sector": 2051
+                },
+                {
+                    "to_sector": 2287
+                },
+                {
+                    "to_sector": 2497
+                }
+            ]
+        },
+        "1217": {
+            "server_tick": 799978,
+            "sector_id": 1217,
+            "name": "Rasalhague",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 226
+                },
+                {
+                    "to_sector": 887
+                },
+                {
+                    "to_sector": 1079
+                },
+                {
+                    "to_sector": 1678
+                },
+                {
+                    "to_sector": 2331
+                },
+                {
+                    "to_sector": 2357
+                },
+                {
+                    "to_sector": 2476
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 501,
+                    "name": "Adweinn",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801057.0717092,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 226
+                },
+                {
+                    "to_sector": 887
+                },
+                {
+                    "to_sector": 1079
+                },
+                {
+                    "to_sector": 1678
+                },
+                {
+                    "to_sector": 2331
+                },
+                {
+                    "to_sector": 2357
+                },
+                {
+                    "to_sector": 2476
+                }
+            ]
+        },
+        "2476": {
+            "server_tick": 801270,
+            "sector_id": 2476,
+            "name": "Meissa",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 630
+                },
+                {
+                    "to_sector": 1217
+                },
+                {
+                    "to_sector": 1283
+                },
+                {
+                    "to_sector": 1972
+                },
+                {
+                    "to_sector": 2060
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 999,
+                    "name": "D'alauean",
+                    "type": 3
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801186.6977017,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 630
+                },
+                {
+                    "to_sector": 1217
+                },
+                {
+                    "to_sector": 1283
+                },
+                {
+                    "to_sector": 1972
+                },
+                {
+                    "to_sector": 2060
+                }
+            ]
+        },
+        "1283": {
+            "server_tick": 801911,
+            "sector_id": 1283,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 359
+                },
+                {
+                    "to_sector": 2001
+                },
+                {
+                    "to_sector": 2150
+                },
+                {
+                    "to_sector": 2476
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801250.956513,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 359
+                },
+                {
+                    "to_sector": 2001
+                },
+                {
+                    "to_sector": 2150
+                },
+                {
+                    "to_sector": 2476
+                }
+            ]
+        },
+        "2001": {
+            "server_tick": 803204,
+            "sector_id": 2001,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 496
+                },
+                {
+                    "to_sector": 1108
+                },
+                {
+                    "to_sector": 1183
+                },
+                {
+                    "to_sector": 1283
+                },
+                {
+                    "to_sector": 1419
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 800,
+                    "name": "Aasetye",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801380.6186402,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 496
+                },
+                {
+                    "to_sector": 1108
+                },
+                {
+                    "to_sector": 1183
+                },
+                {
+                    "to_sector": 1283
+                },
+                {
+                    "to_sector": 1419
+                }
+            ]
+        },
+        "1108": {
+            "server_tick": 804497,
+            "sector_id": 1108,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 92
+                },
+                {
+                    "to_sector": 458
+                },
+                {
+                    "to_sector": 775
+                },
+                {
+                    "to_sector": 852
+                },
+                {
+                    "to_sector": 1431
+                },
+                {
+                    "to_sector": 2001
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 455,
+                    "name": "Kediadon",
+                    "type": 5
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801510.3089604,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 92
+                },
+                {
+                    "to_sector": 458
+                },
+                {
+                    "to_sector": 775
+                },
+                {
+                    "to_sector": 852
+                },
+                {
+                    "to_sector": 1431
+                },
+                {
+                    "to_sector": 2001
+                }
+            ]
+        },
+        "1431": {
+            "server_tick": 805137,
+            "sector_id": 1431,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 206
+                },
+                {
+                    "to_sector": 285
+                },
+                {
+                    "to_sector": 773
+                },
+                {
+                    "to_sector": 1108
+                },
+                {
+                    "to_sector": 2136
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801574.5791266,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 206
+                },
+                {
+                    "to_sector": 285
+                },
+                {
+                    "to_sector": 773
+                },
+                {
+                    "to_sector": 1108
+                },
+                {
+                    "to_sector": 2136
+                }
+            ]
+        },
+        "2136": {
+            "server_tick": 806431,
+            "sector_id": 2136,
+            "name": "Gemini",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1030
+                },
+                {
+                    "to_sector": 1066
+                },
+                {
+                    "to_sector": 1078
+                },
+                {
+                    "to_sector": 1407
+                },
+                {
+                    "to_sector": 1431
+                },
+                {
+                    "to_sector": 1546
+                },
+                {
+                    "to_sector": 1716
+                },
+                {
+                    "to_sector": 2123
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 861,
+                    "name": "Kedardono",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801704.2739363,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 1030
+                },
+                {
+                    "to_sector": 1066
+                },
+                {
+                    "to_sector": 1078
+                },
+                {
+                    "to_sector": 1407
+                },
+                {
+                    "to_sector": 1431
+                },
+                {
+                    "to_sector": 1546
+                },
+                {
+                    "to_sector": 1716
+                },
+                {
+                    "to_sector": 2123
+                }
+            ]
+        },
+        "1078": {
+            "server_tick": 807071,
+            "sector_id": 1078,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1382
+                },
+                {
+                    "to_sector": 1838
+                },
+                {
+                    "to_sector": 2004
+                },
+                {
+                    "to_sector": 2136
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801768.551158,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1382
+                },
+                {
+                    "to_sector": 1838
+                },
+                {
+                    "to_sector": 2004
+                },
+                {
+                    "to_sector": 2136
+                }
+            ]
+        },
+        "1838": {
+            "server_tick": 807712,
+            "sector_id": 1838,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 550
+                },
+                {
+                    "to_sector": 1055
+                },
+                {
+                    "to_sector": 1078
+                },
+                {
+                    "to_sector": 1229
+                },
+                {
+                    "to_sector": 1629
+                },
+                {
+                    "to_sector": 1668
+                },
+                {
+                    "to_sector": 2170
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801832.8169012,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 550
+                },
+                {
+                    "to_sector": 1055
+                },
+                {
+                    "to_sector": 1078
+                },
+                {
+                    "to_sector": 1229
+                },
+                {
+                    "to_sector": 1629
+                },
+                {
+                    "to_sector": 1668
+                },
+                {
+                    "to_sector": 2170
+                }
+            ]
+        },
+        "1055": {
+            "server_tick": 809005,
+            "sector_id": 1055,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 272
+                },
+                {
+                    "to_sector": 388
+                },
+                {
+                    "to_sector": 971
+                },
+                {
+                    "to_sector": 1149
+                },
+                {
+                    "to_sector": 1202
+                },
+                {
+                    "to_sector": 1259
+                },
+                {
+                    "to_sector": 1838
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 433,
+                    "name": "Kaottevix",
+                    "type": 1
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769801962.5329728,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 272
+                },
+                {
+                    "to_sector": 388
+                },
+                {
+                    "to_sector": 971
+                },
+                {
+                    "to_sector": 1149
+                },
+                {
+                    "to_sector": 1202
+                },
+                {
+                    "to_sector": 1259
+                },
+                {
+                    "to_sector": 1838
+                }
+            ]
+        },
+        "1259": {
+            "server_tick": 809646,
+            "sector_id": 1259,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 343
+                },
+                {
+                    "to_sector": 595
+                },
+                {
+                    "to_sector": 902
+                },
+                {
+                    "to_sector": 983
+                },
+                {
+                    "to_sector": 1028
+                },
+                {
+                    "to_sector": 1055
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802026.8108327,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 343
+                },
+                {
+                    "to_sector": 595
+                },
+                {
+                    "to_sector": 902
+                },
+                {
+                    "to_sector": 983
+                },
+                {
+                    "to_sector": 1028
+                },
+                {
+                    "to_sector": 1055
+                }
+            ]
+        },
+        "902": {
+            "server_tick": 810286,
+            "sector_id": 902,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 23
+                },
+                {
+                    "to_sector": 218
+                },
+                {
+                    "to_sector": 234
+                },
+                {
+                    "to_sector": 378
+                },
+                {
+                    "to_sector": 842
+                },
+                {
+                    "to_sector": 1259
+                },
+                {
+                    "to_sector": 1319
+                },
+                {
+                    "to_sector": 1928
+                },
+                {
+                    "to_sector": 2126
+                },
+                {
+                    "to_sector": 2159
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802091.0902405,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 23
+                },
+                {
+                    "to_sector": 218
+                },
+                {
+                    "to_sector": 234
+                },
+                {
+                    "to_sector": 378
+                },
+                {
+                    "to_sector": 842
+                },
+                {
+                    "to_sector": 1259
+                },
+                {
+                    "to_sector": 1319
+                },
+                {
+                    "to_sector": 1928
+                },
+                {
+                    "to_sector": 2126
+                },
+                {
+                    "to_sector": 2159
+                }
+            ]
+        },
+        "218": {
+            "server_tick": 810927,
+            "sector_id": 218,
+            "name": "Yed Prior",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 353
+                },
+                {
+                    "to_sector": 470
+                },
+                {
+                    "to_sector": 807
+                },
+                {
+                    "to_sector": 902
+                },
+                {
+                    "to_sector": 1471
+                },
+                {
+                    "to_sector": 1738
+                },
+                {
+                    "to_sector": 2028
+                },
+                {
+                    "to_sector": 2259
+                },
+                {
+                    "to_sector": 2494
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802155.371208,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 353
+                },
+                {
+                    "to_sector": 470
+                },
+                {
+                    "to_sector": 807
+                },
+                {
+                    "to_sector": 902
+                },
+                {
+                    "to_sector": 1471
+                },
+                {
+                    "to_sector": 1738
+                },
+                {
+                    "to_sector": 2028
+                },
+                {
+                    "to_sector": 2259
+                },
+                {
+                    "to_sector": 2494
+                }
+            ]
+        },
+        "2494": {
+            "server_tick": 811568,
+            "sector_id": 2494,
+            "name": "Zubeneshamali",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 218
+                },
+                {
+                    "to_sector": 413
+                },
+                {
+                    "to_sector": 1527
+                },
+                {
+                    "to_sector": 1548
+                },
+                {
+                    "to_sector": 1575
+                },
+                {
+                    "to_sector": 1645
+                },
+                {
+                    "to_sector": 2070
+                },
+                {
+                    "to_sector": 2205
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802219.6534827,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 218
+                },
+                {
+                    "to_sector": 413
+                },
+                {
+                    "to_sector": 1527
+                },
+                {
+                    "to_sector": 1548
+                },
+                {
+                    "to_sector": 1575
+                },
+                {
+                    "to_sector": 1645
+                },
+                {
+                    "to_sector": 2070
+                },
+                {
+                    "to_sector": 2205
+                }
+            ]
+        },
+        "1575": {
+            "server_tick": 812862,
+            "sector_id": 1575,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 632
+                },
+                {
+                    "to_sector": 826
+                },
+                {
+                    "to_sector": 1164
+                },
+                {
+                    "to_sector": 1223
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 2494
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 646,
+                    "name": "Gleiean",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802349.3826635,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 632
+                },
+                {
+                    "to_sector": 826
+                },
+                {
+                    "to_sector": 1164
+                },
+                {
+                    "to_sector": 1223
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 2494
+                }
+            ]
+        },
+        "1164": {
+            "server_tick": 813502,
+            "sector_id": 1164,
+            "name": "Uncharted Space",
+            "beacon": "I hid 500,000 credits in Sector... [text unreadable]",
+            "adjacent_sectors": [
+                {
+                    "to_sector": 847
+                },
+                {
+                    "to_sector": 965
+                },
+                {
+                    "to_sector": 1067
+                },
+                {
+                    "to_sector": 1575
+                },
+                {
+                    "to_sector": 2189
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802413.6684942,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 847
+                },
+                {
+                    "to_sector": 965
+                },
+                {
+                    "to_sector": 1067
+                },
+                {
+                    "to_sector": 1575
+                },
+                {
+                    "to_sector": 2189
+                }
+            ]
+        },
+        "2189": {
+            "server_tick": 814796,
+            "sector_id": 2189,
+            "name": "Vega",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 126
+                },
+                {
+                    "to_sector": 623
+                },
+                {
+                    "to_sector": 1164
+                },
+                {
+                    "to_sector": 1210
+                },
+                {
+                    "to_sector": 1265
+                },
+                {
+                    "to_sector": 1609
+                },
+                {
+                    "to_sector": 1795
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 877,
+                    "name": "Wyhilinoje",
+                    "type": 7
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802543.4120278,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 126
+                },
+                {
+                    "to_sector": 623
+                },
+                {
+                    "to_sector": 1164
+                },
+                {
+                    "to_sector": 1210
+                },
+                {
+                    "to_sector": 1265
+                },
+                {
+                    "to_sector": 1609
+                },
+                {
+                    "to_sector": 1795
+                }
+            ]
+        },
+        "1609": {
+            "server_tick": 815437,
+            "sector_id": 1609,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 952
+                },
+                {
+                    "to_sector": 2189
+                },
+                {
+                    "to_sector": 2393
+                },
+                {
+                    "to_sector": 2493
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802607.6969066,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 952
+                },
+                {
+                    "to_sector": 2189
+                },
+                {
+                    "to_sector": 2393
+                },
+                {
+                    "to_sector": 2493
+                }
+            ]
+        },
+        "2393": {
+            "server_tick": 816730,
+            "sector_id": 2393,
+            "name": "Zubenelgenubi",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 972
+                },
+                {
+                    "to_sector": 1609
+                },
+                {
+                    "to_sector": 2041
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 963,
+                    "name": "Salebard",
+                    "type": 1
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802737.4576557,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 922
+                },
+                {
+                    "to_sector": 972
+                },
+                {
+                    "to_sector": 1609
+                },
+                {
+                    "to_sector": 2041
+                }
+            ]
+        },
+        "972": {
+            "server_tick": 818024,
+            "sector_id": 972,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 407
+                },
+                {
+                    "to_sector": 417
+                },
+                {
+                    "to_sector": 996
+                },
+                {
+                    "to_sector": 1006
+                },
+                {
+                    "to_sector": 2393
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 394,
+                    "name": "Beaocira",
+                    "type": 6
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802867.2152135,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 407
+                },
+                {
+                    "to_sector": 417
+                },
+                {
+                    "to_sector": 996
+                },
+                {
+                    "to_sector": 1006
+                },
+                {
+                    "to_sector": 2393
+                }
+            ]
+        },
+        "996": {
+            "server_tick": 818664,
+            "sector_id": 996,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 138
+                },
+                {
+                    "to_sector": 587
+                },
+                {
+                    "to_sector": 972
+                },
+                {
+                    "to_sector": 1302
+                },
+                {
+                    "to_sector": 1998
+                },
+                {
+                    "to_sector": 2217
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802931.4868178,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 138
+                },
+                {
+                    "to_sector": 587
+                },
+                {
+                    "to_sector": 972
+                },
+                {
+                    "to_sector": 1302
+                },
+                {
+                    "to_sector": 1998
+                },
+                {
+                    "to_sector": 2217
+                }
+            ]
+        },
+        "587": {
+            "server_tick": 819305,
+            "sector_id": 587,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 691
+                },
+                {
+                    "to_sector": 996
+                },
+                {
+                    "to_sector": 1064
+                },
+                {
+                    "to_sector": 1831
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769802995.779392,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 691
+                },
+                {
+                    "to_sector": 996
+                },
+                {
+                    "to_sector": 1064
+                },
+                {
+                    "to_sector": 1831
+                }
+            ]
+        },
+        "691": {
+            "server_tick": 819946,
+            "sector_id": 691,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 76
+                },
+                {
+                    "to_sector": 587
+                },
+                {
+                    "to_sector": 945
+                },
+                {
+                    "to_sector": 1064
+                },
+                {
+                    "to_sector": 1104
+                },
+                {
+                    "to_sector": 1380
+                },
+                {
+                    "to_sector": 1393
+                },
+                {
+                    "to_sector": 2306
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803060.0786314,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 76
+                },
+                {
+                    "to_sector": 587
+                },
+                {
+                    "to_sector": 945
+                },
+                {
+                    "to_sector": 1064
+                },
+                {
+                    "to_sector": 1104
+                },
+                {
+                    "to_sector": 1380
+                },
+                {
+                    "to_sector": 1393
+                },
+                {
+                    "to_sector": 2306
+                }
+            ]
+        },
+        "76": {
+            "server_tick": 820587,
+            "sector_id": 76,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 109
+                },
+                {
+                    "to_sector": 691
+                },
+                {
+                    "to_sector": 876
+                },
+                {
+                    "to_sector": 1424
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803124.3792756,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 109
+                },
+                {
+                    "to_sector": 691
+                },
+                {
+                    "to_sector": 876
+                },
+                {
+                    "to_sector": 1424
+                }
+            ]
+        },
+        "1424": {
+            "server_tick": 821228,
+            "sector_id": 1424,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 76
+                },
+                {
+                    "to_sector": 1156
+                },
+                {
+                    "to_sector": 1293
+                },
+                {
+                    "to_sector": 1370
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803188.679376,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 76
+                },
+                {
+                    "to_sector": 1156
+                },
+                {
+                    "to_sector": 1293
+                },
+                {
+                    "to_sector": 1370
+                }
+            ]
+        },
+        "1370": {
+            "server_tick": 821869,
+            "sector_id": 1370,
+            "name": "Kappa UMa",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 360
+                },
+                {
+                    "to_sector": 607
+                },
+                {
+                    "to_sector": 1158
+                },
+                {
+                    "to_sector": 1424
+                },
+                {
+                    "to_sector": 1565
+                },
+                {
+                    "to_sector": 1799
+                },
+                {
+                    "to_sector": 1844
+                },
+                {
+                    "to_sector": 2153
+                },
+                {
+                    "to_sector": 2331
+                },
+                {
+                    "to_sector": 2332
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803252.9806387,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 360
+                },
+                {
+                    "to_sector": 607
+                },
+                {
+                    "to_sector": 1158
+                },
+                {
+                    "to_sector": 1424
+                },
+                {
+                    "to_sector": 1565
+                },
+                {
+                    "to_sector": 1799
+                },
+                {
+                    "to_sector": 1844
+                },
+                {
+                    "to_sector": 2153
+                },
+                {
+                    "to_sector": 2331
+                },
+                {
+                    "to_sector": 2332
+                }
+            ]
+        },
+        "1565": {
+            "server_tick": 822510,
+            "sector_id": 1565,
+            "name": "Beta Cap",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1370
+                },
+                {
+                    "to_sector": 1925
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803317.2791936,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1370
+                },
+                {
+                    "to_sector": 1925
+                }
+            ]
+        },
+        "1925": {
+            "server_tick": 823151,
+            "sector_id": 1925,
+            "name": "Alpha Aqr",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 140
+                },
+                {
+                    "to_sector": 145
+                },
+                {
+                    "to_sector": 276
+                },
+                {
+                    "to_sector": 541
+                },
+                {
+                    "to_sector": 1114
+                },
+                {
+                    "to_sector": 1565
+                },
+                {
+                    "to_sector": 2146
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803381.5855222,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 140
+                },
+                {
+                    "to_sector": 145
+                },
+                {
+                    "to_sector": 276
+                },
+                {
+                    "to_sector": 541
+                },
+                {
+                    "to_sector": 1114
+                },
+                {
+                    "to_sector": 1565
+                },
+                {
+                    "to_sector": 2146
+                }
+            ]
+        },
+        "2146": {
+            "server_tick": 823792,
+            "sector_id": 2146,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 586
+                },
+                {
+                    "to_sector": 591
+                },
+                {
+                    "to_sector": 736
+                },
+                {
+                    "to_sector": 1198
+                },
+                {
+                    "to_sector": 1313
+                },
+                {
+                    "to_sector": 1870
+                },
+                {
+                    "to_sector": 1925
+                },
+                {
+                    "to_sector": 2140
+                },
+                {
+                    "to_sector": 2218
+                },
+                {
+                    "to_sector": 2431
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803445.8986485,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 586
+                },
+                {
+                    "to_sector": 591
+                },
+                {
+                    "to_sector": 736
+                },
+                {
+                    "to_sector": 1198
+                },
+                {
+                    "to_sector": 1313
+                },
+                {
+                    "to_sector": 1870
+                },
+                {
+                    "to_sector": 1925
+                },
+                {
+                    "to_sector": 2140
+                },
+                {
+                    "to_sector": 2218
+                },
+                {
+                    "to_sector": 2431
+                }
+            ]
+        },
+        "736": {
+            "server_tick": 824433,
+            "sector_id": 736,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 13
+                },
+                {
+                    "to_sector": 86
+                },
+                {
+                    "to_sector": 713
+                },
+                {
+                    "to_sector": 725
+                },
+                {
+                    "to_sector": 1139
+                },
+                {
+                    "to_sector": 1639
+                },
+                {
+                    "to_sector": 1842
+                },
+                {
+                    "to_sector": 2025
+                },
+                {
+                    "to_sector": 2146
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803510.2100754,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 13
+                },
+                {
+                    "to_sector": 86
+                },
+                {
+                    "to_sector": 713
+                },
+                {
+                    "to_sector": 725
+                },
+                {
+                    "to_sector": 1139
+                },
+                {
+                    "to_sector": 1639
+                },
+                {
+                    "to_sector": 1842
+                },
+                {
+                    "to_sector": 2025
+                },
+                {
+                    "to_sector": 2146
+                }
+            ]
+        },
+        "1139": {
+            "server_tick": 825074,
+            "sector_id": 1139,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 736
+                },
+                {
+                    "to_sector": 1360
+                },
+                {
+                    "to_sector": 1928
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803574.5245035,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 736
+                },
+                {
+                    "to_sector": 1360
+                },
+                {
+                    "to_sector": 1928
+                }
+            ]
+        },
+        "1360": {
+            "server_tick": 826465,
+            "sector_id": 1360,
+            "name": "Alkes",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 88
+                },
+                {
+                    "to_sector": 871
+                },
+                {
+                    "to_sector": 1139
+                },
+                {
+                    "to_sector": 1158
+                },
+                {
+                    "to_sector": 1623
+                },
+                {
+                    "to_sector": 2284
+                },
+                {
+                    "to_sector": 2479
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 556,
+                    "name": "Aggrereth",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803714.113044,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 88
+                },
+                {
+                    "to_sector": 871
+                },
+                {
+                    "to_sector": 1139
+                },
+                {
+                    "to_sector": 1158
+                },
+                {
+                    "to_sector": 1623
+                },
+                {
+                    "to_sector": 2284
+                },
+                {
+                    "to_sector": 2479
+                }
+            ]
+        },
+        "2284": {
+            "server_tick": 827106,
+            "sector_id": 2284,
+            "name": "Alpha Crv",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 804
+                },
+                {
+                    "to_sector": 934
+                },
+                {
+                    "to_sector": 964
+                },
+                {
+                    "to_sector": 1360
+                },
+                {
+                    "to_sector": 2180
+                },
+                {
+                    "to_sector": 2429
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803778.4359343,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 804
+                },
+                {
+                    "to_sector": 934
+                },
+                {
+                    "to_sector": 964
+                },
+                {
+                    "to_sector": 1360
+                },
+                {
+                    "to_sector": 2180
+                },
+                {
+                    "to_sector": 2429
+                }
+            ]
+        },
+        "804": {
+            "server_tick": 827747,
+            "sector_id": 804,
+            "name": "Alphecca",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 729
+                },
+                {
+                    "to_sector": 762
+                },
+                {
+                    "to_sector": 944
+                },
+                {
+                    "to_sector": 1688
+                },
+                {
+                    "to_sector": 1709
+                },
+                {
+                    "to_sector": 1877
+                },
+                {
+                    "to_sector": 2065
+                },
+                {
+                    "to_sector": 2284
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803842.7390163,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 729
+                },
+                {
+                    "to_sector": 762
+                },
+                {
+                    "to_sector": 944
+                },
+                {
+                    "to_sector": 1688
+                },
+                {
+                    "to_sector": 1709
+                },
+                {
+                    "to_sector": 1877
+                },
+                {
+                    "to_sector": 2065
+                },
+                {
+                    "to_sector": 2284
+                }
+            ]
+        },
+        "729": {
+            "server_tick": 829139,
+            "sector_id": 729,
+            "name": "Epsilon Vir",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 804
+                },
+                {
+                    "to_sector": 1165
+                },
+                {
+                    "to_sector": 1950
+                },
+                {
+                    "to_sector": 2336
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 288,
+                    "name": "Batirabtyn",
+                    "type": 1
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769803982.429004,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 804
+                },
+                {
+                    "to_sector": 1165
+                },
+                {
+                    "to_sector": 1950
+                },
+                {
+                    "to_sector": 2336
+                }
+            ]
+        },
+        "1950": {
+            "server_tick": 829780,
+            "sector_id": 1950,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 729
+                },
+                {
+                    "to_sector": 1343
+                },
+                {
+                    "to_sector": 2076
+                },
+                {
+                    "to_sector": 2227
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804046.7489414,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 729
+                },
+                {
+                    "to_sector": 1343
+                },
+                {
+                    "to_sector": 2076
+                },
+                {
+                    "to_sector": 2227
+                }
+            ]
+        },
+        "2227": {
+            "server_tick": 830421,
+            "sector_id": 2227,
+            "name": "Rasalgethi",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 976
+                },
+                {
+                    "to_sector": 1950
+                },
+                {
+                    "to_sector": 2269
+                },
+                {
+                    "to_sector": 2482
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804111.0662017,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 976
+                },
+                {
+                    "to_sector": 1950
+                },
+                {
+                    "to_sector": 2269
+                },
+                {
+                    "to_sector": 2482
+                }
+            ]
+        },
+        "976": {
+            "server_tick": 831062,
+            "sector_id": 976,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1583
+                },
+                {
+                    "to_sector": 2227
+                },
+                {
+                    "to_sector": 2500
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804175.392623,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1583
+                },
+                {
+                    "to_sector": 2227
+                },
+                {
+                    "to_sector": 2500
+                }
+            ]
+        },
+        "1583": {
+            "server_tick": 831703,
+            "sector_id": 1583,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 866
+                },
+                {
+                    "to_sector": 976
+                },
+                {
+                    "to_sector": 1820
+                },
+                {
+                    "to_sector": 2333
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804239.72404,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 866
+                },
+                {
+                    "to_sector": 976
+                },
+                {
+                    "to_sector": 1820
+                },
+                {
+                    "to_sector": 2333
+                }
+            ]
+        },
+        "866": {
+            "server_tick": 832345,
+            "sector_id": 866,
+            "name": "Beta Vir",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 228
+                },
+                {
+                    "to_sector": 845
+                },
+                {
+                    "to_sector": 975
+                },
+                {
+                    "to_sector": 1329
+                },
+                {
+                    "to_sector": 1583
+                },
+                {
+                    "to_sector": 1771
+                },
+                {
+                    "to_sector": 1851
+                },
+                {
+                    "to_sector": 2066
+                },
+                {
+                    "to_sector": 2174
+                },
+                {
+                    "to_sector": 2202
+                },
+                {
+                    "to_sector": 2458
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804304.050601,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 228
+                },
+                {
+                    "to_sector": 845
+                },
+                {
+                    "to_sector": 975
+                },
+                {
+                    "to_sector": 1329
+                },
+                {
+                    "to_sector": 1583
+                },
+                {
+                    "to_sector": 1771
+                },
+                {
+                    "to_sector": 1851
+                },
+                {
+                    "to_sector": 2066
+                },
+                {
+                    "to_sector": 2174
+                },
+                {
+                    "to_sector": 2202
+                },
+                {
+                    "to_sector": 2458
+                }
+            ]
+        },
+        "1771": {
+            "server_tick": 833639,
+            "sector_id": 1771,
+            "name": "Tania Borealis",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 866
+                },
+                {
+                    "to_sector": 1432
+                },
+                {
+                    "to_sector": 1810
+                },
+                {
+                    "to_sector": 2087
+                },
+                {
+                    "to_sector": 2460
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 714,
+                    "name": "Ogeotan",
+                    "type": 7
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804433.9062057,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 866
+                },
+                {
+                    "to_sector": 1432
+                },
+                {
+                    "to_sector": 1810
+                },
+                {
+                    "to_sector": 2087
+                },
+                {
+                    "to_sector": 2460
+                }
+            ]
+        },
+        "1432": {
+            "server_tick": 835026,
+            "sector_id": 1432,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 689
+                },
+                {
+                    "to_sector": 1423
+                },
+                {
+                    "to_sector": 1771
+                },
+                {
+                    "to_sector": 2007
+                },
+                {
+                    "to_sector": 2280
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 582,
+                    "name": "Lothuech",
+                    "type": 5
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804573.0878298,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 689
+                },
+                {
+                    "to_sector": 1423
+                },
+                {
+                    "to_sector": 1771
+                },
+                {
+                    "to_sector": 2007
+                },
+                {
+                    "to_sector": 2280
+                }
+            ]
+        },
+        "689": {
+            "server_tick": 836321,
+            "sector_id": 689,
+            "name": "Alula Borealis",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 653
+                },
+                {
+                    "to_sector": 1432
+                },
+                {
+                    "to_sector": 1798
+                },
+                {
+                    "to_sector": 1926
+                },
+                {
+                    "to_sector": 2210
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 266,
+                    "name": "Larottethrem",
+                    "type": 6
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804702.9688864,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 653
+                },
+                {
+                    "to_sector": 1432
+                },
+                {
+                    "to_sector": 1798
+                },
+                {
+                    "to_sector": 1926
+                },
+                {
+                    "to_sector": 2210
+                }
+            ]
+        },
+        "2210": {
+            "server_tick": 836962,
+            "sector_id": 2210,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 421
+                },
+                {
+                    "to_sector": 689
+                },
+                {
+                    "to_sector": 1158
+                },
+                {
+                    "to_sector": 1376
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804767.2962766,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 421
+                },
+                {
+                    "to_sector": 689
+                },
+                {
+                    "to_sector": 1158
+                },
+                {
+                    "to_sector": 1376
+                }
+            ]
+        },
+        "421": {
+            "server_tick": 838256,
+            "sector_id": 421,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 986
+                },
+                {
+                    "to_sector": 1418
+                },
+                {
+                    "to_sector": 1787
+                },
+                {
+                    "to_sector": 2210
+                },
+                {
+                    "to_sector": 2463
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 163,
+                    "name": "Rheajia",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804897.168191,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 986
+                },
+                {
+                    "to_sector": 1418
+                },
+                {
+                    "to_sector": 1787
+                },
+                {
+                    "to_sector": 2210
+                },
+                {
+                    "to_sector": 2463
+                }
+            ]
+        },
+        "2463": {
+            "server_tick": 838898,
+            "sector_id": 2463,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 84
+                },
+                {
+                    "to_sector": 421
+                },
+                {
+                    "to_sector": 728
+                },
+                {
+                    "to_sector": 895
+                },
+                {
+                    "to_sector": 1082
+                },
+                {
+                    "to_sector": 2251
+                },
+                {
+                    "to_sector": 2390
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769804961.5100238,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 84
+                },
+                {
+                    "to_sector": 421
+                },
+                {
+                    "to_sector": 728
+                },
+                {
+                    "to_sector": 895
+                },
+                {
+                    "to_sector": 1082
+                },
+                {
+                    "to_sector": 2251
+                },
+                {
+                    "to_sector": 2390
+                }
+            ]
+        },
+        "895": {
+            "server_tick": 840193,
+            "sector_id": 895,
+            "name": "Fornax",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 332
+                },
+                {
+                    "to_sector": 2463
+                },
+                {
+                    "to_sector": 2487
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 361,
+                    "name": "Trewa",
+                    "type": 2
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805091.4279485,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 332
+                },
+                {
+                    "to_sector": 2463
+                },
+                {
+                    "to_sector": 2487
+                }
+            ]
+        },
+        "332": {
+            "server_tick": 841488,
+            "sector_id": 332,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 383
+                },
+                {
+                    "to_sector": 895
+                },
+                {
+                    "to_sector": 1165
+                },
+                {
+                    "to_sector": 1285
+                },
+                {
+                    "to_sector": 1937
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 132,
+                    "name": "Beerajira",
+                    "type": 6
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805221.3458517,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 383
+                },
+                {
+                    "to_sector": 895
+                },
+                {
+                    "to_sector": 1165
+                },
+                {
+                    "to_sector": 1285
+                },
+                {
+                    "to_sector": 1937
+                }
+            ]
+        },
+        "1937": {
+            "server_tick": 842130,
+            "sector_id": 1937,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 332
+                },
+                {
+                    "to_sector": 860
+                },
+                {
+                    "to_sector": 958
+                },
+                {
+                    "to_sector": 995
+                },
+                {
+                    "to_sector": 1087
+                },
+                {
+                    "to_sector": 2473
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805285.6957169,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 332
+                },
+                {
+                    "to_sector": 860
+                },
+                {
+                    "to_sector": 958
+                },
+                {
+                    "to_sector": 995
+                },
+                {
+                    "to_sector": 1087
+                },
+                {
+                    "to_sector": 2473
+                }
+            ]
+        },
+        "860": {
+            "server_tick": 842771,
+            "sector_id": 860,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 762
+                },
+                {
+                    "to_sector": 887
+                },
+                {
+                    "to_sector": 1279
+                },
+                {
+                    "to_sector": 1937
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805350.0312014,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 762
+                },
+                {
+                    "to_sector": 887
+                },
+                {
+                    "to_sector": 1279
+                },
+                {
+                    "to_sector": 1937
+                }
+            ]
+        },
+        "762": {
+            "server_tick": 843412,
+            "sector_id": 762,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 363
+                },
+                {
+                    "to_sector": 804
+                },
+                {
+                    "to_sector": 860
+                },
+                {
+                    "to_sector": 1500
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805414.372076,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 363
+                },
+                {
+                    "to_sector": 804
+                },
+                {
+                    "to_sector": 860
+                },
+                {
+                    "to_sector": 1500
+                }
+            ]
+        },
+        "1500": {
+            "server_tick": 1017864,
+            "sector_id": 1500,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 25
+                },
+                {
+                    "to_sector": 235
+                },
+                {
+                    "to_sector": 497
+                },
+                {
+                    "to_sector": 668
+                },
+                {
+                    "to_sector": 762
+                },
+                {
+                    "to_sector": 983
+                },
+                {
+                    "to_sector": 1092
+                },
+                {
+                    "to_sector": 1610
+                },
+                {
+                    "to_sector": 1656
+                },
+                {
+                    "to_sector": 2056
+                },
+                {
+                    "to_sector": 2193
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 615,
+                    "name": "Ogelibtyn",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769822913.7584841,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 25
+                },
+                {
+                    "to_sector": 235
+                },
+                {
+                    "to_sector": 497
+                },
+                {
+                    "to_sector": 668
+                },
+                {
+                    "to_sector": 762
+                },
+                {
+                    "to_sector": 983
+                },
+                {
+                    "to_sector": 1092
+                },
+                {
+                    "to_sector": 1610
+                },
+                {
+                    "to_sector": 1656
+                },
+                {
+                    "to_sector": 2056
+                },
+                {
+                    "to_sector": 2193
+                }
+            ]
+        },
+        "983": {
+            "server_tick": 845349,
+            "sector_id": 983,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 112
+                },
+                {
+                    "to_sector": 166
+                },
+                {
+                    "to_sector": 263
+                },
+                {
+                    "to_sector": 947
+                },
+                {
+                    "to_sector": 1259
+                },
+                {
+                    "to_sector": 1332
+                },
+                {
+                    "to_sector": 1500
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805608.663416,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 112
+                },
+                {
+                    "to_sector": 166
+                },
+                {
+                    "to_sector": 263
+                },
+                {
+                    "to_sector": 947
+                },
+                {
+                    "to_sector": 1259
+                },
+                {
+                    "to_sector": 1332
+                },
+                {
+                    "to_sector": 1500
+                }
+            ]
+        },
+        "112": {
+            "server_tick": 846644,
+            "sector_id": 112,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 151
+                },
+                {
+                    "to_sector": 365
+                },
+                {
+                    "to_sector": 680
+                },
+                {
+                    "to_sector": 697
+                },
+                {
+                    "to_sector": 983
+                },
+                {
+                    "to_sector": 1223
+                },
+                {
+                    "to_sector": 1300
+                },
+                {
+                    "to_sector": 1446
+                },
+                {
+                    "to_sector": 1895
+                },
+                {
+                    "to_sector": 2207
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 45,
+                    "name": "Gasepe",
+                    "type": 3
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805738.551297,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 151
+                },
+                {
+                    "to_sector": 365
+                },
+                {
+                    "to_sector": 680
+                },
+                {
+                    "to_sector": 697
+                },
+                {
+                    "to_sector": 983
+                },
+                {
+                    "to_sector": 1223
+                },
+                {
+                    "to_sector": 1300
+                },
+                {
+                    "to_sector": 1446
+                },
+                {
+                    "to_sector": 1895
+                },
+                {
+                    "to_sector": 2207
+                }
+            ]
+        },
+        "365": {
+            "server_tick": 847939,
+            "sector_id": 365,
+            "name": "Markab",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 112
+                },
+                {
+                    "to_sector": 138
+                },
+                {
+                    "to_sector": 1161
+                },
+                {
+                    "to_sector": 1276
+                },
+                {
+                    "to_sector": 1395
+                },
+                {
+                    "to_sector": 1574
+                },
+                {
+                    "to_sector": 1586
+                },
+                {
+                    "to_sector": 1845
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 142,
+                    "name": "Azeaapd",
+                    "type": 8
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769805868.504213,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 112
+                },
+                {
+                    "to_sector": 138
+                },
+                {
+                    "to_sector": 1161
+                },
+                {
+                    "to_sector": 1276
+                },
+                {
+                    "to_sector": 1395
+                },
+                {
+                    "to_sector": 1574
+                },
+                {
+                    "to_sector": 1586
+                },
+                {
+                    "to_sector": 1845
+                }
+            ]
+        },
+        "1574": {
+            "server_tick": 849540,
+            "sector_id": 1574,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 365
+                },
+                {
+                    "to_sector": 648
+                },
+                {
+                    "to_sector": 961
+                },
+                {
+                    "to_sector": 1029
+                },
+                {
+                    "to_sector": 1836
+                },
+                {
+                    "to_sector": 2087
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 645,
+                    "name": "Korejioe",
+                    "type": 4
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806029.281746,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 365
+                },
+                {
+                    "to_sector": 648
+                },
+                {
+                    "to_sector": 961
+                },
+                {
+                    "to_sector": 1029
+                },
+                {
+                    "to_sector": 1836
+                },
+                {
+                    "to_sector": 2087
+                }
+            ]
+        },
+        "1029": {
+            "server_tick": 850182,
+            "sector_id": 1029,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 1126
+                },
+                {
+                    "to_sector": 1270
+                },
+                {
+                    "to_sector": 1574
+                },
+                {
+                    "to_sector": 1821
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806093.637031,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 1126
+                },
+                {
+                    "to_sector": 1270
+                },
+                {
+                    "to_sector": 1574
+                },
+                {
+                    "to_sector": 1821
+                }
+            ]
+        },
+        "1270": {
+            "server_tick": 850823,
+            "sector_id": 1270,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 32
+                },
+                {
+                    "to_sector": 69
+                },
+                {
+                    "to_sector": 1012
+                },
+                {
+                    "to_sector": 1029
+                },
+                {
+                    "to_sector": 1449
+                },
+                {
+                    "to_sector": 1492
+                },
+                {
+                    "to_sector": 2414
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806157.9794385,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 32
+                },
+                {
+                    "to_sector": 69
+                },
+                {
+                    "to_sector": 1012
+                },
+                {
+                    "to_sector": 1029
+                },
+                {
+                    "to_sector": 1449
+                },
+                {
+                    "to_sector": 1492
+                },
+                {
+                    "to_sector": 2414
+                }
+            ]
+        },
+        "1449": {
+            "server_tick": 852213,
+            "sector_id": 1449,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 756
+                },
+                {
+                    "to_sector": 763
+                },
+                {
+                    "to_sector": 1153
+                },
+                {
+                    "to_sector": 1270
+                },
+                {
+                    "to_sector": 1573
+                },
+                {
+                    "to_sector": 2132
+                },
+                {
+                    "to_sector": 2312
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 590,
+                    "name": "Thaytore",
+                    "type": 5
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806297.3913105,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 756
+                },
+                {
+                    "to_sector": 763
+                },
+                {
+                    "to_sector": 1153
+                },
+                {
+                    "to_sector": 1270
+                },
+                {
+                    "to_sector": 1573
+                },
+                {
+                    "to_sector": 2132
+                },
+                {
+                    "to_sector": 2312
+                }
+            ]
+        },
+        "763": {
+            "server_tick": 853509,
+            "sector_id": 763,
+            "name": "Botein",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 363
+                },
+                {
+                    "to_sector": 1449
+                },
+                {
+                    "to_sector": 1542
+                },
+                {
+                    "to_sector": 2295
+                },
+                {
+                    "to_sector": 2442
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 302,
+                    "name": "Cheramas",
+                    "type": 3
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806427.3809378,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 363
+                },
+                {
+                    "to_sector": 1449
+                },
+                {
+                    "to_sector": 1542
+                },
+                {
+                    "to_sector": 2295
+                },
+                {
+                    "to_sector": 2442
+                }
+            ]
+        },
+        "1542": {
+            "server_tick": 854150,
+            "sector_id": 1542,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 96
+                },
+                {
+                    "to_sector": 763
+                },
+                {
+                    "to_sector": 1145
+                },
+                {
+                    "to_sector": 1297
+                },
+                {
+                    "to_sector": 1963
+                },
+                {
+                    "to_sector": 2223
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806491.7463195,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 96
+                },
+                {
+                    "to_sector": 763
+                },
+                {
+                    "to_sector": 1145
+                },
+                {
+                    "to_sector": 1297
+                },
+                {
+                    "to_sector": 1963
+                },
+                {
+                    "to_sector": 2223
+                }
+            ]
+        },
+        "2223": {
+            "server_tick": 855445,
+            "sector_id": 2223,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 685
+                },
+                {
+                    "to_sector": 699
+                },
+                {
+                    "to_sector": 1542
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 893,
+                    "name": "Tolitem",
+                    "type": 1
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806621.7437935,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 685
+                },
+                {
+                    "to_sector": 699
+                },
+                {
+                    "to_sector": 1542
+                }
+            ]
+        },
+        "685": {
+            "server_tick": 856087,
+            "sector_id": 685,
+            "name": "Eta CMa",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 642
+                },
+                {
+                    "to_sector": 823
+                },
+                {
+                    "to_sector": 1241
+                },
+                {
+                    "to_sector": 1867
+                },
+                {
+                    "to_sector": 1884
+                },
+                {
+                    "to_sector": 2439
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806686.0670025,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 642
+                },
+                {
+                    "to_sector": 823
+                },
+                {
+                    "to_sector": 1241
+                },
+                {
+                    "to_sector": 1867
+                },
+                {
+                    "to_sector": 1884
+                },
+                {
+                    "to_sector": 2439
+                }
+            ]
+        },
+        "1241": {
+            "server_tick": 857383,
+            "sector_id": 1241,
+            "name": "Beta Per",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 685
+                },
+                {
+                    "to_sector": 687
+                },
+                {
+                    "to_sector": 1234
+                },
+                {
+                    "to_sector": 1478
+                },
+                {
+                    "to_sector": 1975
+                },
+                {
+                    "to_sector": 2444
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [
+                {
+                    "port_id": 510,
+                    "name": "Rediraand",
+                    "type": 1
+                }
+            ],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806816.0684187,
+            "has_port": true,
+            "adjacent": [
+                {
+                    "to_sector": 685
+                },
+                {
+                    "to_sector": 687
+                },
+                {
+                    "to_sector": 1234
+                },
+                {
+                    "to_sector": 1478
+                },
+                {
+                    "to_sector": 1975
+                },
+                {
+                    "to_sector": 2444
+                }
+            ]
+        },
+        "687": {
+            "server_tick": 858025,
+            "sector_id": 687,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 86
+                },
+                {
+                    "to_sector": 345
+                },
+                {
+                    "to_sector": 468
+                },
+                {
+                    "to_sector": 489
+                },
+                {
+                    "to_sector": 582
+                },
+                {
+                    "to_sector": 1241
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 1422
+                },
+                {
+                    "to_sector": 2390
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806880.4480326,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 86
+                },
+                {
+                    "to_sector": 345
+                },
+                {
+                    "to_sector": 468
+                },
+                {
+                    "to_sector": 489
+                },
+                {
+                    "to_sector": 582
+                },
+                {
+                    "to_sector": 1241
+                },
+                {
+                    "to_sector": 1310
+                },
+                {
+                    "to_sector": 1422
+                },
+                {
+                    "to_sector": 2390
+                }
+            ]
+        },
+        "582": {
+            "server_tick": 858666,
+            "sector_id": 582,
+            "name": "Uncharted Space",
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 41
+                },
+                {
+                    "to_sector": 378
+                },
+                {
+                    "to_sector": 571
+                },
+                {
+                    "to_sector": 687
+                },
+                {
+                    "to_sector": 741
+                },
+                {
+                    "to_sector": 1286
+                },
+                {
+                    "to_sector": 1480
+                },
+                {
+                    "to_sector": 1510
+                },
+                {
+                    "to_sector": 1556
+                },
+                {
+                    "to_sector": 2489
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 25,
+                    "name": "Sub-Light Cruiser"
+                },
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769806944.8265965,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 41
+                },
+                {
+                    "to_sector": 378
+                },
+                {
+                    "to_sector": 571
+                },
+                {
+                    "to_sector": 687
+                },
+                {
+                    "to_sector": 741
+                },
+                {
+                    "to_sector": 1286
+                },
+                {
+                    "to_sector": 1480
+                },
+                {
+                    "to_sector": 1510
+                },
+                {
+                    "to_sector": 1556
+                },
+                {
+                    "to_sector": 2489
+                }
+            ]
+        },
+        "1556": {
+            "server_tick": 859308,
+            "sector_id": 1556,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 582
+                },
+                {
+                    "to_sector": 650
+                },
+                {
+                    "to_sector": 756
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 1654
+                },
+                {
+                    "to_sector": 1753
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769807009.2031567,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 582
+                },
+                {
+                    "to_sector": 650
+                },
+                {
+                    "to_sector": 756
+                },
+                {
+                    "to_sector": 822
+                },
+                {
+                    "to_sector": 1654
+                },
+                {
+                    "to_sector": 1753
+                }
+            ]
+        },
+        "1753": {
+            "server_tick": 859950,
+            "sector_id": 1753,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 495
+                },
+                {
+                    "to_sector": 1556
+                },
+                {
+                    "to_sector": 2172
+                },
+                {
+                    "to_sector": 2198
+                },
+                {
+                    "to_sector": 2242
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769807073.5765724,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 495
+                },
+                {
+                    "to_sector": 1556
+                },
+                {
+                    "to_sector": 2172
+                },
+                {
+                    "to_sector": 2198
+                },
+                {
+                    "to_sector": 2242
+                }
+            ]
+        },
+        "2198": {
+            "server_tick": 860592,
+            "sector_id": 2198,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 242
+                },
+                {
+                    "to_sector": 513
+                },
+                {
+                    "to_sector": 813
+                },
+                {
+                    "to_sector": 1513
+                },
+                {
+                    "to_sector": 1534
+                },
+                {
+                    "to_sector": 1712
+                },
+                {
+                    "to_sector": 1753
+                },
+                {
+                    "to_sector": 2031
+                },
+                {
+                    "to_sector": 2493
+                }
+            ],
+            "ships_present": [
+                {
+                    "ship_id": 38,
+                    "name": "ai_qa_bot_010's ship"
+                }
+            ],
+            "ports": [],
+            "celestial_objects": [],
+            "counts": {
+                "fighters": 0,
+                "mines": 0
+            },
+            "_last_refreshed": 1769807137.955677,
+            "has_port": false,
+            "adjacent": [
+                {
+                    "to_sector": 242
+                },
+                {
+                    "to_sector": 513
+                },
+                {
+                    "to_sector": 813
+                },
+                {
+                    "to_sector": 1513
+                },
+                {
+                    "to_sector": 1534
+                },
+                {
+                    "to_sector": 1712
+                },
+                {
+                    "to_sector": 1753
+                },
+                {
+                    "to_sector": 2031
+                },
+                {
+                    "to_sector": 2493
+                }
+            ]
+        },
+        "513": {
+            "server_tick": 861234,
+            "sector_id": 513,
+            "name": null,
+            "beacon": null,
+            "adjacent_sectors": [
+                {
+                    "to_sector": 660
+                },
+                {
+                    "to_sector": 960
+                },
+                {
+                    "to_sector": 985
+                },
+                {

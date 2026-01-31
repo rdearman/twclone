@@ -35,4 +35,25 @@ int repo_players_get_sector(db_t *db, int player_id, int *sector_out);
 int repo_players_update_credits_safe(db_t *db, int player_id, long long delta, long long *new_balance_out);
 int repo_players_check_exists(db_t *db, int player_id, int *exists_out);
 
+/* Computer System / Knowledge */
+typedef struct {
+    int port_a_id;
+    int port_b_id;
+    int sector_a_id;
+    int sector_b_id;
+    char *commodity;
+    int hops_between;
+    int hops_from_player;
+    int is_two_way;
+} trade_route_t;
+
+int repo_players_record_port_knowledge(db_t *db, int player_id, int port_id);
+int repo_players_record_visit(db_t *db, int player_id, int sector_id);
+int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sector_id,
+                                        int max_hops_between, int max_hops_from_player,
+                                        int require_two_way,
+                                        trade_route_t **out_routes, int *out_count,
+                                        int *out_truncated, int *out_pairs_checked);
+void repo_players_free_routes(trade_route_t *routes, int count);
+
 #endif // REPO_PLAYERS_H

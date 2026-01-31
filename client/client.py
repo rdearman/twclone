@@ -623,6 +623,7 @@ class Conn:
         self._r = sock.makefile("r", encoding="utf-8", newline="\n")
         self.debug = debug
         self._seen_notices = set()   # for de-duping system.notice
+        self.session_token = None
 
         # optional: the Context can set this after it’s created (for prompt redraws)
         self.ctx = None
@@ -632,6 +633,11 @@ class Conn:
         return f"cli-{self._seq:04d}"
 
     def send(self, obj: Dict[str, Any]) -> None:
+        if self.session_token:
+            if "auth" not in obj:
+                obj["auth"] = {}
+            obj["auth"]["session"] = self.session_token
+
         line = json.dumps(obj, separators=(",", ":")) + "\n"
         if self.debug:
             print(f"[DBG] << {line!r}")
@@ -757,11 +763,12 @@ def compute_flags(ctx: Context) -> dict:
     """
     d = ctx.last_sector_desc or {}
     ships = d.get("ships", [])
-    my_ship_id = get_my_ship_id(ctx.conn)
-    my_name = get_my_player_name(ctx.conn)
+    my_ship_id = get_my_ship_id(ctx.conn, ctx)
+    my_name = get_my_player_name(ctx.conn, ctx)
     # keep beacon count handy for label interpolation
-    ctx.state["beacon_count"] = get_my_beacon_count(ctx.conn)
+    ctx.state["beacon_count"] = get_my_beacon_count(ctx.conn, ctx)
 
+    pl = ctx.player_info.get("player") or {}
     flags = {
         "has_port": bool(d.get("port")),
         "is_stardock": ctx.state.get("is_stardock", False),
@@ -772,7 +779,7 @@ def compute_flags(ctx: Context) -> dict:
         "has_tow_target": has_tow_target(ships, my_ship_id=my_ship_id),
         "on_planet": bool(ctx.state.get("on_planet")),
         "planet_has_products": bool(ctx.state.get("planet_products_available")),
-        "is_corp_member": bool(ctx.player_info.get("corp_id")),
+        "is_corp_member": bool(pl.get("corp_id")),
         "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
         "has_exchange_access": ctx.state.get("has_exchange_access", False),
         "has_insurance_access": ctx.state.get("has_insurance_access", False),
@@ -842,7 +849,7 @@ def pathfind_flow(ctx: Context):
     if not cur:
         # Fallback: fetch current sector from server if we don't have it cached
         try:
-            info = ctx.conn.rpc("move.describe_sector", {})
+            info = ctx.conn.rpc("move.describe_sector", {"sector_id": 1})
             data = (info or {}).get("data") or {}
             cur = data.get("sector_id") or data.get("id")
         except Exception:
@@ -851,7 +858,12 @@ def pathfind_flow(ctx: Context):
         print("Cannot determine current sector."); return
 
     # Ask server for a path
-    req = {"from": cur, "to": target}
+    # NOTE: Schema requires from_sector_id/to_sector_id, but code expects from/to.
+    # We send BOTH to be absolutely sure.
+    req = {
+        "from_sector_id": cur, "to_sector_id": target,
+        "from": cur, "to": target
+    }
     print(f"[DEBUG] Pathfind request: {req}") # ADDED DEBUG PRINT
     resp = ctx.conn.rpc("move.pathfind", req)
     print(f"[DEBUG] Pathfind response: {resp}") # ADDED DEBUG PRINT
@@ -1169,17 +1181,25 @@ def extract_current_sector(resp: Dict[str, Any]) -> Optional[int]:
 def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
     """Convert server sector data to the simplified shape used by v3 flags/menus."""
     sid = d.get("sector_id") or (d.get("sector") or {}).get("id") or d.get("id") \
-          or (d.get("port") or {}).get("sector_id") or (d.get("port") or {}).get("sector")
-    name = d.get("name") or (d.get("sector") or {}).get("name") or (f"Sector {sid}" if sid else "Unknown")
-    adj = d.get("adjacent_sectors") or d.get("adjacent") or d.get("adjacent_sectors_info") or d.get("neighbors") or []
+          or (d.get("port") or {}).get("sector_id") or (d.get("port") or {}).get("sector") \
+          or (d.get("port") or {}).get("number")
+    
+    # Only default to "Sector X" if we have an ID; otherwise keep None so merge skips it
+    name = d.get("name") or (d.get("sector") or {}).get("name")
+    if name is None and sid is not None:
+        name = f"Sector {sid}"
+
+    adj = d.get("adjacent_sectors") or d.get("adjacent") or d.get("adjacent_sectors_info") or d.get("neighbors")
+    
     # Port/class synthesis
-    port_obj = {}
-    ports = d.get("ports") or []
-    if ports and isinstance(ports, list):
+    port_obj = None
+    ports = d.get("ports")
+    if ports and isinstance(ports, list) and len(ports) > 0:
+        port_obj = {}
         p0 = ports[0]
-        # Extract 'id' if present
-        if p0.get("id"):
-            port_obj["id"] = p0["id"]
+        if p0.get("port_id"): port_obj["id"] = p0["port_id"]
+        elif p0.get("id"): port_obj["id"] = p0["id"]
+        
         pcls = p0.get("class") or p0.get("type")
         if isinstance(pcls, int) or (isinstance(pcls, str) and pcls.isdigit()):
             port_obj["class"] = int(pcls)
@@ -1187,15 +1207,17 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
             port_obj["name"] = p0["name"]
     elif isinstance(d.get("port"), dict):
         port_obj = dict(d.get("port"))
-        # Ensure 'id' is copied if it exists in the raw port data
         if "id" not in port_obj and d["port"].get("id"):
             port_obj["id"] = d["port"]["id"]
-        if "class" not in port_obj and isinstance(port_obj.get("type"), int):
-            port_obj["class"] = port_obj["type"]
-    # ships/planets/beacon
-    planets = d.get("celestial_objects") or d.get("planets") or []
-    ships = d.get("ships_present") or d.get("ships") or d.get("entities", {}).get("ships") or []
-    beacon = d.get("beacon") or d.get("beacon_text") or ""
+        if "class" not in port_obj:
+            pcls = port_obj.get("class") or port_obj.get("type")
+            if isinstance(pcls, int) or (isinstance(pcls, str) and pcls.isdigit()):
+                port_obj["class"] = int(pcls)
+
+    planets = d.get("celestial_objects") or d.get("planets")
+    ships = d.get("ships_present") or d.get("ships") or d.get("entities", {}).get("ships")
+    beacon = d.get("beacon") or d.get("beacon_text")
+    
     return {
         "id": sid, "name": name,
         "adjacent": adj,
@@ -1203,45 +1225,53 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
         "planets": planets,
         "ships": ships,
         "beacon": beacon,
-        "counts": d.get("counts") # Add this line
+        "counts": d.get("counts")
     }
 
-def get_my_player_name(conn: Conn) -> Optional[str]:
+def get_my_player_name(conn: Conn, ctx: Optional[Context] = None) -> Optional[str]:
     try:
-        d = get_data(conn.rpc("player.my_info", {}))
+        if ctx and ctx.player_info:
+            d = ctx.player_info
+        else:
+            d = get_data(conn.rpc("player.my_info", {}))
     except Exception:
         return None
-    for key in ("name","player_name","display_name","username"):
+    
+    # Try nested structure first
+    pl = d.get("player") or {}
+    for key in ("username", "name", "player_name", "display_name"):
+        v = pl.get(key)
+        if isinstance(v, str) and v.strip(): return v.strip()
+        
+    # Fallback to top level
+    for key in ("username", "name", "player_name", "display_name"):
         v = d.get(key)
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    for objk in ("player","me"):
-        obj = d.get(objk)
-        if isinstance(obj, dict):
-            for key in ("name","player_name","display_name","username"):
-                v = obj.get(key)
-                if isinstance(v, str) and v.strip():
-                    return v.strip()
+        if isinstance(v, str) and v.strip(): return v.strip()
     return None
 
-def get_my_ship_id(conn: Conn) -> Optional[int]:
+def get_my_ship_id(conn: Conn, ctx: Optional[Context] = None) -> Optional[int]:
     try:
-        d = get_data(conn.rpc("player.my_info", {}))
+        if ctx and ctx.player_info:
+            d = ctx.player_info
+        else:
+            d = get_data(conn.rpc("player.my_info", {}))
     except Exception:
         return None
-    for k in ("ship_id","current_ship_id"):
-        if isinstance(d.get(k), int):
-            return d[k]
-    for objk in ("player", "ship","current_ship","vessel","active_ship"):
-        obj = d.get(objk)
-        if isinstance(obj, dict):
-            sid = obj.get("ship_id") or obj.get("id")
-            if isinstance(sid, int):
-                return sid
+
+    # Try nested player.ship_id
+    pl = d.get("player") or {}
+    for k in ("ship_id", "current_ship_id", "id"):
+        if isinstance(pl.get(k), int): return pl[k]
+
+    # Try top-level
+    for k in ("ship_id", "current_ship_id"):
+        if isinstance(d.get(k), int): return d[k]
+        
+    # Try ship object
     ship = d.get("ship") or {}
-    loc = ship.get("location") or {}
-    if isinstance(loc.get("sector_id"), int):
-        return ship.get("id")
+    sid = ship.get("id") or ship.get("ship_id")
+    if isinstance(sid, int): return sid
+    
     return None
 
 def _extract_beacon_count(d: Dict[str, Any]) -> Optional[int]:
@@ -1261,9 +1291,12 @@ def _extract_beacon_count(d: Dict[str, Any]) -> Optional[int]:
             if isinstance(c, int): return c
     return None
 
-def get_my_beacon_count(conn: Conn) -> Optional[int]:
+def get_my_beacon_count(conn: Conn, ctx: Optional[Context] = None) -> Optional[int]:
     try:
-        d = get_data(conn.rpc("player.my_info", {}))
+        if ctx and ctx.player_info:
+            d = ctx.player_info
+        else:
+            d = get_data(conn.rpc("player.my_info", {}))
         return _extract_beacon_count(d)
     except Exception:
         return None
@@ -1293,11 +1326,12 @@ def has_tow_target(ships, my_ship_id=None) -> bool:
 def _get_menu_flags(ctx: Context) -> dict:
     d = ctx.state.get("sector_info", {})
     ships = d.get("ships", [])
-    my_ship_id = get_my_ship_id(ctx.conn)
-    my_name = get_my_player_name(ctx.conn)
+    my_ship_id = get_my_ship_id(ctx.conn, ctx)
+    my_name = get_my_player_name(ctx.conn, ctx)
     # keep beacon count handy for label interpolation
-    ctx.state["beacon_count"] = get_my_beacon_count(ctx.conn)
+    ctx.state["beacon_count"] = get_my_beacon_count(ctx.conn, ctx)
 
+    pl = ctx.player_info.get("player") or {}
     flags = {
         "has_port": bool(d.get("port")),
         "is_stardock": ctx.state.get("is_stardock", False),
@@ -1308,7 +1342,7 @@ def _get_menu_flags(ctx: Context) -> dict:
         "has_tow_target": has_tow_target(ships, my_ship_id=my_ship_id),
         "on_planet": bool(ctx.state.get("on_planet")),
         "planet_has_products": bool(ctx.state.get("planet_products_available")),
-        "is_corp_member": bool(ctx.player_info.get("corp_id")),
+        "is_corp_member": bool(pl.get("corp_id")),
         "can_autopilot": bool(ctx.state.get("ap_route_plotted")),
         "has_exchange_access": ctx.state.get("has_exchange_access", False),
         "has_insurance_access": ctx.state.get("has_insurance_access", False),
@@ -1323,11 +1357,18 @@ def _get_menu_flags(ctx: Context) -> dict:
     }
     return flags
 
-def _update_corp_context(ctx: Context):
+def _update_corp_context(ctx: Context, force: bool = False):
     """
     Fetches and updates corporation-related context flags in ctx.state.
     Should be called after player_info changes or a corp-related action.
     """
+    if not force and ctx.player_info:
+        # Just update flags from existing player_info if not forcing a refresh
+        corp_data = ctx.player_info.get("corporation")
+        ctx.state["in_corporation"] = bool(corp_data and isinstance(corp_data, dict))
+        ctx.state["is_corp_member"] = ctx.state["in_corporation"]
+        return
+
     ctx.state["in_corporation"] = False
     ctx.state["is_ceo"] = False
     ctx.state["is_ceo_or_officer"] = False
@@ -1345,7 +1386,12 @@ def _update_corp_context(ctx: Context):
     corp_data = ctx.player_info.get("corporation")
     if corp_data and isinstance(corp_data, dict):
         ctx.state["in_corporation"] = True
+        ctx.state["is_corp_member"] = True
         
+        # Only do the heavy lifting if forced
+        if not force:
+            return
+
         # Fetch corp.status to get role and public status
         corp_status_resp = ctx.conn.rpc("corp.status", {})
         if corp_status_resp.get("status") == "ok":
@@ -1953,6 +1999,37 @@ def pretty_print_news_marked_read(ctx):
         return
     print("All news marked as read.")
 
+@register("pretty_print_trade_routes")
+def pretty_print_trade_routes(ctx):
+    resp = ctx.state.get("last_rpc")
+    if not resp or resp.get("status") != "ok":
+        _pp(resp)
+        return
+    
+    data = resp.get("data") or {}
+    routes = data.get("routes") or []
+    
+    if not routes:
+        print("\n(No profitable trade routes found in your known database.)")
+        return
+
+    print("\n--- Recommended Trade Routes ---")
+    print(f"{'Port A':<8} {'Port B':<8} {'Sect A':<8} {'Sect B':<8} {'Hops':<6} {'Dist':<6} {'Type'}")
+    print("-" * 65)
+    
+    for r in routes:
+        p_a = r.get("port_a_id")
+        p_b = r.get("port_b_id")
+        s_a = r.get("sector_a_id")
+        s_b = r.get("sector_b_id")
+        hops = r.get("hops_between")
+        dist = r.get("hops_from_player")
+        is_2way = "2-way" if r.get("is_two_way") else "1-way"
+        
+        print(f"{p_a:<8} {p_b:<8} {s_a:<8} {s_b:<8} {hops:<6} {dist:<6} {is_2way}")
+    print("-" * 65)
+    print("(Dist is hops from your current location to the nearest port in the route.)\n")
+
 @register("corp_create_flow")
 def corp_create_flow(ctx: Context):
     if ctx.state.get("in_corporation"):
@@ -2470,15 +2547,28 @@ def resolve_value(val: Any, ctx: Context) -> Any:
     if isinstance(val, list):
         return [resolve_value(x, ctx) for x in val]
     if isinstance(val, str):
-        m = PROMPT_RE.match(val)
+        # Support default value syntax: <prompt:type:msg[default]>
+        m = re.match(r"^<prompt:(int|float|str|bool)(?::([^\]]+))?(?:\[([^\]]+)\])?>$", val)
         if m:
-            typ, msg = m.group(1), (m.group(2) or "Enter value")
+            typ, msg, default = m.group(1), (m.group(2) or "Enter value"), m.group(3)
             raw = input(f"{msg}: ").strip()
+            
+            if not raw and default is not None:
+                raw = default
+            
+            if not raw and typ != "str":
+                return None
+
             try:
-                val = int(raw) if typ == "int" else (float(raw) if typ == "float" else raw)
+                if typ == "int": return int(raw)
+                if typ == "float": return float(raw)
+                if typ == "bool":
+                    return raw.lower() in ("y", "yes", "true", "1")
+                return raw
             except Exception:
                 print(f"Invalid {typ}.")
                 return None
+            
             # Convenience: if prompting for commodity, accept short codes (ORE, ORG, EQU)
             if typ == 'str' and 'commodity' in (msg or '').lower():
                 if isinstance(val, str):
@@ -2993,8 +3083,8 @@ def scan_sector(ctx: "Context"):
 def help_main(ctx: Context):
     d = ctx.last_sector_desc or {}
     ships = d.get("ships") or []
-    towable_exists = has_tow_target(ships, my_ship_id=get_my_ship_id(ctx.conn))
-    boardable_exists = has_boardable_ship(ships, my_ship_id=get_my_ship_id(ctx.conn), my_name=get_my_player_name(ctx.conn))
+    towable_exists = has_tow_target(ships, my_ship_id=get_my_ship_id(ctx.conn, ctx))
+    boardable_exists = has_boardable_ship(ships, my_ship_id=get_my_ship_id(ctx.conn, ctx), my_name=get_my_player_name(ctx.conn, ctx))
 
     print("--- Help ---")
     print("M: Move to a sector")
@@ -3027,7 +3117,7 @@ def set_beacon_flow(ctx: Context):
     if 1 <= sid <= 10:
         print("FedSpace (1–10): You cannot set a beacon here."); return
 
-    my_count = get_my_beacon_count(ctx.conn)
+    my_count = get_my_beacon_count(ctx.conn, ctx)
     if isinstance(my_count, int):
         print(f"Marker beacons aboard: {my_count}")
         if my_count <= 0:
@@ -3192,8 +3282,8 @@ def print_inspect_response_pretty(ctx):
 def enter_ship_menu(ctx: Context):
     d = ctx.last_sector_desc or {}
     ships = d.get("ships") or []
-    my_ship_id = get_my_ship_id(ctx.conn)
-    my_name = get_my_player_name(ctx.conn)
+    my_ship_id = get_my_ship_id(ctx.conn, ctx)
+    my_name = get_my_player_name(ctx.conn, ctx)
 
     # Build list of boardable ships
     boardable = []
@@ -3314,7 +3404,7 @@ def enter_ship_menu(ctx: Context):
 def tow_flow(ctx: Context):
     d = ctx.last_sector_desc or {}
     ships = d.get("ships") or []
-    if not has_tow_target(ships, my_ship_id=get_my_ship_id(ctx.conn)):
+    if not has_tow_target(ships, my_ship_id=get_my_ship_id(ctx.conn, ctx)):
         print("No towable targets in this sector.")
     else:
         print("Not Implemented: Tow SpaceCraft")
@@ -3405,8 +3495,11 @@ def simple_buy_handler(ctx: Context):
                 "quantity": quantity
             }
         ],
+        "account": 0,
         "idempotency_key": idempotency_key
     }
+    if ctx.current_sector_id is not None:
+        payload["sector_id"] = ctx.current_sector_id
 
     try:
         resp = ctx.conn.rpc("trade.buy", payload)
@@ -3460,8 +3553,11 @@ def simple_sell_handler(ctx: Context):
                 "quantity": quantity
             }
         ],
+        "account": 0,
         "idempotency_key": idempotency_key
     }
+    if ctx.current_sector_id is not None:
+        payload["sector_id"] = ctx.current_sector_id
 
     try:
         resp = ctx.conn.rpc("trade.sell", payload)
@@ -3517,7 +3613,7 @@ def add_route_flow(ctx: Context):
     if not cur:
         # Fallback: fetch current sector from server if we don't have it cached
         try:
-            info = ctx.conn.rpc("move.describe_sector", {})
+            info = ctx.conn.rpc("move.describe_sector", {"sector_id": 1})
             data = (info or {}).get("data") or {}
             cur = data.get("sector_id") or data.get("id")
         except Exception:
@@ -3526,7 +3622,10 @@ def add_route_flow(ctx: Context):
         print("Cannot determine current sector. Please re-display sector (D) first."); return
 
     # Ask server for a path
-    req = {"from": cur, "to": target}
+    req = {
+        "from_sector_id": cur, "to_sector_id": target,
+        "from": cur, "to": target
+    }
     resp = ctx.conn.rpc("move.pathfind", req)
     status = (resp or {}).get("status")
     if status in ("error", "refused"):
@@ -3944,7 +4043,7 @@ def rename_ship_flow(ctx: Context):
     - Confirms, then calls ship.rename
     """
     # Resolve current ship id
-    ship_id = get_my_ship_id(ctx.conn)
+    ship_id = get_my_ship_id(ctx.conn, ctx)
     if not isinstance(ship_id, int):
         print("Could not determine your current ship id.")
         return
@@ -4092,7 +4191,7 @@ def main():
             # optional hello
             capabilities = {}
             try:
-                hello_resp = conn.rpc("system.hello", {"client": "twclone-cli", "version": "3.x"})
+                hello_resp = conn.rpc("system.hello", {"client": "twclone-cli", "client_version": "3.x"})
                 if hello_resp.get("status") == "ok":
                     capabilities = hello_resp.get("data", {}).get("capabilities") or {}
             except Exception:
@@ -4103,6 +4202,11 @@ def main():
             if login.get("status") in ("error","refused"):
                 print("Login failed.");
                 return 2
+
+            # Save session token if returned
+            token = login.get("data", {}).get("session_token")
+            if token:
+                conn.session_token = token
 
             # If hello failed or didn't have caps, try explicit capabilities command
             if not capabilities:

@@ -109,12 +109,12 @@ CREATE TABLE ships (
     has_planet_scanner boolean NOT NULL DEFAULT FALSE,
     has_long_range_scanner boolean NOT NULL DEFAULT FALSE,
     cloaked timestamp,
-    ported boolean NOT NULL DEFAULT FALSE,
+    ported integer DEFAULT 0,
     onplanet boolean NOT NULL DEFAULT FALSE,
     destroyed boolean NOT NULL DEFAULT FALSE,
     hull bigint NOT NULL DEFAULT 100,
     perms bigint NOT NULL DEFAULT 731,
-    CONSTRAINT check_current_cargo_limit CHECK ((colonists + equipment + organics + ore) <= holds),
+    CONSTRAINT check_current_cargo_limit CHECK ((colonists + ore + organics + equipment + slaves + weapons + drugs) <= holds),
     FOREIGN KEY (type_id) REFERENCES shiptypes (shiptypes_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)
 );
@@ -1516,10 +1516,51 @@ CREATE TABLE news_feed (
 );
 
 CREATE TABLE eligible_tows (
+
     ship_id serial PRIMARY KEY,
+
     sector_id integer,
+
     owner_id integer,
+
     fighters integer,
+
     alignment integer,
+
     experience bigint
+
+);
+
+
+
+-- Player Knowledge Tables (Computer System)
+
+CREATE TABLE player_known_ports (
+
+    player_id INTEGER NOT NULL REFERENCES players(player_id) ON DELETE CASCADE,
+
+    port_id INTEGER NOT NULL REFERENCES ports(port_id) ON DELETE CASCADE,
+
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (player_id, port_id)
+
+);
+
+
+
+CREATE TABLE player_visited_sectors (
+
+    player_id INTEGER NOT NULL REFERENCES players(player_id) ON DELETE CASCADE,
+
+    sector_id INTEGER NOT NULL REFERENCES sectors(sector_id) ON DELETE CASCADE,
+
+    visit_count INTEGER NOT NULL DEFAULT 1,
+
+    first_visited_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    last_visited_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (player_id, sector_id)
+
 );

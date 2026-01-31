@@ -926,8 +926,16 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
     }
 
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+
   if (db_player_set_sector (ctx->player_id, to) == 0)
     {
+      /* Record visit */
+      repo_players_record_visit (db, ctx->player_id, to);
+
+      /* Clear ported status on warp */
+      db_ports_set_ported_status (db, player_ship_id, 0);
+
       LOGD ("Player %d warped from %d to %d", ctx->player_id, ctx->sector_id, to);
       ctx->sector_id = to;
       json_t *resp = json_object ();

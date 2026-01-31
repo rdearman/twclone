@@ -60,6 +60,101 @@ cmd_player_rankings (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+static int
+route_compare (const void *a, const void *b)
+{
+  const trade_route_t *ra = (const trade_route_t *) a;
+  const trade_route_t *rb = (const trade_route_t *) b;
+
+  /* Prefer two-way loops */
+  if (ra->is_two_way != rb->is_two_way)
+    {
+      return rb->is_two_way - ra->is_two_way;
+    }
+  /* Then shorter overall distance */
+  int dist_a = ra->hops_between + ra->hops_from_player;
+  int dist_b = rb->hops_between + rb->hops_from_player;
+  return dist_a - dist_b;
+}
+
+int
+cmd_player_computer_recommend_routes (client_ctx_t *ctx, json_t *root)
+{
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int max_hops_between = 10;
+  int max_hops_from_player = 20;
+  int require_two_way = 0;
+  int limit = 10;
+
+  if (json_is_object (data))
+    {
+      json_get_int_flexible (data, "max_hops_between", &max_hops_between);
+      json_get_int_flexible (data, "max_hops_from_player",
+			     &max_hops_from_player);
+      json_get_int_flexible (data, "require_two_way", &require_two_way);
+      json_get_int_flexible (data, "limit", &limit);
+    }
+
+  trade_route_t *routes = NULL;
+  int count = 0;
+  int truncated = 0;
+  int pairs_checked = 0;
+  int rc = repo_players_get_recommended_routes (db, ctx->player_id,
+						ctx->sector_id,
+						max_hops_between,
+						max_hops_from_player,
+						require_two_way, &routes,
+						&count, &truncated, &pairs_checked);
+
+  if (rc != 0)
+    {
+      send_response_error (ctx, root, 500, "Failed to calculate routes");
+      return 0;
+    }
+
+  if (count > 0)
+    {
+      qsort (routes, count, sizeof (trade_route_t), route_compare);
+    }
+
+  json_t *j_routes = json_array ();
+  for (int i = 0; i < count && i < limit; i++)
+    {
+      json_t *r = json_object ();
+      json_object_set_new (r, "port_a_id", json_integer (routes[i].port_a_id));
+      json_object_set_new (r, "port_b_id", json_integer (routes[i].port_b_id));
+      json_object_set_new (r, "sector_a_id",
+			   json_integer (routes[i].sector_a_id));
+      json_object_set_new (r, "sector_b_id",
+			   json_integer (routes[i].sector_b_id));
+      json_object_set_new (r, "hops_between",
+			   json_integer (routes[i].hops_between));
+      json_object_set_new (r, "hops_from_player",
+			   json_integer (routes[i].hops_from_player));
+      json_object_set_new (r, "is_two_way",
+			   routes[i].is_two_way ? json_true () :
+			   json_false ());
+      json_array_append_new (j_routes, r);
+    }
+
+  repo_players_free_routes (routes, count);
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "routes", j_routes);
+  json_object_set_new (payload, "pathing_model", json_string ("full_graph"));
+  json_object_set_new (payload, "truncated", truncated ? json_true () : json_false ());
+  json_object_set_new (payload, "pairs_checked", json_integer (pairs_checked));
+  send_response_ok_take (ctx, root, "player.computer.trade_routes", &payload);
+  return 0;
+}
+
 
 /* ==================================================================== */
 /* STATIC HELPER DEFINITIONS                                            */

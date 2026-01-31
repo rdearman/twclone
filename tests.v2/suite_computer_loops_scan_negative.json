@@ -1,0 +1,133 @@
+{
+  "test_suite_name": "Computer Trade Loops Negative Scan",
+  "description": "Verifies that sector scans do NOT populate port knowledge for trade routes",
+  "tests": [
+    {
+      "name": "Setup: Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register scan_player",
+      "command": "auth.register",
+      "user": "scan_player",
+      "register_if_missing": true,
+      "data": {
+        "username": "scan_player",
+        "passwd": "password"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Login scan_player",
+      "command": "auth.login",
+      "user": "scan_player",
+      "data": {
+        "username": "scan_player",
+        "passwd": "password"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Initial Route Request (Empty)",
+      "command": "player.computer.recommend_routes",
+      "user": "scan_player",
+      "data": {},
+      "expect": {
+        "status": "ok",
+        "data": {
+          "routes": [],
+          "pathing_model": "full_graph",
+          "truncated": false
+        }
+      }
+    },
+    {
+      "name": "Teleport to Sector 14",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 14 WHERE name = 'scan_player'"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh scan_player session",
+      "command": "auth.login",
+      "user": "scan_player",
+      "data": { "username": "scan_player", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Scan Sector 14 (Has Port 2)",
+      "command": "sector.scan",
+      "user": "scan_player",
+      "data": {},
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Warp to Sector 1570 (Has Port 618)",
+      "command": "move.warp",
+      "user": "scan_player",
+      "data": { "to_sector_id": 1570 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Scan Sector 1570 (Has Port 618)",
+      "command": "sector.scan",
+      "user": "scan_player",
+      "data": {},
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Route Request (Still Empty - Scans shouldn't add knowledge)",
+      "command": "player.computer.recommend_routes",
+      "user": "scan_player",
+      "data": { "require_two_way": true },
+      "expect": {
+        "status": "ok",
+        "data": {
+          "routes": []
+        }
+      }
+    },
+    {
+      "name": "Dock at Port 618 (Now we know 1)",
+      "command": "dock.status",
+      "user": "scan_player",
+      "data": { "action": "dock" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Warp back to Sector 14",
+      "command": "move.warp",
+      "user": "scan_player",
+      "data": { "to_sector_id": 14 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Dock at Port 2 (Now we know 2)",
+      "command": "dock.status",
+      "user": "scan_player",
+      "data": { "action": "dock" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Route Request (Should now show routes)",
+      "command": "player.computer.recommend_routes",
+      "user": "scan_player",
+      "data": { "require_two_way": true },
+      "expect": {
+        "status": "ok",
+        "data": {
+          "routes": [
+            {
+              "port_a_id": 2,
+              "port_b_id": 618
+            }
+          ],
+          "pathing_model": "full_graph"
+        }
+      }
+    }
+  ]
+}

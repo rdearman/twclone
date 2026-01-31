@@ -579,10 +579,107 @@ int db_planets_get_commodity_id_v2(db_t *db, const char *code, int *id) {
     const char *q48 = "SELECT commodities_id FROM commodities WHERE code = {1} LIMIT 1;";
     char sql[512]; sql_build(db, q48, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_text(code) }, 1, &res, &err) && db_res_step(res, &err)) {
-        *id = db_res_col_int(res, 0, &err);
+        if (id) *id = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;
     }
     if (res) db_res_finalize(res);
     return -1;
 }
+
+int db_planets_add_colonists_unassigned(db_t *db, int planet_id, int quantity) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q90 */
+    const char *q90 = "UPDATE planets SET colonists_unassigned = GREATEST(0, colonists_unassigned + {1}) WHERE planet_id = {2}";
+    char sql[512]; sql_build(db, q90, sql, sizeof(sql));
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    return -1;
+}
+
+int db_planets_get_colonists_unassigned(db_t *db, int planet_id, int64_t *count) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q91 */
+    const char *q91 = "SELECT colonists_unassigned FROM planets WHERE planet_id={1}";
+    char sql[512]; sql_build(db, q91, sql, sizeof(sql));
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+        if (count) *count = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        return 0;
+    }
+    if (res) db_res_finalize(res);
+    return -1;
+}
+
+int db_planets_add_ore_on_hand(db_t *db, int planet_id, int quantity) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q92 */
+    const char *q92 = "UPDATE planets SET ore_on_hand = GREATEST(0, ore_on_hand + {1}) WHERE planet_id = {2}";
+    char sql[512]; sql_build(db, q92, sql, sizeof(sql));
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    return -1;
+}
+
+int db_planets_get_ore_on_hand(db_t *db, int planet_id, int64_t *count) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q93 */
+    const char *q93 = "SELECT ore_on_hand FROM planets WHERE planet_id={1}";
+    char sql[512]; sql_build(db, q93, sql, sizeof(sql));
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+        if (count) *count = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        return 0;
+    }
+    if (res) db_res_finalize(res);
+    return -1;
+}
+
+int db_planets_add_organics_on_hand(db_t *db, int planet_id, int quantity) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q94 */
+    const char *q94 = "UPDATE planets SET organics_on_hand = GREATEST(0, organics_on_hand + {1}) WHERE planet_id = {2}";
+    char sql[512]; sql_build(db, q94, sql, sizeof(sql));
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    return -1;
+}
+
+int db_planets_get_organics_on_hand(db_t *db, int planet_id, int64_t *count) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q95 */
+    const char *q95 = "SELECT organics_on_hand FROM planets WHERE planet_id={1}";
+    char sql[512]; sql_build(db, q95, sql, sizeof(sql));
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+        if (count) *count = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        return 0;
+    }
+    if (res) db_res_finalize(res);
+    return -1;
+}
+
+int db_planets_add_equipment_on_hand(db_t *db, int planet_id, int quantity) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q96 */
+    const char *q96 = "UPDATE planets SET equipment_on_hand = GREATEST(0, equipment_on_hand + {1}) WHERE planet_id = {2}";
+    char sql[512]; sql_build(db, q96, sql, sizeof(sql));
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    return -1;
+}
+
+int db_planets_get_equipment_on_hand(db_t *db, int planet_id, int64_t *count) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q97 */
+    const char *q97 = "SELECT equipment_on_hand FROM planets WHERE planet_id={1}";
+    char sql[512]; sql_build(db, q97, sql, sizeof(sql));
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
+        if (count) *count = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        return 0;
+    }
+    if (res) db_res_finalize(res);
+    return -1;
+}
+

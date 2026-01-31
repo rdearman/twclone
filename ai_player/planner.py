@@ -176,7 +176,9 @@ class Planner:
                         "command": "move.pathfind", 
                         "data": {
                             "from_sector_id": current_sector,
-                            "to_sector_id": target_sector
+                            "to_sector_id": target_sector,
+                            "from": current_sector,
+                            "to": target_sector
                         }
                     }
 
@@ -237,9 +239,9 @@ class Planner:
                 if valid_commodities_for_llm is None:
                     # Fallback logic if not in state
                     player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
-                    valid_commodities_for_llm = ["ORE", "ORG", "EQU", "COLONISTS"]
+                    valid_commodities_for_llm = ["ORE", "ORG", "EQU", "COL"]
                     if player_alignment < -500:
-                        valid_commodities_for_llm += ["SLAVES", "WEAPONS", "DRUGS"]
+                        valid_commodities_for_llm += ["SLV", "WPN", "DRG"]
 
                 if commodity_to_sell not in valid_commodities_for_llm:
                     logger.warning(f"Rejecting sell goal for commodity '{commodity_to_sell}': Not in LLM's allowed list ({valid_commodities_for_llm}).")
@@ -317,9 +319,9 @@ class Planner:
                 if valid_commodities_for_llm is None:
                     # Fallback logic if not in state
                     player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
-                    valid_commodities_for_llm = ["ORE", "ORG", "EQU", "COLONISTS"]
+                    valid_commodities_for_llm = ["ORE", "ORG", "EQU", "COL"]
                     if player_alignment < -500:
-                        valid_commodities_for_llm += ["SLAVES", "WEAPONS", "DRUGS"]
+                        valid_commodities_for_llm += ["SLV", "WPN", "DRG"]
 
                 if commodity_to_buy not in valid_commodities_for_llm:
                     logger.warning(f"Rejecting buy goal for commodity '{commodity_to_buy}': Not in LLM's allowed list ({valid_commodities_for_llm}).")
@@ -1007,6 +1009,14 @@ class Planner:
                 return {}
             if command_name == "move.pathfind":
                 return context
+            if command_name == "bank.withdraw":
+                bank_balance = current_state.get("bank_balance", 0)
+                if bank_balance > 0:
+                    logger.debug(f"No schema for bank.withdraw. Using default amount {min(bank_balance, 500)}.")
+                    return {"amount": int(min(bank_balance, 500))}
+                else:
+                    logger.warning("bank.withdraw selected but bank balance is 0. Skipping.")
+                    return None
             
             logger.warning(f"No schema found for command '{command_name}'. Adding to schema blacklist and returning None.")
             self.state_manager.add_to_schema_blacklist(command_name)
@@ -1181,11 +1191,14 @@ class Planner:
                     
                     # Try to get actual port commodities, fallback to defaults
                     port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                    player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
                     if port_info and port_info.get("commodities"):
                          candidates = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
                          candidates = [c for c in candidates if c] # filter Nones
                     else:
                          candidates = ["ORE", "ORG", "EQU"]
+                         if player_alignment < -500:
+                             candidates += ["SLV", "WPN", "DRG"]
                     
                     for c in candidates:
                         # Smart selection: quote if missing EITHER buy OR sell price
@@ -1196,6 +1209,9 @@ class Planner:
                 
                 # Fallback: Random
                 all_commodities = ["ORE", "EQU", "ORG"]
+                player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
+                if player_alignment < -500:
+                    all_commodities += ["SLV", "WPN", "DRG"]
                 return random.choice(all_commodities)
         
         if field_name == "quantity":
@@ -1207,6 +1223,14 @@ class Planner:
             return 0
 
         if field_name == "amount":
+            if command_name == "bank.withdraw":
+                bank_balance = current_state.get("bank_balance", 0)
+                if bank_balance > 0:
+                    # Withdraw 500 or full balance if less
+                    return int(min(bank_balance, 500))
+                else:
+                    return None
+
             if command_name == "bank.deposit":
                 player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
                 try:
@@ -1393,6 +1417,13 @@ class Planner:
             purchase_price = item.get("purchase_price")
             origin_port_id = item.get("origin_port_id")
 
+            # NEW: Prevent immediate sell-back if we just bought it at THIS port and haven't moved
+            last_trade = current_state.get("last_port_trade")
+            if last_trade and str(last_trade.get("port_id")) == str(port_id) and \
+               last_trade.get("commodity") == commodity and last_trade.get("type") == "buy":
+                logger.debug(f"Skipping sell of {commodity}: Just bought it here. Must warp first.")
+                continue
+
             if quantity > 0:
                 # 1. Skip if port is full
                 comm_info = next((c for c in commodities_info if canon_commodity(c.get("commodity")) == commodity), None)
@@ -1494,6 +1525,13 @@ class Planner:
             
             buy_price = current_port_buy_prices.get(commodity_code)
             
+            # NEW: Prevent immediate buy-back if we just sold it at THIS port and haven't moved
+            last_trade = current_state.get("last_port_trade")
+            if last_trade and str(last_trade.get("port_id")) == str(port_id) and \
+               last_trade.get("commodity") == commodity_code and last_trade.get("type") == "sell":
+                logger.debug(f"Skipping buy of {commodity_code}: Just sold it here. Must warp first.")
+                continue
+
             # Check if current port actually sells this commodity (buy_price can't be None)
             if buy_price is None or buy_price <= 0:
                 logger.debug(f"Commodity {commodity_code} not available for purchase or has zero/unknown buy price at port {port_id}.")

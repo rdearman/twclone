@@ -1,6 +1,7 @@
 #define TW_DB_INTERNAL 1
 #include "db_int.h"
 #include "repo_players.h"
+#include "repo_universe.h"
 #include "db/sql_driver.h"
 #include <string.h>
 #include <stdio.h>
@@ -407,15 +408,238 @@ int repo_players_update_credits_safe(db_t *db, int player_id, long long delta, l
 int repo_players_check_exists(db_t *db, int player_id, int *exists_out) {
     db_res_t *res = NULL;
     db_error_t err;
-    /* SQL_VERBATIM: Q33 */
-    const char *q33 = "SELECT 1 FROM players WHERE player_id = {1} LIMIT 1;";
-    char sql[512]; sql_build(db, q33, sql, sizeof(sql));
-    *exists_out = 0;
+    /* SQL_VERBATIM: Qn */
+    const char *qn = "SELECT 1 FROM players WHERE player_id = {1}";
+    char sql[512]; sql_build(db, qn, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *exists_out = 1;
         db_res_finalize(res);
         return 0;
     }
     if (res) db_res_finalize(res);
-    return err.code;
+    *exists_out = 0;
+    return err.code ? err.code : 0;
 }
+
+int repo_players_record_port_knowledge(db_t *db, int player_id, int port_id) {
+    db_error_t err;
+    db_bind_t params[] = { db_bind_i64(player_id), db_bind_i64(port_id) };
+
+    const char *q_upd = "UPDATE player_known_ports SET updated_at = CURRENT_TIMESTAMP WHERE player_id = {1} AND port_id = {2}";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    int64_t rows = 0;
+    if (db_exec_rows_affected(db, sql_upd, params, 2, &rows, &err) && rows > 0) return 0;
+
+    const char *q_ins = "INSERT INTO player_known_ports (player_id, port_id) VALUES ({1}, {2})";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 2, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            db_exec(db, sql_upd, params, 2, &err);
+        }
+        return err.code;
+    }
+    return 0;
+}
+
+int repo_players_record_visit(db_t *db, int player_id, int sector_id) {
+    db_error_t err;
+    int64_t rows = 0;
+    db_bind_t params[] = { db_bind_i64(player_id), db_bind_i64(sector_id) };
+
+    const char *q_upd = "UPDATE player_visited_sectors SET visit_count = visit_count + 1, last_visited_at = CURRENT_TIMESTAMP WHERE player_id = {1} AND sector_id = {2}";
+    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    if (db_exec_rows_affected(db, sql_upd, params, 2, &rows, &err) && rows > 0) return 0;
+
+    const char *q_ins = "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES ({1}, {2})";
+    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, params, 2, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) {
+            db_exec(db, sql_upd, params, 2, &err);
+        }
+        return err.code;
+    }
+    return 0;
+}
+
+/* Adjacency list for BFS */
+typedef struct {
+    int *head;
+    int *next;
+    int *to;
+    int nodes;
+    int edges;
+} repo_adj_list_t;
+
+static int h_repo_players_bfs_fast(repo_adj_list_t *adj, int from, int to, int max_dist, int *dist, int *queue) {
+    if (from == to) return 0;
+    if (max_dist <= 0) return -1;
+    if (from < 0 || from >= adj->nodes || to < 0 || to >= adj->nodes) return -1;
+
+    for (int i = 0; i < adj->nodes; i++) dist[i] = -1;
+    dist[from] = 0;
+    queue[0] = from;
+    int q_head = 0, q_tail = 1;
+
+    while (q_head < q_tail) {
+        int curr = queue[q_head++];
+        if (dist[curr] >= max_dist) continue;
+
+        for (int i = adj->head[curr]; i != -1; i = adj->next[i]) {
+            int v = adj->to[i];
+            if (dist[v] == -1) {
+                dist[v] = dist[curr] + 1;
+                if (v == to) return dist[v];
+                queue[q_tail++] = v;
+            }
+        }
+    }
+    return -1;
+}
+
+int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sector_id,
+                                        int max_hops_between, int max_hops_from_player,
+                                        int require_two_way,
+                                        trade_route_t **out_routes, int *out_count,
+                                        int *out_truncated, int *out_pairs_checked) {
+    if (!db || !out_routes || !out_count) return -1;
+    *out_routes = NULL;
+    *out_count = 0;
+    if (out_truncated) *out_truncated = 0;
+    if (out_pairs_checked) *out_pairs_checked = 0;
+
+    int max_id = 0;
+    if (repo_universe_get_max_sector_id(db, &max_id) != 0) return -1;
+    int nodes = max_id + 1;
+
+    int warp_count = 0;
+    if (repo_universe_get_warp_count(db, &warp_count) != 0) return -1;
+
+    repo_adj_list_t adj;
+    adj.nodes = nodes;
+    adj.edges = warp_count;
+    adj.head = malloc(nodes * sizeof(int));
+    adj.next = malloc(warp_count * sizeof(int));
+    adj.to = malloc(warp_count * sizeof(int));
+    int *dist_buf = malloc(nodes * sizeof(int));
+    int *queue_buf = malloc(nodes * sizeof(int));
+
+    if (!adj.head || !adj.next || !adj.to || !dist_buf || !queue_buf) {
+        free(adj.head); free(adj.next); free(adj.to);
+        free(dist_buf); free(queue_buf);
+        return -1;
+    }
+
+    for (int i = 0; i < nodes; i++) adj.head[i] = -1;
+    
+    db_error_t err;
+    db_res_t *res_warps = repo_universe_get_all_warps(db, &err);
+    int edge_idx = 0;
+    if (res_warps) {
+        while (db_res_step(res_warps, &err)) {
+            int u = db_res_col_i32(res_warps, 0, &err);
+            int v = db_res_col_i32(res_warps, 1, &err);
+            if (u >= 0 && u < nodes && v >= 0 && v < nodes && edge_idx < warp_count) {
+                adj.to[edge_idx] = v;
+                adj.next[edge_idx] = adj.head[u];
+                adj.head[u] = edge_idx++;
+            }
+        }
+        db_res_finalize(res_warps);
+    }
+
+    db_res_t *res = NULL;
+    /* SQL_VERBATIM: Q_ROUTES */
+    const char *q_routes = 
+        "SELECT kp1.port_id, kp2.port_id, p1.sector_id, p2.sector_id, "
+        "SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) as a_to_b_count, "
+        "SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) as b_to_a_count "
+        "FROM player_known_ports kp1 "
+        "JOIN player_known_ports kp2 ON kp1.port_id < kp2.port_id "
+        "JOIN ports p1 ON kp1.port_id = p1.port_id "
+        "JOIN ports p2 ON kp2.port_id = p2.port_id "
+        "JOIN port_trade pt1 ON kp1.port_id = pt1.port_id "
+        "JOIN port_trade pt2 ON kp2.port_id = pt2.port_id AND pt1.commodity = pt2.commodity "
+        "WHERE kp1.player_id = {1} AND kp2.player_id = {1} "
+        "GROUP BY kp1.port_id, kp2.port_id, p1.sector_id, p2.sector_id "
+        "HAVING SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) > 0 "
+        "    OR SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) > 0";
+
+    char sql[2048]; sql_build(db, q_routes, sql, sizeof(sql));
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err)) {
+        free(adj.head); free(adj.next); free(adj.to);
+        free(dist_buf); free(queue_buf);
+        return err.code;
+    }
+
+    int capacity = 32;
+    trade_route_t *routes = malloc(capacity * sizeof(trade_route_t));
+    int count = 0;
+    int pairs_checked = 0;
+    int truncated = 0;
+    const int MAX_PAIRS_CHECKED = 2000;
+
+    while (db_res_step(res, &err)) {
+        if (pairs_checked >= MAX_PAIRS_CHECKED) {
+            truncated = 1;
+            break;
+        }
+        pairs_checked++;
+
+        int p_a = db_res_col_i32(res, 0, &err);
+        int p_b = db_res_col_i32(res, 1, &err);
+        int s_a = db_res_col_i32(res, 2, &err);
+        int s_b = db_res_col_i32(res, 3, &err);
+        int a_to_b = db_res_col_i32(res, 4, &err);
+        int b_to_a = db_res_col_i32(res, 5, &err);
+
+        if (require_two_way && (a_to_b == 0 || b_to_a == 0)) continue;
+
+        /* Calculate distances */
+        int dist_ab = h_repo_players_bfs_fast(&adj, s_a, s_b, max_hops_between, dist_buf, queue_buf);
+        if (dist_ab == -1 || dist_ab > max_hops_between) continue;
+
+        int dist_pa = h_repo_players_bfs_fast(&adj, current_sector_id, s_a, max_hops_from_player, dist_buf, queue_buf);
+        int dist_pb = h_repo_players_bfs_fast(&adj, current_sector_id, s_b, max_hops_from_player, dist_buf, queue_buf);
+        
+        int dist_player = -1;
+        if (dist_pa != -1 && dist_pb != -1) dist_player = (dist_pa < dist_pb) ? dist_pa : dist_pb;
+        else if (dist_pa != -1) dist_player = dist_pa;
+        else if (dist_pb != -1) dist_player = dist_pb;
+
+        if (dist_player == -1 || dist_player > max_hops_from_player) continue;
+
+        if (count >= capacity) {
+            capacity *= 2;
+            routes = realloc(routes, capacity * sizeof(trade_route_t));
+        }
+
+        routes[count].port_a_id = p_a;
+        routes[count].port_b_id = p_b;
+        routes[count].sector_a_id = s_a;
+        routes[count].sector_b_id = s_b;
+        routes[count].hops_between = dist_ab;
+        routes[count].hops_from_player = dist_player;
+        routes[count].is_two_way = (a_to_b > 0 && b_to_a > 0) ? 1 : 0;
+        routes[count].commodity = NULL; 
+        count++;
+    }
+    db_res_finalize(res);
+
+    free(adj.head); free(adj.next); free(adj.to);
+    free(dist_buf); free(queue_buf);
+
+    *out_routes = routes;
+    *out_count = count;
+    if (out_truncated) *out_truncated = truncated;
+    if (out_pairs_checked) *out_pairs_checked = pairs_checked;
+    return 0;
+}
+
+void repo_players_free_routes(trade_route_t *routes, int count) {
+    if (!routes) return;
+    for (int i = 0; i < count; i++) {
+        if (routes[i].commodity) free(routes[i].commodity);
+    }
+    free(routes);
+}
+
