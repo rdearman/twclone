@@ -1,0 +1,310 @@
+{
+  "name": "FedSpace MSL Asset Enforcement",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Coverage for two-tier FedSpace enforcement: deny deployment in sectors 1-10, destroy assets in MSL sectors >10",
+  "tests": [
+    {
+      "name": "Setup: User for FedSpace Tests",
+      "setup": "macro_auth_user",
+      "username": "fedspace_user_1",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Get Player ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT player_id FROM players WHERE player_id = @{fedspace_user_1_player_id} LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed Fighters, Mines in Ship",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters = 500, mines = 500 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 1a: Move to FedSpace Sector 1",
+      "command": "nav.move_simple",
+      "data": { "sector_id": 1 },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 1b: Deploy Fighters in FedSpace - SHOULD REFUSE",
+      "command": "combat.deploy_fighters",
+      "data": { "amount": 10, "offense": 3 },
+      "user": "fedspace_user_1",
+      "expect": { "status": "refused", "error_code": 1454 },
+      "asserts": [
+        { "path": "error_message", "op": "contains", "value": "FedSpace" }
+      ]
+    },
+    {
+      "name": "Test 1c: Verify Fighters NOT deployed in FedSpace Sector",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": 1 },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test 1d: Verify Ship Fighter Count Unchanged",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT fighters FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 500 }
+      ]
+    },
+    {
+      "name": "Test 2a: Deploy Mines in FedSpace - SHOULD REFUSE",
+      "command": "combat.deploy_mines",
+      "data": { "amount": 5, "type": "armid" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "refused", "error_code": 1454 },
+      "asserts": [
+        { "path": "error_message", "op": "contains", "value": "FedSpace" }
+      ]
+    },
+    {
+      "name": "Test 2b: Verify Mines NOT deployed in FedSpace Sector",
+      "command": "deploy.mines.list",
+      "data": { "sector_id": 1 },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test 2c: Verify Ship Mine Count Unchanged",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT mines FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 500 }
+      ]
+    },
+    {
+      "name": "Test 3a: Try to Set Beacon in FedSpace - SHOULD REFUSE",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": 1, "text": "This is a test beacon" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "refused", "error_code": 1454 },
+      "asserts": [
+        { "path": "error_message", "op": "contains", "value": "FedSpace" }
+      ]
+    },
+    {
+      "name": "Test 3b: Verify Beacon NOT set in FedSpace",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT beacon FROM sectors WHERE sector_id = 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": null }
+      ]
+    },
+    {
+      "name": "Rig: Find MSL Sector > 10",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT sector_id FROM msl_sectors WHERE sector_id > 10 LIMIT 1;" },
+      "user": "admin",
+      "save": { "msl_sector_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 4a: Move to MSL Sector",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 4b: Deploy Fighters in MSL - SHOULD SUCCEED",
+      "command": "combat.deploy_fighters",
+      "data": { "amount": 25, "offense": 2 },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "save": { "msl_fighter_asset_id": "data.asset_id" },
+      "asserts": [
+        { "path": "data.count_added", "op": "==", "value": 25 }
+      ]
+    },
+    {
+      "name": "Test 4c: Verify Fighters ARE deployed in MSL Sector",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": "@msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": ">=", "value": 25 }
+      ]
+    },
+    {
+      "name": "Test 4d: Store Initial Ship Fighter Count",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT fighters FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "save": { "ship_fighters_before_cleanse": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 4e: Run MSL Cleanse Cron",
+      "command": "sys.run_cron_handler",
+      "data": { "handler_name": "fedspace_cleanup" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 4f: Verify Fighters REMOVED from MSL Sector",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": "@msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test 4g: Verify Ship Fighters NOT returned (not increased)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT fighters FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "@ship_fighters_before_cleanse" }
+      ]
+    },
+    {
+      "name": "Test 5a: Deploy Mines in MSL - SHOULD SUCCEED",
+      "command": "combat.deploy_mines",
+      "data": { "amount": 15, "type": "armid" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "save": { "msl_mine_asset_id": "data.asset_id" }
+    },
+    {
+      "name": "Test 5b: Deploy Limpet Mines in MSL - SHOULD SUCCEED",
+      "command": "combat.deploy_mines",
+      "data": { "amount": 10, "type": "limpet" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 5c: Set Beacon in MSL - SHOULD SUCCEED",
+      "command": "sector.set_beacon",
+      "data": { "sector_id": "@msl_sector_id", "text": "MSL Test Beacon" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 5d: Verify Beacon IS set in MSL Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT beacon FROM sectors WHERE sector_id = @{msl_sector_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "!=", "value": null }
+      ]
+    },
+    {
+      "name": "Test 5e: Store Initial Ship Mine Count",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT mines FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "save": { "ship_mines_before_cleanse": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 5f: Run MSL Cleanse Cron Again",
+      "command": "sys.run_cron_handler",
+      "data": { "handler_name": "fedspace_cleanup" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 5g: Verify Mines REMOVED from MSL Sector",
+      "command": "deploy.mines.list",
+      "data": { "sector_id": "@msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Test 5h: Verify Beacon REMOVED from MSL Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT beacon FROM sectors WHERE sector_id = @{msl_sector_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": null }
+      ]
+    },
+    {
+      "name": "Test 5i: Verify Ship Mines NOT returned",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT mines FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "@ship_mines_before_cleanse" }
+      ]
+    },
+    {
+      "name": "Rig: Find non-MSL sector > 10",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT sector_id FROM sectors WHERE sector_id > 10 AND sector_id NOT IN (SELECT sector_id FROM msl_sectors) LIMIT 1;" },
+      "user": "admin",
+      "save": { "non_msl_sector_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 6a: Move to non-MSL sector > 10",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@non_msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 6b: Deploy Fighters in non-MSL - SHOULD SUCCEED",
+      "command": "combat.deploy_fighters",
+      "data": { "amount": 20, "offense": 1 },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 6c: Get Fighter Count Before Cleanse",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": "@non_msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "save": { "non_msl_fighters_before": "data.total" }
+    },
+    {
+      "name": "Test 6d: Run MSL Cleanse Cron",
+      "command": "sys.run_cron_handler",
+      "data": { "handler_name": "fedspace_cleanup" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 6e: Verify Fighters KEPT in non-MSL sector",
+      "command": "deploy.fighters.list",
+      "data": { "sector_id": "@non_msl_sector_id" },
+      "user": "fedspace_user_1",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total", "op": "==", "value": "@non_msl_fighters_before" }
+      ]
+    }
+  ]
+}

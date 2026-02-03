@@ -64,6 +64,74 @@ iss_summon (int sector_id, int player_id)
   LOGI ("ISS Summoned to sector %d for player %d", sector_id, player_id);
 }
 
+/**
+ * fedspace_enforce_no_aggression_hard()
+ * 
+ * Central enforcement gate for aggression in FedSpace (sectors 1–10).
+ * If attacker is in FedSpace, immediately destroy attacker's ship and pod attacker.
+ * 
+ * Returns:
+ *   1 if punishment was applied (FedSpace violation detected and handled)
+ *   0 if no violation (not in FedSpace, or error)
+ */
+int
+fedspace_enforce_no_aggression_hard (client_ctx_t *ctx, int attacker_ship_id,
+                                      int attacker_player_id, const char *reason)
+{
+  if (!ctx || attacker_ship_id <= 0 || attacker_player_id <= 0)
+    return 0;
+
+  /* Check if attacker is in FedSpace (sectors 1–10) */
+  if (ctx->sector_id < 1 || ctx->sector_id > 10)
+    return 0;  /* Not in FedSpace, no violation */
+
+  /* CAPTAIN Z INTERVENTION: Attacker in FedSpace initiating aggression */
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return 0;
+
+  LOGI ("CAPTAIN Z: FedSpace aggression detected! Player %d in sector %d (%s). "
+        "Destroying ship %d and podding player.",
+        attacker_player_id, ctx->sector_id, reason, attacker_ship_id);
+
+  db_error_t err;
+  db_error_clear (&err);
+
+  /* 1. Destroy attacker's ship using existing DB primitive */
+  if (db_destroy_ship (db, attacker_player_id, attacker_ship_id) != 0)
+    {
+      LOGE ("Failed to destroy attacker ship %d", attacker_ship_id);
+    }
+
+  /* 2. Pod attacker using existing DB primitive */
+  if (db_create_podded_status_entry (db, attacker_player_id) != 0)
+    {
+      LOGD ("Podded entry already exists for player %d", attacker_player_id);
+    }
+  if (db_update_player_podded_status (db, attacker_player_id, "active", 0) != 0)
+    {
+      LOGE ("Failed to update podded status for player %d", attacker_player_id);
+    }
+
+  /* 3. Emit event: Captain Z intervention message */
+  char msg[512];
+  snprintf (msg, sizeof (msg),
+            "CAPTAIN Z INTERVENTION: Your attempt to initiate aggression in FedSpace "
+            "(Sector %d) has resulted in the destruction of your ship and your pod. "
+            "FedSpace is protected space. Respect the law.",
+            ctx->sector_id);
+
+  /* Send notification to attacker */
+  h_send_message_to_player (db, attacker_player_id, 2, /* fedadmin */
+                            "Captain Z - FedSpace Violation", msg);
+
+  /* Emit system event for observers (if using event plumbing) */
+  LOGI ("CAPTAIN Z INTERVENTION: Player %d podded in sector %d for aggression attempt",
+        attacker_player_id, ctx->sector_id);
+
+  return 1;  /* Violation handled, stop processing */
+}
+
 json_t *db_get_stardock_sectors (void);
 int handle_ship_attack (client_ctx_t * ctx, json_t * root, json_t * data,
 			db_t * db);
@@ -549,6 +617,15 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (ship_id <= 0)
     return 0;
   h_decloak_ship (db, ship_id);
+  
+  /* Check for FedSpace denial (sectors 1-10) */
+  if (ctx->sector_id >= 1 && ctx->sector_id <= 10)
+    {
+      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
+                           "Cannot deploy fighters in protected FedSpace.");
+      return 0;
+    }
+  
   db_error_t err;
   db_error_clear (&err);
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
@@ -661,6 +738,15 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   if (ship_id <= 0)
     return 0;
   h_decloak_ship (db, ship_id);
+  
+  /* Check for FedSpace denial (sectors 1-10) */
+  if (ctx->sector_id >= 1 && ctx->sector_id <= 10)
+    {
+      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
+                           "Cannot deploy mines in protected FedSpace.");
+      return 0;
+    }
+  
   db_error_t err;
   db_error_clear (&err);
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
@@ -767,6 +853,16 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
   int attacker_id = h_get_active_ship_id (db, ctx->player_id);
   if (attacker_id <= 0)
     return 0;
+
+  /* FedSpace enforcement: hard-punish aggression in sectors 1–10 */
+  if (fedspace_enforce_no_aggression_hard (ctx, attacker_id, ctx->player_id,
+                                            "ship.attack"))
+    {
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "Captain Z intervenes: aggression in FedSpace is forbidden.");
+      return 0;
+    }
+
   db_error_t err;
   db_error_clear (&err);
   db_tx_begin (db, DB_TX_DEFAULT, &err);

@@ -1,0 +1,234 @@
+{
+  "name": "FedSpace Aggression Captain Z Enforcement",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Coverage for hard-punish enforcement: aggression in sectors 1–10 triggers instant destruction + podding",
+  "tests": [
+    {
+      "name": "Setup: Attacker User",
+      "setup": "macro_auth_user",
+      "username": "attacker_captainz_1",
+      "password": "password"
+    },
+    {
+      "name": "Setup: Target User",
+      "setup": "macro_auth_user",
+      "username": "target_captainz_1",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Seed Fighters for Attacker",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters = 100 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{attacker_captainz_1_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Attacker to FedSpace (Sector 1)",
+      "command": "nav.move_simple",
+      "data": { "sector_id": 1 },
+      "user": "attacker_captainz_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Target to FedSpace (Sector 1)",
+      "command": "nav.move_simple",
+      "data": { "sector_id": 1 },
+      "user": "target_captainz_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get Attacker Ship ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT ship_id FROM players WHERE player_id = @{attacker_captainz_1_player_id};" },
+      "user": "admin",
+      "save": { "attacker_ship_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get Target Ship ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT ship_id FROM players WHERE player_id = @{target_captainz_1_player_id};" },
+      "user": "admin",
+      "save": { "target_ship_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 1a: Attack in FedSpace - ATTEMPT ATTACK",
+      "command": "combat.attack",
+      "data": { "target_ship_id": "@target_ship_id" },
+      "user": "attacker_captainz_1",
+      "expect": { "status": "refused", "error_code": 402 },
+      "asserts": [
+        { "path": "error_message", "op": "contains", "value": "Captain Z" }
+      ]
+    },
+    {
+      "name": "Test 1b: Verify Attacker Ship Destroyed",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT destroyed FROM ships WHERE ship_id = @{attacker_ship_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": true }
+      ]
+    },
+    {
+      "name": "Test 1c: Verify Attacker is Podded",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT status FROM podded_status WHERE player_id = @{attacker_captainz_1_player_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "active" }
+      ]
+    },
+    {
+      "name": "Test 1d: Verify Target Ship Unharmed",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT destroyed FROM ships WHERE ship_id = @{target_ship_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": false }
+      ]
+    },
+    {
+      "name": "Setup: Attacker2 User (for non-FedSpace test)",
+      "setup": "macro_auth_user",
+      "username": "attacker_captainz_2",
+      "password": "password"
+    },
+    {
+      "name": "Setup: Target2 User (for non-FedSpace test)",
+      "setup": "macro_auth_user",
+      "username": "target_captainz_2",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Seed Fighters for Attacker2",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters = 100 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{attacker_captainz_2_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Find Non-FedSpace Sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT sector_id FROM sectors WHERE sector_id > 10 LIMIT 1;" },
+      "user": "admin",
+      "save": { "non_fed_sector": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Attacker2 to Non-FedSpace",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@non_fed_sector" },
+      "user": "attacker_captainz_2",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Target2 to Non-FedSpace",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@non_fed_sector" },
+      "user": "target_captainz_2",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get Attacker2 Ship ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT ship_id FROM players WHERE player_id = @{attacker_captainz_2_player_id};" },
+      "user": "admin",
+      "save": { "attacker_ship_id_2": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get Target2 Ship ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT ship_id FROM players WHERE player_id = @{target_captainz_2_player_id};" },
+      "user": "admin",
+      "save": { "target_ship_id_2": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 2a: Attack Outside FedSpace - ATTEMPT ATTACK",
+      "command": "combat.attack",
+      "data": { "target_ship_id": "@target_ship_id_2" },
+      "user": "attacker_captainz_2",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 2b: Verify Attacker2 Ship NOT Destroyed",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT destroyed FROM ships WHERE ship_id = @{attacker_ship_id_2};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": false }
+      ]
+    },
+    {
+      "name": "Test 2c: Verify Attacker2 NOT Podded",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM podded_status WHERE player_id = @{attacker_captainz_2_player_id} AND status = 'active';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Setup: Attacker3 (for planet attack test)",
+      "setup": "macro_auth_user",
+      "username": "attacker_captainz_3",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Seed Fighters for Attacker3",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters = 100 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{attacker_captainz_3_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get Any Planet NOT in FedSpace",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT planet_id, sector_id FROM planets WHERE sector_id NOT IN (1,2,3,4,5,6,7,8,9,10) AND planet_id > 1 LIMIT 1;" },
+      "user": "admin",
+      "save": { "test_planet_id": "data.rows.0.0", "test_planet_sector": "data.rows.0.1" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move Attacker3 to Planet Sector",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@test_planet_sector" },
+      "user": "attacker_captainz_3",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get Attacker3 Ship ID",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT ship_id FROM players WHERE player_id = @{attacker_captainz_3_player_id};" },
+      "user": "admin",
+      "save": { "attacker_ship_id_3": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 3a: Planet Attack Outside FedSpace - ATTEMPT ATTACK",
+      "command": "combat.attack_planet",
+      "data": { "planet_id": "@test_planet_id" },
+      "user": "attacker_captainz_3",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 3b: Verify Attacker3 Ship NOT Destroyed",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT destroyed FROM ships WHERE ship_id = @{attacker_ship_id_3};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": false }
+      ]
+    }
+  ]
+}

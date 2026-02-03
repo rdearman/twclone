@@ -11,6 +11,7 @@
 /* local includes */
 #include "server_ports.h"
 #include "server_bank.h"
+#include "server_combat.h"
 
 #define UUID_STR_LEN 37
 #define TX_TYPE_TRADE_SELL "TRADE_SELL"
@@ -1726,6 +1727,21 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, 400, "Invalid parameters.");
       return 0;
+    }
+  /* FedSpace enforcement: hard-punish aggression in sectors 1–10 */
+  if (sector_id >= 1 && sector_id <= 10)
+    {
+      int ship_id = h_get_active_ship_id (db, ctx->player_id);
+      if (ship_id > 0)
+        {
+          if (fedspace_enforce_no_aggression_hard (ctx, ship_id, ctx->player_id,
+                                                    "port.rob"))
+            {
+              send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Captain Z intervenes: aggression in FedSpace is forbidden.");
+              return 0;
+            }
+        }
     }
   /* 2. Pre-Checks (No Turn Cost) */
   /* Location Check */

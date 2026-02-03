@@ -108,6 +108,18 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       db_planets_get_ship_sector (db, ship_id, &current_sector);
     }
 
+  /* FedSpace enforcement: hard-punish aggression in sectors 1–10 */
+  if (current_sector >= 1 && current_sector <= 10)
+    {
+      if (fedspace_enforce_no_aggression_hard (ctx, ship_id, ctx->player_id,
+                                                "combat.attack_planet"))
+        {
+          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                               "Captain Z intervenes: aggression in FedSpace is forbidden.");
+          return 0;
+        }
+    }
+
   /* Get planet info */
   int p_sector, p_owner_id, p_fighters;
   if (db_planets_get_attack_info

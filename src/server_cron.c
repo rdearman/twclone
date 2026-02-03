@@ -632,6 +632,62 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
     }
   usleep (10000);		// Yield
 
+  /* 3b. MSL Cleanse: Remove fighters/mines/beacons from MSL sectors > 10 */
+  json_t *msl_cleanse_assets = NULL;
+  if (db_cron_cleanse_msl_assets (db, &msl_cleanse_assets) == 0)
+    {
+      char message[256];
+      size_t index;
+      json_t *value;
+      int fighters_removed = 0, mines_removed = 0, beacons_removed = 0;
+
+      json_array_foreach (msl_cleanse_assets, index, value)
+      {
+        int player_id =
+          json_integer_value (json_object_get (value, "player_id"));
+        int asset_type =
+          json_integer_value (json_object_get (value, "asset_type"));
+        int sector_id =
+          json_integer_value (json_object_get (value, "sector_id"));
+        int quantity =
+          json_integer_value (json_object_get (value, "quantity"));
+
+        const char *asset_name = NULL;
+        if (asset_type == 2) {
+          asset_name = "Fighter";
+          fighters_removed += quantity;
+        } else if (asset_type == 1) {
+          asset_name = "Beacon";
+          beacons_removed += quantity;
+        } else if (asset_type == 4) {
+          asset_name = "Mine";
+          mines_removed += quantity;
+        } else {
+          asset_name = "Unknown Asset";
+        }
+
+        snprintf (message,
+                  sizeof (message),
+                  "%d %s(s) deployed in Sector %d (Major Space Lane) were destroyed by Federal Patrols.",
+                  quantity, asset_name, sector_id);
+        h_send_message_to_player (db, player_id,
+                                  fedadmin,
+                                  "MSL Sweep: Assets Destroyed", message);
+
+        if (db_cron_delete_sector_asset
+            (db, player_id, asset_type, sector_id, quantity) == 0)
+          {
+            cleared_assets++;
+          }
+      }
+      if (fighters_removed + mines_removed + beacons_removed > 0) {
+        LOGI ("MSL cleanse: Removed %d fighters, %d mines, %d beacons in MSL sectors > 10",
+              fighters_removed, mines_removed, beacons_removed);
+      }
+      json_decref (msl_cleanse_assets);
+    }
+  usleep (10000);		// Yield
+
   /* 4. Logout Timeout (New Transaction) */
 
   // Compute cutoff epoch in C to avoid arithmetic in SQL

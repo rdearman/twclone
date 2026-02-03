@@ -19,6 +19,7 @@ int64_t db_cron_get_lock_until (db_t *db, const char *name);
 int db_cron_unlock (db_t *db, const char *name);
 int db_cron_uncloak_fedspace_ships (db_t *db);
 int db_cron_get_illegal_assets_json (db_t *db, json_t **out_array);
+int db_cron_cleanse_msl_assets (db_t *db, json_t **out_removed_array);
 int db_cron_delete_sector_asset (db_t *db, int player_id, int asset_type, int sector_id, int quantity);
 int db_cron_logout_inactive_players (db_t *db, int64_t cutoff_s);
 int db_cron_init_eligible_tows (db_t *db, int start_sec, int end_sec, int64_t stale_cutoff);

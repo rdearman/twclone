@@ -567,6 +567,46 @@ db_cron_delete_sector_asset (db_t *db, int player_id, int asset_type, int sector
 
 
 int
+db_cron_cleanse_msl_assets (db_t *db, json_t **out_removed_array)
+{
+  if (!db || !out_removed_array) return -1;
+
+  *out_removed_array = json_array();
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear (&err);
+
+  const char *sql = 
+    "SELECT owner_id, asset_type, sector_id, quantity FROM sector_assets "
+    "WHERE sector_id IN (SELECT sector_id FROM msl_sectors WHERE sector_id > 10) "
+    "AND owner_id != 0;";
+
+  if (db_query (db, sql, NULL, 0, &res, &err))
+    {
+      while (db_res_step (res, &err))
+        {
+          int player_id = (int) db_res_col_i32(res, 0, &err);
+          int asset_type = (int) db_res_col_i32(res, 1, &err);
+          int sector_id = (int) db_res_col_i32(res, 2, &err);
+          int quantity = (int) db_res_col_i32(res, 3, &err);
+
+          json_t *obj = json_object();
+          json_object_set_new(obj, "player_id", json_integer(player_id));
+          json_object_set_new(obj, "asset_type", json_integer(asset_type));
+          json_object_set_new(obj, "sector_id", json_integer(sector_id));
+          json_object_set_new(obj, "quantity", json_integer(quantity));
+          json_array_append_new(*out_removed_array, obj);
+        }
+      db_res_finalize (res);
+      return 0;
+    }
+
+  return -1;
+}
+
+
+
+int
 
 db_cron_logout_inactive_players (db_t *db, int64_t cutoff_s)
 
