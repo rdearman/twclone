@@ -259,6 +259,15 @@ int repo_corp_create(db_t *db, const char *name, int owner_id, int64_t *new_corp
     return 0;
 }
 
+int repo_corp_create_with_tag(db_t *db, const char *name, const char *tag, int owner_id, int64_t *new_corp_id) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q43 */
+    const char *q43 = "INSERT INTO corporations (name, tag, owner_id) VALUES ({1}, {2}, {3})";
+    char sql[512]; sql_build(db, q43, sql, sizeof(sql));
+    if (!db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(tag), db_bind_i64(owner_id) }, 3, "corporation_id", new_corp_id, &err)) return err.code;
+    return 0;
+}
+
 int repo_corp_insert_member(db_t *db, int corp_id, int player_id, const char *role) {
     (void)role;
     db_error_t err;

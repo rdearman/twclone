@@ -1,7 +1,7 @@
 {
   "game_host": "127.0.0.1",
   "game_port": 1234,
-  "ollama_model": "dolphin-max:latest",
+  "ollama_model": "phi3:latest",
   "log_file": "ai_player_005.log",
   "state_file": "state_005.json",
   "player_username": "ai_qa_bot_005",

@@ -298,6 +298,63 @@ sql_epoch_param_to_timestamptz(const db_t *db)
 }
 
 /**
+ * @brief Return SQL clause for SELECT ... FOR UPDATE.
+ *
+ * PostgreSQL: " FOR UPDATE"
+ * MySQL 8.0+: " FOR UPDATE"
+ */
+const char *
+sql_for_update (const db_t *db)
+{
+  if (!db)
+    {
+      /* Default to PostgreSQL for legacy code */
+      return " FOR UPDATE";
+    }
+
+  db_backend_t backend = db_backend (db);
+
+  switch (backend)
+    {
+    case DB_BACKEND_POSTGRES:
+    case DB_BACKEND_MYSQL:
+      return " FOR UPDATE";
+
+    default:
+      /* Fail fast for unsupported backends */
+      return NULL;
+    }
+}
+
+/**
+ * @brief Return SQL clause for SELECT ... FOR UPDATE OF tables.
+ */
+int
+sql_for_update_of (const db_t *db, const char *tables, char *out_buf,
+		   size_t out_sz)
+{
+  if (!out_buf || out_sz == 0 || !tables)
+    return -1;
+
+  db_backend_t backend = db ? db_backend (db) : DB_BACKEND_POSTGRES;
+
+  switch (backend)
+    {
+    case DB_BACKEND_POSTGRES:
+      return (snprintf (out_buf, out_sz, " FOR UPDATE OF %s", tables) <
+	      (int) out_sz) ? 0 : -1;
+
+    case DB_BACKEND_MYSQL:
+      /* MySQL does not support 'OF' in FOR UPDATE; just return FOR UPDATE */
+      return (snprintf (out_buf, out_sz, " FOR UPDATE") <
+	      (int) out_sz) ? 0 : -1;
+
+    default:
+      return -1;
+    }
+}
+
+/**
  * @brief Return SQL clause for SELECT ... FOR UPDATE SKIP LOCKED.
  *
  * PostgreSQL: " FOR UPDATE SKIP LOCKED"
@@ -326,8 +383,8 @@ sql_for_update_skip_locked(const db_t *db)
     */
     
     default:
-      /* Fail fast for unsupported backends */
-      return NULL;
+      /* Fail safe for unsupported backends */
+      return "";
     }
 }
 

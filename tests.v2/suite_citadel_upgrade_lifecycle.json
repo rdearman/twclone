@@ -1,0 +1,129 @@
+{
+  "name": "Citadel Upgrade Lifecycle Regression",
+  "version": "2.0.0",
+  "protocol_category": "24_Planets",
+  "description": "Regression tests for timed citadel upgrades and background completion",
+  "tests": [
+    {
+      "name": "Setup: Upgrade User",
+      "setup": "macro_auth_user",
+      "username": "upgrade_user",
+      "password": "password123"
+    },
+    {
+      "name": "Rig: Create Test Planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_by, colonist, ore_on_hand, organics_on_hand, equipment_on_hand, fighters) VALUES (7777, 1, 'Construction World', @{upgrade_user_player_id}, 'player', 'M', 1, @{admin_player_id}, 1000000, 1000, 1000, 1000, 1000) ON CONFLICT (planet_id) DO UPDATE SET owner_id=@{upgrade_user_player_id}, type=1, colonist=1000000, ore_on_hand=1000, organics_on_hand=1000, equipment_on_hand=1000, fighters=1000;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Create Test Citadel",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO citadels (planet_id, level, owner_id, construction_status) VALUES (7777, 0, @{upgrade_user_player_id}, 'idle') ON CONFLICT (planet_id) DO UPDATE SET level=0, construction_status='idle';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Move Player to Sector 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1, lastplanet = 7777 WHERE player_id = @{upgrade_user_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Land Ship on Planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1, onplanet = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{upgrade_user_player_id});"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fetch Citadel ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT citadel_id FROM citadels WHERE planet_id = 7777;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "test_citadel_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Start Upgrade to Level 1",
+      "command": "citadel.upgrade",
+      "user": "upgrade_user",
+      "data": { "citadel_id": "@test_citadel_id" },
+      "expect": { "status": "ok", "type": "citadel.upgrade_started" },
+      "asserts": [
+        { "path": "data.target_level", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Verify Construction State (Level Should Still be 0)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT level, construction_status FROM citadels WHERE planet_id = 7777;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 },
+        { "path": "data.rows.0.1", "op": "==", "value": "upgrading" }
+      ]
+    },
+    {
+      "name": "Rig: Simulate Time Travel (expire timer)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE citadels SET construction_end_time = 1 WHERE planet_id = 7777;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Trigger Reaper Cron",
+      "command": "sys.cron.citadel_reap_once",
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify Completion (Level Should be 1, status idle)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT level, construction_status FROM citadels WHERE planet_id = 7777;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": "idle" }
+      ]
+    },
+    {
+      "name": "Idempotency Check: Run Reaper Again",
+      "command": "sys.cron.citadel_reap_once",
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify Level Unchanged",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT level FROM citadels WHERE planet_id = 7777;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

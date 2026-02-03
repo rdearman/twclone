@@ -114,6 +114,8 @@ CREATE TABLE ships (
     destroyed boolean NOT NULL DEFAULT FALSE,
     hull bigint NOT NULL DEFAULT 100,
     perms bigint NOT NULL DEFAULT 731,
+    towing_ship_id integer DEFAULT 0,
+    is_being_towed_by integer DEFAULT 0,
     CONSTRAINT check_current_cargo_limit CHECK ((colonists + ore + organics + equipment + slaves + weapons + drugs) <= holds),
     FOREIGN KEY (type_id) REFERENCES shiptypes (shiptypes_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)

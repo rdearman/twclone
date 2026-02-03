@@ -208,6 +208,8 @@ BEGIN
     EXECUTE 'UPDATE players SET lastplanet = $1 WHERE player_id = $2' USING p_planet_id, p_player_id;
   END IF;
 
+  UPDATE ships SET onplanet = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = p_player_id);
+
   RETURN (0, 'ok'::text, NULL::bigint);
 END;
 $$;
@@ -226,6 +228,8 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='players'::regclass AND attname='lastplanet' AND NOT attisdropped) THEN
     EXECUTE 'UPDATE players SET lastplanet = NULL WHERE player_id = $1' USING p_player_id;
   END IF;
+
+  UPDATE ships SET onplanet = FALSE WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = p_player_id);
 
   RETURN (0, 'ok'::text, NULL::bigint);
 END;

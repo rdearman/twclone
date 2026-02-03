@@ -14,7 +14,7 @@
     {"sector_id": 500, "name": "Genesis Sector"},
     {"sector_id": 700, "name": "Gov Sector"},
     {"sector_id": 900, "name": "Target Sector"},
-    {"sector_id": 5555, "name": "Hazard Zone"},
+    {"sector_id": 555, "name": "Hazard Zone"},
     {"sector_id": 9999, "name": "Limbo"}
   ],
   "ports": [
@@ -47,7 +47,7 @@
     {"username": "attacker_player", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
     {"username": "defender_player", "password": "password", "type": 2, "credits": 10000, "sector_id": 300},
     {"username": "quasar_target", "password": "password123", "type": 2, "credits": 200000, "sector_id": 1},
-    {"username": "hazard_master", "password": "password123", "type": 2, "credits": 1000000000, "sector_id": 5555},
+    {"username": "hazard_master", "password": "password123", "type": 2, "credits": 1000000000, "sector_id": 555},
     {"username": "hazard_victim", "password": "password", "type": 2, "credits": 500000, "alignment": -100, "sector_id": 1},
     {"username": "ceo_user", "password": "password", "type": 2, "credits": 100000, "sector_id": 1},
     {"username": "officer_user", "password": "password", "type": 2, "credits": 5000, "sector_id": 1},
@@ -78,7 +78,7 @@
     {"ship_id": 1007, "name": "AttackerShip", "type_id": 1, "owner_username": "attacker", "sector_id": 300, "holds": 100, "fighters": 1000, "shields": 1000, "hull": 1000},
     {"ship_id": 1008, "name": "DefenderShip", "type_id": 1, "owner_username": "defender", "sector_id": 300, "holds": 100, "fighters": 100, "shields": 1000, "hull": 1000},
     {"ship_id": 1009, "name": "QuasarTargetShip", "type_id": 1, "owner_username": "quasar_target", "sector_id": 1, "fighters": 50, "shields": 80, "hull": 100},
-    {"ship_id": 1010, "name": "HazardMasterShip", "type_id": 1, "owner_username": "hazard_master", "sector_id": 5555, "fighters": 200, "shields": 100, "hull": 100, "mines": 50},
+    {"ship_id": 1010, "name": "HazardMasterShip", "type_id": 1, "owner_username": "hazard_master", "sector_id": 555, "fighters": 200, "shields": 100, "hull": 100, "mines": 50},
     {"ship_id": 1011, "name": "CaptainShip", "type_id": 1, "owner_username": "captain_crunch", "sector_id": 1, "hull": 50},
     {"ship_id": 1012, "name": "AttackerShipV2", "type_id": 1, "owner_username": "attacker_player", "sector_id": 300, "fighters": 50},
     {"ship_id": 1013, "name": "DefenderShipV2", "type_id": 1, "owner_username": "defender_player", "sector_id": 300, "fighters": 100, "hull": 500, "shields": 500},
@@ -94,9 +94,9 @@
   ],
   "deployed_assets": [
     {"sector_id": 2, "owner_username": "toll_collector", "asset_type": 2, "quantity": 30, "offensive_setting": 3},
-    {"sector_id": 5555, "owner_username": "hazard_master", "asset_type": 2, "quantity": 40, "offensive_setting": 1},
-    {"sector_id": 5555, "owner_username": "hazard_master", "asset_type": 2, "quantity": 20, "offensive_setting": 3},
-    {"sector_id": 5555, "owner_username": "hazard_master", "asset_type": 1, "quantity": 15, "offensive_setting": 0}
+    {"sector_id": 555, "owner_username": "hazard_master", "asset_type": 2, "quantity": 40, "offensive_setting": 1},
+    {"sector_id": 555, "owner_username": "hazard_master", "asset_type": 2, "quantity": 20, "offensive_setting": 3},
+    {"sector_id": 555, "owner_username": "hazard_master", "asset_type": 1, "quantity": 15, "offensive_setting": 0}
   ],
   "corporations": [
     {"corporation_id": 100, "name": "WolfCorp", "owner_username": "wall_street_wolf", "credits": 1000000}
@@ -108,7 +108,7 @@
       "citadel": { "level": 5, "qCannonSector": 50, "qCannonAtmosphere": 40, "militaryReactionLevel": 1 }
     },
     {
-      "planet_id": 9001, "num": 1, "sector_id": 5555, "name": "Multi-Hazard Planet",
+      "planet_id": 9001, "num": 1, "sector_id": 555, "name": "Multi-Hazard Planet",
       "owner_username": "hazard_master", "class": "M",
       "citadel": { "level": 5, "qCannonSector": 75, "qCannonAtmosphere": 60, "militaryReactionLevel": 2 }
     },

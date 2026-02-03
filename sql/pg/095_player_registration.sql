@@ -90,14 +90,14 @@ INSERT INTO corporations (name, owner_id, tag)
                 name = 'Zydras'
             LIMIT 1),
         'ORION'),
-('Ferrengi Alliance',
+('Ferengi Alliance',
     (
         SELECT
             player_id
         FROM
             players
         WHERE
-            name LIKE 'Fer%'
+            name = 'Fer'
         LIMIT 1),
     'FENG')
 ON CONFLICT

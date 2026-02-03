@@ -1,5 +1,6 @@
 #include "db/repo/repo_universe.h"
 #include "db/repo/repo_players.h"
+#include "db/repo/repo_cmd.h"
 /* src/server_universe.c */
 #include <time.h>
 #include <stdio.h>
@@ -17,6 +18,7 @@
 #include "game_db.h"
 #include "server_cmds.h"
 #include "server_rules.h"
+#include "server_combat.h"
 // #include "server_bigbang.h"
 #include "server_news.h"
 #include "server_envelope.h"
@@ -36,6 +38,9 @@
 #include "repo_market.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
+#include "db/repo/repo_corporation.h"
+#include "db/repo/repo_cmds.h"
+#include "db/repo/repo_ports.h"
 
 #define UUID_STR_LEN 37
 
@@ -322,18 +327,26 @@ ori_move_all_ships (void)
 
 
 int
-ori_init_once (void)
+ori_init_once (db_t *db)
 {
-  if (ori_initialized || ori_db == NULL)
+  if (ori_initialized)
     {
       return (ori_owner_id != -1);
+    }
+  if (!db)
+    {
+      db = ori_db;
+    }
+  if (!db)
+    {
+      return 0;
     }
 
   db_error_t err;
   db_error_clear (&err);
 
   /* Step 1: Find the Orion Syndicate owner ID from corporation tag */
-  if (repo_universe_get_corp_owner_by_tag (ori_db, "ORION", &ori_owner_id) !=
+  if (repo_universe_get_corp_owner_by_tag (db, "ORION", &ori_owner_id) !=
       0)
     {
       LOGW ("ORI_INIT: Failed to find Orion Syndicate owner. Skipping.");
@@ -344,7 +357,7 @@ ori_init_once (void)
   /* Step 2: Find the Black Market home sector ID (from Port ID 10) */
   db_error_clear (&err);
   if (repo_universe_get_port_sector_by_id_name
-      (ori_db, 10, "Orion Black Market Dock", &ori_home_sector_id) != 0)
+      (db, 10, "Orion Black Market Dock", &ori_home_sector_id) != 0)
     {
       LOGW
 	("ORI_INIT: Failed to find Black Market sector. Movement will be random.");
@@ -358,14 +371,24 @@ ori_init_once (void)
 
 
 void
-ori_tick (int64_t now_ms)
+ori_tick (db_t *db, int64_t now_ms)
 {
-  if (!ori_initialized || ori_owner_id == -1 || ori_db == NULL)
+  (void) now_ms;
+  if (!ori_initialized)
     {
-      return;
+      if (!ori_init_once (db))
+	{
+	  return;
+	}
+    }
+  if (!db)
+    {
+      db = ori_db;
+      if (!db)
+	return;
     }
   LOGI ("ORI_TICK: Running movement logic for Orion Syndicate... @%ld",
-	now_ms);
+	(long) now_ms);
   ori_move_all_ships ();
   LOGI ("ORI_TICK: Complete.");
 }
@@ -938,6 +961,14 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
       LOGD ("Player %d warped from %d to %d", ctx->player_id, ctx->sector_id, to);
       ctx->sector_id = to;
+
+      /* Canon #471: Sector assets engage on entry */
+      if (server_combat_apply_entry_hazards (db, ctx, to))
+        {
+          send_response_error (ctx, root, 403, "Ship destroyed by sector hazards.");
+          return 0;
+        }
+
       json_t *resp = json_object ();
       json_object_set_new (resp, "sector_id", json_integer (to));
       json_object_set_new (resp, "to_sector_id", json_integer (to));
@@ -1601,9 +1632,8 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 					    NULL);
     }
 
-  /* Update player sector */
-  if (repo_universe_update_player_sector (db, ctx->player_id, to_sector_id) !=
-      0)
+  /* Update player sector (and ship/towed ships) */
+  if (db_player_set_sector (ctx->player_id, to_sector_id) != 0)
     {
       send_response_error (ctx, root, ERR_DB,
 			   "Database error during transwarp");
@@ -1611,6 +1641,13 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
     }
 
   ctx->sector_id = to_sector_id;
+
+  /* Canon #471: Sector assets engage on entry */
+  if (server_combat_apply_entry_hazards (db, ctx, to_sector_id))
+    {
+      send_response_error (ctx, root, 403, "Ship destroyed by sector hazards during transwarp.");
+      return 0;
+    }
 
   json_t *data = json_object ();
   json_object_set_new (data, "sector_id", json_integer (to_sector_id));
@@ -1810,24 +1847,62 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
 
 
 int
-fer_init_once (void)
+fer_init_once (db_t *db)
 {
   if (g_fer_inited)
     {
       return 1;
     }
-  if (!g_fer_db)
+  if (!db)
+    {
+      db = g_fer_db;
+    }
+  if (!db)
     {
       LOGW ("[fer] no DB handle; traders disabled");
       return 0;
     }
 
   if (repo_universe_get_ferengi_corp_info
-      (g_fer_db, &g_fer_corp_id, &g_fer_player_id) != 0)
+      (db, &g_fer_corp_id, &g_fer_player_id) != 0)
     {
-      LOGW
-	("[fer] Ferengi Alliance corporation not found. Traders disabled.");
-      return 0;
+      LOGI ("[fer] Ferengi Alliance corporation not found. Creating...");
+
+      /* Resolve System player ID */
+      int32_t system_pid = 1;
+      {
+	int32_t pid = 0;
+	char dummy_pass[256];
+	bool dummy_is_npc;
+	if (repo_cmds_get_login_info (db, "System", &pid, dummy_pass, sizeof (dummy_pass), &dummy_is_npc) == 0)
+	  {
+	    system_pid = pid;
+	  }
+	else
+	  {
+	    LOGW ("[fer] System user not found; defaulting to player_id 1");
+	  }
+      }
+
+      int64_t new_id = 0;
+      int rc = repo_corp_create_with_tag (db, "Ferengi Alliance", "FENG", (int) system_pid, &new_id);
+      if (rc != 0)
+	{
+	  /* Maybe race condition? Try fetching again */
+	  if (repo_universe_get_ferengi_corp_info (db, &g_fer_corp_id, &g_fer_player_id) != 0)
+	    {
+	      LOGE ("[fer] Failed to create Ferengi Alliance (rc=%d). Traders disabled.", rc);
+	      return 0;
+	    }
+	}
+      else
+	{
+	  g_fer_corp_id = (int) new_id;
+	  g_fer_player_id = (int) system_pid;
+	  LOGI ("[fer] Ferengi Alliance created with ID %d (owner=%d).", g_fer_corp_id, g_fer_player_id);
+	  /* Ensure bank account exists */
+	  repo_corp_create_bank_account (db, g_fer_corp_id);
+	}
     }
 
   if (g_fer_player_id == 0)
@@ -1838,7 +1913,7 @@ fer_init_once (void)
 	g_fer_player_id);
 
   int home = 0;
-  if (repo_universe_get_ferengi_homeworld_sector (g_fer_db, &home) != 0
+  if (repo_universe_get_ferengi_homeworld_sector (db, &home) != 0
       || home <= 0)
     {
       LOGW ("[fer] Ferengi homeworld not found; disabling traders");
@@ -1846,11 +1921,11 @@ fer_init_once (void)
     }
 
   int ship_type_id = 0;
-  if (repo_universe_get_ferengi_warship_type_id (g_fer_db, &ship_type_id) != 0
+  if (repo_universe_get_ferengi_warship_type_id (db, &ship_type_id) != 0
       || ship_type_id == 0)
     {
-      LOGE ("[fer] No suitable shiptype found. Disabling.");
-      return 0;
+      LOGW ("[fer] No suitable shiptype found. Combat disabled, but traders active.");
+      /* Non-fatal: traders can still trade (conceptually), just can't spawn warships */
     }
 
   g_fer_inited = 1;
@@ -1865,7 +1940,7 @@ fer_tick (db_t *db, int64_t now_ms)
   (void) now_ms;
   if (!g_fer_inited)
     {
-      if (!fer_init_once ())
+      if (!fer_init_once (db))
 	{
 	  return;
 	}

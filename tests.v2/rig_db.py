@@ -82,7 +82,7 @@ def main():
 
             if p['type'] == 10:
                 # Ensure it's in taverns table too
-                sql = f"INSERT INTO taverns (sector_id, name_id, enabled) VALUES ({p['sector_id']}, 3, 1) ON CONFLICT (sector_id) DO NOTHING;"
+                sql = f"INSERT INTO taverns (sector_id, name_id, enabled) VALUES ({p['sector_id']}, 3, TRUE) ON CONFLICT (sector_id) DO NOTHING;"
                 execute_sql(sql, **db_config)
 
     # 4. Users
@@ -115,7 +115,7 @@ def main():
                 # Seed bank account for player
                 sql = f"""
                 INSERT INTO bank_accounts (owner_type, owner_id, balance, currency, is_active)
-                VALUES ('player', {pid}, {credits}, 'CRD', 1)
+                VALUES ('player', {pid}, {credits}, 'CRD', TRUE)
                 ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = {credits};
                 """
                 execute_sql(sql, **db_config)
@@ -137,7 +137,7 @@ def main():
                 corp_credits = c.get("credits", 1000000)
                 sql = f"""
                 INSERT INTO bank_accounts (owner_type, owner_id, balance, currency, is_active)
-                VALUES ('corp', {c['corporation_id']}, {corp_credits}, 'CRD', 1)
+                VALUES ('corp', {c['corporation_id']}, {corp_credits}, 'CRD', TRUE)
                 ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = {corp_credits};
                 """
                 execute_sql(sql, **db_config)
@@ -249,7 +249,8 @@ def main():
     if "shipyard_inventory" in rig:
         print("Rigging Shipyard Inventory...")
         for i in rig["shipyard_inventory"]:
-            sql = f"INSERT INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES ({i['port_id']}, {i['ship_type_id']}, {i['enabled']}) ON CONFLICT (port_id, ship_type_id) DO NOTHING;"
+            enabled_bool = "TRUE" if i['enabled'] else "FALSE"
+            sql = f"INSERT INTO shipyard_inventory (port_id, ship_type_id, enabled) VALUES ({i['port_id']}, {i['ship_type_id']}, {enabled_bool}) ON CONFLICT (port_id, ship_type_id) DO NOTHING;"
             execute_sql(sql, **db_config)
 
     # 11. Player Prefs

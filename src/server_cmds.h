@@ -21,6 +21,7 @@ int cmd_sys_cluster_init (client_ctx_t * ctx, json_t * root);
 int cmd_sys_cluster_seed_illegal_goods (client_ctx_t * ctx, json_t * root);
 int cmd_sys_test_news_cron (client_ctx_t * ctx, json_t * root);
 int cmd_sys_raw_sql_exec (client_ctx_t * ctx, json_t * root);
+int cmd_sys_cron_citadel_reap_once (client_ctx_t * ctx, json_t * root);
 int cmd_bounty_post_federation (client_ctx_t * ctx, json_t * root);
 int cmd_bounty_post_hitlist (client_ctx_t * ctx, json_t * root);
 int cmd_bounty_list (client_ctx_t * ctx, json_t * root);

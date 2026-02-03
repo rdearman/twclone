@@ -115,6 +115,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"shield_regen", h_shield_regen_tick},
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry},
+  {"citadel_construction_reap", h_citadel_construction_reap},
   {NULL, NULL}			/* required terminator */
 };
 
@@ -971,7 +972,7 @@ engine_main_loop (int shutdown_fd)
 
 
   fer_attach_db (db_handle);
-  int fer_ok = fer_init_once ();
+  int fer_ok = fer_init_once (db_handle);
 
 
   for (;;)

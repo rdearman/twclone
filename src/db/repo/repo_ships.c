@@ -141,6 +141,32 @@ int repo_ships_get_is_being_towed_by(db_t *db, int32_t ship_id, int32_t *towed_b
     return err.code;
 }
 
+int repo_ships_get_towed_ship_info(db_t *db, int32_t tower_ship_id, int32_t *towed_ship_id_out, int32_t *towed_player_id_out, int32_t *towed_corp_id_out)
+{
+    /* SQL_VERBATIM: Q20 */
+    const char *sql_template = "SELECT s.ship_id, p.player_id, cm.corporation_id FROM ships s "
+                               "JOIN players p ON s.ship_id = p.ship_id "
+                               "LEFT JOIN corp_members cm ON p.player_id = cm.player_id "
+                               "WHERE s.is_being_towed_by = {1} LIMIT 1;";
+    char sql[512];
+    sql_build(db, sql_template, sql, sizeof sql);
+
+    db_res_t *res = NULL;
+    db_error_t err;
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(tower_ship_id) }, 1, &res, &err)) {
+        int found = 0;
+        if (db_res_step(res, &err)) {
+            if (towed_ship_id_out) *towed_ship_id_out = db_res_col_i32(res, 0, &err);
+            if (towed_player_id_out) *towed_player_id_out = db_res_col_i32(res, 1, &err);
+            if (towed_corp_id_out) *towed_corp_id_out = db_res_col_i32(res, 2, &err);
+            found = 1;
+        }
+        db_res_finalize(res);
+        return found ? 0 : -1;
+    }
+    return err.code;
+}
+
 int repo_ships_set_towing_id(db_t *db, int32_t ship_id, int32_t target_ship_id)
 {
     /* SQL_VERBATIM: Q7 */

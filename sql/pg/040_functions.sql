@@ -498,16 +498,17 @@ BEGIN
             FROM
                 corporations
             WHERE
-                lower(name) = lower('Imperial'));
+                tag = 'IMP');
     -- Corrected: Capture row count first, then add to total
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     v_added := v_added + v_rows;
+    
     INSERT INTO corporations (name, owner_id, tag, description)
     SELECT
-        'Ferringhi',
+        'Ferengi Alliance',
         NULL,
-        'FER',
-        'Ferringhi faction'
+        'FENG',
+        'Ferengi faction'
     WHERE
         NOT EXISTS (
             SELECT
@@ -515,10 +516,27 @@ BEGIN
             FROM
                 corporations
             WHERE
-                lower(name) = lower('Ferringhi'));
-    -- Corrected: Capture row count first, then add to total
+                tag = 'FENG');
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     v_added := v_added + v_rows;
+
+    INSERT INTO corporations (name, owner_id, tag, description)
+    SELECT
+        'Orion Syndicate',
+        NULL,
+        'ORION',
+        'Orion faction'
+    WHERE
+        NOT EXISTS (
+            SELECT
+                1
+            FROM
+                corporations
+            WHERE
+                tag = 'ORION');
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    v_added := v_added + v_rows;
+
     PERFORM
         bigbang_unlock (v_lock_key);
     RETURN v_added;
@@ -733,18 +751,20 @@ $$;
 CREATE OR REPLACE FUNCTION setup_npc_homeworlds ()
     RETURNS void
     LANGUAGE plpgsql
-    AS $$
+    AS $
 BEGIN
     -- Terra is always in sector 1, no need for dynamic placement
-    INSERT INTO planets (num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
-    SELECT 1, 1, 'Terra', 0, 'player', 'M', planettypes_id, now(), 0
-    FROM planettypes WHERE code = 'M' LIMIT 1;
+    INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
+    SELECT 1, 1, 1, 'Terra', 0, 'player', 'M', planettypes_id, now(), 0
+    FROM planettypes WHERE code = 'M' LIMIT 1
+    ON CONFLICT (planet_id) DO UPDATE SET name = EXCLUDED.name, sector_id = EXCLUDED.sector_id;
 END;
-$$;
+$;
+
 CREATE OR REPLACE FUNCTION setup_ferringhi_alliance ()
     RETURNS void
     LANGUAGE plpgsql
-    AS $$
+    AS $
 DECLARE
     v_ferringhi_sector integer;
     v_ptype bigint;
@@ -754,81 +774,94 @@ BEGIN
     SELECT planettypes_id INTO v_ptype
     FROM planettypes WHERE code = 'M' LIMIT 1;
     
-    -- Get Ferringhi corporation ID
+    -- Get Ferengi Alliance corporation ID by tag
     SELECT corporation_id INTO v_ferringhi_corp_id
-    FROM corporations WHERE lower(name) = lower('Ferringhi') LIMIT 1;
+    FROM corporations WHERE tag = 'FENG' LIMIT 1;
     
-    -- Find the longest tunnel endpoint for Ferringhi placement
-    SELECT COALESCE(exit_sector, 469) INTO v_ferringhi_sector
-    FROM longest_tunnels LIMIT 1;
+    -- Pick a random exit sector from longest_tunnels
+    SELECT exit_sector INTO v_ferringhi_sector
+    FROM longest_tunnels 
+    WHERE exit_sector > 10
+    ORDER BY random() LIMIT 1;
     
-    -- If no tunnels exist, default to sector 469
+    -- If no tunnels exist, default to a high sector
     IF v_ferringhi_sector IS NULL OR v_ferringhi_sector = 0 THEN
         v_ferringhi_sector := 469;
     END IF;
     
-    -- Create Ferringhi Homeworld planet
-    INSERT INTO planets (num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
-    SELECT 2, v_ferringhi_sector, 'Ferringhi Homeworld', COALESCE(v_ferringhi_corp_id, 0), 
-           'player', 'M', v_ptype, now(), 0
-    ON CONFLICT DO NOTHING;
+    -- Create Ferenginar planet (planet_id 2)
+    INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
+    SELECT 2, 2, v_ferringhi_sector, 'Ferenginar', COALESCE(v_ferringhi_corp_id, 0), 
+           'corp', 'M', v_ptype, now(), 0
+    ON CONFLICT (planet_id) DO UPDATE SET sector_id = EXCLUDED.sector_id, owner_id = EXCLUDED.owner_id, owner_type = 'corp', name = EXCLUDED.name;
     
-    -- Deploy defensive fighters and mines at Ferringhi sector
-    INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, offensive_setting, quantity, deployed_at)
-    SELECT v_ferringhi_sector, NULL, COALESCE(v_ferringhi_corp_id, 2), 2, 3, 50000, now()
-    ON CONFLICT DO NOTHING;
-    
-    INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, deployed_at)
-    SELECT v_ferringhi_sector, NULL, COALESCE(v_ferringhi_corp_id, 2), 1, 250, now()
-    ON CONFLICT DO NOTHING;
+    -- Deploy defensive fighters and mines at Ferengi sector
+    IF v_ferringhi_corp_id IS NOT NULL THEN
+        INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, offensive_setting, quantity, deployed_at)
+        VALUES (v_ferringhi_sector, NULL, v_ferringhi_corp_id, 2, 3, 50000, now())
+        ON CONFLICT DO NOTHING;
+        
+        INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, deployed_at)
+        VALUES (v_ferringhi_sector, NULL, v_ferringhi_corp_id, 1, 250, now())
+        ON CONFLICT DO NOTHING;
+    END IF;
 END;
-$$;
+$;
+
 CREATE OR REPLACE FUNCTION setup_orion_syndicate ()
     RETURNS void
     LANGUAGE plpgsql
-    AS $$
+    AS $
 DECLARE
     v_orion_sector integer;
     v_ptype bigint;
     v_orion_corp_id bigint;
     v_port_id integer;
+    v_ferengi_sector integer;
 BEGIN
     -- Get Orion planet type
     SELECT planettypes_id INTO v_ptype
     FROM planettypes WHERE code = 'M' LIMIT 1;
     
-    -- Get Orion Syndicate corporation ID
+    -- Get Orion Syndicate corporation ID by tag
     SELECT corporation_id INTO v_orion_corp_id
-    FROM corporations WHERE lower(name) = lower('Orion Syndicate') LIMIT 1;
+    FROM corporations WHERE tag = 'ORION' LIMIT 1;
+
+    -- Get current Ferengi sector to avoid it
+    SELECT sector_id INTO v_ferengi_sector FROM planets WHERE planet_id = 2;
     
-    -- Find the 2nd longest tunnel endpoint for Orion placement (LIMIT 1 OFFSET 1)
-    SELECT COALESCE(exit_sector, 386) INTO v_orion_sector
-    FROM longest_tunnels LIMIT 1 OFFSET 1;
+    -- Pick a random exit sector from longest_tunnels that isn't Ferenginar
+    SELECT exit_sector INTO v_orion_sector
+    FROM longest_tunnels 
+    WHERE exit_sector > 10 AND exit_sector != COALESCE(v_ferengi_sector, 0)
+    ORDER BY random() LIMIT 1;
     
     -- If no second tunnel or default conflict, use random sector
     IF v_orion_sector IS NULL OR v_orion_sector = 0 THEN
-        v_orion_sector := (random() * 989)::bigint + 11;
+        v_orion_sector := (random() * 989)::int + 11;
     END IF;
     
-    -- Create Orion Hideout planet
-    INSERT INTO planets (num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
-    SELECT 3, v_orion_sector, 'Orion Hideout', COALESCE(v_orion_corp_id, 0), 
-           'player', 'M', v_ptype, now(), 0
-    ON CONFLICT DO NOTHING;
+    -- Create Orion Hideout planet (planet_id 3)
+    INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
+    SELECT 3, 3, v_orion_sector, 'Orion Hideout', COALESCE(v_orion_corp_id, 0), 
+           'corp', 'M', v_ptype, now(), 0
+    ON CONFLICT (planet_id) DO UPDATE SET sector_id = EXCLUDED.sector_id, owner_id = EXCLUDED.owner_id, owner_type = 'corp', name = EXCLUDED.name;
     
     -- Deploy defensive fighters and mines at Orion sector
-    INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, offensive_setting, quantity, deployed_at)
-    SELECT v_orion_sector, NULL, COALESCE(v_orion_corp_id, 1), 2, 2, 50000, now()
-    ON CONFLICT DO NOTHING;
-    
-    INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, deployed_at)
-    SELECT v_orion_sector, NULL, COALESCE(v_orion_corp_id, 1), 1, 250, now()
-    ON CONFLICT DO NOTHING;
+    IF v_orion_corp_id IS NOT NULL THEN
+        INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, offensive_setting, quantity, deployed_at)
+        VALUES (v_orion_sector, NULL, v_orion_corp_id, 2, 2, 50000, now())
+        ON CONFLICT DO NOTHING;
+        
+        INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, deployed_at)
+        VALUES (v_orion_sector, NULL, v_orion_corp_id, 1, 250, now())
+        ON CONFLICT DO NOTHING;
+    END IF;
     
     -- Create Orion Black Market port (type 10 = blackmarket stardock)
-    INSERT INTO ports (sector_id, name, type)
-    VALUES (v_orion_sector, 'Orion Black Market', 10)
-    ON CONFLICT DO NOTHING
+    INSERT INTO ports (sector_id, name, type, number)
+    VALUES (v_orion_sector, 'Orion Black Market Dock', 10, v_orion_sector)
+    ON CONFLICT (sector_id, number) DO UPDATE SET sector_id = EXCLUDED.sector_id, name = EXCLUDED.name
     RETURNING port_id INTO v_port_id;
 
     -- Ensure bank account exists (even if port already existed)
@@ -839,10 +872,11 @@ BEGIN
     IF v_port_id IS NOT NULL THEN
          INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
          VALUES ('port', v_port_id, 'CRD', 1000000, 0, TRUE)
-         ON CONFLICT DO NOTHING;
+         ON CONFLICT (owner_type, owner_id, currency) DO NOTHING;
     END IF;
 END;
-$$;
+$;
+
 CREATE OR REPLACE FUNCTION spawn_initial_fleet ()
     RETURNS void
     LANGUAGE plpgsql

@@ -90,7 +90,7 @@ int db_planets_get_citadel_defenses(db_t *db, int planet_id, int *level, int *sh
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q9 */
-    const char *q9 = "SELECT level, planetary_shields, military_reaction_level FROM citadels WHERE planet_id={1};";
+    const char *q9 = "SELECT level, planetaryShields, militaryReactionLevel FROM citadels WHERE planet_id={1};";
     char sql[512]; sql_build(db, q9, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *level = db_res_col_int(res, 0, &err);
@@ -106,7 +106,7 @@ int db_planets_get_citadel_defenses(db_t *db, int planet_id, int *level, int *sh
 int db_planets_update_citadel_shields(db_t *db, int planet_id, int new_shields) {
     db_error_t err;
     /* SQL_VERBATIM: Q10 */
-    const char *q10 = "UPDATE citadels SET planetary_shields={1} WHERE planet_id={2};";
+    const char *q10 = "UPDATE citadels SET planetaryShields={1} WHERE planet_id={2};";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
     if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(new_shields), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;

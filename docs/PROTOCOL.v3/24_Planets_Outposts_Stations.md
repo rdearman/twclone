@@ -91,7 +91,18 @@ Logic for clearing defenses.
 ### `player.mine.v1` (Event)
 Event when a player lays mines (or collects).
 
-## 4. Planet Market Integration
+## 5. Citadels
+
+### `citadel.build` / `citadel.upgrade`
+Start or upgrade a citadel on a landed planet.
+**Lifecycle**: 
+- Initiation: Reserves resources and sets `construction_status` to "upgrading".
+- Construction: Progress is tracked via `construction_status`, `construction_start_time` and `construction_end_time` (Unix epoch).
+- Completion: A background cron process finalizes the upgrade once the current time exceeds `construction_end_time`. At this point, the citadel level is incremented and the status returns to "idle".
+
+**View Status**: The current level and construction status are visible in `planet.view`.
+
+## 6. Planet Market Integration
 
 ### `planet.market.sell`
 Sell surplus commodities from a player-owned planet to the global market. The planet must have sufficient inventory. Proceeds are credited to the player's account.

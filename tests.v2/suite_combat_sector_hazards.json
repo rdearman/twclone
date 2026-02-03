@@ -21,25 +21,25 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 5555), (5555, 1) ON CONFLICT DO NOTHING;"
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 555), (555, 1) ON CONFLICT DO NOTHING;"
       },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Position hazard_victim player at Sector 1",
+      "name": "Rig: Position players at Sector 1",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'hazard_victim';"
+        "sql": "UPDATE players SET sector_id = 1 WHERE name IN ('hazard_victim', 'hazard_master');"
       },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Position hazard_victim ship at Sector 1",
+      "name": "Rig: Position ships at Sector 1",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim');"
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('hazard_victim', 'hazard_master'));"
       },
       "expect": { "status": "ok" }
     },
@@ -53,11 +53,11 @@
     {
       "name": "Victim Warps to Hazard Sector (Multi-Hazard Entry)",
       "command": "move.warp",
-      "data": { "sector_id": 5555 },
+      "data": { "to_sector_id": 555 },
       "user": "hazard_victim",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 5555 }
+        { "path": "data.sector_id", "op": "==", "value": 555 }
       ]
     },
     {
@@ -80,11 +80,45 @@
       ]
     },
     {
-      "name": "Victim Warps Out Then Back",
-      "command": "move.warp",
-      "data": { "sector_id": 1 },
+      "name": "Rig: Give Transwarp and Heal Ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET has_transwarp = TRUE, hull = 100, shields = 50 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Victim Transwarps to Hazard Sector",
+      "command": "move.transwarp",
+      "data": { "to_sector_id": 555 },
       "user": "hazard_victim",
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Victim Status After Transwarp",
+      "command": "combat.status",
+      "user": "hazard_victim",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.hull", "op": "<", "value": 100 }
+      ]
+    },
+    {
+      "name": "Master Warps to Hazard Sector (Owner/Friendly)",
+      "command": "move.warp",
+      "data": { "to_sector_id": 555 },
+      "user": "hazard_master",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Master Status After Entry (Should be No Damage)",
+      "command": "combat.status",
+      "user": "hazard_master",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.hull", "op": "==", "value": 100 }
+      ]
     }
   ]
 }

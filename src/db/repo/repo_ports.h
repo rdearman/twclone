@@ -146,4 +146,7 @@ int db_ports_replay_idemp_buy(db_t *db, const char *key, int player_id, int sect
 /* Q47: Port Commodity Details */
 int db_ports_get_commodity_details(db_t *db, int port_id, const char *commodity_code, int *quantity, int *max_capacity, bool *buys, bool *sells);
 
+/* Q48: Update Port Sector */
+int db_ports_update_sector(db_t *db, int port_id, int new_sector_id);
+
 #endif

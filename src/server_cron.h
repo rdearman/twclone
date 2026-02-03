@@ -30,6 +30,7 @@ int h_planet_market_tick (db_t * db, int64_t now_s);
 int h_reset_turns_for_player (db_t * db, int64_t now_s);
 int h_daily_corp_tax (db_t * db, int64_t now_s);
 int h_dividend_payout (db_t * db, int64_t now_s);
+int h_citadel_construction_reap (db_t * db, int64_t now_s);
 
 int cron_register_builtins (void);
 

@@ -16,6 +16,7 @@
 #include "server_universe.h"
 #include "server_ports.h"
 #include "server_planets.h"
+#include "repo_citadel.h"
 #include "game_db.h"
 #include "server_config.h"
 #include "repo_market.h"	// For market order helpers
@@ -42,6 +43,7 @@ int iss_init_once (void);
 /* These helpers allow us to yield the C-level lock while keeping the DB handle open */
 int h_daily_news_compiler (db_t * db, int64_t now_s);
 int h_cleanup_old_news (db_t * db, int64_t now_s);
+int h_citadel_construction_reap (db_t * db, int64_t now_s);
 
 
 static inline uint64_t
@@ -1154,16 +1156,16 @@ h_npc_step (db_t *db, int64_t now_s)
       iss_tick (db, now_ms);
     }
 
-  if (fer_init_once () == 1)
+  if (fer_init_once (db) == 1)
     {
       fer_attach_db (db);
-      fer_tick (game_db_get_handle (), now_ms);
+      fer_tick (db, now_ms);
     }
 
-  if (ori_init_once () == 1)
+  if (ori_init_once (db) == 1)
     {
       ori_attach_db (db);
-      ori_tick (now_ms);
+      ori_tick (db, now_ms);
     }
 
   return 0;
@@ -1206,6 +1208,42 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
     }
 
   send_response_ok_take (ctx, root, "sys.cron.planet_tick_once.success",
+			 NULL);
+  return 0;
+}
+
+int
+cmd_sys_cron_citadel_reap_once (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0 ||
+      auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_response_refused_steal (ctx,
+				   root,
+				   ERR_PERMISSION_DENIED,
+				   "Permission denied", NULL);
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+			   "Database unavailable");
+      return 0;
+    }
+
+  int64_t now_s = time (NULL);
+
+  if (h_citadel_construction_reap (db, now_s) != 0)
+    {
+      send_response_error (ctx,
+			   root,
+			   ERR_SERVER_ERROR, "Citadel reap cron failed.");
+      return 0;
+    }
+
+  send_response_ok_take (ctx, root, "sys.cron.citadel_reap_once.success",
 			 NULL);
   return 0;
 }
@@ -2540,5 +2578,27 @@ h_shield_regen_tick (db_t *db, int64_t now_s)
       LOGE ("h_shield_regen_tick: SQL Error");
     }
   unlock (db, "shield_regen");
+  return 0;
+}
+
+int
+h_citadel_construction_reap (db_t *db, int64_t now_s)
+{
+  if (!try_lock (db, "citadel_construction_reap", now_s))
+    {
+      return 0;
+    }
+
+  LOGD ("h_citadel_construction_reap: Scanning for completed upgrades...");
+
+  /* Reap up to 50 citadels per pass */
+  int rc = repo_citadel_reap_upgrades (db, now_s, 50);
+
+  if (rc != 0)
+    {
+      LOGE ("h_citadel_construction_reap: Reap failed with code %d", rc);
+    }
+
+  unlock (db, "citadel_construction_reap");
   return 0;
 }

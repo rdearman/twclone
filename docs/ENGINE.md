@@ -22,8 +22,9 @@ Run background game logic outside the player server: clocks/timers, economy drif
 1. Open DB (WAL, busy_timeout).
 2. Seed/validate DB-backed config; load `config_version`.
 3. Read watermark (`engine_offset`).
-4. Connect to server’s TCP S2S endpoint; `s2s.health.check`.
-5. Enter tick loop (poll socket with timeout until next due job).
+4. **Ferengi Bootstrap**: Automatically creates the "Ferengi Alliance" corporation (tag: `FENG`) if missing. This is a system-owned entity required for NPC traders.
+5. Connect to server’s TCP S2S endpoint; `s2s.health.check`.
+6. Enter tick loop (poll socket with timeout until next due job).
 
 ### Graceful shutdown
 

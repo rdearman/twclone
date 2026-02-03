@@ -51,26 +51,24 @@ class StateManager:
                     self.state.update(saved_state)
                     logger.info("Loaded state from %s", self.state_file)
                     
-                    # --- THIS IS THE FIX ---
-                    # ***CRITICAL: Reset transient and cached data on load***
+                    # Transient data that SHOULD be reset on load
                     self.state["command_retry_info"] = {} 
                     self.state["session_id"] = None # Always force re-login
-                    self.state["command_schemas"] = {} # Always force schema refetch
-                    self.state["schema_blacklist"] = [] # NEW: Clear schema blacklist on load
-                    self.state["pending_schema_requests"] = {} # NEW: Clear pending schema requests on load
-                    self.state["recent_sectors"] = [] # NEW: Clear recent sectors on load
-                    self.state["pending_commands"] = {} # NEW: Clear pending commands on load
-                    self.state["current_path"] = [] # NEW: Clear current path on load
-                    self.state["last_action_result"] = None # NEW: Clear feedback on load
+                    self.state["pending_commands"] = {} 
+                    self.state["command_sent_in_response_loop"] = False
+                    self.state["current_path"] = [] 
+                    self.state["last_action_result"] = None 
                     
-                    # Caches and persistent state are preserved to allow resuming.
-                    # self.state["strategy_plan"] = [] -- KEEP THIS
-                    # self.state["player_info"] = None -- KEEP THIS
-                    # self.state["ship_info"] = None -- KEEP THIS
-                    # self.state["player_location_sector"] = None -- KEEP THIS
-                    # self.state["needs_bootstrap"] = True -- KEEP THIS
-
-                    # --- END FIX ---
+                    # Persistent fields that MUST NOT be reset
+                    # - strategy_plan
+                    # - player_info
+                    # - ship_info
+                    # - player_location_sector
+                    # - needs_bootstrap
+                    # - sector_data
+                    # - port_info_by_sector
+                    # - price_cache
+                    # - etc.
 
         except json.JSONDecodeError:
             logger.error("Failed to decode state file. Starting with fresh state.")

@@ -37,11 +37,14 @@ Set a beacon message.
 Move to an adjacent sector.
 **Args**: `{ "to_sector_id": 2 }`
 **Response**: `move.result` `{ "player_id": ..., "current_sector": 2 }`
-**Events**: Triggers `sector.player_left` (origin) and `sector.player_entered` (dest).
+**Events**: 
+- Triggers `sector.player_left` (origin) and `sector.player_entered` (dest).
+- **Hazard Trigger**: If the destination sector contains hostile fighters, mines (Armid), or limpets, they trigger immediately upon entry.
 
 ### `move.transwarp`
 Long-range jump (requires equipment).
 **Args**: `{ "sector_id": 50 }`
+**Hazard Trigger**: Triggers all entry hazards (fighters, mines, limpets) at the destination sector.
 
 ### `move.pathfind`
 Calculate route.

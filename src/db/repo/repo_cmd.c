@@ -422,8 +422,10 @@ db_player_update_commission (db_t *db, int player_id)
         }
       db_res_t *res = NULL;
       int align = 0; long long exp = 0;
-      const char *sql_sel =
-        "SELECT alignment, experience FROM players WHERE player_id = {1} FOR UPDATE;";
+      char sql_sel[256];
+      snprintf (sql_sel, sizeof (sql_sel),
+		"SELECT alignment, experience FROM players WHERE player_id = {1}%s;",
+		sql_for_update (db));
       db_bind_t p_sel[] = { db_bind_i64 (player_id) };
 
       char sql_sel_converted[256];
@@ -4362,7 +4364,9 @@ db_get_ship_owner_id (db_t *db, int ship_id, int *out_pid, int *out_cid)
 
 
   if (db_query (db,
-                "SELECT player_id, corporation_id FROM ship_ownership WHERE ship_id = {1} AND is_primary = TRUE;",
+                "SELECT so.player_id, cm.corporation_id FROM ship_ownership so "
+                "LEFT JOIN corp_members cm ON so.player_id = cm.player_id "
+                "WHERE so.ship_id = {1} AND so.is_primary = TRUE;",
                 (db_bind_t[]){db_bind_i64 (ship_id)},
                 1,
                 &res,
@@ -5086,6 +5090,17 @@ db_player_set_sector (int pid, int sid)
                 ship_id,
                 pid);
         }
+
+      /* Canon #471: Move towed ships and their owners */
+      const char *sql_towed = "UPDATE ships SET sector_id = {1} WHERE is_being_towed_by = {2};";
+      char sql_towed_conv[256];
+      sql_build(db, sql_towed, sql_towed_conv, sizeof(sql_towed_conv));
+      db_exec(db, sql_towed_conv, (db_bind_t[]){ db_bind_i64(sid), db_bind_i64(ship_id) }, 2, &err);
+
+      const char *sql_towed_p = "UPDATE players SET sector_id = {1} WHERE ship_id IN (SELECT ship_id FROM ships WHERE is_being_towed_by = {2});";
+      char sql_towed_p_conv[256];
+      sql_build(db, sql_towed_p, sql_towed_p_conv, sizeof(sql_towed_p_conv));
+      db_exec(db, sql_towed_p_conv, (db_bind_t[]){ db_bind_i64(sid), db_bind_i64(ship_id) }, 2, &err);
     }
 
 

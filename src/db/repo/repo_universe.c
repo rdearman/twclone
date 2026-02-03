@@ -338,3 +338,87 @@ int repo_universe_get_random_wormhole_neighbor(db_t *db, int sector_id, int *nei
     if (res) db_res_finalize(res);
     return err.code ? err.code : -1;
 }
+
+int repo_universe_get_candidate_homeworld_sectors(db_t *db, int **sectors_out, int *count_out) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q30 */
+    /* Select exit_sectors from longest_tunnels */
+    const char *q30 = "SELECT exit_sector FROM longest_tunnels;";
+    if (db_query(db, q30, NULL, 0, &res, &err)) {
+        int count = db_res_col_count(res) > 0 ? res->num_rows : 0; // num_rows is reliable after step, but for PG query might need count first or array approach
+        /* Actually db_query usually returns full result in memory for this driver impl? 
+           Check db_res structure. Yes, num_rows is populated. */
+        
+        if (count > 0) {
+            *sectors_out = calloc(count, sizeof(int));
+            *count_out = 0;
+            while (db_res_step(res, &err)) {
+                (*sectors_out)[(*count_out)++] = db_res_col_i32(res, 0, &err);
+            }
+        } else {
+            *sectors_out = NULL;
+            *count_out = 0;
+        }
+        db_res_finalize(res);
+        return 0;
+    }
+    return -1;
+}
+
+int repo_universe_ensure_ferengi_homeworld(db_t *db, int sector_id, int owner_id) {
+    db_error_t err;
+    int64_t now_ts = (int64_t)time(NULL);
+    /* Try to update existing Planet 2 */
+    /* SQL_VERBATIM: Q31 */
+    const char *q31_upd = "UPDATE planets SET sector_id = {1}, owner_id = {2}, owner_type = 'corp', name = 'Ferenginar' WHERE planet_id = 2;";
+    char sql_upd[512]; sql_build(db, q31_upd, sql_upd, sizeof(sql_upd));
+    int64_t rows = 0;
+    
+    if (db_exec_rows_affected(db, sql_upd, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(owner_id) }, 2, &rows, &err)) {
+        if (rows > 0) return 0;
+    }
+
+    /* If update failed (rows=0), insert with explicit ID 2. */
+    /* SQL_VERBATIM: Q32 */
+    const char *q32_ins = "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
+                          "VALUES (2, {1}, 'Ferenginar', {2}, 'corp', 'M', 1, {3}, 0, FALSE) "
+                          "ON CONFLICT (planet_id) DO UPDATE SET sector_id = {1};"; 
+    
+    char sql_ins[1024]; sql_build(db, q32_ins, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_timestamp_text(now_ts) }, 3, &err)) {
+        return err.code;
+    }
+    return 0;
+}
+
+int repo_universe_relocate_orion_base(db_t *db, int sector_id, int port_id, int planet_id, int owner_id) {
+    db_error_t err;
+    /* Move Port */
+    /* SQL_VERBATIM: Q33 */
+    const char *q33 = "UPDATE ports SET sector_id = {1} WHERE port_id = {2};";
+    char sql_port[512]; sql_build(db, q33, sql_port, sizeof(sql_port));
+    if (!db_exec(db, sql_port, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(port_id) }, 2, &err)) return err.code;
+
+    /* Move Planet */
+    /* SQL_VERBATIM: Q34 */
+    const char *q34 = "UPDATE planets SET sector_id = {1}, owner_id = {2}, owner_type = 'corp', name = 'Orion Hideout' WHERE planet_id = {3};";
+    char sql_planet[512]; sql_build(db, q34, sql_planet, sizeof(sql_planet));
+    int64_t rows = 0;
+    if (db_exec_rows_affected(db, sql_planet, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_i64(planet_id) }, 3, &rows, &err)) {
+        if (rows > 0) return 0;
+    }
+
+    /* If planet missing, insert it */
+    int64_t now_ts = (int64_t)time(NULL);
+    /* SQL_VERBATIM: Q35 */
+    const char *q35 = "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
+                      "VALUES ({1}, {2}, 'Orion Hideout', {3}, 'corp', 'M', 1, {4}, 0, FALSE) "
+                      "ON CONFLICT (planet_id) DO UPDATE SET sector_id = {2};";
+    char sql_ins[1024]; sql_build(db, q35, sql_ins, sizeof(sql_ins));
+    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_timestamp_text(now_ts) }, 4, &err)) {
+        return err.code;
+    }
+
+    return 0;
+}

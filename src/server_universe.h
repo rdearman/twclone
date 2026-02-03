@@ -10,12 +10,12 @@ int universe_init (void);
 void universe_shutdown (void);
 
 void fer_attach_db (db_t * db);
-int fer_init_once (void);
+int fer_init_once (db_t * db);
 void fer_tick (db_t * db, int64_t now_ms);
 
 void ori_attach_db (db_t * db);
-int ori_init_once (void);
-void ori_tick (int64_t now_ms);
+int ori_init_once (db_t * db);
+void ori_tick (db_t * db, int64_t now_ms);
 
 void iss_init (db_t * db);
 void iss_tick (db_t * db, int64_t now_ms);

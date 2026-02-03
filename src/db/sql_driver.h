@@ -184,6 +184,33 @@ const char *sql_entity_stock_upsert_epoch_fmt(const db_t *db);
 const char *sql_epoch_param_to_timestamptz(const db_t *db);
 
 /**
+ * @brief Return SQL clause for SELECT ... FOR UPDATE.
+ *
+ * PostgreSQL: " FOR UPDATE"
+ * MySQL 8.0+: " FOR UPDATE"
+ *
+ * @param db Database handle.
+ * @return Static string " FOR UPDATE" (note leading space); NULL on unsupported backend.
+ */
+const char *sql_for_update(const db_t *db);
+
+/**
+ * @brief Return SQL clause for SELECT ... FOR UPDATE OF tables.
+ *
+ * Used to lock specific tables in a join.
+ *
+ * PostgreSQL: " FOR UPDATE OF tables"
+ * Others:     " FOR UPDATE" (ignoring table list if not supported)
+ *
+ * @param db Database handle.
+ * @param tables List of table aliases/names (e.g. "s, st, op").
+ * @param out_buf Buffer to write the fragment into.
+ * @param out_sz Size of out_buf.
+ * @return 0 on success, -1 on overflow or unsupported backend.
+ */
+int sql_for_update_of(const db_t *db, const char *tables, char *out_buf, size_t out_sz);
+
+/**
  * @brief Return SQL clause for SELECT ... FOR UPDATE SKIP LOCKED.
  *
  * Used for pessimistic locking with skip behavior on locked rows.

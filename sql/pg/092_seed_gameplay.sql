@@ -572,6 +572,7 @@ INSERT INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VA
   ('system_notice_ttl', 'daily@00:05Z', NULL, now(), TRUE, NULL),
   ('shield_regen', 'every:1m', NULL, now(), TRUE, '{"regen_percent":5}'),
   ('deadletter_retry', 'every:1m', NULL, now(), TRUE, NULL),
-  ('daily_corp_tax', 'daily@05:00Z', NULL, now(), TRUE, NULL)
+  ('daily_corp_tax', 'daily@05:00Z', NULL, now(), TRUE, NULL),
+  ('citadel_construction_reap', 'every:1m', NULL, now(), TRUE, NULL)
 ON CONFLICT (name) DO NOTHING;
 

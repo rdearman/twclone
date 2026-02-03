@@ -287,10 +287,23 @@ int db_combat_load_ship_full_locked(db_t *db, int ship_id, repo_combat_ship_full
     if (!db || !out) return -1;
     db_res_t *res = NULL;
     db_error_t err = {0};
+    char lock_clause[128] = { 0 };
     char sql_tmpl[1024];
-    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = {2} LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1} %s", skip_locked ? "FOR UPDATE SKIP LOCKED" : "FOR UPDATE");
-    char sql[1024]; sql_build(db, sql_tmpl, sql, sizeof(sql));
-    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id), db_bind_bool(true) }, 2, &res, &err)) return -1;
+    if (skip_locked)
+      strncpy (lock_clause, sql_for_update_skip_locked (db),
+	       sizeof (lock_clause) - 1);
+    else
+      sql_for_update_of (db, "s, st, op", lock_clause, sizeof (lock_clause));
+
+    snprintf (sql_tmpl, sizeof (sql_tmpl),
+	      "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1}%s",
+	      lock_clause);
+    char sql[1024];
+    sql_build (db, sql_tmpl, sql, sizeof (sql));
+    if (!db_query (db, sql, (db_bind_t[])
+		   {
+		   db_bind_i64 (ship_id)}, 1, &res, &err))
+      return -1;
     if (!db_res_step(res, &err)) { db_res_finalize(res); return -1; }
     out->id = (int)db_res_col_i32(res, 0, &err); out->hull = (int)db_res_col_i32(res, 1, &err);
     out->shields = (int)db_res_col_i32(res, 2, &err); out->fighters = (int)db_res_col_i32(res, 3, &err);
@@ -308,8 +321,8 @@ int db_combat_load_ship_full_unlocked(db_t *db, int ship_id, repo_combat_ship_fu
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql[1024];
-    sql_build(db, "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = {2} LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1}", sql, sizeof(sql));
-    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id), db_bind_bool(true) }, 2, &res, &err)) return -1;
+    sql_build(db, "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1}", sql, sizeof(sql));
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) return -1;
     if (!db_res_step(res, &err)) { db_res_finalize(res); return -1; }
     out->id = (int)db_res_col_i32(res, 0, &err); out->hull = (int)db_res_col_i32(res, 1, &err);
     out->shields = (int)db_res_col_i32(res, 2, &err); out->fighters = (int)db_res_col_i32(res, 3, &err);
@@ -421,7 +434,7 @@ int db_combat_get_planet_quasar_info(db_t *db, int sector_id, json_t **out_array
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql_tmpl[512], sql[512];
-    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT p.planet_id, p.owner_id, p.owner_type, c.level, c.qCannonSector, c.militaryReactionLevel FROM planets p LEFT JOIN citadels c ON p.planet_id = c.planet_id WHERE p.sector_id = {1} AND c.level >= 3 AND c.qCannonSector > 0%s;", sql_for_update_skip_locked(db));
+    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT p.planet_id, p.owner_id, p.owner_type, c.level, c.qCannonSector, c.militaryReactionLevel FROM planets p JOIN citadels c ON p.planet_id = c.planet_id WHERE p.sector_id = {1} AND c.level >= 3 AND c.qCannonSector > 0%s;", sql_for_update_skip_locked(db));
     sql_build(db, sql_tmpl, sql, sizeof(sql));
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) return -1;
     while(db_res_step(res, &err)) {
@@ -526,8 +539,8 @@ int db_combat_get_ship_fighter_capacity(db_t *db, int ship_id, int *sector_id, i
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql[512];
-    sql_build(db, "SELECT s.sector_id, s.fighters, st.maxfighters, COALESCE(cm.corporation_id,0) FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id LEFT JOIN corp_members cm ON cm.player_id = (SELECT player_id FROM ship_ownership WHERE ship_id = {1} AND is_primary = {2}) WHERE s.ship_id = {1};", sql, sizeof(sql));
-    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id), db_bind_bool(true) }, 2, &res, &err)) return -1;
+    sql_build(db, "SELECT s.sector_id, s.fighters, st.maxfighters, COALESCE(cm.corporation_id,0) FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id LEFT JOIN corp_members cm ON cm.player_id = (SELECT player_id FROM ship_ownership WHERE ship_id = {1} AND is_primary = TRUE) WHERE s.ship_id = {1};", sql, sizeof(sql));
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) return -1;
     if (db_res_step(res, &err)) {
         *sector_id = (int)db_res_col_i32(res, 0, &err);
         *current = (int)db_res_col_i32(res, 1, &err);

@@ -725,6 +725,14 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
 
   // Update context
   ctx->sector_id = sector_id;
+
+  /* Canon #471: Sector assets engage on entry */
+  if (server_combat_apply_entry_hazards (db, ctx, sector_id))
+    {
+      send_response_error (ctx, root, 403, "Ship destroyed by sector hazards on launch.");
+      return 0;
+    }
+
   json_t *response_data = json_object ();
 
 

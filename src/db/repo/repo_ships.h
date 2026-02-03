@@ -27,6 +27,8 @@ int repo_ships_clear_is_being_towed_by(db_t *db, int32_t ship_id);
 
 int repo_ships_get_is_being_towed_by(db_t *db, int32_t ship_id, int32_t *towed_by_id_out);
 
+int repo_ships_get_towed_ship_info(db_t *db, int32_t tower_ship_id, int32_t *towed_ship_id_out, int32_t *towed_player_id_out, int32_t *towed_corp_id_out);
+
 int repo_ships_set_towing_id(db_t *db, int32_t ship_id, int32_t target_ship_id);
 
 int repo_ships_set_is_being_towed_by(db_t *db, int32_t target_ship_id, int32_t player_ship_id);

@@ -21,6 +21,7 @@ int repo_corp_insert_member_ignore(db_t *db, int corp_id, int player_id, const c
 int repo_corp_promote_leader(db_t *db, int corp_id, int player_id);
 int repo_corp_update_owner(db_t *db, int corp_id, int target_player_id);
 int repo_corp_create(db_t *db, const char *name, int owner_id, int64_t *new_corp_id);
+int repo_corp_create_with_tag(db_t *db, const char *name, const char *tag, int owner_id, int64_t *new_corp_id);
 int repo_corp_insert_member(db_t *db, int corp_id, int player_id, const char *role);
 int repo_corp_insert_member_basic(db_t *db, int corp_id, int player_id, const char *role);
 int repo_corp_create_bank_account(db_t *db, int corp_id);

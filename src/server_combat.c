@@ -12,6 +12,7 @@
 #include "server_log.h"
 #include "common.h"
 #include "server_players.h"
+#include "db/repo/repo_ships.h"
 #include "server_universe.h"
 #include "server_combat.h"
 #include "server_envelope.h"
@@ -133,26 +134,37 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
       (db, sector_id, &ids, &quantities, &owners, &corps, &modes,
        &count) != 0)
     return 0;
+
   for (int i = 0; i < count; i++)
     {
       if (!is_asset_hostile
 	  (owners[i], corps[i], ctx->player_id, ctx->corp_id))
-	continue;
+	{
+	  continue;
+	}
       int damage = quantities[i] * damage_per_unit;
       ship_t s = {.hull = ship.hull,.fighters = ship.fighters,.shields =
 	  ship.shields };
       armid_damage_breakdown_t breakdown = { 0 };
       apply_armid_damage_to_ship (&s, damage, &breakdown);
+      
+      /* Calculate units actually consumed based on damage applied */
+      int total_applied = breakdown.shields_lost + breakdown.fighters_lost + breakdown.hull_lost;
+      int units_consumed = (total_applied + damage_per_unit - 1) / damage_per_unit;
+      if (units_consumed > quantities[i]) units_consumed = quantities[i];
+
       ship.hull = s.hull;
       ship.fighters = s.fighters;
       ship.shields = s.shields;
       db_combat_update_ship_stats (db, ship_id, ship.hull, ship.fighters,
 				   ship.shields);
-      db_combat_delete_sector_asset (db, ids[i]);
+      
+      db_combat_decrement_or_delete_asset (db, ids[i], units_consumed);
+      
       json_t *evt = json_object ();
-      json_object_set_new (evt, "damage", json_integer (damage));
+      json_object_set_new (evt, "damage", json_integer (total_applied));
       json_object_set_new (evt, "fighters_engaged",
-			   json_integer (quantities[i]));
+			   json_integer (units_consumed));
       db_log_engine_event ((long long) time (NULL), "combat.hit.fighters",
 			   "player", ctx->player_id, sector_id, evt, NULL);
       json_decref (evt);
@@ -337,10 +349,15 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
 	    int damage = mine_quantity * damage_per_mine;
 	    armid_damage_breakdown_t d = { 0 };
 	    apply_armid_damage_to_ship (&ship_stats, damage, &d);
-	    db_combat_delete_sector_asset (db, mine_id);
+            
+            int total_applied = d.shields_lost + d.fighters_lost + d.hull_lost;
+            int units_consumed = (total_applied + damage_per_mine - 1) / damage_per_mine;
+            if (units_consumed > mine_quantity) units_consumed = mine_quantity;
+
+	    db_combat_decrement_or_delete_asset (db, mine_id, units_consumed);
 	    if (out_enc)
 	      {
-		out_enc->armid_triggered += mine_quantity;
+		out_enc->armid_triggered += units_consumed;
 		out_enc->shields_lost += d.shields_lost;
 		out_enc->fighters_lost += d.fighters_lost;
 		out_enc->hull_lost += d.hull_lost;
@@ -353,7 +370,7 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
 	    json_object_set_new (hit_data, "weapon",
 				 json_string ("armid_mines"));
 	    json_object_set_new (hit_data, "damage_total",
-				 json_integer (damage));
+				 json_integer (total_applied));
 	    db_log_engine_event ((long long) time (NULL), "combat.hit",
 				 "player", ctx->player_id, new_sector_id,
 				 hit_data, NULL);
@@ -451,7 +468,7 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
 	  if (db_combat_move_ship_and_player
 	      (db, ship_id, ctx->player_id, dest) == 0)
 	    {
-	      h_handle_sector_entry_hazards (db, ctx, dest);
+	      server_combat_apply_entry_hazards (db, ctx, dest);
 	      json_t *res = json_object ();
 	      json_object_set_new (res, "success", json_true ());
 	      json_object_set_new (res, "to_sector", json_integer (dest));
@@ -861,27 +878,61 @@ h_decloak_ship (db_t *db, int ship_id)
   return 0;
 }
 
-int
-h_handle_sector_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id)
+static int
+server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int sector_id)
 {
   (void) db;
-  int ship_id = h_get_active_ship_id (game_db_get_handle (), ctx->player_id);
-  if (ship_id <= 0)
-    return 0;
-  json_t *f = NULL;
-  db_combat_get_sector_fighters_locked (game_db_get_handle (), sector_id, &f);
-  size_t i;
-  json_t *item;
-  json_array_foreach (f, i, item)
-  {
-    int owner = json_integer_value (json_object_get (item, "owner_id"));
-    if (is_asset_hostile (owner, 0, ctx->player_id, ctx->corp_id))
-      {
-	h_apply_quasar_damage (ctx, 10, "Fighters");
-      }
-  }
-  json_decref (f);
+  armid_encounter_t enc = { 0 };
+
+  /* 1. Quasars fire first */
+  if (apply_sector_quasar_on_entry (ctx, sector_id))
+    return 1;			/* Ship destroyed */
+
+  /* 2. Mines detonate next */
+  apply_armid_mines_on_entry (ctx, sector_id, &enc);
+  if (enc.destroyed)
+    return 1;
+
+  /* 3. Fighters engage */
+  if (apply_sector_fighters_on_entry (ctx, sector_id))
+    return 1;
+
+  /* 4. Limpets attach last */
+  apply_limpet_mines_on_entry (ctx, sector_id, &enc);
+
   return 0;
+}
+
+int
+server_combat_apply_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id)
+{
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  
+  /* Apply to entering ship */
+  int destroyed = server_combat_apply_entry_hazards_single (db, ctx, sector_id);
+  
+  /* Apply to towed ship if any */
+  if (ship_id > 0)
+    {
+      int towed_sid = 0, towed_pid = 0, towed_cid = 0;
+      if (repo_ships_get_towed_ship_info (db, ship_id, &towed_sid, &towed_pid, &towed_cid) == 0)
+        {
+          /* Create a temporary context for the towed ship's owner */
+          client_ctx_t towed_ctx = *ctx;
+          towed_ctx.player_id = towed_pid;
+          towed_ctx.corp_id = towed_cid;
+          towed_ctx.sector_id = sector_id;
+          
+          if (server_combat_apply_entry_hazards_single (db, &towed_ctx, sector_id))
+            {
+              /* Towed ship destroyed! Disengage beam. */
+              repo_ships_clear_is_being_towed_by (db, towed_sid);
+              repo_ships_clear_towing_id (db, ship_id);
+            }
+        }
+    }
+
+  return destroyed;
 }
 
 int

@@ -20,7 +20,13 @@ int cmd_deploy_mines_list (client_ctx_t * ctx, json_t * root);
 int cmd_combat_sweep_mines (client_ctx_t * ctx, json_t * root);
 
 int apply_sector_fighters_on_entry (client_ctx_t * ctx, int sector_id);
-int h_handle_sector_entry_hazards (db_t * db, client_ctx_t * ctx,
+int apply_armid_mines_on_entry (client_ctx_t * ctx, int new_sector_id,
+				 armid_encounter_t * out_enc);
+int apply_limpet_mines_on_entry (client_ctx_t * ctx, int new_sector_id,
+				 armid_encounter_t * out_enc);
+int apply_sector_quasar_on_entry (client_ctx_t * ctx, int sector_id);
+
+int server_combat_apply_entry_hazards (db_t * db, client_ctx_t * ctx,
 				   int sector_id);
 int h_trigger_atmosphere_quasar (db_t * db, client_ctx_t * ctx,
 				 int planet_id);

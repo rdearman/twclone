@@ -797,3 +797,12 @@ int db_ports_get_commodity_details(db_t *db, int port_id, const char *commodity_
     if (res) db_res_finalize(res);
     return ERR_DB_NOT_FOUND;
 }
+
+int db_ports_update_sector(db_t *db, int port_id, int new_sector_id) {
+    db_error_t err;
+    /* SQL_VERBATIM: Q48 */
+    const char *q48 = "UPDATE ports SET sector_id = {1} WHERE port_id = {2};";
+    char sql[512]; sql_build(db, q48, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(new_sector_id), db_bind_i64(port_id) }, 2, &err)) return err.code;
+    return 0;
+}

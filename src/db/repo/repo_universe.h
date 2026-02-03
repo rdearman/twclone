@@ -30,5 +30,8 @@ int repo_universe_get_ferengi_corp_info(db_t *db, int *corp_id_out, int *player_
 int repo_universe_get_ferengi_homeworld_sector(db_t *db, int *sector_out);
 int repo_universe_get_ferengi_warship_type_id(db_t *db, int *type_id_out);
 int repo_universe_get_random_wormhole_neighbor(db_t *db, int sector_id, int *neighbor_out);
+int repo_universe_get_candidate_homeworld_sectors(db_t *db, int **sectors_out, int *count_out);
+int repo_universe_ensure_ferengi_homeworld(db_t *db, int sector_id, int owner_id);
+int repo_universe_relocate_orion_base(db_t *db, int sector_id, int port_id, int planet_id, int owner_id);
 
 #endif // REPO_UNIVERSE_H

@@ -1551,11 +1551,27 @@ class Planner:
                 highest_potential_profit = potential_profit
                 best_commodity = commodity_code
         
-        # Only return a commodity if there's a strictly positive potential profit.
+        # RELAXATION: If we have no known profitable sell elsewhere, 
+        # just buy the cheapest available commodity at this port to get things moving.
         if best_commodity and highest_potential_profit > 0:
             logger.info(f"Identified most profitable commodity to buy: {best_commodity} with potential profit: {highest_potential_profit}.")
             return best_commodity
-        else:
-            logger.warning(f"No strictly profitable commodity found at port {port_id}. Avoiding purchase.")
-            return None
+        elif best_commodity is None and current_port_commodities_info:
+            # Pick the cheapest one we have a buy price for
+            cheapest_code = None
+            lowest_buy = float('inf')
+            for comm_info in current_port_commodities_info:
+                c_code = canon_commodity(comm_info.get("commodity"))
+                if not c_code: continue
+                b_price = current_port_buy_prices.get(c_code)
+                if b_price is not None and b_price > 0 and b_price < lowest_buy:
+                    lowest_buy = b_price
+                    cheapest_code = c_code
+            
+            if cheapest_code:
+                logger.info(f"No known profitable routes. Buying cheapest available: {cheapest_code} at {lowest_buy}.")
+                return cheapest_code
+
+        logger.warning(f"No suitable commodity found at port {port_id}. Avoiding purchase.")
+        return None
 
