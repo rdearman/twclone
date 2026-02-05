@@ -65,11 +65,16 @@ int repo_universe_mass_randomize_zero_sector_ships(db_t *db) {
 }
 
 db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err) {
+    (void) owner_id;  /* Not used - we get Orion ships from corporation membership */
     /* SQL_VERBATIM: Q7 */
-    const char *q7 = "SELECT s.ship_id, s.sector_id FROM ships s JOIN ship_ownership so ON s.ship_id = so.ship_id WHERE so.player_id = {1};";
+    const char *q7 = "SELECT s.ship_id, s.sector_id FROM ships s "
+                     "JOIN ship_ownership so ON s.ship_id = so.ship_id "
+                     "JOIN corp_members cm ON so.player_id = cm.player_id "
+                     "JOIN corporations c ON cm.corporation_id = c.corporation_id "
+                     "WHERE c.tag = 'ORION';";
     char sql[1024]; sql_build(db, q7, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i64(owner_id) }, 1, &res, err);
+    db_query(db, sql, (db_bind_t[]){}, 0, &res, err);
     return res;
 }
 

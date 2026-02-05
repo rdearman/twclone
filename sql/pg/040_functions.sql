@@ -883,6 +883,75 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION spawn_orion_fleet ()
+    RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_orion_sector integer;
+    v_ship_id integer;
+BEGIN
+    -- Get Orion home sector
+    SELECT center_sector INTO v_orion_sector
+    FROM clusters WHERE name = 'Orion Syndicate' LIMIT 1;
+    
+    IF v_orion_sector IS NULL THEN
+        RETURN;
+    END IF;
+    
+    -- Spawn Zydras with Heavy Fighter Patrol (shiptypes_id 18)
+    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
+    VALUES ('Zydras Heavy Cruiser', 18, v_orion_sector, 10, 5, 3, FALSE)
+    RETURNING ship_id INTO v_ship_id;
+    INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 5, 1) ON CONFLICT DO NOTHING;
+    UPDATE players SET ship_id = v_ship_id WHERE player_id = 5;
+    
+    -- Spawn Krell with Scout/Looter (shiptypes_id 19)
+    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
+    VALUES ('Krell Scout', 19, v_orion_sector, 10, 2, 1, FALSE)
+    RETURNING ship_id INTO v_ship_id;
+    INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 6, 1) ON CONFLICT DO NOTHING;
+    UPDATE players SET ship_id = v_ship_id WHERE player_id = 6;
+    
+    -- Spawn Vex with Contraband Runner (shiptypes_id 20)
+    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
+    VALUES ('Vex Contraband Runner', 20, v_orion_sector, 10, 3, 2, FALSE)
+    RETURNING ship_id INTO v_ship_id;
+    INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 7, 1) ON CONFLICT DO NOTHING;
+    UPDATE players SET ship_id = v_ship_id WHERE player_id = 7;
+    
+    -- Spawn Jaxx with Smuggler's Kiss (shiptypes_id 21)
+    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
+    VALUES ('Jaxx Smuggler', 21, v_orion_sector, 10, 3, 2, FALSE)
+    RETURNING ship_id INTO v_ship_id;
+    INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 8, 1) ON CONFLICT DO NOTHING;
+    UPDATE players SET ship_id = v_ship_id WHERE player_id = 8;
+    
+    -- Spawn Sira with Black Market Guard (shiptypes_id 22)
+    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
+    VALUES ('Sira Market Guard', 22, v_orion_sector, 10, 4, 2, FALSE)
+    RETURNING ship_id INTO v_ship_id;
+    INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 9, 1) ON CONFLICT DO NOTHING;
+    UPDATE players SET ship_id = v_ship_id WHERE player_id = 9;
+    -- Add all Orion captains to the Orion Syndicate corporation (by name, not ID)
+    -- All are Officers; Zydras is the Owner at corporation level
+    INSERT INTO corp_members (corporation_id, player_id, role)
+    SELECT 
+        (SELECT corporation_id FROM corporations WHERE tag = 'ORION' LIMIT 1),
+        player_id,
+        'Officer' as role
+    FROM players
+    WHERE name IN (
+        'Zydras, Heavy Fighter Captain',
+        'Krell, Scout Captain',
+        'Vex, Contraband Captain',
+        'Jaxx, Smuggler Captain',
+        'Sira, Market Guard Captain'
+    )
+    AND is_npc = TRUE
+    ON CONFLICT DO NOTHING;
+END;
+$$;
 CREATE OR REPLACE FUNCTION spawn_initial_fleet ()
     RETURNS void
     LANGUAGE plpgsql
@@ -1137,10 +1206,10 @@ BEGIN
     RAISE NOTICE 'Stardocks in MSL: %', (SELECT COUNT(*) FROM stardock_location sl WHERE EXISTS (SELECT 1 FROM msl_sectors WHERE sector_id = sl.sector_id));
     
     -- Create Orion cluster (special)
-    -- Find Orion homeworld first to use as center_sector
+    -- Use Orion Hideout planet (planet_id 3) to find the center sector
     SELECT pl.sector_id INTO v_center_sector
     FROM planets pl
-    WHERE LOWER(pl.name) LIKE '%orion%'
+    WHERE pl.planet_id = 3
     LIMIT 1;
     
     INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)

@@ -278,10 +278,11 @@ ori_move_all_ships (void)
   db_res_t *res = repo_universe_get_orion_ships (ori_db, ori_owner_id, &err);
   if (!res)
     {
-      LOGE ("ORI_MOVE: Failed to query Orion ships: %s", err.message);
+      LOGE ("[cron] ori_move: Failed to query Orion ships: %s", err.message);
       return;
     }
 
+  int ship_count = 0;
   while (db_res_step (res, &err))
     {
       int ship_id = db_res_col_i32 (res, 0, &err);
@@ -306,11 +307,21 @@ ori_move_all_ships (void)
 	  new_target = (new_target % 999) + 1;
 	}
 
-      /* TODO: Implement persistent ship target tracking in future schema update */
-      LOGI ("ORI_MOVE: Ship %d would target sector %d (from %d).",
-	    ship_id, new_target, current_sector);
+      /* Move the ship to the new sector */
+      if (repo_universe_update_ship_sector (ori_db, ship_id, new_target) == 0)
+	{
+	  LOGD ("[cron] ori_move: Ship %d moved to sector %d (from %d).",
+	      ship_id, new_target, current_sector);
+	}
+      else
+	{
+	  LOGW ("[cron] ori_move: Failed to move ship %d to sector %d.",
+	      ship_id, new_target);
+	}
+      ship_count++;
     }
 
+  LOGI ("[cron] Orion Syndicate processed %d ships for movement.", ship_count);
   db_res_finalize (res);
 }
 
@@ -376,10 +387,7 @@ ori_tick (db_t *db, int64_t now_ms)
       if (!db)
 	return;
     }
-  LOGI ("[cron] Running movement logic for Orion Syndicate... @%ld",
-	(long) now_ms);
   ori_move_all_ships ();
-  // LOGI ("[cron] Complete.");
 }
 
 

@@ -885,8 +885,6 @@ main (int argc, char **argv)
   snprintf (buf, sizeof (buf), "SELECT generate_sectors(%d)", sectors);
   exec_sql (app, buf, "generate_sectors");
 
-  exec_sql (app, "SELECT generate_clusters(10)", "generate_clusters");
-
   int max_ports = (sectors * port_ratio) / 100;
   (void) max_ports;
   (void) bigbang_create_tunnels;
@@ -1048,6 +1046,12 @@ main (int argc, char **argv)
   exec_sql (app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");
   exec_sql (app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
   exec_sql (app, "SELECT setup_orion_syndicate()", "setup_orion");
+
+  // Create clusters AFTER faction homeworlds are set up
+  exec_sql (app, "SELECT generate_clusters_v2(50)", "generate_clusters");
+  
+  // Spawn Orion trader fleet AFTER clusters are created
+  exec_sql (app, "SELECT spawn_orion_fleet()", "spawn_orion_fleet");
 
   // Then generate random warps for the rest of the universe
   create_random_warps (app, sectors, density);

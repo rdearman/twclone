@@ -39,6 +39,9 @@ int iss_init_once (void);
 #define RANGE_SIZE (MAX_UNPROTECTED_SECTOR - MIN_UNPROTECTED_SECTOR + 1)
 #define NEWS_EXPIRATION_SECONDS 604800L
 #define MAX_ARTICLE_LEN 512
+#define MSL_TABLE_NAME "msl_sectors"
+
+
 /* --- ADD TO TOP OF FILE (Declarations section) --- */
 /* These helpers allow us to yield the C-level lock while keeping the DB handle open */
 int h_daily_news_compiler (db_t * db, int64_t now_s);
@@ -194,8 +197,6 @@ tow_ship (db_t *db, int ship_id, int new_sector_id, int admin_id,
   return 0;
 }
 
-
-#define MSL_TABLE_NAME "msl_sectors"
 
 
 static int *
@@ -392,18 +393,18 @@ populate_msl_if_empty (db_t *db)
 
   if (total_sectors_in_table > 0)
     {
-      LOGI
-	("%s table already populated with %d entries. Skipping MSL calculation.",
+      LOGD
+	("[cron] %s table already populated with %d entries. Skipping MSL calculation.",
 	 MSL_TABLE_NAME, total_sectors_in_table);
       return 0;
     }
-  LOGI
-    ("%s table is empty. Starting comprehensive MSL path calculation (FedSpace 1-10 <-> Stardocks)...",
+  LOGD
+    ("[cron] %s table is empty. Starting comprehensive MSL path calculation (FedSpace 1-10 <-> Stardocks)...",
      MSL_TABLE_NAME);
 
   if (db_cron_create_msl_table (db) != 0)
     {
-      LOGE ("SQL error creating %s table", MSL_TABLE_NAME);
+      LOGE ("[cron] SQL error creating %s table", MSL_TABLE_NAME);
       return -1;
     }
 
@@ -413,14 +414,14 @@ populate_msl_if_empty (db_t *db)
   if (db_cron_get_stardock_locations (db, &stardock_sectors, &stardock_count)
       != 0)
     {
-      LOGE ("SQL error preparing Stardock select");
+      LOGE ("[cron] SQL error preparing Stardock select");
       return -1;
     }
 
   if (stardock_count == 0)
     {
       LOGW
-	("No stardock locations found in stardock_location table. Skipping MSL calculation.");
+	("[cron] No stardock locations found in stardock_location table. Skipping MSL calculation.");
       free (stardock_sectors);
       return 0;
     }
@@ -429,7 +430,7 @@ populate_msl_if_empty (db_t *db)
   db_error_clear (&err);
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     {
-      LOGE ("SQL error starting master transaction: %s", err.message);
+      LOGE ("[cron] SQL error starting master transaction: %s", err.message);
       free (stardock_sectors);
       return -1;
     }
@@ -449,7 +450,7 @@ populate_msl_if_empty (db_t *db)
 				avoid_list, &total_unique_sectors_added);
 	  if (start_sector != stardock_id)
 	    {
-	      LOGI ("Calculating path %d -> %d (Reverse)", stardock_id,
+	      LOGI ("[cron] Calculating path %d -> %d (Reverse)", stardock_id,
 		    start_sector);
 	      _insert_path_sectors (db, stardock_id, start_sector,
 				    avoid_list, &total_unique_sectors_added);
@@ -460,10 +461,10 @@ populate_msl_if_empty (db_t *db)
   free (stardock_sectors);
   if (!db_tx_commit (db, &err))
     {
-      LOGE ("SQL error committing master path transaction: %s", err.message);
+      LOGE ("[cron] SQL error committing master path transaction: %s", err.message);
       return -1;
     }
-  LOGI ("Completed MSL setup. Populated %s with %d total unique sectors.",
+  LOGI ("[cron] Completed MSL setup. Populated %s with %d total unique sectors.",
 	MSL_TABLE_NAME, total_unique_sectors_added);
   return 0;
 }
@@ -799,7 +800,7 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
 
   /* Final Cleanup */
   db_cron_clear_eligible_tows (db);
-  LOGI ("fedspace_cleanup: ok (towed=%d)", tows);
+  LOGI ("[cron] Fedspace Clean Up (towed=%d)", tows);
   unlock (db, "fedspace_cleanup");
   return 0;
 }
