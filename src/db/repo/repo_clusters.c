@@ -311,3 +311,166 @@ int repo_clusters_upsert_port_stock(db_t *db, int port_id, const char *commodity
     if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity), db_bind_i64(quantity), db_bind_i64(now_s) }, 4, &err)) return err.code;
     return 0;
 }
+
+/* ========================================================================
+   PHASE B: Incident State Helpers
+   ======================================================================== */
+
+int repo_clusters_check_incident_active(db_t *db, int cluster_id, int player_id, int *has_incident_out) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    const char *q = "SELECT (suspicion > 0 OR wanted_level > 0 OR banned = 1) FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+    char sql[512]; sql_build(db, q, sql, sizeof(sql));
+    if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
+        if (db_res_step (res, &err)) {
+            *has_incident_out = db_res_col_i32 (res, 0, &err);
+        } else {
+            *has_incident_out = 0;
+        }
+        db_res_finalize (res);
+        return 0;
+    }
+    return err.code;
+}
+
+int repo_clusters_promote_wanted_from_suspicion(db_t *db, int cluster_id, int player_id) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    const char *q_read = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+    char sql_read[512]; sql_build(db, q_read, sql_read, sizeof(sql_read));
+    
+    if (!db_query (db, sql_read, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
+        return err.code;
+    }
+    
+    int suspicion = 0, wanted_level = 0;
+    if (db_res_step (res, &err)) {
+        suspicion = db_res_col_i32 (res, 0, &err);
+        wanted_level = db_res_col_i32 (res, 1, &err);
+    }
+    db_res_finalize (res);
+    
+    /* Phase B Threshold: suspicion >= 3 promotes to wanted_level */
+    if (suspicion >= 3) {
+        wanted_level++;
+        /* Reset suspicion after promotion */
+        const char *q_upd = "UPDATE cluster_player_status SET suspicion = 0, wanted_level = {1}, banned = CASE WHEN {1} >= 3 THEN 1 ELSE banned END WHERE cluster_id = {2} AND player_id = {3}";
+        char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+        if (!db_exec (db, sql_upd, (db_bind_t[]){ db_bind_i64(wanted_level), db_bind_i64(cluster_id), db_bind_i64(player_id) }, 3, &err)) {
+            return err.code;
+        }
+    }
+    
+    return 0;
+}
+
+int repo_clusters_clear_incident_state(db_t *db, int cluster_id, int player_id) {
+    db_error_t err;
+    const char *q = "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 0, banned = 0 WHERE cluster_id = {1} AND player_id = {2}";
+    char sql[512]; sql_build(db, q, sql, sizeof(sql));
+    if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &err)) {
+        return err.code;
+    }
+    return 0;
+}
+
+/* Phase C: Reduce incident by one tier for local surrender */
+int repo_clusters_reduce_incident_by_tier(db_t *db, int cluster_id, int player_id) {
+    db_error_t err;
+    db_res_t *res = NULL;
+    
+    /* Query current state */
+    const char *q_sel = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+    char sql_sel[512];
+    sql_build(db, q_sel, sql_sel, sizeof(sql_sel));
+    
+    if (!db_query(db, sql_sel, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
+        return err.code;
+    }
+    
+    int suspicion = 0, wanted_level = 0;
+    if (db_res_step(res, &err)) {
+        suspicion = db_res_col_i32(res, 0, &err);
+        wanted_level = db_res_col_i32(res, 1, &err);
+    }
+    db_res_finalize(res);
+    
+    /* Reduce by one tier: wanted_level first, then suspicion */
+    if (wanted_level > 0) {
+        wanted_level--;
+    } else if (suspicion > 0) {
+        suspicion = 0;
+    }
+    
+    /* Clear banned if wanted_level drops below 3 */
+    int new_banned = (wanted_level >= 3) ? 1 : 0;
+    
+    const char *q_upd = "UPDATE cluster_player_status SET suspicion = {1}, wanted_level = {2}, banned = {3} WHERE cluster_id = {4} AND player_id = {5}";
+    char sql_upd[512];
+    sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    
+    if (!db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i64(suspicion), db_bind_i64(wanted_level), db_bind_i64(new_banned), db_bind_i64(cluster_id), db_bind_i64(player_id) }, 5, &err)) {
+        return err.code;
+    }
+    
+    return 0;
+}
+
+/* Phase C: Apply bribe success effects (clear suspicion, reduce wanted_level) */
+int repo_clusters_apply_bribe_success(db_t *db, int cluster_id, int player_id) {
+    db_error_t err;
+    db_res_t *res = NULL;
+    
+    /* Query current state */
+    const char *q_sel = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+    char sql_sel[512];
+    sql_build(db, q_sel, sql_sel, sizeof(sql_sel));
+    
+    if (!db_query(db, sql_sel, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
+        return err.code;
+    }
+    
+    int suspicion = 0, wanted_level = 0;
+    if (db_res_step(res, &err)) {
+        suspicion = db_res_col_i32(res, 0, &err);
+        wanted_level = db_res_col_i32(res, 1, &err);
+    }
+    db_res_finalize(res);
+    
+    /* Bribe success: clear suspicion and reduce wanted_level by 1 */
+    suspicion = 0;
+    if (wanted_level > 0) {
+        wanted_level--;
+    }
+    
+    /* Clear banned if wanted_level drops below 3 */
+    int new_banned = (wanted_level >= 3) ? 1 : 0;
+    
+    const char *q_upd = "UPDATE cluster_player_status SET suspicion = {1}, wanted_level = {2}, banned = {3} WHERE cluster_id = {4} AND player_id = {5}";
+    char sql_upd[512];
+    sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    
+    if (!db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i64(suspicion), db_bind_i64(wanted_level), db_bind_i64(new_banned), db_bind_i64(cluster_id), db_bind_i64(player_id) }, 5, &err)) {
+        return err.code;
+    }
+    
+    return 0;
+}
+
+/* Phase C: Apply bribe failure effects (increment suspicion, possibly promote wanted_level) */
+int repo_clusters_apply_bribe_failure(db_t *db, int cluster_id, int player_id) {
+    db_error_t err;
+    
+    /* Increment suspicion */
+    const char *q = "UPDATE cluster_player_status SET suspicion = suspicion + 1 WHERE cluster_id = {1} AND player_id = {2}";
+    char sql[512];
+    sql_build(db, q, sql, sizeof(sql));
+    
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &err)) {
+        return err.code;
+    }
+    
+    /* Check if suspicion >= 3 and promote wanted_level */
+    return repo_clusters_promote_wanted_from_suspicion(db, cluster_id, player_id);
+}
+

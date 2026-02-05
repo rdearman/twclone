@@ -87,7 +87,7 @@ INSERT INTO corporations (name, owner_id, tag)
             FROM
                 players
             WHERE
-                name = 'Zydras'
+                name LIKE 'Zydras%'
             LIMIT 1),
         'ORION'),
 ('Ferengi Alliance',

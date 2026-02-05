@@ -1,0 +1,283 @@
+{
+  "name": "Police Phase B - Incident State Escalation",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat_Police",
+  "description": "Coverage for incident state tracking: port robbery increments suspicion, thresholds promote wanted_level, surrender resolves incident state. Tests jurisdiction-aware tracking and clearing.",
+  "tests": [
+    {
+      "name": "Setup: Create test player",
+      "setup": "macro_auth_user",
+      "username": "phase_b_player",
+      "password": "testpass"
+    },
+    {
+      "name": "Setup: Get player ship ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ship_id FROM players WHERE player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "player_ship_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Find a sector in RANDOM cluster (law_severity > 0)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'RANDOM' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "random_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Move player to RANDOM cluster sector",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@{random_sector}" },
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Determine cluster_id for random sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT c.clusters_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE cs.sector_id = @{random_sector};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "random_cluster_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Test A.1: No incident - player has zero suspicion initially",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COALESCE(suspicion, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "initial_suspicion": "data.rows.0.0" },
+      "asserts": [
+        { "path": "initial_suspicion", "op": "equals", "value": 0, "msg": "New player should have zero suspicion" }
+      ]
+    },
+    {
+      "name": "Test A.2: No incident - surrender should return no-incident error",
+      "command": "police.surrender",
+      "data": {},
+      "user": "phase_b_player",
+      "expect": { "status": "error" },
+      "asserts": [
+        { "path": "error.code", "op": "equals", "value": 502, "msg": "Surrender with no incident should return not-implemented (Phase B stub)" }
+      ]
+    },
+    {
+      "name": "Rig: Seed port cash and find a port in random sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET cash = 100000 WHERE sector_id = @{random_sector} LIMIT 1;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get port ID for robbery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT port_id FROM ports WHERE sector_id = @{random_sector} LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "robbery_port_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Seed player XP for robbery eligibility",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET xp = 10000 WHERE player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set player alignment to allow robbery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET alignment = 80 WHERE player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test B.1: Port robbery increments suspicion",
+      "command": "port.rob",
+      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits" },
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test B.2: Verify suspicion incremented to 1 after robbery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COALESCE(suspicion, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "suspicion_after_1": "data.rows.0.0" },
+      "asserts": [
+        { "path": "suspicion_after_1", "op": "equals", "value": 1, "msg": "Suspicion should be 1 after first robbery" }
+      ]
+    },
+    {
+      "name": "Test B.3: Check wanted_level still zero after suspicion=1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COALESCE(wanted_level, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "wanted_after_1": "data.rows.0.0" },
+      "asserts": [
+        { "path": "wanted_after_1", "op": "equals", "value": 0, "msg": "Wanted level should remain 0 until suspicion threshold" }
+      ]
+    },
+    {
+      "name": "Test B.4: Second robbery increments suspicion to 2",
+      "command": "port.rob",
+      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits" },
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test B.5: Verify suspicion is 2 after second robbery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COALESCE(suspicion, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "suspicion_after_2": "data.rows.0.0" },
+      "asserts": [
+        { "path": "suspicion_after_2", "op": "equals", "value": 2, "msg": "Suspicion should be 2 after second robbery" }
+      ]
+    },
+    {
+      "name": "Test B.6: Third robbery triggers promotion (suspicion >= 3)",
+      "command": "port.rob",
+      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits" },
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test B.7: Verify promotion - wanted_level=1, suspicion resets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COALESCE(suspicion, 0), COALESCE(wanted_level, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "incident_state": "data.rows.0" },
+      "asserts": [
+        { "path": "incident_state.0", "op": "equals", "value": 0, "msg": "Suspicion should reset to 0 after promotion" },
+        { "path": "incident_state.1", "op": "equals", "value": 1, "msg": "Wanted level should be 1 after threshold promotion" }
+      ]
+    },
+    {
+      "name": "Test C.1: Surrender with active incident should clear state (Phase B)",
+      "command": "police.surrender",
+      "data": {},
+      "user": "phase_b_player",
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Test C.2: Verify incident cleared after surrender",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COALESCE(suspicion, 0), COALESCE(wanted_level, 0), COALESCE(banned, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "cleared_state": "data.rows.0" },
+      "asserts": [
+        { "path": "cleared_state.0", "op": "equals", "value": 0, "msg": "Suspicion should be cleared" },
+        { "path": "cleared_state.1", "op": "equals", "value": 0, "msg": "Wanted level should be cleared" },
+        { "path": "cleared_state.2", "op": "equals", "value": 0, "msg": "Banned flag should be cleared" }
+      ]
+    },
+    {
+      "name": "Rig: Find sector in Orion cluster (lawless)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'ORION' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Get Orion cluster ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT c.clusters_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE cs.sector_id = @{orion_sector};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_cluster_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Move player to Orion sector",
+      "command": "nav.move_simple",
+      "data": { "sector_id": "@{orion_sector}" },
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Get port in Orion sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT port_id FROM ports WHERE sector_id = @{orion_sector} LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_port_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Seed cash for Orion port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET cash = 100000 WHERE port_id = @{orion_port_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test D.1: Lawless (Orion) - robbery should NOT create incident state",
+      "command": "port.rob",
+      "data": { "sector_id": "@{orion_sector}", "port_id": "@{orion_port_id}", "mode": "credits" },
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test D.2: Verify no incident row created in Orion",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_player_status WHERE cluster_id = @{orion_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_incident_count": "data.rows.0.0" },
+      "asserts": [
+        { "path": "orion_incident_count", "op": "equals", "value": 0, "msg": "No incident should be tracked in lawless cluster" }
+      ]
+    },
+    {
+      "name": "Test D.3: Bribe/surrender in Orion should return no-police error",
+      "command": "police.surrender",
+      "data": {},
+      "user": "phase_b_player",
+      "expect": { "status": "error", "error_code": 1410 },
+      "asserts": [
+        { "path": "error.code", "op": "equals", "value": 1410, "msg": "Lawless cluster should return ERR_NO_POLICE_PRESENCE" }
+      ]
+    }
+  ]
+}

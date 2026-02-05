@@ -66,7 +66,7 @@ int repo_universe_mass_randomize_zero_sector_ships(db_t *db) {
 
 db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err) {
     /* SQL_VERBATIM: Q7 */
-    const char *q7 = "SELECT s.id, s.sector, s.target_sector FROM ships s JOIN ship_ownership so ON s.id = so.ship_id WHERE so.player_id = {1};";
+    const char *q7 = "SELECT s.ship_id, s.sector_id FROM ships s JOIN ship_ownership so ON s.ship_id = so.ship_id WHERE so.player_id = {1};";
     char sql[1024]; sql_build(db, q7, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i64(owner_id) }, 1, &res, err);
@@ -104,6 +104,21 @@ int repo_universe_get_port_sector_by_id_name(db_t *db, int port_id, const char *
     const char *q10 = "SELECT sector_id FROM ports WHERE port_id={1} AND name={2};";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(name) }, 2, &res, &err) && db_res_step(res, &err)) {
+        *sector_out = db_res_col_i32(res, 0, &err);
+        db_res_finalize(res);
+        return 0;
+    }
+    if (res) db_res_finalize(res);
+    return err.code ? err.code : -1;
+}
+
+int repo_universe_get_cluster_center_sector_by_role(db_t *db, const char *role, int *sector_out) {
+    db_res_t *res = NULL;
+    db_error_t err;
+    /* SQL_VERBATIM: Q10b */
+    const char *q10b = "SELECT center_sector FROM clusters WHERE role={1};";
+    char sql[512]; sql_build(db, q10b, sql, sizeof(sql));
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(role) }, 1, &res, &err) && db_res_step(res, &err)) {
         *sector_out = db_res_col_i32(res, 0, &err);
         db_res_finalize(res);
         return 0;

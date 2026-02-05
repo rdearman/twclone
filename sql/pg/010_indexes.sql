@@ -141,3 +141,5 @@ CREATE INDEX idx_engine_cmds_prio_due ON engine_commands (priority, due_at);
 
 CREATE INDEX ix_news_feed_pub_ts ON news_feed (published_ts);
 
+
+CREATE INDEX IF NOT EXISTS idx_ports_type_sector ON ports(type, sector_id);

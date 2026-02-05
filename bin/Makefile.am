@@ -102,6 +102,7 @@ server_SOURCES = \
 	../src/server_news.c \
 	../src/server_planets.c \
 	../src/server_players.c \
+	../src/server_police.c \
 	../src/server_ports.c \
 	../src/server_s2s.c \
 	../src/server_ships.c \

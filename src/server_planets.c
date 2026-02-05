@@ -15,6 +15,7 @@
 #include "server_log.h"
 #include "db/repo/repo_database.h"
 #include "db/repo/repo_planets.h"
+#include "db/repo/repo_clusters.h"
 #include "game_db.h"
 #include "errors.h"
 #include "server_cmds.h"
@@ -659,6 +660,22 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
 			   "You do not have permission to land on this planet.");
       return 0;
     }
+
+  /* Phase C: Check ban enforcement in planet's cluster */
+  {
+    int cluster_id = 0;
+    int rc = repo_clusters_get_cluster_for_sector(db, planet_sector, &cluster_id);
+    if (rc == 0)  /* Cluster found (not unclaimed) */
+      {
+        int is_banned = 0;
+        if (repo_clusters_get_player_banned(db, cluster_id, ctx->player_id, &is_banned) == 0 && is_banned)
+          {
+            send_response_error(ctx, root, ERR_BANNED_FROM_JURISDICTION,
+                              "You are banned from this jurisdiction and cannot land.");
+            return 0;
+          }
+      }
+  }
 
   /* Task A: Block landing on Earth for evil players */
   int alignment = 0;

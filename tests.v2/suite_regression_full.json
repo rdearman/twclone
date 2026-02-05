@@ -1,0 +1,33 @@
+{
+  "name": "Full Regression Test Suite",
+  "version": "2.0.0",
+  "description": "Master regression suite orchestrating all critical feature tests: Captain Z enforcement, FedSpace MSL asset denial, Cluster Generation v2 invariants, Police Phase A/B/C, and Ferengi NPC initialization.",
+  "include_suites": [
+    "suite_fedspace_aggression_captainz.json",
+    "suite_fedspace_msl_asset_enforcement.json",
+    "suite_cluster_generation_v2_invariants.json",
+    "suite_police_phase_a.json",
+    "suite_police_phase_b_incidents.json",
+    "suite_police_phase_c_resolution.json",
+    "suite_npc_ferengi_init.json"
+  ],
+  "meta": {
+    "features_covered": [
+      "Captain Z hard-punish enforcement (FedSpace sectors 1-10)",
+      "FedSpace MSL asset deployment denial (deny in 1-10, destroy in >10)",
+      "Cluster Generation v2 database invariants",
+      "Police Phase A: RPC availability and jurisdiction stubs",
+      "Police Phase B: Incident state tracking (suspicion/wanted_level) and port robbery trigger",
+      "Police Phase C: Resolution mechanics (bribery success/failure, surrender outcomes) and ban enforcement",
+      "Ferengi NPC auto-creation and idempotency"
+    ],
+    "total_test_count": "~130+",
+    "estimated_runtime": "15-20 minutes",
+    "prerequisites": [
+      "Database rigged with test_rig.json",
+      "Server running and accessible at configured host:port",
+      "BigBang cluster seeding completed"
+    ]
+  }
+}
+

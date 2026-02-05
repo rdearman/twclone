@@ -1,0 +1,80 @@
+{
+  "name": "Ferengi NPC Initialization",
+  "version": "2.0.0",
+  "protocol_category": "22_NPC_Ferengi",
+  "description": "Coverage for Ferengi NPC auto-creation: verifies that Ferengi Alliance corporation is created on first tick and is idempotent",
+  "tests": [
+    {
+      "name": "Setup: Admin Auth",
+      "setup": "macro_auth_user",
+      "username": "System",
+      "password": "BOT"
+    },
+    {
+      "name": "Rig: Get System Player ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT player_id FROM players WHERE name='System' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "system_player_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Check if Ferengi Corp exists",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM corporations WHERE tag='FENG';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "ferengi_corp_count": "data.rows.0.0" }
+    },
+    {
+      "name": "Conditional: If Ferengi missing, trigger init",
+      "command": "sys.npc.ferengi_tick_once",
+      "data": {},
+      "user": "System",
+      "conditional": {
+        "field": "ferengi_corp_count",
+        "op": "equals",
+        "value": 0
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 1: Ferengi Alliance exists",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT name, owner_id FROM corporations WHERE tag='FENG' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "ferengi_data": "data.rows.0" },
+      "asserts": [
+        { "path": "ferengi_data.0", "op": "equals", "value": "Ferengi Alliance", "msg": "Corporation name must be 'Ferengi Alliance'" },
+        { "path": "ferengi_data.1", "op": "equals", "value": "@{system_player_id}", "msg": "Owner must be System player" }
+      ]
+    },
+    {
+      "name": "Test 2: Idempotency - Run ferengi_tick_once again",
+      "command": "sys.npc.ferengi_tick_once",
+      "data": {},
+      "user": "System",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 3: Only one Ferengi corporation exists",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM corporations WHERE tag='FENG';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "final_ferengi_count": "data.rows.0.0" },
+      "asserts": [
+        { "path": "final_ferengi_count", "op": "equals", "value": 1, "msg": "Must have exactly one Ferengi corporation (idempotent)" }
+      ]
+    }
+  ]
+}

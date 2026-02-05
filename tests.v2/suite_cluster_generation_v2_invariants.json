@@ -1,0 +1,193 @@
+{
+  "name": "Cluster Generation v2 Invariants",
+  "version": "2.0.0",
+  "protocol_category": "22_Universe_Navigation",
+  "description": "Coverage for Cluster Generation v2 database invariants: Federation contains sectors 1-10 + all msl_sectors; no overlaps; free space exists",
+  "tests": [
+    {
+      "name": "Setup: Admin Auth",
+      "setup": "macro_auth_user",
+      "username": "System",
+      "password": "BOT"
+    },
+    {
+      "name": "Invariant 1.1: Sector 1 exists and is in Federation cluster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE cs.sector_id = 1 AND c.role = 'FED';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "sector_1_in_fed": "data.rows.0.0" },
+      "asserts": [
+        { "path": "sector_1_in_fed", "op": "equals", "value": 1, "msg": "Sector 1 must be in Federation cluster" }
+      ]
+    },
+    {
+      "name": "Invariant 1.2: Sectors 2-10 all exist and are in Federation cluster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE cs.sector_id BETWEEN 2 AND 10 AND c.role = 'FED';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "sectors_2_10_in_fed": "data.rows.0.0" },
+      "asserts": [
+        { "path": "sectors_2_10_in_fed", "op": "equals", "value": 9, "msg": "All sectors 2-10 must be in Federation cluster" }
+      ]
+    },
+    {
+      "name": "Invariant 2.1: Find all MSL sector IDs",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(DISTINCT sector_id) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'FED' AND cs.sector_id > 10;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "msl_sector_count": "data.rows.0.0" }
+    },
+    {
+      "name": "Invariant 2.2: All MSL sectors > 10 are in Federation cluster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'FED' AND cs.sector_id > 10 AND c.role = 'FED';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "msl_in_fed": "data.rows.0.0" },
+      "asserts": [
+        { "path": "msl_in_fed", "op": "equals", "value": "@{msl_sector_count}", "msg": "All MSL sectors must be in Federation cluster" }
+      ]
+    },
+    {
+      "name": "Invariant 3.1: No sector is assigned to multiple clusters",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT sector_id FROM cluster_sectors GROUP BY sector_id HAVING COUNT(*) > 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "overlapped_sectors": "data.rows" },
+      "asserts": [
+        { "path": "overlapped_sectors", "op": "is_empty", "msg": "No sector can be in multiple clusters" }
+      ]
+    },
+    {
+      "name": "Invariant 4.1: Free space exists (sectors not in any cluster)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM sectors s WHERE NOT EXISTS (SELECT 1 FROM cluster_sectors cs WHERE cs.sector_id = s.sector_id);"
+      },
+      "expect": { "status": "ok" },
+      "save": { "free_space_count": "data.rows.0.0" },
+      "asserts": [
+        { "path": "free_space_count", "op": "greater_than", "value": 0, "msg": "Free space must exist (sectors not in any cluster)" }
+      ]
+    },
+    {
+      "name": "Invariant 4.2: Federation cluster contains sectors 1-10",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'FED' AND cs.sector_id BETWEEN 1 AND 10;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "fed_1_to_10": "data.rows.0.0" },
+      "asserts": [
+        { "path": "fed_1_to_10", "op": "equals", "value": 10, "msg": "Federation must contain all sectors 1-10" }
+      ]
+    },
+    {
+      "name": "Invariant 5.1: Orion cluster exists and is lawless",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM clusters WHERE role = 'ORION' AND law_severity = 0;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_lawless": "data.rows.0.0" },
+      "asserts": [
+        { "path": "orion_lawless", "op": "equals", "value": 1, "msg": "Orion cluster must exist and be lawless (law_severity=0)" }
+      ]
+    },
+    {
+      "name": "Invariant 5.2: RANDOM cluster exists with law_severity > 0",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM clusters WHERE role = 'RANDOM' AND law_severity > 0;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "random_lawful": "data.rows.0.0" },
+      "asserts": [
+        { "path": "random_lawful", "op": "greater_than", "value": 0, "msg": "At least one RANDOM cluster must exist with law_severity > 0" }
+      ]
+    },
+    {
+      "name": "Invariant 6.1: No sector outside 1-40000 assigned to clusters",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_sectors WHERE sector_id < 1 OR sector_id > 40000;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "invalid_sector_ids": "data.rows.0.0" },
+      "asserts": [
+        { "path": "invalid_sector_ids", "op": "equals", "value": 0, "msg": "All assigned sectors must be within valid range 1-40000" }
+      ]
+    },
+    {
+      "name": "Invariant 7.1: Federation cluster has role='FED'",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT role FROM clusters WHERE role = 'FED' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "fed_role": "data.rows.0.0" },
+      "asserts": [
+        { "path": "fed_role", "op": "equals", "value": "FED", "msg": "Federation cluster role must be 'FED'" }
+      ]
+    },
+    {
+      "name": "Invariant 7.2: Orion cluster has role='ORION'",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT role FROM clusters WHERE role = 'ORION' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "orion_role": "data.rows.0.0" },
+      "asserts": [
+        { "path": "orion_role", "op": "equals", "value": "ORION", "msg": "Orion cluster role must be 'ORION'" }
+      ]
+    },
+    {
+      "name": "Invariant 8.1: All clusters have valid law_severity >= 0",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM clusters WHERE law_severity < 0;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "invalid_law_severity": "data.rows.0.0" },
+      "asserts": [
+        { "path": "invalid_law_severity", "op": "equals", "value": 0, "msg": "All clusters must have law_severity >= 0" }
+      ]
+    },
+    {
+      "name": "Invariant 9.1: Federation has law_severity > 0 (law-abiding)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT law_severity FROM clusters WHERE role = 'FED' LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "fed_law_severity": "data.rows.0.0" },
+      "asserts": [
+        { "path": "fed_law_severity", "op": "greater_than", "value": 0, "msg": "Federation must be law-abiding (law_severity > 0)" }
+      ]
+    }
+  ]
+}

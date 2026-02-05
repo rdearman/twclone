@@ -1,0 +1,403 @@
+{
+  "name": "suite_police_phase_c_resolution",
+  "description": "Police Phase C: Resolution Mechanics (Bribery, Surrender Outcomes, Ban Enforcement)",
+  "tests": [
+    {
+      "name": "C_Surrender_Fed_Clears_All",
+      "description": "Surrender in Federation cluster clears all incident fields",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_fed_surrender"
+        },
+        {
+          "step": "Move to FED cluster sector",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'FED') LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Create incident: manually set suspicion=2, wanted_level=1",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET suspicion = 2, wanted_level = 1 WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'FED' LIMIT 1) AND player_id = $PLAYER_ID"
+        },
+        {
+          "command": "police.surrender",
+          "data": {}
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "ok" },
+            { "path": "data.wanted_level_after", "value": 0 },
+            { "path": "data.suspicion_after", "value": 0 }
+          ]
+        },
+        {
+          "step": "Verify DB cleared",
+          "command": "db_query",
+          "sql": "SELECT suspicion, wanted_level, banned FROM cluster_player_status WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'FED' LIMIT 1) AND player_id = $PLAYER_ID"
+        },
+        {
+          "assert_equal": [
+            { "path": "suspicion", "value": 0, "row": 0 },
+            { "path": "wanted_level", "value": 0, "row": 0 },
+            { "path": "banned", "value": false, "row": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Surrender_Local_Reduces_Tier",
+      "description": "Surrender in local cluster reduces incident by one tier",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_local_surrender"
+        },
+        {
+          "step": "Move to local (RANDOM) cluster sector",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Create incident: wanted_level=2",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 2 WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) AND player_id = $PLAYER_ID"
+        },
+        {
+          "command": "police.surrender",
+          "data": {}
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "ok" },
+            { "path": "data.wanted_level_before", "value": 2 },
+            { "path": "data.wanted_level_after", "value": 1 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Surrender_No_Incident",
+      "description": "Surrender with no incident returns error",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_no_incident"
+        },
+        {
+          "step": "Move to any lawful sector",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Ensure no incident (clear if exists)",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 0 WHERE player_id = $PLAYER_ID"
+        },
+        {
+          "command": "police.surrender",
+          "data": {}
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1413 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Bribe_Success_Reduces_Wanted",
+      "description": "Successful bribe reduces wanted_level and clears suspicion",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_bribe_success"
+        },
+        {
+          "step": "Move to local cluster",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Create incident: wanted_level=1, suspicion=1",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET suspicion = 1, wanted_level = 1 WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) AND player_id = $PLAYER_ID"
+        },
+        {
+          "step": "Bribe with sufficient amount (wanted=1 requires >= 200)",
+          "command": "police.bribe",
+          "data": { "amount": 250 }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "ok" },
+            { "path": "data.success", "value": true },
+            { "path": "data.suspicion_after", "value": 0 },
+            { "path": "data.wanted_level_after", "value": 0 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Bribe_Failure_Increments_Suspicion",
+      "description": "Failed bribe increments suspicion and may promote wanted_level",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_bribe_fail"
+        },
+        {
+          "step": "Move to local cluster",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Create incident: wanted_level=1",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 1 WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) AND player_id = $PLAYER_ID"
+        },
+        {
+          "step": "Bribe with insufficient amount (requires >= 200, offer 100)",
+          "command": "police.bribe",
+          "data": { "amount": 100 }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "data.success", "value": false },
+            { "path": "data.suspicion_after", "value": 1 },
+            { "path": "data.wanted_level_after", "value": 1 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Bribe_No_Incident",
+      "description": "Bribe with no incident returns error",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_bribe_no_incident"
+        },
+        {
+          "step": "Move to local cluster",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Ensure no incident",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 0 WHERE player_id = $PLAYER_ID"
+        },
+        {
+          "command": "police.bribe",
+          "data": { "amount": 500 }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1413 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Ban_Blocks_Sector_Entry",
+      "description": "Banned player cannot warp to banned cluster",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_ban_entry"
+        },
+        {
+          "step": "Find RANDOM cluster ID",
+          "command": "db_query",
+          "sql": "SELECT clusters_id FROM clusters WHERE role = 'RANDOM' LIMIT 1"
+        },
+        {
+          "step": "Set banned=1 in player's status",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET banned = 1 WHERE cluster_id = $RESULT.clusters_id[0] AND player_id = $PLAYER_ID"
+        },
+        {
+          "step": "Get a sector in that cluster",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = $RESULT.clusters_id[0] LIMIT 1"
+        },
+        {
+          "step": "Try to warp into banned cluster",
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1412 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Ban_Blocks_Planet_Landing",
+      "description": "Banned player cannot land on planets in banned cluster",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_ban_landing"
+        },
+        {
+          "step": "Find ORION cluster (for simplicity, has planets)",
+          "command": "db_query",
+          "sql": "SELECT clusters_id FROM clusters WHERE role = 'ORION' LIMIT 1"
+        },
+        {
+          "step": "Find a planet in any sector of ORION cluster",
+          "command": "db_query",
+          "sql": "SELECT DISTINCT p.planet_id FROM planets p JOIN sectors s ON p.sector = s.sector_id JOIN cluster_sectors cs ON s.sector_id = cs.sector_id WHERE cs.cluster_id = $PREV_RESULT.clusters_id[0] LIMIT 1"
+        },
+        {
+          "step": "Set banned=1 in cluster_player_status",
+          "command": "db_exec",
+          "sql": "INSERT INTO cluster_player_status (cluster_id, player_id, banned) VALUES ($PREV_CLUSTER_ID, $PLAYER_ID, 1) ON CONFLICT DO NOTHING; UPDATE cluster_player_status SET banned = 1 WHERE cluster_id = $PREV_CLUSTER_ID AND player_id = $PLAYER_ID"
+        },
+        {
+          "step": "Get sector for that planet and move there",
+          "command": "db_query",
+          "sql": "SELECT p.sector FROM planets p WHERE p.planet_id = $PREV_PLANET_ID"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector[0]" }
+        },
+        {
+          "step": "Try to land on that planet",
+          "command": "planet.land",
+          "data": { "planet_id": "$PREV_PLANET_ID" }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1412 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Lawless_Reject_Bribe",
+      "description": "Bribe rejected in lawless cluster",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_lawless_bribe"
+        },
+        {
+          "step": "Move to ORION (lawless)",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'ORION' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "command": "police.bribe",
+          "data": { "amount": 1000 }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1410 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Fed_Reject_Bribe",
+      "description": "Bribe rejected in Federation cluster",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_fed_bribe"
+        },
+        {
+          "step": "Move to FED cluster",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'FED' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "step": "Create incident",
+          "command": "db_exec",
+          "sql": "UPDATE cluster_player_status SET wanted_level = 1 WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'FED' LIMIT 1) AND player_id = $PLAYER_ID"
+        },
+        {
+          "command": "police.bribe",
+          "data": { "amount": 5000 }
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1411 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C_Regression_Phase_A_Unchanged",
+      "description": "Verify Phase A handler behavior still works (lawless no police)",
+      "commands": [
+        {
+          "macro": "macro_auth_user",
+          "player_name": "test_phase_a_compat"
+        },
+        {
+          "step": "Move to ORION lawless cluster",
+          "command": "db_query",
+          "sql": "SELECT sector_id FROM cluster_sectors WHERE cluster_id = (SELECT clusters_id FROM clusters WHERE role = 'ORION' LIMIT 1) LIMIT 1"
+        },
+        {
+          "command": "move.warp",
+          "data": { "to_sector_id": "$RESULT.sector_id[0]" }
+        },
+        {
+          "command": "police.surrender",
+          "data": {}
+        },
+        {
+          "assert_equal": [
+            { "path": "status", "value": "error" },
+            { "path": "error.code", "value": 1410 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+{
+  "name": "Police Phase A - Jurisdiction Awareness",
+  "description": "Tests for police.bribe and police.surrender command availability based on cluster law_severity and role. Phase A: stub implementations return not-implemented or jurisdiction-blocked errors.",
+  "tests": [
+    {
+      "name": "Setup: Create test player",
+      "setup": "macro_auth_user",
+      "username": "police_test_player",
+      "password": "testpassword"
+    },
+    {
+      "name": "Rig: Find a FedSpace sector (should be 1-10)",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT sector_id FROM sectors WHERE sector_id BETWEEN 1 AND 10 LIMIT 1;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "fedspace_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Position player in FedSpace",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = @{fedspace_sector} WHERE name = 'police_test_player';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position player's ship in FedSpace",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{fedspace_sector} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'police_test_player');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test FedSpace: police.bribe should be refused",
+      "command": "police.bribe",
+      "data": { "amount": 1000 },
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_code": 1411
+      }
+    },
+    {
+      "name": "Test FedSpace: police.bribe error message should mention Federation",
+      "command": "police.bribe",
+      "data": { "amount": 1000 },
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_msg_contains": "Federation"
+      }
+    },
+    {
+      "name": "Test FedSpace: police.surrender should return not-implemented",
+      "command": "police.surrender",
+      "data": {},
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_code": 502
+      }
+    },
+    {
+      "name": "Test FedSpace: police.surrender error should mention Phase A",
+      "command": "police.surrender",
+      "data": {},
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_msg_contains": "Phase A"
+      }
+    },
+    {
+      "name": "Rig: Find a sector in Orion cluster (lawless, law_severity=0)",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'ORION' LIMIT 1;"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "orion_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Position player in Orion sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = @{orion_sector} WHERE name = 'police_test_player';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position player's ship in Orion sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{orion_sector} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'police_test_player');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test Orion (lawless): police.bribe should return no police presence",
+      "command": "police.bribe",
+      "data": { "amount": 1000 },
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_code": 1410
+      }
+    },
+    {
+      "name": "Test Orion (lawless): police.bribe error should mention lawless",
+      "command": "police.bribe",
+      "data": { "amount": 1000 },
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_msg_contains": "lawless"
+      }
+    },
+    {
+      "name": "Test Orion (lawless): police.surrender should return no police presence",
+      "command": "police.surrender",
+      "data": {},
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_code": 1410
+      }
+    },
+    {
+      "name": "Test Orion (lawless): police.surrender error should mention lawless",
+      "command": "police.surrender",
+      "data": {},
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_msg_contains": "lawless"
+      }
+    },
+    {
+      "name": "Rig: Find a sector in a RANDOM cluster (law_severity=1, non-Fed)",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'RANDOM' LIMIT 1;"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "random_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Position player in RANDOM cluster sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = @{random_sector} WHERE name = 'police_test_player';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position player's ship in RANDOM cluster sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{random_sector} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'police_test_player');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test RANDOM cluster: police.bribe should return not-implemented",
+      "command": "police.bribe",
+      "data": { "amount": 1000 },
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_code": 502
+      }
+    },
+    {
+      "name": "Test RANDOM cluster: police.bribe error should mention Phase A",
+      "command": "police.bribe",
+      "data": { "amount": 1000 },
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_msg_contains": "not yet implemented"
+      }
+    },
+    {
+      "name": "Test RANDOM cluster: police.surrender should return not-implemented",
+      "command": "police.surrender",
+      "data": {},
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_code": 502
+      }
+    },
+    {
+      "name": "Test RANDOM cluster: police.surrender error should mention Phase A",
+      "command": "police.surrender",
+      "data": {},
+      "user": "police_test_player",
+      "expect": {
+        "status": "error",
+        "error_msg_contains": "not yet implemented"
+      }
+    }
+  ]
+}

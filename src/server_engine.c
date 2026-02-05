@@ -1337,7 +1337,7 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
     {
       return 0;
     }
-  LOGD ("limpet_ttl_cleanup: Starting Limpet mine TTL cleanup.");
+  LOGD ("[cron]: Starting Limpet mine TTL cleanup.");
 
   long long expiry_threshold_s =
     now_s - ((long long) g_cfg.mines.limpet.limpet_ttl_days * 24 * 3600);
@@ -1346,7 +1346,7 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
   if (sql_ts_to_epoch_expr
       (db, "deployed_at", deployed_as_epoch, sizeof deployed_as_epoch) != 0)
     {
-      LOGE ("limpet_ttl_cleanup: Failed to build epoch expression");
+      LOGE ("[cron] Failed to build epoch expression");
       unlock (db, "limpet_ttl_cleanup");
       return -1;
     }
@@ -1354,12 +1354,12 @@ cron_limpet_ttl_cleanup (db_t *db, int64_t now_s)
   if (repo_engine_cleanup_expired_limpets
       (db, deployed_as_epoch, ASSET_LIMPET_MINE, expiry_threshold_s) != 0)
     {
-      LOGE ("limpet_ttl_cleanup: Failed to delete expired limpets");
+      LOGE ("[cron] Failed to delete expired limpets");
       unlock (db, "limpet_ttl_cleanup");
       return -1;
     }
 
-  LOGI ("limpet_ttl_cleanup: Expired Limpet mines cleanup completed.");
+  LOGI ("[cron] Expired Limpet mines cleanup completed.");
   unlock (db, "limpet_ttl_cleanup");
   return 0;
 }

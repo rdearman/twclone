@@ -160,10 +160,10 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/server_envelope.$(OBJEXT) ../src/server_log.$(OBJEXT) \
 	../src/server_loop.$(OBJEXT) ../src/server_main.$(OBJEXT) \
 	../src/server_news.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
-	../src/server_players.$(OBJEXT) ../src/server_ports.$(OBJEXT) \
-	../src/server_s2s.$(OBJEXT) ../src/server_ships.$(OBJEXT) \
-	../src/server_stardock.$(OBJEXT) ../src/server_sysop.$(OBJEXT) \
-	../src/server_universe.$(OBJEXT) \
+	../src/server_players.$(OBJEXT) ../src/server_police.$(OBJEXT) \
+	../src/server_ports.$(OBJEXT) ../src/server_s2s.$(OBJEXT) \
+	../src/server_ships.$(OBJEXT) ../src/server_stardock.$(OBJEXT) \
+	../src/server_sysop.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
@@ -207,6 +207,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/server_news.Po \
 	../src/$(DEPDIR)/server_planets.Po \
 	../src/$(DEPDIR)/server_players.Po \
+	../src/$(DEPDIR)/server_police.Po \
 	../src/$(DEPDIR)/server_ports.Po \
 	../src/$(DEPDIR)/server_s2s.Po \
 	../src/$(DEPDIR)/server_ships.Po \
@@ -312,7 +313,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-01-21
+ISODATE = 2026-02-05
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lhistory -lreadline -lpthread -lm 
@@ -476,6 +477,7 @@ server_SOURCES = \
 	../src/server_news.c \
 	../src/server_planets.c \
 	../src/server_players.c \
+	../src/server_police.c \
 	../src/server_ports.c \
 	../src/server_s2s.c \
 	../src/server_ships.c \
@@ -723,6 +725,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_players.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_police.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_ports.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_s2s.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -783,6 +787,7 @@ include ../src/$(DEPDIR)/server_main.Po # am--include-marker
 include ../src/$(DEPDIR)/server_news.Po # am--include-marker
 include ../src/$(DEPDIR)/server_planets.Po # am--include-marker
 include ../src/$(DEPDIR)/server_players.Po # am--include-marker
+include ../src/$(DEPDIR)/server_police.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ports.Po # am--include-marker
 include ../src/$(DEPDIR)/server_s2s.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
@@ -1010,6 +1015,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_news.Po
 	-rm -f ../src/$(DEPDIR)/server_planets.Po
 	-rm -f ../src/$(DEPDIR)/server_players.Po
+	-rm -f ../src/$(DEPDIR)/server_police.Po
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
@@ -1123,6 +1129,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_news.Po
 	-rm -f ../src/$(DEPDIR)/server_planets.Po
 	-rm -f ../src/$(DEPDIR)/server_players.Po
+	-rm -f ../src/$(DEPDIR)/server_police.Po
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po

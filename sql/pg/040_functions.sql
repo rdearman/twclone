@@ -9,9 +9,15 @@ CREATE OR REPLACE FUNCTION bigbang_lock (p_key bigint)
     RETURNS void
     LANGUAGE plpgsql
     AS $$
+DECLARE
+    ok boolean;
 BEGIN
-    PERFORM
-        pg_advisory_lock(p_key);
+    -- Don't block forever waiting for the advisory lock
+    -- Fail fast if another session holds it
+    ok := pg_try_advisory_lock(p_key);
+    IF NOT ok THEN
+        RAISE EXCEPTION 'bigbang_lock: could not acquire advisory lock %, another session is running bigbang', p_key;
+    END IF;
 END;
 $$;
 CREATE OR REPLACE FUNCTION bigbang_unlock (p_key bigint)
@@ -751,7 +757,7 @@ $$;
 CREATE OR REPLACE FUNCTION setup_npc_homeworlds ()
     RETURNS void
     LANGUAGE plpgsql
-    AS $
+    AS $$
 BEGIN
     -- Terra is always in sector 1, no need for dynamic placement
     INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
@@ -759,12 +765,12 @@ BEGIN
     FROM planettypes WHERE code = 'M' LIMIT 1
     ON CONFLICT (planet_id) DO UPDATE SET name = EXCLUDED.name, sector_id = EXCLUDED.sector_id;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION setup_ferringhi_alliance ()
     RETURNS void
     LANGUAGE plpgsql
-    AS $
+    AS $$
 DECLARE
     v_ferringhi_sector integer;
     v_ptype bigint;
@@ -806,12 +812,12 @@ BEGIN
         ON CONFLICT DO NOTHING;
     END IF;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION setup_orion_syndicate ()
     RETURNS void
     LANGUAGE plpgsql
-    AS $
+    AS $$
 DECLARE
     v_orion_sector integer;
     v_ptype bigint;
@@ -875,7 +881,7 @@ BEGIN
          ON CONFLICT (owner_type, owner_id, currency) DO NOTHING;
     END IF;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION spawn_initial_fleet ()
     RETURNS void
@@ -936,5 +942,373 @@ CREATE OR REPLACE FUNCTION apply_game_defaults ()
 BEGIN
 END;
 $$;
+
+-- ============================================================================
+-- MSL (Major Space Lanes) Generation - Moved from Server Startup
+-- ============================================================================
+-- Computes paths from FedSpace (1-10) to all Stardocks and marks those sectors
+-- as MSL. This must be called after sector warps are generated.
+
+CREATE OR REPLACE FUNCTION generate_msl()
+    RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_lock_key bigint := 72002010;
+    i int;
+    v_inserted int;
+    v_msl_count int;
+BEGIN
+    PERFORM bigbang_lock(v_lock_key);
+
+    -- Safety: don't let this run forever if something goes wrong
+    PERFORM set_config('statement_timeout', '60s', true);
+
+    DELETE FROM msl_sectors;
+
+    -- Distances/parents for one shortest-path tree (multi-source from 1..10)
+    CREATE TEMP TABLE sector_distances (
+        sector_id  int PRIMARY KEY,
+        dist       int NOT NULL,
+        parent_id  int NOT NULL
+    ) ON COMMIT DROP;
+
+    -- Seed FedSpace
+    INSERT INTO sector_distances(sector_id, dist, parent_id)
+    SELECT gs, 0, 0
+    FROM generate_series(1,10) gs;
+
+    -- BFS outwards up to depth 100 (safe bound)
+    FOR i IN 0..99 LOOP
+        INSERT INTO sector_distances(sector_id, dist, parent_id)
+        SELECT DISTINCT ON (sw.to_sector)
+            sw.to_sector::int,
+            i + 1,
+            sw.from_sector::int
+        FROM sector_distances sd
+        JOIN sector_warps sw
+          ON sw.from_sector = sd.sector_id
+        WHERE sd.dist = i
+          AND NOT EXISTS (
+              SELECT 1 FROM sector_distances d2 WHERE d2.sector_id = sw.to_sector
+          )
+        ORDER BY sw.to_sector, sw.from_sector;  -- deterministic parent tie-break
+
+        GET DIAGNOSTICS v_inserted = ROW_COUNT;
+        EXIT WHEN v_inserted = 0;
+    END LOOP;
+
+    -- Base MSL always includes FedSpace core
+    INSERT INTO msl_sectors(sector_id)
+    SELECT generate_series(1,10)
+    ON CONFLICT DO NOTHING;
+
+    -- Backtrack from each reachable stardock using parent pointers
+    INSERT INTO msl_sectors(sector_id)
+    WITH RECURSIVE trace AS (
+        SELECT d.sector_id, d.parent_id, d.dist
+        FROM sector_distances d
+        JOIN ports p ON p.sector_id = d.sector_id AND p.type = 9
+
+        UNION ALL
+
+        SELECT d.sector_id, d.parent_id, d.dist
+        FROM sector_distances d
+        JOIN trace t ON d.sector_id = t.parent_id
+        WHERE t.dist > 0
+    )
+    SELECT DISTINCT sector_id
+    FROM trace
+    ON CONFLICT DO NOTHING;
+
+    SELECT COUNT(*) INTO v_msl_count FROM msl_sectors;
+
+    RAISE NOTICE 'MSL Generation: % sectors', v_msl_count;
+
+    PERFORM bigbang_unlock(v_lock_key);
+    RETURN v_msl_count;
+END;
+$$;
+
+-- ============================================================================
+-- Cluster Generation v2 (Flood-Fill with ~50% Coverage)
+-- ============================================================================
+-- Generates clusters with real regions using radius flood-fill (BFS)
+-- Federation cluster includes sectors 1-10 and all MSL sectors.
+-- Other clusters spread to ~50% of remaining universe.
+
+CREATE OR REPLACE FUNCTION generate_clusters_v2 (target_coverage_pct int DEFAULT 50)
+    RETURNS integer
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    v_lock_key bigint := 72002011;
+    v_max_sector bigint;
+    v_fed_cluster_id bigint;
+    v_orion_cluster_id bigint;
+    v_ferengi_cluster_id bigint;
+    v_cluster_id bigint;
+    v_center_sector int;
+    v_align int;
+    v_total_target int;
+    v_per_cluster_target int;
+    v_cluster_count int;
+    v_added int := 0;
+    v_i int;
+    v_attempts int;
+    v_sectors_for_this_cluster int;
+    rec record;
+    rec_edge record;
+BEGIN
+    PERFORM bigbang_lock (v_lock_key);
+    
+    -- Truncate for idempotency
+    TRUNCATE cluster_sectors;
+    
+    -- Get max sector
+    SELECT MAX(sector_id) INTO v_max_sector FROM sectors;
+    IF v_max_sector IS NULL OR v_max_sector <= 0 THEN
+        PERFORM bigbang_unlock (v_lock_key);
+        RETURN 0;
+    END IF;
+    
+    -- Calculate target cluster count: random between 3 and 20 (scaled by universe)
+    -- Formula: 3 + random portion = 3..20
+    v_cluster_count := 3 + (floor(random() * 18))::int;
+    v_cluster_count := GREATEST(3, LEAST(20, v_cluster_count));
+    
+    -- Target total sectors for random clusters (excludes Fed/special)
+    v_total_target := (v_max_sector * target_coverage_pct) / 100;
+    v_per_cluster_target := v_total_target / v_cluster_count;
+    
+    -- Create Federation cluster (fixed)
+    INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)
+    VALUES ('Federation Core', 'FED', 'FACTION', 1, 3, 100)
+    ON CONFLICT (name) DO UPDATE 
+    SET role = EXCLUDED.role, kind = EXCLUDED.kind, 
+        center_sector = EXCLUDED.center_sector,
+        law_severity = EXCLUDED.law_severity,
+        alignment = EXCLUDED.alignment;
+    
+    -- Get Federation cluster ID
+    SELECT clusters_id INTO v_fed_cluster_id 
+    FROM clusters WHERE name = 'Federation Core';
+    
+    -- Populate Federation cluster BASE: sectors 1-10 + all MSL sectors
+    INSERT INTO cluster_sectors (cluster_id, sector_id)
+    SELECT v_fed_cluster_id, generate_series(1, 10)
+    ON CONFLICT DO NOTHING;
+    
+    INSERT INTO cluster_sectors (cluster_id, sector_id)
+    SELECT v_fed_cluster_id, sector_id FROM msl_sectors
+    ON CONFLICT DO NOTHING;
+    
+    -- Expand Federation cluster HALO: 2 hops outward from base sectors
+    -- Add neighbors-of-neighbors but DO NOT modify MSL table
+    INSERT INTO cluster_sectors (cluster_id, sector_id)
+    WITH RECURSIVE fed_halo(sector_id, hops) AS (
+        -- Start from base Fed sectors (1-10 + MSL)
+        SELECT sector_id, 0
+        FROM (SELECT generate_series(1, 10) as sector_id
+              UNION
+              SELECT sector_id FROM msl_sectors) base
+        
+        UNION ALL
+        
+        -- Expand 2 hops outward
+        SELECT DISTINCT sw.to_sector::int, fh.hops + 1
+        FROM fed_halo fh
+        JOIN sector_warps sw ON fh.sector_id = sw.from_sector
+        WHERE fh.hops < 2  -- Hard limit: 2 hops
+          AND NOT EXISTS (
+            -- Don't add sectors already in Fed cluster
+            SELECT 1 FROM cluster_sectors 
+            WHERE cluster_id = v_fed_cluster_id AND sector_id = sw.to_sector
+          )
+    )
+    SELECT DISTINCT v_fed_cluster_id, sector_id
+    FROM fed_halo
+    WHERE hops > 0  -- Only add the halo, not the base (already added)
+    ON CONFLICT DO NOTHING;
+    
+    -- Log sanity checks
+    RAISE NOTICE 'MSL Sectors: %', (SELECT COUNT(*) FROM msl_sectors);
+    RAISE NOTICE 'Federation cluster total sectors: %', (SELECT COUNT(*) FROM cluster_sectors WHERE cluster_id = v_fed_cluster_id);
+    RAISE NOTICE 'Stardocks in MSL: %', (SELECT COUNT(*) FROM stardock_location sl WHERE EXISTS (SELECT 1 FROM msl_sectors WHERE sector_id = sl.sector_id));
+    
+    -- Create Orion cluster (special)
+    -- Find Orion homeworld first to use as center_sector
+    SELECT pl.sector_id INTO v_center_sector
+    FROM planets pl
+    WHERE LOWER(pl.name) LIKE '%orion%'
+    LIMIT 1;
+    
+    INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)
+    VALUES ('Orion Syndicate', 'ORION', 'SYNDICATE', v_center_sector, 0, -80)
+    ON CONFLICT (name) DO UPDATE 
+    SET role = EXCLUDED.role, kind = EXCLUDED.kind,
+        center_sector = EXCLUDED.center_sector,
+        law_severity = EXCLUDED.law_severity,
+        alignment = EXCLUDED.alignment;
+    
+    SELECT clusters_id INTO v_orion_cluster_id 
+    FROM clusters WHERE name = 'Orion Syndicate';
+    
+    -- Find Orion homeworld and add small region around it
+    FOR rec IN 
+        SELECT pl.sector_id 
+        FROM planets pl
+        WHERE LOWER(pl.name) LIKE '%orion%' 
+        LIMIT 5
+    LOOP
+        -- Add homeworld to Orion cluster
+        INSERT INTO cluster_sectors (cluster_id, sector_id)
+        VALUES (v_orion_cluster_id, rec.sector_id)
+        ON CONFLICT DO NOTHING;
+        
+        -- Small bounded flood-fill (max 20 sectors, 5 hops)
+        v_sectors_for_this_cluster := 0;
+        INSERT INTO cluster_sectors (cluster_id, sector_id)
+        WITH RECURSIVE ff(sector_id, hops) AS (
+            SELECT rec.sector_id::int, 0
+            
+            UNION ALL
+            
+            SELECT DISTINCT sw.to_sector::int, ff.hops + 1
+            FROM ff
+            JOIN sector_warps sw ON ff.sector_id = sw.from_sector
+            WHERE ff.hops < 5  -- Hard hop limit
+              AND NOT EXISTS (
+                SELECT 1 FROM cluster_sectors 
+                WHERE sector_id = sw.to_sector
+              )
+        )
+        SELECT DISTINCT v_orion_cluster_id, sector_id 
+        FROM ff
+        WHERE sector_id NOT IN (SELECT sector_id FROM cluster_sectors)
+        LIMIT 20
+        ON CONFLICT DO NOTHING;
+    END LOOP;
+    
+    -- Create Ferengi cluster (special)
+    -- Find Ferengi homeworld first to use as center_sector
+    SELECT pl.sector_id INTO v_center_sector
+    FROM planets pl
+    WHERE LOWER(pl.name) LIKE '%ferengi%' OR LOWER(pl.name) LIKE '%ferring%'
+    LIMIT 1;
+    
+    INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)
+    VALUES ('Ferengi Alliance', 'FERENGI', 'ALLIANCE', v_center_sector, 1, 50)
+    ON CONFLICT (name) DO UPDATE 
+    SET role = EXCLUDED.role, kind = EXCLUDED.kind,
+        center_sector = EXCLUDED.center_sector,
+        law_severity = EXCLUDED.law_severity,
+        alignment = EXCLUDED.alignment;
+    
+    SELECT clusters_id INTO v_ferengi_cluster_id 
+    FROM clusters WHERE name = 'Ferengi Alliance';
+    
+    -- Find Ferengi homeworld and add small region around it
+    FOR rec IN 
+        SELECT pl.sector_id 
+        FROM planets pl
+        WHERE LOWER(pl.name) LIKE '%ferengi%' OR LOWER(pl.name) LIKE '%ferring%'
+        LIMIT 5
+    LOOP
+        -- Add homeworld to Ferengi cluster
+        INSERT INTO cluster_sectors (cluster_id, sector_id)
+        VALUES (v_ferengi_cluster_id, rec.sector_id)
+        ON CONFLICT DO NOTHING;
+        
+        -- Small bounded flood-fill (max 20 sectors, 5 hops)
+        INSERT INTO cluster_sectors (cluster_id, sector_id)
+        WITH RECURSIVE ff(sector_id, hops) AS (
+            SELECT rec.sector_id::int, 0
+            
+            UNION ALL
+            
+            SELECT DISTINCT sw.to_sector::int, ff.hops + 1
+            FROM ff
+            JOIN sector_warps sw ON ff.sector_id = sw.from_sector
+            WHERE ff.hops < 5  -- Hard hop limit
+              AND NOT EXISTS (
+                SELECT 1 FROM cluster_sectors 
+                WHERE sector_id = sw.to_sector
+              )
+        )
+        SELECT DISTINCT v_ferengi_cluster_id, sector_id 
+        FROM ff
+        WHERE sector_id NOT IN (SELECT sector_id FROM cluster_sectors)
+        LIMIT 20
+        ON CONFLICT DO NOTHING;
+    END LOOP;
+    
+    -- Generate random clusters with bounded flood-fill
+    v_i := 0;
+    WHILE v_i < v_cluster_count AND v_i < 100 LOOP
+        -- Pick random unclaimed center
+        v_attempts := 0;
+        v_center_sector := 0;
+        
+        WHILE v_attempts < 50 AND v_center_sector = 0 LOOP
+            SELECT 1 + floor(random() * (v_max_sector))::int INTO v_center_sector;
+            
+            -- Check if already claimed
+            IF EXISTS (
+                SELECT 1 FROM cluster_sectors WHERE sector_id = v_center_sector
+            ) THEN
+                v_center_sector := 0;
+            END IF;
+            
+            v_attempts := v_attempts + 1;
+        END LOOP;
+        
+        IF v_center_sector = 0 THEN
+            -- Exhausted attempts, done
+            EXIT;
+        END IF;
+        
+        -- Create cluster with random name
+        v_align := floor(random() * 200)::int - 100;
+        INSERT INTO clusters (name, role, kind, center_sector, law_severity, alignment)
+        VALUES (randomname(), 'RANDOM', 'REGION', v_center_sector, 1, v_align)
+        RETURNING clusters_id INTO v_cluster_id;
+        
+        -- Bounded flood-fill: expand up to per_cluster_target with 10-hop limit
+        INSERT INTO cluster_sectors (cluster_id, sector_id)
+        WITH RECURSIVE flood_fill(sector_id, hops) AS (
+            -- Start: just the center
+            SELECT v_center_sector::int, 0
+            
+            UNION ALL
+            
+            -- Expand: follow warps
+            SELECT DISTINCT sw.to_sector::int, ff.hops + 1
+            FROM flood_fill ff
+            JOIN sector_warps sw ON ff.sector_id = sw.from_sector
+            WHERE ff.hops < 10  -- Hard hop limit prevents runaway
+              AND NOT EXISTS (
+                  SELECT 1 FROM cluster_sectors 
+                  WHERE sector_id = sw.to_sector
+              )
+        )
+        SELECT DISTINCT v_cluster_id, sector_id 
+        FROM flood_fill
+        WHERE sector_id NOT IN (SELECT sector_id FROM cluster_sectors)
+        LIMIT v_per_cluster_target::int  -- Hard size limit
+        ON CONFLICT DO NOTHING;
+        
+        v_i := v_i + 1;
+    END LOOP;
+    
+    -- Count total sectors added
+    SELECT COUNT(*) INTO v_added FROM cluster_sectors;
+    
+    PERFORM bigbang_unlock (v_lock_key);
+    RETURN v_added;
+END;
+$$;
+
 COMMIT;
+
 

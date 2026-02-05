@@ -21,6 +21,12 @@ int repo_clusters_drift_port_prices(db_t *db, int mid_price, const char *commodi
 int repo_clusters_get_player_banned(db_t *db, int cluster_id, int player_id, int *banned_out);
 int repo_clusters_get_player_suspicion_wanted(db_t *db, int cluster_id, int player_id, int *suspicion_out, int *wanted_out);
 int repo_clusters_upsert_player_status(db_t *db, int cluster_id, int player_id, int susp_inc, int busted);
+int repo_clusters_check_incident_active(db_t *db, int cluster_id, int player_id, int *has_incident_out);
+int repo_clusters_promote_wanted_from_suspicion(db_t *db, int cluster_id, int player_id);
+int repo_clusters_clear_incident_state(db_t *db, int cluster_id, int player_id);
+int repo_clusters_reduce_incident_by_tier(db_t *db, int cluster_id, int player_id);
+int repo_clusters_apply_bribe_success(db_t *db, int cluster_id, int player_id);
+int repo_clusters_apply_bribe_failure(db_t *db, int cluster_id, int player_id);
 db_res_t* repo_clusters_get_all_ports(db_t *db, db_error_t *err);
 int repo_clusters_get_alignment(db_t *db, int sector_id, int *alignment_out);
 int repo_clusters_upsert_port_stock(db_t *db, int port_id, const char *commodity, int quantity, int64_t now_s);

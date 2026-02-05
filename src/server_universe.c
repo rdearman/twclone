@@ -1,6 +1,7 @@
 #include "db/repo/repo_universe.h"
 #include "db/repo/repo_players.h"
 #include "db/repo/repo_cmd.h"
+#include "db/repo/repo_clusters.h"
 /* src/server_universe.c */
 #include <time.h>
 #include <stdio.h>
@@ -285,41 +286,29 @@ ori_move_all_ships (void)
     {
       int ship_id = db_res_col_i32 (res, 0, &err);
       int current_sector = db_res_col_i32 (res, 1, &err);
-      int target_sector = db_res_col_i32 (res, 2, &err);
-      int new_target = target_sector;
+      int new_target = current_sector;
 
       /* Core Orion Movement Strategy:
          60% chance to target Black Market home sector for resupply/patrol
          40% chance to target a random unprotected sector for piracy */
-      if (new_target == 0 || new_target == current_sector)
+      if (rand () % 10 < 6 && ori_home_sector_id != -1)
 	{
-	  if (rand () % 10 < 6 && ori_home_sector_id != -1)
-	    {
-	      new_target = ori_home_sector_id;
-	    }
-	  else
-	    {
-	      /* Random sector in unprotected range (11..999) */
-	      new_target = (rand () % (999 - 11 + 1)) + 11;
-	    }
-	  /* Don't target the current sector */
-	  if (new_target == current_sector)
-	    {
-	      new_target = (new_target % 999) + 1;
-	    }
-	}
-
-      /* Update the target for the next tick */
-      db_error_clear (&err);
-      if (repo_universe_update_ship_target (ori_db, ship_id, new_target) != 0)
-	{
-	  LOGE ("ORI_MOVE: Failed to update target for ship %d", ship_id);
+	  new_target = ori_home_sector_id;
 	}
       else
 	{
-	  LOGI ("ORI_MOVE: Ship %d targeting sector %d (from %d).",
-		ship_id, new_target, current_sector);
+	  /* Random sector in unprotected range (11..999) */
+	  new_target = (rand () % (999 - 11 + 1)) + 11;
 	}
+      /* Don't target the current sector */
+      if (new_target == current_sector)
+	{
+	  new_target = (new_target % 999) + 1;
+	}
+
+      /* TODO: Implement persistent ship target tracking in future schema update */
+      LOGI ("ORI_MOVE: Ship %d would target sector %d (from %d).",
+	    ship_id, new_target, current_sector);
     }
 
   db_res_finalize (res);
@@ -349,21 +338,21 @@ ori_init_once (db_t *db)
   if (repo_universe_get_corp_owner_by_tag (db, "ORION", &ori_owner_id) !=
       0)
     {
-      LOGW ("ORI_INIT: Failed to find Orion Syndicate owner. Skipping.");
+      LOGW ("[ori] Failed to find Orion Syndicate owner. Skipping.");
       ori_initialized = true;
       return 0;
     }
 
-  /* Step 2: Find the Black Market home sector ID (from Port ID 10) */
+  /* Step 2: Find the Orion Syndicate home sector from clusters table */
   db_error_clear (&err);
-  if (repo_universe_get_port_sector_by_id_name
-      (db, 10, "Orion Black Market Dock", &ori_home_sector_id) != 0)
+  if (repo_universe_get_cluster_center_sector_by_role
+      (db, "ORION", &ori_home_sector_id) != 0)
     {
       LOGW
-	("ORI_INIT: Failed to find Black Market sector. Movement will be random.");
+	("[ori]: Failed to find Black Market sector. Movement will be random.");
     }
 
-  LOGI ("ORI_INIT: Orion Syndicate owner ID is %d, Home Sector is %d",
+  LOGI ("[ori]: Orion Syndicate owner ID is %d, Home Sector is %d",
 	ori_owner_id, ori_home_sector_id);
   ori_initialized = true;
   return 1;
@@ -387,10 +376,10 @@ ori_tick (db_t *db, int64_t now_ms)
       if (!db)
 	return;
     }
-  LOGI ("ORI_TICK: Running movement logic for Orion Syndicate... @%ld",
+  LOGI ("[cron] Running movement logic for Orion Syndicate... @%ld",
 	(long) now_ms);
   ori_move_all_ships ();
-  LOGI ("ORI_TICK: Complete.");
+  // LOGI ("[cron] Complete.");
 }
 
 
@@ -941,6 +930,22 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 			   "Warp interdicted by hostile planetary defences");
       return 0;
     }
+
+  /* Phase C: Check ban enforcement */
+  {
+    int cluster_id = 0;
+    int rc = repo_clusters_get_cluster_for_sector(db, to, &cluster_id);
+    if (rc == 0)  /* Cluster found (not unclaimed) */
+      {
+        int is_banned = 0;
+        if (repo_clusters_get_player_banned(db, cluster_id, ctx->player_id, &is_banned) == 0 && is_banned)
+          {
+            send_response_error(ctx, root, ERR_BANNED_FROM_JURISDICTION,
+                              "You are banned from this jurisdiction.");
+            return 0;
+          }
+      }
+  }
 
   /* Consume turn */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);

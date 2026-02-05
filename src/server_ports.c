@@ -2157,6 +2157,15 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 	}
       we_started_tx = 0;
 
+      /* Phase B: Track incident in local cluster after successful robbery */
+      {
+        extern int police_track_incident_for_robbery(db_t *db, int player_id, int sector_id);
+        int incident_rc = police_track_incident_for_robbery(db, ctx->player_id, sector_id);
+        if (incident_rc < 0) {
+          LOGE("Failed to track robbery incident for player %d in sector %d", ctx->player_id, sector_id);
+        }
+      }
+
       json_object_set_new (res_data, "rob_result", json_string ("success"));
       json_object_set_new (res_data, "credits_stolen",
 			   json_integer (loot_credits));

@@ -569,7 +569,7 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
     {
       return 0;
     }
-  LOGI ("fedspace_cleanup: Lock acquired, starting cleanup operations.");
+  LOGI ("[cron] Lock acquired, starting cleanup operations.");
 
   /* 2. Heavy Ops: Uncloak & MSL & Clusters (These are largely idempotent/fast or own their own tx) */
   int uncloak = uncloak_ships_in_fedspace (db);
@@ -583,13 +583,13 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
   // Populate MSL if needed (this handles its own transaction internally)
   if (populate_msl_if_empty (db) != 0)
     {
-      LOGE ("fedspace_cleanup: MSL population failed.");
+      LOGE ("[cron] MSL population failed.");
     }
 
   // Init Clusters (idempotent)
   if (clusters_init (db) != 0)
     {
-      LOGE ("fedspace_cleanup: Cluster init failed.");
+      LOGE ("[cron] Cluster init failed.");
     }
   clusters_seed_illegal_goods (db);
 
@@ -709,7 +709,7 @@ h_fedspace_cleanup (db_t *db, int64_t now_s)
   int confiscation_sector = get_random_sector (db);
   if (confiscation_sector <= 0)
     {
-      LOGE ("fedspace_cleanup: Could not get random sector");
+      LOGE ("[cron] Fedspace Clean Up: Could not get random sector");
       unlock (db, "fedspace_cleanup");
       return -1;
     }
@@ -936,7 +936,7 @@ h_planet_population_tick (db_t *db, int64_t now_s)
 int
 h_planet_treasury_interest_tick (db_t *db, int64_t now_s)
 {
-  LOGI ("BANK0: Planet Treasury Interest cron disabled for v1.0.");
+  LOGI ("[cron] Planet Treasury Interest cron disabled for v1.0.");
   (void) db;			// Suppress unused parameter warning
   (void) now_s;			// Suppress unused parameter warning
   return 0;			// Do nothing, cleanly exit
