@@ -1482,19 +1482,6 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 					   sell->actor_id,
 					   commodity_code, &seller_stock);
 
-	    long long buyer_credits = 0;
-
-
-	    db_get_port_bank_balance (db, buy->actor_id, &buyer_credits);
-
-	    int max_affordable = 0;
-
-
-	    if (sell->price > 0)
-	      {
-		max_affordable = (int) (buyer_credits / sell->price);
-	      }
-
 	    int trade_qty = qty_buy_rem;
 
 
@@ -1506,10 +1493,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 	      {
 		trade_qty = seller_stock;
 	      }
-	    if (max_affordable < trade_qty)
-	      {
-		trade_qty = max_affordable;
-	      }
+	    /* Note: max_affordable check removed; balance check is atomic in DB */
 
 	    if (trade_qty > 0)
 	      {
@@ -1600,6 +1584,7 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		  }
 
 		if (trade_ok && db_insert_commodity_trade (db,
+							   commodity_id,
 							   buy->id,
 							   sell->id,
 							   trade_qty,
@@ -1665,27 +1650,24 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		else
 		  {
 		    db_tx_rollback (db, &err);
-		    break;
+		    /* Instead of breaking, just move to next buyer if insufficient funds */
+		    if (b_idx + 1 < buy_count)
+		      {
+			b_idx++;
+		      }
+		    else
+		      {
+			break;  /* No more buyers to try */
+		      }
+		    continue;
 		  }
 
-		if (buy->filled_quantity >= buy->quantity ||
-		    max_affordable == 0)
+		if (buy->filled_quantity >= buy->quantity)
 		  {
 		    b_idx++;
 		  }
 		if (sell->filled_quantity >= sell->quantity ||
 		    seller_stock <= 0)
-		  {
-		    s_idx++;
-		  }
-
-		if (max_affordable == 0 &&
-		    buy->filled_quantity < buy->quantity)
-		  {
-		    b_idx++;
-		  }
-		if (seller_stock <= 0 &&
-		    sell->filled_quantity < sell->quantity)
 		  {
 		    s_idx++;
 		  }
@@ -1696,12 +1678,9 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		  {
 		    s_idx++;
 		  }
-		else if (max_affordable <= 0)
-		  {
-		    b_idx++;
-		  }
 		else
 		  {
+		    /* Can't match; move to next seller */
 		    s_idx++;
 		  }
 	      }

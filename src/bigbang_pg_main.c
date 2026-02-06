@@ -895,6 +895,7 @@ main (int argc, char **argv)
   exec_sql (app, buf, "generate_ports");
 
   exec_sql (app, "SELECT generate_stardock()", "generate_stardock");
+  exec_sql (app, "SELECT generate_msl()", "generate_msl");
   exec_sql (app, "SELECT generate_taverns(20)", "generate_taverns");
 
   if (port_size > 0 || tech_level > 0 || port_credits > 0)

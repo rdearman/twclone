@@ -478,6 +478,7 @@ db_load_open_orders_for_commodity (db_t *db,
 
 int
 db_insert_commodity_trade (db_t *db,
+                           int commodity_id,
                            int buy_order_id,
                            int sell_order_id,
                            int quantity,
@@ -492,35 +493,36 @@ db_insert_commodity_trade (db_t *db,
   db_error_t err;
   db_error_clear(&err);
 
-  int64_t now = time(NULL);
-  db_bind_t params[11];
+  db_bind_t params[12];
 
-  params[0]  = db_bind_i64 (buy_order_id);         /* {1} */
-  params[1]  = db_bind_i64 (sell_order_id);        /* {2} */
-  params[2]  = db_bind_i64 (quantity);             /* {3} */
-  params[3]  = db_bind_i64 (price);                /* {4} */
-  params[4]  = db_bind_timestamp_text (now);       /* {5} */
-  params[5]  = db_bind_text(buyer_actor_type);     /* {6} */
-  params[6]  = db_bind_i64 (buyer_actor_id);       /* {7} */
-  params[7]  = db_bind_text(seller_actor_type);    /* {8} */
-  params[8]  = db_bind_i64 (seller_actor_id);      /* {9} */
-  params[9]  = db_bind_i64 (settlement_tx_buy);    /* {10} */
-  params[10] = db_bind_i64 (settlement_tx_sell);   /* {11} */
+  params[0]  = db_bind_i64 (commodity_id);         /* {1} */
+  params[1]  = db_bind_text(buyer_actor_type);     /* {2} */
+  params[2]  = db_bind_i64 (buyer_actor_id);       /* {3} */
+  params[3]  = db_bind_text("port");               /* {4} */
+  params[4]  = db_bind_i64 (0);                    /* {5} placeholder location */
+  params[5]  = db_bind_text(seller_actor_type);    /* {6} */
+  params[6]  = db_bind_i64 (seller_actor_id);      /* {7} */
+  params[7]  = db_bind_text("port");               /* {8} */
+  params[8]  = db_bind_i64 (0);                    /* {9} placeholder location */
+  params[9]  = db_bind_i64 (quantity);             /* {10} */
+  params[10] = db_bind_i64 (price);                /* {11} */
+  params[11] = db_bind_i64 (settlement_tx_buy);    /* {12} */
 
   const char *sql_tmpl =
     "INSERT INTO commodity_trades ("
-    "buy_order_id, sell_order_id, quantity, price, ts, "
-    "buyer_actor_type, buyer_actor_id, seller_actor_type, seller_actor_id, "
-    "settlement_tx_buy, settlement_tx_sell) "
-    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11})";
+    "commodity_id, buyer_actor_type, buyer_actor_id, "
+    "buyer_location_type, buyer_location_id, "
+    "seller_actor_type, seller_actor_id, "
+    "seller_location_type, seller_location_id, "
+    "quantity, price, settlement_tx_buy) "
+    "VALUES ({1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12})";
 
   char sql[512];
   if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0)
     return -1;
 
-  
   int64_t new_id = -1;
-  if (!db_exec_insert_id(db, sql, params, 11, "id", &new_id, &err))
+  if (!db_exec_insert_id(db, sql, params, 12, "id", &new_id, &err))
     {
       LOGE("db_insert_commodity_trade: insert failed: %s (code=%d backend=%d)",
            err.message, err.code, err.backend_code);

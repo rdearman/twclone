@@ -313,7 +313,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-02-05
+ISODATE = 2026-02-06
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lhistory -lreadline -lpthread -lm 
@@ -400,7 +400,7 @@ AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
-server_LDADD = -ljansson -lcrypto -lpthread -lm -lpq -lreadline -lhistory
+server_LDADD = -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory
 AUTOMAKE_OPTIONS = subdir-objects
 
 # BigBang sources (PostgreSQL Only)

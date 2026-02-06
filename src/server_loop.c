@@ -16,6 +16,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include "db/repo/repo_database.h"
 #include <jansson.h>
 #include <stdbool.h>
@@ -73,6 +75,9 @@ typedef struct
 
 __thread client_ctx_t *g_ctx_for_send = NULL;
 
+/* TLS context (global, thread-safe) */
+static SSL_CTX *g_ssl_ctx = NULL;
+
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t * obj);
 
@@ -110,6 +115,9 @@ extern int cmd_bulk_execute (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_history (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_quote (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_sell (client_ctx_t * ctx, json_t * root);
+extern int cmd_police_bribe (client_ctx_t * ctx, json_t * root);
+extern int cmd_police_surrender (client_ctx_t * ctx, json_t * root);
+extern int handle_police_status (client_ctx_t * ctx, json_t * root);
 
 /* UPDATED SIGNATURE: passing db_t* as first arg */
 extern int cmd_move_autopilot_start (db_t * db, client_ctx_t * ctx,
@@ -630,6 +638,12 @@ static const command_entry_t k_command_registry[] = {
    schema_trade_quote, 0, false, NULL},
   {"trade.sell", cmd_trade_sell, "Sell commodity to port", schema_trade_sell,
    0, false, NULL},
+  {"police.bribe", cmd_police_bribe, "Attempt to bribe police",
+   schema_placeholder, 0, false, NULL},
+  {"police.surrender", cmd_police_surrender, "Surrender to authorities",
+   schema_placeholder, 0, false, NULL},
+  {"police.status", handle_police_status, "Query incident state",
+   schema_placeholder, 0, false, NULL},
   {NULL, NULL, NULL, NULL, 0, false, NULL}	/* Sentinel */
 };
 
@@ -1220,44 +1234,146 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
 }
 
+/* TLS helper: read a line from SSL connection (buffered for partial reads) */
+static ssize_t
+ssl_readline (SSL *ssl, unsigned char *buf, size_t buf_len,
+	      unsigned char *read_buf, size_t *read_pos, size_t *read_used)
+{
+  size_t line_len = 0;
+
+  while (line_len < buf_len - 1)
+    {
+      /* Check if we have data in buffer */
+      if (*read_pos < *read_used)
+	{
+	  unsigned char ch = read_buf[(*read_pos)++];
+	  buf[line_len++] = ch;
+	  if (ch == '\n')
+	    {
+	      buf[line_len] = '\0';
+	      return (ssize_t) line_len;
+	    }
+	}
+      else
+	{
+	  /* Buffer empty, read more */
+	  int n = SSL_read (ssl, read_buf, 8192);
+	  if (n > 0)
+	    {
+	      *read_used = (size_t) n;
+	      *read_pos = 0;
+	    }
+	  else if (n == 0)
+	    {
+	      /* Connection closed cleanly */
+	      if (line_len > 0)
+		{
+		  buf[line_len] = '\0';
+		  return (ssize_t) line_len;
+		}
+	      return 0;
+	    }
+	  else
+	    {
+	      /* SSL error */
+	      int err = SSL_get_error (ssl, n);
+	      if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE)
+		{
+		  continue;	/* Retry */
+		}
+	      LOGD ("SSL_read error: %d", err);
+	      return -1;
+	    }
+	}
+    }
+
+  /* Line too long */
+  LOGD ("SSL readline: line exceeds max length %zu", buf_len);
+  return -1;
+}
+
 void *
 connection_thread (void *arg)
 {
   client_ctx_t *ctx = (client_ctx_t *) arg;
   int fd = ctx->fd;
 
-  FILE *f = fdopen (fd, "r");
-  if (!f)
+  char *line = NULL;
+  size_t line_len = 0;
+  ssize_t read_len;
+
+  if (ctx->is_tls)
+    {
+      /* TLS path: use ssl_readline */
+      char line_buf[65536];
+      while ((read_len = ssl_readline (ctx->ssl_conn, (unsigned char *) line_buf,
+					sizeof (line_buf),
+					ctx->ssl_read_buf, &ctx->ssl_read_pos,
+					&ctx->ssl_read_used)) > 0)
+	{
+	  json_error_t jerr;
+	  json_t *root = json_loads (line_buf, 0, &jerr);
+
+	  if (!root || !json_is_object (root))
+	    {
+	      send_enveloped_error (fd, NULL, ERR_INVALID_SCHEMA,
+				    "Malformed JSON");
+	      if (root)
+		json_decref (root);
+	    }
+	  else
+	    {
+	      process_message (ctx, root);
+	      json_decref (root);
+	    }
+	}
+    }
+  else
+    {
+      /* Plaintext path: use FILE* and getline */
+      FILE *f = fdopen (fd, "r");
+      if (!f)
+	{
+	  close (fd);
+	  free (ctx);
+	  return NULL;
+	}
+
+      while (getline (&line, &line_len, f) != -1)
+	{
+	  json_error_t jerr;
+	  json_t *root = json_loads (line, 0, &jerr);
+
+	  if (!root || !json_is_object (root))
+	    {
+	      send_enveloped_error (fd, NULL, ERR_INVALID_SCHEMA,
+				    "Malformed JSON");
+	      if (root)
+		json_decref (root);
+	    }
+	  else
+	    {
+	      process_message (ctx, root);
+	      json_decref (root);
+	    }
+	}
+
+      free (line);
+      fclose (f);
+    }
+
+  /* TLS cleanup */
+  if (ctx->is_tls && ctx->ssl_conn)
+    {
+      SSL_shutdown (ctx->ssl_conn);
+      SSL_free (ctx->ssl_conn);
+    }
+
+  if (ctx->is_tls)
     {
       close (fd);
-      free (ctx);
-      return NULL;
     }
 
-  char *line = NULL;
-  size_t len = 0;
-
-  while (getline (&line, &len, f) != -1)
-    {
-      json_error_t jerr;
-      json_t *root = json_loads (line, 0, &jerr);
-
-      if (!root || !json_is_object (root))
-	{
-	  send_enveloped_error (fd, NULL, ERR_INVALID_SCHEMA,
-				"Malformed JSON");
-	  if (root)
-	    json_decref (root);
-	}
-      else
-	{
-	  process_message (ctx, root);
-	  json_decref (root);
-	}
-    }
-
-  free (line);
-  fclose (f);
   db_close_thread ();
   loop_remove_client (ctx);
   free (ctx);
@@ -1271,11 +1387,55 @@ server_loop (volatile sig_atomic_t *running)
 #ifdef SIGPIPE
   signal (SIGPIPE, SIG_IGN);
 #endif
+
+  /* Initialize TLS if enabled */
+  if (g_cfg.tls_enabled)
+    {
+      SSL_library_init ();
+      SSL_load_error_strings ();
+      g_ssl_ctx = SSL_CTX_new (TLS_server_method ());
+      if (!g_ssl_ctx)
+	{
+	  LOGE ("Failed to create SSL context\n");
+	  return -1;
+	}
+
+      /* Load certificate and key */
+      if (SSL_CTX_use_certificate_file (g_ssl_ctx, g_cfg.tls_cert_path,
+					 SSL_FILETYPE_PEM) <= 0)
+	{
+	  LOGE ("Failed to load TLS certificate: %s\n", g_cfg.tls_cert_path);
+	  SSL_CTX_free (g_ssl_ctx);
+	  return -1;
+	}
+
+      if (SSL_CTX_use_PrivateKey_file (g_ssl_ctx, g_cfg.tls_key_path,
+					SSL_FILETYPE_PEM) <= 0)
+	{
+	  LOGE ("Failed to load TLS private key: %s\n", g_cfg.tls_key_path);
+	  SSL_CTX_free (g_ssl_ctx);
+	  return -1;
+	}
+
+      if (!SSL_CTX_check_private_key (g_ssl_ctx))
+	{
+	  LOGE ("TLS private key does not match certificate\n");
+	  SSL_CTX_free (g_ssl_ctx);
+	  return -1;
+	}
+
+      SSL_CTX_set_options (g_ssl_ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+      LOGI ("TLS initialized with cert=%s, key=%s\n",
+	    g_cfg.tls_cert_path, g_cfg.tls_key_path);
+    }
+
   int listen_fd = make_listen_socket (g_cfg.server_port);
 
   if (listen_fd < 0)
     {
       LOGE ("Server loop exiting due to listen socket error.\n");
+      if (g_ssl_ctx)
+	SSL_CTX_free (g_ssl_ctx);
       return -1;
     }
   LOGI ("Listening on 0.0.0.0:%d\n", g_cfg.server_port);
@@ -1335,14 +1495,53 @@ server_loop (volatile sig_atomic_t *running)
 	      perror ("accept");
 	      continue;
 	    }
+
+	  /* TLS handshake if enabled */
+	  if (g_cfg.tls_enabled && g_ssl_ctx)
+	    {
+	      SSL *ssl = SSL_new (g_ssl_ctx);
+	      if (!ssl)
+		{
+		  LOGE ("SSL_new failed\n");
+		  close (cfd);
+		  free (ctx);
+		  continue;
+		}
+
+	      if (SSL_set_fd (ssl, cfd) <= 0)
+		{
+		  LOGE ("SSL_set_fd failed\n");
+		  SSL_free (ssl);
+		  close (cfd);
+		  free (ctx);
+		  continue;
+		}
+
+	      int ret = SSL_accept (ssl);
+	      if (ret <= 0)
+		{
+		  int err = SSL_get_error (ssl, ret);
+		  LOGE ("SSL_accept failed: %d\n", err);
+		  SSL_free (ssl);
+		  close (cfd);
+		  free (ctx);
+		  continue;
+		}
+
+	      ctx->is_tls = 1;
+	      ctx->ssl_conn = ssl;
+	      ctx->ssl_read_pos = 0;
+	      ctx->ssl_read_used = 0;
+	    }
+
 	  loop_add_client (ctx);
 	  ctx->fd = cfd;
 	  ctx->running = (sig_atomic_t *) running;
 	  char ip[INET_ADDRSTRLEN];
 
 	  inet_ntop (AF_INET, &ctx->peer.sin_addr, ip, sizeof (ip));
-	  LOGI ("Client connected: %s:%u (fd=%d)\n", ip,
-		(unsigned) ntohs (ctx->peer.sin_port), cfd);
+	  LOGI ("Client connected: %s:%u (fd=%d, tls=%d)\n", ip,
+		(unsigned) ntohs (ctx->peer.sin_port), cfd, ctx->is_tls);
 	  pthread_t th;
 	  int prc = pthread_create (&th, &attr, connection_thread, ctx);
 
@@ -1354,6 +1553,10 @@ server_loop (volatile sig_atomic_t *running)
 	    {
 	      LOGE ("pthread_create: %s\n", strerror (prc));
 	      loop_remove_client (ctx);
+	      if (ctx->is_tls && ctx->ssl_conn)
+		{
+		  SSL_free (ctx->ssl_conn);
+		}
 	      close (cfd);
 	      free (ctx);
 	    }

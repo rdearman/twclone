@@ -85,6 +85,7 @@ int db_get_open_order (db_t *db,
 // Helper to insert a new commodity trade.
 // Returns the new trade's ID on success, or -1 on failure.
 int db_insert_commodity_trade (db_t *db,
+                               int commodity_id,
                                int buy_order_id,
                                int sell_order_id,
                                int quantity,
@@ -94,9 +95,7 @@ int db_insert_commodity_trade (db_t *db,
                                const char *seller_actor_type,
                                int seller_actor_id,
                                int settlement_tx_buy,
-                               // bank_tx.id
-                               int settlement_tx_sell   // bank_tx.id
-                               );
+                               int settlement_tx_sell);
 
 // Helper to list open orders for a specific port (read-only, for diagnostics)
 // Returns 0 on success, populating out_orders.

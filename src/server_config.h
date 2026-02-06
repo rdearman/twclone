@@ -222,6 +222,11 @@ extern "C"
     int planet_treasury_interest_rate_bps;	/* Added to match DB config */
     int64_t bank_min_balance_for_interest;	/* Added to match DB config */
     int64_t bank_max_daily_interest_per_account;	/* Added to match DB config */
+    /* TLS Configuration */
+    int tls_enabled;
+    int tls_required;
+    char tls_cert_path[512];
+    char tls_key_path[512];
   } server_config_t;
 /* Single global instance (defined in server_config.c) */
   extern server_config_t g_cfg;

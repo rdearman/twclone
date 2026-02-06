@@ -11,10 +11,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from twclient import TWClient
 
 class JsonSuiteRunner:
-    def __init__(self, host: str, port: int, timeout: int = 25, macros_path: str = "tests.v2/macros.json"):
+    def __init__(self, host: str, port: int, timeout: int = 25, macros_path: str = "tests.v2/macros.json",
+                 use_tls: bool = False, tls_skip_verify: bool = False):
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.use_tls = use_tls
+        self.tls_skip_verify = tls_skip_verify
         self.macros = self._load_macros(macros_path)
         self.user_clients: Dict[str, TWClient] = {}
         self.vars = {}
@@ -122,14 +125,16 @@ class JsonSuiteRunner:
 
     def _get_user_client(self, username: str) -> TWClient:
         if username not in self.user_clients:
-            client = TWClient(self.host, self.port)
+            client = TWClient(self.host, self.port, timeout=self.timeout,
+                            use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
             client.connect()
             self.user_clients[username] = client
         return self.user_clients[username]
 
     def _get_admin_client(self) -> TWClient:
         if not self._admin_client:
-            self._admin_client = TWClient(self.host, self.port)
+            self._admin_client = TWClient(self.host, self.port, timeout=self.timeout,
+                                        use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
             self._admin_client.connect()
             # Try System/BOT first as it's the standard bootstrap admin
             if not self._admin_client.login("System", "BOT"):
@@ -144,6 +149,12 @@ class JsonSuiteRunner:
             return False
         with open(suite_path, "r") as f:
             data = json.load(f)
+        
+        # Check if suite has TLS config
+        config = data.get("config", {})
+        if config.get("tls"):
+            self.use_tls = True
+            self.tls_skip_verify = config.get("tls_skip_verify", False)
         
         raw_tests = data.get("tests", [])
         tests = self._expand_macros(raw_tests)
@@ -192,7 +203,8 @@ class JsonSuiteRunner:
         elif user:
             client = self._get_user_client(user)
         else:
-            client = TWClient(self.host, self.port)
+            client = TWClient(self.host, self.port, timeout=self.timeout,
+                            use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
             client.connect()
 
         cmd_json = {}

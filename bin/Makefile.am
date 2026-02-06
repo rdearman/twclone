@@ -20,7 +20,7 @@ AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I
 AM_LDFLAGS = $(SANITIZE_FLAGS)
 
 
-server_LDADD   	= -ljansson -lcrypto -lpthread -lm -lpq -lreadline -lhistory
+server_LDADD   	= -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \

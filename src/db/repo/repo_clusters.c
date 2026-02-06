@@ -474,3 +474,112 @@ int repo_clusters_apply_bribe_failure(db_t *db, int cluster_id, int player_id) {
     return repo_clusters_promote_wanted_from_suspicion(db, cluster_id, player_id);
 }
 
+/* ========================================================================
+   POLICE PHASE D1: Public Cluster Resolution & Crime Recording
+   ======================================================================== */
+
+/*
+ * repo_clusters_get_cluster_info_for_sector()
+ *
+ * Query cluster metadata for a given sector.
+ *
+ * Returns:
+ *   0 if found (info_out populated)
+ *   1 if sector is not in any cluster (unclaimed)
+ *   <0 on DB error
+ */
+int repo_clusters_get_cluster_info_for_sector(db_t *db, int sector_id,
+                                               cluster_info_t *info_out)
+{
+  db_error_t err;
+  db_res_t *res = NULL;
+
+  if (!db || !info_out || sector_id <= 0)
+    return -1;
+
+  memset(info_out, 0, sizeof(*info_out));
+
+  /* Query: sector -> cluster_id -> role, law_severity */
+  const char *q = "SELECT c.clusters_id, c.role, c.law_severity "
+                  "FROM cluster_sectors cs "
+                  "JOIN clusters c ON c.clusters_id = cs.cluster_id "
+                  "WHERE cs.sector_id = {1} "
+                  "LIMIT 1";
+  char sql[512];
+  sql_build(db, q, sql, sizeof(sql));
+
+  if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(sector_id)}, 1, &res,
+                &err))
+    {
+      return -1;
+    }
+
+  if (!db_res_step(res, &err))
+    {
+      /* No cluster found for this sector (unclaimed) */
+      db_res_finalize(res);
+      return 1;  /* Not found (unclaimed) */
+    }
+
+  /* Parse result */
+  info_out->cluster_id = (int)db_res_col_i64(res, 0, &err);
+  const char *role_str = db_res_col_text(res, 1, &err);
+  info_out->law_severity = (int)db_res_col_i64(res, 2, &err);
+
+  if (role_str)
+    snprintf(info_out->role, sizeof(info_out->role), "%s", role_str);
+
+  db_res_finalize(res);
+  return 0;  /* Success */
+}
+
+/*
+ * repo_clusters_record_crime()
+ *
+ * Record a crime in a cluster's player incident state.
+ *
+ * CRITICAL INVARIANT: Lawless clusters (law_severity == 0) NEVER get incident rows.
+ *                     This keeps Orion clean and avoids subtle bugs.
+ *
+ * Also: FedSpace sectors 1–10 are excluded (Captain Z handles them).
+ *
+ * Returns 0 on success (or if guarded against), <0 on DB error.
+ */
+int repo_clusters_record_crime(db_t *db, int player_id, int sector_id,
+                                int crime_type, int severity_points)
+{
+  cluster_info_t cluster_info;
+  
+  if (!db || player_id <= 0 || sector_id <= 0 || severity_points <= 0)
+    return -1;
+
+  /* Resolve sector to cluster */
+  int rc = repo_clusters_get_cluster_info_for_sector(db, sector_id, &cluster_info);
+  
+  /* If unclaimed sector, nothing to do */
+  if (rc == 1)
+    return 0;
+  
+  /* If DB error, propagate */
+  if (rc < 0)
+    return rc;
+
+  /* CRITICAL INVARIANT: Lawless clusters never create/modify incident rows */
+  if (cluster_info.law_severity == 0)
+    return 0;  /* Guard: no incident tracking in lawless space */
+
+  /* FedSpace 1–10 is handled by Captain Z; skip incident recording */
+  if (sector_id >= 1 && sector_id <= 10)
+    return 0;
+
+  /* Record the incident: upsert player status and increment suspicion */
+  rc = repo_clusters_upsert_player_status(db, cluster_info.cluster_id, player_id,
+                                          severity_points, 0);
+  if (rc != 0)
+    return rc;
+
+  /* Check if suspicion >= 3 and promote to wanted_level */
+  return repo_clusters_promote_wanted_from_suspicion(db, cluster_info.cluster_id, player_id);
+}
+
+

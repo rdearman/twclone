@@ -51,6 +51,13 @@ typedef struct
   json_t *captured_envelopes;	// If non-NULL, responses are appended here instead of sent
   int captured_envelopes_valid;	/* 1 if captured_envelopes was allocated by server and is safe to use */
   int responses_sent;		// Hardening: ensure every request gets a reply
+  
+  /* --- TLS support --- */
+  void *ssl_conn;		// SSL* (opaque pointer to avoid OpenSSL in common.h)
+  int is_tls;			// 1 if TLS, 0 if plaintext
+  unsigned char ssl_read_buf[8192];  // Buffer for SSL_read remnants
+  size_t ssl_read_pos;		// Current read position in buffer
+  size_t ssl_read_used;		// Bytes actually in buffer
 } client_ctx_t;
 // Structure to represent a commodity's essential data
 typedef struct

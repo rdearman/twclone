@@ -4,6 +4,24 @@
 #include "db/db_api.h"
 #include <stdint.h>
 
+/* ========================================================================
+   Cluster Info Structure (for Police Phase D)
+   ======================================================================== */
+
+typedef struct {
+  int cluster_id;
+  char role[64];           /* "FED", "RANDOM", "ORION", "FERENGI", etc. */
+  int law_severity;
+} cluster_info_t;
+
+/* Crime type constants */
+#define CRIME_ATTACK_PORT     1
+#define CRIME_CONTRABAND      2
+
+/* Enforcement thresholds */
+#define ENFORCE_WANTED_THRESHOLD 2    /* Block dock if wanted_level >= 2 */
+#define SUSPICION_WANTED_THRESHOLD 3  /* Promote to wanted if suspicion >= 3 (Phase B) */
+
 int repo_clusters_get_sector_count(db_t *db, int *count_out);
 int repo_clusters_get_cluster_for_sector(db_t *db, int sector_id, int *cluster_id_out);
 int repo_clusters_create(db_t *db, const char *name, const char *role, const char *kind, int center_sector, int alignment, int law_severity, int *cluster_id_out);
@@ -30,5 +48,13 @@ int repo_clusters_apply_bribe_failure(db_t *db, int cluster_id, int player_id);
 db_res_t* repo_clusters_get_all_ports(db_t *db, db_error_t *err);
 int repo_clusters_get_alignment(db_t *db, int sector_id, int *alignment_out);
 int repo_clusters_upsert_port_stock(db_t *db, int port_id, const char *commodity, int quantity, int64_t now_s);
+
+/* ========================================================================
+   Police Phase D: Crime Recording & Cluster Resolution
+   ======================================================================== */
+
+int repo_clusters_get_cluster_info_for_sector(db_t *db, int sector_id, cluster_info_t *info_out);
+
+int repo_clusters_record_crime(db_t *db, int player_id, int sector_id, int crime_type, int severity_points);
 
 #endif // REPO_CLUSTERS_H

@@ -8,6 +8,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <openssl/ssl.h>
 /* local includes */
 #include "server_envelope.h"
 #include "schemas.h"
@@ -340,21 +341,46 @@ cmd_system_schema_list (client_ctx_t *ctx, json_t *root)
 static int
 send_all (int fd, const char *buf, size_t len)
 {
-  size_t off = 0;
-  while (off < len)
+  client_ctx_t *ctx = g_ctx_for_send;
+
+  if (ctx && ctx->is_tls && ctx->ssl_conn)
     {
-      ssize_t n = send (fd, buf + off, len - off, MSG_NOSIGNAL);
-
-
-      if (n < 0)
+      /* TLS write path */
+      size_t off = 0;
+      while (off < len)
 	{
-	  if (errno == EINTR)
+	  int n = SSL_write (ctx->ssl_conn, buf + off, len - off);
+	  if (n <= 0)
 	    {
-	      continue;
+	      int err = SSL_get_error (ctx->ssl_conn, n);
+	      if (err == SSL_ERROR_WANT_WRITE)
+		{
+		  continue;
+		}
+	      LOGD ("SSL_write error: %d", err);
+	      return -1;
 	    }
-	  return -1;
+	  off += (size_t) n;
 	}
-      off += (size_t) n;
+    }
+  else
+    {
+      /* Plaintext write path */
+      size_t off = 0;
+      while (off < len)
+	{
+	  ssize_t n = send (fd, buf + off, len - off, MSG_NOSIGNAL);
+
+	  if (n < 0)
+	    {
+	      if (errno == EINTR)
+		{
+		  continue;
+		}
+	      return -1;
+	    }
+	  off += (size_t) n;
+	}
     }
   return 0;
 }

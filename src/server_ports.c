@@ -23,6 +23,7 @@ void free_trade_lines (TradeLine * lines, size_t n);
 #include "db/repo/repo_ports.h"
 #include "db/repo/repo_combat.h"
 #include "db/repo/repo_players.h"
+#include "db/repo/repo_clusters.h"
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
@@ -1056,6 +1057,53 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
 				       "Port refuses docking: You are banned in this cluster.",
 				       NULL);
 	  return 0;
+	}
+
+      /* Phase D1: Enforcement gate - check wanted_level in lawful clusters */
+      if (new_ported_status > 0)
+	{
+	  cluster_info_t cluster_info = {0};
+	  int cluster_rc = repo_clusters_get_cluster_info_for_sector (db, ctx->sector_id,
+	                                                               &cluster_info);
+	  
+	  /* If cluster exists and is lawful, check enforcement threshold */
+	  if (cluster_rc == 0 && cluster_info.law_severity > 0)
+	    {
+	      int suspicion = 0;
+	      int wanted_level = 0;
+	      if (repo_clusters_get_player_suspicion_wanted (db, cluster_info.cluster_id,
+	                                                     ctx->player_id,
+	                                                     &suspicion, &wanted_level) == 0)
+	        {
+	          if (wanted_level >= ENFORCE_WANTED_THRESHOLD)
+	            {
+	              /* INTERCEPT: Block docking, return enforcement response */
+	              json_t *enforcement_obj = json_object ();
+	              json_object_set_new (enforcement_obj, "cluster_id",
+	                                    json_integer (cluster_info.cluster_id));
+	              json_object_set_new (enforcement_obj, "wanted_level",
+	                                    json_integer (wanted_level));
+	              json_t *options = json_array ();
+	              json_array_append_new (options, json_string ("surrender"));
+	              json_array_append_new (options, json_string ("bribe"));
+	              json_object_set_new (enforcement_obj, "options", options);
+
+	              json_t *error_obj = json_object ();
+	              json_object_set_new (error_obj, "code",
+	                                    json_string ("ENFORCEMENT_INTERCEPT"));
+	              json_object_set_new (error_obj, "msg",
+	                                    json_string ("You are wanted in this cluster."));
+	              
+	              payload = json_object ();
+	              json_object_set_new (payload, "ok", json_boolean (false));
+	              json_object_set_new (payload, "error", error_obj);
+	              json_object_set_new (payload, "enforcement", enforcement_obj);
+	              
+	              send_response_ok_take (ctx, root, "dock.status_v1", &payload);
+	              return 0;  /* Do not dock */
+	            }
+	        }
+	    }
 	}
 
       /* Update ships.ported status (and clear onplanet) */
@@ -2157,12 +2205,13 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 	}
       we_started_tx = 0;
 
-      /* Phase B: Track incident in local cluster after successful robbery */
+      /* Phase D1: Record CRIME_ATTACK_PORT (port robbery counts as port aggression) */
       {
-        extern int police_track_incident_for_robbery(db_t *db, int player_id, int sector_id);
-        int incident_rc = police_track_incident_for_robbery(db, ctx->player_id, sector_id);
-        if (incident_rc < 0) {
-          LOGE("Failed to track robbery incident for player %d in sector %d", ctx->player_id, sector_id);
+        int crime_rc = repo_clusters_record_crime(db, ctx->player_id, sector_id, 
+                                                   CRIME_ATTACK_PORT, 2);
+        if (crime_rc < 0) {
+          LOGE("Failed to record port robbery crime for player %d in sector %d", 
+               ctx->player_id, sector_id);
         }
       }
 
@@ -2916,6 +2965,32 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	}
       we_started_tx = 0;
     }
+
+  /* Phase D1: Record CRIME_CONTRABAND if any illegal commodities were traded */
+  {
+    if (trade_lines && n > 0)
+      {
+        for (size_t i = 0; i < n; i++)
+          {
+            const char *commodity = trade_lines[i].commodity;
+            if (commodity && h_is_illegal_commodity (db, commodity))
+              {
+                /* Illegal commodity traded; record crime */
+                int crime_rc = repo_clusters_record_crime (db, ctx->player_id,
+                                                            sector_id,
+                                                            CRIME_CONTRABAND, 1);
+                if (crime_rc < 0)
+                  {
+                    LOGE ("Failed to record contraband crime for player %d in sector %d",
+                          ctx->player_id, sector_id);
+                  }
+                /* Only record once per trade (even if multiple illegal items) */
+                break;
+              }
+          }
+      }
+  }
+
   send_response_ok_take (ctx, root, "trade.sell_receipt_v1", &receipt);
   receipt = NULL;
   goto cleanup;
@@ -3582,6 +3657,31 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       goto cleanup;
     }
   we_started_tx = 0;
+
+  /* Phase D1: Record CRIME_CONTRABAND if any illegal commodities were traded */
+  {
+    if (trade_lines && n > 0)
+      {
+        for (size_t i = 0; i < n; i++)
+          {
+            const char *commodity = trade_lines[i].commodity;
+            if (commodity && h_is_illegal_commodity (db, commodity))
+              {
+                /* Illegal commodity traded; record crime */
+                int crime_rc = repo_clusters_record_crime (db, ctx->player_id,
+                                                            ctx->sector_id,
+                                                            CRIME_CONTRABAND, 1);
+                if (crime_rc < 0)
+                  {
+                    LOGE ("Failed to record contraband crime for player %d in sector %d",
+                          ctx->player_id, ctx->sector_id);
+                  }
+                /* Only record once per trade (even if multiple illegal items) */
+                break;
+              }
+          }
+      }
+  }
 
   /* success response */
   send_response_ok_take (ctx, root, "trade.buy_receipt_v1", &receipt);

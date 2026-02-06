@@ -1,0 +1,304 @@
+================================================================================
+HOW TO CONFIGURE AND RUN THE SERVER WITH TLS ENABLED
+================================================================================
+
+There are two approaches: quick dev setup, or persistent database config.
+
+APPROACH 1: QUICK DEV SETUP (Temporary - 5 minutes)
+====================================================
+
+Perfect for testing the TLS smoke tests immediately.
+
+Step 1: Generate self-signed certificate
+-----------------------------------------
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout /tmp/test_key.pem \
+  -out /tmp/test_cert.pem \
+  -days 365 \
+  -subj "/CN=localhost"
+
+# Creates /tmp/test_cert.pem and /tmp/test_key.pem
+
+
+Step 2: Set config in the database
+-----------------------------------
+# Connect to the database
+psql twclone
+
+# Inside psql, run:
+INSERT INTO config (key, value, type) VALUES 
+  ('tls_enabled', '1', 'int'),
+  ('tls_cert_path', '/tmp/test_cert.pem', 'string'),
+  ('tls_key_path', '/tmp/test_key.pem', 'string')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type;
+
+# Verify it was set:
+SELECT key, value, type FROM config WHERE key LIKE 'tls%' ORDER BY key;
+
+# Exit psql:
+\q
+
+
+Step 3: Restart the server
+---------------------------
+# Kill the running server (find its PID first):
+pgrep -f "bin/server"  # Shows PID(s)
+
+# Kill it (use the PID from above):
+kill <PID>
+
+# Wait a moment
+sleep 2
+
+# Start server again (from twclone directory):
+cd /home/rick/twclone
+./bin/server
+
+# Watch for TLS initialization message in logs:
+# "TLS initialized with cert=/tmp/test_cert.pem, key=/tmp/test_key.pem"
+
+
+Step 4: Verify TLS is working
+------------------------------
+# Test with openssl s_client:
+echo '{"cmd":"system.hello"}' | \
+  openssl s_client -connect localhost:1234 -quiet 2>/dev/null
+
+# You should see a JSON response (even though command is invalid,
+# the important thing is TLS handshake succeeded)
+
+
+Step 5: Run the TLS test suite
+-------------------------------
+# In another terminal, run:
+cd /home/rick/twclone
+python3 tests.v2/run_suites_all.py
+
+# Watch for output like:
+# >>> EXECUTING SUITE: tests.v2/suite_tls_smoke.json
+# Test: TLS: Login succeeds over TLS... PASS
+# Test: TLS: Ship list retrieves data over TLS... PASS
+# etc.
+
+# At the end:
+# >>> SUITE PASSED: tests.v2/suite_tls_smoke.json
+
+
+APPROACH 2: PERSISTENT SETUP (Recommended for Production)
+==========================================================
+
+Use proper cert location and ensure TLS stays on after restart.
+
+Step 1: Generate or obtain certificate
+---------------------------------------
+# For development (self-signed):
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout /etc/twclone/tls_key.pem \
+  -out /etc/twclone/tls_cert.pem \
+  -days 365 \
+  -subj "/CN=yourdomain.com"
+
+# For production: Use cert from your CA
+# Place cert at: /etc/twclone/tls_cert.pem
+# Place key at: /etc/twclone/tls_key.pem
+
+# Set permissions:
+sudo chmod 600 /etc/twclone/tls_key.pem
+sudo chmod 644 /etc/twclone/tls_cert.pem
+
+
+Step 2: Update database config permanently
+--------------------------------------------
+psql twclone << SQL
+INSERT INTO config (key, value, type) VALUES 
+  ('tls_enabled', '1', 'int'),
+  ('tls_cert_path', '/etc/twclone/tls_cert.pem', 'string'),
+  ('tls_key_path', '/etc/twclone/tls_key.pem', 'string')
+ON CONFLICT (key) DO UPDATE 
+SET value = EXCLUDED.value, type = EXCLUDED.type;
+SQL
+
+
+Step 3: Restart server
+-----------------------
+# Find and kill old server:
+PID=$(pgrep -f "bin/server" | head -1)
+kill $PID
+sleep 2
+
+# Start new server:
+cd /home/rick/twclone
+./bin/server &
+
+# Or if using systemd:
+sudo systemctl restart twclone
+
+
+Step 4: Verify startup
+----------------------
+# Check logs for TLS initialization:
+tail -20 /var/log/twclone.log | grep -i tls
+
+# Should show:
+# TLS initialized with cert=/etc/twclone/tls_cert.pem, ...
+
+# Test a connection:
+openssl s_client -connect localhost:1234 -CAfile /etc/twclone/tls_cert.pem
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: "Failed to load TLS certificate"
+------------------------------------------
+Causes:
+  - File doesn't exist
+  - File not readable
+  - Wrong path in config
+
+Solution:
+  - Check file exists: ls -la /tmp/test_cert.pem
+  - Check readable: cat /tmp/test_cert.pem | head -1
+  - Verify PEM format (starts with -----BEGIN CERTIFICATE-----)
+  - Check server logs: tail -50 /var/log/twclone.log or check stdout
+
+
+Problem: "TLS private key does not match certificate"
+-------------------------------------------------------
+Cause: Cert and key don't match
+
+Solution:
+  - Regenerate both together:
+    openssl req -x509 -newkey rsa:2048 -nodes \
+      -keyout /tmp/test_key.pem -out /tmp/test_cert.pem \
+      -days 365 -subj "/CN=localhost"
+  - Update config to point to new files
+  - Restart server
+
+
+Problem: Server starts but TLS tests still fail
+------------------------------------------------
+Check:
+  1. TLS is actually enabled in config:
+     psql twclone -c "SELECT value FROM config WHERE key = 'tls_enabled'"
+     Should return: 1
+
+  2. Server loaded config:
+     tail -50 /var/log/twclone.log | grep -i tls
+     Should show initialization message
+
+  3. Server is listening on 1234:
+     netstat -tlnp | grep 1234
+
+  4. Manually test TLS connection:
+     openssl s_client -connect localhost:1234
+     Should show certificate and successful handshake
+
+
+Problem: "Connection refused" from test suite
+----------------------------------------------
+Cause: Server not running or TLS not enabled
+
+Solution:
+  1. Verify server is running:
+     pgrep -f "bin/server"
+     
+  2. Check TLS config in database:
+     psql twclone -c "SELECT key, value FROM config WHERE key LIKE 'tls%'"
+     
+  3. Check server logs:
+     tail -100 /var/log/twclone.log
+     
+  4. Try manual connection:
+     openssl s_client -connect localhost:1234
+
+
+================================================================================
+VERIFYING TLS IS WORKING
+================================================================================
+
+Method 1: Using openssl s_client
+---------------------------------
+echo '{"cmd":"system.hello"}' | \
+  openssl s_client -connect localhost:1234 -quiet -CAfile /tmp/test_cert.pem
+
+Expected:
+  - Certificate is displayed
+  - JSON response returned (even if error)
+  - No "Connection refused" or SSL errors
+
+Method 2: Using Python
+-----------------------
+python3 << 'PYEOF'
+import socket, ssl, json
+
+context = ssl.create_default_context()
+context.check_hostname = False
+context.verify_mode = ssl.CERT_NONE
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+ssock = context.wrap_socket(sock, server_hostname='localhost')
+ssock.connect(('localhost', 1234))
+ssock.sendall(b'{"cmd":"auth.login","username":"zydras","password":"testpass123"}\n')
+data = ssock.recv(4096)
+print("Received:", data.decode())
+ssock.close()
+PYEOF
+
+
+Method 3: Run actual test suite
+--------------------------------
+cd /home/rick/twclone
+python3 tests.v2/run_suites_all.py 2>&1 | grep -A10 "suite_tls_smoke"
+
+Expected output:
+  >>> EXECUTING SUITE: tests.v2/suite_tls_smoke.json
+  Test: TLS: Login succeeds over TLS... PASS
+  Test: TLS: Ship list retrieves data over TLS... PASS
+  Test: TLS: Invalid JSON returns error over TLS... PASS
+  Test: TLS: Multiple messages in sequence work... PASS
+  >>> SUITE PASSED: tests.v2/suite_tls_smoke.json
+
+
+================================================================================
+SIMPLEST ONE-LINER SETUP
+================================================================================
+
+# Generate cert + enable in database:
+openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/test_key.pem -out /tmp/test_cert.pem -days 365 -subj "/CN=localhost" && psql twclone -c "INSERT INTO config (key, value, type) VALUES ('tls_enabled', '1', 'int'), ('tls_cert_path', '/tmp/test_cert.pem', 'string'), ('tls_key_path', '/tmp/test_key.pem', 'string') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type;"
+
+# Then restart server and test
+
+
+================================================================================
+DISABLING TLS (If needed)
+================================================================================
+
+To turn TLS back off:
+
+psql twclone << SQL
+UPDATE config SET value = '0' WHERE key = 'tls_enabled';
+SQL
+
+Then restart the server. It will go back to plaintext mode.
+
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+Once TLS is working:
+
+1. Run all regression tests:
+   python3 tests.v2/run_suites_all.py
+
+2. For production, get a proper certificate from a CA
+   - Replace /tmp/test_cert.pem with real cert
+   - Replace /tmp/test_key.pem with real key
+   - Update database config with new paths
+
+3. Consider deploying to a load balancer if you want:
+   - Multiple server instances
+   - TLS termination at LB instead of server
+   - (Out of scope for this implementation, but feasible)

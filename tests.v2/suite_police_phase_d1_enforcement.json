@@ -1,0 +1,263 @@
+{
+  "name": "Police Phase D1 - Crime Triggers and Dock Intercept",
+  "description": "Tests for D1 crime triggers (ATTACK_PORT, CONTRABAND), dock intercept enforcement gate, and police.status RPC. Validates lawless invariant and FedSpace preservation.",
+  "tests": [
+    {
+      "name": "Setup: Create test player for D1 testing",
+      "setup": "macro_auth_user",
+      "username": "d1_crime_tester",
+      "password": "testpass123"
+    },
+    {
+      "name": "Rig: Find a lawful cluster sector (law_severity > 0, not FedSpace)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN clusters c ON s.cluster_id = c.clusters_id WHERE c.law_severity > 0 AND c.role != 'FED' AND s.sector_id NOT BETWEEN 1 AND 10 LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "lawful_sector": "data.rows.0.0", "lawful_cluster_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Find a port in the lawful cluster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT port_id FROM ports WHERE sector_id = @{lawful_sector} LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "lawful_port": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Position test player in lawful sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = @{lawful_sector} WHERE name = 'd1_crime_tester';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position test player's ship in lawful sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{lawful_sector} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'd1_crime_tester');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Baseline: police.status should show no incidents in lawful cluster initially",
+      "command": "police.status",
+      "user": "d1_crime_tester",
+      "data": { "cluster_id": "@{lawful_cluster_id}" },
+      "expect": {
+        "status": "ok",
+        "data.suspicion": 0,
+        "data.wanted_level": 0,
+        "data.banned": false
+      }
+    },
+    {
+      "name": "Test D1-C1: Lawful contraband should increment suspicion",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, wanted_level, banned) VALUES (@{lawful_cluster_id}, (SELECT player_id FROM players WHERE name = 'd1_crime_tester'), 0, 0, false) ON CONFLICT(cluster_id, player_id) DO NOTHING; SELECT pg_sleep(0.1);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Trigger D1-C1: Record contraband crime in lawful cluster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT repo_clusters_record_crime((SELECT player_id FROM players WHERE name = 'd1_crime_tester'), @{lawful_sector}, 2, 1);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify D1-C1: police.status shows suspicion=1",
+      "command": "police.status",
+      "user": "d1_crime_tester",
+      "data": { "cluster_id": "@{lawful_cluster_id}" },
+      "expect": {
+        "status": "ok",
+        "data.suspicion": 1
+      }
+    },
+    {
+      "name": "Test D1-C2: Port aggression should increment suspicion more",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT repo_clusters_record_crime((SELECT player_id FROM players WHERE name = 'd1_crime_tester'), @{lawful_sector}, 1, 2);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify D1-C2: police.status shows suspicion=3 (1+2), should be wanted_level=1",
+      "command": "police.status",
+      "user": "d1_crime_tester",
+      "data": { "cluster_id": "@{lawful_cluster_id}" },
+      "expect": {
+        "status": "ok",
+        "data.suspicion": 3,
+        "data.wanted_level": 1
+      }
+    },
+    {
+      "name": "Test D1-C3: Another port aggression should push wanted to 2",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT repo_clusters_record_crime((SELECT player_id FROM players WHERE name = 'd1_crime_tester'), @{lawful_sector}, 1, 2);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify D1-C3: police.status shows wanted_level=2 (enforcement threshold)",
+      "command": "police.status",
+      "user": "d1_crime_tester",
+      "data": { "cluster_id": "@{lawful_cluster_id}" },
+      "expect": {
+        "status": "ok",
+        "data.wanted_level": 2
+      }
+    },
+    {
+      "name": "Test D1-D1: Dock intercept should block docking when wanted=2",
+      "command": "port.dock_status",
+      "user": "d1_crime_tester",
+      "data": { "port_id": "@{lawful_port}" },
+      "expect": {
+        "status": "error",
+        "error_code": 1410,
+        "data.enforcement.cluster_id": "@{lawful_cluster_id}",
+        "data.enforcement.wanted_level": 2,
+        "data.enforcement.options": [ "surrender", "bribe" ]
+      }
+    },
+    {
+      "name": "Rig: Find a lawless (ORION) cluster sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN clusters c ON s.cluster_id = c.clusters_id WHERE c.law_severity = 0 LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "lawless_sector": "data.rows.0.0", "lawless_cluster_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Position test player in lawless sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = @{lawless_sector} WHERE name = 'd1_crime_tester';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position test player's ship in lawless sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{lawless_sector} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'd1_crime_tester');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test D1-L1: Lawless contraband should NOT create cluster_player_status",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_player_status WHERE cluster_id = @{lawless_cluster_id} AND player_id = (SELECT player_id FROM players WHERE name = 'd1_crime_tester');"
+      },
+      "expect": { "status": "ok" },
+      "save": { "lawless_status_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Trigger D1-L1: Record contraband in lawless cluster (should be no-op)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT repo_clusters_record_crime((SELECT player_id FROM players WHERE name = 'd1_crime_tester'), @{lawless_sector}, 2, 1);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify D1-L1: cluster_player_status row was NOT created (count after)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_player_status WHERE cluster_id = @{lawless_cluster_id} AND player_id = (SELECT player_id FROM players WHERE name = 'd1_crime_tester');"
+      },
+      "expect": {
+        "status": "ok",
+        "data.rows.0.0": 0
+      },
+      "save": { "lawless_status_after": "data.rows.0.0" }
+    },
+    {
+      "name": "Assert D1-L1: Lawless invariant proven (before count == after count == 0)",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT @{lawless_status_before} = @{lawless_status_after} AND @{lawless_status_before} = 0 AS invariant_holds;"
+      },
+      "expect": {
+        "status": "ok",
+        "data.rows.0.0": true
+      }
+    },
+    {
+      "name": "Test D1-L2: Lawless port.rob should NOT create cluster_player_status",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT repo_clusters_record_crime((SELECT player_id FROM players WHERE name = 'd1_crime_tester'), @{lawless_sector}, 1, 2);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify D1-L2: cluster_player_status row still absent",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM cluster_player_status WHERE cluster_id = @{lawless_cluster_id} AND player_id = (SELECT player_id FROM players WHERE name = 'd1_crime_tester');"
+      },
+      "expect": {
+        "status": "ok",
+        "data.rows.0.0": 0
+      }
+    },
+    {
+      "name": "Rig: Find port in lawless cluster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT port_id FROM ports WHERE sector_id = @{lawless_sector} LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "lawless_port": "data.rows.0.0" }
+    },
+    {
+      "name": "Test D1-L3: Dock intercept should NOT trigger in lawless cluster",
+      "command": "port.dock_status",
+      "user": "d1_crime_tester",
+      "data": { "port_id": "@{lawless_port}" },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Test D1-S1: police.status in lawless cluster should return OK but no jurisdiction",
+      "command": "police.status",
+      "user": "d1_crime_tester",
+      "data": { "cluster_id": "@{lawless_cluster_id}" },
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

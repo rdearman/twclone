@@ -29,71 +29,105 @@
 #include "game_db.h"
 
 /* ========================================================================
-   HELPER: Resolve sector -> cluster info
+   RPC HANDLER: police.status (Phase D)
    ======================================================================== */
 
-typedef struct {
-  int cluster_id;
-  char role[64];           /* "FED", "RANDOM", "ORION", "FERENGI", etc. */
-  int law_severity;
-} cluster_info_t;
-
-/*
- * h_get_cluster_info_for_sector()
- *
- * Query cluster metadata for a given sector.
- *
- * Returns:
- *   0 if found
- *   1 if sector is not in any cluster (unclaimed)
- *   <0 on DB error
- */
-static int
-h_get_cluster_info_for_sector(db_t *db, int sector_id,
-                              cluster_info_t *info_out)
+int
+handle_police_status (client_ctx_t *ctx, json_t *root)
 {
-  db_error_t err;
-  db_res_t *res = NULL;
+  db_t *db = game_db_get_handle ();
+  json_t *payload = NULL;
+  int cluster_id = 0;
+  int suspicion = 0;
+  int wanted_level = 0;
+  int banned = 0;
 
-  if (!db || !info_out || sector_id <= 0)
+  if (!ctx || !root)
     return -1;
 
-  memset(info_out, 0, sizeof(*info_out));
-
-  /* Query: sector -> cluster_id -> role, law_severity */
-  const char *q = "SELECT c.clusters_id, c.role, c.law_severity "
-                  "FROM cluster_sectors cs "
-                  "JOIN clusters c ON c.clusters_id = cs.cluster_id "
-                  "WHERE cs.sector_id = {1} "
-                  "LIMIT 1";
-  char sql[512];
-  sql_build(db, q, sql, sizeof(sql));
-
-  if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(sector_id)}, 1, &res,
-                &err))
+  if (!db)
     {
-      LOGE("Failed to query cluster for sector %d: %d", sector_id, err.code);
+      send_response_error (ctx, root, 500, "No database handle.");
       return -1;
     }
 
-  if (!db_res_step(res, &err))
+  if (ctx->player_id <= 0)
     {
-      /* No cluster found for this sector (unclaimed) */
-      db_res_finalize(res);
-      return 1;  /* Not found (unclaimed) */
+      send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
+      return 0;
     }
 
-  /* Parse result */
-  info_out->cluster_id = (int)db_res_col_i64(res, 0, &err);
-  const char *role_str = db_res_col_text(res, 1, &err);
-  info_out->law_severity = (int)db_res_col_i64(res, 2, &err);
+  /* Resolve cluster_id from request or current sector */
+  json_t *data = json_object_get (root, "data");
+  if (json_is_object (data))
+    {
+      json_t *jcluster = json_object_get (data, "cluster_id");
+      if (json_is_integer (jcluster))
+        {
+          cluster_id = (int) json_integer_value (jcluster);
+        }
+    }
 
-  if (role_str)
-    snprintf(info_out->role, sizeof(info_out->role), "%s", role_str);
+  /* If no cluster_id provided, resolve from current sector */
+  if (cluster_id <= 0)
+    {
+      cluster_info_t info = {0};
+      int rc = repo_clusters_get_cluster_info_for_sector (db, ctx->sector_id, &info);
+      if (rc == 0)
+        {
+          cluster_id = info.cluster_id;
+        }
+      else if (rc == 1)
+        {
+          /* Unclaimed sector; return default state */
+          payload = json_object ();
+          json_object_set_new (payload, "cluster_id", json_null ());
+          json_object_set_new (payload, "jurisdiction", json_string ("none"));
+          json_object_set_new (payload, "suspicion", json_integer (0));
+          json_object_set_new (payload, "wanted_level", json_integer (0));
+          json_object_set_new (payload, "banned", json_boolean (false));
+          send_response_ok_take (ctx, root, "police.status_v1", &payload);
+          return 0;
+        }
+      else
+        {
+          send_response_error (ctx, root, 500, "Database error resolving cluster.");
+          return -1;
+        }
+    }
 
-  db_res_finalize(res);
-  return 0;  /* Success */
+  /* Read incident state for this player in this cluster */
+  if (repo_clusters_get_player_suspicion_wanted (db, cluster_id, ctx->player_id,
+                                                  &suspicion, &wanted_level) != 0)
+    {
+      send_response_error (ctx, root, 500, "Database error reading incident state.");
+      return -1;
+    }
+
+  /* Read banned status */
+  if (repo_clusters_get_player_banned (db, cluster_id, ctx->player_id, &banned) != 0)
+    {
+      banned = 0;
+    }
+
+  /* Build response */
+  payload = json_object ();
+  if (!payload)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Out of memory.");
+      return -1;
+    }
+
+  json_object_set_new (payload, "cluster_id", json_integer (cluster_id));
+  json_object_set_new (payload, "suspicion", json_integer (suspicion));
+  json_object_set_new (payload, "wanted_level", json_integer (wanted_level));
+  json_object_set_new (payload, "banned", json_boolean (banned == 1));
+
+  send_response_ok_take (ctx, root, "police.status_v1", &payload);
+  return 0;
 }
+
 
 /* ========================================================================
    RPC HANDLER: police.bribe
@@ -131,7 +165,7 @@ cmd_police_bribe(client_ctx_t *ctx, json_t *root)
     }
 
   cluster_info_t cluster_info;
-  int lookup_result = h_get_cluster_info_for_sector(db, ctx->sector_id,
+  int lookup_result = repo_clusters_get_cluster_info_for_sector(db, ctx->sector_id,
                                                       &cluster_info);
 
   if (lookup_result < 0)
@@ -320,7 +354,7 @@ cmd_police_surrender(client_ctx_t *ctx, json_t *root)
     }
 
   cluster_info_t cluster_info;
-  int lookup_result = h_get_cluster_info_for_sector(db, ctx->sector_id,
+  int lookup_result = repo_clusters_get_cluster_info_for_sector(db, ctx->sector_id,
                                                       &cluster_info);
 
   if (lookup_result < 0)
@@ -464,7 +498,7 @@ police_track_incident_for_robbery(db_t *db, int player_id, int sector_id)
     return -1;
 
   cluster_info_t cluster_info;
-  int rc = h_get_cluster_info_for_sector(db, sector_id, &cluster_info);
+  int rc = repo_clusters_get_cluster_info_for_sector(db, sector_id, &cluster_info);
   
   if (rc == 1)
     /* Unclaimed sector: no cluster, no incident tracking */

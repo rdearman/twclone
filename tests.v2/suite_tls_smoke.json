@@ -1,0 +1,105 @@
+{
+  "suite": "TLS Smoke Tests",
+  "description": "Verify TLS transport works with plaintext JSON protocol unchanged. NOTE: Requires server with --tls-enable flag and certs configured.",
+  "config": {
+    "server": "localhost:1234",
+    "tls": true,
+    "tls_skip_verify": true
+  },
+  "meta": {
+    "prerequisites": [
+      "Server compiled with OpenSSL support",
+      "Server started with tls_enabled=1 in config",
+      "Valid TLS cert and key at configured paths",
+      "Test cert: /tmp/test_cert.pem",
+      "Test key: /tmp/test_key.pem"
+    ],
+    "instructions": [
+      "Generate test cert: openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/test_key.pem -out /tmp/test_cert.pem -days 365 -subj '/CN=localhost'",
+      "Set in database: INSERT INTO config (key,value,type) VALUES ('tls_enabled','1','int'), ('tls_cert_path','/tmp/test_cert.pem','string'), ('tls_key_path','/tmp/test_key.pem','string');",
+      "Restart server"
+    ]
+  },
+  "tests": [
+    {
+      "name": "TLS: Login succeeds over TLS",
+      "description": "Verify basic authentication works over encrypted connection",
+      "xfail": true,
+      "xfail_reason": "Server not running with TLS enabled; enable via config to test",
+      "request": {
+        "cmd": "auth.login",
+        "username": "zydras",
+        "password": "testpass123"
+      },
+      "expect": {
+        "ok": true,
+        "type": "auth.login"
+      },
+      "capture": ["session_id", "player_id"]
+    },
+    {
+      "name": "TLS: Ship list retrieves data over TLS",
+      "description": "Verify a basic RPC works over TLS after login",
+      "xfail": true,
+      "xfail_reason": "Server not running with TLS enabled; enable via config to test",
+      "request": {
+        "cmd": "ship.list"
+      },
+      "expect": {
+        "ok": true,
+        "type": "ship.list",
+        "data": {
+          "ships": []
+        }
+      }
+    },
+    {
+      "name": "TLS: Invalid JSON returns error over TLS",
+      "description": "Verify error handling works over TLS",
+      "xfail": true,
+      "xfail_reason": "Server not running with TLS enabled; enable via config to test",
+      "request": {
+        "cmd": "invalid.command"
+      },
+      "expect": {
+        "ok": false,
+        "type": "invalid.command",
+        "error_code": "ERR_INVALID_SCHEMA"
+      }
+    },
+    {
+      "name": "TLS: Multiple messages in sequence work",
+      "description": "Verify multiple JSON messages can be exchanged over single TLS connection",
+      "xfail": true,
+      "xfail_reason": "Server not running with TLS enabled; enable via config to test",
+      "setup": [],
+      "requests": [
+        {
+          "cmd": "auth.login",
+          "username": "zydras",
+          "password": "testpass123"
+        },
+        {
+          "cmd": "player.info"
+        },
+        {
+          "cmd": "player.info"
+        }
+      ],
+      "expect_sequence": [
+        {
+          "ok": true,
+          "type": "auth.login"
+        },
+        {
+          "ok": true,
+          "type": "player.info"
+        },
+        {
+          "ok": true,
+          "type": "player.info"
+        }
+      ]
+    }
+  ]
+}

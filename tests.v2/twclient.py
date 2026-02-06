@@ -2,13 +2,17 @@ import socket
 import json
 import time
 import uuid
+import ssl
 from typing import Optional, Dict, Any, List
 
 class TWClient:
-    def __init__(self, host: str = "localhost", port: int = 1234, timeout: int = 25):
+    def __init__(self, host: str = "localhost", port: int = 1234, timeout: int = 25, 
+                 use_tls: bool = False, tls_skip_verify: bool = False):
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.use_tls = use_tls
+        self.tls_skip_verify = tls_skip_verify
         self.sock: Optional[socket.socket] = None
         self.session_token: Optional[str] = None
         self.player_id: Optional[int] = None
@@ -18,6 +22,14 @@ class TWClient:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.settimeout(self.timeout)
         self.sock.connect((self.host, self.port))
+        
+        # Wrap with TLS if enabled
+        if self.use_tls:
+            context = ssl.create_default_context()
+            if self.tls_skip_verify:
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+            self.sock = context.wrap_socket(self.sock, server_hostname=self.host)
 
     def close(self):
         """Closes the connection."""
