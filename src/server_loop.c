@@ -503,6 +503,7 @@ static const command_entry_t k_command_registry[] = {
   {"session.disconnect", cmd_session_disconnect, "Disconnect",
    schema_session_disconnect, 0, false, NULL},
   {"session.ping", cmd_session_ping, "Ping", schema_session_ping, 0, false, NULL},
+  {"player.ping", cmd_session_ping, "Ping (alias for session.ping)", schema_session_ping, 0, false, NULL},
   {"sys.cluster.init", cmd_sys_cluster_init, "Cluster init",
    schema_placeholder, CMD_FLAG_DEBUG_ONLY | CMD_FLAG_HIDDEN, false, NULL},
   {"sys.cluster.seed_illegal_goods", cmd_sys_cluster_seed_illegal_goods,

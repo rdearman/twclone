@@ -350,7 +350,7 @@ class StateManager:
             # Check if we already have a batch of this commodity at the same price and origin
             found = False
             for cargo_item in self.state['ship_info']['cargo']:
-                if (cargo_item.get('commodity') == commodity and 
+                if (canon_commodity(cargo_item.get('commodity')) == commodity and 
                     cargo_item.get('purchase_price') == purchase_price and
                     cargo_item.get('origin_port_id') == port_id):
                     cargo_item['quantity'] += quantity
@@ -398,12 +398,13 @@ class StateManager:
             quantity_to_remove = quantity_sold
             
             # Create a list of items that don't match the commodity being sold
-            other_items = [item for item in self.state['ship_info']['cargo'] if item.get('commodity') != commodity_sold]
+            # Note: Must canonicalize commodity names for comparison since server might return "organics" but we canonicalize to "ORG"
+            other_items = [item for item in self.state['ship_info']['cargo'] if canon_commodity(item.get('commodity')) != commodity_sold]
 
             # Sort matching items by purchase price to sell cheapest first (for profit calculation)
             matching_items = sorted([
                 item for item in self.state['ship_info']['cargo'] 
-                if item.get('commodity') == commodity_sold and item.get('purchase_price') is not None
+                if canon_commodity(item.get('commodity')) == commodity_sold and item.get('purchase_price') is not None
             ], key=lambda x: x['purchase_price'])
 
             for cargo_item in matching_items:

@@ -8,6 +8,7 @@ import time
 import random
 import uuid
 from pathlib import Path
+import psycopg2
 
 from datetime import datetime, timezone
 DEFAULT_TIMEOUT = 30.0
@@ -162,6 +163,45 @@ def make_bot_config(base_cfg, idx, username, password, out_path: Path):
     return cfg
 
 
+def setup_bot_equipment(bigbang_config):
+    """Load database credentials and run equipment setup SQL."""
+    try:
+        # Database is always 'twclone'
+        db_name = "twclone"
+        
+        # Parse connection parameters
+        conn_params = {
+            "dbname": db_name,
+            "user": "postgres",
+            "password": "B1lb0 Bagg1ns!",
+            "host": "localhost"
+        }
+        
+        print(f"Connecting to database {db_name} to setup bot equipment...")
+        conn = psycopg2.connect(**conn_params)
+        cursor = conn.cursor()
+        
+        # Read and execute the SQL setup script
+        setup_sql_path = Path(__file__).parent / "setup_bot_equipment.sql"
+        if not setup_sql_path.exists():
+            print(f"WARNING: Setup SQL file not found at {setup_sql_path}")
+            cursor.close()
+            conn.close()
+            return
+        
+        setup_sql = setup_sql_path.read_text()
+        cursor.execute(setup_sql)
+        conn.commit()
+        
+        print("Bot equipment setup completed successfully.")
+        cursor.close()
+        conn.close()
+        
+    except Exception as e:
+        print(f"WARNING: Failed to setup bot equipment: {e}")
+        print("Continuing without equipment setup...")
+
+
 def main():
     p = argparse.ArgumentParser(description="Spawn many AI QA bot processes for twclone.")
     p.add_argument("--bot-dir", required=True,
@@ -182,6 +222,8 @@ def main():
                    help="Python executable to use when launching bots.")
     p.add_argument("--no-launch", action="store_true",
                    help="Only create accounts & configs; do not start bot processes.")
+    p.add_argument("--bigbang-config", default=None,
+                   help="Path to bigbang.json for database setup (defaults to ../bin/bigbang.json).")
     args = p.parse_args()
 
     # Bot dir is where we store configs and data files
@@ -209,6 +251,18 @@ def main():
     game_host = args.host or base_cfg.get("game_host", "127.0.0.1")
     game_port = args.port or int(base_cfg.get("game_port", 1234))
     client_version = base_cfg.get("client_version", "AI_QA_Bot/1.0")
+
+    # Load bigbang config for database setup
+    if args.bigbang_config:
+        bigbang_path = Path(args.bigbang_config)
+    else:
+        bigbang_path = code_dir.parent / "bin" / "bigbang.json"
+    
+    bigbang_cfg = {}
+    if bigbang_path.exists():
+        bigbang_cfg = json.loads(bigbang_path.read_text())
+    else:
+        print(f"WARNING: bigbang.json not found at {bigbang_path}")
 
     procs = []
     for i in range(1, args.amount + 1):
@@ -238,6 +292,10 @@ def main():
         )
         # Small stagger to avoid thundering herd on login
         time.sleep(0.25)
+
+    # After all accounts are created, setup equipment and alignment
+    print("\nSetting up bot equipment and alignment...")
+    setup_bot_equipment(bigbang_cfg)
 
     if args.no_launch:
         print("Configs created and accounts ensured; no bots launched (--no-launch set).")

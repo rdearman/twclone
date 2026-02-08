@@ -357,10 +357,19 @@ def _get_fallback_plan(game_state, state_manager, planner):
             logger.warning("Fallback: No navigation options, scanning")
             return ["scan: density"]
 
-def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective: Optional[str] = None):
+def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective: Optional[str] = None, bot_number: int = 0):
     """
     Asks the LLM for a high-level strategic plan.
     """
+    # Stagger LLM requests from concurrent bots to avoid thundering herd on Ollama
+    # Each bot waits 0.5-2.5 seconds, spread by bot number
+    jitter = random.uniform(0.5, 2.5)
+    stagger = (bot_number % 10) * 0.3  # Add 0-2.7s based on bot number
+    wait_time = jitter + stagger
+    if wait_time > 0.1:
+        logger.debug(f"Staggering LLM request by {wait_time:.1f}s (bot #{bot_number})")
+        time.sleep(wait_time)
+    
     # Filter the game state to reduce token count for the LLM
     filtered_game_state = _get_filtered_game_state_for_llm(game_state, state_manager)
     logger.debug(f"DEBUG: Known sectors passed to LLM: {filtered_game_state.get('all_known_sectors')}")
@@ -1151,6 +1160,11 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     # Fix: Use session_token, not session (server returns session_token)
                     session_token = response_data.get("session_token") or response_data.get("session")
                     state_manager.set("session_id", session_token)
+                    
+                    # Clear cached ship_info to force resync from server.
+                    # This prevents stale cargo from persisting if items were deleted from the DB.
+                    state_manager.set("ship_info", None)
+                    logger.info("Cleared cached ship_info to force resync from server.")
                     
                     # Wrap in 'player' key if it looks like player info but is missing the wrapper
                     p_info = response_data if "player" in response_data else {"player": response_data}

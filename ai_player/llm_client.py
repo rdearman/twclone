@@ -2,6 +2,8 @@ import httpx
 import json
 import logging
 import re
+import random
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,7 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
 #DEFAULT_MODEL = "phi3:latest"
 DEFAULT_MODEL = "dolphin-max:latest"
-REQUEST_TIMEOUT = 60  # 1 minute
+REQUEST_TIMEOUT = 300  # 5 minutes - account for Ollama queueing with concurrent bots
 
 def parse_llm_json(response_text):
     """
