@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-99988a6f",
+    "ts": "2026-02-13T08:45:28Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 405,
+        "message": "Missing or invalid 'target_player_id'."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

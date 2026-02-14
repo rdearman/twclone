@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_planet.create_1508",
+    "first_seen": "20260213_093444_149",
+    "command": "planet.create",
+    "error_code": 1508,
+    "error_message": "Sector has reached maximum planets."
+}

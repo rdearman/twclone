@@ -143,11 +143,11 @@
  ../src/errors.h ../config.h ../src/server_communication.h \
  ../src/server_auth.h ../src/server_envelope.h ../src/s2s_transport.h \
  ../src/db/repo/repo_database.h ../src/db/db_api.h ../src/errors.h \
- ../src/game_db.h ../src/db/db_api.h /usr/include/readline/readline.h \
- /usr/include/readline/rlstdc.h /usr/include/readline/rltypedefs.h \
- /usr/include/readline/keymaps.h /usr/include/readline/chardefs.h \
- /usr/include/ctype.h /usr/include/readline/tilde.h \
- /usr/include/readline/history.h
+ ../src/db/repo/repo_s2s_peers.h ../src/game_db.h ../src/db/db_api.h \
+ /usr/include/readline/readline.h /usr/include/readline/rlstdc.h \
+ /usr/include/readline/rltypedefs.h /usr/include/readline/keymaps.h \
+ /usr/include/readline/chardefs.h /usr/include/ctype.h \
+ /usr/include/readline/tilde.h /usr/include/readline/history.h
 /usr/include/stdc-predef.h:
 ../src/sysop_interaction.h:
 /usr/include/signal.h:
@@ -321,6 +321,7 @@
 ../src/db/repo/repo_database.h:
 ../src/db/db_api.h:
 ../src/errors.h:
+../src/db/repo/repo_s2s_peers.h:
 ../src/game_db.h:
 ../src/db/db_api.h:
 /usr/include/readline/readline.h:

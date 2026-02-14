@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Master regression suite orchestrating all critical feature tests: Captain Z enforcement, FedSpace MSL asset denial, Cluster Generation v2 invariants, Police Phase A/B/C/D1, Ferengi NPC initialization, and TLS transport.",
   "include_suites": [
+    "suite_s2s_peer_auth.json",
     "suite_fedspace_aggression_captainz.json",
     "suite_fedspace_msl_asset_enforcement.json",
     "suite_cluster_generation_v2_invariants.json",
@@ -15,6 +16,7 @@
   ],
   "meta": {
     "features_covered": [
+      "S2S peer registry, authentication handshake, and replay protection (Issue #223)",
       "Captain Z hard-punish enforcement (FedSpace sectors 1-10)",
       "FedSpace MSL asset deployment denial (deny in 1-10, destroy in >10)",
       "Cluster Generation v2 database invariants",

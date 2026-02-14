@@ -1096,7 +1096,7 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 
   const char *target_commodity = commodity;
   /* Slave -> Colonist conversion for evil players */
-  if (strcasecmp (commodity, "SLAVES") == 0 && alignment < 0)
+  if ((strcasecmp (commodity, "SLAVES") == 0 || strcasecmp (commodity, "SLV") == 0) && alignment < 0)
     {
       target_commodity = "COLONISTS";
     }
@@ -1723,7 +1723,12 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
 				    root, ERR_DB, "Failed to create planet.");
     }
 
-  db_planets_consume_genesis (db, ship_id);
+  if (db_planets_consume_genesis (db, ship_id) != 0)
+    {
+      free (planet_name);
+      return send_error_and_return (ctx,
+				    root, ERR_DB, "Failed to consume genesis torpedo.");
+    }
 
   navhaz_delta = GENESIS_NAVHAZ_DELTA;
   if (navhaz_delta != 0)

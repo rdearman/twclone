@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-9feae8ca",
+    "ts": "2026-02-13T17:02:59Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 403,
+        "message": "Ship destroyed by sector hazards on launch."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

@@ -134,44 +134,58 @@ BEGIN
         -- Insert port_trade records based on type
         IF v_port_type = 1 THEN
             INSERT INTO port_trade (port_id, commodity, mode) 
-            VALUES (v_port_id, 'organics', 'buy'), 
-                   (v_port_id, 'equipment', 'buy'), 
-                   (v_port_id, 'ore', 'sell');
+            VALUES (v_port_id, 'ORG', 'buy'), 
+                   (v_port_id, 'EQU', 'buy'), 
+                   (v_port_id, 'ORE', 'sell');
         ELSEIF v_port_type = 2 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'sell'),
-                   (v_port_id, 'organics', 'sell'),
-                   (v_port_id, 'equipment', 'buy');
+            VALUES (v_port_id, 'ORE', 'sell'),
+                   (v_port_id, 'ORG', 'sell'),
+                   (v_port_id, 'EQU', 'buy');
         ELSEIF v_port_type = 3 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'buy'),
-                   (v_port_id, 'organics', 'sell'),
-                   (v_port_id, 'equipment', 'sell');
+            VALUES (v_port_id, 'ORE', 'buy'),
+                   (v_port_id, 'ORG', 'sell'),
+                   (v_port_id, 'EQU', 'sell');
         ELSEIF v_port_type = 4 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'buy'),
-                   (v_port_id, 'organics', 'sell'),
-                   (v_port_id, 'equipment', 'buy');
+            VALUES (v_port_id, 'ORE', 'buy'),
+                   (v_port_id, 'ORG', 'sell'),
+                   (v_port_id, 'EQU', 'buy');
         ELSEIF v_port_type = 5 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'buy'),
-                   (v_port_id, 'organics', 'buy'),
-                   (v_port_id, 'equipment', 'sell');
+            VALUES (v_port_id, 'ORE', 'buy'),
+                   (v_port_id, 'ORG', 'buy'),
+                   (v_port_id, 'EQU', 'sell');
         ELSEIF v_port_type = 6 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'sell'),
-                   (v_port_id, 'organics', 'buy'),
-                   (v_port_id, 'equipment', 'sell');
+            VALUES (v_port_id, 'ORE', 'sell'),
+                   (v_port_id, 'ORG', 'buy'),
+                   (v_port_id, 'EQU', 'sell');
         ELSEIF v_port_type = 7 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'buy'),
-                   (v_port_id, 'organics', 'buy'),
-                   (v_port_id, 'equipment', 'buy');
+            VALUES (v_port_id, 'ORE', 'buy'),
+                   (v_port_id, 'ORG', 'buy'),
+                   (v_port_id, 'EQU', 'buy');
         ELSEIF v_port_type = 8 THEN
             INSERT INTO port_trade (port_id, commodity, mode)
-            VALUES (v_port_id, 'ore', 'sell'),
-                   (v_port_id, 'organics', 'sell'),
-                   (v_port_id, 'equipment', 'sell');
+            VALUES (v_port_id, 'ORE', 'sell'),
+                   (v_port_id, 'ORG', 'sell'),
+                   (v_port_id, 'EQU', 'sell');
+        ELSEIF v_port_type = 9 THEN
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES (v_port_id, 'ORE', 'buy'),
+                   (v_port_id, 'ORG', 'buy'),
+                   (v_port_id, 'EQU', 'buy'),
+                   (v_port_id, 'ORE', 'sell'),
+                   (v_port_id, 'ORG', 'sell'),
+                   (v_port_id, 'EQU', 'sell');
+        ELSEIF v_port_type = 10 THEN
+            -- Black Market Port - buy and sell ALL commodities
+            INSERT INTO port_trade (port_id, commodity, mode)
+            SELECT v_port_id, c.code, 'buy' FROM commodities c
+            UNION ALL
+            SELECT v_port_id, c.code, 'sell' FROM commodities c;
         END IF;
     END LOOP;
     CLOSE port_cursor;

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 int db_ports_upsert_stock(db_t *db, const char *entity_type, int entity_id, const char *commodity_code, int quantity, int64_t ts) {
     db_error_t err;
@@ -70,6 +71,34 @@ int db_ports_get_commodity_code(db_t *db, const char *commodity, char **code) {
     db_res_t *res = NULL;
     db_error_t err;
     db_error_clear(&err);
+    
+    if (!commodity || !*commodity) {
+        return -1;
+    }
+    
+    /* Only accept 3-character uppercase codes: ORE, ORG, EQU, SLV, WPN, DRG */
+    const char *valid_codes[] = {"ORE", "ORG", "EQU", "SLV", "WPN", "DRG", NULL};
+    char upper_input[8];
+    strncpy(upper_input, commodity, sizeof(upper_input) - 1);
+    upper_input[sizeof(upper_input) - 1] = '\0';
+    
+    /* Convert to uppercase for comparison */
+    for (int i = 0; upper_input[i]; i++) {
+        upper_input[i] = toupper((unsigned char)upper_input[i]);
+    }
+    
+    int is_valid = 0;
+    for (int i = 0; valid_codes[i]; i++) {
+        if (strcmp(upper_input, valid_codes[i]) == 0) {
+            is_valid = 1;
+            break;
+        }
+    }
+    
+    if (!is_valid) {
+        return -1;  /* Invalid code format */
+    }
+    
     /* SQL_VERBATIM: Q4 */
     const char *q4 = "SELECT code FROM commodities WHERE UPPER(code) = UPPER({1}) LIMIT 1;";
     char sql[512]; sql_build(db, q4, sql, sizeof(sql));

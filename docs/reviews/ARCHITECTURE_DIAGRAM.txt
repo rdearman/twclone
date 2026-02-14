@@ -1,0 +1,164 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║              COMMODITY SYSTEM ARCHITECTURE - EXTENSIBILITY MAP                 ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+
+                              COMMODITIES TABLE ✅
+                         (fully flexible, no constraints)
+                                       │
+                  ┌────────────────────┼────────────────────┐
+                  │                    │                    │
+                  ▼                    ▼                    ▼
+         ENTITY_STOCK ✅      PORT_TRADE ❌         PLANET_GOODS ⚠️
+     (dynamic by code)     (CHECK constraint)    (CHECK constraint)
+         ports/planets      limits to 6 codes     limits to 5 codes
+                               │                        │
+                               │                        │
+                          [SCHEMA CHANGE]         [SCHEMA CHANGE]
+                          [NO CODE CHANGE]        [NO CODE CHANGE]
+                               │                        │
+                  ┌────────────┴────────────────────────┴──────┐
+                  │                                             │
+                  ▼                                             ▼
+         PORT TRADING SYSTEM                        PLANET MARKET SYSTEM ✅
+         (works if constraint                       (works dynamically)
+          is updated)                               (checks illegal flag)
+                  │
+                  │
+                  ▼
+         SHIPS TABLE ❌❌❌
+    (CRITICAL BLOCKER)
+         ╔════════════════════╗
+         ║ ore               ║
+         ║ organics          ║ ← 7 hardcoded columns
+         ║ equipment         ║ ← Would need 9 columns
+         ║ colonists         ║ ← for 2 new commodities
+         ║ slaves            ║
+         ║ weapons           ║
+         ║ drugs             ║
+         ╚════════════════════╝
+                  │
+                  ├─► CHECK CONSTRAINT (hardcoded sum) ❌
+                  │   (colonists+ore+organics+equipment+slaves+weapons+drugs)
+                  │   [SCHEMA CHANGE REQUIRED]
+                  │
+                  ├─► h_update_ship_cargo() ❌
+                  │   (hardcoded if/else chain)
+                  │   [CODE CHANGE + REBUILD REQUIRED]
+                  │
+                  └─► ~30 SQL Queries ❌
+                      (SELECT ore, organics, equipment, ...)
+                      [CODE CHANGE REQUIRED]
+
+
+EXTENSIBILITY SCORE BY COMPONENT
+═══════════════════════════════════════════════════════════════════════════════
+
+Component              Extensibility  Changes Needed          Time
+─────────────────────────────────────────────────────────────────────────────
+Commodities Table      ⭐⭐⭐⭐⭐     None                    0 min
+Entity Stock           ⭐⭐⭐⭐⭐     None                    0 min
+Planet Markets         ⭐⭐⭐⭐     Schema only            5 min
+Port Trading           ⭐⭐⭐       Schema + Config         10 min
+Ship Cargo             ⭐          Schema + Code + Build   40 min
+
+OVERALL EXTENSIBILITY: ⭐⭐⭐ (3/5 stars)
+                       Good data structure, poor ship cargo design
+
+
+ADDING 2 COMMODITIES: WORKFLOW DIAGRAM
+═════════════════════════════════════════════════════════════════════════════
+
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 1. INSERT into commodities table                             │
+    │    INSERT INTO commodities (code, name, illegal, ...)       │
+    │    Time: 1 minute ✅                                        │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 2. Schema Migration: Add columns to ships                    │
+    │    ALTER TABLE ships ADD COLUMN water BIGINT;               │
+    │    ALTER TABLE ships ADD COLUMN spice BIGINT;               │
+    │    Time: 2 minutes ✅                                       │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 3. Update CHECK Constraints (3 tables)                       │
+    │    - ships (cargo limit calculation)                         │
+    │    - port_trade (allowed commodities)                        │
+    │    - planet_goods (allowed commodities)                      │
+    │    Time: 5 minutes ✅                                       │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 4. Update Server Code: h_update_ship_cargo()                 │
+    │    Add 2 if/else branches for WTR, SPC                       │
+    │    Time: 5 minutes ✅                                       │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 5. Update SQL Queries (~20 locations)                        │
+    │    Search/replace SELECT clauses to include water, spice     │
+    │    Time: 15 minutes ✅                                      │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 6. Rebuild Server                                            │
+    │    make clean && make -j4                                    │
+    │    Time: 2 minutes ✅                                       │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 7. Update Schema Files (sql/pg & sql/my)                     │
+    │    for future deployments                                    │
+    │    Time: 5 minutes ✅                                       │
+    └──────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │ 8. Add Port Trade Entries (optional)                         │
+    │    INSERT into port_trade for new commodities                │
+    │    Time: 5 minutes ✅                                       │
+    └──────────────────────────────────────────────────────────────┘
+
+    TOTAL TIME: ~40-50 minutes
+
+
+RECOMMENDED ARCHITECTURAL CHANGES
+═════════════════════════════════════════════════════════════════════════════
+
+Current Design (POOR EXTENSIBILITY):
+    ┌─────────────────┐
+    │ SHIPS           │
+    ├─────────────────┤
+    │ ore (column)    │
+    │ organics (col)  │  ← Hardcoded, not extensible
+    │ equipment (col) │
+    │ ... x 7         │
+    └─────────────────┘
+
+Better Design (FULL EXTENSIBILITY):
+    ┌─────────────────┐       ┌──────────────────────┐
+    │ SHIPS           │       │ SHIP_CARGO           │
+    ├─────────────────┤       ├──────────────────────┤
+    │ ship_id (PK)    │◄──┐   │ ship_id (FK)         │
+    │ name            │   │   │ commodity_code (FK)  │◄── To COMMODITIES
+    │ type_id         │   └───│ quantity             │
+    │ holds           │   ┌───│ UNIQUE(ship_id,code) │
+    │ ...             │   │   └──────────────────────┘
+    └─────────────────┘   │
+                          └── JOIN to get all cargo
+    
+    Benefits:
+    - Add new commodities: Just INSERT to commodities
+    - Add to ship: Just INSERT to ship_cargo
+    - No schema migration needed
+    - No server code changes needed
+    - Supports unlimited commodities
+

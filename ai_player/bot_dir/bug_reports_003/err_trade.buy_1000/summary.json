@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_trade.buy_1000",
+    "first_seen": "20260213_093341_305",
+    "command": "trade.buy",
+    "error_code": 1000,
+    "error_message": "Failed to update ship cargo."
+}

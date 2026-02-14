@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_stock.portfolio_1300",
+    "first_seen": "20260213_084508_517",
+    "command": "stock.portfolio",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

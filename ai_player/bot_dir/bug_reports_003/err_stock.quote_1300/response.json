@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-e805a188",
+    "ts": "2026-02-13T08:47:48Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1300,
+        "message": "Unknown command"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_bank.loan_request_1300",
+    "first_seen": "20260213_084740_934",
+    "command": "bank.loan_request",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

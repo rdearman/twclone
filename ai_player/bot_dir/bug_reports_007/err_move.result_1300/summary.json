@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_move.result_1300",
+    "first_seen": "20260213_084502_827",
+    "command": "move.result",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

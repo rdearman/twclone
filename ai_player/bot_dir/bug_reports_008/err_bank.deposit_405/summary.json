@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_bank.deposit_405",
+    "first_seen": "20260213_084525_537",
+    "command": "bank.deposit",
+    "error_code": 405,
+    "error_message": "Invalid amount."
+}

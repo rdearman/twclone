@@ -564,6 +564,33 @@ h_can_trade_commodity (db_t *db,
       return false;		// Port not linked to a sector?
     }
 
+  // Check if this is a black market port (type = 10)
+  // Black market ports can always trade illegal goods (with player alignment restrictions)
+  db_res_t *port_type_res = NULL;
+  db_error_t err = {0};
+  int port_type = 0;
+  
+  if (db_query (db, "SELECT type FROM ports WHERE port_id = {1};",
+		(db_bind_t[]){db_bind_i64 (port_id)}, 1, &port_type_res, &err) == 0
+      && db_res_step (port_type_res, &err) == 0)
+    {
+      port_type = (int)db_res_col_i64 (port_type_res, 0, &err);
+      db_res_finalize (port_type_res);
+      
+      if (port_type == 10)
+	{
+	  LOGD
+	    ("h_can_trade_commodity: Port %d is a black market port, allowing illegal trade.",
+	     port_id);
+	  // Still need to check player alignment below
+	  goto check_player_alignment;
+	}
+    }
+  else if (port_type_res)
+    {
+      db_res_finalize (port_type_res);
+    }
+
   int cluster_align_band_id = 0;
 
 
@@ -594,6 +621,8 @@ h_can_trade_commodity (db_t *db,
 	 port_id, commodity_code);
       return false;
     }
+
+check_player_alignment:
 
   // 5. Check player alignment band properties
   int player_alignment = 0;	// Declare player_alignment

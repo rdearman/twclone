@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-09c85307",
+    "ts": "2026-02-13T08:45:26Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1301,
+        "message": "Invalid amount."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

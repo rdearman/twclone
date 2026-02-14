@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_planet.list_1300",
+    "first_seen": "20260213_084630_784",
+    "command": "planet.list",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

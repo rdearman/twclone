@@ -1,0 +1,39 @@
+{
+    "session_id": null,
+    "player_info": null,
+    "ship_info": null,
+    "player_location_sector": null,
+    "sector_data": {},
+    "universe_map": {},
+    "port_info_by_sector": {},
+    "price_cache": {},
+    "bank_balance": 0,
+    "command_retry_info": {
+        "unknown": {
+            "failures": 1,
+            "next_retry_time": 1770879946.6986601
+        }
+    },
+    "strategy_plan": [],
+    "trade_successful": false,
+    "q_table": {},
+    "n_table": {},
+    "command_schemas": {},
+    "schema_blacklist": [],
+    "pending_schema_requests": {},
+    "recent_sectors": [],
+    "pending_commands": {},
+    "port_trade_blacklist": [],
+    "warp_blacklist": [],
+    "current_path": [],
+    "last_action_result": null,
+    "last_quotes": {},
+    "command_sent_in_response_loop": false,
+    "last_port_trade": null,
+    "current_qa_objective": null,
+    "qa_objective_start_time": null,
+    "qa_commands_for_objective": 0,
+    "qa_workflow_queue": [],
+    "qa_workflow_index": 0,
+    "qa_tested_commands": []
+}

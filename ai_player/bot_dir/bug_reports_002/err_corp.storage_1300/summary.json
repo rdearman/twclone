@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_corp.storage_1300",
+    "first_seen": "20260213_084429_518",
+    "command": "corp.storage",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

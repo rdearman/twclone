@@ -141,13 +141,18 @@ BEGIN
     ) ON COMMIT DROP;
 
     /* Insert ports respecting port_ratio, and capture their IDs and types */
+    /* Type 10 = black market (outlaw), Type 1-8 = regular ports */
     WITH inserted_ports AS (
         INSERT INTO ports (number, name, sector_id, type)
         SELECT
             s.sector_id AS number,
             randomname() AS name,
             s.sector_id AS sector_id,
-            floor(random() * 8 + 1)::int AS type
+            CASE 
+                WHEN random() * 100.0 < COALESCE((SELECT value::numeric FROM config WHERE key = 'outlaw_port_percentage'), 10.0)
+                THEN 10  /* Black market port */
+                ELSE floor(random() * 8 + 1)::int  /* Regular port types 1-8 */
+            END AS type
         FROM sectors s
         WHERE s.sector_id > 10                       /* Don't create ports in Fedspace core */
           AND s.sector_id <= v_target
@@ -205,65 +210,91 @@ BEGIN
             /* SBB (Sell Ore, Buy Organics/Equipment) */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'organics', 'buy'),
-                (v_port_rec.port_id, 'equipment', 'buy'),
-                (v_port_rec.port_id, 'ore',       'sell');
+                (v_port_rec.port_id, 'ORG', 'buy'),
+                (v_port_rec.port_id, 'EQU', 'buy'),
+                (v_port_rec.port_id, 'ORE', 'sell');
 
         ELSIF v_port_rec.type = 2 THEN
             /* SSB */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'sell'),
-                (v_port_rec.port_id, 'organics',  'sell'),
-                (v_port_rec.port_id, 'equipment', 'buy');
+                (v_port_rec.port_id, 'ORE', 'sell'),
+                (v_port_rec.port_id, 'ORG', 'sell'),
+                (v_port_rec.port_id, 'EQU', 'buy');
 
         ELSIF v_port_rec.type = 3 THEN
             /* BSS */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'buy'),
-                (v_port_rec.port_id, 'organics',  'sell'),
-                (v_port_rec.port_id, 'equipment', 'sell');
+                (v_port_rec.port_id, 'ORE', 'buy'),
+                (v_port_rec.port_id, 'ORG', 'sell'),
+                (v_port_rec.port_id, 'EQU', 'sell');
 
         ELSIF v_port_rec.type = 4 THEN
             /* BSB */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'buy'),
-                (v_port_rec.port_id, 'organics',  'sell'),
-                (v_port_rec.port_id, 'equipment', 'buy');
+                (v_port_rec.port_id, 'ORE', 'buy'),
+                (v_port_rec.port_id, 'ORG', 'sell'),
+                (v_port_rec.port_id, 'EQU', 'buy');
 
         ELSIF v_port_rec.type = 5 THEN
             /* BBS */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'buy'),
-                (v_port_rec.port_id, 'organics',  'buy'),
-                (v_port_rec.port_id, 'equipment', 'sell');
+                (v_port_rec.port_id, 'ORE', 'buy'),
+                (v_port_rec.port_id, 'ORG', 'buy'),
+                (v_port_rec.port_id, 'EQU', 'sell');
 
         ELSIF v_port_rec.type = 6 THEN
             /* SBS */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'sell'),
-                (v_port_rec.port_id, 'organics',  'buy'),
-                (v_port_rec.port_id, 'equipment', 'sell');
+                (v_port_rec.port_id, 'ORE', 'sell'),
+                (v_port_rec.port_id, 'ORG', 'buy'),
+                (v_port_rec.port_id, 'EQU', 'sell');
 
         ELSIF v_port_rec.type = 7 THEN
             /* BBB (Specialty Port) */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'buy'),
-                (v_port_rec.port_id, 'organics',  'buy'),
-                (v_port_rec.port_id, 'equipment', 'buy');
+                (v_port_rec.port_id, 'ORE', 'buy'),
+                (v_port_rec.port_id, 'ORG', 'buy'),
+                (v_port_rec.port_id, 'EQU', 'buy');
 
         ELSIF v_port_rec.type = 8 THEN
             /* SSS (Specialty Port) */
             INSERT INTO port_trade (port_id, commodity, mode)
             VALUES
-                (v_port_rec.port_id, 'ore',       'sell'),
-                (v_port_rec.port_id, 'organics',  'sell'),
-                (v_port_rec.port_id, 'equipment', 'sell');
+                (v_port_rec.port_id, 'ORE', 'sell'),
+                (v_port_rec.port_id, 'ORG', 'sell'),
+                (v_port_rec.port_id, 'EQU', 'sell');
+
+        ELSIF v_port_rec.type = 9 THEN
+            /* Stardock - buy all, sell all */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            VALUES
+                (v_port_rec.port_id, 'ORE', 'buy'),
+                (v_port_rec.port_id, 'ORG', 'buy'),
+                (v_port_rec.port_id, 'EQU', 'buy'),
+                (v_port_rec.port_id, 'ORE', 'sell'),
+                (v_port_rec.port_id, 'ORG', 'sell'),
+                (v_port_rec.port_id, 'EQU', 'sell');
+
+        ELSIF v_port_rec.type = 10 THEN
+            /* Black Market Port - buy and sell ALL commodities (legal + illegal) */
+            INSERT INTO port_trade (port_id, commodity, mode)
+            SELECT
+                v_port_rec.port_id AS port_id,
+                c.code AS commodity,
+                'buy' AS mode
+            FROM commodities c
+            UNION ALL
+            SELECT
+                v_port_rec.port_id AS port_id,
+                c.code AS commodity,
+                'sell' AS mode
+            FROM commodities c;
         END IF;
 
         /*
@@ -317,6 +348,24 @@ BEGIN
          * clusters aren't populated yet, so this generator stays “legal-only”.
          */
     END LOOP;
+
+    /*
+     * Seed illegal goods for black market ports (type = 10)
+     * This allows outlaw ports scattered throughout space to trade in illegal commodities
+     */
+    INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
+    SELECT
+        'port' AS entity_type,
+        p.port_id AS entity_id,
+        c.code AS commodity_code,
+        GREATEST(10, (p.size * 1000 * (0.20 + random() * 0.30))::int) AS quantity,
+        c.base_price AS price
+    FROM new_ports np
+    JOIN ports p ON p.port_id = np.port_id
+    CROSS JOIN commodities c
+    WHERE p.type = 10  /* Black market ports only */
+      AND c.illegal = TRUE  /* Only illegal commodities */
+    ON CONFLICT DO NOTHING;
 
     /* Create bank accounts for the new ports */
     INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)

@@ -77,6 +77,7 @@ server_SOURCES = \
 	../src/db/repo/repo_universe.c \
 	../src/db/repo/repo_clusters.c \
 	../src/db/repo/repo_warp.c \
+	../src/db/repo/repo_s2s_peers.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
 	../src/s2s_keyring.c \

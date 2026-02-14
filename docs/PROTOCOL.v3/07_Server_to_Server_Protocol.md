@@ -8,9 +8,92 @@
 *   **Framing**: 4-byte big-endian length prefix + UTF-8 JSON envelope.
 *   **Limits**: `frame_size_limit` (default 64 KiB).
 
-## 2. Authentication
+## 2. Peer Registry
 
-*   **Method**: HMAC-SHA256.
+Each S2S peer (remote engine or federated server) must be registered in the `s2s_peers` table:
+
+*   **peer_id** (TEXT PRIMARY KEY): Stable unique identifier (e.g., "engine_01", "fed_server_alpha").
+*   **host** (TEXT NOT NULL): Remote hostname or IP address.
+*   **port** (INTEGER NOT NULL): Remote TCP port (default 4321).
+*   **enabled** (BOOLEAN DEFAULT TRUE): Whether this peer is active. Disabled peers are rejected at handshake.
+*   **shared_key_id** (INTEGER NOT NULL): Foreign key to `s2s_keys.key_id` for HMAC authentication.
+*   **last_seen_at** (TIMESTAMPTZ NULL): Timestamp of last successful authenticated handshake.
+*   **notes** (TEXT NULL): Admin notes (e.g., deployment info, contact).
+*   **created_at** (TIMESTAMPTZ): Timestamp when peer was registered.
+
+### 2.1 Handshake Protocol
+
+Before any application messages are exchanged, both sides must complete an authenticated **handshake**:
+
+**Client sends `s2s.hello`:**
+```json
+{
+  "v": 1,
+  "id": "01J93QXK...",
+  "ts": 1737990000,
+  "src": "engine|server",
+  "dst": "server|engine",
+  "type": "s2s.hello",
+  "payload": {
+    "peer_id": "engine_01",
+    "shared_key_id": 42,
+    "nonce": "d23f8a1b9c4e...",
+    "ts": 1737990000,
+    "hmac": "sha256:abcd1234..."
+  }
+}
+```
+
+**Server validates and responds with `s2s.hello_ack`:**
+```json
+{
+  "v": 1,
+  "id": "01J93QXL...",
+  "ts": 1737990001,
+  "src": "server|engine",
+  "dst": "engine|server",
+  "type": "s2s.hello_ack",
+  "payload": {
+    "status": "ok",
+    "peer_id": "engine_01",
+    "nonce_echo": "d23f8a1b9c4e...",
+    "hmac": "sha256:efgh5678..."
+  }
+}
+```
+
+**Validation steps:**
+1. Lookup peer_id in `s2s_peers`.
+2. Confirm peer.enabled = TRUE.
+3. Lookup peer.shared_key_id in `s2s_keys` (resolve shared secret).
+4. Verify HMAC deterministically (constant-time compare).
+5. Validate timestamp: `|now - hello.ts| ≤ 300s` (5-minute skew window).
+6. Check nonce in `s2s_nonce_seen` for this peer; reject if duplicate (replay).
+7. On success, insert nonce into `s2s_nonce_seen` and update `s2s_peers.last_seen_at` to current time.
+
+On validation failure, return `s2s.error` with appropriate code (see **Error Codes** below) and close connection.
+
+### 2.2 HMAC Signing Rules
+
+**Canonical form for signature:** Concatenate the following fields in order, separated by `|`:
+```
+[peer_id]|[shared_key_id]|[nonce]|[ts]
+```
+
+Example (with values):
+```
+engine_01|42|d23f8a1b9c4e|1737990000
+```
+
+**Algorithm**: HMAC-SHA256 over the canonical string.
+
+**Key material**: Byte sequence from `s2s_keys.secret` (raw binary, length from `s2s_keys.secret_bytes`).
+
+**HMAC field format**: `"sha256:" + hex(digest)` (e.g., `"sha256:abc123..."`).
+
+## 3. Authentication
+
+*   **Method**: HMAC-SHA256 (per-frame and handshake).
 *   **Key Source**: `s2s_keys` database table.
 *   **Mechanism**: `auth` field in envelope contains `key_id` and `sig` (signature). Signature is calculated over the canonicalized JSON (excluding `auth.sig`).
 
@@ -73,7 +156,28 @@
 **`s2s.error`**
 *   Payload: `{ "code": "unsupported_type", "message": "...", "details": {} }`
 
-## 5. Admin / Maintenance RPCs (Mapped via S2S or DB)
+## 5. Replay Protection
+
+**Nonce tracking** prevents message replay attacks:
+
+*   **Nonce table**: `s2s_nonce_seen` stores (peer_id, nonce) composite primary key.
+*   **Insertion**: On every authenticated handshake, the nonce is inserted with message timestamp (`msg_ts`).
+*   **Replay detection**: If a duplicate nonce+peer_id combination exists, the message is rejected with error code `ERR_S2S_REPLAY` (2016).
+*   **TTL cleanup**: Nonces older than the skew window (300 seconds) are periodically deleted to prevent table bloat. Cleanup occurs during each successful handshake or via background maintenance (optional).
+
+## 6. Error Codes (S2S Peer Authentication)
+
+| Code | Symbol | Meaning |
+|------|--------|---------|
+| 2010 | `ERR_S2S_UNKNOWN_PEER` | peer_id not found in `s2s_peers`. |
+| 2011 | `ERR_S2S_PEER_DISABLED` | peer.enabled = FALSE; connection rejected. |
+| 2012 | `ERR_S2S_PEER_KEY_MISSING` | shared_key_id resolves to no record in `s2s_keys`. |
+| 2013 | `ERR_S2S_BAD_HANDSHAKE` | Handshake format invalid or missing required fields. |
+| 2014 | `ERR_S2S_BAD_HMAC` | HMAC signature verification failed (constant-time compare). |
+| 2016 | `ERR_S2S_REPLAY` | Nonce already seen for this peer within skew window. |
+| 2017 | `ERR_S2S_TIMESTAMP_SKEW` | Timestamp outside ±300s window; potential clock drift. |
+
+## 7. Admin / Maintenance RPCs (Mapped via S2S or DB)
 
 These operations are triggered by the Server (via Admin RPCs) and executed by the Engine (via DB commands or S2S).
 

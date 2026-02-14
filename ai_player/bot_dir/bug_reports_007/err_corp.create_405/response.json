@@ -1,0 +1,19 @@
+{
+    "id": "srv-refuse",
+    "reply_to": "c-ba5f1b9e",
+    "ts": "2026-02-13T08:46:23Z",
+    "status": "refused",
+    "type": "error",
+    "error": {
+        "code": 405,
+        "message": "Missing or invalid corporation name."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_survey.port_1300",
+    "first_seen": "20260213_090733_715",
+    "command": "survey.port",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

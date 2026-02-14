@@ -289,9 +289,9 @@ DECLARE
   v_new_qty      bigint;
   v_total_new    bigint;
 BEGIN
-  -- Validate commodity column name
-  IF p_commodity NOT IN ('ore','organics','equipment','colonists','slaves','weapons','drugs') THEN
-    RETURN (400, 'invalid commodity'::text, NULL::bigint);
+  -- Validate commodity code (accept only 3-char codes)
+  IF p_commodity NOT IN ('ORE','ORG','EQU','SLV','WPN','DRG') THEN
+    RETURN (400, 'invalid commodity code'::text, NULL::bigint);
   END IF;
 
   -- Lock and fetch

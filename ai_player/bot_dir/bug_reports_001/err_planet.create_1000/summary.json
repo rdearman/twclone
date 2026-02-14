@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_planet.create_1000",
+    "first_seen": "20260213_113608_222",
+    "command": "planet.create",
+    "error_code": 1000,
+    "error_message": "Failed to create planet."
+}

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_corp.invite_405",
+    "first_seen": "20260213_084627_876",
+    "command": "corp.invite",
+    "error_code": 405,
+    "error_message": "Missing or invalid 'target_player_id'."
+}

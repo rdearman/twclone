@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_planet.create_1703",
+    "first_seen": "20260214_051030_545",
+    "command": "planet.create",
+    "error_code": 1703,
+    "error_message": "Planet creation prohibited in FedSpace."
+}

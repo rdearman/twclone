@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_bounty.info_1300",
+    "first_seen": "20260213_084732_688",
+    "command": "bounty.info",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

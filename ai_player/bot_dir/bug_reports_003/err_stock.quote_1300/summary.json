@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_stock.quote_1300",
+    "first_seen": "20260213_084749_791",
+    "command": "stock.quote",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

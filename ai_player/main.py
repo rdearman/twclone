@@ -228,15 +228,103 @@ PROMPT_QA_OBJECTIVE = """You are a QA testing bot for a space game. Your current
 Based on this objective, provide a detailed strategic plan.
 """
 
-QA_OBJECTIVES = [
-    "test basic trading",
-    "test combat system",
-    "test planet landing",
-    "test ship upgrades",
-    "test mining operations",
-    "test bounty hunting",
-    "test illegal trading"
-]
+# Deterministic workflow-based QA testing (replaces vague LLM objectives)
+# Each workflow is a sequence of commands to execute in order
+QA_WORKFLOWS = {
+    "planet": [
+        "player:info",
+        "ship:status",
+        "sector:info",
+        "planet:list",
+        "planet:create",
+        "move:pathfind",
+        "move:warp",
+        "planet:land",
+        "planet:info",
+        "planet:harvest",
+        "planet:launch",
+        "move:result"
+    ],
+    "combat": [
+        "player:info",
+        "ship:status",
+        "sector:info",
+        "ship:scan",
+        "combat:attack",
+        "combat:deploy_fighters",
+        "combat:target_lock",
+        "combat:fire_weapon",
+        "move:result",
+        "ship:status"
+    ],
+    "corp": [
+        "player:info",
+        "corp:list",
+        "corp:create",
+        "corp:info",
+        "corp:invite",
+        "corp:accept_invite",
+        "corp:member_list",
+        "corp:storage",
+        "corp:disband",
+        "player:info"
+    ],
+    "stock": [
+        "player:info",
+        "bank:balance",
+        "stock:list",
+        "stock:quote",
+        "stock:buy",
+        "stock:portfolio",
+        "stock:sell",
+        "bank:balance",
+        "player:info"
+    ],
+    "mail": [
+        "player:info",
+        "mail:list",
+        "mail:send",
+        "mail:read",
+        "mail:delete",
+        "chat:broadcast",
+        "chat:list",
+        "player:info"
+    ],
+    "banking": [
+        "player:info",
+        "bank:balance",
+        "bank:deposit",
+        "bank:withdraw",
+        "bank:loan_request",
+        "bank:loan_list",
+        "bank:loan_pay",
+        "bank:balance",
+        "player:info"
+    ],
+    "bounty": [
+        "player:info",
+        "ship:status",
+        "bounty:list",
+        "bounty:info",
+        "bounty:claim",
+        "bounty:hunt_log",
+        "move:result",
+        "player:info"
+    ],
+    "trade": [
+        "player:my_info",
+        "ship:status",
+        "sector:info",
+        "trade:port_info",
+        # Repeat quote/buy/sell cycle 3 times to maximize profit opportunities
+        "trade:quote", "trade:buy", "trade:sell",
+        "trade:quote", "trade:buy", "trade:sell",
+        "trade:quote", "trade:buy", "trade:sell"
+    ]
+}
+
+# Workflow order for round-robin rotation
+QA_WORKFLOW_ORDER = ["planet", "combat", "corp", "stock", "mail", "banking", "bounty", "trade"]
 
 def _get_fallback_plan(game_state, state_manager, planner):
     """
@@ -739,11 +827,20 @@ def main(config_path="config.json"):
     state_manager.set_default("strategy_plan", [])
     state_manager.set_default("session_id", None)
     state_manager.set_default("current_qa_objective", None) # NEW: For QA testing mode
+    state_manager.set_default("qa_objective_start_time", None)  # Track when objective started
+    state_manager.set_default("qa_commands_for_objective", 0)  # Count commands for this objective
+    state_manager.set_default("qa_workflow_queue", [])  # Queue of commands from current workflow
+    state_manager.set_default("qa_workflow_index", 0)  # Index in round-robin workflow rotation
+    state_manager.set_default("qa_tested_commands", [])  # Track which commands have been tested
     # We must reset session_id on start, as it's not persistent
     state_manager.set("session_id", None) 
 
     last_heartbeat = time.time()
     schemas_bootstrapped = False
+    
+    # QA Mode Constants
+    QA_OBJECTIVE_TIME_LIMIT = 600  # 10 minutes - rotate objective after this time
+    QA_OBJECTIVE_COMMAND_LIMIT = 50  # commands - rotate objective after this many commands
     
     # --- Main Loop ---
     while not shutdown_flag:
@@ -885,26 +982,61 @@ def main(config_path="config.json"):
                 survey_needed = at_port and (not port_info or not port_info.get("commodities"))
 
                 if config.get("qa_mode"):
-                    current_qa_objective = state_manager.get("current_qa_objective")
-                    if current_qa_objective is None:
-                        current_qa_objective = random.choice(QA_OBJECTIVES)
-                        state_manager.set("current_qa_objective", current_qa_objective)
-                        logger.info(f"New QA Objective selected: {current_qa_objective}")
+                    # Workflow-based QA mode: Execute deterministic command sequences
+                    current_workflow_queue = state_manager.get("qa_workflow_queue", [])
                     
-                    logger.info(f"Requesting new plan for QA Objective: {current_qa_objective}")
-                    new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage, state_manager, qa_objective=current_qa_objective)
+                    # If queue is empty, load next workflow
+                    if not current_workflow_queue:
+                        workflow_idx = state_manager.get("qa_workflow_index", 0)
+                        workflow_name = QA_WORKFLOW_ORDER[workflow_idx % len(QA_WORKFLOW_ORDER)]
+                        workflow_commands = QA_WORKFLOWS[workflow_name]
+                        
+                        # Special handling: TRADE workflow requires being at a port
+                        if workflow_name == "trade":
+                            if not at_port:
+                                # Try to navigate to a known port, or skip workflow
+                                known_ports = state_manager.get("known_ports", {})
+                                if known_ports:
+                                    # Get first available port
+                                    first_port_info = next(iter(known_ports.values()))
+                                    target_sector = first_port_info.get("sector_id")
+                                    if target_sector and target_sector != current_sector_id:
+                                        logger.info(f"QA: Not at port. Prepending navigation to sector {target_sector}")
+                                        # Insert navigation commands at front (use goto: format for strategic goal)
+                                        workflow_commands = [f"goto: {target_sector}", "sector:info"] + workflow_commands
+                                    else:
+                                        logger.info(f"QA: Skipping TRADE workflow (not at a port and no new ports to navigate to)")
+                                        state_manager.set("qa_workflow_index", workflow_idx + 1)
+                                        continue
+                                else:
+                                    logger.info(f"QA: Skipping TRADE workflow (not at a port, sector {current_sector_id} has no ports). Rotating to next workflow.")
+                                    state_manager.set("qa_workflow_index", workflow_idx + 1)
+                                    continue
+                        
+                        # Log coverage stats
+                        tested_cmds = state_manager.get("qa_tested_commands", [])
+                        coverage_pct = (len(tested_cmds) / 215) * 100 if tested_cmds else 0
+                        logger.info(f"QA Workflow rotation: {workflow_name.upper()} ({workflow_idx % len(QA_WORKFLOW_ORDER)}). Coverage: {coverage_pct:.1f}% ({len(tested_cmds)}/215 commands tested)")
+                        
+                        current_workflow_queue = workflow_commands.copy()
+                        state_manager.set("qa_workflow_queue", current_workflow_queue)
+                        state_manager.set("qa_workflow_index", workflow_idx + 1)
                     
-                    if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
-                        state_manager.set("strategy_plan", new_plan)
-                        strategy_plan = new_plan
-                    else:
-                        logger.warning(f"LLM failed to provide a valid plan for QA Objective '{current_qa_objective}'. Using fallback plan.")
-                        fallback_plan = _get_fallback_plan(game_state, state_manager, planner)
-                        state_manager.set("strategy_plan", fallback_plan)
-                        strategy_plan = fallback_plan
-                        # Do not clear the objective yet, let the fallback help achieve it or progress
-                        time.sleep(2) 
-                        # Removed 'continue' so we proceed to execute the fallback plan immediately
+                    # Convert first command from queue into a goal
+                    if current_workflow_queue:
+                        next_cmd = current_workflow_queue.pop(0)
+                        state_manager.set("qa_workflow_queue", current_workflow_queue)
+                        
+                        # Smart goal format conversion:
+                        # If it's already a goal format (contains strategic keywords), use as-is
+                        # Otherwise wrap with "execute:" for raw commands
+                        if any(keyword in next_cmd for keyword in ["survey:", "sell:", "buy:", "goto:"]):
+                            goal = next_cmd  # Already a strategic goal
+                        else:
+                            goal = f"execute: {next_cmd}"  # Raw command, needs execution wrapper
+                        strategy_plan = [goal]
+                        state_manager.set("strategy_plan", strategy_plan)
+                        logger.info(f"QA: Next workflow command: {next_cmd}")
                 else: # Not in QA mode, revert to old strategy logic
                     if survey_needed:
                         logger.info("At a port, but survey is incomplete. Setting goal to survey.")
@@ -964,8 +1096,24 @@ def main(config_path="config.json"):
                 if game_conn.send_command(full_command):
                     state_manager.add_pending_command(full_command['id'], full_command)
                     state_manager.record_command_sent(command_name)
+                    
+                    # Track tested commands in QA mode
                     if config.get("qa_mode"):
+                        qa_commands = state_manager.get("qa_commands_for_objective", 0)
+                        state_manager.set("qa_commands_for_objective", qa_commands + 1)
+                        
+                        # Track command in coverage list
+                        tested_cmds = state_manager.get("qa_tested_commands", [])
+                        if command_name not in tested_cmds:
+                            tested_cmds.append(command_name)
+                            state_manager.set("qa_tested_commands", tested_cmds)
+                        
                         bug_reporter.log_command(full_command)
+                        
+                        # In QA mode, clear the strategy plan after sending a workflow command
+                        # so the next workflow command gets popped from the queue
+                        if current_goal and current_goal.startswith("execute:"):
+                            state_manager.set("strategy_plan", [])
                     
                     # If an invariant command was sent, prioritize waiting for its response
                     if next_command_dict.get("is_invariant"):

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_planet.create_1505",
+    "first_seen": "20260213_092328_174",
+    "command": "planet.create",
+    "error_code": 1505,
+    "error_message": "Insufficient Genesis torpedoes on your ship."
+}

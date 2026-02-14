@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_move.pathfind_1301",
+    "first_seen": "20260213_084508_676",
+    "command": "move.pathfind",
+    "error_code": 1301,
+    "error_message": "missing required property: from_sector_id"
+}

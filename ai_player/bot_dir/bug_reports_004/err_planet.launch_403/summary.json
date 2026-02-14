@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_planet.launch_403",
+    "first_seen": "20260213_170259_626",
+    "command": "planet.launch",
+    "error_code": 403,
+    "error_message": "Ship destroyed by sector hazards on launch."
+}

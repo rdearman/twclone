@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_sell.cheapest_1300",
+    "first_seen": "20260213_090603_504",
+    "command": "sell.cheapest",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

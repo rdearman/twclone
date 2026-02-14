@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_trade.port_info_1800",
+    "first_seen": "20260213_084436_772",
+    "command": "trade.port_info",
+    "error_code": 1800,
+    "error_message": "No port found."
+}

@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-b3fb3351",
+    "ts": "2026-02-13T10:06:29Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1453,
+        "message": "No link"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

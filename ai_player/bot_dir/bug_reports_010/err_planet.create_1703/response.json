@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-706227b4",
+    "ts": "2026-02-14T06:32:48Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1703,
+        "message": "Planet creation prohibited in FedSpace."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

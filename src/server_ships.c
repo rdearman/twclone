@@ -906,7 +906,7 @@ h_update_ship_cargo (db_t *db,
 
   const char *col_name = NULL;
 
-
+  /* Strict validation: only accept 3-char commodity codes */
   if (strcasecmp (commodity_code, "ORE") == 0)
     {
       col_name = "ore";
@@ -919,25 +919,25 @@ h_update_ship_cargo (db_t *db,
     {
       col_name = "equipment";
     }
-  else if (strcasecmp (commodity_code, "COLONISTS") == 0)
+  else if (strcasecmp (commodity_code, "COL") == 0)
     {
       col_name = "colonists";
     }
-  else if (strcasecmp (commodity_code, "SLAVES") == 0)
+  else if (strcasecmp (commodity_code, "SLV") == 0)
     {
       col_name = "slaves";
     }
-  else if (strcasecmp (commodity_code, "WEAPONS") == 0)
+  else if (strcasecmp (commodity_code, "WPN") == 0)
     {
       col_name = "weapons";
     }
-  else if (strcasecmp (commodity_code, "DRUGS") == 0)
+  else if (strcasecmp (commodity_code, "DRG") == 0)
     {
       col_name = "drugs";
     }
   else
     {
-      LOGE ("h_update_ship_cargo: unknown commodity_code: '%s'",
+      LOGE ("h_update_ship_cargo: invalid commodity code '%s' (must be 3-char code: ORE, ORG, EQU, COL, SLV, WPN, or DRG)",
 	    commodity_code);
       if (new_quantity_out)
 	{
@@ -976,19 +976,19 @@ h_update_ship_cargo (db_t *db,
     {
       current_qty = equ;
     }
-  else if (strcasecmp (commodity_code, "COLONISTS") == 0)
+  else if (strcasecmp (commodity_code, "COLONISTS") == 0 || strcasecmp (commodity_code, "COL") == 0)
     {
       current_qty = colonists;
     }
-  else if (strcasecmp (commodity_code, "SLAVES") == 0)
+  else if (strcasecmp (commodity_code, "SLAVES") == 0 || strcasecmp (commodity_code, "SLV") == 0)
     {
       current_qty = slaves;
     }
-  else if (strcasecmp (commodity_code, "WEAPONS") == 0)
+  else if (strcasecmp (commodity_code, "WEAPONS") == 0 || strcasecmp (commodity_code, "WPN") == 0)
     {
       current_qty = weapons;
     }
-  else if (strcasecmp (commodity_code, "DRUGS") == 0)
+  else if (strcasecmp (commodity_code, "DRUGS") == 0 || strcasecmp (commodity_code, "DRG") == 0)
     {
       current_qty = drugs;
     }

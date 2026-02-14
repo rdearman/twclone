@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_trade.sell_1495",
+    "first_seen": "20260214_120602_308",
+    "command": "trade.sell",
+    "error_code": 1495,
+    "error_message": "You do not carry enough of that commodity."
+}

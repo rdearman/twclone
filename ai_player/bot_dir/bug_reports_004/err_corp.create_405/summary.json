@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_corp.create_405",
+    "first_seen": "20260213_084535_511",
+    "command": "corp.create",
+    "error_code": 405,
+    "error_message": "Missing or invalid corporation name."
+}

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_bank.withdraw_1301",
+    "first_seen": "20260213_084658_665",
+    "command": "bank.withdraw",
+    "error_code": 1301,
+    "error_message": "Invalid amount."
+}

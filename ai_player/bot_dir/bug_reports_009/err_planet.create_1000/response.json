@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-dd575080",
+    "ts": "2026-02-13T11:53:40Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1000,
+        "message": "Failed to create planet."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

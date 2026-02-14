@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_combat.fire_weapon_1300",
+    "first_seen": "20260213_084654_094",
+    "command": "combat.fire_weapon",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

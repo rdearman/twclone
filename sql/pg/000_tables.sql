@@ -36,7 +36,8 @@ CREATE TABLE sectors (
     sector_id serial PRIMARY KEY,
     name text,
     beacon text,
-    nebulae text
+    nebulae text,
+    navhaz INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE commission (
@@ -426,7 +427,7 @@ CREATE TABLE port_trade (
     port_trade_id serial PRIMARY KEY,
     port_id integer NOT NULL,
     maxproduct bigint,
-    commodity text CHECK (commodity IN ('ore', 'organics', 'equipment')),
+    commodity text CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'SLV', 'WPN', 'DRG')),
     mode text CHECK (mode IN ('buy', 'sell')),
     FOREIGN KEY (port_id) REFERENCES ports (port_id)
 );
@@ -757,7 +758,7 @@ CREATE TABLE podded_status (
 
 CREATE TABLE planet_goods (
     planet_id integer NOT NULL,
-    commodity text NOT NULL CHECK (commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),
+    commodity text NOT NULL CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'FOOD', 'FUEL')),
     quantity integer NOT NULL DEFAULT 0,
     max_capacity bigint NOT NULL,
     production_rate bigint NOT NULL,
@@ -1447,6 +1448,29 @@ CREATE TABLE s2s_keys (
     active boolean DEFAULT TRUE,
     created_ts timestamptz NOT NULL
 );
+
+CREATE TABLE s2s_peers (
+    peer_id text PRIMARY KEY,
+    host text NOT NULL,
+    port integer NOT NULL,
+    enabled boolean NOT NULL DEFAULT TRUE,
+    shared_key_id text NOT NULL REFERENCES s2s_keys(key_id),
+    last_seen_at timestamptz,
+    notes text,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_s2s_peers_enabled ON s2s_peers(enabled);
+CREATE INDEX idx_s2s_peers_host_port ON s2s_peers(host, port);
+
+CREATE TABLE s2s_nonce_seen (
+    peer_id text NOT NULL,
+    nonce text NOT NULL,
+    msg_ts timestamptz NOT NULL,
+    seen_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(peer_id, nonce),
+    FOREIGN KEY(peer_id) REFERENCES s2s_peers(peer_id)
+);
+CREATE INDEX idx_s2s_nonce_seen_at ON s2s_nonce_seen(seen_at);
 
 CREATE TABLE cron_tasks (
     cron_tasks_id serial PRIMARY KEY,

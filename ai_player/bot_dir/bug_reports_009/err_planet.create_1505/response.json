@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-1f0cbcde",
+    "ts": "2026-02-13T09:23:28Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1505,
+        "message": "Insufficient Genesis torpedoes on your ship."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

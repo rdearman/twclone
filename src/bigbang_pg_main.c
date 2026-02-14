@@ -442,6 +442,7 @@ create_random_warps (PGconn *c, int numSectors, int maxWarps)
       int targetWarps = 1 + (rand () % maxWarps);
       int attempts = 0;
       int deg = 0;
+      int has_warp = 0;
 
 
       while (deg < targetWarps && attempts < 200)
@@ -449,24 +450,81 @@ create_random_warps (PGconn *c, int numSectors, int maxWarps)
 	  int t = 11 + (rand () % (numSectors - 10));
 
 
-	  if (t == s || is_sector_used (c, t))
+	  if (t == s)
 	    {
 	      attempts++;
 	      continue;
 	    }
+	  
+	  /* Check if adding a warp would exceed maxWarps limit on either sector */
+	  char check_sql[256];
+	  snprintf (check_sql, sizeof (check_sql),
+		   "SELECT (SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d) as s_count, "
+		   "       (SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d) as t_count;",
+		   s, t);
+	  
+	  PGresult *check_r = PQexec (c, check_sql);
+	  int s_count = 0, t_count = 0;
+	  if (check_r && PQresultStatus (check_r) != PGRES_FATAL_ERROR && PQntuples (check_r) > 0)
+	    {
+	      s_count = atoi (PQgetvalue (check_r, 0, 0));
+	      t_count = atoi (PQgetvalue (check_r, 0, 1));
+	      PQclear (check_r);
+	    }
+	  
+	  /* Skip if either sector already has max warps */
+	  if (s_count >= maxWarps || t_count >= maxWarps)
+	    {
+	      attempts++;
+	      continue;
+	    }
+	  
+	  /* Note: Removed is_sector_used(c, t) check to allow connecting
+	     tunnel sectors to the main graph. This prevents tunnel sectors
+	     from becoming orphaned. */
 
 	  int res = insert_warp_unique (c, s, t);
 
 
 	  if (res > 0)
 	    {
-	      if ((rand () % 100) >= DEFAULT_PERCENT_ONEWAY)
+	      has_warp = 1;
+	      
+	      /* Check reverse warp count before adding it */
+	      char rev_check[128];
+	      snprintf (rev_check, sizeof (rev_check),
+		       "SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d;", t);
+	      PGresult *rev_r = PQexec (c, rev_check);
+	      int t_rev_count = 0;
+	      if (rev_r && PQresultStatus (rev_r) != PGRES_FATAL_ERROR && PQntuples (rev_r) > 0)
+		{
+		  t_rev_count = atoi (PQgetvalue (rev_r, 0, 0));
+		  PQclear (rev_r);
+		}
+	      
+	      /* Only add reverse warp if target hasn't hit max */
+	      if ((rand () % 100) >= DEFAULT_PERCENT_ONEWAY && t_rev_count < maxWarps)
 		{
 		  insert_warp_unique (c, t, s);
 		}
 	      deg++;
 	    }
 	  attempts++;
+	}
+      
+      /* Safety net: If no warps were created after 200 attempts,
+         force at least one connection to prevent orphaned sectors. */
+      if (!has_warp && deg == 0)
+	{
+	  int t = 11 + (rand () % (numSectors - 10));
+	  if (t != s)
+	    {
+	      insert_warp_unique (c, s, t);
+	      if ((rand () % 100) >= DEFAULT_PERCENT_ONEWAY)
+		{
+		  insert_warp_unique (c, t, s);
+		}
+	    }
 	}
     }
   exec_sql (c, "COMMIT", "COMMIT random warps");
@@ -605,6 +663,146 @@ ensure_fedspace_exit (PGconn *c, int outer_min, int outer_max)
 	  have++;
 	}
     }
+  return 0;
+}
+
+
+/* Validate and fix universe connectivity. If trapped sectors are found,
+   automatically add warps to escape them. This ensures no sector is unreachable. */
+static int
+validate_universe_connectivity (PGconn *c)
+{
+  PGresult *r = PQexec (c,
+			"SELECT s.sector_id "
+			"  FROM sectors s "
+			" WHERE s.sector_id > 10 "
+			"   AND NOT EXISTS ("
+			"     SELECT 1 FROM sector_warps "
+			"      WHERE from_sector = s.sector_id"
+			"   ) "
+			" ORDER BY s.sector_id");
+
+  if (!r || PQresultStatus (r) != PGRES_TUPLES_OK)
+    {
+      fprintf (stderr, "ERROR: Failed to query trapped sectors\n");
+      if (r)
+	{
+	  PQclear (r);
+	}
+      return -1;
+    }
+
+  int trapped_count = PQntuples (r);
+  if (trapped_count > 0)
+    {
+      int fixed_count = 0;
+      
+      /* Get total sector count and max warps per sector */
+      PGresult *max_r = PQexec (c, "SELECT MAX(sector_id) FROM sectors");
+      int max_sector = 2500;
+      if (max_r && PQresultStatus (max_r) != PGRES_FATAL_ERROR)
+	{
+	  max_sector = atoi (PQgetvalue (max_r, 0, 0));
+	  PQclear (max_r);
+	}
+      
+      PGresult *cfg_r = PQexec (c, "SELECT value FROM config WHERE key = 'maxwarps_per_sector'");
+      int max_warps = 6;
+      if (cfg_r && PQresultStatus (cfg_r) != PGRES_FATAL_ERROR && PQntuples (cfg_r) > 0)
+	{
+	  max_warps = atoi (PQgetvalue (cfg_r, 0, 0));
+	  PQclear (cfg_r);
+	}
+
+      /* Add warps to each trapped sector */
+      for (int i = 0; i < trapped_count; i++)
+	{
+	  int trapped_sector = atoi (PQgetvalue (r, i, 0));
+	  
+	  /* Try to add a warp to a random sector (retry up to 10 times) */
+	  int added = 0;
+	  for (int attempt = 0; attempt < 10 && !added; attempt++)
+	    {
+	      int target = 11 + (rand () % (max_sector - 10));
+	      if (target == trapped_sector)
+		continue;
+	      
+	      /* Check current warp count for both sectors */
+	      char count_sql[512];
+	      snprintf (count_sql, sizeof (count_sql),
+		       "SELECT "
+		       "  (SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d) as from_count, "
+		       "  (SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d) as to_count;",
+		       trapped_sector, target);
+	      
+	      PGresult *count_r = PQexec (c, count_sql);
+	      int from_count = 0, to_count = 0;
+	      
+	      if (count_r && PQresultStatus (count_r) != PGRES_FATAL_ERROR && PQntuples (count_r) > 0)
+		{
+		  from_count = atoi (PQgetvalue (count_r, 0, 0));
+		  to_count = atoi (PQgetvalue (count_r, 0, 1));
+		  PQclear (count_r);
+		}
+	      
+	      /* Skip if either sector already has max warps */
+	      if (from_count >= max_warps || to_count >= max_warps)
+		continue;
+	      
+	      /* Build SQL to add the warp */
+	      char sql[256];
+	      snprintf (sql, sizeof (sql),
+		       "INSERT INTO sector_warps (from_sector, to_sector) "
+		       "SELECT %d, %d "
+		       "WHERE NOT EXISTS (SELECT 1 FROM sector_warps WHERE from_sector = %d AND to_sector = %d);",
+		       trapped_sector, target, trapped_sector, target);
+	      
+	      PGresult *insert_r = PQexec (c, sql);
+	      if (insert_r && PQresultStatus (insert_r) != PGRES_FATAL_ERROR)
+		{
+		  int affected = atoi (PQcmdTuples (insert_r));
+		  if (affected > 0)
+		    {
+		      added = 1;
+		      fixed_count++;
+		    }
+		  PQclear (insert_r);
+		}
+	    }
+	}
+      
+      fprintf (stderr, "BIGBANG: Fixed %d orphaned sectors\n", fixed_count);
+    }
+
+  PQclear (r);
+  
+  /* Verify fix worked */
+  PGresult *verify_r = PQexec (c,
+			       "SELECT COUNT(*) FROM sectors s "
+			       " WHERE s.sector_id > 10 "
+			       "   AND NOT EXISTS ("
+			       "     SELECT 1 FROM sector_warps "
+			       "      WHERE from_sector = s.sector_id"
+			       "   )");
+  
+  if (verify_r && PQresultStatus (verify_r) != PGRES_FATAL_ERROR)
+    {
+      int remaining_trapped = atoi (PQgetvalue (verify_r, 0, 0));
+      PQclear (verify_r);
+      
+      if (remaining_trapped == 0)
+	{
+	  printf ("BIGBANG: Universe connectivity validation: OK (all sectors have exits)\n");
+	  return 0;
+	}
+      else
+	{
+	  fprintf (stderr, "ERROR: After auto-fix, %d sectors still trapped\n", remaining_trapped);
+	  return -1;
+	}
+    }
+  
+  printf ("BIGBANG: Universe connectivity validation: OK (all sectors have exits)\n");
   return 0;
 }
 
@@ -1057,6 +1255,22 @@ main (int argc, char **argv)
   // Then generate random warps for the rest of the universe
   create_random_warps (app, sectors, density);
   ensure_fedspace_exit (app, 11, sectors);
+
+  /* Validate universe connectivity - ensure no orphan sectors */
+  if (validate_universe_connectivity (app) != 0)
+    {
+      fprintf (stderr, "FATAL: Universe validation failed. Aborting bigbang.\n");
+      PQfinish (app);
+      if (jcfg)
+	{
+	  json_decref (jcfg);
+	}
+      free (admin_cs);
+      free (db_name);
+      free (app_cs_tmpl);
+      free (sql_dir);
+      return 2;
+    }
 
   PQfinish (app);
   if (jcfg)

@@ -1,0 +1,142 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                 COMMODITY EXTENSIBILITY - QUICK REFERENCE                      ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+SCENARIO: Add 2 new commodities (1 legal: WATER, 1 illegal: SPICE)
+
+┌─ CAN DO WITHOUT CODE CHANGES ─────────────────────────────────────────────────┐
+│                                                                                 │
+│  ✅ Add to commodities table
+│     INSERT INTO commodities VALUES ('WTR', 'Water', false, 80, 15);
+│     INSERT INTO commodities VALUES ('SPC', 'Spice', true, 1200, 80);
+│     [Immediate effect - works immediately]
+│
+│  ✅ Add to entity_stock (ports/planets)
+│     [Works automatically if commodity is in commodities table]
+│
+│  ✅ Enable planet market trading
+│     [Already works dynamically - checks commodities.illegal at runtime]
+│
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ REQUIRES DATABASE SCHEMA MIGRATION ──────────────────────────────────────────┐
+│                                                                                 │
+│  ❌ Ship cargo trading
+│     Problem: Ships table has hardcoded columns (ore, organics, etc.)
+│     Fix needed: ALTER TABLE ships ADD COLUMN water BIGINT;
+│                 ALTER TABLE ships ADD COLUMN spice BIGINT;
+│     Impact: Schema migration (default values = 0 for all 10,000+ ships)
+│     Effort: ~10 lines SQL, but affects all ships
+│
+│  ❌ Cargo hold constraint  
+│     Problem: CHECK constraint explicitly sums all 7 commodities
+│     Fix needed: DROP CONSTRAINT check_current_cargo_limit;
+│                 ALTER TABLE ships ADD CONSTRAINT check_current_cargo_limit 
+│                   CHECK ((colonists+ore+organics+equipment+slaves+weapons+drugs+water+spice) <= holds);
+│     Impact: Constraint update
+│     Effort: ~5 lines SQL
+│
+│  ❌ Port trading support
+│     Problem: port_trade table has CHECK constraint limiting to 6 commodities
+│     Fix needed: ALTER TABLE port_trade DROP CONSTRAINT port_trade_commodity_check;
+│                 ALTER TABLE port_trade ADD CONSTRAINT port_trade_commodity_check
+│                   CHECK (commodity IN ('ORE','ORG','EQU','SLV','WPN','DRG','WTR','SPC'));
+│     Impact: Constraint update
+│     Effort: ~5 lines SQL
+│
+│  ❌ Planet goods support
+│     Problem: planet_goods has CHECK limiting to 5 commodities (no illegals)
+│     Fix needed: Similar constraint update
+│     Impact: Constraint update
+│     Effort: ~5 lines SQL
+│
+│  ⚠️  Update schema files for future deployments
+│     - sql/pg/000_tables.sql (3 constraints)
+│     - sql/my/000_tables.sql (3 constraints)
+│     Effort: ~15 lines SQL across 2 files
+│
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ REQUIRES SERVER CODE CHANGES ────────────────────────────────────────────────┐
+│                                                                                 │
+│  ❌ Server cargo update support
+│     File: src/server_ships.c
+│     Function: h_update_ship_cargo() (lines 910-947)
+│     Problem: Hardcoded if/else chain for each commodity
+│     Fix needed: Add 2 new branches:
+│                 else if (strcasecmp(commodity_code, "WTR") == 0)
+│                   col_name = "water";
+│                 else if (strcasecmp(commodity_code, "SPC") == 0)
+│                   col_name = "spice";
+│     Impact: Server binary must be recompiled
+│     Effort: ~10 lines C, 1 rebuild
+│
+│  ❌ Database queries for ship cargo
+│     Files: Multiple (src/db/repo/repo_*.c, src/server_*.c)
+│     Problem: Every query selecting ship cargo explicitly lists all columns
+│     Fix needed: Search/replace all SELECT statements to include water, spice
+│     Impact: Could affect dozens of queries
+│     Effort: ~20 replacements
+│
+│  ✅ Port trading logic
+│     NO CHANGES NEEDED - uses commodity_code dynamically
+│
+│  ✅ Market trading logic
+│     NO CHANGES NEEDED - checks commodities.illegal at runtime
+│
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+EFFORT BREAKDOWN
+═══════════════════════════════════════════════════════════════════════════════
+
+Phase 1: Schema Changes (REQUIRED)
+  Database constraints update:    ~20 lines SQL (5 mins)
+  Schema file updates:             ~15 lines SQL (5 mins)
+  Subtotal:                        ~10 minutes
+
+Phase 2: Server Code (REQUIRED IF ships carry new commodities)
+  h_update_ship_cargo() changes:   ~10 lines C (5 mins)
+  Query updates:                   ~20 replacements (15 mins)
+  Rebuild server:                  ~2 minutes
+  Subtotal:                        ~25 minutes
+
+Phase 3: Configuration (OPTIONAL)
+  Add port_trade entries:          SQL script (5 mins)
+  Update port generation:          ~10 lines SQL if new defaults (5 mins)
+  Subtotal:                        ~10 minutes
+
+TOTAL EFFORT: 45-60 minutes (for 2 new commodities)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+KEY INSIGHTS
+═══════════════════════════════════════════════════════════════════════════════
+
+🔴 CRITICAL ISSUE: Denormalized Ship Cargo Storage
+   The ships table uses one column per commodity. This is NOT extensible.
+   
+   Recommendation for future: Refactor to ship_cargo table
+   (ship_id, commodity_code, quantity) - fully dynamic
+
+🟡 MODERATE ISSUE: CHECK Constraints as Whitelists
+   Port_trade and planet_goods use explicit commodity lists in CHECK
+   
+   Recommendation for future: Use foreign keys to commodities table
+   This already works for entity_stock
+
+🟢 GOOD AREAS:
+   - Commodities table: fully flexible, no constraints
+   - Entity stock: fully dynamic, works with any code
+   - Market logic: checks illegal flag at runtime
+   - Protocol: can accept any code if database allows
+
+BOTTOM LINE
+═════════════════════════════════════════════════════════════════════════════
+
+✅ CAN ADD: Commodities to trading without code (only database)
+❌ CAN'T DO: Ships can't carry new types without schema + code changes
+⚠️  PARTIALLY: Port trading works with DB constraint fix only
+
+For 3-5 new commodities, the effort is still manageable (~2 hours).
+For 10+ new commodities, should consider architecture refactoring.
+

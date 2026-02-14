@@ -424,10 +424,11 @@ int db_planets_create(db_t *db, int sector_id, const char *name, int owner_id, c
 
 int db_planets_consume_genesis(db_t *db, int ship_id) {
     db_error_t err;
+    int64_t rows_affected = 0;
     /* SQL_VERBATIM: Q34 */
     const char *q34 = "UPDATE ships SET genesis = genesis - 1 WHERE ship_id = {1} AND genesis >= 1;";
     char sql[512]; sql_build(db, q34, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &err)) return 0;
+    if (db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &rows_affected, &err) && rows_affected > 0) return 0;
     return -1;
 }
 

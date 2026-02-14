@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_corp.info_1300",
+    "first_seen": "20260213_084527_756",
+    "command": "corp.info",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

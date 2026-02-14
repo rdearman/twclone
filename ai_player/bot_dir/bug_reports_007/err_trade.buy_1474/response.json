@@ -1,0 +1,19 @@
+{
+    "id": "srv-refuse",
+    "reply_to": "c-fcf6220f",
+    "ts": "2026-02-13T19:36:03Z",
+    "status": "refused",
+    "type": "error",
+    "error": {
+        "code": 1474,
+        "message": "Port does not sell this commodity."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

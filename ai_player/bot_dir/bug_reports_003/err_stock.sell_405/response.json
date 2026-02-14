@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-dc34c9b6",
+    "ts": "2026-02-13T08:47:53Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 405,
+        "message": "Missing or invalid 'equity_id'."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

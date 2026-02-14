@@ -429,7 +429,7 @@ CREATE TABLE port_trade (
     port_trade_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     port_id bigint NOT NULL,
     maxproduct bigint,
-    commodity TEXT CHECK (commodity IN ('ore', 'organics', 'equipment')),
+    commodity TEXT CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'SLV', 'WPN', 'DRG')),
     mode TEXT CHECK (mode IN ('buy', 'sell')),
     FOREIGN KEY (port_id) REFERENCES ports (port_id)
 );
@@ -743,7 +743,7 @@ CREATE TABLE podded_status (
 
 CREATE TABLE planet_goods (
     planet_id bigint NOT NULL,
-    commodity TEXT NOT NULL CHECK (commodity IN ('ore', 'organics', 'equipment', 'food', 'fuel')),
+    commodity TEXT NOT NULL CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'FOOD', 'FUEL')),
     quantity bigint NOT NULL DEFAULT 0,
     max_capacity bigint NOT NULL,
     production_rate bigint NOT NULL,

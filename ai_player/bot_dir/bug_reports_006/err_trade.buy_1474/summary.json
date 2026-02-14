@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_trade.buy_1474",
+    "first_seen": "20260213_173933_814",
+    "command": "trade.buy",
+    "error_code": 1474,
+    "error_message": "Port does not sell this commodity."
+}

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_buy.profitable_1300",
+    "first_seen": "20260213_090746_299",
+    "command": "buy.profitable",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

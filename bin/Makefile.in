@@ -146,6 +146,7 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/repo/repo_universe.$(OBJEXT) \
 	../src/db/repo/repo_clusters.$(OBJEXT) \
 	../src/db/repo/repo_warp.$(OBJEXT) \
+	../src/db/repo/repo_s2s_peers.$(OBJEXT) \
 	../src/engine_consumer.$(OBJEXT) ../src/globals.$(OBJEXT) \
 	../src/s2s_keyring.$(OBJEXT) ../src/s2s_transport.$(OBJEXT) \
 	../src/schemas.$(OBJEXT) ../src/server_auth.$(OBJEXT) \
@@ -242,6 +243,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/db/repo/$(DEPDIR)/repo_player_settings.Po \
 	../src/db/repo/$(DEPDIR)/repo_players.Po \
 	../src/db/repo/$(DEPDIR)/repo_ports.Po \
+	../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po \
 	../src/db/repo/$(DEPDIR)/repo_session.Po \
 	../src/db/repo/$(DEPDIR)/repo_ships.Po \
 	../src/db/repo/$(DEPDIR)/repo_stardock.Po \
@@ -452,6 +454,7 @@ server_SOURCES = \
 	../src/db/repo/repo_universe.c \
 	../src/db/repo/repo_clusters.c \
 	../src/db/repo/repo_warp.c \
+	../src/db/repo/repo_s2s_peers.c \
 	../src/engine_consumer.c \
 	../src/globals.c \
 	../src/s2s_keyring.c \
@@ -677,6 +680,9 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_warp.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_s2s_peers.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/engine_consumer.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/globals.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -822,6 +828,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_player_settings.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_players.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_ports.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_session.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_ships.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_stardock.Po@am__quote@ # am--include-marker
@@ -1050,6 +1057,7 @@ distclean: distclean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_players.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ports.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
@@ -1164,6 +1172,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_players.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ports.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po

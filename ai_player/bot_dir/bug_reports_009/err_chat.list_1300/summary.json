@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_chat.list_1300",
+    "first_seen": "20260213_084652_102",
+    "command": "chat.list",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

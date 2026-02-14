@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_corp.disband_1300",
+    "first_seen": "20260213_084710_595",
+    "command": "corp.disband",
+    "error_code": 1300,
+    "error_message": "Unknown command"
+}

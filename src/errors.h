@@ -193,6 +193,17 @@
 #define ERR_REPLICATION_LAG     2000
 #define ERR_S2S_CONFLICT        2001
 #define ERR_SHARD_UNAVAILABLE   2002
+/* S2S Peer Authentication and Handshake Errors (2010-2020) */
+#define ERR_S2S_UNKNOWN_PEER    2010  /* Peer not found in s2s_peers registry */
+#define ERR_S2S_PEER_DISABLED   2011  /* Peer exists but enabled=FALSE */
+#define ERR_S2S_PEER_KEY_MISSING 2012 /* Peer references non-existent key */
+#define ERR_S2S_BAD_HANDSHAKE   2013  /* Handshake message format invalid */
+#define ERR_S2S_BAD_HMAC        2014  /* HMAC signature verification failed */
+#define ERR_S2S_REPLAY          2015  /* Nonce already seen (replay attack) */
+#define ERR_S2S_TIMESTAMP_SKEW  2016  /* Timestamp outside acceptable window */
+
+#define ERR_SHARD_UNAVAILABLE   2002
+
 
 /* Asset Errors (2100-2199) */
 #define ERR_CAPABILITY_DISABLED 2100

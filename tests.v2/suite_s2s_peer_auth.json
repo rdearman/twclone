@@ -1,0 +1,282 @@
+{
+  "description": "S2S Peer Registry and Authentication Tests",
+  "notes": [
+    "Tests verify S2S peer registration, handshake validation, and replay protection.",
+    "These tests exercise the database layer (s2s_peers, s2s_nonce_seen tables) and repo functions.",
+    "Once handshake logic is wired into s2s_transport.c, these tests can be extended to test the full protocol flow."
+  ],
+  "tests": [
+    {
+      "name": "Setup: Create S2S Keys for Testing",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_keys (key_id, name, secret, secret_bytes, created_at) VALUES (100, 'test_key_1', E'\\\\x0102030405060708090a0b0c0d0e0f10', 16, now()) ON CONFLICT(key_id) DO NOTHING",
+        "expect_rows": ">=0"
+      }
+    },
+    {
+      "name": "Setup: Create S2S Keys for Disabled Peer Test",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_keys (key_id, name, secret, secret_bytes, created_at) VALUES (101, 'test_key_2', E'\\\\x1112131415161718191a1b1c1d1e1f20', 16, now()) ON CONFLICT(key_id) DO NOTHING",
+        "expect_rows": ">=0"
+      }
+    },
+    {
+      "name": "Setup: Register Valid S2S Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_peers (peer_id, host, port, enabled, shared_key_id, notes, created_at) VALUES ('engine_01', 'localhost', 4321, TRUE, 100, 'Test engine instance', now()) ON CONFLICT(peer_id) DO UPDATE SET enabled=TRUE, shared_key_id=100",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Setup: Register Disabled S2S Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_peers (peer_id, host, port, enabled, shared_key_id, notes, created_at) VALUES ('engine_disabled', 'disabled.internal', 4321, FALSE, 101, 'Disabled test peer', now()) ON CONFLICT(peer_id) DO UPDATE SET enabled=FALSE, shared_key_id=101",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Valid Peer Exists",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id, enabled, shared_key_id FROM s2s_peers WHERE peer_id='engine_01'",
+        "expect_rows": 1,
+        "expect_columns": {
+          "peer_id": "engine_01",
+          "enabled": true,
+          "shared_key_id": 100
+        }
+      }
+    },
+    {
+      "name": "Query: Verify Disabled Peer Exists",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id, enabled, shared_key_id FROM s2s_peers WHERE peer_id='engine_disabled'",
+        "expect_rows": 1,
+        "expect_columns": {
+          "peer_id": "engine_disabled",
+          "enabled": false,
+          "shared_key_id": 101
+        }
+      }
+    },
+    {
+      "name": "Setup: Insert Test Nonce (Replay Detection Baseline)",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_nonce_seen (peer_id, nonce, msg_ts, seen_at) VALUES ('engine_01', 'nonce_abc123', now(), now()) ON CONFLICT(peer_id, nonce) DO NOTHING",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Nonce Recorded",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id, nonce FROM s2s_nonce_seen WHERE peer_id='engine_01' AND nonce='nonce_abc123'",
+        "expect_rows": 1,
+        "expect_columns": {
+          "peer_id": "engine_01",
+          "nonce": "nonce_abc123"
+        }
+      }
+    },
+    {
+      "name": "Test: Nonce Uniqueness Constraint (Replay Rejection)",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_nonce_seen (peer_id, nonce, msg_ts, seen_at) VALUES ('engine_01', 'nonce_abc123', now(), now())",
+        "expect_error": "unique|constraint|duplicate"
+      }
+    },
+    {
+      "name": "Setup: Insert New Unique Nonce for Disabled Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_nonce_seen (peer_id, nonce, msg_ts, seen_at) VALUES ('engine_disabled', 'nonce_xyz789', now(), now())",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Nonce For Disabled Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id FROM s2s_nonce_seen WHERE peer_id='engine_disabled' AND nonce='nonce_xyz789'",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: List All Active S2S Peers",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id, host, port, enabled FROM s2s_peers WHERE enabled=TRUE ORDER BY peer_id",
+        "expect_rows": 1,
+        "expect_columns": {
+          "peer_id": "engine_01",
+          "host": "localhost",
+          "port": 4321,
+          "enabled": true
+        }
+      }
+    },
+    {
+      "name": "Query: List All Disabled S2S Peers",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id FROM s2s_peers WHERE enabled=FALSE",
+        "expect_rows": 1,
+        "expect_columns": {
+          "peer_id": "engine_disabled"
+        }
+      }
+    },
+    {
+      "name": "Setup: Update last_seen_at for Valid Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "UPDATE s2s_peers SET last_seen_at=now() WHERE peer_id='engine_01'",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify last_seen_at Updated",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT peer_id FROM s2s_peers WHERE peer_id='engine_01' AND last_seen_at IS NOT NULL",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Unknown Peer Does Not Exist",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT COUNT(*) as cnt FROM s2s_peers WHERE peer_id='unknown_peer'",
+        "expect_rows": 1,
+        "expect_columns": {
+          "cnt": 0
+        }
+      }
+    },
+    {
+      "name": "Query: Verify Missing Key Reference Is Caught",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT s2s_peers.peer_id FROM s2s_peers LEFT JOIN s2s_keys ON s2s_peers.shared_key_id = s2s_keys.key_id WHERE s2s_peers.peer_id='engine_01' AND s2s_keys.key_id IS NULL",
+        "expect_rows": 0
+      }
+    },
+    {
+      "name": "Setup: Create Multiple Peers for Registry Listing",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_peers (peer_id, host, port, enabled, shared_key_id, created_at) VALUES ('engine_02', 'engine2.internal', 4321, TRUE, 100, now()), ('fed_server_alpha', 'fed.example.com', 4321, TRUE, 100, now()) ON CONFLICT(peer_id) DO NOTHING",
+        "expect_rows": ">=0"
+      }
+    },
+    {
+      "name": "Query: List All S2S Peers Registered",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT COUNT(*) as cnt FROM s2s_peers",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Key Resolution For All Peers",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT COUNT(*) as cnt FROM s2s_peers p INNER JOIN s2s_keys k ON p.shared_key_id = k.key_id WHERE p.enabled=TRUE",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Cleanup: Clear Old Nonces (Replay Window Expiry)",
+      "db_step": {
+        "driver": "pg",
+        "query": "DELETE FROM s2s_nonce_seen WHERE seen_at < now() - interval '300 seconds'",
+        "expect_rows": ">=0"
+      }
+    },
+    {
+      "name": "Query: Verify Recent Nonces Still Present",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT COUNT(*) as cnt FROM s2s_nonce_seen WHERE peer_id='engine_01'",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Setup: Test Nonce With Different Peer IDs (No Collision)",
+      "db_step": {
+        "driver": "pg",
+        "query": "INSERT INTO s2s_nonce_seen (peer_id, nonce, msg_ts, seen_at) VALUES ('engine_02', 'nonce_abc123', now(), now())",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Same Nonce Allowed For Different Peers",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT COUNT(*) as cnt FROM s2s_nonce_seen WHERE nonce='nonce_abc123'",
+        "expect_rows": 1,
+        "expect_columns": {
+          "cnt": 2
+        }
+      }
+    },
+    {
+      "name": "Test: Enable Previously Disabled Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "UPDATE s2s_peers SET enabled=TRUE WHERE peer_id='engine_disabled'",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Verify Peer Now Enabled",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT enabled FROM s2s_peers WHERE peer_id='engine_disabled'",
+        "expect_rows": 1,
+        "expect_columns": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "name": "Test: Disable Valid Peer",
+      "db_step": {
+        "driver": "pg",
+        "query": "UPDATE s2s_peers SET enabled=FALSE WHERE peer_id='engine_02'",
+        "expect_rows": 1
+      }
+    },
+    {
+      "name": "Query: Count Enabled vs Disabled Peers",
+      "db_step": {
+        "driver": "pg",
+        "query": "SELECT enabled, COUNT(*) as cnt FROM s2s_peers GROUP BY enabled ORDER BY enabled",
+        "expect_rows": 2
+      }
+    },
+    {
+      "name": "Cleanup: Disable All Test Peers",
+      "db_step": {
+        "driver": "pg",
+        "query": "UPDATE s2s_peers SET enabled=FALSE WHERE peer_id IN ('engine_01', 'engine_02', 'engine_disabled', 'fed_server_alpha')",
+        "expect_rows": ">=0"
+      }
+    },
+    {
+      "name": "Cleanup: Clear All Test Nonces",
+      "db_step": {
+        "driver": "pg",
+        "query": "DELETE FROM s2s_nonce_seen WHERE peer_id IN ('engine_01', 'engine_02', 'engine_disabled', 'fed_server_alpha')",
+        "expect_rows": ">=0"
+      }
+    }
+  ]
+}

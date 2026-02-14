@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-32dc4f5d",
+    "ts": "2026-02-13T09:34:43Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1508,
+        "message": "Sector has reached maximum planets."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_move.warp_403",
+    "first_seen": "20260213_090048_409",
+    "command": "move.warp",
+    "error_code": 403,
+    "error_message": "Ship destroyed by sector hazards."
+}

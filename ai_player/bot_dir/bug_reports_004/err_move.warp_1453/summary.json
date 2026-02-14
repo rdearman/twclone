@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_move.warp_1453",
+    "first_seen": "20260213_094118_950",
+    "command": "move.warp",
+    "error_code": 1453,
+    "error_message": "No link"
+}
