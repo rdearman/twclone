@@ -224,7 +224,15 @@ compare_sql_files (const void *a, const void *b)
   int num_a = atoi (fa);
   int num_b = atoi (fb);
 
-  return (num_a > num_b) - (num_a < num_b);
+  if (num_a != num_b)
+    {
+      return (num_a > num_b) - (num_a < num_b);
+    }
+
+  /* Same numeric prefix (e.g. 091_seed_essential.sql and
+     091_seed_fedspace_warps.sql): fall back to the full name so the apply
+     order is deterministic rather than whatever readdir() happened to return. */
+  return strcmp (fa, fb);
 }
 
 
