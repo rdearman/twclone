@@ -1101,7 +1101,6 @@ main (int argc, char **argv)
   exec_sql (app, buf, "generate_ports");
 
   exec_sql (app, "SELECT generate_stardock()", "generate_stardock");
-  exec_sql (app, "SELECT generate_msl()", "generate_msl");
   exec_sql (app, "SELECT generate_taverns(20)", "generate_taverns");
 
   if (port_size > 0 || tech_level > 0 || port_credits > 0)
@@ -1263,6 +1262,12 @@ main (int argc, char **argv)
   // Then generate random warps for the rest of the universe
   create_random_warps (app, sectors, density);
   ensure_fedspace_exit (app, 11, sectors);
+
+  /* Major Space Lanes are a BFS over sector_warps from FedSpace to each
+     stardock, so they must be computed after the full warp graph exists
+     (tunnels, random warps and the FedSpace exit). Running generate_msl()
+     before this point left msl_sectors containing only sectors 1-10 (#486). */
+  exec_sql (app, "SELECT generate_msl()", "generate_msl");
 
   /* Validate universe connectivity - ensure no orphan sectors */
   if (validate_universe_connectivity (app) != 0)
