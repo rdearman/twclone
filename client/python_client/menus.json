@@ -430,16 +430,14 @@
           "key": "b",
           "label": "(B) Buy (buy)",
           "action": {
-            "pycall": "simple_buy_handler",
-            "post": "pretty_print_trade_receipt"
+            "pycall": "simple_buy_handler"
           }
         },
         {
           "key": "s",
           "label": "(S) Sell",
           "action": {
-            "pycall": "simple_sell_handler",
-            "post": "pretty_print_sell_receipt"
+            "pycall": "simple_sell_handler"
           }
         },
         {
@@ -455,7 +453,8 @@
               }
             },
             "post": "pretty_print_trade_quote"
-          }
+          },
+          "show_if_ctx": ["debug"]
         },
         {
           "key": "k",

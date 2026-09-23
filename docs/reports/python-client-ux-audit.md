@@ -118,6 +118,16 @@ contract, plus two new entries added in the HUD slice: **Events** (the
 event inbox/log, see §6) and **Notices** (`notice.list`). A deeper
 communications redesign (threading, richer scrollback) is future work.
 
+## 4a. Port trading (Slice 7 implemented)
+
+Dock entry now reads the confirmed `port.info` response once and presents a
+normalized stock/capacity table. Buy and Sell use separate navigation items
+but share a quote-first flow: the player selects from displayed inventory,
+reviews an authoritative quote, explicitly confirms (default No), and sees a
+direction-correct receipt. Successful trades refresh HUD state and inventory;
+cancelled/refused trades do not claim a state change. Legacy arbitrary quote
+and raw diagnostic trade output is debug-only.
+
 ## 5. Debug tools excluded from normal play
 
 Testing/Bulk/raw-JSON-Trade menus, and menu items for commands confirmed

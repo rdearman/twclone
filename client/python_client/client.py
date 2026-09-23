@@ -592,7 +592,11 @@ def _infer_is_stardock(data: dict) -> bool:
     return False
 
 def ctx_refresh_port_context(ctx):
-    """Best-effort fetch to set ctx.state['is_stardock'] and other access flags before showing the Dock menu."""
+    """Fetch and normalize the current port before entering the dock menu.
+
+    ``port.info`` is the only read needed for the trading screen.  In
+    particular, do not probe a collection of guessed command names here.
+    """
     ctx.state.setdefault('is_stardock', False)
     ctx.state.setdefault('is_shipyard_port', False)
     ctx.state.setdefault('has_exchange_access', False)
@@ -604,53 +608,75 @@ def ctx_refresh_port_context(ctx):
     if conn is None:
         return
 
-    def _try(cmd, payload=None):
-        try:
-            r = conn.rpc(cmd, payload or {})
-            if isinstance(r, dict) and r.get('status') in ('ok','srv-ok','success', None):
-                d = r.get('data') or {}
-                if isinstance(d, dict) and d:
-                    ctx.state['is_stardock'] = bool(_infer_is_stardock(d))
-                    
-                    port_data = d.get('port') if isinstance(d.get('port'), dict) else d
-                    port_class = port_data.get('class') or port_data.get('type')
-                    if port_class == 9: # Stardock
-                        ctx.state['is_shipyard_port'] = True
-                        ctx.state['has_hardware_access'] = True
-                        ctx.state['has_exchange_access'] = True # Example: Exchange at Stardock
-                        ctx.state['has_insurance_access'] = True # Example: Insurance at Stardock
-                    elif port_class == 7: # Tavern (arbitrary, adjust as per game rules)
-                        ctx.state['has_tavern_access'] = True
-                    ctx.state['has_local_services'] = bool(
-                        ctx.state.get('has_exchange_access') or
-                        ctx.state.get('has_insurance_access') or
-                        ctx.state.get('has_tavern_access') or
-                        ctx.state.get('is_shipyard_port') or
-                        ctx.state.get('has_shipyard_access')
-                    )
-                    # Update only non-empty fields to avoid clearing known sector info (ships, adj, etc)
-                    normalized = normalize_sector(d)
-                    if not ctx.last_sector_desc:
-                        ctx.last_sector_desc = normalized
-                    else:
-                        for k, v in normalized.items():
-                            if v is not None: # Only overwrite if we have new data
-                                ctx.last_sector_desc[k] = v
-                    
-                    if 'port' in d and isinstance(d['port'], dict) and 'id' in d['port']:
-                        if 'port' not in ctx.last_sector_desc:
-                            ctx.last_sector_desc['port'] = {}
-                        ctx.last_sector_desc['port']['id'] = d['port']['id']
-                    
-                    # Refresh corporation context as well
-                    _update_corp_context(ctx)
-                    return True
-        except Exception:
-            pass
-        return False
-    for cmd in ("port.status","dock.status","port.info","sector.port.status","sector.current","whereami"):
-        if _try(cmd):
-            break
+    sector_id = ctx.current_sector_id
+    port = (ctx.last_sector_desc or {}).get("port") or {}
+    data = {"sector_id": sector_id} if sector_id is not None else {}
+    if port.get("id") is not None:
+        data["port_id"] = port["id"]
+    r = _refresh_port_info(ctx, data)
+    if r.get("status") == "ok":
+        port_data = (r.get("data") or {}).get("port") or {}
+        ctx.state["is_stardock"] = bool(_infer_is_stardock({"port": port_data}))
+
+
+def normalize_port_info(resp: dict) -> dict:
+    """Return a stable, player-client port/inventory shape."""
+    if not isinstance(resp, dict) or resp.get("status") != "ok":
+        return {}
+    raw = (resp.get("data") or {}).get("port")
+    if not isinstance(raw, dict):
+        return {}
+    rows = []
+    for item in raw.get("commodities") or []:
+        if not isinstance(item, dict) or not item.get("code"):
+            continue
+        qty = item.get("quantity")
+        maximum = item.get("max_quantity")
+        rows.append({
+            "commodity": str(item["code"]).upper(),
+            "available": qty if isinstance(qty, int) else None,
+            "max_quantity": maximum if isinstance(maximum, int) else None,
+            "base_price": item.get("price"),
+            # The server exposes stock/capacity, not a separate mode field.
+            "sells": isinstance(qty, int) and qty > 0,
+            "buys": (isinstance(qty, int) and isinstance(maximum, int)
+                     and qty < maximum),
+        })
+    return {"id": raw.get("id"), "name": raw.get("name") or "Port",
+            "commodities": rows, "raw": raw}
+
+
+def _refresh_port_info(ctx, data=None):
+    resp = ctx.conn.rpc("port.info", data or {})
+    normalized = normalize_port_info(resp)
+    if normalized:
+        ctx.state["port_inventory"] = normalized
+        ctx.last_sector_desc.setdefault("port", {})
+        ctx.last_sector_desc["port"].update({k: normalized[k] for k in ("id", "name")
+                                              if normalized.get(k) is not None})
+        ctx.last_sector_desc["port"]["commodities"] = normalized["commodities"]
+    return resp
+
+
+def render_port_summary(port: dict) -> list:
+    """Build readable port lines without making RPCs or printing JSON."""
+    lines = [f"--- Port: {port.get('name') or 'Port'} ---"]
+    rows = port.get("commodities") or []
+    if not rows:
+        return lines + ["(No commodities reported.)"]
+    for row in rows:
+        stock = "?" if row.get("available") is None else str(row["available"])
+        cap = "?" if row.get("max_quantity") is None else str(row["max_quantity"])
+        modes = "/".join(x for x, ok in (("sell", row.get("sells")), ("buy", row.get("buys"))) if ok) or "closed"
+        price = row.get("base_price")
+        indicative = f"~{present_money(price)}" if price is not None else "~?"
+        lines.append(f"  {row['commodity']}: stock {stock}/{cap}; {modes}; base {indicative}")
+    return lines
+
+
+def _print_port_summary(ctx):
+    for line in render_port_summary(ctx.state.get("port_inventory") or {}):
+        print(line)
 # --- END AUTO-ADDED DOCK_CONTEXT_REFRESH ---
 
 
@@ -1306,7 +1332,6 @@ def pretty_print_trade_quote(ctx):
     data = resp.get("data")
     if not isinstance(data, dict):
         print("[Error] Invalid trade.quote response data.")
-        _pp(resp) # Fallback to raw print if data is malformed
         return
 
     port_id = data.get("port_id")
@@ -1333,13 +1358,11 @@ def pretty_print_trade_receipt(ctx):
 
     if resp.get("status") != "ok":
         print(f"[Error] Trade failed: {resp.get('error', {}).get('message', 'Unknown error')}")
-        _pp(resp) # Fallback to raw print on error
         return
 
     data = resp.get("data")
     if not isinstance(data, dict):
         print("[Error] Invalid trade receipt data.")
-        _pp(resp) # Fallback to raw print if data is malformed
         return
 
     sector_id = data.get("sector_id")
@@ -1375,13 +1398,11 @@ def pretty_print_sell_receipt(ctx):
 
     if resp.get("status") != "ok":
         print(f"[Error] Sell failed: {resp.get('error', {}).get('message', 'Unknown error')}")
-        _pp(resp) # Fallback to raw print on error
         return
 
     data = resp.get("data")
     if not isinstance(data, dict):
         print("[Error] Invalid sell receipt data.")
-        _pp(resp) # Fallback to raw print if data is malformed
         return
 
     sector_id = data.get("sector_id")
@@ -2481,6 +2502,8 @@ def render_menu(ctx: Context):
     # run optional on-enter hook for this menu
     try:
         menu_on_enter(ctx, menu)
+    except ConnectionError:
+        raise
     except Exception:
         pass
     flags = compute_flags(ctx)
@@ -3284,123 +3307,138 @@ def tow_flow(ctx: Context):
 # regardless of the response status. Removed; see the single implementations
 # above, which route through _perform_warp().
 
-@register("simple_buy_handler")
-def simple_buy_handler(ctx: Context):
+def _trade_rows(ctx, direction):
+    port = ctx.state.get("port_inventory") or {}
+    return [row for row in port.get("commodities", []) if row.get("buys" if direction == "sell" else "sells")]
 
-    port_id = (ctx.last_sector_desc.get("port") or {}).get("id")
-    if port_id is None:
-        print("Cannot determine current port ID. Please ensure you are docked.")
+
+def _trade_confirmation(prompt, default_no=True):
+    answer = input(prompt + " [y/N]: ").strip().lower()
+    return answer in ("y", "yes")
+
+
+def _trade_error(resp, action):
+    error = (resp.get("error") or {}) if isinstance(resp, dict) else {}
+    print(f"[Error] {action} refused: {error.get('message') or 'The server refused the trade.'}")
+
+
+def _present_trade_receipt(resp, direction):
+    if not isinstance(resp, dict) or resp.get("status") != "ok":
+        _trade_error(resp or {}, direction.capitalize())
         return
-
-    commodity_input = input("Product Code (ORE, ORG, EQU): ").strip().upper()
-    
-    code_map = {
-        "ORE": "ORE",
-        "ORG": "ORG",
-        "EQU": "EQU",
-        "ORGANICS": "ORG",
-        "EQUIPMENT": "EQU"
-    }
-    commodity = code_map.get(commodity_input)
-
-    if not commodity:
-        print("Invalid commodity. Please use ORE, ORG, or EQU.")
+    data = resp.get("data") or {}
+    if not isinstance(data, dict):
+        print("[Error] The server returned an invalid trade receipt.")
         return
+    verb = "Bought" if direction == "buy" else "Sold"
+    print(f"--- Trade Receipt ({verb}) ---")
+    total = data.get("total_cost")
+    fees = data.get("fees")
+    if direction == "buy":
+        print(f"Total charged (including fees): {present_money(total)}")
+    else:
+        print(f"Net credits received (after fees): {present_money(total)}")
+    if fees is not None:
+        print(f"Fees: {present_money(fees)}")
+    if data.get("credits_remaining") is not None:
+        print(f"Credits remaining: {present_money(data['credits_remaining'])}")
+    for line in data.get("lines") or []:
+        if isinstance(line, dict):
+            print(f"  {line.get('quantity', '?')} x {line.get('commodity', '?')}"
+                  f" @ {present_money(line.get('unit_price'))}/unit")
 
+
+def dock_trade_flow(ctx: Context, direction: str):
+    """Shared, quoted buy/sell flow for the current normalized port."""
+    if direction not in ("buy", "sell"):
+        return
+    port = ctx.state.get("port_inventory") or {}
+    if not port.get("commodities"):
+        print("No port inventory is available. Please re-enter the dock.")
+        return
+    rows = _trade_rows(ctx, direction)
+    if not rows:
+        print(f"This port has nothing available to {direction}.")
+        return
+    print(f"\n--- {direction.capitalize()} ---")
+    for index, row in enumerate(rows, 1):
+        print(f"  {index}. {row['commodity']} (stock {row.get('available', '?')}/"
+              f"{row.get('max_quantity', '?')}, base ~{present_money(row.get('base_price'))})")
     try:
-        quantity = int(input(f"Quantity of {commodity}: ").strip())
-        if quantity <= 0:
-            print("Quantity must be positive.")
-            return
+        selected = int(input("Commodity number: ").strip())
+        row = rows[selected - 1]
+    except (ValueError, IndexError):
+        print("Cancelled: choose a displayed commodity number.")
+        return
+    try:
+        quantity = int(input(f"Quantity of {row['commodity']}: ").strip())
     except ValueError:
         print("Invalid quantity.")
         return
+    if quantity <= 0:
+        print("Quantity must be positive.")
+        return
+    if direction == "buy" and isinstance(row.get("available"), int) and quantity > row["available"]:
+        print(f"Maximum available here is {row['available']}.")
+        return
+    if direction == "sell" and isinstance(row.get("max_quantity"), int) and isinstance(row.get("available"), int):
+        print(f"Port can accept up to {row['max_quantity'] - row['available']} units of {row['commodity']}.")
+        if quantity > row["max_quantity"] - row["available"]:
+            return
+    capacity = ctx.hud.cargo_total
+    used = ctx.hud.cargo_used
+    if direction == "buy" and isinstance(capacity, int) and isinstance(used, int):
+        print(f"Cargo guidance: {max(0, capacity - used)} hold(s) available; credits: "
+              f"{present_money(ctx.hud.credits) if ctx.hud.credits is not None else '?'}.")
+        if quantity > max(0, capacity - used):
+            print("Quantity exceeds known free cargo capacity.")
+            return
+    port_id = port.get("id")
+    if port_id is None:
+        print("Cannot determine the current port ID.")
+        return
+    quote = ctx.conn.rpc("trade.quote", {"port_id": port_id, "commodity": row["commodity"], "quantity": quantity})
+    if quote.get("status") != "ok":
+        _trade_error(quote, "Quote")
+        return
+    q = quote.get("data") or {}
+    total_key = "total_buy_price" if direction == "buy" else "total_sell_price"
+    total = q.get(total_key)
+    print(f"Authoritative quote: {quantity} x {row['commodity']} = {present_money(total)}"
+          f" (unit {present_money(q.get('buy_price' if direction == 'buy' else 'sell_price'))}).")
+    if ctx.hud.credits is not None and direction == "buy" and total is not None:
+        try:
+            projected = ctx.hud.credits - parse_credits(total)
+            if projected < 0:
+                print(f"Warning: locally projected credits would be {format_credits(projected)}.")
+        except MoneyError:
+            pass
+    if not _trade_confirmation("Commit this trade?" ):
+        print("Trade cancelled; no changes were made.")
+        return
+    payload = {"port_id": port_id, "sector_id": ctx.current_sector_id,
+               "items": [{"commodity": row["commodity"], "quantity": quantity}],
+               "account": 0, "idempotency_key": str(uuid.uuid4())}
+    resp = ctx.conn.rpc(f"trade.{direction}", payload)
+    ctx.state["last_rpc"] = resp
+    if resp.get("status") != "ok":
+        _trade_error(resp, direction.capitalize())
+        return
+    _present_trade_receipt(resp, direction)
+    # Refresh authoritative player/ship state, then the port inventory shown here.
+    _hud_rpc(ctx, "player.my_info", {})
+    _hud_rpc(ctx, "ship.status", {})
+    _refresh_port_info(ctx, {"port_id": port_id, "sector_id": ctx.current_sector_id})
+    _print_port_summary(ctx)
 
-    # Generate a unique idempotency key
-    idempotency_key = str(uuid.uuid4())
 
-    print(f"Attempting to buy {quantity} units of {commodity} (Port ID: {port_id})...")
-
-    payload = {
-        "port_id": port_id,
-        "items": [
-            {
-                "commodity": commodity,
-                "quantity": quantity
-            }
-        ],
-        "account": 0,
-        "idempotency_key": idempotency_key
-    }
-    if ctx.current_sector_id is not None:
-        payload["sector_id"] = ctx.current_sector_id
-
-    try:
-        resp = ctx.conn.rpc("trade.buy", payload)
-        ctx.state["last_rpc"] = resp
-        _run_post(ctx, "pretty_print_trade_receipt")
-    except Exception as e:
-        print(f"[ERROR] An unexpected error occurred during RPC call: {e}")
-        ctx.state["last_rpc"] = {"status": "error", "error": {"message": str(e)}}
-        _run_post(ctx, "pretty_print_trade_receipt")
+@register("simple_buy_handler")
+def simple_buy_handler(ctx: Context):
+    dock_trade_flow(ctx, "buy")
 
 @register("simple_sell_handler")
 def simple_sell_handler(ctx: Context):
-    port_id = (ctx.last_sector_desc.get("port") or {}).get("id")
-    if port_id is None:
-        print("Cannot determine current port ID. Please ensure you are docked.")
-        return
-
-    commodity_input = input("Product Code (ORE, ORG, EQU): ").strip().upper()
-    
-    code_map = {
-        "ORE": "ORE",
-        "ORG": "ORG",
-        "EQU": "EQU",
-        "ORGANICS": "ORG",
-        "EQUIPMENT": "EQU"
-    }
-    commodity = code_map.get(commodity_input)
-
-    if not commodity:
-        print("Invalid commodity. Please use ORE, ORG, or EQU.")
-        return
-
-    try:
-        quantity = int(input(f"Quantity of {commodity}: ").strip())
-        if quantity <= 0:
-            print("Quantity must be positive.")
-            return
-    except ValueError:
-        print("Invalid quantity.")
-        return
-
-    idempotency_key = str(uuid.uuid4())
-
-    print(f"Attempting to sell {quantity} units of {commodity} (Port ID: {port_id})...")
-
-    payload = {
-        "port_id": port_id,
-        "items": [
-            {
-                "commodity": commodity,
-                "quantity": quantity
-            }
-        ],
-        "account": 0,
-        "idempotency_key": idempotency_key
-    }
-    if ctx.current_sector_id is not None:
-        payload["sector_id"] = ctx.current_sector_id
-
-    try:
-        resp = ctx.conn.rpc("trade.sell", payload)
-        ctx.state["last_rpc"] = resp
-        _run_post(ctx, "pretty_print_sell_receipt")
-    except Exception as e:
-        print(f"[ERROR] An unexpected error occurred during RPC call: {e}")
-        ctx.state["last_rpc"] = {"status": "error", "error": {"message": str(e)}}
-        _run_post(ctx, "pretty_print_sell_receipt")
+    dock_trade_flow(ctx, "sell")
 
 @register("intercept_flow")
 def intercept_flow(ctx: Context):

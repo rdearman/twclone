@@ -393,6 +393,35 @@ top-level hotkey to minimise disruption.
   actions reachable through deployment; handlers/RPCs unchanged; every
   submenu has a back action; existing command-validation tests still pass.
 
+### Slice 7 — Quoted port-trading workflow
+
+* **Files changed:** `client.py`, `menus.json`, and new
+  `tests/test_port_trading.py`.
+* **Protocol evidence:** `src/server_ports.c:cmd_trade_port_info` returns one
+  `data.port` object with `commodities[]` rows containing `code`, `quantity`,
+  `price`, and server-added `max_quantity`; `cmd_trade_quote` accepts
+  `port_id`, `commodity`, and positive `quantity` and does not mutate state;
+  `cmd_trade_buy`/`cmd_trade_sell` require `items`, account/sector/port
+  context, and an idempotency key. The server receipt uses `total_cost` as
+  gross-plus-fees for buy and net-after-fees for sell.
+* **Behavioural contract:** entering DOCK performs one confirmed
+  `port.info` read and stores a normalized inventory. The summary shows port
+  name, stock/capacity, derived sell/buy availability, and `~` indicative
+  prices. Buy and Sell retain separate menu entries but share
+  `dock_trade_flow`; selection is limited to displayed inventory rows. A
+  non-mutating authoritative quote is shown before an explicit Y/N
+  confirmation (default No), with cargo/stock/credit guidance. Confirmed
+  actions receive a fresh UUID idempotency key; refusal/cancellation never
+  refreshes or claims a state change. Success prints direction-correct
+  receipts, refreshes `player.my_info` and `ship.status` through `_hud_rpc`,
+  then refreshes and redisplays port inventory. Normal mode emits no raw
+  trade JSON and uses `money.py` for credit display/arithmetic.
+* **Tests/result:** `test_port_trading.py` adds 5 focused tests; the complete
+  Python-client suite passed `102 passed`.
+* **Remaining limitations:** trade payloads remain single-line trades; live
+  server verification is still unavailable in this environment. The legacy
+  generic quote/raw trade entry remains debug-only for diagnostics.
+
 ---
 
 ## 4. Current architecture
@@ -858,13 +887,12 @@ string) before relying on them.
    renderer task requiring its own tests); no additional UX-audit items were
    addressed in this slice.
 
-5. **Port/trading workflow redesign.**
+5. **Port/trading workflow redesign — COMPLETE (Slice 7).**
    *Dependencies:* none new.
    *Files:* `client.py` (trade/port/dock handlers), `presenters.py`.
-   *Completion criteria:* trading flows present quotes/receipts using
-   `money.py` consistently (already mostly done — verify no regressions)
-   and improve the interaction sequence per the UX audit's screen
-   proposals, with new/updated tests.
+   *Done:* normalized `port.info` inventory, shared quoted buy/sell flow,
+   confirmation safety, UUID idempotency, direction-correct receipts, and
+   post-success HUD/port refresh. See §3, Slice 7.
 
 6. **Communications workflow refinement.**
    *Dependencies:* item 1 recommended (to see real chat/mail/notice volume).
@@ -1067,3 +1095,17 @@ string) before relying on them.
 * **Workflows that could not be preserved and why:** none. All existing
   handlers, RPCs, and gameplay logic are unchanged; only menu structure and
   flag syncing were modified.
+
+### 2026-09-23 — Slice 7: Quoted port-trading workflow
+* **Files changed:** `client/python_client/client.py`,
+  `client/python_client/menus.json`, `client/python_client/tests/test_port_trading.py`,
+  and this handover.
+* **Behaviour delivered:** DOCK now reads and normalizes `port.info`, renders
+  a readable stock/capacity/availability summary with indicative prices,
+  routes Buy/Sell through shared quote-confirm-mutate code, uses UUID
+  idempotency keys, presents buy/sell receipts with their asymmetric server
+  semantics, suppresses raw JSON in normal trade paths, and refreshes HUD plus
+  port state only after successful mutation.
+* **Tests/result:** full suite `102 passed`; `git diff --check` clean.
+* **Remaining issues:** communications refinement and responsive rendering
+  remain queued; live-server smoke testing remains unavailable.
