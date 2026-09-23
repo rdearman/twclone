@@ -115,8 +115,10 @@ the confirmed `to_player`/`message`, raw JSON dumps instead of formatted
 history). Fixed: a top-level `Comms` entry now routes to working Chat/Mail
 screens using the confirmed `chat.send`/`chat.broadcast`/`chat.history`
 contract, plus two new entries added in the HUD slice: **Events** (the
-event inbox/log, see §6) and **Notices** (`notice.list`). A deeper
-communications redesign (threading, richer scrollback) is future work.
+event inbox/log, see §6) and **Notices** (`notice.list`). Slice 8 adds
+human-readable empty/refusal-safe rendering, `[NEW]` indicators, and indexed
+inbox selection for `mail.read`. A deeper communications redesign (threading,
+richer scrollback) remains future work.
 
 ## 4a. Port trading (Slice 7 implemented)
 

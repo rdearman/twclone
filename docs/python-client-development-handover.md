@@ -750,6 +750,8 @@ any test in this suite.
 | `test_session_loop.py` | `run_session()` returns `EXIT_OK` on a `SystemExit(0)` from the normal quit path; returns `EXIT_CONNECTION_LOST` and prints exactly one line (no traceback, no duplicate "N new events" notice) when `ConnectionError` propagates from `handle_choice`; `KeyboardInterrupt` still propagates unchanged; `menu_on_enter` re-raises `ConnectionError` while still suppressing other prefetch exceptions. |
 | `test_corporation_equity.py` | `_update_corp_context()` no longer calls `stock.exchange.list_stocks` or `equity.exchange.list`; membership and CEO/officer role hydration; dividend action menu gating (hidden in normal, hidden for non-CEO in debug, visible for CEO in debug); `stock_dividend_set_flow()` prompt/payload shape (`equity.dividend_set`, `{"amount_per_share": N}`); traceback-free server refusal presentation. |
 | `test_navigation.py` | Normal `MAIN` contains all 13 expected top-level hotkeys; debug entries (`Y`/`B`) absent in normal mode and present in debug mode; `C`/`G`/`O`/`F` hotkey meanings preserved (Computer/Comms/Corporation/Deployment); non-corp player can reach `CORPORATION_MAIN` and see Create/Join/List workflows; `SERVICES` appears when any service-access flag is true; `SERVICES` absent when all flags false; each service entry preserves its original visibility condition; tactical actions (deploy fighters/mines, release beacon, tow, enter ship) reachable through `DEPLOYMENT_MAIN`; handlers/RPCs unchanged for moved actions; every submenu has a back action. |
+| `test_port_trading.py` | Port normalization, stock/capacity-derived availability, summary/name/indicative-price rendering, quote-before-mutation, cancellation, UUID idempotency, buy/sell receipt wording, and successful refresh sequence. |
+| `test_communications.py` | Comms landing reachability, safe chat/mail/notice empty and malformed states, unread markers, display-index mail selection, confirmed read payload, and refusal rendering without raw JSON. |
 
 **Run command and current result:**
 
@@ -894,13 +896,12 @@ string) before relying on them.
    confirmation safety, UUID idempotency, direction-correct receipts, and
    post-success HUD/port refresh. See §3, Slice 7.
 
-6. **Communications workflow refinement.**
+6. **Communications workflow refinement — COMPLETE (Slice 8).**
    *Dependencies:* item 1 recommended (to see real chat/mail/notice volume).
    *Files:* `client.py` (Comms handlers), `events.py`, `menus.json`.
-   *Completion criteria:* richer than the minimal `comms_events_view`/
-   `comms_notices_view` added in Slice 3 — e.g. filtering by category,
-   clearer unread-vs-history distinction in the UI, without inventing
-   delivery guarantees the server doesn't provide.
+   *Done:* human-readable chat history, indexed mail inbox/read flow,
+   consistent unread markers, safe empty/malformed/refusal states, and no
+   invented unread totals. See §3, Slice 8.
 
 7. **Remaining extraction from `client.py`.**
    *Dependencies:* none new.
@@ -1109,3 +1110,40 @@ string) before relying on them.
 * **Tests/result:** full suite `102 passed`; `git diff --check` clean.
 * **Remaining issues:** communications refinement and responsive rendering
   remain queued; live-server smoke testing remains unavailable.
+
+### 2026-09-23 — Slice 8: Communications usability
+* **Files changed:** `client/python_client/client.py`,
+  `client/python_client/tests/test_communications.py`, this handover, and
+  `docs/reports/python-client-ux-audit.md`.
+* **Protocol evidence used:** implemented `chat.history`, `mail.inbox`,
+  `mail.read`, `mail.delete`, `mail.send`, and `notice.list` handlers in
+  `src/server_communication.c`; no page-limited response was treated as a
+  total unread count.
+* **Behaviour delivered:** human-readable chat/mail/notices, safe empty and
+  malformed states, indexed inbox reading, consistent `[NEW]` indicators,
+  clean refusal messages, and no new side-effecting polling.
+* **Tests/result:** full suite `107 passed`; scoped `git diff --check` clean.
+* **Remaining issues:** no dedicated reply/thread handler exists; responsive
+  rendering remains queued; live-server smoke testing remains unavailable.
+
+### Slice 8 — Communications usability
+
+* **Implementation note/evidence:** `src/server_communication.c` confirms
+  `chat.history` returns `messages`; `mail.inbox` returns `items` with
+  `read_at`; `mail.read` accepts `id` and marks it read; `mail.delete`
+  accepts `ids[]`; `notice.list` returns `items` with `seen_at`. The same
+  handlers confirm chat broadcast/private and mail send payloads. No client
+  unread-total endpoint was inferred from page-limited responses.
+* **Files changed:** `client.py`, new `tests/test_communications.py`, and
+  this handover/audit.
+* **Behavioural contract:** COMMS remains a clear landing menu. Chat history,
+  inbox, notices, empty states, malformed rows, and refusal responses render
+  as human-readable text without raw JSON. Inbox entries show display
+  indices and `[NEW]` markers; Read selects an index from the displayed
+  inbox cache and then calls the confirmed `mail.read` handler. Compose uses
+  confirmed send handlers only. No new polling was introduced.
+* **Tests/result:** `test_communications.py` adds 5 focused tests; the full
+  suite passed `107 passed`.
+* **Remaining limitations:** no reply/thread workflow was added because no
+  confirmed dedicated reply handler exists; unread counts remain
+  page-bounded HUD approximations.

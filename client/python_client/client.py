@@ -340,9 +340,13 @@ def cli_chat_history(ctx):
     r = ctx.conn.rpc("chat.history", {"limit": 20})
     ctx.state["last_rpc"] = r
     if r.get("status") == "ok":
-        msgs = (r.get("data") or {}).get("messages") or []
+        data = r.get("data") or {}
+        msgs = data.get("messages") if isinstance(data, dict) else []
+        if not isinstance(msgs, list):
+            msgs = []
+        msgs = [message for message in msgs if isinstance(message, dict)]
         if not msgs:
-            print("(no chat history)")
+            print("No chat history yet.")
         for m in msgs:
             sender = m.get("sender_name") or f"ID:{m.get('sender_id')}"
             to = m.get("recipient_name")
@@ -376,65 +380,19 @@ def cli_chat_send(ctx):
 
 @register("cli_mail_inbox")
 def cli_mail_inbox(ctx):
-    r = _hud_rpc(ctx, "mail.inbox", {"limit": 20})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
+    mail_inbox_flow(ctx)
 
 @register("cli_mail_read")
 def cli_mail_read(ctx):
-    mid = input("Mail id: ").strip()
-    try:
-        mid = int(mid)
-    except Exception:
-        print("Bad id.")
-        return
-    r = ctx.conn.rpc("mail.read", {"id": mid})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
+    mail_read_flow(ctx)
 
 @register("cli_mail_send")
 def cli_mail_send(ctx):
-    to = input("To (player): ").strip()
-    subj = input("Subject: ").strip()
-    body = input("Body: ").strip()
-    r = ctx.conn.rpc("mail.send", {"to": to, "subject": subj, "body": body})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
+    mail_send_flow(ctx)
 
 @register("cli_mail_delete")
 def cli_mail_delete(ctx):
-    mid = input("Mail id: ").strip()
-    try:
-        mid = int(mid)
-    except Exception:
-        print("Bad id.")
-        return
-    r = ctx.conn.rpc("mail.delete", {"id": mid})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
-    try:
-        mid = int(mid)
-    except Exception:
-        print("Bad id.")
-        return
-    r = ctx.conn.rpc("mail.delete", {"id": mid})
-    import json as _json
-    try:
-        print(_json.dumps(r, ensure_ascii=False, indent=2))
-    except Exception:
-        print(r)
+    mail_delete_flow(ctx)
 
 @register("mail_inbox_flow")
 def mail_inbox_flow(ctx: Context):
@@ -442,32 +400,48 @@ def mail_inbox_flow(ctx: Context):
     ctx.state["last_rpc"] = r
     if r.get("status") == "ok":
         data = r.get("data") or {}
-        items = data.get("items") or []
+        items = data.get("items") if isinstance(data, dict) else []
+        if not isinstance(items, list):
+            items = []
+        items = [item for item in items if isinstance(item, dict)]
+        ctx.state["mail_items"] = items
         if items:
             print("\n--- Inbox ---")
-            for item in items:
-                mail_id = item.get("id")
+            for index, item in enumerate(items, 1):
+                unread = "[NEW] " if not item.get("read_at") else "      "
+                mail_id = item.get("id", "?")
                 sender = item.get("sender_name") or f"ID: {item.get('sender_id')}"
                 subject = item.get("subject") or "(no subject)"
                 sent_at = item.get("sent_at") or "unknown time"
-                print(f"  ID: {mail_id:<4} From: {sender:<15} Subject: {subject:<30} Sent: {sent_at}")
+                print(f"  {index:>2}. {unread}From: {sender} | {subject} | {sent_at} (id {mail_id})")
         else:
+            ctx.state["mail_items"] = []
             print("Inbox is empty.")
     else:
-        _pp(r)
+        print(f"[Error] Could not load inbox: {(r.get('error') or {}).get('message') or 'server refusal'}")
 
 @register("mail_read_flow")
 def mail_read_flow(ctx: Context):
     try:
-        mid = int(input("Mail ID to read: ").strip())
+        index = int(input("Inbox item number to read: ").strip())
     except ValueError:
-        print("Invalid Mail ID."); return
+        print("Invalid inbox item number."); return
+
+    items = ctx.state.get("mail_items") or []
+    if not isinstance(items, list) or not 1 <= index <= len(items):
+        print("That inbox item is not available. Open Inbox first.")
+        return
+    item = items[index - 1]
+    mid = item.get("id") if isinstance(item, dict) else None
+    if not isinstance(mid, int):
+        print("That inbox item has no valid message ID.")
+        return
 
     r = ctx.conn.rpc("mail.read", {"id": mid})
     ctx.state["last_rpc"] = r
     if r.get("status") == "ok":
         data = r.get("data") or {}
-        if data:
+        if isinstance(data, dict) and data:
             sender = data.get("sender_name") or f"ID: {data.get('sender_id')}"
             subject = data.get("subject") or "(no subject)"
             sent_at = data.get("sent_at") or "unknown time"
@@ -482,7 +456,7 @@ def mail_read_flow(ctx: Context):
         else:
             print(f"Mail ID {mid} not found or no content.")
     else:
-        _pp(r)
+        print(f"[Error] Could not read mail: {(r.get('error') or {}).get('message') or 'server refusal'}")
 
 @register("mail_send_flow")
 def mail_send_flow(ctx: Context):
@@ -490,25 +464,18 @@ def mail_send_flow(ctx: Context):
     if not to:
         print("Recipient cannot be empty. Cancelled."); return
     subj = input("Subject: ").strip()
-    body = input("Body (enter on a new line, then Ctrl+D to finish): ")
-    
-    # Read multi-line input for body
-    lines = []
-    while True:
-        try:
-            line = input()
-            lines.append(line)
-        except EOFError:
-            break
-    body = "\n".join(lines)
-
-    r = ctx.conn.rpc("mail.send", {"to": to, "subject": subj, "body": body})
+    body = input("Body: ").strip()
+    if not body:
+        print("Message body cannot be empty. Cancelled.")
+        return
+    r = ctx.conn.rpc("mail.send", {"to": to, "subject": subj, "body": body,
+                                    "idempotency_key": str(uuid.uuid4())})
     ctx.state["last_rpc"] = r
     if r.get("status") == "ok":
         print(f"Mail sent to {to}.")
     else:
         print(f"Failed to send mail to {to}.")
-        _pp(r)
+        print(f"[Error] {(r.get('error') or {}).get('message') or 'server refusal'}")
 
 @register("mail_delete_flow")
 def mail_delete_flow(ctx: Context):
@@ -523,7 +490,7 @@ def mail_delete_flow(ctx: Context):
         print(f"Mail ID {mid} deleted.")
     else:
         print(f"Failed to delete Mail ID {mid}.")
-        _pp(r)
+        print(f"[Error] {(r.get('error') or {}).get('message') or 'server refusal'}")
 # --- END AUTO-ADDED CHAT_MAIL ---
 
 
@@ -553,11 +520,17 @@ def comms_notices_view(ctx: Context):
     if r.get("status") != "ok":
         _pp(r)
         return
-    items = (r.get("data") or {}).get("items") or []
+    data = r.get("data") or {}
+    items = data.get("items") if isinstance(data, dict) else []
+    if not isinstance(items, list):
+        items = []
     print("\n--- Notices ---")
     if not items:
         print("(no notices)")
     for it in items:
+        if not isinstance(it, dict):
+            print("  [info] Unreadable notice (skipped)")
+            continue
         seen = "" if it.get("seen_at") else " [new]"
         print(f"  [{it.get('severity','info')}] {it.get('title','')}{seen}\n    {it.get('body','')}")
 
