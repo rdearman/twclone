@@ -1256,18 +1256,8 @@ def _update_corp_context(ctx: Context, force: bool = False):
                 ctx.state["is_ceo_or_officer"] = True
             elif corp_status_data.get("your_role") == "Officer":
                 ctx.state["is_ceo_or_officer"] = True
-
-            # Check if corporation has public stock
-            corp_id = corp_status_data.get("corp_id")
-            if corp_id:
-                # Assuming stock.exchange.list_stocks can filter by corp_id
-                # Or a direct corp.stock_info command
-                list_stocks_resp = ctx.conn.rpc("stock.exchange.list_stocks", {"corp_id": corp_id})
-                if list_stocks_resp.get("status") == "ok":
-                    stocks = get_data(list_stocks_resp).get("stocks", [])
-                    if any(s.get("corp_id") == corp_id for s in stocks):
-                        ctx.state["corp_is_public"] = True
-                        ctx.state["corp_not_public"] = False
+            # Note: No read endpoint exists for public corporation status.
+            # corp_is_public stays False/unverified; validation is server-owned.
         else:
             print("[Warning] Could not fetch corporation status.")
     
@@ -2231,12 +2221,8 @@ def stock_dividend_set_flow(ctx: Context):
     if not ctx.state.get("is_ceo"):
         print("Only the CEO can declare dividends.")
         return
-    if not ctx.state.get("corp_is_public"):
-        print("Cannot declare dividend: your corporation is not publicly traded.")
-        return
 
     try:
-        stock_id = int(input("Enter Stock ID to declare dividend for: ").strip())
         amount_per_share = parse_credits(input("Enter amount per share (whole credits): ").strip())
         if amount_per_share <= 0:
             print("Amount per share must be positive.")
@@ -2245,14 +2231,16 @@ def stock_dividend_set_flow(ctx: Context):
         print("Invalid input.")
         return
 
-    resp = ctx.conn.rpc("stock.dividend.set", {"stock_id": stock_id, "amount_per_share": amount_per_share})
+    resp = ctx.conn.rpc("equity.dividend_set", {"amount_per_share": amount_per_share})
     ctx.state["last_rpc"] = resp
 
     if resp.get("status") == "ok":
         print("Dividend declared successfully!")
         _pp(resp)
     else:
-        print(f"[Error] Failed to declare dividend: {resp.get('error', {}).get('message', 'Unknown error')}")
+        err = resp.get("error", {})
+        msg = err.get("message") if isinstance(err, dict) else str(err)
+        print(f"[Error] Failed to declare dividend: {msg or 'Unknown error'}")
         _pp(resp)
 
 @register("insurance_buy_flow")

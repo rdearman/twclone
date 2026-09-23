@@ -334,6 +334,15 @@ unreachable, exactly as recorded in Slice 3.
   `menu_on_enter` re-raising `ConnectionError` while still suppressing
   other exceptions.
 
+### Slice 5 — Authoritative equity dividend flow and public-status probe cleanup
+
+Goal: remove the failing public-status probe from normal play and align the debug dividend flow with the server contract.
+
+* **Public-status probe cleanup** — removed the `stock.exchange.list_stocks` RPC call from `_update_corp_context()` (`client.py`). Investigation confirmed no implemented server read command exposes corporation public status (`corp_is_public`). Public-status validation is server-owned; `corp_is_public` remains `False` by default in client state without sending speculative RPCs.
+* **Dividend workflow correction** — `stock_dividend_set_flow()` (`client.py`) was updated to call canonical `equity.dividend_set` with payload `{"amount_per_share": <integer>}`. Removed the redundant `stock_id` input prompt and local `corp_is_public` pre-check. Server error/refusal responses (e.g. `"Your corporation is not publicly traded."`) are presented cleanly without a traceback.
+* **Menu gating correction** — `EXCHANGE_MAIN` option `d` ("Declare Dividend") visibility in `menus.json` updated to `show_if_ctx: ["debug", "is_ceo"]`, keeping it absent from normal play and available to CEOs in debug mode without requiring an unresolvable `corp_is_public` flag.
+* **Tests added** — `test_corporation_equity.py` covers no-list-stocks call, membership/role hydration, menu gating (normal vs debug CEO vs debug non-CEO), payload shape, and traceback-free error presentation.
+
 ---
 
 ## 4. Current architecture
@@ -660,6 +669,7 @@ any test in this suite.
 | `test_hud_render.py` | Wide-terminal two-line rendering with expected labels/values; narrow-terminal wrapping (more, shorter lines, no truncated field); unavailable fields render as `—`, never `0`/blank; `OFFLINE` link state renders unambiguously without colour. |
 | `test_event_log.py` | `EventLog` unread counters increase/clear on `mark_read()` without erasing history; recognised categories render without raw JSON; unknown events are safe/compact in normal mode and inspectable in debug mode; `Context.drain_events()` moves the queue into the log and empties `Conn.events`; `Context.activity_count` combines mail/notices/event-log correctly and returns `None` only when nothing is known. |
 | `test_session_loop.py` | `run_session()` returns `EXIT_OK` on a `SystemExit(0)` from the normal quit path; returns `EXIT_CONNECTION_LOST` and prints exactly one line (no traceback, no duplicate "N new events" notice) when `ConnectionError` propagates from `handle_choice`; `KeyboardInterrupt` still propagates unchanged; `menu_on_enter` re-raises `ConnectionError` while still suppressing other prefetch exceptions. |
+| `test_corporation_equity.py` | `_update_corp_context()` no longer calls `stock.exchange.list_stocks` or `equity.exchange.list`; membership and CEO/officer role hydration; dividend action menu gating (hidden in normal, hidden for non-CEO in debug, visible for CEO in debug); `stock_dividend_set_flow()` prompt/payload shape (`equity.dividend_set`, `{"amount_per_share": N}`); traceback-free server refusal presentation. |
 
 **Run command and current result:**
 
@@ -668,7 +678,7 @@ pytest client/python_client/tests/ -q
 ```
 
 ```text
-78 passed
+85 passed
 ```
 
 **Server-side `tests.v2` were not run in this environment** — the sandbox's
@@ -685,17 +695,7 @@ string) before relying on them.
 
 **Confirmed defects (should be fixed in a future slice, not yet done):**
 
-* `client._update_corp_context` (around the `corp_id` branch) calls the
-  deprecated `stock.exchange.list_stocks` alias in **normal play** (no
-  `debug` gate) purely to heuristically infer `corp_is_public`; this should
-  either be replaced with `equity.exchange.list` if that subcommand is
-  confirmed to work through `cmd_equity`, or the heuristic should be
-  removed/re-evaluated if it doesn't.
-* `stock_dividend_set_flow` still calls `stock.dividend.set` (deprecated
-  alias of `equity.dividend_set`) instead of the canonical name; low
-  priority since this flow is already `debug`-gated in `menus.json`
-  (labelled `[debug: unconfirmed]`), but should be corrected for
-  consistency once/if the dividend workflow gets test evidence.
+* None remaining in the Python client workflows evaluated to date. (Slice 5 resolved the failing `stock.exchange.list_stocks` probe in `_update_corp_context` and the non-canonical `stock.dividend.set` call site).
 
 **Architectural/UX debt (desirable improvements, not defects):**
 
@@ -858,7 +858,7 @@ string) before relying on them.
    442dce86972bf116aa5e4101781123398581bafa
    feat(python-client): graceful mid-session disconnect handling
    ```
-3. Run the Python-client test suite and confirm `78 passed`:
+3. Run the Python-client test suite and confirm `85 passed`:
    ```bash
    pytest client/python_client/tests/ -q
    ```
@@ -982,3 +982,8 @@ string) before relying on them.
   confirmed to be a small feature-flag set, not a per-command catalogue; no
   live-server verification this session (Postgres credential mismatch
   persists in this sandbox).
+
+### 2026-09-23 — Slice 5: Authoritative equity dividend flow and public-status cleanup
+* **Files changed:** `client/python_client/client.py` (removed failing `stock.exchange.list_stocks` RPC from `_update_corp_context`; updated `stock_dividend_set_flow` to call `equity.dividend_set` with `{"amount_per_share": N}` without Stock ID prompt), `client/python_client/menus.json` (dividend gating changed to `["debug", "is_ceo"]`), `client/python_client/tests/test_corporation_equity.py` (new), `docs/python-client-development-handover.md` (Slice 5 documentation).
+* **Tests/result:** `test_corporation_equity.py` added (7 tests); full suite `85 passed`.
+* **Remaining issues:** no read endpoint exposes corporation public status (server-owned validation accepted); no live-server verification this session (Postgres credential mismatch persists in this sandbox).

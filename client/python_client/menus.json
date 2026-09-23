@@ -812,7 +812,7 @@
           "action": {
             "pycall": "stock_dividend_set_flow"
           },
-          "show_if_ctx": ["debug", "is_ceo", "corp_is_public"]
+          "show_if_ctx": ["debug", "is_ceo"]
         },
         {
           "key": "q",
