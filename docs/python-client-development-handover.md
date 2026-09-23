@@ -848,11 +848,17 @@ string) before relying on them.
 1. Read this handover (`docs/python-client-development-handover.md`) in
    full before touching any code.
 2. Run `git status` and inspect the diff for `client/python_client/` and
-   `docs/` to see exactly what is staged/unstaged/untracked in the current
-   working tree (as of this handover, the entire `client/python_client/`
-   directory and `docs/reports/` are untracked — nothing here has been
-   committed yet).
-3. Run the Python-client test suite and confirm `70 passed`:
+   `docs/` to see what is staged/unstaged in the working tree. Confirm the
+   following Python-client commits exist:
+
+   ```text
+   71fbd6322bacc4b39d6e277821d7e387787929bd
+   feat(python-client): overhaul protocol safety and terminal UX
+
+   442dce86972bf116aa5e4101781123398581bafa
+   feat(python-client): graceful mid-session disconnect handling
+   ```
+3. Run the Python-client test suite and confirm `78 passed`:
    ```bash
    pytest client/python_client/tests/ -q
    ```
