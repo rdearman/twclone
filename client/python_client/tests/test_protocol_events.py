@@ -7,6 +7,13 @@ Tests for protocol.Conn's event-queue behaviour (persistent HUD slice):
 4. Queue overflow follows the documented bounded (drop-oldest) policy.
 5. Connection loss updates state and queues one client event.
 16. No background thread writes to stdout (Conn never spawns a reader thread).
+
+Disconnect-handling slice additions:
+
+* `disconnect_reason` is a short, player-safe label (no credentials, tokens,
+  or raw frame content).
+* Repeated failures on an already-dead connection keep the first reason and
+  never queue a second `connection.lost` event.
 """
 import json
 import socket
@@ -115,6 +122,43 @@ def test_connection_loss_updates_state_and_queues_one_client_event():
     events = conn.events.drain()
     assert len(events) == 1
     assert events[0]["category"] == "connection"
+    assert events[0]["type"] == "connection.lost"
+
+
+def test_disconnect_reason_is_player_safe_and_recorded_once():
+    conn, peer = _make_conn_pair()
+    peer.close()
+
+    assert conn.disconnect_reason is None
+    with pytest.raises(ConnectionError):
+        conn.rpc("player.my_info", {})
+
+    reason = conn.disconnect_reason
+    assert reason is not None
+    # Player-safe: short label, no credentials/tokens/raw frame content.
+    assert "session" not in reason.lower()
+    assert "token" not in reason.lower()
+    assert "{" not in reason  # never a serialised frame/JSON blob
+
+
+def test_repeated_disconnect_detection_keeps_first_reason_and_single_event():
+    conn, peer = _make_conn_pair()
+    peer.close()
+
+    with pytest.raises(ConnectionError):
+        conn.rpc("player.my_info", {})
+    first_reason = conn.disconnect_reason
+    assert first_reason is not None
+
+    # A second attempt on the now-dead connection must also normalise to
+    # ConnectionError, but must not queue a second event or change the
+    # recorded reason.
+    with pytest.raises(ConnectionError):
+        conn.rpc("player.my_info", {})
+
+    assert conn.disconnect_reason == first_reason
+    events = conn.events.drain()
+    assert len(events) == 1
     assert events[0]["type"] == "connection.lost"
 
 

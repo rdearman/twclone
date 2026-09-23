@@ -57,6 +57,13 @@ def _hud_rpc(ctx: "Context", command: str, data: dict) -> dict:
 HOST = "127.0.0.1"
 PORT = 1234
 
+# Process exit codes. Named constants so the meaning of a given exit status
+# is documented at the call site rather than a bare integer.
+EXIT_OK = 0
+EXIT_CONNECTION_REFUSED = 1  # could not establish the initial connection
+EXIT_LOGIN_FAILED = 2        # connected, but auth.login was refused/errored
+EXIT_CONNECTION_LOST = 3     # mid-session disconnect (post-login)
+
 def parse_args():
     p = argparse.ArgumentParser(description="Trade Wars 2002 interactive client (v3).")
     p.add_argument("--host", default=HOST, help=f"Server host (default: {HOST})")
@@ -663,6 +670,12 @@ def menu_on_enter(ctx, menu_def: dict):
     """Call optional prefetch hooks.
     
     Supports menu JSON like: {"on_enter": {"pycall": "ctx_refresh_port_context"}}.
+
+    ConnectionError must always propagate (protocol.Conn is the single
+    place that normalises socket failures into it; a lost connection must
+    never be silently swallowed here). Other prefetch failures remain
+    non-fatal for this slice — that broad `except Exception` is recorded
+    technical debt in the handover, not a deliberate design choice.
     """
     if not isinstance(menu_def, dict):
         return
@@ -672,6 +685,8 @@ def menu_on_enter(ctx, menu_def: dict):
         if callable(fn):
             try:
                 fn(ctx)
+            except ConnectionError:
+                raise
             except Exception:
                 pass
 
@@ -4076,6 +4091,45 @@ def load_menus(path: Optional[str]) -> Dict[str, Any]:
 
 # ---------------------------
 # Main
+def run_session(ctx: Context) -> int:
+    """
+    Run the interactive menu loop until the player quits or the connection
+    is lost.
+
+    Contract:
+      * Returns EXIT_OK for a normal quit. Menu quit handlers call
+        `sys.exit(0)` directly (unchanged, existing behaviour); this
+        function catches that `SystemExit` and translates it into a plain
+        return so callers/tests have one predictable, non-exception return
+        value instead of having to handle SystemExit themselves.
+      * Returns EXIT_CONNECTION_LOST if a `ConnectionError` propagates from
+        the transport layer once the session is under way (after login).
+        `protocol.Conn` is solely responsible for normalising socket-level
+        failures (OSError variants, EOF, etc.) into `ConnectionError`; this
+        function does not — and must not — interpret those variants itself.
+      * Prints exactly one concise, player-facing message on disconnect and
+        never lets a traceback reach the terminal. It does not drain/print
+        the queued "connection.lost" event first — that event remains
+        available, unread, for later inspection (e.g. Comms > Events, if a
+        future session reconnects) rather than being duplicated here as a
+        second message.
+    """
+    try:
+        while True:
+            render_menu(ctx)
+            choice = read_choice()
+            new_events = ctx.drain_events()
+            if new_events:
+                print(f"({new_events} new event{'s' if new_events != 1 else ''}. See Comms > Events.)")
+            handle_choice(ctx, choice)
+    except SystemExit as exc:
+        code = exc.code
+        return EXIT_OK if code in (None, 0) else code
+    except ConnectionError:
+        print("Connection to the server was lost.")
+        return EXIT_CONNECTION_LOST
+
+
 # ---------------------------
 def main():
     args = parse_args()
@@ -4103,7 +4157,7 @@ def main():
 
             if login.get("status") in ("error","refused"):
                 print("Login failed.");
-                return 2
+                return EXIT_LOGIN_FAILED
 
             # Save session token if returned
             token = login.get("data", {}).get("session_token")
@@ -4161,17 +4215,11 @@ def main():
             # First render sector header once
             call_handler("redisplay_sector", ctx)
 
-            while True:
-                render_menu(ctx)
-                choice = read_choice()
-                new_events = ctx.drain_events()
-                if new_events:
-                    print(f"({new_events} new event{'s' if new_events != 1 else ''}. See Comms > Events.)")
-                handle_choice(ctx, choice)
+            return run_session(ctx)
 
     except ConnectionRefusedError:
         print(f"Couldn’t connect to {args.host}:{args.port}. Is the server running?")
-        return 1
+        return EXIT_CONNECTION_REFUSED
 
 if __name__ == "__main__":
     main()

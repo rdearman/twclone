@@ -123,6 +123,12 @@ class Conn:
         # disconnect; a "connection.lost" event is queued at the same time.
         self.connected = True
 
+        # The first (and only) disconnect reason recorded for this
+        # connection. Always a short, player-safe label — never raw
+        # exception text, socket internals, or protocol frame content.
+        # Remains None until a disconnect is detected.
+        self.disconnect_reason: Optional[str] = None
+
         # optional: the Context can set this after it's created (for prompt redraws)
         self.ctx = None
 
@@ -142,7 +148,10 @@ class Conn:
         try:
             self.sock.sendall(line.encode("utf-8"))
         except OSError as exc:
-            self._mark_disconnected(str(exc) or "Connection lost.")
+            # Normalise every socket-layer failure into ConnectionError here;
+            # callers (client.py) must never need to inspect OSError/EOF
+            # variants themselves.
+            self._mark_disconnected("Connection lost while sending data.")
             raise ConnectionError("Connection lost.") from exc
 
     def recv(self) -> Dict[str, Any]:
@@ -150,19 +159,32 @@ class Conn:
         try:
             line = self._r.readline()
         except OSError as exc:
-            self._mark_disconnected(str(exc) or "Connection lost.")
+            self._mark_disconnected("Connection lost while receiving data.")
             raise ConnectionError("Connection lost.") from exc
         if self.debug:
             print(f"[DBG] >> {line!r}")
         if not line:
-            self._mark_disconnected("Server closed connection.")
+            self._mark_disconnected("Server closed the connection.")
             raise ConnectionError("Server closed connection.")
         return json.loads(line)
 
     def _mark_disconnected(self, reason: str) -> None:
-        """Record a detected disconnect exactly once and queue one event."""
+        """
+        Record a detected disconnect exactly once and queue exactly one
+        "connection.lost" event.
+
+        `reason` must already be a short, player-safe label (no raw
+        exception text, no socket internals, no credentials/tokens, no
+        protocol frame content) — this is the only place that constructs
+        the stored reason, so callers never need to sanitise it themselves.
+        Idempotent: once `self.connected` is False, further calls (from
+        repeated failed send/recv attempts on an already-dead socket) are a
+        deliberate no-op, so the *first* reason and event are the ones that
+        are ever recorded, never duplicated or overwritten.
+        """
         if self.connected:
             self.connected = False
+            self.disconnect_reason = reason
             self.events.push("connection", "connection.lost", {"reason": reason})
 
     def rpc(self, command: str, data: dict) -> dict:

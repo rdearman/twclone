@@ -241,6 +241,99 @@ unsolicited server events, without turning the client into a curses UI.
   rendering), `test_event_log.py` (counters, rendering, `Context`
   integration), plus two additions to `test_architecture.py`.
 
+### Slice 4 — Graceful mid-session disconnect handling
+
+Goal: a socket failure after login must end the session with exactly one
+clear player-facing message and a documented exit code, never an unhandled
+traceback. No automatic reconnect was implemented — `RECONNECTING` remains
+unreachable, exactly as recorded in Slice 3.
+
+* **Named exit codes** — `client.py` now defines `EXIT_OK = 0`,
+  `EXIT_CONNECTION_REFUSED = 1`, `EXIT_LOGIN_FAILED = 2`,
+  `EXIT_CONNECTION_LOST = 3` at module scope, replacing the bare integers
+  previously returned inline from `main()`. Values are unchanged from
+  before this slice (verified: no test asserted on the old literals).
+* **`Conn.disconnect_reason`** (`protocol.py`) — a new `Optional[str]`
+  attribute, set exactly once by `_mark_disconnected`, alongside the
+  existing (unchanged) `connection.lost` event push, guarded by the same
+  `if self.connected:` idempotency check that already existed. The reason
+  string is always one of three short, fixed, player-safe labels
+  constructed at the `send`/`recv` call sites in `Conn`
+  ("Connection lost while sending data.", "Connection lost while receiving
+  data.", "Server closed the connection.") — never the raw `str(exc))` of
+  the underlying `OSError` (which the previous code used and which could
+  echo OS-level detail), never a credential/token/session value, and never
+  a serialised protocol frame. `Conn` continues to normalise every
+  socket-layer failure into a bare `ConnectionError` at the `raise` sites;
+  no new exception type was introduced and callers still only ever see
+  `ConnectionError`.
+* **`client.run_session(ctx) -> int`** — the interactive menu loop
+  (`render_menu` / `read_choice` / `drain_events`+notify / `handle_choice`)
+  was extracted verbatim from `main()`'s `while True:` block into this new
+  function so it has an independent, testable return contract:
+  - `SystemExit` (raised directly by the existing `quit_client` handler
+    and the `Testing` menu's disconnect option, both via `sys.exit(0)`,
+    **unchanged** in this slice) is caught and translated into
+    `EXIT_OK` (or the exit's own code, if non-zero/non-`None`) so
+    `run_session` always *returns* an int rather than exiting the
+    process itself — `main()` remains the single place that actually
+    ends the process.
+  - `ConnectionError` propagating from `handle_choice` (i.e. from any
+    `ctx.conn.rpc(...)` call made by a menu action) is caught, prints
+    exactly one line ("Connection to the server was lost.") and returns
+    `EXIT_CONNECTION_LOST`. It does **not** call `ctx.drain_events()`
+    again first — the `connection.lost` event that caused the failure is
+    left queued/unread rather than being surfaced a second time via the
+    normal "N new events" notice.
+  - Any other exception (e.g. `KeyboardInterrupt`) is not caught here and
+    propagates unchanged — this slice only special-cases the two outcomes
+    above.
+* **`main()`** — unchanged startup behaviour: `ConnectionRefusedError`
+  during the initial `socket.connect()` still prints the same message and
+  now returns the named `EXIT_CONNECTION_REFUSED` (value `1`, same as
+  before); a refused/errored `auth.login` still prints "Login failed." and
+  now returns `EXIT_LOGIN_FAILED` (value `2`, same as before). After
+  successful login/hydration, `main()` now simply `return
+  run_session(ctx)` instead of containing the loop inline.
+* **`menu_on_enter`** (`client.py`) — its prefetch-hook try/except now
+  re-raises `ConnectionError` explicitly before falling through to the
+  pre-existing broad `except Exception: pass`. This closes the one path
+  that could previously swallow a disconnect silently (an on-enter hook
+  failing with `ConnectionError` would otherwise never reach
+  `run_session`'s handler at all). The broad `except Exception: pass` for
+  *non-connection* prefetch failures is unchanged and is recorded as
+  technical debt in §10 — this slice deliberately did not widen scope to
+  fix every broad catch in `client.py` (e.g. the `hello`/`capabilities`/
+  `mail.inbox`/`notice.list` `except Exception: pass` blocks still present
+  in `main()`'s login/hydration sequence, which are pre-existing and
+  out of scope here since they run before `run_session` and before the
+  interactive loop even starts).
+* **Capability-catalogue finding recorded, not implemented** —
+  investigated `cmd_system_capabilities` (`src/server_config.c:912`) and
+  `build_capabilities()` (`src/server_main.c:70-96`): `system.capabilities`
+  returns a small, static feature-flag object (`features.auth`,
+  `features.warp`, `features."sector.describe"`, `features."trade.buy"`,
+  `features.server_autopilot`, plus a `limits` object) — it is **not** a
+  per-command allowlist or catalogue. This closes backlog item 2 from
+  Slice 3's continuation list with a documented conclusion rather than an
+  implementation: `system.capabilities` is authoritative for the handful
+  of broad features it advertises and could eventually gate corresponding
+  broad menu areas (e.g. hiding autopilot-only options when
+  `server_autopilot` is `false`), but it cannot answer "is this individual
+  command implemented" — that still requires either implemented-handler
+  evidence (as used throughout this project) or a future, more granular
+  server command catalogue that does not exist yet. No menu-gating code
+  was changed based on this finding.
+* **Tests added** — `test_protocol_events.py` gained
+  `test_disconnect_reason_is_player_safe_and_recorded_once` and
+  `test_repeated_disconnect_detection_keeps_first_reason_and_single_event`;
+  new `test_session_loop.py` covers normal-quit → `EXIT_OK`,
+  `ConnectionError` → `EXIT_CONNECTION_LOST` with exactly one printed line
+  and no traceback, no duplicate "N new events" notice before the terminal
+  message, `KeyboardInterrupt` still propagating unchanged, and
+  `menu_on_enter` re-raising `ConnectionError` while still suppressing
+  other exceptions.
+
 ---
 
 ## 4. Current architecture
@@ -270,12 +363,12 @@ Runtime flow:
    `hud.render_hud_lines(ctx.hud, connected=ctx.conn.connected,
    activity=ctx.activity_count)` and prints each returned line. No RPC is
    made here.
-7. **Safe-boundary event draining** — the top-level loop in `main()` calls
-   `read_choice()` (blocking on `input()`), and only *after* it returns
-   calls `ctx.drain_events()` (which moves `Conn.events` into
-   `ctx.event_log` and returns the count), printing a one-line
-   `"N new events..."` notice if non-zero. Events are never drained or
-   printed while a prompt is active.
+7. **Safe-boundary event draining** — `run_session()`'s loop (called from
+   `main()` after login/hydration) calls `read_choice()` (blocking on
+   `input()`), and only *after* it returns calls `ctx.drain_events()`
+   (which moves `Conn.events` into `ctx.event_log` and returns the count),
+   printing a one-line `"N new events..."` notice if non-zero. Events are
+   never drained or printed while a prompt is active.
 8. **Event-log presentation** — `Comms → Events` (`comms_events_view`)
    drains once more for freshness, prints the bounded recent history via
    `events.render_event_text`, then calls `ctx.event_log.mark_read()`.
@@ -336,6 +429,11 @@ flowchart TD
 * Money never uses binary floating-point arithmetic — `money.parse_credits`
   routes every input through `Decimal`, verified by
   `test_architecture.py::test_no_affected_money_workflow_calls_float`.
+* A mid-session disconnect never surfaces as an unhandled traceback —
+  `protocol.Conn` normalises every socket-layer failure into
+  `ConnectionError`; `client.run_session` is the single place that catches
+  it, prints exactly one player-facing line, and returns
+  `EXIT_CONNECTION_LOST` (`test_session_loop.py`).
 
 ---
 
@@ -386,7 +484,7 @@ confirmation. `docs/EVENT_CONTRACT.md` is repository-tracked and versioned
 | `unread_notices` | folded into `Activity` | `notice.list` | count of `data.items` lacking `seen_at` | Login; any `_hud_rpc("notice.list", ...)` call (currently only `comms_notices_view`) | `None` → excluded from `activity_count` sum | Same page-bounded caveat |
 | `unread_news` | not folded into `Activity` (see below) | `auth.login` **only** | `data.unread_news_count` | Login only | Never refreshed mid-session | **Confirmed gap**: `news.get_feed` marks all news read as a side effect (`repo_news_update_last_read`); no other implemented command exposes an unread count without consuming it |
 | `last_refresh_ts` | drives `Link:` state | (set internally) | n/a | Any successful `merge_hud` call | `None` until first hydration → `Link: ONLINE` (no staleness claim until a timestamp exists) | — |
-| *(derived)* connection state | `Link: ONLINE / STALE / OFFLINE / RECONNECTING` | n/a | `Conn.connected` + `last_refresh_ts` vs `hud.STALE_AFTER_SECONDS` (30s) | Continuous (recomputed at render time) | `OFFLINE` iff `Conn.connected is False` | **`RECONNECTING` is unreachable** — no automatic-reconnect logic exists yet; a dropped connection currently propagates as `ConnectionError` up to `main()`, ending the session |
+| *(derived)* connection state | `Link: ONLINE / STALE / OFFLINE / RECONNECTING` | n/a | `Conn.connected` + `last_refresh_ts` vs `hud.STALE_AFTER_SECONDS` (30s) | Continuous (recomputed at render time) | `OFFLINE` iff `Conn.connected is False` | **`RECONNECTING` is unreachable** — no automatic-reconnect logic exists yet; a dropped connection is caught by `client.run_session` (Slice 4), which prints one message and ends the session cleanly with `EXIT_CONNECTION_LOST` rather than attempting to reconnect |
 | *(derived)* `activity_count` | `Activity: {n}` | n/a | `Context.activity_count` = `unread_mail + unread_notices + event_log.unread_count` (only counting the terms that are known) | Continuous (recomputed at render time) | `None` (→ `—`) only if nothing is known at all | Excludes `unread_news` deliberately (see above) |
 
 **Explicit confirmations required by this handover:**
@@ -432,11 +530,22 @@ confirmation. `docs/EVENT_CONTRACT.md` is repository-tracked and versioned
   report "N events were dropped" if queue growth becomes an issue.
 * **Connection-loss deduplication** — `Conn._mark_disconnected(reason)`
   only acts `if self.connected:` (i.e. exactly once per connection),
-  setting `self.connected = False` and pushing exactly one
+  setting `self.connected = False`, recording `self.disconnect_reason`
+  (a short, fixed, player-safe label — never raw exception text, socket
+  internals, credentials/tokens, or protocol frame content; see Slice 4),
+  and pushing exactly one
   `{"category": "connection", "type": "connection.lost", "data": {"reason": ...}}`
-  event before re-raising as `ConnectionError`.
+  event before re-raising as `ConnectionError`. Repeated failed send/recv
+  attempts on an already-dead connection are no-ops at this layer (the
+  reason and the single queued event are never overwritten/duplicated),
+  though `Conn` still raises a fresh `ConnectionError` each time so callers
+  never need to special-case "already disconnected".
+* **`client.run_session(ctx)`** is where a propagating `ConnectionError` is
+  finally handled (Slice 4): it prints exactly one player-facing line and
+  returns `EXIT_CONNECTION_LOST`, without draining/re-notifying the queued
+  `connection.lost` event first (see §3, Slice 4 for the exact contract).
 * **Safe UI drain points** — `Context.drain_events()` is the only sanctioned
-  drain call; it is invoked from `main()`'s loop immediately after
+  drain call; it is invoked from `run_session()`'s loop immediately after
   `read_choice()` returns (never during `input()`), and again at the top of
   `comms_events_view` for freshness before display. No other code path
   calls `Conn.events.drain()` directly.
@@ -504,13 +613,28 @@ tested against a running server this session — see §9):
   (`corp.status`, the deprecated `stock.exchange.list_stocks` call in
   `_update_corp_context`) rather than from any server-advertised capability
   list. This is recorded technical debt, not a design goal.
+* **`system.capabilities` is confirmed, but is not a command catalogue**
+  (investigated in Slice 4) — `cmd_system_capabilities`
+  (`src/server_config.c:912`) returns whatever `build_capabilities()`
+  (`src/server_main.c:70-96`) constructed: a small, static
+  `features.{auth,warp,"sector.describe","trade.buy",server_autopilot}`
+  flag map plus a `limits` object. It is authoritative for that small,
+  broad, advertised feature set, and a future slice could use it to gate
+  the *corresponding broad menu areas* (e.g. hiding autopilot-only options
+  when `features.server_autopilot` is `false`). It cannot answer whether
+  any individual command (e.g. a specific `equity.*` or `stock.*` action)
+  is implemented — that still requires either implemented-handler evidence
+  (the standard this project already applies) or a future, more granular
+  server command catalogue that does not currently exist. Do not treat the
+  presence/absence of a feature flag as evidence about an unrelated
+  command's existence.
 * **Future capability-driven gating rule** — if a future slice investigates
   server-advertised capabilities (`system.capabilities` already exists and
   is fetched into `ctx.capabilities` at login but is not yet used for menu
   gating), it must gate only on confirmed fields returned by that command
-  (or an equivalent confirmed command-catalogue endpoint), never on
-  inferred port names, heuristics, or `docs/PROTOCOL.v3/`'s draft-status
-  sections.
+  (or an equivalent confirmed command-catalogue endpoint, once one exists),
+  never on inferred port names, heuristics, or `docs/PROTOCOL.v3/`'s
+  draft-status sections.
 
 ---
 
@@ -531,10 +655,11 @@ any test in this suite.
 | `test_settings_model.py` | Normalisation of bookmarks/avoid-list/notes/settings-aggregate against confirmed and missing-optional-collection response shapes; malformed-response → `NormalizationError`, not a traceback. |
 | `test_money.py` | Integer-credit parsing, decimal-string receipt parsing, integral-real parsing, rejection of malformed money, consistent formatting. |
 | `test_architecture.py` | No circular imports across all extracted modules (now including `hud`/`events`); `Conn` never unconditionally renders; `settings_model.py`/`presenters.py` have no RPC calls; `state.py` doesn't import menu/orchestration logic; no affected money-related function calls `float()`. |
-| `test_protocol_events.py` | `Conn` queues unsolicited events without printing; RPC replies still reach the caller with events interleaved; event order preserved; queue overflow drop-oldest + `dropped` counter; unknown event types retained; connection loss sets `connected=False` and queues exactly one `connection.lost` event; `Conn` spawns no background thread. |
+| `test_protocol_events.py` | `Conn` queues unsolicited events without printing; RPC replies still reach the caller with events interleaved; event order preserved; queue overflow drop-oldest + `dropped` counter; unknown event types retained; connection loss sets `connected=False` and queues exactly one `connection.lost` event; `Conn` spawns no background thread; `disconnect_reason` is a short player-safe label; repeated disconnect detection keeps the first reason and only one queued event. |
 | `test_hud_state.py` | Login hydration populates every available field; unknown fields stay `None` (not `0`), including a check that `0` itself is preserved as a real value; refused/error responses never mutate `HudState`; successful responses update only the relevant fields via `apply_response`; unmapped commands are a no-op; malformed credits leave `credits` unknown, not a traceback; `connection_label`'s ONLINE/STALE/OFFLINE thresholds. |
 | `test_hud_render.py` | Wide-terminal two-line rendering with expected labels/values; narrow-terminal wrapping (more, shorter lines, no truncated field); unavailable fields render as `—`, never `0`/blank; `OFFLINE` link state renders unambiguously without colour. |
 | `test_event_log.py` | `EventLog` unread counters increase/clear on `mark_read()` without erasing history; recognised categories render without raw JSON; unknown events are safe/compact in normal mode and inspectable in debug mode; `Context.drain_events()` moves the queue into the log and empties `Conn.events`; `Context.activity_count` combines mail/notices/event-log correctly and returns `None` only when nothing is known. |
+| `test_session_loop.py` | `run_session()` returns `EXIT_OK` on a `SystemExit(0)` from the normal quit path; returns `EXIT_CONNECTION_LOST` and prints exactly one line (no traceback, no duplicate "N new events" notice) when `ConnectionError` propagates from `handle_choice`; `KeyboardInterrupt` still propagates unchanged; `menu_on_enter` re-raises `ConnectionError` while still suppressing other prefetch exceptions. |
 
 **Run command and current result:**
 
@@ -543,7 +668,7 @@ pytest client/python_client/tests/ -q
 ```
 
 ```text
-70 passed
+78 passed
 ```
 
 **Server-side `tests.v2` were not run in this environment** — the sandbox's
@@ -574,22 +699,38 @@ string) before relying on them.
 
 **Architectural/UX debt (desirable improvements, not defects):**
 
-* No automatic reconnect exists; a dropped connection ends the session via
-  an uncaught `ConnectionError` propagating out of `main()`'s loop.
+* No automatic reconnect exists. A dropped connection now ends the session
+  cleanly (`run_session` prints one message and returns
+  `EXIT_CONNECTION_LOST`, per Slice 4) rather than crashing, but no attempt
+  is made to re-establish the connection or resume the session.
 * `RECONNECTING` is part of `hud.connection_label`'s vocabulary but is
-  unreachable — reserved for the reconnect work above.
+  unreachable — reserved for actual reconnect work, which remains
+  unimplemented.
+* `main()`'s login/hydration sequence still has several
+  `except Exception: pass` blocks (`system.hello`/`system.capabilities`,
+  `mail.inbox`, `notice.list`) that would also swallow a `ConnectionError`
+  raised during login, before `run_session` ever starts — Slice 4 only
+  guaranteed clean handling for the *post-login* interactive loop and the
+  one `menu_on_enter` prefetch path; a disconnect during initial login
+  hydration is not yet covered by the same guarantee.
+* `menu_on_enter`'s remaining `except Exception: pass` for non-connection
+  prefetch failures is unchanged from before Slice 4 — still broad, still
+  non-fatal by design for this slice, still recorded debt (§8).
 * `unread_news` cannot be refreshed mid-session without consuming it
   (confirmed server-side gap, not a client defect — see §6).
 * `unread_mail`/`unread_notices` are page-bounded approximations, not
   verified server-side totals.
 * Menu capability gating (`has_exchange_access` etc., `is_ceo`,
-  `corp_is_public`) remains heuristic/client-side rather than driven by a
-  confirmed server capability list (§8).
+  `corp_is_public`) remains heuristic/client-side; `system.capabilities` is
+  now confirmed to be a small, broad feature-flag set, not a per-command
+  catalogue, so it cannot fully replace this heuristic gating on its own
+  (§8).
 * No live-server testing has occurred in this environment this session
   (§9) — everything is validated against `FakeConn`/`socketpair` fixtures.
 * `client.py` is still ~4,200 lines and remains the single orchestration
   file for all menu handlers; this slice only extracted what was strictly
-  needed for the HUD/event work (it did not attempt a broader breakup).
+  needed for the disconnect-handling work (it did not attempt a broader
+  breakup).
 * Several `mail.*`/legacy `cli_mail_*` handlers (e.g. `cli_mail_inbox`,
   `cli_mail_read`, `cli_mail_send`, `cli_mail_delete` near
   `client.py`'s early `mail`/`chat` section) still dump raw
@@ -613,29 +754,48 @@ string) before relying on them.
    from `Comms → Events`, all against a real running server; document any
    discrepancy from the fixture-based assumptions in §6/§7.
 
-2. **Capability-discovery investigation, then (only if supported)
-   capability-driven menus.**
-   *Dependencies:* item 1 (need a live server to inspect real
-   `system.capabilities` output) or, failing that, a careful read of the
-   handler for `system.capabilities` in `src/server_*.c` to determine its
-   actual confirmed fields.
-   *Files:* `client.py` (menu-gating call sites), possibly a new
-   `capabilities.py`.
-   *Completion criteria:* either (a) a documented confirmed capability
-   field set exists and at least one heuristic gate (`has_exchange_access`
-   or similar) is replaced with it plus a test, or (b) this backlog item is
-   closed with a written note that no such server-side data exists yet, and
-   the heuristic gating in §8 remains explicitly accepted debt.
+2. **Capability-discovery investigation — CLOSED (Slice 4), not fully
+   actioned.**
+   *Finding:* `system.capabilities` (`cmd_system_capabilities`,
+   `src/server_config.c:912`, built by `build_capabilities()`,
+   `src/server_main.c:70-96`) is confirmed to return only a small, static
+   feature-flag map (`features.auth`/`warp`/`"sector.describe"`/
+   `"trade.buy"`/`server_autopilot`, plus `limits`) — it is **not** a
+   per-command catalogue. This closes the investigation without a live
+   server: no further capability-catalogue investigation is needed unless
+   the server later adds one.
+   *Remaining follow-on work (not yet done):* gate the *broad* menu areas
+   that correspond 1:1 to an advertised feature flag (e.g. autopilot menu
+   items behind `features.server_autopilot`) using `ctx.capabilities`
+   (already fetched at login, currently unused for gating). Do not attempt
+   to derive individual command availability from these flags — that still
+   requires implemented-handler evidence.
+   *Files:* `client.py` (menu-gating call sites for the specific
+   autopilot-related options only).
+   *Completion criteria:* at least one heuristic gate that has a direct,
+   confirmed feature-flag equivalent is replaced with a check against
+   `ctx.capabilities`, plus a test; heuristic gates with no corresponding
+   flag (most of them — `is_ceo`, `corp_is_public`, `has_exchange_access`,
+   etc.) remain explicitly accepted debt (§8), not blocked on this item.
 
-3. **Reconnection and session recovery.**
-   *Dependencies:* item 1 (to observe real disconnect behaviour).
-   *Files:* `protocol.py` (`Conn`), `client.py` (`main()` loop),
+3. **Reconnection and session recovery — partially complete (Slice 4).**
+   *Done:* a dropped connection now ends the session cleanly — exactly one
+   player-facing message, `EXIT_CONNECTION_LOST`, no traceback (see §3,
+   Slice 4; `client.run_session`, `protocol.Conn.disconnect_reason`).
+   *Remaining:* no automatic reconnect attempt exists; `RECONNECTING` in
+   `hud.connection_label` is still unreachable.
+   *Dependencies:* item 1 (a live server, to observe real disconnect/
+   reconnect timing) is recommended before attempting actual reconnect
+   logic, so behaviour isn't designed purely against synthetic
+   socketpair failures.
+   *Files:* `protocol.py` (`Conn`), `client.py` (`run_session`/`main`),
    `hud.py` (`connection_label` already has the `RECONNECTING` slot).
-   *Completion criteria:* a dropped connection surfaces as `RECONNECTING`
-   in the HUD instead of ending the session outright (where reconnection is
-   actually attempted), with tests covering the new state transition; if
-   automatic reconnect is judged out of scope, at minimum ensure the
-   disconnect is presented clearly instead of an unhandled traceback.
+   *Completion criteria:* if automatic reconnect is judged in scope, a
+   dropped connection surfaces as `RECONNECTING` in the HUD while a bounded
+   number of reconnect attempts are made, with tests covering the new state
+   transition and its eventual give-up path; if judged out of scope, this
+   item can be closed as "clean disconnect handling is suffient" with that
+   decision recorded here.
 
 4. **Main-screen information architecture and navigation refinement.**
    *Dependencies:* none new (builds on the HUD from Slice 3).
@@ -766,7 +926,7 @@ string) before relying on them.
   non-canonical `stock.*` call sites, no live-server verification this
   session).
 
-### 2026-09-23 — Handover documentation pass (this change set)
+### 2026-09-23 — Handover documentation pass
 * **Files changed:** `docs/python-client-development-handover.md` (new,
   this document), `client/python_client/README.md` (new, minimal
   setup/run/test pointer), `docs/reports/python-client-ux-audit.md`
@@ -775,3 +935,44 @@ string) before relying on them.
   client/python_client/tests/ -q` re-run to confirm `70 passed` still
   holds.
 * **Remaining issues:** unchanged from Slice 3 above; see §10/§11.
+
+### 2026-09-23 — Checkpoint commit
+* **Commit:** `71fbd6322bacc4b39d6e277821d7e387787929bd` — "feat(python-client):
+  overhaul protocol safety and terminal UX", covering Slices 1-3 plus the
+  handover/README/audit-pointer documentation pass above (all previously
+  untracked; this was their first commit).
+* **Tests/result:** `70 passed`.
+* **Remaining issues:** unchanged from Slice 3; see §10/§11.
+
+### 2026-09-23 — Slice 4: Graceful mid-session disconnect handling
+* **Files changed:** `client/python_client/protocol.py`
+  (`Conn.disconnect_reason` added, set once by `_mark_disconnected` with a
+  fixed, player-safe label instead of raw `str(exc)`; `Conn` continues to
+  raise only `ConnectionError`, no new exception types), `client/python_client/client.py`
+  (named `EXIT_OK`/`EXIT_CONNECTION_REFUSED`/`EXIT_LOGIN_FAILED`/
+  `EXIT_CONNECTION_LOST` constants; interactive loop extracted from `main()`
+  into `run_session(ctx) -> int`, which translates a normal-quit
+  `SystemExit` into `EXIT_OK` and a propagating `ConnectionError` into one
+  printed line + `EXIT_CONNECTION_LOST`, without an extra event-drain
+  cycle; `menu_on_enter` now re-raises `ConnectionError` before its
+  existing broad `except Exception: pass`), `docs/python-client-development-handover.md`
+  (this change set: new Slice 4 subsection in §3, disconnect-handling
+  detail added to §7, capability-catalogue finding recorded in §8, test
+  inventory/§9 updated to `78 passed`, §10 limitations revised, §11
+  backlog items 2 and 3 updated/closed, this entry).
+* **Tests/result:** `test_protocol_events.py` gained
+  `test_disconnect_reason_is_player_safe_and_recorded_once` and
+  `test_repeated_disconnect_detection_keeps_first_reason_and_single_event`;
+  new `test_session_loop.py` (6 tests: normal quit → `EXIT_OK`,
+  `ConnectionError` → `EXIT_CONNECTION_LOST` with exactly one line and no
+  traceback, no duplicate "N new events" notice, `KeyboardInterrupt`
+  propagates unchanged, `menu_on_enter` re-raises `ConnectionError` while
+  still suppressing other exceptions). Full suite: `78 passed`.
+* **Remaining issues:** no automatic reconnect (`RECONNECTING` still
+  unreachable — recorded as accepted, not required, scope for this slice);
+  login-time `except Exception: pass` blocks in `main()`'s hydration
+  sequence (before `run_session` starts) still not covered by this
+  guarantee; menu capability gating remains heuristic — `system.capabilities`
+  confirmed to be a small feature-flag set, not a per-command catalogue; no
+  live-server verification this session (Postgres credential mismatch
+  persists in this sandbox).
