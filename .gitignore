@@ -74,6 +74,7 @@ tmp/
 
 # python stuff
 __pycache__
+.pytest_cache
 ai_player/bugs
 temp_parser_test.err
 temp_parser_test.py
