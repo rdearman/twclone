@@ -1,0 +1,90 @@
+[gd_scene load_steps=2 format=3 uid="uid://b6x1v4q81at2"]
+
+[ext_resource type="Script" uid="uid://ctujlskv5ng3y" path="res://Main.gd" id="1_script"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="NewsPanel" type="Panel" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="NewsLabel" type="Label" parent="VBoxContainer/NewsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Game News"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="LeftPanel" type="Panel" parent="VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+
+[node name="InfoLabel" type="RichTextLabel" parent="VBoxContainer/HBoxContainer/LeftPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+bbcode_enabled = true
+text = "[center][b]Player & Ship[/b][/center]"
+selection_enabled = true
+
+[node name="MainView" type="PanelContainer" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OutputLog" type="RichTextLabel" parent="VBoxContainer/HBoxContainer/MainView"]
+layout_mode = 2
+focus_mode = 2
+scroll_following = true
+selection_enabled = true
+
+[node name="RightPanel" type="Panel" parent="VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+
+[node name="InfoLabel" type="RichTextLabel" parent="VBoxContainer/HBoxContainer/RightPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+bbcode_enabled = true
+text = "[center][b]Sector Info[/b][/center]"
+selection_enabled = true
+
+[node name="CommandInput" type="LineEdit" parent="VBoxContainer"]
+layout_mode = 2
+placeholder_text = "Enter command..."
+
+[node name="ActionDeck" type="HFlowContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="SuggestionPopup" type="PopupMenu" parent="."]
