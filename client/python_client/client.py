@@ -621,6 +621,13 @@ def ctx_refresh_port_context(ctx):
                         ctx.state['has_insurance_access'] = True # Example: Insurance at Stardock
                     elif port_class == 7: # Tavern (arbitrary, adjust as per game rules)
                         ctx.state['has_tavern_access'] = True
+                    ctx.state['has_local_services'] = bool(
+                        ctx.state.get('has_exchange_access') or
+                        ctx.state.get('has_insurance_access') or
+                        ctx.state.get('has_tavern_access') or
+                        ctx.state.get('is_shipyard_port') or
+                        ctx.state.get('has_shipyard_access')
+                    )
                     # Update only non-empty fields to avoid clearing known sector info (ships, adj, etc)
                     normalized = normalize_sector(d)
                     if not ctx.last_sector_desc:
@@ -738,7 +745,14 @@ def compute_flags(ctx: Context) -> dict:
         "has_exchange_access": ctx.state.get("has_exchange_access", False),
         "has_insurance_access": ctx.state.get("has_insurance_access", False),
         "has_tavern_access": ctx.state.get("has_tavern_access", False),
-        "has_hardware_access": ctx.state.get("has_hardware_access", False),
+        "has_shipyard_access": bool(ctx.state.get("has_shipyard_access") or ctx.state.get("is_shipyard_port")),
+        "has_local_services": bool(
+            ctx.state.get("has_exchange_access") or
+            ctx.state.get("has_insurance_access") or
+            ctx.state.get("has_tavern_access") or
+            ctx.state.get("is_shipyard_port") or
+            ctx.state.get("has_shipyard_access")
+        ),
         "in_corporation": ctx.state.get("in_corporation", False),
         "is_ceo": ctx.state.get("is_ceo", False),
         "is_ceo_or_officer": ctx.state.get("is_ceo_or_officer", False),
@@ -746,6 +760,9 @@ def compute_flags(ctx: Context) -> dict:
         "corp_not_public": not ctx.state.get("corp_is_public", False),
         "corp_is_public": ctx.state.get("corp_is_public", False)
     }
+    ctx.state["has_local_services"] = flags["has_local_services"]
+    ctx.state["has_shipyard_access"] = flags["has_shipyard_access"]
+    ctx.state["not_in_corporation"] = flags["not_in_corporation"]
     return flags
 
 @register("sector_density_scan_flow")
@@ -1202,7 +1219,14 @@ def _get_menu_flags(ctx: Context) -> dict:
         "has_exchange_access": ctx.state.get("has_exchange_access", False),
         "has_insurance_access": ctx.state.get("has_insurance_access", False),
         "has_tavern_access": ctx.state.get("has_tavern_access", False),
-        "has_hardware_access": ctx.state.get("has_hardware_access", False),
+        "has_shipyard_access": bool(ctx.state.get("has_shipyard_access") or ctx.state.get("is_shipyard_port")),
+        "has_local_services": bool(
+            ctx.state.get("has_exchange_access") or
+            ctx.state.get("has_insurance_access") or
+            ctx.state.get("has_tavern_access") or
+            ctx.state.get("is_shipyard_port") or
+            ctx.state.get("has_shipyard_access")
+        ),
         "in_corporation": ctx.state.get("in_corporation", False),
         "is_ceo": ctx.state.get("is_ceo", False),
         "is_ceo_or_officer": ctx.state.get("is_ceo_or_officer", False),
@@ -1210,6 +1234,9 @@ def _get_menu_flags(ctx: Context) -> dict:
         "corp_not_public": not ctx.state.get("corp_is_public", False),
         "corp_is_public": ctx.state.get("corp_is_public", False),
     }
+    ctx.state["has_local_services"] = flags["has_local_services"]
+    ctx.state["has_shipyard_access"] = flags["has_shipyard_access"]
+    ctx.state["not_in_corporation"] = flags["not_in_corporation"]
     return flags
 
 def _update_corp_context(ctx: Context, force: bool = False):

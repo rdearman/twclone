@@ -343,6 +343,56 @@ Goal: remove the failing public-status probe from normal play and align the debu
 * **Menu gating correction** — `EXCHANGE_MAIN` option `d` ("Declare Dividend") visibility in `menus.json` updated to `show_if_ctx: ["debug", "is_ceo"]`, keeping it absent from normal play and available to CEOs in debug mode without requiring an unresolvable `corp_is_public` flag.
 * **Tests added** — `test_corporation_equity.py` covers no-list-stocks call, membership/role hydration, menu gating (normal vs debug CEO vs debug non-CEO), payload shape, and traceback-free error presentation.
 
+### Slice 6 — Main navigation redesign
+
+Goal: restructure the `MAIN` menu to feel like the command centre of a
+space-trading game; group related actions; preserve every established
+top-level hotkey to minimise disruption.
+
+* **`MAIN` menu restructured** — 13 normal entries (down from the previous
+  flat unstructured list), 2 debug-only entries unchanged. Established
+  top-level hotkeys preserved exactly: `M` Move & Navigation, `D` Describe
+  Sector, `P` Dock & Trade, `L` Land on Planet, `S` Sector Services,
+  `F` Operations & Deployment, `C` Ship's Computer, `G` Comms & Events,
+  `N` News, `O` Corporation, `U` User Settings, `H` Help, `Q` Quit, `Y`
+  Testing (debug only), `B` Bulk Execute (debug only). No hotkey was
+  reassigned — the reduction in disruption was judged more valuable than
+  aligning every key with the first letter of a new label.
+* **`SERVICES` submenu created** (`menus.json`) — groups
+  location-dependent services under `S` at the top level:
+  `X` Exchange, `T` Tavern, `S` Shipyard, `I` Insurance, `Q` Back. Each
+  service entry preserves its original `show_if_ctx` visibility condition.
+  `has_local_services` is calculated as the logical OR of
+  `has_exchange_access`, `has_insurance_access`, `has_tavern_access`,
+  `is_shipyard_port`, and `has_shipyard_access` — no port-name, port-class,
+  or sector-name heuristics. If none of those flags is true, the `S` entry
+  is hidden from `MAIN`. Port/Dock trading (`P`) remains a direct top-level
+  entry; it was not moved into `SERVICES`.
+* **Tactical actions moved to `DEPLOYMENT_MAIN`** (`F`) — deploy fighters,
+  deploy mines, release beacon, tow spacecraft, and enter/board ship are
+  now in the Operations & Deployment submenu alongside the existing
+  deployment entries. Their handlers (`set_beacon_flow`, `tow_flow`,
+  `enter_ship_menu`) and visibility conditions (`can_set_beacon`,
+  `has_tow_target`, `has_boardable`) are unchanged.
+* **`Corporation` always reachable** — the `O` entry in `MAIN` no longer
+  requires `in_corporation`. Players outside a corporation can still reach
+  Create, Join, and List workflows; submenu-level `show_if_ctx` conditions
+  continue to gate member-only actions (`Corporation Status`, `Roster`,
+  Treasury, etc.).
+* **`Comms` submenu (`G`)** — existing `COMMS` menu retained with event
+  inbox, notices, chat/broadcast, mail, and back. Handlers are unchanged.
+* **Flag syncing** (`client.py`) — `compute_flags` and `_get_menu_flags`
+  now write `not_in_corporation`, `has_local_services`, and
+  `has_shipyard_access` back onto `ctx.state` so that submenu-level
+  `show_if_ctx` checks see the computed values.
+* **Tests added** — `test_navigation.py` (12 tests) covers: normal `MAIN`
+  top-level hotkeys present; debug entries absent in normal / present in
+  debug; preserved hotkey meanings for `C`, `G`, `O`, `F`; non-corp player
+  can reach create/join/list; `SERVICES` visible with any service flag /
+  absent when none; individual service conditions preserved; tactical
+  actions reachable through deployment; handlers/RPCs unchanged; every
+  submenu has a back action; existing command-validation tests still pass.
+
 ---
 
 ## 4. Current architecture
@@ -670,6 +720,7 @@ any test in this suite.
 | `test_event_log.py` | `EventLog` unread counters increase/clear on `mark_read()` without erasing history; recognised categories render without raw JSON; unknown events are safe/compact in normal mode and inspectable in debug mode; `Context.drain_events()` moves the queue into the log and empties `Conn.events`; `Context.activity_count` combines mail/notices/event-log correctly and returns `None` only when nothing is known. |
 | `test_session_loop.py` | `run_session()` returns `EXIT_OK` on a `SystemExit(0)` from the normal quit path; returns `EXIT_CONNECTION_LOST` and prints exactly one line (no traceback, no duplicate "N new events" notice) when `ConnectionError` propagates from `handle_choice`; `KeyboardInterrupt` still propagates unchanged; `menu_on_enter` re-raises `ConnectionError` while still suppressing other prefetch exceptions. |
 | `test_corporation_equity.py` | `_update_corp_context()` no longer calls `stock.exchange.list_stocks` or `equity.exchange.list`; membership and CEO/officer role hydration; dividend action menu gating (hidden in normal, hidden for non-CEO in debug, visible for CEO in debug); `stock_dividend_set_flow()` prompt/payload shape (`equity.dividend_set`, `{"amount_per_share": N}`); traceback-free server refusal presentation. |
+| `test_navigation.py` | Normal `MAIN` contains all 13 expected top-level hotkeys; debug entries (`Y`/`B`) absent in normal mode and present in debug mode; `C`/`G`/`O`/`F` hotkey meanings preserved (Computer/Comms/Corporation/Deployment); non-corp player can reach `CORPORATION_MAIN` and see Create/Join/List workflows; `SERVICES` appears when any service-access flag is true; `SERVICES` absent when all flags false; each service entry preserves its original visibility condition; tactical actions (deploy fighters/mines, release beacon, tow, enter ship) reachable through `DEPLOYMENT_MAIN`; handlers/RPCs unchanged for moved actions; every submenu has a back action. |
 
 **Run command and current result:**
 
@@ -678,7 +729,7 @@ pytest client/python_client/tests/ -q
 ```
 
 ```text
-85 passed
+97 passed
 ```
 
 **Server-side `tests.v2` were not run in this environment** — the sandbox's
@@ -797,13 +848,15 @@ string) before relying on them.
    item can be closed as "clean disconnect handling is suffient" with that
    decision recorded here.
 
-4. **Main-screen information architecture and navigation refinement.**
-   *Dependencies:* none new (builds on the HUD from Slice 3).
-   *Files:* `client.py` (`redisplay_sector`, `render_menu`), `menus.json`.
-   *Completion criteria:* address any remaining navigation-consistency
-   findings noted in `docs/reports/python-client-ux-audit.md` (e.g.
-   consistent "back to primary screen" behaviour); add tests for any
-   handler changes.
+4. **Main-screen information architecture and navigation refinement —
+   COMPLETE (Slice 6).**
+   *Done:* `MAIN` restructured into 13 normal + 2 debug entries; `SERVICES`
+   submenu created; tactical actions moved to `DEPLOYMENT_MAIN`;
+   `Corporation` accessible to non-members; hotkeys preserved; 12 new tests
+   in `test_navigation.py`. See §3, Slice 6.
+   *Remaining:* two-column wide-terminal rendering is deferred (a separate
+   renderer task requiring its own tests); no additional UX-audit items were
+   addressed in this slice.
 
 5. **Port/trading workflow redesign.**
    *Dependencies:* none new.
@@ -858,7 +911,7 @@ string) before relying on them.
    442dce86972bf116aa5e4101781123398581bafa
    feat(python-client): graceful mid-session disconnect handling
    ```
-3. Run the Python-client test suite and confirm `85 passed`:
+3. Run the Python-client test suite and confirm `97 passed`:
    ```bash
    pytest client/python_client/tests/ -q
    ```
@@ -987,3 +1040,30 @@ string) before relying on them.
 * **Files changed:** `client/python_client/client.py` (removed failing `stock.exchange.list_stocks` RPC from `_update_corp_context`; updated `stock_dividend_set_flow` to call `equity.dividend_set` with `{"amount_per_share": N}` without Stock ID prompt), `client/python_client/menus.json` (dividend gating changed to `["debug", "is_ceo"]`), `client/python_client/tests/test_corporation_equity.py` (new), `docs/python-client-development-handover.md` (Slice 5 documentation).
 * **Tests/result:** `test_corporation_equity.py` added (7 tests); full suite `85 passed`.
 * **Remaining issues:** no read endpoint exposes corporation public status (server-owned validation accepted); no live-server verification this session (Postgres credential mismatch persists in this sandbox).
+
+### 2026-09-23 — Slice 6: Main navigation redesign
+* **Files changed:** `client/python_client/menus.json` (`MAIN` restructured
+  to 13 normal + 2 debug entries; `SERVICES` submenu created with
+  Exchange/Tavern/Shipyard/Insurance; `DEPLOYMENT_MAIN` extended with
+  tactical actions release-beacon, tow, enter-ship alongside existing
+  deploy-fighters/mines; `Corporation` entry no longer gated by
+  `in_corporation` at the `MAIN` level), `client/python_client/client.py`
+  (`compute_flags` and `_get_menu_flags` now write `not_in_corporation`,
+  `has_local_services`, and `has_shipyard_access` back onto `ctx.state`;
+  `has_local_services` and `has_shipyard_access` computed as OR of existing
+  access flags — no new heuristics), `client/python_client/tests/test_navigation.py`
+  (new: 12 tests covering hotkeys, debug gating, hotkey-meaning preservation,
+  corporation accessibility, SERVICES visibility, service conditions,
+  tactical-action reachability, handler/RPC invariants, back actions),
+  `docs/python-client-development-handover.md` (Slice 6 §3/§9/§11/§12/§13).
+* **Before/after normal `MAIN` entries:** before: flat list of ~18 entries
+  mixing movement, location, comms, corp, settings, and tactical actions;
+  after: 13 focused top-level entries — M Move, D Describe, P Dock, L Land,
+  S Services, F Operations, C Computer, G Comms, N News, O Corporation,
+  U Settings, H Help, Q Quit — with tactical actions grouped under F and
+  location services under S.
+* **Tests/result:** `test_navigation.py` added (12 tests); full suite
+  `97 passed`.
+* **Workflows that could not be preserved and why:** none. All existing
+  handlers, RPCs, and gameplay logic are unchanged; only menu structure and
+  flag syncing were modified.

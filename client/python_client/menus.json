@@ -38,6 +38,23 @@
           ]
         },
         {
+          "key": "s",
+          "label": "(S) Sector Services",
+          "action": {
+            "submenu": "SERVICES"
+          },
+          "show_if_ctx": [
+            "has_local_services"
+          ]
+        },
+        {
+          "key": "f",
+          "label": "(F) Operations & Deployment",
+          "action": {
+            "submenu": "DEPLOYMENT_MAIN"
+          }
+        },
+        {
           "key": "c",
           "label": "(C) Ship's Computer",
           "action": {
@@ -45,34 +62,25 @@
           }
         },
         {
-          "key": "r",
-          "label": "(R) Release Beacon",
+          "key": "g",
+          "label": "(G) Comms & Events",
           "action": {
-            "pycall": "set_beacon_flow"
-          },
-          "show_if": [
-            "can_set_beacon"
-          ]
+            "submenu": "COMMS"
+          }
         },
         {
-          "key": "w",
-          "label": "(W) Tow SpaceCraft",
+          "key": "n",
+          "label": "(N) News",
           "action": {
-            "pycall": "tow_flow"
-          },
-          "show_if": [
-            "has_tow_target"
-          ]
+            "submenu": "NEWS"
+          }
         },
         {
-          "key": "e",
-          "label": "(E) Enter Ship*",
+          "key": "o",
+          "label": "(O) Corporation",
           "action": {
-            "pycall": "enter_ship_menu"
-          },
-          "show_if": [
-            "has_boardable"
-          ]
+            "submenu": "CORPORATION_MAIN"
+          }
         },
         {
           "key": "u",
@@ -80,14 +88,6 @@
           "action": {
             "submenu": "SETTINGS"
           }
-        },
-        {
-          "key": "y",
-          "label": "(Y) Testing Menu",
-          "action": {
-            "submenu": "TESTING"
-          },
-          "show_if_ctx": ["debug"]
         },
         {
           "key": "h",
@@ -104,12 +104,14 @@
           }
         },
         {
-          "key": "o",
-          "label": "(O) Corporation",
+          "key": "y",
+          "label": "(Y) Testing Menu",
           "action": {
-            "submenu": "CORPORATION_MAIN"
+            "submenu": "TESTING"
           },
-          "show_if_ctx": ["in_corporation"]
+          "show_if_ctx": [
+            "debug"
+          ]
         },
         {
           "key": "b",
@@ -117,44 +119,24 @@
           "action": {
             "submenu": "BULK"
           },
-          "show_if_ctx": ["debug"]
-        },
-        {
-          "key": "n",
-          "label": "(N) News",
-          "action": {
-            "submenu": "NEWS"
-          }
-        },
-        {
-          "key": "g",
-          "label": "(G) Comms (Chat/Mail)",
-          "action": {
-            "submenu": "COMMS"
-          }
-        },
-        {
-          "key": "f",
-          "label": "(F) Deployment",
-          "action": {
-            "submenu": "DEPLOYMENT_MAIN"
-          }
-        },
+          "show_if_ctx": [
+            "debug"
+          ]
+        }
+      ]
+    },
+    "SERVICES": {
+      "title": "--- Sector Services Menu ---",
+      "options": [
         {
           "key": "x",
           "label": "E(X)change",
           "action": {
             "submenu": "EXCHANGE_MAIN"
           },
-          "show_if_ctx": ["has_exchange_access"]
-        },
-        {
-          "key": "i",
-          "label": "(I) Insurance",
-          "action": {
-            "submenu": "INSURANCE_MAIN"
-          },
-          "show_if_ctx": ["has_insurance_access"]
+          "show_if_ctx": [
+            "has_exchange_access"
+          ]
         },
         {
           "key": "t",
@@ -162,7 +144,9 @@
           "action": {
             "submenu": "TAVERN_MAIN"
           },
-          "show_if_ctx": ["has_tavern_access"]
+          "show_if_ctx": [
+            "has_tavern_access"
+          ]
         },
         {
           "key": "s",
@@ -170,7 +154,26 @@
           "action": {
             "submenu": "SHIPYARD_MAIN"
           },
-          "show_if_ctx": ["has_shipyard_access"]
+          "show_if_ctx": [
+            "has_shipyard_access"
+          ]
+        },
+        {
+          "key": "i",
+          "label": "(I) Insurance",
+          "action": {
+            "submenu": "INSURANCE_MAIN"
+          },
+          "show_if_ctx": [
+            "has_insurance_access"
+          ]
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back to Main Menu",
+          "action": {
+            "back": true
+          }
         }
       ]
     },
@@ -1672,25 +1675,55 @@
       ]
     },
     "DEPLOYMENT_MAIN": {
-      "title": "--- Deployment Menu ---",
+      "title": "--- Operations & Deployment Menu ---",
       "options": [
         {
           "key": "f",
-          "label": "(F) Fighters",
+          "label": "(F) Deploy Fighters",
           "action": {
             "submenu": "DEPLOYMENT_FIGHTERS"
           }
         },
         {
           "key": "m",
-          "label": "(M) Mines",
+          "label": "(M) Deploy Mines",
           "action": {
             "submenu": "DEPLOYMENT_MINES"
           }
         },
         {
+          "key": "r",
+          "label": "(R) Release Beacon",
+          "action": {
+            "pycall": "set_beacon_flow"
+          },
+          "show_if": [
+            "can_set_beacon"
+          ]
+        },
+        {
+          "key": "w",
+          "label": "(W) Tow SpaceCraft",
+          "action": {
+            "pycall": "tow_flow"
+          },
+          "show_if": [
+            "has_tow_target"
+          ]
+        },
+        {
+          "key": "e",
+          "label": "(E) Enter / Board Ship",
+          "action": {
+            "pycall": "enter_ship_menu"
+          },
+          "show_if": [
+            "has_boardable"
+          ]
+        },
+        {
           "key": "q",
-          "label": "(Q) Back",
+          "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
