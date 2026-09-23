@@ -2,7 +2,7 @@
 
 ## Scope
 
-Phase 1 implements the audit roadmap's Transport and Protocol Boundary slice. The existing `Main.tscn` shell is preserved; no Phase 2 state-model or gameplay work was started.
+Phase 1 implements the audit roadmap's Transport and Protocol Boundary and State Models/Authoritative Refresh slices. The existing `Main.tscn` shell is preserved; no Phase 2 gameplay-shell redesign or gameplay-domain work was started.
 
 ## Baseline
 
@@ -144,3 +144,53 @@ No live server or database was started. No live login was attempted and no exist
 ## Acceptance status
 
 The Slice 1 transport, correlation, structured-result, authentication-boundary, event-separation and diagnostic acceptance criteria are demonstrated by the passing headless tests and main-scene smoke run. Live protocol validation remains deliberately deferred because no safe live-server fixture was available.
+
+## Slice 2 — Normalized state and authoritative refresh
+
+### Architecture and ownership
+
+- `ClientState.gd` owns the client-owned normalized player, ship and sector models. It never stores or exposes protocol envelopes.
+- `AuthoritativeRefresh.gd` owns refresh sequencing, request ownership, refresh generations and late-result rejection. It is constructed by `Main.gd` and uses the Slice 1 transport and `AuthSession` without knowing about UI nodes.
+- `Main.gd` subscribes to `ClientState.changed`, `refresh_finished` and `refresh_failed`, and renders only the snapshot/HUD view model. It no longer reads player, ship or sector response dictionaries to populate the shell.
+- A refresh generation is incremented for every authenticated refresh. Pending requests from an older generation are retired; late, duplicate or unknown replies cannot update the current snapshot.
+
+### Authoritative protocol contract
+
+The implemented handlers and server response construction establish this sequential refresh:
+
+1. `player.my_info`, payload `{}`, expected successful type `player.info`, normalized from `data.player`.
+2. `ship.status`, payload `{}`, expected successful type `ship.status`, normalized from `data.ship`.
+3. `sector.info`, payload `{}`, expected successful type `sector.info`, normalized from the sector scan object, including its required `sector_id`.
+
+The requests are sequential so the coordinator has one deterministic partial-failure boundary per domain. Each request carries the authenticated session token through the existing transport. Only a correlated `ok` reply with the expected command and response type is accepted.
+
+### Models and freshness
+
+Missing values remain absent/`null` in the HUD view model; valid zeroes remain zero. Credits are retained as integer-valued money without float conversion. Optional ship cargo and sector entity fields are tolerated, while structurally invalid required objects are rejected. Availability is explicit: `unavailable`, `refreshing`, `fresh`, `partially available`, `stale` and `disconnected`.
+
+Authentication marks prior session-bound values stale, then starts a new refresh. A refusal, timeout, malformed reply or unexpected response type marks only the affected domain partially available and retains its last confirmed value. Disconnect marks retained values disconnected/stale in the state boundary, fails the active refresh and prevents late replies from mutating state. A successful reauthentication therefore obtains a new snapshot rather than treating cached values as live.
+
+### Slice 2 files
+
+- `client/godot_client/godot/ClientState.gd`
+- `client/godot_client/godot/AuthoritativeRefresh.gd`
+- `client/godot_client/godot/Main.gd`
+- `client/godot_client/godot/tests/state_model_test.gd`
+- this implementation report
+
+### Slice 2 tests and validation
+
+The state harness contains 20 focused test groups covering player/ship/sector normalization, missing-versus-zero values, integer credits, optional and malformed fields, authentication gating, correlated success, refusal/timeout/disconnect retention, partial refresh, late generations, unexpected types, reauthentication, the Main state boundary, normal-output JSON exclusion and diagnostic redaction.
+
+Executed results:
+
+- `Godot state tests: 20 passed`.
+- Slice 1 regression: `Godot protocol tests: 8 passed`.
+- Main scene headless smoke: process exited successfully.
+- Python regression: `112 passed`.
+
+The exact commands use Godot 4.5.1 with `XDG_DATA_HOME=/tmp/twclone-godot-xdg-data` and `XDG_CACHE_HOME=/tmp/twclone-godot-xdg-cache`; the report's Slice 1 command remains the reproducible protocol baseline.
+
+### Phase 1 status
+
+Phase 1 is complete only when the Slice 1 and Slice 2 acceptance criteria are demonstrated by the passing Godot transport/state tests, the Main.tscn headless smoke and the 112-test Python regression suite. No live server was started, so live login/refresh validation remains deferred. Phase 2 primary gameplay shell, HUD redesign, movement, trading and communications remain intentionally unstarted.

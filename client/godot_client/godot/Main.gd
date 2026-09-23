@@ -3,6 +3,8 @@ extends Control
 const Protocol = preload("res://Protocol.gd")
 const ProtocolTransport = preload("res://ProtocolTransport.gd")
 const AuthSession = preload("res://AuthSession.gd")
+const ClientState = preload("res://ClientState.gd")
+const AuthoritativeRefresh = preload("res://AuthoritativeRefresh.gd")
 
 # Config File Path
 const CONFIG_PATH = "user://client_config.cfg"
@@ -19,6 +21,8 @@ const CONFIG_PATH = "user://client_config.cfg"
 # Network & State
 var transport
 var auth_session
+var client_state
+var refresh_coordinator
 var is_connected_flag: bool = false
 var session_token: String = ""
 var player_id: int = 0
@@ -31,8 +35,6 @@ var auth_token: String = "" # Stored persistent token if any
 var network_log_file: FileAccess
 var schema_cache: Dictionary = {}
 var pending_schemas: Array = []
-var player_cache: Dictionary = {}
-var ship_cache: Dictionary = {}
 
 # Application State Machine
 enum AppState { INIT, PROMPT_SERVER_IP, PROMPT_SERVER_PORT, PROMPT_USERNAME, PROMPT_PASSWORD, CONNECTING, HARVESTING_SCHEMAS, AUTHENTICATING, LOGGED_IN }
@@ -56,6 +58,8 @@ var command_list: Array = [
 func _ready():
     transport = ProtocolTransport.new(15.0, 200)
     auth_session = AuthSession.new()
+    client_state = ClientState.new()
+    refresh_coordinator = AuthoritativeRefresh.new(transport, auth_session, client_state)
     transport.transport_connected.connect(_on_transport_connected)
     transport.transport_disconnected.connect(_on_transport_disconnected)
     transport.reply_received.connect(_on_transport_reply)
@@ -67,6 +71,9 @@ func _ready():
     transport.diagnostic.connect(_on_transport_diagnostic)
     auth_session.authentication_failed.connect(_on_authentication_failed)
     auth_session.session_invalidated.connect(_on_session_invalidated)
+    client_state.changed.connect(_on_client_state_changed)
+    refresh_coordinator.refresh_finished.connect(_on_refresh_finished)
+    refresh_coordinator.refresh_failed.connect(_on_refresh_failed)
 
     network_log_file = FileAccess.open("user://network_debug.log", FileAccess.WRITE)
     if network_log_file:
@@ -176,6 +183,7 @@ func _on_transport_connected():
 func _on_transport_disconnected(reason: String):
     is_connected_flag = false
     connection_state = ConnectionState.DISCONNECTED
+    refresh_coordinator.handle_disconnect()
     auth_session.invalidate("The connection was lost.")
     session_token = ""
     if current_state != AppState.INIT:
@@ -184,6 +192,9 @@ func _on_transport_disconnected(reason: String):
     _update_connection_banner("Disconnected")
 
 func _on_transport_reply(_request_id: String, response: Dictionary, command: String):
+    if refresh_coordinator.accepts_request(_request_id):
+        refresh_coordinator.handle_reply(_request_id, response, command)
+        return
     _process_response(response, command)
 
 func _on_request_timed_out(_request_id: String, command: String):
@@ -192,6 +203,9 @@ func _on_request_timed_out(_request_id: String, command: String):
         auth_session.fail_request("Login timed out.")
 
 func _on_request_failed(_request_id: String, command: String, result: Dictionary):
+    if refresh_coordinator.accepts_request(_request_id):
+        refresh_coordinator.handle_failure(_request_id, command, result)
+        return
     if result.get("kind", "") == "timeout":
         return
     if command == "auth.login":
@@ -209,6 +223,16 @@ func _on_authentication_failed(message: String):
     current_state = AppState.PROMPT_PASSWORD
     log_message("Login refused: %s" % message)
     _update_connection_banner("Connected — login required")
+
+func _on_client_state_changed(snapshot: Dictionary):
+    _render_state_snapshot(snapshot)
+
+func _on_refresh_finished(_snapshot: Dictionary):
+    log_message("System: Authoritative player, ship and sector refresh complete.")
+
+func _on_refresh_failed(snapshot: Dictionary):
+    var freshness: Dictionary = snapshot.get("freshness", {})
+    log_message("System: Refresh incomplete; state is %s." % freshness.get("overall", "partially available"))
 
 func _on_session_invalidated(reason: String):
     log_message("System: Session ended. %s" % reason)
@@ -247,21 +271,22 @@ func _process_response(msg: Dictionary, request_command: String = ""):
         current_state = AppState.LOGGED_IN
         log_message("System: Login successful. Session stored.")
         _save_config()
-        send_request("player.my_info", {})
-        send_request("sector.info", {})
+        client_state.mark_authenticated()
+        if not refresh_coordinator.refresh():
+            log_message("System: Unable to start authoritative refresh.")
     elif type == "move.result":
         log_message("Move accepted by the server.")
         send_request("player.my_info", {})
         send_request("sector.info", {})
     elif type == "player.info" or msg.get("command") == "player.my_info":
-        _update_left_panel(data)
-        var p = data.get("player", {})
-        if p is Dictionary and p.has("ship_id"):
-            send_request("ship.info", {"ship_id": int(p["ship_id"])})
+        if client_state.apply_response("player.my_info", msg):
+            _render_state_snapshot(client_state.snapshot())
     elif type == "ship.info" or type == "ship.status":
-        _update_left_panel({"active_ship": data.get("ship", data)})
+        if client_state.apply_response("ship.status", msg):
+            _render_state_snapshot(client_state.snapshot())
     elif type == "sector.info":
-        _update_right_panel(data)
+        if client_state.apply_response("sector.info", msg):
+            _render_state_snapshot(client_state.snapshot())
     elif type == "system.cmd_list":
         var commands = data.get("commands", [])
         var names := []
@@ -293,91 +318,50 @@ func _process_response(msg: Dictionary, request_command: String = ""):
         
 # --- UI Updates ---
 
-func _update_left_panel(data: Dictionary):
-    # Update Cache
-    if data.has("player"):
-        player_cache = data.get("player")
-    if data.has("active_ship"):
-        ship_cache = data.get("active_ship")
-        
-    var text = "[center][b]Player & Ship[/b][/center]\n"
-    
-    if not player_cache.is_empty():
-        text += "[b]Name:[/b] %s\n" % player_cache.get("username", "Unknown")
-        text += "[b]Credits:[/b] %s\n" % player_cache.get("credits", "0")
-        text += "[b]Corp:[/b] %s\n" % str(player_cache.get("corp_id", "None"))
-        text += "[b]Turns:[/b] %s\n" % str(int(player_cache.get("turns_remaining", 0)))
-    
+func _render_state_snapshot(snapshot: Dictionary) -> void:
+    var hud: Dictionary = snapshot.get("hud", {})
+    var freshness: Dictionary = snapshot.get("freshness", {})
+    var text := "[center][b]Player & Ship[/b][/center]\n"
+    text += "[b]State:[/b] %s\n" % _display_value(freshness.get("overall", null))
+    text += "[b]Name:[/b] %s\n" % _display_value(hud.get("player_name", null))
+    text += "[b]Credits:[/b] %s\n" % _display_value(hud.get("credits", null))
+    text += "[b]Turns:[/b] %s\n" % _display_value(hud.get("turns_remaining", null))
     text += "\n[center][b]Active Ship[/b][/center]\n"
-    
-    if not ship_cache.is_empty():
-        text += "[b]Name:[/b] %s\n" % ship_cache.get("name", "Unnamed")
-        
-        # Type handling
-        var stype = ship_cache.get("type", "Unknown")
-        if stype is Dictionary:
-            stype = stype.get("name", "Unknown")
-        text += "[b]Type:[/b] %s\n" % stype
-        
-        text += "[b]Hull:[/b] %s/%s\n" % [str(int(ship_cache.get("hp",0))), str(int(ship_cache.get("max_hp",0)))]
-        
-        # Holds/Cargo handling
-        var holds = ship_cache.get("holds", ship_cache.get("cargo_max", 0))
-        var cargo_used = 0
-        var cargo = ship_cache.get("cargo")
-        if cargo is Dictionary:
-            for val in cargo.values():
-                cargo_used += int(val)
-        else:
-            cargo_used = int(ship_cache.get("cargo_used", 0))
-            
-        text += "[b]Cargo:[/b] %s/%s\n" % [str(cargo_used), str(int(holds))]
-    else:
-        text += "No ship data."
-        
+    text += "[b]ID:[/b] %s\n" % _display_value(hud.get("ship_id", null))
+    text += "[b]Name:[/b] %s\n" % _display_value(hud.get("ship_name", null))
+    text += "[b]Fighters:[/b] %s\n" % _display_value(hud.get("fighters", null))
+    text += "[b]Shields:[/b] %s\n" % _display_value(hud.get("shields", null))
+    text += "[b]Cargo:[/b] %s/%s\n" % [_display_value(hud.get("cargo_used", null)), _display_value(hud.get("cargo_total", null))]
     left_panel_label.text = text
 
-func _update_right_panel(data: Dictionary):
-    var text = "[center][b]Sector Info[/b][/center]\n"
-    
-    text += "[b]ID:[/b] %d\n" % int(data.get("sector_id", 0))
-    
-    var sname = data.get("name", "Unknown").replace("System Volume", "").strip_edges()
-    text += "[b]Name:[/b] %s\n" % sname
-    
-    # Beacon
-    var beacon = data.get("beacon")
-    if beacon:
-        text += "\n[color=yellow][b]Beacon:[/b] %s[/color]\n" % beacon
-    
-    var adj = data.get("adjacent", [])
-    if adj.size() > 0:
-        var adj_ints = []
-        for a in adj:
-            adj_ints.append(str(int(a)))
-        text += "\n[b]Warps:[/b] " + ", ".join(adj_ints) + "\n"
+    var sector: Dictionary = snapshot.get("sector", {})
+    var sector_text := "[center][b]Sector Info[/b][/center]\n"
+    sector_text += "[b]State:[/b] %s\n" % _display_value(freshness.get("sector", null))
+    sector_text += "[b]ID:[/b] %s\n" % _display_value(sector.get("id", null))
+    sector_text += "[b]Name:[/b] %s\n" % _display_value(sector.get("name", null))
+    if sector.has("beacon"):
+        sector_text += "\n[b]Beacon:[/b] %s\n" % _display_value(sector["beacon"])
+    if sector.has("adjacent_sector_ids"):
+        var warp_names := []
+        for warp_id in sector["adjacent_sector_ids"]:
+            warp_names.append(str(warp_id))
+        sector_text += "\n[b]Warps:[/b] %s\n" % ", ".join(warp_names)
+    sector_text = _append_entity_names(sector_text, sector.get("ports", []), "Ports")
+    sector_text = _append_entity_names(sector_text, sector.get("planets", []), "Planets")
+    sector_text = _append_entity_names(sector_text, sector.get("ships", []), "Ships")
+    right_panel_label.text = sector_text
 
-    var ports = data.get("ports", [])
-    if ports.size() > 0:
-        text += "\n[b]Ports:[/b]\n"
-        for port in ports:
-            text += "- %s (%s)\n" % [port.get("name"), str(int(port.get("type", 0)))]
-    
-    var planets = data.get("planets", [])
-    if planets.size() > 0:
-        text += "\n[b]Planets:[/b]\n"
-        for obj in planets:
-            text += "- %s\n" % obj.get("name", "Unknown")
+func _append_entity_names(text: String, entities: Array, title: String) -> String:
+    if entities.is_empty():
+        return text
+    text += "\n[b]%s:[/b]\n" % title
+    for entity in entities:
+        if entity is Dictionary:
+            text += "- %s\n" % _display_value(entity.get("name", entity.get("ship_name", null)))
+    return text
 
-    var ships = data.get("ships", [])
-    if ships.size() > 0:
-        text += "\n[b]Ships:[/b]\n"
-        for s in ships:
-            var sname_obj = s.get("name", s.get("ship_name", "Unknown"))
-            var owner = s.get("owner", "Unknown")
-            text += "- %s (%s)\n" % [sname_obj, owner]
-    
-    right_panel_label.text = text
+func _display_value(value) -> String:
+    return "—" if value == null else str(value)
 
 # --- Button Deck (Drill-Down UI) ---
 
