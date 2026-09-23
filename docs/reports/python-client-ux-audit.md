@@ -130,6 +130,14 @@ direction-correct receipt. Successful trades refresh HUD state and inventory;
 cancelled/refused trades do not claim a state change. Legacy arbitrary quote
 and raw diagnostic trade output is debug-only.
 
+## 4b. Responsive terminal rendering (Slice 9 implemented)
+
+Menu layout now uses a deterministic fallback for non-TTY output, one column
+when narrow or labels are long, and two columns only when complete hotkey
+labels fit. HUD and titles follow the detected width without truncation or
+terminal-control sequences. Layout calculation is separated into pure helpers
+for deterministic tests.
+
 ## 5. Debug tools excluded from normal play
 
 Testing/Bulk/raw-JSON-Trade menus, and menu items for commands confirmed

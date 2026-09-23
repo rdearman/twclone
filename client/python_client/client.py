@@ -22,6 +22,8 @@ import os
 import re
 import socket
 import sys
+import shutil
+import textwrap
 from typing import Any, Dict, Callable, List, Optional
 
 from protocol import Conn, get_data, extract_current_sector, normalize_sector
@@ -2458,11 +2460,64 @@ def _interp_label(label: str, ctx: Context) -> str:
 _HUD_EXCLUDED_MENUS = {"TESTING", "BULK"}
 
 
-def _render_hud(ctx: Context) -> None:
+def terminal_width(stream=None, fallback: int = 80) -> int:
+    """Return a stable usable width; redirected output always uses fallback."""
+    stream = stream or sys.stdout
+    try:
+        if not stream.isatty():
+            return fallback
+        columns = shutil.get_terminal_size(fallback=(fallback, 24)).columns
+        return max(20, int(columns))
+    except (AttributeError, OSError, ValueError):
+        return fallback
+
+
+def layout_menu_options(labels: list, width: int = 80) -> list:
+    """Lay out complete menu labels in one or two columns without truncation."""
+    width = max(20, int(width or 80))
+    labels = [str(label) for label in labels]
+    if not labels:
+        return []
+    gap = 4
+    column_width = max((len(label) for label in labels), default=0)
+    if len(labels) < 2 or column_width > (width - gap) // 2:
+        return ["  " + label for label in labels]
+    lines = []
+    for index in range(0, len(labels), 2):
+        left = labels[index]
+        if index + 1 >= len(labels):
+            lines.append("  " + left)
+            continue
+        right = labels[index + 1]
+        lines.append("  " + left.ljust(column_width) + (" " * gap) + right)
+    return lines
+
+
+def layout_menu_lines(menu: dict, visible_labels: list, width: int = 80) -> list:
+    """Pure menu line calculation used by render_menu and unit tests."""
+    lines = []
+    if "sections" not in menu:
+        return layout_menu_options(visible_labels, width)
+    offset = 0
+    for section in menu.get("sections", []):
+        if visible_labels and isinstance(visible_labels[0], list):
+            labels = visible_labels[offset] if offset < len(visible_labels) else []
+            offset += 1
+        else:
+            labels = visible_labels[offset:offset + len(section.get("options", []))]
+            offset += len(section.get("options", []))
+        if section.get("name"):
+            lines.append(f"[{section['name']}]")
+        lines.extend(layout_menu_options(labels, width))
+    return lines
+
+
+def _render_hud(ctx: Context, width: int) -> None:
     if ctx.current_menu in _HUD_EXCLUDED_MENUS:
         return
     for line in hud_module.render_hud_lines(
-        ctx.hud, connected=ctx.conn.connected, activity=ctx.activity_count
+        ctx.hud, connected=ctx.conn.connected, activity=ctx.activity_count,
+        width=width
     ):
         print(line)
 
@@ -2471,7 +2526,8 @@ def render_menu(ctx: Context):
     if not menu:
         print(f"[Error] Menu '{ctx.current_menu}' not found.")
         return
-    _render_hud(ctx)
+    width = terminal_width()
+    _render_hud(ctx, width)
     # run optional on-enter hook for this menu
     try:
         menu_on_enter(ctx, menu)
@@ -2485,18 +2541,17 @@ def render_menu(ctx: Context):
     title = title.replace("{{sector_id}}", str(ctx.current_sector_id or "?"))
     port_name = (ctx.last_sector_desc.get("port") or {}).get("name") or "Port"
     title = title.replace("{{port_name}}", str(port_name))
-    print("\n" + title)
+    print("\n" + "\n".join(textwrap.wrap(title, width=width) or [title]))
     if "sections" in menu:
+        visible_labels = []
         for sec in menu["sections"]:
-            if sec.get("name"):
-                print(f"\n[{sec['name']}]")
-            for opt in sec.get("options", []):
-                if option_visible(opt, flags) and _option_visible_with_ctx(ctx, opt):
-                    print(" ", _interp_label(opt["label"], ctx))
+            visible_labels.append([_interp_label(opt["label"], ctx) for opt in sec.get("options", [])
+                                   if option_visible(opt, flags) and _option_visible_with_ctx(ctx, opt)])
     else:
-        for opt in menu.get("options", []):
-            if option_visible(opt, flags) and _option_visible_with_ctx(ctx, opt):
-                print(" ", _interp_label(opt["label"], ctx))
+        visible_labels = [_interp_label(opt["label"], ctx) for opt in menu.get("options", [])
+                          if option_visible(opt, flags) and _option_visible_with_ctx(ctx, opt)]
+    for line in layout_menu_lines(menu, visible_labels, width):
+        print(line)
 
 def option_visible(opt: Dict[str, Any], flags: Dict[str, bool]) -> bool:
     show_if = opt.get("show_if", [])

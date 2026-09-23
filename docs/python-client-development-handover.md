@@ -422,6 +422,44 @@ top-level hotkey to minimise disruption.
   server verification is still unavailable in this environment. The legacy
   generic quote/raw trade entry remains debug-only for diagnostics.
 
+### Slice 8 — Communications usability
+
+* **Implementation note/evidence:** `src/server_communication.c` confirms
+  `chat.history` returns `messages`; `mail.inbox` returns `items` with
+  `read_at`; `mail.read` accepts `id` and marks it read; `mail.delete`
+  accepts `ids[]`; `notice.list` returns `items` with `seen_at`. The same
+  handlers confirm chat broadcast/private and mail send payloads. No client
+  unread-total endpoint was inferred from page-limited responses.
+* **Files changed:** `client.py`, new `tests/test_communications.py`, and
+  this handover/audit.
+* **Behavioural contract:** COMMS remains a clear landing menu. Chat history,
+  inbox, notices, empty states, malformed rows, and refusal responses render
+  as human-readable text without raw JSON. Inbox entries show display
+  indices and `[NEW]` markers; Read selects an index from the displayed
+  inbox cache and then calls the confirmed `mail.read` handler. Compose uses
+  confirmed send handlers only. No new polling was introduced.
+* **Tests/result:** `test_communications.py` adds 5 focused tests; the full
+  suite passed `107 passed`.
+* **Remaining limitations:** no reply/thread workflow was added because no
+  confirmed dedicated reply handler exists; unread counts remain
+  page-bounded HUD approximations.
+
+### Slice 9 — Responsive terminal rendering
+
+* **Files changed:** `client.py`, new `tests/test_terminal_layout.py`, and
+  this handover/audit.
+* **Behavioural contract:** terminal width is detected only for TTY output
+  with a deterministic 80-column fallback for redirected output. HUD width
+  follows the detected width. Menu layout is calculated by pure helpers:
+  narrow terminals use one column; two columns are used only when complete
+  labels (including hotkeys) fit; long labels force one column. Titles wrap
+  without truncating content, and no terminal-control sequences were added.
+* **Tests/result:** `test_terminal_layout.py` adds 5 focused width/layout
+  tests; the complete suite passed `112 passed`.
+* **Remaining limitations:** interactive input remains the standard line
+  prompt; only menu/title output is width-laid out.
+
+
 ---
 
 ## 4. Current architecture
@@ -885,9 +923,9 @@ string) before relying on them.
    submenu created; tactical actions moved to `DEPLOYMENT_MAIN`;
    `Corporation` accessible to non-members; hotkeys preserved; 12 new tests
    in `test_navigation.py`. See §3, Slice 6.
-   *Remaining:* two-column wide-terminal rendering is deferred (a separate
-   renderer task requiring its own tests); no additional UX-audit items were
-   addressed in this slice.
+   *Done in Slice 9:* deterministic terminal-width detection, pure one/two
+   column menu layout, and width-aware HUD/title rendering with preserved
+   hotkeys. See §3, Slice 9.
 
 5. **Port/trading workflow redesign — COMPLETE (Slice 7).**
    *Dependencies:* none new.
@@ -1126,24 +1164,13 @@ string) before relying on them.
 * **Remaining issues:** no dedicated reply/thread handler exists; responsive
   rendering remains queued; live-server smoke testing remains unavailable.
 
-### Slice 8 — Communications usability
-
-* **Implementation note/evidence:** `src/server_communication.c` confirms
-  `chat.history` returns `messages`; `mail.inbox` returns `items` with
-  `read_at`; `mail.read` accepts `id` and marks it read; `mail.delete`
-  accepts `ids[]`; `notice.list` returns `items` with `seen_at`. The same
-  handlers confirm chat broadcast/private and mail send payloads. No client
-  unread-total endpoint was inferred from page-limited responses.
-* **Files changed:** `client.py`, new `tests/test_communications.py`, and
-  this handover/audit.
-* **Behavioural contract:** COMMS remains a clear landing menu. Chat history,
-  inbox, notices, empty states, malformed rows, and refusal responses render
-  as human-readable text without raw JSON. Inbox entries show display
-  indices and `[NEW]` markers; Read selects an index from the displayed
-  inbox cache and then calls the confirmed `mail.read` handler. Compose uses
-  confirmed send handlers only. No new polling was introduced.
-* **Tests/result:** `test_communications.py` adds 5 focused tests; the full
-  suite passed `107 passed`.
-* **Remaining limitations:** no reply/thread workflow was added because no
-  confirmed dedicated reply handler exists; unread counts remain
-  page-bounded HUD approximations.
+### 2026-09-23 — Slice 9: Responsive terminal rendering
+* **Files changed:** `client/python_client/client.py`,
+  `client/python_client/tests/test_terminal_layout.py`, this handover, and
+  `docs/reports/python-client-ux-audit.md`.
+* **Behaviour delivered:** deterministic TTY/non-TTY width handling,
+  width-aware HUD/title output, safe two-column menus only where complete
+  labels fit, and pure layout helpers preserving all hotkeys.
+* **Tests/result:** full suite `112 passed`; scoped `git diff --check` clean.
+* **Remaining issues:** live-server smoke testing remains unavailable;
+  interactive input remains line-oriented.
