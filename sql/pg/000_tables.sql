@@ -80,6 +80,17 @@ CREATE TABLE shiptypes (
     FOREIGN KEY (required_commission) REFERENCES commission (commission_id)
 );
 
+CREATE TABLE shiptype_restrictions (
+    restriction_id serial PRIMARY KEY,
+    shiptypes_id integer NOT NULL,
+    check_type text NOT NULL CHECK (check_type IN ('CEO', 'ALIGNMENT_MIN', 'ALIGNMENT_MAX', 'SCORE_MIN', 'CUSTOM')),
+    check_value text,
+    description text NOT NULL,
+    enabled boolean NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (shiptypes_id) REFERENCES shiptypes (shiptypes_id) ON DELETE CASCADE,
+    CONSTRAINT unique_restriction_per_type UNIQUE (shiptypes_id, check_type)
+);
+
 CREATE TABLE ships (
     ship_id serial PRIMARY KEY,
     name text NOT NULL,
@@ -419,6 +430,7 @@ CREATE TABLE ports (
     invisible boolean DEFAULT FALSE,
     type BIGINT DEFAULT 1,
     economy_curve_id bigint NOT NULL DEFAULT 1,
+    porttype_id integer,
     FOREIGN KEY (economy_curve_id) REFERENCES economy_curve (economy_curve_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)
 );
@@ -772,8 +784,22 @@ CREATE TABLE commodities (
     name text NOT NULL,
     illegal boolean NOT NULL DEFAULT FALSE,
     base_price integer NOT NULL DEFAULT 0 CHECK (base_price >= 0),
-    volatility integer NOT NULL DEFAULT 0 CHECK (volatility >= 0)
+    volatility integer NOT NULL DEFAULT 0 CHECK (volatility >= 0),
+    max_holds_per_ship integer CHECK (max_holds_per_ship >= 0)
 );
+
+-- Phase 1: Dynamic ship cargo (commodity-agnostic)
+-- Source of truth for all ship cargo. Replaces hardcoded columns (ore, organics, etc).
+-- Legacy columns in ships table are kept for Phase 1 compatibility but ship_cargo is authoritative.
+CREATE TABLE ship_cargo (
+    ship_id integer NOT NULL REFERENCES ships(ship_id) ON DELETE CASCADE,
+    commodity_code text NOT NULL REFERENCES commodities(code) ON DELETE RESTRICT,
+    quantity bigint NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    PRIMARY KEY (ship_id, commodity_code)
+);
+
+-- Index for efficient queries by ship_id alone
+CREATE INDEX idx_ship_cargo_ship_id ON ship_cargo(ship_id);
 
 CREATE TABLE clusters (
     clusters_id serial PRIMARY KEY,

@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_port_id, int32_t *out_type);
+int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_port_id, int32_t *out_porttype_id);
 
 int repo_stardock_get_ship_state(db_t *db, int32_t ship_id, db_res_t **out_res);
 

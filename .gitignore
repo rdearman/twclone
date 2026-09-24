@@ -9,6 +9,7 @@
 *.dylib
 *.exe
 *.out
+*.zip
 twconfig.db
 bigbang.json
 

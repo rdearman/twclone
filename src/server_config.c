@@ -135,6 +135,8 @@ config_set_defaults (void)
   g_cfg.regen.enabled = true;
   g_cfg.regen.shield_rate_pct_per_tick = 0.05;
   g_cfg.regen.tick_seconds = 60;
+  /* Phase 4: Ship Types Defaults */
+  snprintf (g_cfg.starter_shiptype_name, sizeof g_cfg.starter_shiptype_name, "Scout Marauder");
   // TLS Defaults
   g_cfg.tls_enabled = 0;
   g_cfg.tls_required = 0;
@@ -671,6 +673,10 @@ apply_db (db_t *db)
 	    {
 	      cfg_parse_int64 (val, type,
 			       &g_cfg.bank_max_daily_interest_per_account);
+	    }
+	  else if (strcmp (key, "starter_shiptype_name") == 0)
+	    {
+	      snprintf (g_cfg.starter_shiptype_name, sizeof (g_cfg.starter_shiptype_name), "%s", val);
 	    }
 	  else if (strcmp (key, "tls_enabled") == 0)
 	    {

@@ -17,13 +17,15 @@ var _generation: int = 0
 var _active := false
 var _pending: Dictionary = {}
 var _retired: Dictionary = {}
+var _domains: Array[String] = []
+var _domain_index := 0
 
 func _init(transport_ref, auth_session_ref, state_ref = null) -> void:
 	transport = transport_ref
 	auth_session = auth_session_ref
 	state = state_ref if state_ref != null else ClientState.new()
 
-func refresh(force: bool = false) -> bool:
+func refresh(force: bool = false, requested_domains: Array = []) -> bool:
 	if not auth_session.is_authenticated():
 		return false
 	if _active and not force:
@@ -33,11 +35,17 @@ func refresh(force: bool = false) -> bool:
 	_pending.clear()
 	_generation += 1
 	_active = true
-	if not state.begin_refresh(_generation):
+	_domains.clear()
+	var requested: Array = ["player", "ship", "sector"] if requested_domains.is_empty() else requested_domains
+	for domain in ["player", "ship", "sector"]:
+		if domain in requested and not _domains.has(domain):
+			_domains.append(domain)
+	if _domains.is_empty() or not state.begin_refresh(_generation, _domains):
 		_active = false
 		return false
 	refresh_started.emit(_generation)
-	_request_step("player")
+	_domain_index = 0
+	_request_step(_domains[0])
 	return true
 
 func accepts_request(request_id: String) -> bool:
@@ -128,13 +136,18 @@ func _request_step(domain: String) -> void:
 	}
 
 func _next_or_finish(domain: String) -> void:
-	match domain:
-		"player": _request_step("ship")
-		"ship": _request_step("sector")
-		"sector":
-			_active = false
-			var snapshot: Dictionary = state.finish_refresh(_generation)
-			if snapshot["freshness"]["overall"] == ClientState.FRESH:
-				refresh_finished.emit(snapshot)
-			else:
-				refresh_failed.emit(snapshot)
+	_domain_index += 1
+	if _domain_index < _domains.size():
+		_request_step(_domains[_domain_index])
+		return
+	_active = false
+	var snapshot: Dictionary = state.finish_refresh(_generation)
+	var requested_are_fresh := true
+	for requested_domain in _domains:
+		if str(snapshot["freshness"].get(requested_domain, "")) != ClientState.FRESH:
+			requested_are_fresh = false
+		break
+	if requested_are_fresh:
+		refresh_finished.emit(snapshot)
+	else:
+		refresh_failed.emit(snapshot)

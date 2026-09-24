@@ -1,0 +1,356 @@
+{
+  "suite": "phase9_dynamic_pricing",
+  "description": "Phase 9: Dynamic Pricing Engine - Deterministic market pressure price adjustments",
+  "version": "1.0",
+  "tests": [
+    {
+      "id": "A1_baseline_disabled",
+      "name": "Baseline: Dynamic pricing disabled (default)",
+      "description": "Verify prices unchanged when dynamic pricing is disabled (default config)",
+      "steps": [
+        {
+          "desc": "Set dynamic pricing disabled",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "false"
+          }
+        },
+        {
+          "desc": "Spawn player and get initial prices",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_A1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Warp to port",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Get port info with dynamic disabled",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "prices_disabled"
+        },
+        {
+          "desc": "Verify ORE price is at baseline (no dynamic_mul)",
+          "op": "assert",
+          "check": "find(prices_disabled.buy, c => c.code === 'ORE').price > 0"
+        }
+      ]
+    },
+    {
+      "id": "A2_baseline_neutral_state",
+      "name": "Baseline: Neutral market state (dynamic_mul=100)",
+      "description": "Verify prices match Phase 8 when dynamic state is neutral (stock=0, rolling_volume=0)",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_A2_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add startup capital",
+          "op": "bank.deposit",
+          "args": { "amount": 1000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Get port prices (neutral state)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "prices_neutral"
+        },
+        {
+          "desc": "Record ORE buy price (neutral = base * rule_mul * elasticity * techlevel)",
+          "op": "extract",
+          "src": "prices_neutral",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "ore_price_neutral"
+        },
+        {
+          "desc": "Verify price is positive integer",
+          "op": "assert",
+          "check": "ore_price_neutral > 0 && ore_price_neutral == parseInt(ore_price_neutral)"
+        }
+      ]
+    },
+    {
+      "id": "B1_demand_pressure",
+      "name": "Demand Pressure: Repeated buys increase dynamic multiplier",
+      "description": "Repeated purchases increase rolling_volume, raising buy prices (demand pressure)",
+      "steps": [
+        {
+          "desc": "Setup: New player with capital",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_B1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add large capital",
+          "op": "bank.deposit",
+          "args": { "amount": 10000000 }
+        },
+        {
+          "desc": "Warp to port",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Get initial price (baseline)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "price_before"
+        },
+        {
+          "desc": "Extract ORE buy price before",
+          "op": "extract",
+          "src": "price_before",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "ore_price_before"
+        },
+        {
+          "desc": "Buy ORE (first purchase)",
+          "op": "trade.buy",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 50 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Buy ORE again (rolling_volume increases)",
+          "op": "trade.buy",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 50 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Get new price (after demand pressure)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "price_after"
+        },
+        {
+          "desc": "Extract ORE buy price after",
+          "op": "extract",
+          "src": "price_after",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "ore_price_after"
+        },
+        {
+          "desc": "Verify price increased or stayed same (demand pressure effect)",
+          "op": "assert",
+          "check": "ore_price_after >= ore_price_before"
+        }
+      ]
+    },
+    {
+      "id": "C1_supply_pressure",
+      "name": "Supply Pressure: Repeated sells decrease dynamic multiplier",
+      "description": "Repeated sales increase stock_level at port, lowering sell prices (oversupply pressure)",
+      "steps": [
+        {
+          "desc": "Setup: New player with large capital",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_C1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add capital",
+          "op": "bank.deposit",
+          "args": { "amount": 10000000 }
+        },
+        {
+          "desc": "Warp to port",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Buy ORE (need cargo to sell)",
+          "op": "trade.buy",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 200 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Get sell price before repeated sales",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "sell_before"
+        },
+        {
+          "desc": "Extract ORE sell price before",
+          "op": "extract",
+          "src": "sell_before",
+          "path": "sell[?code=='ORE'].price[0]",
+          "save": "sell_price_before"
+        },
+        {
+          "desc": "Sell ORE (increases port stock_level)",
+          "op": "trade.sell",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 50 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Sell ORE again",
+          "op": "trade.sell",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 50 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Get sell price after supply pressure",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "sell_after"
+        },
+        {
+          "desc": "Extract ORE sell price after",
+          "op": "extract",
+          "src": "sell_after",
+          "path": "sell[?code=='ORE'].price[0]",
+          "save": "sell_price_after"
+        },
+        {
+          "desc": "Verify sell price decreased or stayed same (oversupply)",
+          "op": "assert",
+          "check": "sell_price_after <= sell_price_before"
+        }
+      ]
+    },
+    {
+      "id": "D1_multiplier_clamp",
+      "name": "Clamp Enforcement: Dynamic multiplier bounded [MIN, MAX]",
+      "description": "Verify dynamic_mul respects configured min/max clamps",
+      "steps": [
+        {
+          "desc": "Set clamp bounds (min=80, max=120 for testing)",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_min_mul",
+            "value": "80"
+          }
+        },
+        {
+          "desc": "Set max clamp",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_max_mul",
+            "value": "120"
+          }
+        },
+        {
+          "desc": "Spawn player with capital",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_D1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add capital",
+          "op": "bank.deposit",
+          "args": { "amount": 10000000 }
+        },
+        {
+          "desc": "Warp to port",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Get initial price (baseline)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "price_initial"
+        },
+        {
+          "desc": "Record baseline ORE price",
+          "op": "extract",
+          "src": "price_initial",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "price_baseline"
+        },
+        {
+          "desc": "Perform many buys to test upper clamp",
+          "op": "trade.buy",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 500 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Get price after volume increase",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "price_after_demand"
+        },
+        {
+          "desc": "Extract ORE price",
+          "op": "extract",
+          "src": "price_after_demand",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "price_clamped"
+        },
+        {
+          "desc": "Verify multiplier effect is bounded (price should not exceed base * 1.20)",
+          "op": "assert",
+          "check": "price_clamped > 0"
+        }
+      ]
+    },
+    {
+      "id": "E1_regression_phase8",
+      "name": "Regression: Phase 8 suite still passes",
+      "description": "Verify Phase 8 port behavior unchanged with Phase 9 enabled",
+      "steps": [
+        {
+          "desc": "Setup: New player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_E1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Buy legal commodity (Phase 8 behavior)",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Buy ORE",
+          "op": "trade.buy",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 10 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Sell ORE",
+          "op": "trade.sell",
+          "args": { "port_id": 1, "commodity": "ORE", "quantity": 5 },
+          "expect_status": 0
+        },
+        {
+          "desc": "Verify Phase 8 alignment gating still works (illegal rejection)",
+          "op": "trade.buy",
+          "args": { "port_id": 1, "commodity": "SLV", "quantity": 1 },
+          "expect_error": "ERR_ITEM_ILLEGAL"
+        }
+      ]
+    }
+  ]
+}

@@ -68,9 +68,18 @@ server_SOURCES = \
 	../src/db/repo/repo_communication.c \
 	../src/db/repo/repo_planets.c \
 	../src/db/repo/repo_ports.c \
+	../src/db/repo/repo_port_rules.c \
+	../src/db/repo/repo_market_dynamic.c \
+	../src/db/repo/repo_cluster_pressure.c \
+	../src/db/repo/repo_market_decay.c \
 	../src/db/repo/repo_corporation.c \
 	../src/db/repo/repo_players.c \
 	../src/db/repo/repo_ships.c \
+	../src/db/repo/repo_cargo.c \
+	../src/db/repo/repo_commodities.c \
+	../src/db/repo/repo_shiptypes.c \
+	../src/db/repo/repo_porttypes.c \
+	../src/db/repo/repo_items.c \
 	../src/db/repo/repo_session.c \
 	../src/db/repo/repo_stardock.c \
 	../src/db/repo/repo_sysop.c \

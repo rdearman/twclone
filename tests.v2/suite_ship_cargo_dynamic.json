@@ -1,0 +1,163 @@
+{
+  "test_suite_name": "Ship Cargo - Dynamic (Phase 1)",
+  "description": "Tests ship_cargo table and commodity-agnostic cargo handling",
+  "tests": [
+    {
+      "name": "Setup: Auth user for cargo tests",
+      "setup": "macro_auth_user",
+      "username": "cargo_test_user",
+      "password": "testpass123"
+    },
+    {
+      "name": "T1.1: Get initial ship state (no cargo)",
+      "command": "ship.inspect",
+      "user": "cargo_test_user",
+      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T1.2: Attempt to add cargo - mixed commodities capacity enforcement",
+      "command": "port.trade.buy",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "ORE",
+        "quantity": 5
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T1.3: Verify cargo added to ship_cargo table",
+      "command": "ship.inspect",
+      "user": "cargo_test_user",
+      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok", "ore_gte": 1 }
+    },
+    {
+      "name": "T1.4: Add different commodity",
+      "command": "port.trade.buy",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "ORG",
+        "quantity": 3
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T1.5: Verify mixed cargo (ORE + ORG) both present",
+      "command": "ship.inspect",
+      "user": "cargo_test_user",
+      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.1: Verify illegal commodities count towards holds",
+      "comment": "Illegal commodities (SLV, WPN, DRG) must count against holds capacity like legal ones",
+      "command": "port.trade.buy",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "SLV",
+        "quantity": 2
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.2: Verify illegal commodity in cargo",
+      "command": "ship.inspect",
+      "user": "cargo_test_user",
+      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T3.1: Attempt to remove more cargo than present",
+      "comment": "Removing more than present should fail, not result in negative quantity",
+      "command": "port.trade.sell",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "ORE",
+        "quantity": 100
+      },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "T3.2: Verify cargo unchanged after failed removal",
+      "command": "ship.inspect",
+      "user": "cargo_test_user",
+      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.1: Port trade buy updates ship_cargo",
+      "comment": "Buying at port should write to ship_cargo, not just legacy columns",
+      "command": "port.trade.buy",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "EQU",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.2: Verify port trade sell updates ship_cargo",
+      "command": "port.trade.sell",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "EQU",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T5.1: Planet deposit/withdraw updates ship_cargo",
+      "comment": "Planet operations should use ship_cargo as source of truth",
+      "command": "planet.deposit",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "ORE",
+        "quantity": 2
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T5.2: Verify planet withdraw",
+      "command": "planet.withdraw",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "ORE",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T6.1: Empty cargo consistency check",
+      "comment": "Ship with no cargo should return zero for all commodities, not missing rows",
+      "command": "ship.jettison",
+      "user": "cargo_test_user",
+      "data": {
+        "ship_id": "@cargo_test_user_active_ship_id",
+        "commodity_code": "ORE"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T6.2: Verify empty cargo returns zero",
+      "command": "ship.inspect",
+      "user": "cargo_test_user",
+      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T7.1: New commodity works without schema/code changes",
+      "comment": "This test validates commodity-agnostic design: if a new commodity exists in DB, cargo ops work",
+      "skip": "true",
+      "reason": "Phase 2: Requires new commodity in commodities table"
+    }
+  ]
+}

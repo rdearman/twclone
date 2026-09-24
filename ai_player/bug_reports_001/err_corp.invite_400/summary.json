@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_corp.invite_400",
+    "first_seen": "20260216_175049_928",
+    "command": "corp.invite",
+    "error_code": 400,
+    "error_message": "Missing or invalid 'target_player_id'."
+}

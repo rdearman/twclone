@@ -12,7 +12,17 @@
     "suite_police_phase_c_resolution.json",
     "suite_police_phase_d1_enforcement.json",
     "suite_npc_ferengi_init.json",
-    "suite_tls_smoke.json"
+    "suite_tls_smoke.json",
+    "suite_ship_cargo_dynamic.json",
+    "suite_commodities_data_driven_phase2.json",
+    "suite_phase3_port_dynamic_trading.json",
+    "suite_phase7_ship_cargo_generic.json",
+    "suite_phase8_port_behaviour_rules.json",
+    "suite_phase9_dynamic_pricing.json",
+    "suite_phase9_1_state_updates.json",
+    "suite_phase9_2_cluster_pressure.json",
+    "suite_phase10_market_decay.json",
+    "suite_commodity_quantity_restrictions.json"
   ],
   "meta": {
     "features_covered": [
@@ -24,10 +34,13 @@
       "Police Phase B: Incident state tracking (suspicion/wanted_level) and port robbery trigger",
       "Police Phase C: Resolution mechanics (bribery success/failure, surrender outcomes) and ban enforcement",
       "Police Phase D1: Crime triggers (ATTACK_PORT, CONTRABAND), dock intercept enforcement gate, police.status RPC, lawless invariant",
-      "Ferengi NPC auto-creation and idempotency"
+      "Ferengi NPC auto-creation and idempotency",
+      "Phase 1: Ship Cargo - Dynamic commodity storage via normalized ship_cargo table (no schema changes for new commodities)",
+      "Phase 2: Commodities Data-Driven - Port trading and planet deposits driven by port_trade/planet_goods database entries (no code changes for new commodities)",
+      "Phase 3: Port Dynamic Trading - All port trade validation commodity-driven; adding commodity to DB/port_trade enables trading without code recompilation"
     ],
-    "total_test_count": "~150+",
-    "estimated_runtime": "20-25 minutes",
+    "total_test_count": "~170+",
+    "estimated_runtime": "28-35 minutes",
     "prerequisites": [
       "Database rigged with test_rig.json",
       "Server running and accessible at configured host:port",

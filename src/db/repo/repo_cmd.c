@@ -3088,7 +3088,6 @@ db_ports_at_sector_json (db_t *db, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
-
   const char *sql_template = "SELECT port_id, name, type FROM ports WHERE sector_id = {1};";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);

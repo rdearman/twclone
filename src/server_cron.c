@@ -27,6 +27,8 @@
 #include "server_clusters.h"	// Cluster Economy & Law
 #include "db/db_api.h"
 #include "db/sql_driver.h"
+#include "db/repo/repo_porttypes.h"
+#include "db/repo/repo_market_decay.h"	// Phase 10: Market decay & stabilisation
 
 int iss_init_once (void);
 #define INITIAL_QUEUE_CAPACITY 64
@@ -47,6 +49,7 @@ int iss_init_once (void);
 int h_daily_news_compiler (db_t * db, int64_t now_s);
 int h_cleanup_old_news (db_t * db, int64_t now_s);
 int h_citadel_construction_reap (db_t * db, int64_t now_s);
+int h_market_state_decay (db_t * db, int64_t now_s);
 
 
 static inline uint64_t
@@ -1330,7 +1333,7 @@ h_port_economy_tick (db_t *db, int64_t now_s)
   json_array_foreach (ports_data, index, item)
   {
     int port_id = json_integer_value (json_object_get (item, "port_id"));
-    int port_type = json_integer_value (json_object_get (item, "port_type"));
+    int porttype_id = json_integer_value (json_object_get (item, "porttype_id"));
     int port_size = json_integer_value (json_object_get (item, "port_size"));
     const char *commodity_code =
       json_string_value (json_object_get (item, "commodity_code"));
@@ -1343,7 +1346,7 @@ h_port_economy_tick (db_t *db, int64_t now_s)
 
     int max_capacity = port_size * 1000;
     double desired_level_ratio =
-      (port_type == PORT_TYPE_STARDOCK) ? 0.9 : 0.5;
+      (repo_porttypes_is_stardock (db, porttype_id)) ? 0.9 : 0.5;
     int desired_stock = (int) (max_capacity * desired_level_ratio);
 
     int shortage =
@@ -2636,5 +2639,51 @@ h_citadel_construction_reap (db_t *db, int64_t now_s)
     }
 
   unlock (db, "citadel_construction_reap");
+  return 0;
+}
+
+/* ===================================================================
+ * Phase 10: Market State Decay & Stabilisation
+ * =================================================================== */
+int
+h_market_state_decay (db_t *db, int64_t now_s)
+{
+  if (!try_lock (db, "market_state_decay", now_s))
+    {
+      return 0;
+    }
+
+  LOGD ("h_market_state_decay: Starting market state decay cycle");
+
+  /* Read config values */
+  int decay_num = db_get_config_int(db, "market.decay.num", MARKET_DECAY_DEFAULT_NUM);
+  int decay_den = db_get_config_int(db, "market.decay.den", MARKET_DECAY_DEFAULT_DEN);
+  int min_pressure = db_get_config_int(db, "market.cluster_pressure.min", MARKET_PRESSURE_DEFAULT_MIN);
+  int max_pressure = db_get_config_int(db, "market.cluster_pressure.max", MARKET_PRESSURE_DEFAULT_MAX);
+
+  /* Validate config values */
+  if (decay_num < MARKET_DECAY_MIN_NUM || decay_num > MARKET_DECAY_MAX_NUM)
+    {
+      LOGW ("h_market_state_decay: Invalid decay_num=%d, using default", decay_num);
+      decay_num = MARKET_DECAY_DEFAULT_NUM;
+    }
+  if (decay_den < MARKET_DECAY_MIN_DEN || decay_den > MARKET_DECAY_MAX_DEN)
+    {
+      LOGW ("h_market_state_decay: Invalid decay_den=%d, using default", decay_den);
+      decay_den = MARKET_DECAY_DEFAULT_DEN;
+    }
+
+  /* Execute the decay cycle */
+  if (repo_market_decay_execute_cycle(db, decay_num, decay_den, min_pressure, max_pressure) != 0)
+    {
+      LOGE ("h_market_state_decay: Decay cycle failed");
+      unlock (db, "market_state_decay");
+      return -1;
+    }
+
+  LOGI ("h_market_state_decay: Decay cycle complete (num=%d, den=%d, pressure bounds=[%d,%d])",
+        decay_num, decay_den, min_pressure, max_pressure);
+
+  unlock (db, "market_state_decay");
   return 0;
 }

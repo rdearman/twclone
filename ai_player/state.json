@@ -8,12 +8,7 @@
     "port_info_by_sector": {},
     "price_cache": {},
     "bank_balance": 0,
-    "command_retry_info": {
-        "unknown": {
-            "failures": 389,
-            "next_retry_time": 1770981855.8765235
-        }
-    },
+    "command_retry_info": {},
     "strategy_plan": [],
     "trade_successful": false,
     "q_table": {},
@@ -26,14 +21,7 @@
     "port_trade_blacklist": [],
     "warp_blacklist": [],
     "current_path": [],
-    "last_action_result": {
-        "status": "error",
-        "command": "unknown",
-        "error_code": 1101,
-        "error_msg": "Invalid login",
-        "sector_id": null,
-        "sent_command": null
-    },
+    "last_action_result": null,
     "last_quotes": {},
     "command_sent_in_response_loop": false,
     "last_port_trade": null,

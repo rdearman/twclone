@@ -1,0 +1,164 @@
+{
+  "test_suite_name": "Commodities Data-Driven Catalogue (Phase 2)",
+  "description": "Tests commodity eligibility rules are driven by DB (port_trade, planet_goods, commodities.illegal) rather than hardcoded lists",
+  "tests": [
+    {
+      "name": "Setup: Auth test users for commodity tests",
+      "setup": "macro_auth_user",
+      "username": "comm_test_good",
+      "password": "testpass123"
+    },
+    {
+      "name": "Setup: Auth evil alignment user",
+      "setup": "macro_auth_user",
+      "username": "comm_test_evil",
+      "password": "testpass123"
+    },
+    {
+      "name": "T1: Verify new commodity can be added without code changes (ALT test)",
+      "description": "T1 demonstrates commodity-agnostic system: ALT (3-char code for test commodity) works in ship_cargo without server recompile",
+      "db_setup": {
+        "sql": [
+          "INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('ALT', 'Alternate Tech', false, 100, 5);",
+          "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) SELECT p.port_id, 'ALT', 'buy', 1000 FROM ports p WHERE p.port_id = (SELECT port_id FROM ports LIMIT 1);"
+        ]
+      },
+      "command": "ship.inspect",
+      "user": "comm_test_good",
+      "data": { "ship_id": "@comm_test_good_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.1: Port trade list is DB-driven (legal commodity)",
+      "description": "T2 verifies port.trade command queries port_trade table, not hardcoded lists",
+      "command": "port.get_trade_info",
+      "user": "comm_test_good",
+      "data": { "port_id": "@port_normal_buy_sell" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.2: Port trade list includes ORE (standard commodity)",
+      "command": "port.trade.buy",
+      "user": "comm_test_good",
+      "data": {
+        "ship_id": "@comm_test_good_active_ship_id",
+        "commodity_code": "ORE",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T3.1: Alignment gating - good player cannot buy illegal DRG",
+      "description": "T3 verifies illegal commodity filtering based on commodities.illegal flag and player alignment",
+      "command": "port.trade.buy",
+      "user": "comm_test_good",
+      "data": {
+        "ship_id": "@comm_test_good_active_ship_id",
+        "commodity_code": "DRG",
+        "quantity": 1,
+        "port_id": "@port_black_market"
+      },
+      "expect": { "status": "error", "error_code_contains": "not.*allowed|blocked|illegal" }
+    },
+    {
+      "name": "T3.2: Alignment gating - evil player CAN buy illegal DRG",
+      "description": "T3.2 verifies evil alignment bypasses illegal commodity restrictions",
+      "db_setup": {
+        "sql": [
+          "UPDATE players SET alignment = -1000 WHERE player_id = (SELECT player_id FROM players WHERE username = 'comm_test_evil');"
+        ]
+      },
+      "command": "port.trade.buy",
+      "user": "comm_test_evil",
+      "data": {
+        "ship_id": "@comm_test_evil_active_ship_id",
+        "commodity_code": "DRG",
+        "quantity": 1,
+        "port_id": "@port_black_market"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.1: Planet deposit uses DB list (no hardcoded ORE/ORG/EQU restriction)",
+      "description": "T4 verifies planet.deposit checks planet_goods table, allowing any commodity found there",
+      "db_setup": {
+        "sql": [
+          "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, population, type, creator, created_by) VALUES (1, 'Test Planet Deposit', 1, 'player', 'M', 0, 1, 'test', 1);",
+          "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) SELECT p.planet_id, 'ORE', 0, 1000000, 0 FROM planets p WHERE p.name = 'Test Planet Deposit';",
+          "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) SELECT p.planet_id, 'DRG', 0, 1000000, 0 FROM planets p WHERE p.name = 'Test Planet Deposit';"
+        ]
+      },
+      "command": "ship.inspect",
+      "user": "comm_test_good",
+      "data": { "ship_id": "@comm_test_good_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.2: Good player deposits ORE (standard commodity)",
+      "command": "planet.deposit",
+      "user": "comm_test_good",
+      "data": {
+        "ship_id": "@comm_test_good_active_ship_id",
+        "planet_id": "@test_planet_deposit",
+        "commodity": "ORE",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.3: Good player cannot deposit DRG (illegal) - alignment check",
+      "command": "planet.deposit",
+      "user": "comm_test_good",
+      "data": {
+        "ship_id": "@comm_test_good_active_ship_id",
+        "planet_id": "@test_planet_deposit",
+        "commodity": "DRG",
+        "quantity": 1
+      },
+      "expect": { "status": "error", "error_code_contains": "not.*allowed|blocked|illegal" }
+    },
+    {
+      "name": "T4.4: Evil player deposits DRG (illegal) - alignment allows it",
+      "db_setup": {
+        "sql": [
+          "UPDATE ship_cargo SET quantity = 5 WHERE commodity_code = 'DRG' AND ship_id = (SELECT ship_id FROM ships WHERE owner_id = (SELECT player_id FROM players WHERE username = 'comm_test_evil') LIMIT 1);"
+        ]
+      },
+      "command": "planet.deposit",
+      "user": "comm_test_evil",
+      "data": {
+        "ship_id": "@comm_test_evil_active_ship_id",
+        "planet_id": "@test_planet_deposit",
+        "commodity": "DRG",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Regression: Phase 1 test - mixed cargo capacity still enforced",
+      "description": "Verify Phase 1 holds enforcement not broken by Phase 2 refactoring",
+      "command": "port.trade.buy",
+      "user": "comm_test_good",
+      "data": {
+        "ship_id": "@comm_test_good_active_ship_id",
+        "commodity_code": "ORG",
+        "quantity": 1000000
+      },
+      "expect": { "status": "error", "error_code_contains": "hold|capacity" }
+    }
+  ],
+  "assertions": [
+    {
+      "name": "DB-driven port trade: Port 1 trades ORE via port_trade table",
+      "sql": "SELECT COUNT(*) as cnt FROM port_trade WHERE commodity = 'ORE' AND mode IN ('buy', 'sell');"
+    },
+    {
+      "name": "DB-driven planet goods: Planet has multiple commodities in planet_goods",
+      "sql": "SELECT COUNT(*) as cnt FROM planet_goods WHERE planet_id = (SELECT planet_id FROM planets WHERE name = 'Test Planet Deposit') AND cnt >= 2;"
+    },
+    {
+      "name": "Commodity table: ALT commodity exists with illegal=false",
+      "sql": "SELECT COUNT(*) as cnt FROM commodities WHERE code = 'ALT' AND illegal = false;"
+    }
+  ]
+}

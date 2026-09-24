@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-b04c97fb",
+    "ts": "2026-02-16T17:50:40Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 1300,
+        "message": "Unknown command"
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

@@ -1,0 +1,350 @@
+{
+  "name": "Phase 10 Market Decay & Stabilisation",
+  "description": "Deterministic market state decay to prevent permanent price drift",
+  "suites": [
+    {
+      "id": "phase10_decay",
+      "name": "Market State Decay Cycle Tests",
+      "description": "Tests for deterministic decay of port and cluster market states",
+      "tests": [
+        {
+          "id": "A1_decay_disabled",
+          "name": "Decay disabled: state unchanged",
+          "description": "When market.dynamic_pricing_enabled=false, decay should be no-op",
+          "steps": [
+            {
+              "desc": "Disable dynamic pricing",
+              "op": "config.set",
+              "args": {
+                "key": "market.dynamic_pricing_enabled",
+                "value": "false"
+              }
+            },
+            {
+              "desc": "Query initial port_commodity_state",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT COUNT(*) as cnt FROM port_commodity_state"
+              },
+              "save": "count_before"
+            },
+            {
+              "desc": "Run market_state_decay cron",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Query port_commodity_state again",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT COUNT(*) as cnt FROM port_commodity_state"
+              },
+              "save": "count_after"
+            },
+            {
+              "desc": "Verify counts match",
+              "op": "assert",
+              "check": "count_before.cnt == count_after.cnt"
+            }
+          ]
+        },
+        {
+          "id": "B1_port_decay_enabled",
+          "name": "Port rolling_volume decay when enabled",
+          "description": "Rolling volume should decay by multiplier after cron runs",
+          "steps": [
+            {
+              "desc": "Enable dynamic pricing",
+              "op": "config.set",
+              "args": {
+                "key": "market.dynamic_pricing_enabled",
+                "value": "true"
+              }
+            },
+            {
+              "desc": "Seed port with known rolling_volume (1000)",
+              "op": "db.execute",
+              "args": {
+                "query": "INSERT INTO port_commodity_state (port_id, commodity_code, rolling_volume, stock_level) VALUES (1, 'FOOD', 1000, 100) ON CONFLICT DO NOTHING"
+              }
+            },
+            {
+              "desc": "Get decay config values",
+              "op": "config.get",
+              "args": {
+                "keys": ["market.decay.num", "market.decay.den"]
+              },
+              "save": "decay_config"
+            },
+            {
+              "desc": "Run decay cron",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Query port state after decay",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT rolling_volume FROM port_commodity_state WHERE port_id=1 AND commodity_code='FOOD'"
+              },
+              "save": "after_decay"
+            },
+            {
+              "desc": "Verify decay applied (should be 1000*98/100=980)",
+              "op": "assert",
+              "check": "after_decay.rolling_volume == 980"
+            },
+            {
+              "desc": "Verify stock_level unchanged (should still be 100)",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT stock_level FROM port_commodity_state WHERE port_id=1 AND commodity_code='FOOD'"
+              },
+              "save": "stock_check"
+            },
+            {
+              "desc": "Verify stock_level unchanged",
+              "op": "assert",
+              "check": "stock_check.stock_level == 100"
+            }
+          ]
+        },
+        {
+          "id": "C1_cluster_pressure_decay",
+          "name": "Cluster pressure decay when enabled",
+          "description": "Pressure should decay multiplicatively and be clamped",
+          "steps": [
+            {
+              "desc": "Ensure dynamic pricing enabled",
+              "op": "config.set",
+              "args": {
+                "key": "market.dynamic_pricing_enabled",
+                "value": "true"
+              }
+            },
+            {
+              "desc": "Get a cluster_id (query clusters table)",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT cluster_id FROM clusters LIMIT 1"
+              },
+              "save": "cluster_id"
+            },
+            {
+              "desc": "Seed cluster pressure (pressure=5000)",
+              "op": "db.execute",
+              "args": {
+                "query": "INSERT INTO cluster_commodity_pressure (cluster_id, commodity_code, pressure, rolling_volume) VALUES ($1, 'ORE', 5000, 500) ON CONFLICT (cluster_id, commodity_code) DO UPDATE SET pressure=5000, rolling_volume=500",
+                "params": ["cluster_id"]
+              }
+            },
+            {
+              "desc": "Run decay cron",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Query cluster state after decay",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT pressure, rolling_volume FROM cluster_commodity_pressure WHERE cluster_id=$1 AND commodity_code='ORE'",
+                "params": ["cluster_id"]
+              },
+              "save": "cluster_after"
+            },
+            {
+              "desc": "Verify pressure decayed (5000*98/100=4900)",
+              "op": "assert",
+              "check": "cluster_after.pressure == 4900"
+            },
+            {
+              "desc": "Verify rolling_volume decayed (500*98/100=490)",
+              "op": "assert",
+              "check": "cluster_after.rolling_volume == 490"
+            }
+          ]
+        },
+        {
+          "id": "D1_multiplicative_decay",
+          "name": "Two decay cycles are multiplicative",
+          "description": "Running decay twice should equal floor(floor(x*98/100)*98/100)",
+          "steps": [
+            {
+              "desc": "Enable dynamic pricing",
+              "op": "config.set",
+              "args": {
+                "key": "market.dynamic_pricing_enabled",
+                "value": "true"
+              }
+            },
+            {
+              "desc": "Seed port with 10000 rolling_volume",
+              "op": "db.execute",
+              "args": {
+                "query": "INSERT INTO port_commodity_state (port_id, commodity_code, rolling_volume, stock_level) VALUES (2, 'WATER', 10000, 0) ON CONFLICT DO NOTHING"
+              }
+            },
+            {
+              "desc": "Run decay first time",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Read value after first decay",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT rolling_volume FROM port_commodity_state WHERE port_id=2 AND commodity_code='WATER'"
+              },
+              "save": "after_first"
+            },
+            {
+              "desc": "Verify first decay: 10000*98/100=9800",
+              "op": "assert",
+              "check": "after_first.rolling_volume == 9800"
+            },
+            {
+              "desc": "Run decay second time",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Read value after second decay",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT rolling_volume FROM port_commodity_state WHERE port_id=2 AND commodity_code='WATER'"
+              },
+              "save": "after_second"
+            },
+            {
+              "desc": "Verify second decay: 9800*98/100=9604",
+              "op": "assert",
+              "check": "after_second.rolling_volume == 9604"
+            }
+          ]
+        },
+        {
+          "id": "E1_pressure_clamping",
+          "name": "Cluster pressure clamping",
+          "description": "Cluster pressure should clamp to configured bounds",
+          "steps": [
+            {
+              "desc": "Enable dynamic pricing",
+              "op": "config.set",
+              "args": {
+                "key": "market.dynamic_pricing_enabled",
+                "value": "true"
+              }
+            },
+            {
+              "desc": "Get max pressure config",
+              "op": "config.get",
+              "args": {
+                "keys": ["market.cluster_pressure.max"]
+              },
+              "save": "max_pressure_cfg"
+            },
+            {
+              "desc": "Get a cluster",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT cluster_id FROM clusters LIMIT 1"
+              },
+              "save": "cluster_id"
+            },
+            {
+              "desc": "Seed pressure beyond clamp (1000000, will clamp to max)",
+              "op": "db.execute",
+              "args": {
+                "query": "INSERT INTO cluster_commodity_pressure (cluster_id, commodity_code, pressure, rolling_volume) VALUES ($1, 'LOOT', 1000000, 100) ON CONFLICT (cluster_id, commodity_code) DO UPDATE SET pressure=1000000",
+                "params": ["cluster_id"]
+              }
+            },
+            {
+              "desc": "Run decay cron",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Query pressure after clamping",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT pressure FROM cluster_commodity_pressure WHERE cluster_id=$1 AND commodity_code='LOOT'",
+                "params": ["cluster_id"]
+              },
+              "save": "pressure_after"
+            },
+            {
+              "desc": "Verify pressure clamped to max (50000 by default)",
+              "op": "assert",
+              "check": "pressure_after.pressure <= 50000"
+            }
+          ]
+        },
+        {
+          "id": "F1_negative_pressure_decay",
+          "name": "Negative pressure (supply signal) decays toward zero",
+          "description": "Negative pressure should decay multiplicatively and clamp to min",
+          "steps": [
+            {
+              "desc": "Enable dynamic pricing",
+              "op": "config.set",
+              "args": {
+                "key": "market.dynamic_pricing_enabled",
+                "value": "true"
+              }
+            },
+            {
+              "desc": "Get a cluster",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT cluster_id FROM clusters LIMIT 1"
+              },
+              "save": "cluster_id"
+            },
+            {
+              "desc": "Seed negative pressure (-1000)",
+              "op": "db.execute",
+              "args": {
+                "query": "INSERT INTO cluster_commodity_pressure (cluster_id, commodity_code, pressure, rolling_volume) VALUES ($1, 'METAL', -1000, 50) ON CONFLICT (cluster_id, commodity_code) DO UPDATE SET pressure=-1000",
+                "params": ["cluster_id"]
+              }
+            },
+            {
+              "desc": "Run decay cron",
+              "op": "cron.run",
+              "args": {
+                "task": "market_state_decay"
+              }
+            },
+            {
+              "desc": "Query pressure after decay",
+              "op": "db.query",
+              "args": {
+                "query": "SELECT pressure FROM cluster_commodity_pressure WHERE cluster_id=$1 AND commodity_code='METAL'",
+                "params": ["cluster_id"]
+              },
+              "save": "pressure_after"
+            },
+            {
+              "desc": "Verify negative pressure decayed: -1000*98/100=-980",
+              "op": "assert",
+              "check": "pressure_after.pressure == -980"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

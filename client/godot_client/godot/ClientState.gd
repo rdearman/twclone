@@ -41,15 +41,20 @@ func mark_disconnected() -> void:
 	sector_availability = DISCONNECTED
 	_emit_changed()
 
-func begin_refresh(generation: int) -> bool:
+func begin_refresh(generation: int, requested_domains: Array = ["player", "ship", "sector"]) -> bool:
 	if not authenticated or disconnected:
 		return false
 	refresh_generation = generation
-	player_availability = REFRESHING
-	ship_availability = REFRESHING
-	sector_availability = REFRESHING
+	player_availability = _refresh_availability("player", requested_domains, player)
+	ship_availability = _refresh_availability("ship", requested_domains, ship)
+	sector_availability = _refresh_availability("sector", requested_domains, sector)
 	_emit_changed()
 	return true
+
+func _refresh_availability(domain: String, requested_domains: Array, value: Dictionary) -> String:
+	if domain in requested_domains:
+		return REFRESHING
+	return STALE if not value.is_empty() else UNAVAILABLE
 
 func accept_player(data: Dictionary, generation: int) -> bool:
 	if not authenticated or disconnected or generation != refresh_generation or not _has_object(data, "player"):
@@ -205,19 +210,20 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 			if not (item is Dictionary):
 				continue
 			var quantity = item.get("quantity", item.get("qty", null))
-			if typeof(quantity) != TYPE_INT or quantity < 0:
+			if not _is_integral_number(quantity) or quantity < 0:
 				continue
 			var commodity = item.get("commodity", item.get("code", null))
 			if not (commodity is String):
 				continue
-			cargo.append({"commodity": commodity, "quantity": quantity})
-			used += quantity
+			var normalized_quantity := int(quantity)
+			cargo.append({"commodity": commodity, "quantity": normalized_quantity})
+			used += normalized_quantity
 		result["cargo"] = cargo
 		result["cargo_used"] = used
 	return result
 
 static func normalize_sector(data: Dictionary) -> Dictionary:
-	if data.is_empty() or not data.has("sector_id") or typeof(data["sector_id"]) != TYPE_INT:
+	if data.is_empty() or not data.has("sector_id") or not _is_integral_number(data["sector_id"]):
 		return {}
 	var result := {}
 	_copy_int(data, result, "sector_id", "id")
@@ -227,8 +233,9 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 	if adjacent is Array:
 		var adjacent_ids := []
 		for item in adjacent:
-			if typeof(item) == TYPE_INT:
-				adjacent_ids.append(item)
+			var destination = item.get("to_sector") if item is Dictionary else item
+			if _is_integral_number(destination):
+				adjacent_ids.append(int(destination))
 		result["adjacent_sector_ids"] = adjacent_ids
 	result["ports"] = _normalize_entities(data.get("ports", []), ["id", "port_id", "name", "type", "class"])
 	result["planets"] = _normalize_entities(data.get("celestial_objects", data.get("planets", [])), ["id", "planet_id", "name", "type"])
@@ -253,7 +260,9 @@ static func _normalize_entities(value, allowed: Array) -> Array:
 			if not source.has(key):
 				continue
 			var field = source[key]
-			if typeof(field) == TYPE_INT or typeof(field) == TYPE_STRING:
+			if _is_integral_number(field):
+				item[key] = int(field)
+			elif typeof(field) == TYPE_STRING:
 				item[key] = field
 		if not item.is_empty():
 			result.append(item)
@@ -264,8 +273,13 @@ static func _has_object(data: Dictionary, key: String) -> bool:
 
 static func _copy_int(source: Dictionary, target: Dictionary, source_key: String, target_key: String = "") -> void:
 	var key := target_key if not target_key.is_empty() else source_key
-	if source.has(source_key) and typeof(source[source_key]) == TYPE_INT:
-		target[key] = source[source_key]
+	if source.has(source_key) and _is_integral_number(source[source_key]):
+		target[key] = int(source[source_key])
+
+static func _is_integral_number(value: Variant) -> bool:
+	if typeof(value) == TYPE_INT:
+		return true
+	return typeof(value) == TYPE_FLOAT and is_finite(value) and value == floor(value)
 
 static func _copy_string(source: Dictionary, target: Dictionary, key: String) -> void:
 	if source.has(key) and source[key] is String:
@@ -275,8 +289,8 @@ static func _copy_money(source: Dictionary, target: Dictionary, key: String) -> 
 	if not source.has(key):
 		return
 	var value = source[key]
-	if typeof(value) == TYPE_INT:
-		target[key] = value
+	if _is_integral_number(value):
+		target[key] = int(value)
 		return
 	if not (value is String):
 		return

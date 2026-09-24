@@ -1476,7 +1476,7 @@ db_cron_port_get_economy_data_json (db_t *db, json_t **out_array)
 
     "       p.size AS port_size, "
 
-    "       p.type AS port_type, "
+    "       COALESCE(p.porttype_id, 0) AS porttype_id, "
 
     "       es.commodity_code, "
 
@@ -1512,7 +1512,7 @@ db_cron_port_get_economy_data_json (db_t *db, json_t **out_array)
 
           json_object_set_new(obj, "port_size", json_integer(db_res_col_i32(res, 1, &err)));
 
-          json_object_set_new(obj, "port_type", json_integer(db_res_col_i32(res, 2, &err)));
+          json_object_set_new(obj, "porttype_id", json_integer(db_res_col_i32(res, 2, &err)));
 
           json_object_set_new(obj, "commodity_code", json_string(db_res_col_text(res, 3, &err)));
 

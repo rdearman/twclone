@@ -813,6 +813,16 @@ BEGIN
     SELECT 1, 1, 1, 'Terra', 0, 'player', 'M', planettypes_id, now(), 0
     FROM planettypes WHERE code = 'M' LIMIT 1
     ON CONFLICT (planet_id) DO UPDATE SET name = EXCLUDED.name, sector_id = EXCLUDED.sector_id;
+    
+    -- Seed Terra with 50% of max capacity
+    UPDATE planets p
+    SET 
+        ore_on_hand = (pt.maxore / 2)::bigint,
+        organics_on_hand = (pt.maxorganics / 2)::bigint,
+        equipment_on_hand = (pt.maxequipment / 2)::bigint,
+        colonists_unassigned = (pt.maxColonist_ore / 2)::bigint
+    FROM planettypes pt
+    WHERE p.planet_id = 1 AND p.type = pt.planettypes_id;
 END;
 $$;
 
@@ -849,6 +859,16 @@ BEGIN
     SELECT 2, 2, v_ferringhi_sector, 'Ferenginar', COALESCE(v_ferringhi_corp_id, 0), 
            'corp', 'M', v_ptype, now(), 0
     ON CONFLICT (planet_id) DO UPDATE SET sector_id = EXCLUDED.sector_id, owner_id = EXCLUDED.owner_id, owner_type = 'corp', name = EXCLUDED.name;
+    
+    -- Seed Ferenginar with 50% of max capacity
+    UPDATE planets p
+    SET 
+        ore_on_hand = (pt.maxore / 2)::bigint,
+        organics_on_hand = (pt.maxorganics / 2)::bigint,
+        equipment_on_hand = (pt.maxequipment / 2)::bigint,
+        colonists_unassigned = (pt.maxColonist_ore / 2)::bigint
+    FROM planettypes pt
+    WHERE p.planet_id = 2 AND p.type = pt.planettypes_id;
     
     -- Deploy defensive fighters and mines at Ferengi sector
     IF v_ferringhi_corp_id IS NOT NULL THEN
@@ -901,6 +921,16 @@ BEGIN
     SELECT 3, 3, v_orion_sector, 'Orion Hideout', COALESCE(v_orion_corp_id, 0), 
            'corp', 'M', v_ptype, now(), 0
     ON CONFLICT (planet_id) DO UPDATE SET sector_id = EXCLUDED.sector_id, owner_id = EXCLUDED.owner_id, owner_type = 'corp', name = EXCLUDED.name;
+    
+    -- Seed Orion Hideout with 50% of max capacity
+    UPDATE planets p
+    SET 
+        ore_on_hand = (pt.maxore / 2)::bigint,
+        organics_on_hand = (pt.maxorganics / 2)::bigint,
+        equipment_on_hand = (pt.maxequipment / 2)::bigint,
+        colonists_unassigned = (pt.maxColonist_ore / 2)::bigint
+    FROM planettypes pt
+    WHERE p.planet_id = 3 AND p.type = pt.planettypes_id;
     
     -- Deploy defensive fighters and mines at Orion sector
     IF v_orion_corp_id IS NOT NULL THEN

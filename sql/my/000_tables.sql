@@ -82,6 +82,17 @@ CREATE TABLE shiptypes (
     FOREIGN KEY (required_commission) REFERENCES commission (commission_id)
 );
 
+CREATE TABLE shiptype_restrictions (
+    restriction_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    shiptypes_id bigint NOT NULL,
+    check_type VARCHAR(20) NOT NULL CHECK (check_type IN ('CEO', 'ALIGNMENT_MIN', 'ALIGNMENT_MAX', 'SCORE_MIN', 'CUSTOM')),
+    check_value VARCHAR(255),
+    description TEXT NOT NULL,
+    enabled boolean NOT NULL DEFAULT TRUE,
+    FOREIGN KEY (shiptypes_id) REFERENCES shiptypes (shiptypes_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_restriction_per_type (shiptypes_id, check_type)
+);
+
 CREATE TABLE ships (
     ship_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     `name` TEXT NOT NULL,
@@ -421,6 +432,7 @@ CREATE TABLE ports (
     invisible boolean DEFAULT FALSE,
     `type` BIGINT DEFAULT 1,
     economy_curve_id bigint NOT NULL DEFAULT 1,
+    porttype_id bigint,
     FOREIGN KEY (economy_curve_id) REFERENCES economy_curve (economy_curve_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)
 );
@@ -757,8 +769,24 @@ CREATE TABLE commodities (
     `name` TEXT NOT NULL,
     illegal boolean NOT NULL DEFAULT FALSE,
     base_price bigint NOT NULL DEFAULT 0 CHECK (base_price >= 0),
-    volatility bigint NOT NULL DEFAULT 0 CHECK (volatility >= 0)
+    volatility bigint NOT NULL DEFAULT 0 CHECK (volatility >= 0),
+    max_holds_per_ship bigint CHECK (max_holds_per_ship >= 0)
 );
+
+-- Phase 1: Dynamic ship cargo (commodity-agnostic)
+-- Source of truth for all ship cargo. Replaces hardcoded columns (ore, organics, etc).
+-- Legacy columns in ships table are kept for Phase 1 compatibility but ship_cargo is authoritative.
+CREATE TABLE ship_cargo (
+    ship_id bigint NOT NULL,
+    commodity_code TEXT NOT NULL,
+    quantity bigint NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    PRIMARY KEY (ship_id, commodity_code),
+    FOREIGN KEY (ship_id) REFERENCES ships(ship_id) ON DELETE CASCADE,
+    FOREIGN KEY (commodity_code) REFERENCES commodities(code) ON DELETE RESTRICT
+);
+
+-- Index for efficient queries by ship_id alone
+CREATE INDEX idx_ship_cargo_ship_id ON ship_cargo(ship_id);
 
 CREATE TABLE clusters (
     clusters_id BIGINT AUTO_INCREMENT PRIMARY KEY,

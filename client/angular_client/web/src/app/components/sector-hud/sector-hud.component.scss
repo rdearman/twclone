@@ -1,0 +1,29 @@
+.hud {
+  color: #0f0;
+  .header {
+    font-size: 1.5em;
+    margin-bottom: 10px;
+    border-bottom: 1px double #555;
+    .sector-id { color: #ff0; font-weight: bold; margin-right: 15px; }
+  }
+
+  .section {
+    margin-bottom: 10px;
+    label { color: #aaa; font-style: italic; margin-right: 5px; }
+    ul { list-style: none; padding: 0; margin: 5px 0; li { color: #0f0; } }
+  }
+
+  .adj-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 5px;
+    .adj-link {
+      background: #222;
+      padding: 3px 8px;
+      border: 1px solid #444;
+      cursor: pointer;
+      &:hover { background: #333; color: #ff0; }
+    }
+  }
+}

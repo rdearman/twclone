@@ -1,4 +1,6 @@
 #include "db/repo/repo_stardock.h"
+#include "db/repo/repo_shiptypes.h"
+#include "db/repo/repo_porttypes.h"
 #include <jansson.h>
 
 #ifndef DB_OK
@@ -54,7 +56,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   int player_id = ctx->player_id;
   int ship_id = 0;
   int sector_id = 0;
-  int port_type = 0;		// Declare port_type here
+  int porttype_id = 0;		// DB-driven port type ID
   // 1. Authenticate player and get ship/sector context
   if (player_id <= 0)
     {
@@ -77,15 +79,15 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   // 2. Determine location type (Stardock, Class-0, or Other)
   char location_type[16] = "OTHER";
   int port_id = 0;
-  if (repo_stardock_get_port_by_sector (db, sector_id, &port_id, &port_type)
+  if (repo_stardock_get_port_by_sector (db, sector_id, &port_id, &porttype_id)
       == 0)
     {
-      if (port_type == PORT_TYPE_STARDOCK)
+      if (repo_porttypes_is_stardock (db, porttype_id))
 	{			// Stardock
 	  strncpy (location_type, LOCATION_STARDOCK,
 		   sizeof (location_type) - 1);
 	}
-      else if (port_type == PORT_TYPE_CLASS0)
+      else
 	{			// Class-0
 	  strncpy (location_type, LOCATION_CLASS0,
 		   sizeof (location_type) - 1);
@@ -338,19 +340,19 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // 2. Check Port Location (Stardock or Class 0)
-  int port_type = -1;
+  int porttype_id = -1;
   int port_id_tmp = 0;
   if (repo_stardock_get_port_by_sector
-      (db, sector_id, &port_id_tmp, &port_type) != 0)
+      (db, sector_id, &port_id_tmp, &porttype_id) != 0)
     {
-      port_type = -1;
+      porttype_id = -1;
     }
 
-  if (port_type == -1)
+  if (porttype_id <= 0)
     {
       send_response_error (ctx,
 			   root,
-			   1811,
+			   ERR_PORTTYPE_NOT_FOUND,
 			   "Hardware can only be purchased at Stardock or Class-0 ports.");
       return 0;
     }
@@ -394,19 +396,19 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   // 4. Validate Port Type vs Item Requirements
-  if (requires_stardock && port_type != 9)
+  if (requires_stardock && !repo_porttypes_is_stardock (db, porttype_id))
     {
       send_response_error (ctx,
 			   root,
-			   1811,
-			   "This hardware item is not sold at Class-0 ports.");
+			   ERR_PORT_STARDOCK_ONLY,
+			   "This hardware item is only sold at Stardock ports.");
       return 0;
     }
-  if (!sold_in_class0 && port_type == 0)
+  if (!sold_in_class0 && !repo_porttypes_is_stardock (db, porttype_id))
     {
       send_response_error (ctx,
 			   root,
-			   1811,
+			   ERR_PORTTYPE_NOT_FOUND,
 			   "This hardware item is not sold at Class-0 ports.");
       return 0;
     }
@@ -794,6 +796,7 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
       json_t *ship_obj = json_object ();
       json_t *reasons_array = json_array ();
       bool eligible = true;
+      int ship_type_id = (int) db_res_col_i64 (res_inventory, 0, &err);
       const char *type_name = db_res_col_text (res_inventory, 1, &err);
       long long new_ship_basecost = db_res_col_i64 (res_inventory, 2, &err);
       long long net_cost;
@@ -804,20 +807,31 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
 	  net_cost = 0;
 	}
 
+      /* Phase 4: Ship type restrictions now DB-driven via shiptype_restrictions */
+      int dummy_corp_id = 0;
+      player_info_t player_info = {
+          .alignment = player_alignment,
+          .commission_id = player_commission,
+          .score = 0,
+          .player_id = player_id,
+          .is_ceo = (h_is_player_corp_ceo (db, player_id, &dummy_corp_id) ? 1 : 0)
+      };
+      
+      if (repo_shiptypes_validate_eligibility(db, ship_type_id, &player_info) != 0)
+        {
+          eligible = false;
+          char *restriction_reason = repo_shiptypes_get_restriction_desc(db, ship_type_id, &player_info);
+          if (restriction_reason)
+            {
+              json_array_append_new (reasons_array, json_string (restriction_reason));
+              free(restriction_reason);
+            }
+          else
+            {
+              json_array_append_new (reasons_array, json_string ("restricted_ship_type"));
+            }
+        }
 
-      /* Corporate Flagship: CEO-only */
-      if (type_name && !strcasecmp (type_name, "Corporate Flagship"))
-	{
-	  int dummy_corp_id = 0;
-
-
-	  if (!h_is_player_corp_ceo (db, player_id, &dummy_corp_id))
-	    {
-	      eligible = false;
-	      json_array_append_new (reasons_array,
-				     json_string ("must_be_corp_ceo"));
-	    }
-	}
       json_object_set_new (ship_obj, "type", json_string (type_name));
       json_object_set_new (ship_obj, "name", json_string (type_name));	// Using type_name as name for now
       json_object_set_new (ship_obj, "base_price",
@@ -1174,27 +1188,35 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   long long new_shiptype_basecost = db_res_col_i64 (res_target, 0, &err);
-  const char *target_ship_name = db_res_col_text (res_target, 16, &err);
 
-
-  if (target_ship_name
-      && strcasecmp (target_ship_name, "Corporate Flagship") == 0)
+  /* Phase 4: Ship type restrictions now DB-driven via shiptype_restrictions */
+  int dummy_corp_id = 0;
+  player_info_t player_info_upgrade = {
+      .alignment = player_alignment,
+      .commission_id = player_commission,
+      .score = 0,
+      .player_id = ctx->player_id,
+      .is_ceo = (h_is_player_corp_ceo (db, ctx->player_id, &dummy_corp_id) ? 1 : 0)
+  };
+  
+  if (repo_shiptypes_validate_eligibility(db, new_type_id, &player_info_upgrade) != 0)
     {
-      int dummy_corp_id = 0;
-
-
-      if (!h_is_player_corp_ceo (db, ctx->player_id, &dummy_corp_id))
-	{
-	  db_res_finalize (res_target);
-	  free (cfg);
-	  db_tx_rollback (db, &err);
-	  send_response_error (ctx,
-			       root,
-			       ERR_SHIPYARD_REQUIREMENTS_NOT_MET,
-			       "Only a corporation CEO can purchase a Corporate Flagship.");
-	  return 0;
-	}
+      db_res_finalize (res_target);
+      free (cfg);
+      db_tx_rollback (db, &err);
+      char *restriction_reason = repo_shiptypes_get_restriction_desc(db, new_type_id, &player_info_upgrade);
+      if (restriction_reason)
+        {
+          send_response_error (ctx, root, ERR_SHIPYARD_REQUIREMENTS_NOT_MET, restriction_reason);
+          free(restriction_reason);
+        }
+      else
+        {
+          send_response_error (ctx, root, ERR_SHIPYARD_REQUIREMENTS_NOT_MET, "You are not eligible for this ship type.");
+        }
+      return 0;
     }
+
   db_res_finalize (res_target);
 
   long trade_in_value =

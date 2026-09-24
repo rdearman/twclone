@@ -16,6 +16,8 @@
 #include "db/repo/repo_database.h"
 #include "db/repo/repo_planets.h"
 #include "db/repo/repo_clusters.h"
+#include "db/repo/repo_commodities.h"
+#include "db/repo/repo_ships.h"
 #include "game_db.h"
 #include "errors.h"
 #include "server_cmds.h"
@@ -1093,6 +1095,37 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 
   int alignment = 0;
   db_player_get_alignment (db, ctx->player_id, &alignment);
+
+  /* Phase 2: Verify commodity is in planet_goods (DB-driven whitelist) */
+  char **allowed_codes = NULL;
+  int allowed_count = 0;
+  int cm_rc = repo_commodities_list_planet_transferable(db, planet_id, alignment, &allowed_codes, &allowed_count);
+  if (cm_rc != 0) {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Could not query planet commodities.");
+      return 0;
+  }
+
+  /* Check if requested commodity is in the allowed list */
+  bool commodity_allowed = false;
+  for (int i = 0; i < allowed_count; i++) {
+      if (strcasecmp(commodity, allowed_codes[i]) == 0) {
+          commodity_allowed = true;
+          break;
+      }
+  }
+
+  /* Cleanup allocated memory */
+  for (int i = 0; i < allowed_count; i++) {
+      free(allowed_codes[i]);
+  }
+  free(allowed_codes);
+
+  if (!commodity_allowed) {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Commodity not accepted by this planet.");
+      return 0;
+  }
 
   const char *target_commodity = commodity;
   /* Slave -> Colonist conversion for evil players */
@@ -2238,11 +2271,140 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
 {
-  // TODO: P3B Schema update pending. Stub for now.
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: planet.colonists.set");
+  if (!require_auth (ctx, root))
+    return 0;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                          "Database unavailable");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Missing data");
+      return 0;
+    }
+
+  int planet_id = (int) json_integer_value (json_object_get (data, "planet_id"));
+  int quantity = (int) json_integer_value (json_object_get (data, "quantity"));
+  const char *action = json_string_value (json_object_get (data, "action"));
+  
+  if (planet_id <= 0 || quantity <= 0 || !action)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing planet_id, quantity, or action");
+      return 0;
+    }
+
+  /* Get active ship */
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Player has no active ship");
+      return 0;
+    }
+
+  if (strcmp(action, "pickup") == 0)
+    {
+      /* Pick up colonists from planet and add to ship */
+      int64_t available = 0;
+      if (db_planets_get_colonists_unassigned (db, planet_id, &available) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Database error");
+          return 0;
+        }
+
+      if (available < quantity)
+        {
+          send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS, 
+                              "Not enough unassigned colonists on this planet");
+          return 0;
+        }
+
+      /* Get ship cargo info */
+      int ore, organics, equipment, colonists, slaves, weapons, drugs, holds;
+      if (repo_ships_get_cargo_and_holds(db, ship_id, &ore, &organics, &equipment, 
+                                         &colonists, &slaves, &weapons, &drugs, &holds) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Failed to get ship info");
+          return 0;
+        }
+
+      /* Check hold capacity (colonists + current cargo) */
+      int total_cargo = ore + organics + equipment + colonists + slaves + weapons + drugs;
+      if (total_cargo + quantity > holds)
+        {
+          send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS, "Not enough hold space");
+          return 0;
+        }
+
+      /* Update ship colonists */
+      if (repo_ships_update_cargo_column(db, ship_id, "colonists", colonists + quantity) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Failed to add colonists to ship");
+          return 0;
+        }
+
+      /* Update planet colonists (subtract) */
+      if (db_planets_add_colonists_unassigned (db, planet_id, -quantity) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Failed to remove colonists from planet");
+          return 0;
+        }
+
+      json_t *payload = json_object ();
+      json_object_set_new (payload, "action", json_string ("pickup"));
+      json_object_set_new (payload, "quantity", json_integer (quantity));
+      json_object_set_new (payload, "planet_id", json_integer (planet_id));
+      json_object_set_new (payload, "ship_colonists", json_integer (colonists + quantity));
+      send_response_ok_take (ctx, root, "planet.colonists.set", &payload);
+    }
+  else if (strcmp(action, "dropoff") == 0)
+    {
+      /* Get ship cargo info */
+      int ore, organics, equipment, colonists, slaves, weapons, drugs, holds;
+      if (repo_ships_get_cargo_and_holds(db, ship_id, &ore, &organics, &equipment, 
+                                         &colonists, &slaves, &weapons, &drugs, &holds) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Failed to get ship info");
+          return 0;
+        }
+
+      if (colonists < quantity)
+        {
+          send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS, "Not enough colonists on ship");
+          return 0;
+        }
+
+      /* Update ship colonists (subtract) */
+      if (repo_ships_update_cargo_column(db, ship_id, "colonists", colonists - quantity) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Failed to remove colonists from ship");
+          return 0;
+        }
+
+      /* Update planet colonists (add) */
+      if (db_planets_add_colonists_unassigned (db, planet_id, quantity) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Failed to add colonists to planet");
+          return 0;
+        }
+
+      json_t *payload = json_object ();
+      json_object_set_new (payload, "action", json_string ("dropoff"));
+      json_object_set_new (payload, "quantity", json_integer (quantity));
+      json_object_set_new (payload, "planet_id", json_integer (planet_id));
+      json_object_set_new (payload, "ship_colonists", json_integer (colonists - quantity));
+      send_response_ok_take (ctx, root, "planet.colonists.set", &payload);
+    }
+  else
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Unknown action");
+    }
+
   return 0;
 }
 
@@ -2250,11 +2412,67 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
 {
-  // TODO: P3B Schema update pending. Stub for now.
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: planet.colonists.get");
+  if (!require_auth (ctx, root))
+    return 0;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                          "Database unavailable");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  if (!data)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD, "Missing data");
+      return 0;
+    }
+
+  int planet_id = (int) json_integer_value (json_object_get (data, "planet_id"));
+  
+  if (planet_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Missing planet_id");
+      return 0;
+    }
+
+  /* Get planet's unassigned colonists */
+  int64_t planet_colonists = 0;
+  if (db_planets_get_colonists_unassigned (db, planet_id, &planet_colonists) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB, "Database error");
+      return 0;
+    }
+
+  /* Get active ship */
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Player has no active ship");
+      return 0;
+    }
+
+  /* Get ship's colonist count and holds */
+  int ore, organics, equipment, colonists, slaves, weapons, drugs, holds;
+  if (repo_ships_get_cargo_and_holds(db, ship_id, &ore, &organics, &equipment, 
+                                     &colonists, &slaves, &weapons, &drugs, &holds) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB, "Failed to get ship info");
+      return 0;
+    }
+
+  int total_cargo = ore + organics + equipment + colonists + slaves + weapons + drugs;
+  int available_holds = holds - total_cargo;
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "planet_id", json_integer (planet_id));
+  json_object_set_new (payload, "planet_colonists", json_integer ((int) planet_colonists));
+  json_object_set_new (payload, "ship_colonists", json_integer (colonists));
+  json_object_set_new (payload, "ship_holds_available", json_integer (available_holds));
+  send_response_ok_take (ctx, root, "planet.colonists.get", &payload);
+
   return 0;
 }
 

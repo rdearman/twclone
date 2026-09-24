@@ -16,6 +16,7 @@
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
+#include "server_config.h"
 #include "server_cmds.h"
 #include "server_rules.h"
 #include "repo_player_settings.h"
@@ -1342,10 +1343,18 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
       return -1;
     }
 
+  /* Phase 4: Read starter ship type from config instead of hardcoding */
+  struct twconfig *cfg = config_load ();
+  if (!cfg)
+    {
+      return -1;
+    }
+
   int ship_type_id = 0, holds = 0, fighters = 0, shields = 0;
   if (repo_players_get_shiptype_by_name
-      (db, "Scout Marauder", &ship_type_id, &holds, &fighters, &shields) != 0)
+      (db, cfg->starter_shiptype_name, &ship_type_id, &holds, &fighters, &shields) != 0)
     {
+      free (cfg);
       return -1;
     }
 
@@ -1354,25 +1363,30 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
       (db, "Starter Ship", ship_type_id, holds, fighters, shields, sector_id,
        &ship_id) != 0)
     {
+      free (cfg);
       return -1;
     }
 
   if (repo_players_set_ship_ownership (db, ship_id, player_id) != 0)
     {
+      free (cfg);
       return -1;
     }
 
   if (repo_players_update_ship_and_sector (db, player_id, ship_id, sector_id)
       != 0)
     {
+      free (cfg);
       return -1;
     }
 
   if (repo_players_update_podded_status (db, player_id, "alive") != 0)
     {
+      free (cfg);
       return -1;
     }
 
+  free (cfg);
   return 0;
 }
 

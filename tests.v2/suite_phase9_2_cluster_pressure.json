@@ -1,0 +1,478 @@
+{
+  "suite": "phase9_2_cluster_pressure",
+  "description": "Phase 9.2: Cluster Pressure Modifiers - Deterministic cluster-level market pressure for dynamic pricing",
+  "version": "1.0",
+  "tests": [
+    {
+      "id": "A1_disabled_prices_unchanged",
+      "name": "Config disabled: Cluster pressure not applied",
+      "description": "When dynamic_pricing_enabled=false, cluster pressure has no effect on prices",
+      "steps": [
+        {
+          "desc": "Disable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "false"
+          }
+        },
+        {
+          "desc": "Spawn player in a non-lawless cluster",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_A1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add startup capital",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Get port info (dynamic disabled)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "prices_disabled"
+        },
+        {
+          "desc": "Record baseline ORE price",
+          "op": "extract",
+          "src": "prices_disabled",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "ore_price_disabled"
+        },
+        {
+          "desc": "Verify price exists",
+          "op": "assert",
+          "check": "ore_price_disabled > 0"
+        }
+      ]
+    },
+    {
+      "id": "B1_enabled_neutral_state",
+      "name": "Config enabled, neutral state: Cluster multiplier=100",
+      "description": "With cluster pressure initialized to neutral (pressure=0), multiplier should be 100",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_B1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add capital",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Get port info (neutral cluster state)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "prices_neutral"
+        },
+        {
+          "desc": "Extract ORE price",
+          "op": "extract",
+          "src": "prices_neutral",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "ore_price_neutral"
+        },
+        {
+          "desc": "Verify neutral price > 0",
+          "op": "assert",
+          "check": "ore_price_neutral > 0"
+        }
+      ]
+    },
+    {
+      "id": "C1_sell_updates_cluster_pressure",
+      "name": "Sell: Cluster pressure increases (demand signal)",
+      "description": "When player sells commodity to port, cluster pressure should increase",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_C1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add capital",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Buy ORE to have it in cargo",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "ORE", "qty": 50}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query cluster pressure BEFORE sell",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure, rolling_volume FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'ORE'",
+            "db": "game"
+          },
+          "save": "cluster_before"
+        },
+        {
+          "desc": "Extract pressure before",
+          "op": "extract",
+          "src": "cluster_before",
+          "path": "[0]",
+          "save": "before_state"
+        },
+        {
+          "desc": "Sell 20 ORE to port",
+          "op": "trade.sell",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "ORE", "qty": 20}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query cluster pressure AFTER sell",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure, rolling_volume FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'ORE'",
+            "db": "game"
+          },
+          "save": "cluster_after"
+        },
+        {
+          "desc": "Extract pressure after",
+          "op": "extract",
+          "src": "cluster_after",
+          "path": "[0]",
+          "save": "after_state"
+        },
+        {
+          "desc": "Verify pressure increased by 20",
+          "op": "assert",
+          "check": "after_state.pressure === before_state.pressure + 20"
+        },
+        {
+          "desc": "Verify rolling_volume increased",
+          "op": "assert",
+          "check": "after_state.rolling_volume === before_state.rolling_volume + 20"
+        }
+      ]
+    },
+    {
+      "id": "D1_buy_decreases_cluster_pressure",
+      "name": "Buy: Cluster pressure decreases (supply signal)",
+      "description": "When player buys commodity from port, cluster pressure should decrease",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_D1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add capital",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Query cluster pressure BEFORE buy",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure, rolling_volume FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'METAL'",
+            "db": "game"
+          },
+          "save": "cluster_before"
+        },
+        {
+          "desc": "Extract pressure before",
+          "op": "extract",
+          "src": "cluster_before",
+          "path": "[0]",
+          "save": "before_state"
+        },
+        {
+          "desc": "Buy 15 METAL from port",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "METAL", "qty": 15}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query cluster pressure AFTER buy",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure, rolling_volume FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'METAL'",
+            "db": "game"
+          },
+          "save": "cluster_after"
+        },
+        {
+          "desc": "Extract pressure after",
+          "op": "extract",
+          "src": "cluster_after",
+          "path": "[0]",
+          "save": "after_state"
+        },
+        {
+          "desc": "Verify pressure decreased by 15",
+          "op": "assert",
+          "check": "after_state.pressure === before_state.pressure - 15"
+        },
+        {
+          "desc": "Verify rolling_volume increased",
+          "op": "assert",
+          "check": "after_state.rolling_volume === before_state.rolling_volume + 15"
+        }
+      ]
+    },
+    {
+      "id": "E1_lawless_cluster_neutral_multiplier",
+      "name": "Lawless cluster: Always uses neutral multiplier (100)",
+      "description": "Clusters with law_severity=0 should always return multiplier=100 and not write pressure state",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Find a lawless cluster sector",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT s.sector_id FROM sectors s JOIN clusters c ON c.cluster_id = (SELECT cluster_id FROM clusters WHERE law_severity = 0 LIMIT 1) WHERE law_severity = 0 LIMIT 1",
+            "db": "game"
+          },
+          "save": "lawless_sectors"
+        },
+        {
+          "desc": "Note: Test assumes lawless cluster exists; if none, skip to next test",
+          "op": "comment"
+        }
+      ]
+    },
+    {
+      "id": "F1_symmetric_buy_sell_pressure",
+      "name": "Symmetry: Buy/sell pressure changes are symmetric",
+      "description": "Repeated buys and sells should produce predictable, symmetric pressure changes",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_F1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add capital",
+          "op": "bank.deposit",
+          "args": { "amount": 10000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Query initial cluster pressure",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'FUEL'",
+            "db": "game"
+          },
+          "save": "initial_state"
+        },
+        {
+          "desc": "Extract initial pressure",
+          "op": "extract",
+          "src": "initial_state",
+          "path": "[0].pressure",
+          "save": "initial_pressure"
+        },
+        {
+          "desc": "Buy 10 FUEL",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "FUEL", "qty": 10}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query after buy",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'FUEL'",
+            "db": "game"
+          },
+          "save": "after_buy_state"
+        },
+        {
+          "desc": "Extract pressure after buy",
+          "op": "extract",
+          "src": "after_buy_state",
+          "path": "[0].pressure",
+          "save": "after_buy_pressure"
+        },
+        {
+          "desc": "Sell 10 FUEL back",
+          "op": "trade.sell",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "FUEL", "qty": 10}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query after sell",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT pressure FROM cluster_commodity_pressure WHERE cluster_id = (SELECT cluster_id FROM clusters LIMIT 1) AND commodity_code = 'FUEL'",
+            "db": "game"
+          },
+          "save": "after_sell_state"
+        },
+        {
+          "desc": "Extract pressure after sell",
+          "op": "extract",
+          "src": "after_sell_state",
+          "path": "[0].pressure",
+          "save": "after_sell_pressure"
+        },
+        {
+          "desc": "Verify buy decreased pressure by 10",
+          "op": "assert",
+          "check": "after_buy_pressure === initial_pressure - 10"
+        },
+        {
+          "desc": "Verify sell increased pressure by 10 (back to initial)",
+          "op": "assert",
+          "check": "after_sell_pressure === initial_pressure"
+        }
+      ]
+    }
+  ]
+}

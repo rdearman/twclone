@@ -639,6 +639,18 @@ class Planner:
                     payload = self._build_payload("trade.sell", current_state)
                     if payload:
                         return {"command": "trade.sell", "data": payload}
+            
+            # C. If we have cargo but can't sell here, find another port for it
+            else:
+                cargo_route = self._find_port_for_cargo(current_state)
+                if cargo_route:
+                    target_sector, commodity = cargo_route
+                    if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
+                        logger.info(f"Tactical Override: Have {commodity} but this port doesn't buy it. Going to sector {target_sector}.")
+                        payload = self._build_payload("move.warp", current_state)
+                        if payload:
+                            payload["to_sector_id"] = target_sector
+                            return {"command": "move.warp", "data": payload}
 
         # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
         # If we're at a port and have completed survey, always try to trade 1 unit.
@@ -1223,9 +1235,9 @@ class Planner:
             if command_name in ["planet.land", "planet.harvest", "planet.info", "planet.deposit", "planet.withdraw", "planet.rename"]:
                 # Get any planets in current sector
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
-                planets = sector_data.get("planets", [])
+                planets = sector_data.get("celestial_objects") or sector_data.get("planets", [])
                 if planets:
-                    return random.choice(planets).get("id")
+                    return random.choice(planets).get("planet_id")
                 return None
         
         if field_name == "player_id":
@@ -1284,17 +1296,18 @@ class Planner:
             if command_name in ["planet.deposit", "planet.withdraw"]:
                 # Default small quantity
                 return 1
-            if command_name in ["trade.buy", "trade.sell", "trade.quote"]:
-                # Trade quantity - buy/sell 1 unit for testing
+            if command_name in ["trade.quote"]:
+                # Trade quantity - quote 1 unit for testing
                 return 1
+        
         
         if field_name == "commodity":
             if command_name in ["trade.buy", "trade.sell"]:
                 # Get first available commodity from current port
                 sector_id = str(current_state.get("player_location_sector"))
-                sector_data = current_state.get("sector_data", {}).get(sector_id, {})
-                port_data = sector_data.get("port", {}) or {}
-                commodities = port_data.get("commodities", [])
+                # Try to get commodities from cached port info
+                port_info = current_state.get("port_info_by_sector", {}).get(sector_id, {})
+                commodities = port_info.get("commodities", [])
                 if commodities:
                     commodity = commodities[0].get("commodity")
                     if commodity:
@@ -1433,9 +1446,15 @@ class Planner:
             if command_name == "trade.buy":
                 # The _get_cheapest_commodity_to_buy now returns the commodity with the highest potential profit
                 commodity = self._get_cheapest_commodity_to_buy(current_state)
-                if not commodity: 
-                    logger.warning("No profitable commodity found to buy. Cannot generate buy command.")
-                    return None
+                if not commodity:
+                    logger.warning("No profitable commodity found to buy. Trying fallback.")
+                    # Fallback: use first valid commodity
+                    valid_comms = current_state.get("valid_commodity_names", [])
+                    if valid_comms:
+                        commodity = valid_comms[0]
+                    else:
+                        logger.warning("No valid commodities available. Cannot generate buy command.")
+                        return None
                 
                 free_holds = self._get_free_holds(current_state)
                 if free_holds <= 0:
@@ -1446,8 +1465,9 @@ class Planner:
                 buy_price = current_state.get("price_cache", {}).get(port_id, {}).get("buy", {}).get(commodity)
                 
                 if buy_price is None:
-                    logger.warning(f"No buy price found for {commodity}. Cannot generate buy command.")
-                    return None
+                    logger.warning(f"No buy price found for {commodity}. Returning generic 1-unit buy.")
+                    # Fallback: buy 1 unit without price validation
+                    return [{"commodity": commodity, "quantity": 1}]
 
                 player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
                 try:
@@ -1472,7 +1492,18 @@ class Planner:
                     return None 
             if command_name == "trade.sell":
                 commodity_to_sell = canon_commodity(self._get_best_commodity_to_sell(current_state))
-                if not commodity_to_sell: return None
+                if not commodity_to_sell:
+                    logger.warning("No best commodity found to sell. Trying fallback.")
+                    # Fallback: sell first item in cargo
+                    cargo_list = (current_state.get("ship_info") or {}).get("cargo", [])
+                    if cargo_list:
+                        commodity_to_sell = canon_commodity(cargo_list[0].get("commodity"))
+                        if not commodity_to_sell:
+                            logger.warning("Cannot canonicalize first cargo item. Cannot generate sell command.")
+                            return None
+                    else:
+                        logger.warning("No cargo to sell. Cannot generate sell command.")
+                        return None
 
                 cargo_list = (current_state.get("ship_info") or {}).get("cargo", [])
                 total_quantity = 0
@@ -1656,6 +1687,51 @@ class Planner:
                 logger.info(f"Found commodity to sell: {best_commodity} at price {best_sell_price} (purchase price unknown).")
         
         return best_commodity
+
+    def _find_port_for_cargo(self, current_state):
+        """
+        If we have cargo but can't sell it at the current port, find a nearby port that buys it.
+        ONLY considers ports we've already surveyed (have prices for).
+        Returns (target_sector, commodity) tuple or None.
+        """
+        ship_info = current_state.get("ship_info", {})
+        cargo_list = ship_info.get("cargo", [])
+        if not cargo_list:
+            return None
+        
+        current_sector = current_state.get("player_location_sector")
+        price_cache = current_state.get("price_cache", {})
+        
+        # Get all cargo we have
+        my_cargo = {}
+        for item in cargo_list:
+            comm = canon_commodity(item.get("commodity"))
+            qty = item.get("quantity", 0)
+            if comm and qty > 0:
+                my_cargo[comm] = qty
+        
+        if not my_cargo:
+            return None
+        
+        # Check all SURVEYED ports (those in price_cache) to find one that buys our cargo
+        # IMPORTANT: Only look at ports we've already surveyed, not all known ports
+        for port_id_str, prices_dict in price_cache.items():
+            sell_prices = prices_dict.get("sell", {})
+            
+            # Check if this port buys any of our cargo
+            for commodity in my_cargo.keys():
+                sell_price = sell_prices.get(commodity)
+                if sell_price is not None and sell_price > 0:
+                    # Find which sector this port is in
+                    all_port_info = current_state.get("port_info_by_sector", {})
+                    for sector_id_str, port_data in all_port_info.items():
+                        if str(port_data.get("port_id")) == port_id_str:
+                            sector_id = int(sector_id_str)
+                            if sector_id != current_sector:  # Don't go to current sector
+                                logger.info(f"Found surveyed port {port_id_str} in sector {sector_id} that buys {commodity} at {sell_price}")
+                                return (sector_id, commodity)
+        
+        return None
 
     def _calculate_potential_profit(self, commodity_code, buy_price, current_state):
         """

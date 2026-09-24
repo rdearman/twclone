@@ -4,7 +4,7 @@ extends RefCounted
 ## Pure helpers for the player-client envelope contract.
 
 const REDACTED = "<redacted>"
-const SECRET_KEYS = ["password", "passwd", "token", "session", "secret", "authorization"]
+const SECRET_KEYS = ["password", "passwd", "token", "session", "session_token", "secret", "authorization"]
 
 static func parse_frame(line: String) -> Dictionary:
 	var parser := JSON.new()

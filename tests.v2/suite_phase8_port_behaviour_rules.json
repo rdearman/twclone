@@ -1,0 +1,559 @@
+{
+  "suite": "phase8_port_behaviour_rules",
+  "description": "Phase 8: Data-Driven Port Behaviour - Tests for database-driven trading rules, multipliers, and alignment gating",
+  "version": "1.0",
+  "tests": [
+    {
+      "id": "A1_parity_legal_buy_class0",
+      "name": "Parity: Buy legal commodity at CLASS0 (regression)",
+      "description": "Verify that legal commodities can still be bought at CLASS0 port (pre-refactor behaviour unchanged)",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_A1_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Get player starting ship",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id from first ship",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Move to CLASS0 port (sector 1, port 1)",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Get port trading info",
+          "op": "ports.port_info",
+          "args": {
+            "port_id": 1
+          },
+          "save": "port_info"
+        },
+        {
+          "desc": "Verify ORE is available for purchase at CLASS0",
+          "op": "assert",
+          "check": "find(port_info.buy, c => c.code === 'ORE')"
+        },
+        {
+          "desc": "Buy ORE commodity",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "quantity": 10
+          },
+          "expect_status": 0
+        },
+        {
+          "desc": "Verify ship cargo contains ORE",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "check": "my_ships.ships[0].cargo.find(c => c.code === 'ORE' && c.qty >= 10)"
+        }
+      ]
+    },
+    {
+      "id": "A2_parity_legal_sell_class0",
+      "name": "Parity: Sell legal commodity at CLASS0 (regression)",
+      "description": "Verify that legal commodities can still be sold at CLASS0 port",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player with ORE in cargo",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_A2_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Create initial cargo: add ORE directly to ship (setup step)",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Buy ORE first",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "quantity": 20
+          }
+        },
+        {
+          "desc": "Sell ORE back to port",
+          "op": "trade.sell",
+          "args": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "quantity": 10
+          },
+          "expect_status": 0
+        },
+        {
+          "desc": "Verify cargo reduced",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "check": "my_ships.ships[0].cargo.find(c => c.code === 'ORE').qty === 10"
+        }
+      ]
+    },
+    {
+      "id": "A3_parity_stardock_equipment",
+      "name": "Parity: Equipment trading at STARDOCK (regression)",
+      "description": "Verify STARDOCK can still trade equipment (EQU) as before refactor",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_A3_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Warp to STARDOCK (sector 1, port 2)",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 2
+          }
+        },
+        {
+          "desc": "Get port info",
+          "op": "ports.port_info",
+          "args": {
+            "port_id": 2
+          },
+          "save": "stardock_info"
+        },
+        {
+          "desc": "Verify EQU is available at STARDOCK",
+          "op": "assert",
+          "check": "find(stardock_info.buy, c => c.code === 'EQU')"
+        },
+        {
+          "desc": "Buy equipment",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 2,
+            "commodity": "EQU",
+            "quantity": 5
+          },
+          "expect_status": 0
+        }
+      ]
+    },
+    {
+      "id": "A4_parity_blackmarket_illegal",
+      "name": "Parity: Illegal trading at BLACKMARKET with evil player (regression)",
+      "description": "Verify BLACKMARKET allows illegal commodities for evil-aligned players",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_A4_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Set player alignment to evil (-100)",
+          "op": "players.set_alignment",
+          "args": {
+            "alignment": -100
+          }
+        },
+        {
+          "desc": "Warp to BLACKMARKET (sector 10, port type 10)",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 5
+          }
+        },
+        {
+          "desc": "Get port info",
+          "op": "ports.port_info",
+          "args": {
+            "port_id": 5
+          },
+          "save": "blackmarket_info"
+        },
+        {
+          "desc": "Verify illegal commodities visible at BLACKMARKET for evil player",
+          "op": "assert",
+          "check": "find(blackmarket_info.buy, c => c.code === 'SLV' || c.code === 'WPN' || c.code === 'DRG')"
+        },
+        {
+          "desc": "Buy illegal commodity (slaves)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 5,
+            "commodity": "SLV",
+            "quantity": 2
+          },
+          "expect_status": 0
+        }
+      ]
+    },
+    {
+      "id": "A5_negative_unknown_commodity",
+      "name": "Negative: Unknown commodity rejected",
+      "description": "Verify that unknown commodity codes are properly rejected",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_A5_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Warp to port",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Attempt to buy unknown commodity",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "NOTREAL",
+            "quantity": 1
+          },
+          "expect_error": "ERR_PORT_COMMODITY_UNSUPPORTED"
+        }
+      ]
+    },
+    {
+      "id": "B1_additive_insert_commodity",
+      "name": "DB-Driven Additive: New commodity via SQL rule",
+      "description": "Insert a new commodity and add porttype rule, verify trading works without code changes",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_B1_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Insert test commodity ALT",
+          "op": "db.execute",
+          "sql": "INSERT INTO commodities (code, name, base_price, volatility, illegal) VALUES ('ALT', 'Alien Tech', 50000, 0, 0) ON CONFLICT DO NOTHING;"
+        },
+        {
+          "desc": "Add ALT to CLASS0 porttype rule",
+          "op": "db.execute",
+          "sql": "INSERT INTO porttype_commodity_rules (porttype_id, commodity_code, can_buy, can_sell, base_price_mul) VALUES (1, 'ALT', true, true, 100) ON CONFLICT DO NOTHING;"
+        },
+        {
+          "desc": "Warp to CLASS0",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Buy new commodity ALT",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "ALT",
+            "quantity": 2
+          },
+          "expect_status": 0
+        },
+        {
+          "desc": "Verify cargo contains ALT",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "check": "my_ships.ships[0].cargo.find(c => c.code === 'ALT')"
+        },
+        {
+          "desc": "Delete rule for ALT",
+          "op": "db.execute",
+          "sql": "DELETE FROM porttype_commodity_rules WHERE commodity_code = 'ALT';"
+        },
+        {
+          "desc": "Attempt to buy ALT again (should fail, rule deleted)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "ALT",
+            "quantity": 1
+          },
+          "expect_error": "ERR_PORT_COMMODITY_UNSUPPORTED"
+        },
+        {
+          "desc": "Cleanup: Remove test commodity",
+          "op": "db.execute",
+          "sql": "DELETE FROM commodities WHERE code = 'ALT';"
+        }
+      ]
+    },
+    {
+      "id": "C1_alignment_gate_good_illegal",
+      "name": "Alignment Gate: Good player blocked from illegal commodities",
+      "description": "Verify that good-aligned players cannot purchase illegal commodities even at black market",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player with good alignment",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_C1_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Set player alignment to good (+100)",
+          "op": "players.set_alignment",
+          "args": {
+            "alignment": 100
+          }
+        },
+        {
+          "desc": "Warp to CLASS0",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Verify illegal commodities are NOT visible to good player at CLASS0",
+          "op": "ports.port_info",
+          "args": {
+            "port_id": 1
+          },
+          "check": "!find(result.buy, c => ['SLV', 'WPN', 'DRG'].includes(c.code))"
+        },
+        {
+          "desc": "Attempt to buy illegal commodity (should fail)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "SLV",
+            "quantity": 1
+          },
+          "expect_error": "ERR_ITEM_ILLEGAL"
+        }
+      ]
+    },
+    {
+      "id": "C2_alignment_gate_evil_illegal",
+      "name": "Alignment Gate: Evil player allowed illegal at BLACKMARKET",
+      "description": "Verify that evil-aligned players CAN purchase illegal commodities at black market ports",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_C2_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Set player alignment to evil (-100)",
+          "op": "players.set_alignment",
+          "args": {
+            "alignment": -100
+          }
+        },
+        {
+          "desc": "Warp to BLACKMARKET",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 5
+          }
+        },
+        {
+          "desc": "Verify illegal commodities visible to evil player",
+          "op": "ports.port_info",
+          "args": {
+            "port_id": 5
+          },
+          "save": "bm_info",
+          "check": "find(result.buy, c => ['SLV', 'WPN', 'DRG'].includes(c.code))"
+        },
+        {
+          "desc": "Buy illegal commodity (should succeed for evil)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 5,
+            "commodity": "WPN",
+            "quantity": 3
+          },
+          "expect_status": 0
+        }
+      ]
+    },
+    {
+      "id": "D1_multiplier_consistency",
+      "name": "Multiplier Verification: Buy/Sell multiplier consistency",
+      "description": "Verify that buy and sell price paths use consistent rule multiplier logic",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player with initial capital",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_D1_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add credits for testing",
+          "op": "bank.deposit",
+          "args": {
+            "amount": 1000000
+          }
+        },
+        {
+          "desc": "Warp to CLASS0",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Get commodity pricing details from port_info",
+          "op": "ports.port_info",
+          "args": {
+            "port_id": 1
+          },
+          "save": "pricing_info"
+        },
+        {
+          "desc": "Extract ORE buy price",
+          "op": "extract",
+          "src": "pricing_info",
+          "path": "buy[?code=='ORE'].price[0]",
+          "save": "ore_buy_price"
+        },
+        {
+          "desc": "Extract ORE sell price",
+          "op": "extract",
+          "src": "pricing_info",
+          "path": "sell[?code=='ORE'].price[0]",
+          "save": "ore_sell_price"
+        },
+        {
+          "desc": "Verify buy/sell prices are in reasonable ratio (multiplier applied consistently)",
+          "op": "assert",
+          "check": "ore_buy_price > 0 && ore_sell_price > 0 && (ore_sell_price / ore_buy_price) <= 1.5"
+        }
+      ]
+    },
+    {
+      "id": "E1_negative_buy_disabled",
+      "name": "Negative: Commodity with can_buy=false is blocked",
+      "description": "Verify that commodities with can_buy=false cannot be purchased",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_E1_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Disable ORE buying at CLASS0 (setup: update rule)",
+          "op": "db.execute",
+          "sql": "UPDATE porttype_commodity_rules SET can_buy = false WHERE porttype_id = 1 AND commodity_code = 'ORE';"
+        },
+        {
+          "desc": "Warp to CLASS0",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Attempt to buy ORE (should fail, can_buy=false)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "quantity": 1
+          },
+          "expect_error": "ERR_PORT_BUY_DISABLED"
+        },
+        {
+          "desc": "Cleanup: Re-enable ORE buying",
+          "op": "db.execute",
+          "sql": "UPDATE porttype_commodity_rules SET can_buy = true WHERE porttype_id = 1 AND commodity_code = 'ORE';"
+        }
+      ]
+    },
+    {
+      "id": "E2_negative_sell_disabled",
+      "name": "Negative: Commodity with can_sell=false is blocked",
+      "description": "Verify that commodities with can_sell=false cannot be sold",
+      "steps": [
+        {
+          "desc": "Setup: Spawn new player",
+          "op": "players.spawn",
+          "args": {
+            "name": "TestPlayer_E2_{{UUID}}"
+          },
+          "save": "player_id"
+        },
+        {
+          "desc": "Buy ORE first",
+          "op": "universe.warp_to",
+          "args": {
+            "port_id": 1
+          }
+        },
+        {
+          "desc": "Buy some ORE",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "quantity": 10
+          }
+        },
+        {
+          "desc": "Disable ORE selling (setup)",
+          "op": "db.execute",
+          "sql": "UPDATE porttype_commodity_rules SET can_sell = false WHERE porttype_id = 1 AND commodity_code = 'ORE';"
+        },
+        {
+          "desc": "Attempt to sell ORE (should fail, can_sell=false)",
+          "op": "trade.sell",
+          "args": {
+            "port_id": 1,
+            "commodity": "ORE",
+            "quantity": 5
+          },
+          "expect_error": "ERR_PORT_SELL_DISABLED"
+        },
+        {
+          "desc": "Cleanup: Re-enable ORE selling",
+          "op": "db.execute",
+          "sql": "UPDATE porttype_commodity_rules SET can_sell = true WHERE porttype_id = 1 AND commodity_code = 'ORE';"
+        }
+      ]
+    }
+  ]
+}

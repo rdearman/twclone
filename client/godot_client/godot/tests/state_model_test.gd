@@ -30,12 +30,14 @@ func _init() -> void:
 	_run("player normalization", _test_player_normalization)
 	_run("ship normalization", _test_ship_normalization)
 	_run("sector normalization", _test_sector_normalization)
+	_run("JSON numeric normalization", _test_json_numeric_normalization)
 	_run("unknown fields", _test_unknown_fields)
 	_run("zero fields", _test_zero_fields)
 	_run("integer money", _test_integer_money)
 	_run("optional fields", _test_optional_fields)
 	_run("malformed fields", _test_malformed_fields)
 	_run("authenticated refresh", _test_authenticated_refresh)
+	_run("scoped refresh", _test_scoped_refresh)
 	_run("unauthenticated refresh", _test_unauthenticated_refresh)
 	_run("refusal retention", _test_refusal_retention)
 	_run("timeout retention", _test_timeout_retention)
@@ -48,7 +50,7 @@ func _init() -> void:
 	_run("normal output safety", _test_normal_output_safety)
 	_run("debug redaction", _test_debug_redaction)
 	if failures.is_empty():
-		print("Godot state tests: 20 passed")
+		print("Godot state tests: 22 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -99,6 +101,28 @@ func _test_sector_normalization() -> void:
 	_check(sector["ports"].size() == 1 and sector["planets"].size() == 1, "sector objects were not normalized")
 	_check(sector["counts"]["fighters"] == 0, "sector zero count was lost")
 
+func _test_json_numeric_normalization() -> void:
+	var player := ClientState.normalize_player({"player": {
+		"id": 3.0, "username": "newguy", "credits": "5000.00", "turns_remaining": 999999.0,
+		"sector": 1.0, "ship_id": 3.0,
+	}})
+	var ship := ClientState.normalize_ship({"ship": {
+		"id": 3.0, "name": "Bit Banger", "type_id": 2.0, "holds": 10.0,
+		"fighters": 1.0, "shields": 1.0, "cargo": [],
+	}})
+	var sector := ClientState.normalize_sector({
+		"sector_id": 1.0, "name": "Fedspace 1", "beacon": "The Federation -- Do Not Dump!",
+		"adjacent_sectors": [{"to_sector": 2.0}, {"to_sector": 3.0}],
+		"celestial_objects": [{"name": "Terra", "planet_id": 1.0, "type": 1.0}],
+		"ships_present": [{"name": "Bit Banger", "ship_id": 3.0}],
+		"counts": {"fighters": 0.0, "mines": 0.0},
+	})
+	_check(player.get("sector_id") == 1 and player.get("turns_remaining") == 999999, "integral JSON player numbers were discarded")
+	_check(ship.get("holds") == 10 and ship.get("fighters") == 1 and ship.get("shields") == 1, "integral JSON ship numbers were discarded")
+	_check(sector.get("id") == 1 and sector.get("adjacent_sector_ids") == [2, 3], "JSON sector identity or object-form warps were discarded")
+	_check(sector.get("planets", []).size() == 1 and sector.get("ships", []).size() == 1, "JSON entity identifiers were discarded")
+	_check(sector.get("counts", {}).get("fighters") == 0, "JSON zero count was not preserved")
+
 func _test_unknown_fields() -> void:
 	var state := ClientState.new()
 	state.mark_authenticated()
@@ -120,9 +144,11 @@ func _test_zero_fields() -> void:
 
 func _test_integer_money() -> void:
 	var integer: Dictionary = ClientState.normalize_player({"player": {"credits": 42}})
+	var json_number: Dictionary = ClientState.normalize_player({"player": {"credits": 42.0}})
 	var decimal_string: Dictionary = ClientState.normalize_player({"player": {"credits": "42.00"}})
 	var malformed: Dictionary = ClientState.normalize_player({"player": {"credits": "42.50"}})
 	_check(typeof(integer["credits"]) == TYPE_INT and integer["credits"] == 42, "integer credits changed type")
+	_check(typeof(json_number["credits"]) == TYPE_INT and json_number["credits"] == 42, "integral JSON-number credits were not normalized")
 	_check(decimal_string["credits"] == 42, "server decimal-string credits were not normalized")
 	_check(not malformed.has("credits"), "fractional malformed credits were accepted")
 
@@ -175,6 +201,23 @@ func _test_authenticated_refresh() -> void:
 	_complete_refresh(refresh, transport)
 	_check(state.player["username"] == "Alice" and state.ship["name"] == "Ship", "refresh did not publish player and ship")
 	_check(state.sector["id"] == 9 and state.overall_availability() == ClientState.FRESH, "refresh did not publish fresh sector snapshot")
+
+func _test_scoped_refresh() -> void:
+	var parts: Array = _new_refresh()
+	_seed_confirmed(parts)
+	var transport = parts[0]
+	var state = parts[2]
+	var refresh = parts[3]
+	var previous_sector: Dictionary = state.sector.duplicate(true)
+	var call_count: int = transport.calls.size()
+	_check(refresh.refresh(true, ["player", "ship"]), "player-and-ship scoped refresh did not start")
+	var player_id: String = transport.calls[call_count]["id"]
+	refresh.handle_reply(player_id, _player_reply("Alice", 20), "player.my_info")
+	var ship_id: String = transport.calls[call_count + 1]["id"]
+	refresh.handle_reply(ship_id, _ship_reply("Surface Ship"), "ship.status")
+	_check(transport.calls.size() == call_count + 2, "scoped refresh unexpectedly requested sector.info")
+	_check(state.player_availability == ClientState.FRESH and state.ship_availability == ClientState.FRESH, "scoped player/ship refresh was not fresh")
+	_check(state.sector == previous_sector and state.sector_availability == ClientState.STALE, "unrequested sector was not retained and marked stale")
 
 func _test_unauthenticated_refresh() -> void:
 	var transport = FakeTransport.new()
@@ -284,8 +327,8 @@ func _test_reauth_refresh() -> void:
 
 func _test_scene_state_boundary() -> void:
 	var source := FileAccess.get_file_as_string("res://Main.gd")
-	_check(source.contains("client_state.apply_response"), "Main.gd does not consume ClientState")
-	_check(source.contains("_render_state_snapshot"), "Main.gd has no normalized snapshot renderer")
+	_check(source.contains("client_state.changed.connect"), "Main.gd does not subscribe to normalized ClientState snapshots")
+	_check(source.contains("gameplay_view.set_snapshot(snapshot)"), "Main.gd does not pass normalized snapshots into GameplayView")
 	_check(source.contains("client_state.mark_authenticated") and source.contains("refresh_coordinator.refresh"), "authentication does not trigger authoritative refresh")
 	_check(not source.contains("JSON.stringify(data"), "Main.gd still dumps response data")
 
@@ -294,5 +337,5 @@ func _test_normal_output_safety() -> void:
 	_check(refusal["message"] == "Denied" and not refusal["message"].contains("{"), "normal result message was not human-readable")
 
 func _test_debug_redaction() -> void:
-	var diagnostic := Protocol.diagnostic_json({"data": {"passwd": "pw", "auth": {"session": "tok"}, "value": 0}})
-	_check(not diagnostic.contains("pw") and not diagnostic.contains("tok") and diagnostic.contains("0"), "debug diagnostic redaction failed")
+	var diagnostic := Protocol.diagnostic_json({"data": {"passwd": "password-value-xyz", "auth": {"session": "session-value-xyz"}, "session_token": "session-token-value-xyz", "value": 0}})
+	_check(not diagnostic.contains("password-value-xyz") and not diagnostic.contains("session-value-xyz") and not diagnostic.contains("session-token-value-xyz") and diagnostic.contains("0"), "debug diagnostic redaction failed")

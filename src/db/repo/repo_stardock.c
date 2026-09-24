@@ -5,10 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 
-int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_port_id, int32_t *out_type)
+int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_port_id, int32_t *out_porttype_id)
 {
     /* SQL_VERBATIM: Q1 */
-    const char *sql = "SELECT port_id, type FROM ports WHERE sector_id = {1} AND (type = 9 OR type = 0);";
+    /* Get port from sector, preferring stardock/class0 */
+    const char *sql = "SELECT p.port_id, COALESCE(p.porttype_id, 0) FROM ports p "
+                      "LEFT JOIN porttypes pt ON p.porttype_id = pt.porttype_id "
+                      "WHERE p.sector_id = {1} AND (pt.is_stardock = true OR pt.code = 'CLASS0') "
+                      "ORDER BY pt.is_stardock DESC LIMIT 1;";
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
@@ -16,7 +20,7 @@ int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_p
     if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             *out_port_id = (int32_t)db_res_col_i64(res, 0, &err);
-            *out_type = (int32_t)db_res_col_i64(res, 1, &err);
+            *out_porttype_id = (int32_t)db_res_col_i64(res, 1, &err);
             db_res_finalize(res);
             return 0;
         }
@@ -101,10 +105,12 @@ int repo_stardock_check_shipyard_location(db_t *db, int32_t sector_id, int32_t p
 {
     /* SQL_VERBATIM: Q7 */
     /* SQL_VERBATIM: Q11 */
+    /* Check if player is docked at stardock or black market port */
     const char *sql = "SELECT p.port_id FROM ports p "
                       "JOIN ships s ON s.ported = p.port_id "
                       "JOIN players pl ON pl.ship_id = s.ship_id "
-                      "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (p.type = 9 OR p.type = 10);";
+                      "JOIN porttypes pt ON p.porttype_id = pt.porttype_id "
+                      "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (pt.is_stardock = true OR pt.is_black_market = true);";
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;

@@ -1,4 +1,5 @@
 #include "db/repo/repo_ships.h"
+#include "db/repo/repo_cargo.h"
 #include <strings.h>
 #include <libpq-fe.h>
 #include <stdatomic.h>
@@ -892,6 +893,7 @@ h_update_ship_cargo (db_t *db,
 {
   LOGI ("h_update_ship_cargo: entered for ship_id=%d, commodity=%s, delta=%d",
 	ship_id, commodity_code, delta);
+
   if (!db || ship_id <= 0 || !commodity_code)
     {
       LOGE
@@ -904,133 +906,16 @@ h_update_ship_cargo (db_t *db,
       return ERR_DB_MISUSE;
     }
 
-  const char *col_name = NULL;
-
-  /* Strict validation: only accept 3-char commodity codes */
-  if (strcasecmp (commodity_code, "ORE") == 0)
-    {
-      col_name = "ore";
-    }
-  else if (strcasecmp (commodity_code, "ORG") == 0)
-    {
-      col_name = "organics";
-    }
-  else if (strcasecmp (commodity_code, "EQU") == 0)
-    {
-      col_name = "equipment";
-    }
-  else if (strcasecmp (commodity_code, "COL") == 0)
-    {
-      col_name = "colonists";
-    }
-  else if (strcasecmp (commodity_code, "SLV") == 0)
-    {
-      col_name = "slaves";
-    }
-  else if (strcasecmp (commodity_code, "WPN") == 0)
-    {
-      col_name = "weapons";
-    }
-  else if (strcasecmp (commodity_code, "DRG") == 0)
-    {
-      col_name = "drugs";
-    }
-  else
-    {
-      LOGE ("h_update_ship_cargo: invalid commodity code '%s' (must be 3-char code: ORE, ORG, EQU, COL, SLV, WPN, or DRG)",
-	    commodity_code);
-      if (new_quantity_out)
-	{
-	  *new_quantity_out = 0;
-	}
-      return ERR_DB_MISUSE;
-    }
-
-  int ore = 0, org = 0, equ = 0, holds = 0, colonists = 0, slaves = 0,
-    weapons = 0, drugs = 0;
-
-
-  if (repo_ships_get_cargo_and_holds (db,
-				      ship_id,
-				      &ore,
-				      &org,
-				      &equ,
-				      &colonists,
-				      &slaves, &weapons, &drugs, &holds) != 0)
-    {
-      return ERR_SHIP_NOT_FOUND;
-    }
-
-  int current_qty = 0;
-
-
-  if (strcasecmp (commodity_code, "ORE") == 0)
-    {
-      current_qty = ore;
-    }
-  else if (strcasecmp (commodity_code, "ORG") == 0)
-    {
-      current_qty = org;
-    }
-  else if (strcasecmp (commodity_code, "EQU") == 0)
-    {
-      current_qty = equ;
-    }
-  else if (strcasecmp (commodity_code, "COLONISTS") == 0 || strcasecmp (commodity_code, "COL") == 0)
-    {
-      current_qty = colonists;
-    }
-  else if (strcasecmp (commodity_code, "SLAVES") == 0 || strcasecmp (commodity_code, "SLV") == 0)
-    {
-      current_qty = slaves;
-    }
-  else if (strcasecmp (commodity_code, "WEAPONS") == 0 || strcasecmp (commodity_code, "WPN") == 0)
-    {
-      current_qty = weapons;
-    }
-  else if (strcasecmp (commodity_code, "DRUGS") == 0 || strcasecmp (commodity_code, "DRG") == 0)
-    {
-      current_qty = drugs;
-    }
-
-  int new_qty = current_qty + delta;
-  int current_total = ore + org + equ + colonists + slaves + weapons + drugs;
-  int new_total = current_total - current_qty + new_qty;
-
-
-  if (new_qty < 0)
-    {
-      if (new_quantity_out)
-	{
-	  *new_quantity_out = current_qty;
-	}
-      return ERR_INSUFFICIENT_FUNDS;	// Or generic constraint violation
-    }
-
-  if (new_total > holds && delta > 0)
-    {
-      if (new_quantity_out)
-	{
-	  *new_quantity_out = current_qty;
-	}
-      return ERR_HOLD_FULL;
-    }
-
-  int rc = repo_ships_update_cargo_column (db, ship_id, col_name, new_qty);
-  if (rc != 0)
-    {
-      if (new_quantity_out)
-	{
-	  *new_quantity_out = current_qty;
-	}
-      return rc;
-    }
+  /* Phase 1: Route through cargo layer (ship_cargo is source of truth) */
+  int64_t new_qty = 0;
+  int rc = repo_cargo_add (db, ship_id, commodity_code, (int64_t) delta, &new_qty);
 
   if (new_quantity_out)
     {
-      *new_quantity_out = new_qty;
+      *new_quantity_out = (int) new_qty;
     }
-  return 0;
+
+  return rc;
 }
 
 
