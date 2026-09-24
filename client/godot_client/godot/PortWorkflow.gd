@@ -1,7 +1,10 @@
 extends Control
 
+const COMMAND_RAIL_CLEARANCE := 292.0
+
 signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
 signal back_requested
+signal tavern_enter_requested
 signal tavern_entered
 signal tavern_exited
 
@@ -26,14 +29,18 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
 	var dim := ColorRect.new()
+	dim.name = "WorkflowDim"
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.offset_left = COMMAND_RAIL_CLEARANCE
 	dim.offset_top = 88
 	dim.offset_bottom = -62
 	dim.color = Color(0.006, 0.014, 0.025, 0.985)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
 	var margin := MarginContainer.new()
+	margin.name = "WorkflowMargin"
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	margin.offset_left = COMMAND_RAIL_CLEARANCE + 10.0
 	margin.offset_top = 88
 	margin.offset_bottom = -62
 	margin.add_theme_constant_override("margin_left", 28)
@@ -126,8 +133,10 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 	var port_data = payload.get("port", {})
 	if not (port_data is Dictionary) or port_data.is_empty():
 		return
+	if _tavern_mode:
+		_tavern_mode = false
+		tavern_exited.emit()
 	_port = port_data.duplicate(true)
-	_tavern_mode = false
 	_sector_id = sector_id
 	_port_title.text = str(_port.get("name", "PORT")).to_upper()
 	_description.text = "Authoritative port inventory · choose a commodity and request a quote before committing a trade."
@@ -154,6 +163,11 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 func enter_tavern() -> void:
 	if not visible or not _is_stardock() or _tavern_mode:
 		return
+	tavern_enter_requested.emit()
+
+func confirm_tavern_entered() -> void:
+	if not visible or not _is_stardock() or _tavern_mode:
+		return
 	_tavern_mode = true
 	_port_title.text = str(_port.get("name", "STARDOCK")).to_upper() + " · TAVERN"
 	_description.text = "STARDOCK TAVERN · Local services and games are available while you are in this room."
@@ -173,8 +187,16 @@ func exit_tavern() -> void:
 	_commodity_region.visible = true
 	tavern_exited.emit()
 
+func close_for_location_change() -> void:
+	_tavern_mode = false
+	visible = false
+	_trade_dialog.hide()
+	_port.clear()
+	_sector_id = 0
+	_tavern_button.visible = false
+
 func _is_stardock() -> bool:
-	return str(_port.get("name", "")).to_lower().contains("stardock")
+	return int(_port.get("type", -1)) == 9
 
 func _add_commodity_row(list: VBoxContainer, item: Dictionary) -> void:
 	var card := PanelContainer.new()
@@ -217,6 +239,7 @@ func _add_commodity_row(list: VBoxContainer, item: Dictionary) -> void:
 	_trade_buttons.append({"button": sell, "available": sell_available})
 
 func set_busy(busy: bool) -> void:
+	_tavern_button.disabled = busy or not _is_stardock() or _tavern_mode
 	for entry in _trade_buttons:
 		var button: Button = entry["button"]
 		if is_instance_valid(button):

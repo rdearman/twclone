@@ -42,6 +42,7 @@ func _init() -> void:
 	_run("refusal retention", _test_refusal_retention)
 	_run("timeout retention", _test_timeout_retention)
 	_run("disconnect retention", _test_disconnect_retention)
+	_run("logout clears session", _test_logout_clears_session)
 	_run("partial refresh", _test_partial_refresh)
 	_run("late generation", _test_late_generation)
 	_run("unexpected type", _test_unexpected_type)
@@ -50,7 +51,7 @@ func _init() -> void:
 	_run("normal output safety", _test_normal_output_safety)
 	_run("debug redaction", _test_debug_redaction)
 	if failures.is_empty():
-		print("Godot state tests: 22 passed")
+		print("Godot state tests: 28 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -272,6 +273,15 @@ func _test_disconnect_retention() -> void:
 	_check(state.player["username"] == old_name and state.overall_availability() == ClientState.DISCONNECTED, "disconnect did not retain stale values explicitly")
 	_check(state.snapshot()["hud"]["credits"] != null, "disconnect erased confirmed values")
 
+func _test_logout_clears_session() -> void:
+	var parts: Array = _new_refresh()
+	var state = parts[2]
+	_seed_confirmed(parts)
+	state.clear_session_state()
+	_check(state.player.is_empty() and state.ship.is_empty() and state.sector.is_empty(), "logout retained the previous captain's state")
+	_check(not state.authenticated and state.disconnected and state.overall_availability() == ClientState.DISCONNECTED, "logout did not invalidate authentication state")
+	_check(state.player_availability == ClientState.UNAVAILABLE and state.ship_availability == ClientState.UNAVAILABLE and state.sector_availability == ClientState.UNAVAILABLE, "logout did not clear per-domain freshness")
+
 func _test_partial_refresh() -> void:
 	var parts: Array = _new_refresh()
 	var state = parts[2]
@@ -330,6 +340,14 @@ func _test_scene_state_boundary() -> void:
 	_check(source.contains("client_state.changed.connect"), "Main.gd does not subscribe to normalized ClientState snapshots")
 	_check(source.contains("gameplay_view.set_snapshot(snapshot)"), "Main.gd does not pass normalized snapshots into GameplayView")
 	_check(source.contains("client_state.mark_authenticated") and source.contains("refresh_coordinator.refresh"), "authentication does not trigger authoritative refresh")
+	_check(source.contains("command_name == \"auth.logout\"") and source.contains("transport.close(\"Logged out.\")"), "confirmed logout is not routed through the correlated command lifecycle")
+	_check(source.contains("client_state.clear_session_state()"), "logout does not clear prior captain state")
+	_check(source.contains("command == \"move.warp\"") and source.contains("_on_warp_requested(int(data.get(\"to_sector_id\", 0)))"), "typed warp does not share the guarded direct-movement path")
+	_check(not source.contains("transport.request(\"subscribe.add\""), "login still sends subscription requests with a known-invalid schema payload")
+	_check(source.contains("Event feeds unavailable · server contract mismatch"), "unsupported live feeds are not disclosed to the player")
+	_check(source.contains("gameplay_view.tavern_enter_requested.connect(_on_tavern_enter_requested)"), "StarDock tavern entry is not correlated through Main")
+	_check(source.contains("transport.request(\"tavern.lottery.status\", {}, auth_session.session_token)"), "tavern entry does not verify authoritative tavern presence")
+	_check(source.contains("gameplay_view.port_workflow.confirm_tavern_entered()"), "Tavern menu access is not opened after the server probe")
 	_check(not source.contains("JSON.stringify(data"), "Main.gd still dumps response data")
 
 func _test_normal_output_safety() -> void:

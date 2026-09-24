@@ -14,6 +14,7 @@ func _run() -> void:
 	var commands = view.command_menu
 	_check(commands is PanelContainer, "general commands are not a docked panel")
 	_check(commands.get_parent() == view.gameplay_body and view.gameplay_body.get_child(0) == commands, "command panel is not persistently placed on the left")
+	_check(view.toast_panel.position.x >= 300.0, "notification ribbon overlaps the persistent left command rail")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": false,
@@ -31,6 +32,29 @@ func _run() -> void:
 	double_click.double_click = true
 	view._on_warp_row_gui_input(double_click, 18)
 	_check(activations == [18], "double-click did not activate the selected warp destination")
+	view.enter_port_workflow({"port": {"id": 9, "name": "Helix", "type": 9, "commodities": []}})
+	_check(not commands._tavern_access, "opening StarDock port information prematurely exposed Tavern actions")
+	view.port_workflow.confirm_tavern_entered()
+	_check(commands._tavern_access and commands._active_category == "TAVERN" and commands.get_meta("context_label").text.contains("confirmed by the server"), "confirmed Tavern entry did not open its persistent command category and context")
+	view.port_workflow._back_button.pressed.emit()
+	_check(not commands._tavern_access and commands._active_category != "TAVERN", "leaving Tavern did not remove Tavern commands from the command rail")
+	view.enter_port_workflow({"port": {"id": 9, "name": "Helix", "type": 9, "commodities": []}})
+	view.port_workflow.confirm_tavern_entered()
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 18},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 18, "adjacent_sector_ids": [17], "ports": [], "planets": [], "ships": [{"ship_id": 74, "name": "Long Meridian"}]},
+	})
+	_check(not view.port_workflow.visible and not commands._tavern_access, "authoritative movement did not close the old port/Tavern context")
+	view.select_object_key("ship:74")
+	var inspect_button := _context_button(view, "INSPECT SHIP DETAILS · unavailable")
+	var private_message_button := _context_button(view, "PRIVATE MESSAGE OWNER · unavailable")
+	var attack_button := _context_button(view, "ATTACK THIS SHIP")
+	_check(inspect_button != null and inspect_button.disabled and inspect_button.tooltip_text.contains("ignores it"), "unsupported ship inspection was not visibly disabled with its reason")
+	_check(private_message_button != null and private_message_button.disabled, "unsupported ship messaging was not visibly disabled")
+	_check(attack_button != null and not attack_button.disabled, "confirmed selected-ship action was incorrectly disabled")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": true,
@@ -43,7 +67,7 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot gameplay view tests: 5 passed")
+		print("Godot gameplay view tests: 13 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -53,3 +77,9 @@ func _run() -> void:
 func _check(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+
+func _context_button(view, label: String) -> Button:
+	for child in view.context_action_list.get_children():
+		if child is Button and (child as Button).text == label:
+			return child
+	return null

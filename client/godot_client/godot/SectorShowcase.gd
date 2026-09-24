@@ -36,15 +36,29 @@ func _ready() -> void:
 	var showcase_selection := OS.get_environment("TWCLONE_SHOWCASE_SELECT")
 	if showcase_selection == "warp":
 		gameplay.select_object_key("warp:18")
+	elif showcase_selection.begins_with("planet:") or showcase_selection.begins_with("ship:"):
+		gameplay.select_object_key(showcase_selection)
 	else:
 		gameplay.select_object_key("port:7")
 	if OS.get_environment("TWCLONE_SHOWCASE_COMMANDS") == "1":
 		gameplay.command_menu.open_for(state.snapshot(), {})
+	var showcase_notice := OS.get_environment("TWCLONE_SHOWCASE_NOTICE")
+	if not showcase_notice.is_empty():
+		gameplay.show_notification(showcase_notice)
+	var showcase_category := OS.get_environment("TWCLONE_SHOWCASE_CATEGORY")
+	if not showcase_category.is_empty():
+		gameplay.command_menu._active_category = showcase_category
+		gameplay.command_menu._rebuild_categories()
 	if OS.get_environment("TWCLONE_SHOWCASE_PORT") == "1":
-		gameplay.enter_port_workflow({"port": {"id": 7, "name": "Helix Trade Port", "commodities": [
+		var showcase_port_type := int(OS.get_environment("TWCLONE_SHOWCASE_PORT_TYPE"))
+		if showcase_port_type <= 0:
+			showcase_port_type = 2
+		gameplay.enter_port_workflow({"port": {"id": 7, "name": "Helix Trade Port", "type": showcase_port_type, "commodities": [
 			{"code": "ORE", "quantity": 120, "max_quantity": 500, "price": "42.00"},
 			{"code": "ORG", "quantity": 0, "max_quantity": 400, "price": "71.00"},
 		]}})
+		if OS.get_environment("TWCLONE_SHOWCASE_TAVERN") == "1" and showcase_port_type == 9:
+			gameplay.port_workflow.confirm_tavern_entered()
 	if OS.get_environment("TWCLONE_SHOWCASE_PLANET") == "1":
 		gameplay.enter_planet_workflow(19)
 		gameplay.set_planet_information({"name": "Nereid", "type": "Oceanic", "owner": "Unclaimed", "sector_id": 17, "citadel_level": 1, "ore_on_hand": 240, "organics_on_hand": 180, "equipment_on_hand": 95})

@@ -6,11 +6,13 @@ signal warp_activated(destination: int)
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
 signal trade_confirmation(accepted: bool)
+signal tavern_enter_requested
 
 const SectorViewScript = preload("res://SectorView.gd")
 const CommandMenuScript = preload("res://CommandMenu.gd")
 const PortWorkflowScript = preload("res://PortWorkflow.gd")
 const PlanetWorkflowScript = preload("res://PlanetWorkflow.gd")
+const COMMAND_RAIL_TOAST_X := 310.0
 
 var sector_view
 var sector_title: Label
@@ -60,6 +62,11 @@ func _ready() -> void:
 	_update_responsive_layout()
 
 func set_snapshot(snapshot: Dictionary) -> void:
+	var previous_sector = _snapshot.get("hud", {}).get("sector_id", null)
+	var next_sector = snapshot.get("hud", {}).get("sector_id", null)
+	if port_workflow != null and port_workflow.visible and previous_sector != null and next_sector != null and int(previous_sector) != int(next_sector):
+		port_workflow.close_for_location_change()
+		command_menu.set_tavern_access(false)
 	_snapshot = snapshot.duplicate(true)
 	_render_snapshot(_snapshot)
 
@@ -238,6 +245,9 @@ func _build() -> void:
 	port_workflow.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int) -> void:
 		trade_requested.emit(direction, port_id, sector_id, commodity, quantity)
 	)
+	port_workflow.tavern_enter_requested.connect(func() -> void:
+		tavern_enter_requested.emit()
+	)
 	port_workflow.tavern_entered.connect(func() -> void:
 		command_menu.set_tavern_access(true)
 		show_notification("Entered the StarDock tavern.")
@@ -282,7 +292,7 @@ func _build() -> void:
 
 	toast_panel = PanelContainer.new()
 	toast_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	toast_panel.position = Vector2(29, -79)
+	toast_panel.position = Vector2(COMMAND_RAIL_TOAST_X, -79)
 	toast_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	toast_panel.custom_minimum_size = Vector2(390, 43)
 	toast_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.04, 0.057, 0.94), Color(0.28, 0.72, 0.75, 0.8)))
@@ -605,7 +615,8 @@ func _add_object_actions(kind: String, object: Dictionary) -> void:
 			_add_context_button("ATTACK THIS SHIP", true, _dispatch_context_action.bind({"label": "Attack this ship", "command": "combat.attack", "context_id": "target_ship_id", "mutating": true}, object))
 			_add_context_button("CLAIM THIS SHIP", false, _dispatch_context_action.bind({"label": "Claim ship", "command": "ship.claim", "context_id": "ship_id", "mutating": true}, object))
 			_add_context_button("TOW THIS SHIP", false, _dispatch_context_action.bind({"label": "Tow ship", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true}, object))
-			_add_context_note("Single-ship inspection and private messaging are not supported by the current server contract.")
+			_add_context_unavailable("INSPECT SHIP DETAILS · unavailable", "ship.inspect requires a ship ID in its schema, but the handler ignores it and returns sector-wide ships.")
+			_add_context_unavailable("PRIVATE MESSAGE OWNER · unavailable", "The chat.send schema rejects the recipient fields required by its handler.")
 
 func _add_context_button(label: String, primary: bool, callback: Callable) -> Button:
 	var button := Button.new()
@@ -625,6 +636,15 @@ func _add_context_note(message: String) -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	context_action_list.add_child(note)
 
+func _add_context_unavailable(label: String, reason: String) -> void:
+	var button := _add_context_button(label, false, _show_unavailable_context_action.bind(reason))
+	button.disabled = true
+	button.tooltip_text = reason
+	button.set_meta("unavailable_reason", reason)
+
+func _show_unavailable_context_action(reason: String) -> void:
+	show_notification(reason)
+
 func _dispatch_context_action(action: Dictionary, object: Dictionary) -> void:
 	command_menu.dispatch_context_action(action, object)
 
@@ -632,8 +652,11 @@ func _apply_context_action_availability() -> void:
 	var freshness: Dictionary = _snapshot.get("freshness", {})
 	var available := bool(_snapshot.get("authenticated", false)) and not bool(_snapshot.get("disconnected", true)) and str(freshness.get("sector", "")) == "fresh"
 	for button in context_action_buttons:
-		button.disabled = not available
-		if not available:
+		var reason := str(button.get_meta("unavailable_reason", ""))
+		button.disabled = not available or not reason.is_empty()
+		if not reason.is_empty():
+			button.tooltip_text = reason
+		elif not available:
 			button.tooltip_text = "Reconnect and refresh the current sector before acting."
 			
 func _selected_descriptor() -> Dictionary:
@@ -841,7 +864,7 @@ func _update_responsive_layout() -> void:
 		contents_scroll.custom_minimum_size.y = 78
 		panel_column.add_theme_constant_override("separation", 7)
 		selection_panel.visible = true
-		action_button.visible = true
+		context_action_list.visible = true
 		details_button.visible = true
 		toast_panel.visible = false
 	else:
@@ -862,6 +885,6 @@ func _update_responsive_layout() -> void:
 		contents_scroll.custom_minimum_size.y = 0
 		panel_column.add_theme_constant_override("separation", 12)
 		selection_panel.visible = true
-		action_button.visible = true
+		context_action_list.visible = true
 		details_button.visible = true
 		toast_panel.visible = true

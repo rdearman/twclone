@@ -55,6 +55,7 @@ func _ready() -> void:
 	gameplay_view.command_requested.connect(_on_command_requested)
 	gameplay_view.trade_requested.connect(_on_trade_requested)
 	gameplay_view.trade_confirmation.connect(_on_trade_confirmation)
+	gameplay_view.tavern_enter_requested.connect(_on_tavern_enter_requested)
 	_load_config()
 	login_view.set_connection_values(server_ip if not server_ip.is_empty() else "127.0.0.1", server_port if server_port > 0 else 1234, auth_username)
 	login_view.set_status("Enter your captain credentials to begin.")
@@ -134,7 +135,14 @@ func _on_transport_reply(request_id: String, response: Dictionary, command: Stri
 	if _pending_game_commands.has(request_id):
 		var operation: Dictionary = _pending_game_commands[request_id]
 		_pending_game_commands.erase(request_id)
-		if operation.get("kind") == "planet_info" or operation.get("kind") == "planet_colonists":
+		if operation.get("kind") == "tavern_probe":
+			var tavern_result: Dictionary = Protocol.result_from_response(response)
+			gameplay_view.set_command_busy(false)
+			if tavern_result.get("kind") == "ok":
+				gameplay_view.port_workflow.confirm_tavern_entered()
+			else:
+				gameplay_view.show_notification("No tavern is available here · remaining at the port.")
+		elif operation.get("kind") == "planet_info" or operation.get("kind") == "planet_colonists":
 			var planet_result: Dictionary = Protocol.result_from_response(response)
 			if planet_result.get("kind") == "ok":
 				if operation.get("kind") == "planet_info":
@@ -198,6 +206,14 @@ func _on_authentication_failed(message: String) -> void:
 func _on_request_timed_out(request_id: String, command: String) -> void:
 	if command == "auth.login":
 		auth_session.fail_request("Login timed out. Try again.")
+	elif command == "auth.logout":
+		_pending_game_commands.erase(request_id)
+		gameplay_view.set_command_busy(false)
+		gameplay_view.show_notification("Logout was not confirmed. Your session is still shown as active; retry or reconnect before closing the client.")
+	elif _pending_game_commands.has(request_id) and _pending_game_commands[request_id].get("kind") == "tavern_probe":
+		_pending_game_commands.erase(request_id)
+		gameplay_view.set_command_busy(false)
+		gameplay_view.show_notification("Tavern access could not be verified · remaining at the port.")
 	elif command == "move.warp":
 		_pending_game_commands.erase(request_id)
 		gameplay_view.show_notification("Warp response timed out. Checking the server's current state…")
@@ -250,6 +266,10 @@ func _on_request_failed(request_id: String, command: String, result: Dictionary)
 	elif _pending_game_commands.has(request_id):
 		var failed_operation: Dictionary = _pending_game_commands[request_id]
 		_pending_game_commands.erase(request_id)
+		if failed_operation.get("kind") == "tavern_probe":
+			gameplay_view.set_command_busy(false)
+			gameplay_view.show_notification("Tavern access could not be verified · remaining at the port.")
+			return
 		if failed_operation.get("kind") in ["planet_info", "planet_colonists"]:
 			_planet_pending_count = maxi(0, _planet_pending_count - 1)
 			gameplay_view.show_notification("Planet record request failed · %s" % str(result.get("message", "request failed")))
@@ -296,7 +316,7 @@ func _on_refresh_finished(_snapshot: Dictionary) -> void:
 			gameplay_view.set_command_busy(false)
 
 func _on_warp_requested(destination: int) -> void:
-	if not auth_session.is_authenticated() or _pending_game_commands.size() > 0 or _warp_refresh_pending:
+	if not auth_session.is_authenticated() or _pending_game_commands.size() > 0 or _warp_refresh_pending or _command_refresh_pending or not _pending_trade.is_empty():
 		return
 	gameplay_view.set_action_pending(true)
 	var request_id: String = transport.request("move.warp", {"to_sector_id": destination}, auth_session.session_token)
@@ -306,6 +326,18 @@ func _on_warp_requested(destination: int) -> void:
 		return
 	_pending_game_commands[request_id] = {"kind": "warp", "destination": destination}
 	gameplay_view.show_notification("Warp request sent · waiting for server confirmation.")
+
+func _on_tavern_enter_requested() -> void:
+	if not auth_session.is_authenticated() or not _pending_game_commands.is_empty() or _command_refresh_pending or _warp_refresh_pending or not _pending_trade.is_empty():
+		gameplay_view.show_notification("Tavern access cannot be checked while another command is pending.")
+		return
+	var request_id: String = transport.request("tavern.lottery.status", {}, auth_session.session_token)
+	if request_id.is_empty():
+		gameplay_view.show_notification("Tavern access could not be checked · connection unavailable.")
+		return
+	_pending_game_commands[request_id] = {"kind": "tavern_probe", "command": "tavern.lottery.status", "label": "Verify StarDock tavern access", "mutating": false}
+	gameplay_view.set_command_busy(true)
+	gameplay_view.show_notification("Checking for an active tavern in this StarDock sector…")
 
 func _finish_warp_reply(response: Dictionary, destination: int) -> void:
 	var result: Dictionary = Protocol.result_from_response(response)
@@ -324,6 +356,9 @@ func _refresh_after_warp_attempt() -> void:
 		gameplay_view.show_notification("Could not refresh your location. The displayed sector may be stale.")
 
 func _on_command_requested(command: String, data: Dictionary, label: String, mutating: bool) -> void:
+	if command == "move.warp":
+		_on_warp_requested(int(data.get("to_sector_id", 0)))
+		return
 	var is_planet_read := _landed_planet_id > 0 and command in ["planet.info", "planet.colonists.get"]
 	if not auth_session.is_authenticated() or (not is_planet_read and _pending_game_commands.size() > 0) or not _pending_trade.is_empty() or _warp_refresh_pending or (_command_refresh_pending and not is_planet_read):
 		gameplay_view.show_notification("A command is already pending, or the connection is unavailable.")
@@ -347,6 +382,9 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 		var data: Dictionary = result.get("data", {})
 		var summary := _result_summary(data)
 		var command_name := str(operation.get("command", ""))
+		if command_name == "auth.logout":
+			_finish_logout()
+			return
 		if command_name == "planet.land":
 			var planet_id := int(data.get("planet_id", 0))
 			if planet_id > 0:
@@ -394,6 +432,28 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 		if str(operation.get("command", "")) in ["trade.buy", "trade.sell"]:
 			_pending_trade.clear()
 		gameplay_view.show_notification("%s refused · %s" % [label, str(result.get("message", "The server did not accept the command."))])
+
+func _finish_logout() -> void:
+	_pending_game_commands.clear()
+	_command_refresh_pending = false
+	_warp_refresh_pending = false
+	_pending_trade.clear()
+	_landed_planet_id = 0
+	_planet_pending_count = 0
+	gameplay_view.set_command_busy(false)
+	client_state.clear_session_state()
+	gameplay_view.command_menu.set_tavern_access(false)
+	gameplay_view.port_workflow.visible = false
+	gameplay_view.leave_planet_workflow()
+	gameplay_view.set_connection_notice(false)
+	gameplay_view.visible = false
+	auth_session.invalidate("Logged out by the player.")
+	_authenticated_once = false
+	transport.close("Logged out.")
+	login_view.set_overlay_mode(false)
+	login_view.visible = true
+	login_view.set_connection_values(server_ip, server_port, auth_username)
+	login_view.set_status("Logged out. You can connect again whenever you are ready.")
 
 func _refresh_after_command(domains: Array = []) -> void:
 	_command_refresh_pending = true
@@ -505,9 +565,9 @@ func _on_reconnect_requested() -> void:
 	login_view.set_status("Reconnect to refresh the displayed state.")
 
 func _subscribe_to_player_events() -> void:
-	# system.notice is an always-on topic. These streams are opt-in under Protocol v3.
-	for topic in ["sector.*", "combat.*", "trade.*"]:
-		transport.request("subscribe.add", {"topic": topic}, auth_session.session_token)
+	# The documented/handled `topic` field conflicts with the strict schema's
+	# required `event_type`; do not send requests that the server must reject.
+	gameplay_view.show_notification("Event feeds unavailable · server contract mismatch")
 
 func _present_server_event(event: Dictionary) -> void:
 	var message := EventPresenter.notification_for(event)

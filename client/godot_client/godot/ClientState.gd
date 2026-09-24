@@ -41,6 +41,19 @@ func mark_disconnected() -> void:
 	sector_availability = DISCONNECTED
 	_emit_changed()
 
+func clear_session_state() -> void:
+	player.clear()
+	ship.clear()
+	sector.clear()
+	authenticated = false
+	disconnected = true
+	refresh_generation = 0
+	last_refresh_generation = 0
+	player_availability = UNAVAILABLE
+	ship_availability = UNAVAILABLE
+	sector_availability = UNAVAILABLE
+	_emit_changed()
+
 func begin_refresh(generation: int, requested_domains: Array = ["player", "ship", "sector"]) -> bool:
 	if not authenticated or disconnected:
 		return false

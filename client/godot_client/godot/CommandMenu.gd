@@ -10,18 +10,20 @@ const COMMANDS := {
 	"COMPUTER": [
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
+		{"label": "Rename ship · unavailable", "unavailable_reason": "The ship.rename schema accepts name, but its handler requires ship_id and new_name."},
 		{"label": "Scan adjacent sectors", "command": "move.scan"},
 		{"label": "Sector density scan", "command": "sector.scan.density", "fixed": {}},
 		{"label": "Player rankings", "command": "player.rankings"},
-		{"label": "Ship type catalogue", "command": "shipyard.list"},
+		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
 		{"label": "Hardware catalogue", "command": "hardware.list"},
 		{"label": "Buy ship hardware", "command": "hardware.buy", "fields": [["code", FIELD_TEXT, "Hardware item code", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true},
-		{"label": "Recommend trade routes", "command": "player.computer.recommend_routes", "fields": [["max_hops_between", FIELD_INT, "Maximum hops", "10"], ["require_two_way", "boolean", "Require two-way trade", "false"], ["limit", FIELD_INT, "Result limit", "10"]]},
+		{"label": "Trade routes", "command": "player.computer.recommend_routes", "tooltip": "The server's two-way filter is mismatched; recommendations use its default (false).", "fields": [["max_hops_between", FIELD_INT, "Maximum hops", "10"], ["limit", FIELD_INT, "Result limit", "10"]]},
 	],
 	"COMMUNICATIONS": [
 		{"label": "Recent server events", "local_activity": true},
 		{"label": "Chat history", "command": "chat.history", "fixed": {"limit": 20}},
 		{"label": "Broadcast message", "command": "chat.broadcast", "fields": [["message", FIELD_TEXT, "Message", ""]], "mutating": true},
+		{"label": "Private message · unavailable", "unavailable_reason": "The chat.send schema rejects the recipient fields required by its handler."},
 		{"label": "Notices", "command": "notice.list"},
 		{"label": "Mail inbox", "command": "mail.inbox", "fixed": {"limit": 20}},
 		{"label": "Online players", "command": "player.list_online"},
@@ -51,7 +53,9 @@ const COMMANDS := {
 	"NEWS & RECORDS": [
 		{"label": "News feed", "command": "news.get_feed"},
 		{"label": "Mark news read", "command": "news.mark_feed_read", "mutating": true},
-		{"label": "Insurance policies", "command": "insurance.policies.list"},
+		{"label": "Insurance policy list · server stub", "unavailable_reason": "The current insurance handler returns a hard-coded stub, not authoritative policies."},
+		{"label": "Buy insurance · server stub", "unavailable_reason": "The current insurance purchase handler returns a hard-coded stub and does not create a policy."},
+		{"label": "File insurance claim · server stub", "unavailable_reason": "The current insurance claim handler returns a hard-coded stub and does not process a claim."},
 		{"label": "Subscriptions", "command": "subscribe.list"},
 	],
 	"CORPORATION": [
@@ -93,13 +97,15 @@ const COMMANDS := {
 		{"label": "Buy a rumour hint · 50 CR", "command": "tavern.rumour.get_hint", "mutating": true},
 	],
 	"NAVIGATION": [
+		{"label": "Warp to sector number", "command": "move.warp", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "mutating": true},
 		{"label": "Bookmarks", "command": "nav.bookmark.list"},
 		{"label": "Add current sector bookmark", "command": "nav.bookmark.add", "fields": [["name", FIELD_TEXT, "Bookmark name", ""]], "context_sector": true, "mutating": true},
 		{"label": "Remove bookmark", "command": "nav.bookmark.remove", "fields": [["name", FIELD_TEXT, "Bookmark name", ""]], "mutating": true},
 		{"label": "Avoid list", "command": "nav.avoid.list"},
 		{"label": "Avoid a sector", "command": "nav.avoid.add", "fields": [["sector_id", FIELD_INT, "Sector ID", ""]], "mutating": true},
 		{"label": "Remove sector from avoid list", "command": "nav.avoid.remove", "fields": [["sector_id", FIELD_INT, "Sector ID", ""]], "mutating": true},
-		{"label": "Find a route", "command": "move.pathfind", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]]},
+		{"label": "Autopilot status", "command": "move.autopilot.status"},
+		{"label": "Plot route to sector", "command": "move.autopilot.start", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true},
 	],
 	"SETTINGS & NOTES": [
 		{"label": "View settings and preferences", "command": "player.get_settings"},
@@ -113,9 +119,14 @@ const COMMANDS := {
 	"MAIL & SUBSCRIPTIONS": [
 		{"label": "Mail inbox", "command": "mail.inbox", "fixed": {}},
 		{"label": "Read mail by ID", "command": "mail.read", "fields": [["mail_id", FIELD_INT, "Mail ID", ""]], "mutating": true, "duplicate_mail_read_id": true},
+		{"label": "Send mail · unavailable", "unavailable_reason": "The mail.send schema requires to_player_name, but the handler reads to or to_id."},
+		{"label": "Delete mail · unavailable", "unavailable_reason": "The mail.delete schema requires mail_id, but the handler reads an ids array."},
 		{"label": "Subscription catalogue", "command": "subscribe.catalog"},
-		{"label": "Add subscription", "command": "subscribe.add", "fields": [["topic", FIELD_TEXT, "Topic", ""]], "mutating": true},
-		{"label": "Remove subscription", "command": "subscribe.remove", "fields": [["topic", FIELD_TEXT, "Topic", ""]], "mutating": true},
+		{"label": "Add subscription · unavailable", "unavailable_reason": "Protocol docs and handler require topic, but the strict schema requires event_type and rejects topic."},
+		{"label": "Remove subscription · unavailable", "unavailable_reason": "Protocol docs and handler require topic, but the strict schema requires event_type and rejects topic."},
+	],
+	"SESSION": [
+		{"label": "Log out to login screen", "local_logout": true},
 	],
 }
 
@@ -130,6 +141,7 @@ var _busy := false
 var _form_dialog: ConfirmationDialog
 var _result_dialog: AcceptDialog
 var _result_text: Label
+var _logout_dialog: ConfirmationDialog
 var _form_fields: Dictionary = {}
 var _form_action: Dictionary = {}
 var _form_content: VBoxContainer
@@ -202,6 +214,13 @@ func _ready() -> void:
 	_result_text.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	result_margin.add_child(_result_text)
 	get_parent().add_child(_result_dialog)
+	_logout_dialog = ConfirmationDialog.new()
+	_logout_dialog.title = "Log out of Trade Wars?"
+	_logout_dialog.dialog_text = "Your server session will be ended. You can log in again without closing the client."
+	_logout_dialog.ok_button_text = "LOG OUT"
+	_logout_dialog.exclusive = false
+	_logout_dialog.confirmed.connect(_confirm_logout)
+	get_parent().add_child(_logout_dialog)
 	_shipyard_dialog = AcceptDialog.new()
 	_shipyard_dialog.title = "Shipyard · available hulls"
 	_shipyard_dialog.exclusive = false
@@ -236,10 +255,8 @@ func open_for(snapshot: Dictionary, selection: Dictionary) -> void:
 	_snapshot = snapshot.duplicate(true)
 	_selection = selection.duplicate(true)
 	var context_label: Label = get_meta("context_label")
-	if _selection.is_empty():
-		context_label.text = "General shipboard, communication and service commands."
-	else:
-		context_label.text = "Selected %s · %s" % [str(_selection.get("kind", "object")).capitalize(), str(_selection.get("name", ""))]
+	context_label.text = _context_description()
+	if not _selection.is_empty():
 		if str(_selection.get("kind", "")) == "planet":
 			_active_category = "PLANET"
 		elif str(_selection.get("kind", "")) == "port":
@@ -253,6 +270,7 @@ func open_for(snapshot: Dictionary, selection: Dictionary) -> void:
 func update_snapshot(snapshot: Dictionary) -> void:
 	_snapshot = snapshot.duplicate(true)
 	_selection.clear()
+	(get_meta("context_label") as Label).text = _context_description()
 	if _active_category in ["PLANET", "PORT", "SHIP"]:
 		_active_category = "COMPUTER"
 	_rebuild_categories()
@@ -265,7 +283,15 @@ func set_tavern_access(available: bool) -> void:
 		_active_category = "COMPUTER"
 	if available:
 		_active_category = "TAVERN"
+	(get_meta("context_label") as Label).text = _context_description()
 	_rebuild_categories()
+
+func _context_description() -> String:
+	if _tavern_access:
+		return "StarDock Tavern · access confirmed by the server."
+	if _selection.is_empty():
+		return "General shipboard, communication and service commands."
+	return "Selected %s · %s" % [str(_selection.get("kind", "object")).capitalize(), str(_selection.get("name", ""))]
 
 func dispatch_context_action(action: Dictionary, selection: Dictionary) -> void:
 	var previous_selection := _selection
@@ -435,7 +461,7 @@ func _render_actions() -> void:
 		actions = [
 			{"label": "Dock · open port screen", "command": "port.info", "fixed": {}},
 			{"label": "Request commodity quote", "command": "trade.quote", "context_id": "port_id", "fields": [["commodity", FIELD_TEXT, "Commodity code or name", ""], ["quantity", FIELD_INT, "Quantity", "1"]]},
-			{"label": "Shipyard · choose eligible hull", "command": "shipyard.list"},
+			{"label": "Shipyard · choose eligible hull", "command": "shipyard.list", "requires_shipyard_dock": true},
 		]
 	elif _active_category == "SHIP":
 		var ship_data: Dictionary = _selection.get("data", {})
@@ -468,11 +494,28 @@ func _render_actions() -> void:
 		_style_button(button, false)
 		var connected := bool(_snapshot.get("authenticated", false)) and not bool(_snapshot.get("disconnected", true))
 		var freshness: Dictionary = _snapshot.get("freshness", {})
-		var context_stale: bool = action.has("context_id") and str(freshness.get("sector", "")) != "fresh"
-		button.disabled = _busy or not connected or context_stale
-		button.tooltip_text = "Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else ""))
+		var context_stale: bool = (action.has("context_id") or bool(action.get("requires_fresh_sector", false))) and str(freshness.get("sector", "")) != "fresh"
+		var unavailable_reason := str(action.get("unavailable_reason", ""))
+		var missing_shipyard_context := bool(action.get("requires_shipyard_dock", false)) and not _is_docked_at_shipyard()
+		button.disabled = not unavailable_reason.is_empty() or _busy or not connected or context_stale or missing_shipyard_context
+		button.tooltip_text = unavailable_reason if not unavailable_reason.is_empty() else ("Dock at a supported shipyard port in this sector first." if missing_shipyard_context else (str(action.get("tooltip", "")) if action.has("tooltip") else ("Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else "")))))
 		button.pressed.connect(_choose_action.bind(action))
 		_action_list.add_child(button)
+
+func _is_docked_at_shipyard() -> bool:
+	var ship: Dictionary = _snapshot.get("ship", {})
+	var docked_port_id := int(ship.get("ported", 0))
+	if docked_port_id <= 0:
+		return false
+	var sector: Dictionary = _snapshot.get("sector", {})
+	for port in sector.get("ports", []):
+		if not (port is Dictionary):
+			continue
+		var port_id := int(port.get("id", port.get("port_id", 0)))
+		var port_type := int(port.get("type", -1))
+		if port_id == docked_port_id:
+			return port_type in [9, 10]
+	return false
 
 func set_busy(value: bool) -> void:
 	_busy = value
@@ -486,6 +529,15 @@ func _add_unavailable(message: String) -> void:
 	_action_list.add_child(label)
 
 func _choose_action(action: Dictionary) -> void:
+	if action.has("unavailable_reason"):
+		_add_unavailable(str(action["unavailable_reason"]))
+		return
+	if bool(action.get("local_logout", false)):
+		if bool(_snapshot.get("authenticated", false)) and not bool(_snapshot.get("disconnected", true)):
+			_logout_dialog.popup_centered(Vector2i(460, 180))
+		else:
+			_add_unavailable("There is no active server session to log out of.")
+		return
 	if str(action.get("command", "")).begins_with("tavern.") and not _tavern_access:
 		_add_unavailable("Tavern services are available only while inside a StarDock tavern.")
 		return
@@ -494,6 +546,9 @@ func _choose_action(action: Dictionary) -> void:
 		return
 	if bool(action.get("local_help", false)):
 		show_help()
+		return
+	if bool(action.get("requires_fresh_sector", false)) and str(_snapshot.get("freshness", {}).get("sector", "")) != "fresh":
+		_add_unavailable("Refresh the current sector before planning from its location.")
 		return
 	var data: Dictionary = action.get("fixed", {}).duplicate(true)
 	if bool(action.get("context_sector", false)):
@@ -554,6 +609,9 @@ func _choose_action(action: Dictionary) -> void:
 	_form_dialog.ok_button_text = "SEND"
 	_form_dialog.popup_centered(Vector2i(480, 330))
 	set_meta("pending_data", data)
+
+func _confirm_logout() -> void:
+	command_requested.emit("auth.logout", {}, "Log out", true)
 
 func _submit_form() -> void:
 	var data: Dictionary = get_meta("pending_data", {}).duplicate(true)
