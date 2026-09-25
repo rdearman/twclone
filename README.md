@@ -1,12 +1,13 @@
 
 # twclone
 
-A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, a terminal client, and a deterministic “Big Bang” universe generator—now backed by **PostgreSQL** (with support for MySQL and other database engines) with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
+A modern, C-based recreation of classic BBS-era space-trading gameplay (in the spirit of TradeWars 2002). **twclone** provides a headless server, active Godot and Python clients, and a deterministic “Big Bang” universe generator—now backed by **PostgreSQL** (with support for MySQL and other database engines) with a **JSON** protocol that makes writing clients (or AI bots) straightforward.
 
 > **What’s new (2025):**
 >
 > * Full **PostgreSQL** data model with multi-database support (MySQL, etc.)
 > * **JSON** protocol for client & bot compatibility
+> * Two active clients: the native **Godot client** for the illustrated game UI and the **Python client** for terminal/reference workflows and protocol testing
 > * A separate **Game Engine** process (forked) that runs clocks, economy, maintenance, NPC stubs, and enforcement via **durable DB rails** and a **TCP S2S** control channel
 > * **DB-backed configuration** & secrets with live reload
 > * Cleaner broadcast pipeline to players
@@ -24,7 +25,7 @@ If you’re here from SourceForge: welcome back! The original code (largely GPL-
 * [Quick start](#quick-start)
 * [Build from source](#build-from-source)
 * [Running the server](#running-the-server)
-* [Running the client](#running-the-client)
+* [Running the clients](#running-the-clients)
 * [Universe generation (“Big Bang”)](#universe-generation-big-bang)
 * [Game Engine (overview)](#game-engine-overview)
 * [Configuration (DB-backed)](#configuration-db-backed)
@@ -44,6 +45,12 @@ If you’re here from SourceForge: welcome back! The original code (largely GPL-
 twclone/
 ├─ bin/                 # Built artefacts: server, client, test_bang
 ├─ src/                 # C sources (server_loop.c, engine/*.c, …)
+├─ client/
+│  ├─ godot_client/     # Active native Godot gameplay client
+│  ├─ python_client/    # Active terminal/reference client and test client
+│  ├─ angular_client/   # Reserve web client implementation
+│  ├─ web_client/       # Reserve web client area
+│  └─ C_client/         # Reserve/legacy client area
 ├─ data/                # menus.json and other runtime data
 ├─ docs/                # ENGINE.md, PROTOCOL.md, SYSOP.md, design notes
 ├─ Makefile.am …        # Autotools build files
@@ -70,8 +77,10 @@ make clean && make -j
 # 4) Start the server
 ./server
 
-# 5) Connect with the client (renders from menus.json)
-./bin/client --host localhost --port 1234 --menus ./data/menus.json
+# 5) Connect with an active client
+# Python reference client:
+python3 client/python_client/client.py --help
+# Or open client/godot_client/godot/project.godot in Godot 4.
 
 ```
 
@@ -116,15 +125,32 @@ server: listening on 0.0.0.0:1234
 
 ---
 
-## Running the client
+## Running the clients
 
-A simple terminal client is included for testing. You can also write your own in any language that speaks JSON.
+The actively maintained clients are:
+
+* **Godot** — the primary native desktop client with the illustrated sector, port, planet, cargo, navigation, and command-screen workflows. See [`client/godot_client/godot/`](./client/godot_client/godot/).
+* **Python** — the terminal/reference client used for protocol workflows, regression coverage, and automation. See [`client/python_client/README.md`](./client/python_client/README.md).
+
+The repository also contains reserve or alternate client implementations. The Angular/web clients and the C client area are kept for reference and future work; they are not the current primary gameplay clients.
+
+You can also write another client in any language that speaks the JSON protocol.
+
+### Python client
 
 ```bash
-./bin/client --host localhost --port 1234 --menus ./data/menus.json
+python3 client/python_client/client.py --help
 ```
 
-If you place `menus.json` at `./data/menus.json`, you can usually just run `./bin/client`.
+### Godot client
+
+Open `client/godot_client/godot/project.godot` in Godot 4 and run the project. Configure the server connection through the client’s login screen.
+
+### Reserve clients
+
+* [`client/angular_client/`](./client/angular_client/) — Angular/web implementation reserved for future browser-client work.
+* [`client/web_client/`](./client/web_client/) — reserved web-client area.
+* [`client/C_client/`](./client/C_client/) — reserved/legacy native client area.
 
 ---
 
@@ -268,5 +294,3 @@ Huge thanks to the original contributors and community that kept the TW flame al
 * © 2002 Ryan Glasnapp ([rglasnap@nmt.edu](mailto:rglasnap@nmt.edu))
 
 This GitHub edition is an independent rewrite with modern plumbing (SQLite + JSON + engine/server split). Shout-out to the original team—your work inspired this revival.
-
-
