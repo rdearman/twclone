@@ -13,9 +13,14 @@ var selected_key := ""
 var _sprite_nodes: Dictionary = {}
 var _warp_markers: Dictionary = {}
 var _hovered_key := ""
+var _beacon_panel: PanelContainer
+var _beacon_label: Label
 
 func _ready() -> void:
 	clip_contents = true
+	# Let the Node2D/Area2D hit targets receive artwork clicks. The parent
+	# Control must not consume the event before it reaches the object.
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_mode = Control.FOCUS_ALL
 	var background := TextureRect.new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -29,12 +34,33 @@ func _ready() -> void:
 	wash.color = Color(0.015, 0.027, 0.055, 0.12)
 	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(wash)
+	_beacon_panel = PanelContainer.new()
+	_beacon_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_beacon_panel.position = Vector2(-360, 18)
+	_beacon_panel.custom_minimum_size = Vector2(330, 0)
+	_beacon_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_beacon_panel.add_theme_stylebox_override("panel", _beacon_style())
+	var beacon_margin := MarginContainer.new()
+	beacon_margin.add_theme_constant_override("margin_left", 13)
+	beacon_margin.add_theme_constant_override("margin_right", 13)
+	beacon_margin.add_theme_constant_override("margin_top", 9)
+	beacon_margin.add_theme_constant_override("margin_bottom", 9)
+	_beacon_panel.add_child(beacon_margin)
+	_beacon_label = Label.new()
+	_beacon_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_beacon_label.add_theme_font_size_override("font_size", 13)
+	_beacon_label.add_theme_color_override("font_color", Color(0.96, 0.9, 0.72))
+	beacon_margin.add_child(_beacon_label)
+	add_child(_beacon_panel)
 	world_layer = Node2D.new()
 	world_layer.name = "WorldLayer"
 	add_child(world_layer)
 	resized.connect(_layout_objects)
 
 func compose(sector: Dictionary, selection_key: String) -> void:
+	var beacon := str(sector.get("beacon", "")).strip_edges()
+	_beacon_label.text = "BEACON\n" + beacon if not beacon.is_empty() else "NO BEACON MESSAGE"
+	_beacon_panel.visible = not beacon.is_empty()
 	current_objects.clear()
 	for item in sector.get("ports", []):
 		if item is Dictionary:
@@ -45,7 +71,8 @@ func compose(sector: Dictionary, selection_key: String) -> void:
 	for item in sector.get("ships", []):
 		if item is Dictionary:
 			current_objects.append(_descriptor("ship", item, "ship", ["id", "ship_id"]))
-	current_objects = current_objects.filter(func(item: Dictionary) -> bool: return not str(item.get("key", "")).is_empty())
+	# Keep records with a missing server ID visible as non-actionable artwork so
+	# the player can see the object and the details panel can explain the gap.
 	current_objects.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["key"]) < str(b["key"]))
 	selected_key = selection_key
 	_rebuild_art_objects()
@@ -57,6 +84,14 @@ func select_object(selection_key: String, source: String = "artwork") -> void:
 	selected_key = selection_key
 	_update_highlight()
 	object_selected.emit(selection_key, source)
+
+func _beacon_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.015, 0.04, 0.06, 0.9)
+	style.border_color = Color(0.82, 0.63, 0.31, 0.8)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	return style
 
 func select_warp(destination: int) -> void:
 	if not _warp_markers.has(destination):
@@ -74,7 +109,9 @@ func _descriptor(kind: String, source: Dictionary, sprite_kind: String, id_field
 			identity = source[field]
 			break
 	if identity == null:
-		return {"kind": kind, "name": str(source.get("name", source.get("ship_name", kind.capitalize()))), "key": "", "selectable": false, "data": source.duplicate(true)}
+		var fallback_name := str(source.get("name", source.get("ship_name", kind.capitalize())))
+		var fallback_key := "%s:unknown:%s" % [kind, fallback_name.to_lower().replace(" ", "_")]
+		return {"kind": kind, "name": fallback_name, "key": fallback_key, "selectable": false, "data": source.duplicate(true), "sprite_kind": "ship" if kind == "ship" else sprite_kind}
 	var display_name := str(source.get("name", source.get("ship_name", "Unnamed %s" % kind.capitalize())))
 	return {
 		"kind": kind,
@@ -100,11 +137,16 @@ func _rebuild_art_objects() -> void:
 		art_object.add_child(sprite)
 		var hit_area := Area2D.new()
 		hit_area.input_pickable = true
+		hit_area.collision_layer = 1
+		hit_area.collision_mask = 1
+		hit_area.z_index = 2
 		hit_area.mouse_entered.connect(_on_object_hovered.bind(str(object["key"])))
 		hit_area.mouse_exited.connect(_on_object_unhovered.bind(str(object["key"])))
 		var hit_shape := CollisionShape2D.new()
 		var circle := CircleShape2D.new()
-		circle.radius = 106.0 if str(object["kind"]) == "ship" else 132.0
+		# Match the visible atlas cell rather than relying on the transparent
+		# sprite pixels to define input. This keeps port/planet clicks reliable.
+		circle.radius = 108.0 if str(object["kind"]) == "ship" else 122.0
 		hit_shape.shape = circle
 		hit_area.add_child(hit_shape)
 		art_object.add_child(hit_area)
@@ -263,6 +305,36 @@ func _on_object_input(_viewport: Node, event: InputEvent, _shape_index: int, key
 		grab_focus()
 		get_viewport().set_input_as_handled()
 
+func _input(event: InputEvent) -> void:
+	# Area2D is the normal path, but a Control parent or a renderer/input
+	# backend can prevent physics picking from reaching a child Node2D. Use the
+	# same object geometry as a deterministic fallback hit test on the artwork
+	# canvas itself; this is not a second UI button or an action shortcut.
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var local_position: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
+		var candidate := _object_at_position(local_position)
+		if not candidate.is_empty():
+			select_object(str(candidate.get("key", "")), "artwork")
+			grab_focus()
+			get_viewport().set_input_as_handled()
+
+func _object_at_position(position: Vector2) -> Dictionary:
+	var best := {}
+	var best_distance := INF
+	for object in current_objects:
+		var key := str(object.get("key", ""))
+		var nodes: Dictionary = _sprite_nodes.get(key, {})
+		if nodes.is_empty():
+			continue
+		var root: Node2D = nodes.get("root")
+		if not is_instance_valid(root):
+			continue
+		var distance := position.distance_to(root.position)
+		var radius := 108.0 if str(object.get("kind", "")) == "ship" else 122.0
+		if distance <= radius and distance < best_distance:
+			best = object
+			best_distance = distance
+	return best
 func _on_object_hovered(key: String) -> void:
 	_hovered_key = key
 	_update_highlight()

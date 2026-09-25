@@ -241,7 +241,12 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 	var result := {}
 	_copy_int(data, result, "sector_id", "id")
 	_copy_string(data, result, "name")
+	# Protocol v3 calls this field beacon. Accept beacon_text only as a
+	# defensive read of older server envelopes; presentation still gets the
+	# value from this normalized authoritative sector record.
 	_copy_string(data, result, "beacon")
+	if not result.has("beacon"):
+		_copy_string(data, result, "beacon_text", "beacon")
 	var adjacent = data.get("adjacent_sectors", data.get("adjacent", null))
 	if adjacent is Array:
 		var adjacent_ids := []
@@ -294,9 +299,9 @@ static func _is_integral_number(value: Variant) -> bool:
 		return true
 	return typeof(value) == TYPE_FLOAT and is_finite(value) and value == floor(value)
 
-static func _copy_string(source: Dictionary, target: Dictionary, key: String) -> void:
+static func _copy_string(source: Dictionary, target: Dictionary, key: String, target_key: String = "") -> void:
 	if source.has(key) and source[key] is String:
-		target[key] = source[key]
+		target[target_key if not target_key.is_empty() else key] = source[key]
 
 static func _copy_money(source: Dictionary, target: Dictionary, key: String) -> void:
 	if not source.has(key):

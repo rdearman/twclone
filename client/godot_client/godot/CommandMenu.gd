@@ -13,10 +13,10 @@ const COMMANDS := {
 		{"label": "Rename ship · unavailable", "unavailable_reason": "The ship.rename schema accepts name, but its handler requires ship_id and new_name."},
 		{"label": "Scan adjacent sectors", "command": "move.scan"},
 		{"label": "Sector density scan", "command": "sector.scan.density", "fixed": {}},
-		{"label": "Player rankings", "command": "player.rankings"},
+		{"label": "Player rankings · unavailable", "unavailable_reason": "The current server handler returns an empty rankings list rather than authoritative player ranks, even when players exist."},
 		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
-		{"label": "Hardware catalogue", "command": "hardware.list"},
-		{"label": "Buy ship hardware", "command": "hardware.buy", "fields": [["code", FIELD_TEXT, "Hardware item code", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true},
+		{"label": "Hardware catalogue", "command": "hardware.list", "requires_supported_dock": true, "tooltip": "Dock at a supported hardware port first."},
+		{"label": "Buy ship hardware", "command": "hardware.buy", "requires_supported_dock": true, "fields": [["item_code", FIELD_TEXT, "Hardware item code (from catalogue)", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true, "tooltip": "Dock first; the server catalogue supplies valid hardware codes."},
 		{"label": "Trade routes", "command": "player.computer.recommend_routes", "tooltip": "The server's two-way filter is mismatched; recommendations use its default (false).", "fields": [["max_hops_between", FIELD_INT, "Maximum hops", "10"], ["limit", FIELD_INT, "Result limit", "10"]]},
 	],
 	"COMMUNICATIONS": [
@@ -300,22 +300,102 @@ func dispatch_context_action(action: Dictionary, selection: Dictionary) -> void:
 	_selection = previous_selection
 
 func show_result(label: String, payload: Dictionary) -> void:
-	_result_dialog.title = label
-	_result_text.text = _format_result(payload)
-	_result_dialog.popup_centered(Vector2i(560, 380))
+	var parent := get_parent()
+	if parent and parent.has_method("show_information"):
+		parent.show_information(label, format_result(label, payload))
+	else:
+		_result_dialog.title = label
+		_result_text.text = format_result(label, payload)
+		_result_dialog.popup_centered(Vector2i(560, 380))
+
+func format_result(label: String, payload: Dictionary) -> String:
+	if label.to_lower().contains("density"):
+		return _format_density_result(payload)
+	if label.to_lower().contains("scan"):
+		return _format_scan_result(payload)
+	return _format_result(payload)
+
+func _format_scan_result(payload: Dictionary) -> String:
+	var data = payload.get("data", payload)
+	if not (data is Dictionary):
+		return "No scan data was returned by the server."
+	var sector_id = data.get("sector_id", data.get("id", "unavailable"))
+	var name := str(data.get("name", "Unknown"))
+	var adjacent = data.get("adjacent", data.get("adjacent_sectors", []))
+	var raw_counts = data.get("counts", {})
+	var counts: Dictionary = raw_counts if raw_counts is Dictionary else {}
+	var raw_port = data.get("port", {})
+	var port: Dictionary = raw_port if raw_port is Dictionary else {}
+	var lines: Array[String] = ["Sector %s · %s" % [str(sector_id), name], "", "Adjacent: %s" % _scan_list(adjacent), "Port: %s" % ("present" if bool(port.get("present", false)) else "none"), "Ships: %s" % str(counts.get("ships", data.get("ships", 0))), "Planets: %s" % str(counts.get("planets", data.get("planets", 0))), "Mines: %s" % str(counts.get("mines", data.get("mines", 0))), "Fighters: %s" % str(counts.get("fighters", data.get("fighters", 0)))]
+	var beacon := str(data.get("beacon", "")).strip_edges()
+	lines.append("Beacon: %s" % (beacon if not beacon.is_empty() else "none"))
+	return "\n".join(lines)
+
+func _scan_list(value: Variant) -> String:
+	if not (value is Array) or value.is_empty():
+		return "none"
+	var values: Array[String] = []
+	for item in value:
+		if item is Dictionary:
+			values.append(str(item.get("sector_id", item.get("to_sector", item.get("id", "?")))))
+		else:
+			values.append(str(item))
+	return ", ".join(values)
+
+func _format_density_result(payload: Dictionary) -> String:
+	var data = payload.get("sectors", payload.get("data", payload))
+	if data is Dictionary and data.has("sectors"):
+		data = data["sectors"]
+	var rows: Array[String] = ["SECTOR DENSITY", ""]
+	if data is Dictionary and data.has("density"):
+		rows.append("%s: %s" % [str(data.get("sector_id", "?")), _density_value(data.get("density", null))])
+	elif data is Array:
+		if not data.is_empty() and data[0] is Dictionary:
+			for entry in data:
+				if entry is Dictionary and entry.has("sector_id"):
+					rows.append("%s: %s" % [str(entry["sector_id"]), _density_value(entry.get("density", null))])
+		else:
+			# The compact server form is [sector_id, density, ...]. Keep IDs and
+			# null values intact; never turn array indexes into fake sector IDs.
+			var index := 0
+			while index < data.size():
+				var sid = data[index]
+				var density = data[index + 1] if index + 1 < data.size() else null
+				rows.append("%s: %s" % [str(sid), _density_value(density)])
+				index += 2
+	if rows.size() == 2:
+		rows.append("No density values were returned by the server.")
+	return "\n".join(rows)
+
+func _density_value(value: Variant) -> String:
+	if value == null:
+		return "unavailable"
+	if typeof(value) == TYPE_FLOAT and is_finite(value) and value == floor(value):
+		return str(int(value))
+	return str(value)
 
 func set_activity_history(entries: Array[String]) -> void:
 	_activity_history = entries.duplicate()
 
 func show_activity_history() -> void:
-	_result_dialog.title = "Recent server events"
-	_result_text.text = "No server events have arrived during this session." if _activity_history.is_empty() else "\n\n".join(_activity_history)
-	_result_dialog.popup_centered(Vector2i(620, 420))
+	var content := "No server events have arrived during this session." if _activity_history.is_empty() else "\n\n".join(_activity_history)
+	var parent := get_parent()
+	if parent and parent.has_method("show_information"):
+		parent.show_information("Recent server events", content)
+	else:
+		_result_dialog.title = "Recent server events"
+		_result_text.text = content
+		_result_dialog.popup_centered(Vector2i(620, 420))
 
 func show_help() -> void:
-	_result_dialog.title = "Trade Wars · Field Guide"
-	_result_text.text = "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape/Back to close the current dialog.\n\nCOMMAND\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and the display refreshes from authoritative state. A pending action cannot be sent twice.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
-	_result_dialog.popup_centered(Vector2i(620, 520))
+	var content := "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape to clear selection.\n\nCOMMAND\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and results appear in the Information panel.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
+	var parent := get_parent()
+	if parent and parent.has_method("show_information"):
+		parent.show_information("Trade Wars · Field Guide", content)
+	else:
+		_result_dialog.title = "Trade Wars · Field Guide"
+		_result_text.text = content
+		_result_dialog.popup_centered(Vector2i(620, 520))
 
 func show_shipyard(data: Dictionary, current_ship_name: String = "") -> void:
 	for child in _shipyard_rows.get_children():
@@ -497,8 +577,9 @@ func _render_actions() -> void:
 		var context_stale: bool = (action.has("context_id") or bool(action.get("requires_fresh_sector", false))) and str(freshness.get("sector", "")) != "fresh"
 		var unavailable_reason := str(action.get("unavailable_reason", ""))
 		var missing_shipyard_context := bool(action.get("requires_shipyard_dock", false)) and not _is_docked_at_shipyard()
-		button.disabled = not unavailable_reason.is_empty() or _busy or not connected or context_stale or missing_shipyard_context
-		button.tooltip_text = unavailable_reason if not unavailable_reason.is_empty() else ("Dock at a supported shipyard port in this sector first." if missing_shipyard_context else (str(action.get("tooltip", "")) if action.has("tooltip") else ("Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else "")))))
+		var missing_supported_dock := bool(action.get("requires_supported_dock", false)) and not _is_docked_at_supported_hardware()
+		button.disabled = not unavailable_reason.is_empty() or _busy or not connected or context_stale or missing_shipyard_context or missing_supported_dock
+		button.tooltip_text = unavailable_reason if not unavailable_reason.is_empty() else ("Dock at a supported hardware port in this sector first." if missing_supported_dock else ("Dock at a supported shipyard port in this sector first." if missing_shipyard_context else (str(action.get("tooltip", "")) if action.has("tooltip") else ("Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else ""))))))
 		button.pressed.connect(_choose_action.bind(action))
 		_action_list.add_child(button)
 
@@ -515,6 +596,17 @@ func _is_docked_at_shipyard() -> bool:
 		var port_type := int(port.get("type", -1))
 		if port_id == docked_port_id:
 			return port_type in [9, 10]
+	return false
+
+func _is_docked_at_supported_hardware() -> bool:
+	var ship: Dictionary = _snapshot.get("ship", {})
+	var docked_port_id := int(ship.get("ported", 0))
+	if docked_port_id <= 0:
+		return false
+	var sector: Dictionary = _snapshot.get("sector", {})
+	for port in sector.get("ports", []):
+		if port is Dictionary and int(port.get("id", port.get("port_id", 0))) == docked_port_id:
+			return int(port.get("type", -1)) in [9, 10]
 	return false
 
 func set_busy(value: bool) -> void:

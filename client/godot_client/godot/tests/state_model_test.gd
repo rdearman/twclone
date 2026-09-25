@@ -348,6 +348,8 @@ func _test_scene_state_boundary() -> void:
 	_check(source.contains("gameplay_view.tavern_enter_requested.connect(_on_tavern_enter_requested)"), "StarDock tavern entry is not correlated through Main")
 	_check(source.contains("transport.request(\"tavern.lottery.status\", {}, auth_session.session_token)"), "tavern entry does not verify authoritative tavern presence")
 	_check(source.contains("gameplay_view.port_workflow.confirm_tavern_entered()"), "Tavern menu access is not opened after the server probe")
+	_check(source.contains("config.set_value(\"server\", \"profiles\"") and source.contains("config.set_value(\"server\", \"selected_profile\""), "saved connection profiles are not persisted")
+	_check(not source.contains("config.set_value(\"auth\", \"password\"") and not source.contains("config.set_value(\"server\", \"profiles\", {\"password\""), "login configuration attempts to persist a password")
 	_check(not source.contains("JSON.stringify(data"), "Main.gd still dumps response data")
 
 func _test_normal_output_safety() -> void:

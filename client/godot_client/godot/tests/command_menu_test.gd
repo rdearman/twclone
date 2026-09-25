@@ -50,14 +50,14 @@ func _run() -> void:
 	if captured.size() > 3:
 		_check(captured[3]["command"] == "planet.info", "planet command name changed")
 		_check(captured[3]["data"] == {"planet_id": 19}, "planet ID was not bound from authoritative selection")
-	menu._choose_action({"command": "hardware.buy", "label": "Buy ship hardware", "mutating": true, "idempotency": true, "fields": [["code", "text", "Hardware item code", ""], ["quantity", "integer", "Quantity", "1"]]})
-	menu._form_fields["code"].text = "MARKER_BEACON"
+	menu._choose_action({"command": "hardware.buy", "label": "Buy ship hardware", "mutating": true, "idempotency": true, "fields": [["item_code", "text", "Hardware item code", ""], ["quantity", "integer", "Quantity", "1"]]})
+	menu._form_fields["item_code"].text = "MARKER_BEACON"
 	menu._form_fields["quantity"].text = "2"
 	menu._submit_form()
 	_check(captured.size() == 5, "hardware purchase form did not emit")
 	if captured.size() > 4:
 		_check(captured[4]["command"] == "hardware.buy", "hardware purchase command changed")
-		_check(captured[4]["data"].get("code") == "MARKER_BEACON" and captured[4]["data"].get("quantity") == 2, "hardware request does not match the server schema")
+		_check(captured[4]["data"].get("item_code") == "MARKER_BEACON" and captured[4]["data"].get("quantity") == 2, "hardware request does not match the server schema")
 		_check(not str(captured[4]["data"].get("idempotency_key", "")).is_empty(), "hardware purchase omitted its idempotency key")
 	menu._choose_action({"command": "mail.read", "label": "Read mail by ID", "mutating": true, "duplicate_mail_read_id": true, "fields": [["mail_id", "integer", "Mail ID", ""]]})
 	(menu._form_fields["mail_id"] as LineEdit).text = "52"

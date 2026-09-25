@@ -22,6 +22,39 @@ func _run() -> void:
 		"freshness": {"sector": "fresh", "overall": "fresh"},
 		"sector": {"id": 17, "adjacent_sector_ids": [18], "ports": [], "planets": [], "ships": []},
 	})
+	view.show_command_result("Sector density scan", {"sectors": [21, 21.0, 213, 100.0, 808, 0, 1793, null]})
+	_check(not view.command_menu._result_dialog.visible, "read-only result opened a modal dialog")
+	_check(view.information_text.text.contains("21: 21") and view.information_text.text.contains("1793: unavailable"), "density result was not rendered in the Information panel")
+	var command_calls := 0
+	view.command_requested.connect(func(_command: String, _data: Dictionary, _label: String, _mutating: bool) -> void: command_calls += 1)
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 17},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 17, "ports": [{"id": 7, "name": "Batiredigo", "type": 2}], "planets": [], "ships": [], "adjacent_sector_ids": []}
+	})
+	var port_nodes: Dictionary = view.sector_view._sprite_nodes.get("port:7", {})
+	_check(not port_nodes.is_empty(), "port artwork node was not created")
+	var port_hit_area: Area2D = port_nodes["root"].get_child(1)
+	_check(port_hit_area.input_pickable and port_hit_area.get_child(0).shape.radius > 0.0, "port artwork does not have a usable hit area")
+	var port_click := InputEventMouseButton.new()
+	port_click.button_index = MOUSE_BUTTON_LEFT
+	port_click.pressed = true
+	port_click.position = port_nodes["root"].get_global_transform_with_canvas().origin
+	view.sector_view._input(port_click)
+	_check(view.selection_title.text == "PORT" and view.selection_detail.text.contains("Batiredigo"), "artwork click did not select the exact port in Sector Contents")
+	_check(not view.notification_label.visible, "artwork selection recreated the floating selection banner")
+	_check(not view.command_menu._result_dialog.visible and view.information_text.text.contains("21: 21"), "port selection covered or replaced the Information panel")
+	_check(command_calls == 0, "artwork selection emitted a gameplay command")
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 17},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 17, "ports": [{"name": "Unnamed-ID Port", "type": 2}], "planets": [], "ships": [], "adjacent_sector_ids": []}
+	})
+	_check(not view.sector_view._sprite_nodes.get("port:unknown:unnamed-id_port", {}).is_empty(), "port without an ID failed to render selectable artwork")
 	var activations: Array[int] = []
 	view.warp_activated.connect(func(destination: int) -> void: activations.append(destination))
 	view._on_warp_selected("warp:18", 18)

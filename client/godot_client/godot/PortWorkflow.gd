@@ -22,6 +22,8 @@ var _tavern_button: Button
 var _description: Label
 var _commodity_region: VBoxContainer
 var _tavern_mode := false
+var _hold_label: Label
+var _player_ship: Dictionary = {}
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -93,6 +95,10 @@ func _ready() -> void:
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(description)
 	_description = description
+	_hold_label = Label.new()
+	_hold_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hold_label.add_theme_color_override("font_color", Color(0.74, 0.86, 0.82))
+	column.add_child(_hold_label)
 	_commodity_region = VBoxContainer.new()
 	_commodity_region.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(_commodity_region)
@@ -140,6 +146,7 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 	_sector_id = sector_id
 	_port_title.text = str(_port.get("name", "PORT")).to_upper()
 	_description.text = "Authoritative port inventory · choose a commodity and request a quote before committing a trade."
+	_update_hold_label()
 	_back_button.text = "BACK TO SECTOR"
 	_tavern_button.visible = _is_stardock()
 	_commodity_region.visible = true
@@ -159,6 +166,30 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 			_add_commodity_row(list, item)
 	visible = true
 	_trade_dialog.hide()
+
+func set_player_hold(ship: Dictionary) -> void:
+	_player_ship = ship.duplicate(true) if ship is Dictionary else {}
+	_update_hold_label()
+
+func _update_hold_label() -> void:
+	if not is_instance_valid(_hold_label):
+		return
+	var capacity = _player_ship.get("holds", null)
+	var cargo: Array = _player_ship.get("cargo", [])
+	var used = _player_ship.get("cargo_used", null)
+	if used == null:
+		used = 0
+		for item in cargo:
+			if item is Dictionary and (item.get("quantity", 0) is int or item.get("quantity", 0) is float):
+				used += int(item.get("quantity", 0))
+	var contents := "empty"
+	if not cargo.is_empty():
+		var parts: Array[String] = []
+		for item in cargo:
+			if item is Dictionary:
+				parts.append("%s × %s" % [str(item.get("commodity", "?")), str(item.get("quantity", 0))])
+		contents = ", ".join(parts)
+	_hold_label.text = "YOUR HOLD · %s/%s used · Available space: %s\n%s" % [str(used), "—" if capacity == null else str(capacity), "—" if capacity == null else str(maxi(0, int(capacity) - int(used))), contents]
 
 func enter_tavern() -> void:
 	if not visible or not _is_stardock() or _tavern_mode:

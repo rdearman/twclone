@@ -274,19 +274,21 @@ h_port_buys_commodity (db_t *db, int port_id, const char *commodity)
 
   int current_quantity = 0;
   int max_capacity = 0;
+  bool buys = false;
 
-  if (db_ports_get_buy_eligibility
+  /* Enforce the generated port_trade B/S pattern as well as capacity. */
+  if (db_ports_get_commodity_details
       (db, port_id, canonical_commodity_code, &current_quantity,
-       &max_capacity) != 0)
+       &max_capacity, &buys, NULL) != 0)
     {
       free (canonical_commodity_code);
       return 0;
     }
 
-  int buys = (current_quantity < max_capacity) ? 1 : 0;
+  int can_buy = buys && current_quantity < max_capacity;
 
   free (canonical_commodity_code);
-  return buys;
+  return can_buy;
 }
 
 
@@ -477,10 +479,14 @@ h_port_sells_commodity (db_t *db, int port_id, const char *commodity)
       return 0;
     }
   int quantity = 0;
-  int rc = h_get_port_commodity_quantity (db, port_id, commodity, &quantity);
+  int max_capacity = 0;
+  bool sells = false;
+  int rc = db_ports_get_commodity_details (db, port_id, commodity,
+                                            &quantity, &max_capacity,
+                                            NULL, &sells);
 
 
-  if (rc == 0 && quantity > 0)
+  if (rc == 0 && sells && quantity > 0)
     {
       return 1;
     }

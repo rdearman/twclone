@@ -99,6 +99,8 @@ DECLARE
 
     v_size int;
     v_cap int;
+    v_port_size int;
+    v_tech_level int;
 
     v_code_ore text;
     v_code_org text;
@@ -118,6 +120,23 @@ BEGIN
 
     IF v_port_ratio IS NULL OR v_port_ratio > 100 OR v_port_ratio < 0 THEN
         v_port_ratio := 40;
+    END IF;
+
+    /* The generator must use the same capacity/tech values that the server
+     * will use.  Do this before inserting stock; applying these values after
+     * seeding stock can turn a buy port into a full port. */
+    SELECT value::int INTO v_port_size
+      FROM config
+     WHERE key = 'port_size';
+    IF v_port_size IS NULL OR v_port_size <= 0 THEN
+        v_port_size := 10;
+    END IF;
+
+    SELECT value::int INTO v_tech_level
+      FROM config
+     WHERE key = 'tech_level';
+    IF v_tech_level IS NULL OR v_tech_level <= 0 THEN
+        v_tech_level := 1;
     END IF;
 
     IF target_sectors IS NULL THEN
@@ -142,19 +161,16 @@ BEGIN
 
     /* Insert ports respecting port_ratio, and capture their IDs and types */
     /* Type 10 = black market (outlaw), Type 1-8 = regular ports */
-    WITH inserted_ports AS (
-        INSERT INTO ports (number, name, sector_id, type)
+    WITH candidates AS (
         SELECT
-            s.sector_id AS number,
-            randomname() AS name,
-            s.sector_id AS sector_id,
-            CASE 
+            s.sector_id,
+            CASE
                 WHEN random() * 100.0 < COALESCE((SELECT value::numeric FROM config WHERE key = 'outlaw_port_percentage'), 10.0)
-                THEN 10  /* Black market port */
-                ELSE floor(random() * 8 + 1)::int  /* Regular port types 1-8 */
+                THEN 10
+                ELSE floor(random() * 8 + 1)::int
             END AS type
         FROM sectors s
-        WHERE s.sector_id > 10                       /* Don't create ports in Fedspace core */
+        WHERE s.sector_id > 10
           AND s.sector_id <= v_target
           AND NOT EXISTS (
                 SELECT 1
@@ -162,6 +178,23 @@ BEGIN
                  WHERE p.sector_id = s.sector_id
           )
           AND random() <= (v_port_ratio / 100.0)
+    ),
+    inserted_ports AS (
+        INSERT INTO ports (number, name, sector_id, type, size, techlevel,
+                           porttype_id)
+        SELECT
+            c.sector_id AS number,
+            randomname() AS name,
+            c.sector_id AS sector_id,
+            c.type,
+            v_port_size,
+            v_tech_level,
+            CASE
+                WHEN c.type = 10
+                THEN (SELECT porttype_id FROM porttypes WHERE code = 'BLACKMARKET')
+                ELSE (SELECT porttype_id FROM porttypes WHERE code = 'CLASS0')
+            END
+        FROM candidates c
         RETURNING port_id, type, sector_id
     )
     INSERT INTO new_ports
@@ -319,7 +352,7 @@ BEGIN
         VALUES
             ('port', v_port_rec.port_id, v_code_ore,
                 CASE
-                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity='ore' AND pt.mode='buy')
+                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity = v_code_ore AND pt.mode='buy')
                         THEN GREATEST(0, (v_cap * (random() * 0.10))::int)
                     ELSE GREATEST(1, (v_cap * (0.60 + random() * 0.35))::int)
                 END,
@@ -327,7 +360,7 @@ BEGIN
             ),
             ('port', v_port_rec.port_id, v_code_org,
                 CASE
-                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity='organics'  AND pt.mode='buy')
+                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity = v_code_org AND pt.mode='buy')
                         THEN GREATEST(0, (v_cap * (random() * 0.10))::int)
                     ELSE GREATEST(1, (v_cap * (0.60 + random() * 0.35))::int)
                 END,
@@ -335,7 +368,7 @@ BEGIN
             ),
             ('port', v_port_rec.port_id, v_code_equ,
                 CASE
-                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity='equipment' AND pt.mode='buy')
+                    WHEN EXISTS (SELECT 1 FROM port_trade pt WHERE pt.port_id = v_port_rec.port_id AND pt.commodity = v_code_equ AND pt.mode='buy')
                         THEN GREATEST(0, (v_cap * (random() * 0.10))::int)
                     ELSE GREATEST(1, (v_cap * (0.60 + random() * 0.35))::int)
                 END,
@@ -358,7 +391,7 @@ BEGIN
         'port' AS entity_type,
         p.port_id AS entity_id,
         c.code AS commodity_code,
-        GREATEST(10, (p.size * 1000 * (0.20 + random() * 0.30))::int) AS quantity,
+        GREATEST(10, (COALESCE(p.size, v_port_size) * 1000 * (0.20 + random() * 0.30))::int) AS quantity,
         c.base_price AS price
     FROM new_ports np
     JOIN ports p ON p.port_id = np.port_id
@@ -366,6 +399,24 @@ BEGIN
     WHERE p.type = 10  /* Black market ports only */
       AND c.illegal = TRUE  /* Only illegal commodities */
     ON CONFLICT DO NOTHING;
+
+    /* Phase 9 is loaded before BigBang creates ports.  Seed dynamic state
+     * here as well so newly generated ports have a row from their first tick.
+     * Use the actual entity stock rather than a disconnected fixed value. */
+    INSERT INTO port_commodity_state
+        (port_id, commodity_code, stock_level, rolling_volume, updated_at)
+    SELECT np.port_id,
+           c.code,
+           COALESCE(es.quantity, 0),
+           0,
+           CURRENT_TIMESTAMP
+      FROM new_ports np
+      CROSS JOIN commodities c
+      LEFT JOIN entity_stock es
+        ON es.entity_type = 'port'
+       AND es.entity_id = np.port_id
+       AND es.commodity_code = c.code
+    ON CONFLICT (port_id, commodity_code) DO NOTHING;
 
     /* Create bank accounts for the new ports */
     INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
@@ -416,11 +467,15 @@ BEGIN
     -- Pick random sector_id > 10
     v_sector := 11 + floor(random() * (v_max_sector - 10));
     -- Insert Stardock (Type 9, Size 10, Tech 10)
-    INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash)
-        VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000)
+    INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash,
+                       porttype_id)
+        VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000,
+                (SELECT porttype_id FROM porttypes WHERE code = 'STARDOCK'))
     ON CONFLICT (sector_id, number)
         DO UPDATE SET
-            name = EXCLUDED.name, type = EXCLUDED.type, size = EXCLUDED.size, techlevel = EXCLUDED.techlevel, petty_cash = EXCLUDED.petty_cash
+            name = EXCLUDED.name, type = EXCLUDED.type, size = EXCLUDED.size,
+            techlevel = EXCLUDED.techlevel, petty_cash = EXCLUDED.petty_cash,
+            porttype_id = EXCLUDED.porttype_id
         RETURNING
             port_id INTO v_port_id;
     -- Create bank account for Stardock
@@ -1458,5 +1513,3 @@ END;
 $$;
 
 COMMIT;
-
-

@@ -7,11 +7,14 @@ signal command_requested(command: String, data: Dictionary, label: String, mutat
 signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
 signal trade_confirmation(accepted: bool)
 signal tavern_enter_requested
+signal route_engage_requested
+signal route_cancel_requested
 
 const SectorViewScript = preload("res://SectorView.gd")
 const CommandMenuScript = preload("res://CommandMenu.gd")
 const PortWorkflowScript = preload("res://PortWorkflow.gd")
 const PlanetWorkflowScript = preload("res://PlanetWorkflow.gd")
+const LocalSectorNotes = preload("res://LocalSectorNotes.gd")
 const COMMAND_RAIL_TOAST_X := 310.0
 
 var sector_view
@@ -42,6 +45,10 @@ var trade_quote_dialog: ConfirmationDialog
 var center_split: SplitContainer
 var gameplay_body: HBoxContainer
 var command_panel: PanelContainer
+var information_panel: PanelContainer
+var information_title: Label
+var information_text: Label
+var information_scroll: ScrollContainer
 var selection_panel: PanelContainer
 var panel_column: VBoxContainer
 var contents_scroll: ScrollContainer
@@ -54,8 +61,14 @@ var _selected_key := ""
 var _rows: Dictionary = {}
 var _hovered_key := ""
 var _planet_mode := false
+var _route_panel: PanelContainer
+var _route_label: Label
+var _local_notes
+var _note_input: LineEdit
+var _note_status: Label
 
 func _ready() -> void:
+	_local_notes = LocalSectorNotes.new()
 	_build()
 	_render_snapshot(_snapshot)
 	resized.connect(_update_responsive_layout)
@@ -95,12 +108,11 @@ func clear_hover_hint(_key: String) -> void:
 	_hovered_key = ""
 	if _selected_key.is_empty():
 		notification_label.text = "Select an object to see its contextual actions."
+		notification_label.visible = true
 	else:
-		var object := _selected_descriptor()
-		if not object.is_empty():
-			notification_label.text = "SELECTED · %s · %s" % [str(object.get("kind", "object")).to_upper(), str(object.get("name", "object"))]
-		else:
-			notification_label.text = "SELECTED · %s" % _selected_key
+		# Selection details live only in the Sector Contents panel. Do not put a
+		# second selection summary over the Information panel/artwork boundary.
+		notification_label.visible = false
 
 func set_action_pending(pending: bool) -> void:
 	if not is_instance_valid(action_button):
@@ -227,6 +239,27 @@ func _build() -> void:
 	details_button.pressed.connect(_on_view_details)
 	_apply_button_style(details_button, false)
 	selection_column.add_child(details_button)
+	var note_title := _label("PRIVATE SECTOR NOTE", 10, Color(0.48, 0.78, 0.75))
+	selection_column.add_child(note_title)
+	_note_input = LineEdit.new()
+	_note_input.placeholder_text = "e.g. Batiredigo sells slaves"
+	_note_input.tooltip_text = "Stored locally on this client and never sent as a gameplay command."
+	_note_input.max_length = 240
+	selection_column.add_child(_note_input)
+	var note_row := HBoxContainer.new()
+	var save_note := Button.new()
+	save_note.text = "SAVE NOTE"
+	save_note.tooltip_text = "Save a private note for this sector"
+	save_note.pressed.connect(_save_sector_note)
+	note_row.add_child(save_note)
+	var remove_note := Button.new()
+	remove_note.text = "REMOVE"
+	remove_note.tooltip_text = "Remove this private sector note"
+	remove_note.pressed.connect(_remove_sector_note)
+	note_row.add_child(remove_note)
+	selection_column.add_child(note_row)
+	_note_status = _label("Private · local only", 10, Color(0.54, 0.65, 0.67))
+	selection_column.add_child(_note_status)
 	contents_scroll = ScrollContainer.new()
 	contents_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	panel_column.add_child(contents_scroll)
@@ -240,6 +273,8 @@ func _build() -> void:
 	)
 	gameplay_body.add_child(command_menu)
 	gameplay_body.move_child(command_menu, 0)
+	_build_information_panel()
+	gameplay_body.move_child(information_panel, 1)
 	command_menu.open_for(_snapshot, {})
 	port_workflow = PortWorkflowScript.new()
 	port_workflow.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int) -> void:
@@ -301,6 +336,30 @@ func _build() -> void:
 	notification_label = _label("Select an object to see its contextual details.", 13, Color(0.91, 0.92, 0.87))
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	toast_margin.add_child(notification_label)
+	_route_panel = PanelContainer.new()
+	_route_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_route_panel.offset_left = COMMAND_RAIL_TOAST_X
+	_route_panel.offset_top = 76
+	_route_panel.offset_right = -20
+	_route_panel.custom_minimum_size.y = 48
+	_route_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.04, 0.10, 0.10, 0.97), Color(0.84, 0.64, 0.3, 0.9)))
+	_route_panel.visible = false
+	add_child(_route_panel)
+	var route_row := HBoxContainer.new()
+	_route_panel.add_child(route_row)
+	_route_label = _label("ROUTE", 12, Color(0.95, 0.88, 0.7))
+	_route_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	route_row.add_child(_route_label)
+	var engage := Button.new()
+	engage.text = "ENGAGE AUTONAV"
+	engage.tooltip_text = "Execute the confirmed route one server-confirmed warp at a time"
+	engage.pressed.connect(func() -> void: route_engage_requested.emit())
+	route_row.add_child(engage)
+	var cancel := Button.new()
+	cancel.text = "CANCEL ROUTE"
+	cancel.tooltip_text = "Discard the plotted route without moving"
+	cancel.pressed.connect(func() -> void: route_cancel_requested.emit())
+	route_row.add_child(cancel)
 
 	offline_overlay = PanelContainer.new()
 	offline_overlay.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -376,6 +435,7 @@ func _render_snapshot(snapshot: Dictionary) -> void:
 	if not _selected_key.is_empty() and not _rows.has(_selected_key):
 		_selected_key = ""
 		_render_selection({})
+	_refresh_note_editor()
 	if is_instance_valid(command_menu):
 		command_menu.update_snapshot(snapshot)
 
@@ -533,8 +593,6 @@ func _select_warp(key: String, destination: int, notify: bool) -> void:
 	var descriptor := {"kind": "warp", "name": "Sector %d" % destination, "key": key, "data": {"sector_id": destination}}
 	_render_selection(descriptor)
 	_set_selected_notification("WARP", "Sector %d" % destination)
-	if notify:
-		show_notification("Selected adjacent destination · Sector %d." % destination)
 
 func _select(key: String, notify: bool) -> void:
 	_selected_key = key
@@ -545,9 +603,7 @@ func _select(key: String, notify: bool) -> void:
 	_style_all_rows()
 	_render_selection(sector_view.selected_object())
 	var selected: Dictionary = sector_view.selected_object()
-	_set_selected_notification(str(selected.get("kind", "OBJECT")).to_upper(), str(selected.get("name", "Object")))
-	if notify:
-		show_notification("Selected %s." % str(selected.get("name", "object")))
+	notification_label.visible = false
 
 func _on_art_object_selected(key: String, _source: String) -> void:
 	_selected_key = key
@@ -555,13 +611,12 @@ func _on_art_object_selected(key: String, _source: String) -> void:
 	_render_selection(sector_view.selected_object())
 	if _rows.has(key):
 		_rows[key].grab_focus()
-	show_notification("Selected %s." % str(sector_view.selected_object().get("name", "object")))
-	var selected: Dictionary = sector_view.selected_object()
-	_set_selected_notification(str(selected.get("kind", "OBJECT")).to_upper(), str(selected.get("name", "Object")))
+	notification_label.visible = false
 
 func _set_selected_notification(kind: String, title: String) -> void:
-	notification_label.text = "SELECTED · %s · %s" % [kind, title]
-	notification_label.visible = true
+	# Kept as a compatibility seam for callers; selection is rendered in the
+	# right-hand Sector Contents panel, never in the floating notification bar.
+	notification_label.visible = false
 
 func _on_art_warp_selected(destination: int, _source: String) -> void:
 	var key := "warp:%d" % destination
@@ -599,15 +654,65 @@ func _render_selection(object: Dictionary) -> void:
 			extras.append("Type %s" % str(fields["type"]))
 		if fields.has("owner"):
 			extras.append("Owner %s" % str(fields["owner"]))
+		if kind == "ship":
+			var selected_id = fields.get("id", fields.get("ship_id", null))
+			var current_id = _snapshot.get("hud", {}).get("ship_id", null)
+			if selected_id != null and current_id != null and str(selected_id) == str(current_id):
+				var current_ship: Dictionary = _snapshot.get("ship", {})
+				var cargo: Array = current_ship.get("cargo", [])
+				extras.append("Holds %s · Cargo %s" % [_display(current_ship.get("holds")), _cargo_summary(cargo)])
+			else:
+				extras.append("Cargo unavailable · sector.info does not return other ships' holds")
 		if not extras.is_empty():
 			selection_detail.text += "\n" + " · ".join(extras)
 		_add_object_actions(kind, object)
 	_apply_context_action_availability()
+	_refresh_note_editor()
+
+func _cargo_summary(cargo: Array) -> String:
+	if cargo.is_empty():
+		return "empty"
+	var parts: Array[String] = []
+	for item in cargo:
+		if item is Dictionary:
+			parts.append("%s × %s" % [str(item.get("commodity", "?")), str(item.get("quantity", 0))])
+	return ", ".join(parts) if not parts.is_empty() else "empty"
+
+func _current_sector_id() -> int:
+	var value = _snapshot.get("hud", {}).get("sector_id", _snapshot.get("sector", {}).get("id", 0))
+	return int(value) if value != null else 0
+
+func _refresh_note_editor() -> void:
+	if not is_instance_valid(_note_input) or _local_notes == null:
+		return
+	var sector_id := _current_sector_id()
+	_note_input.text = _local_notes.get_note(sector_id) if sector_id > 0 else ""
+	_note_status.text = "Private · local only" if sector_id > 0 else "No confirmed sector"
+
+func _save_sector_note() -> void:
+	var sector_id := _current_sector_id()
+	if sector_id <= 0:
+		show_notification("Cannot save a note without a confirmed sector ID.")
+		return
+	_local_notes.set_note(sector_id, _note_input.text)
+	show_notification("Private note saved for Sector %d." % sector_id)
+
+func _remove_sector_note() -> void:
+	var sector_id := _current_sector_id()
+	if sector_id <= 0:
+		return
+	_local_notes.remove_note(sector_id)
+	_note_input.text = ""
+	show_notification("Private note removed from Sector %d." % sector_id)
 
 func _add_object_actions(kind: String, object: Dictionary) -> void:
 	match kind:
 		"port":
-			_add_context_button("DOCK · OPEN PORT", true, _dispatch_context_action.bind({"label": "Dock · open port screen", "command": "port.info", "fixed": {}} , object))
+			var port_data: Dictionary = object.get("data", {})
+			if port_data.has("id") or port_data.has("port_id"):
+				_add_context_button("DOCK · OPEN PORT", true, _dispatch_context_action.bind({"label": "Dock · open port screen", "command": "port.info", "fixed": {}} , object))
+			else:
+				_add_context_unavailable("DOCK · PORT ID UNAVAILABLE", "The sector response did not include this port's ID, so the client cannot safely request port.info.")
 		"planet":
 			_add_context_button("PLANET INFORMATION", false, _dispatch_context_action.bind({"label": "Planet information", "command": "planet.info", "context_id": "planet_id"}, object))
 			_add_context_button("LAND ON PLANET", true, _dispatch_context_action.bind({"label": "Land on planet", "command": "planet.land", "context_id": "planet_id", "mutating": true}, object))
@@ -688,7 +793,61 @@ func request_warp_now(destination: int) -> void:
 	warp_activated.emit(destination)
 
 func show_command_result(label: String, data: Dictionary) -> void:
-	command_menu.show_result(label, data)
+	show_information(label, command_menu.format_result(label, data))
+
+func show_information(title: String, content: String) -> void:
+	if not is_instance_valid(information_panel):
+		return
+	information_title.text = title.to_upper()
+	information_text.text = content if not content.strip_edges().is_empty() else "No information was returned."
+	information_scroll.scroll_vertical = 0
+
+func clear_information() -> void:
+	show_information("Information", "No result yet. Read-only command results will appear here and will not interrupt the sector view.")
+
+func _build_information_panel() -> void:
+	information_panel = PanelContainer.new()
+	information_panel.custom_minimum_size.x = 270
+	information_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	information_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.032, 0.049, 0.97), Color(0.55, 0.42, 0.25, 0.9)))
+	gameplay_body.add_child(information_panel)
+	var margin := _inner_margin(information_panel, 14, 14)
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	margin.add_child(column)
+	var heading := HBoxContainer.new()
+	column.add_child(heading)
+	information_title = _label("INFORMATION", 16, Color(0.94, 0.78, 0.51))
+	information_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(information_title)
+	var clear := Button.new()
+	clear.text = "CLEAR"
+	clear.tooltip_text = "Clear the current information result"
+	clear.focus_mode = Control.FOCUS_ALL
+	clear.pressed.connect(clear_information)
+	heading.add_child(clear)
+	var rule := ColorRect.new()
+	rule.custom_minimum_size.y = 1
+	rule.color = Color(0.55, 0.42, 0.25, 0.7)
+	column.add_child(rule)
+	information_scroll = ScrollContainer.new()
+	information_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.add_child(information_scroll)
+	information_text = _label("No result yet. Read-only command results will appear here and will not interrupt the sector view.", 12, Color(0.84, 0.87, 0.83))
+	information_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	information_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	information_scroll.add_child(information_text)
+
+func show_planned_route(path: Array, destination: int) -> void:
+	var ids: Array[String] = []
+	for item in path:
+		if typeof(item) == TYPE_INT or typeof(item) == TYPE_FLOAT:
+			ids.append(str(int(item)))
+	_route_label.text = "PLANNED ROUTE · DESTINATION %d · %s · No movement yet" % [destination, " → ".join(ids)]
+	_route_panel.visible = not ids.is_empty()
+
+func clear_planned_route() -> void:
+	_route_panel.visible = false
 
 func show_shipyard(data: Dictionary) -> void:
 	var ship_state: Dictionary = _snapshot.get("ship", {})
@@ -721,6 +880,7 @@ func enter_port_workflow(data: Dictionary) -> void:
 	if sector_id == null:
 		show_notification("Port information arrived, but the current sector is unavailable.")
 		return
+	port_workflow.set_player_hold(_snapshot.get("ship", {}))
 	port_workflow.show_port(data, int(sector_id))
 
 func enter_planet_workflow(planet_id: int) -> void:

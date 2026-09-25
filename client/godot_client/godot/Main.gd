@@ -19,6 +19,8 @@ var network_log_file: FileAccess
 var server_ip := ""
 var server_port := 0
 var auth_username := ""
+var server_profiles: Array[Dictionary] = []
+var selected_server_profile := -1
 var _login_password := ""
 var _connection_started := false
 var _authenticated_once := false
@@ -29,6 +31,9 @@ var _pending_trade: Dictionary = {}
 var _landed_planet_id := 0
 var _planet_pending_count := 0
 var _activity_history: Array[String] = []
+var _planned_route: Array[int] = []
+var _route_destination := 0
+var _route_running := false
 
 func _ready() -> void:
 	transport = ProtocolTransport.new(15.0, 200)
@@ -49,6 +54,7 @@ func _ready() -> void:
 	refresh_coordinator.refresh_failed.connect(_on_refresh_failed)
 	refresh_coordinator.refresh_finished.connect(_on_refresh_finished)
 	login_view.login_requested.connect(_on_login_requested)
+	login_view.profiles_changed.connect(_on_profiles_changed)
 	gameplay_view.reconnect_requested.connect(_on_reconnect_requested)
 	gameplay_view.warp_requested.connect(_on_warp_requested)
 	gameplay_view.warp_activated.connect(_on_warp_requested)
@@ -56,7 +62,10 @@ func _ready() -> void:
 	gameplay_view.trade_requested.connect(_on_trade_requested)
 	gameplay_view.trade_confirmation.connect(_on_trade_confirmation)
 	gameplay_view.tavern_enter_requested.connect(_on_tavern_enter_requested)
+	gameplay_view.route_engage_requested.connect(_engage_planned_route)
+	gameplay_view.route_cancel_requested.connect(_cancel_planned_route)
 	_load_config()
+	login_view.set_profiles(server_profiles, selected_server_profile)
 	login_view.set_connection_values(server_ip if not server_ip.is_empty() else "127.0.0.1", server_port if server_port > 0 else 1234, auth_username)
 	login_view.set_status("Enter your captain credentials to begin.")
 	gameplay_view.visible = false
@@ -81,6 +90,7 @@ func _on_login_requested(host: String, port: int, username: String, password: St
 	server_ip = host
 	server_port = port
 	auth_username = username
+	selected_server_profile = login_view.get_selected_profile_index()
 	_login_password = password
 	_save_config()
 	login_view.set_status("Connecting to %s:%d…" % [server_ip, server_port], true)
@@ -110,6 +120,10 @@ func _submit_login() -> void:
 func _on_transport_disconnected(reason: String) -> void:
 	_connection_started = false
 	_pending_game_commands.clear()
+	_route_running = false
+	_planned_route.clear()
+	_route_destination = 0
+	gameplay_view.clear_planned_route()
 	_command_refresh_pending = false
 	_warp_refresh_pending = false
 	_planet_pending_count = 0
@@ -165,6 +179,8 @@ func _on_transport_reply(request_id: String, response: Dictionary, command: Stri
 				gameplay_view.enter_port_workflow(port_result.get("data", {}))
 			else:
 				gameplay_view.show_notification("Port refresh refused · %s" % str(port_result.get("message", "No current port data.")))
+		elif operation.get("kind") == "route_warp":
+			_finish_route_warp(response, operation)
 		else:
 			await _finish_command_reply(response, operation)
 		return
@@ -398,6 +414,28 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 				gameplay_view.set_command_busy(false)
 				gameplay_view.show_notification("Landing succeeded, but the response omitted the planet ID.")
 			return
+		if command_name == "move.autopilot.start":
+			var path: Array = _route_from_response(data)
+			if path.is_empty():
+				gameplay_view.set_command_busy(false)
+				gameplay_view.show_notification("Route planner returned no usable path. No movement was made.")
+			else:
+				_planned_route.clear()
+				for sector_id in path:
+					if typeof(sector_id) == TYPE_INT or typeof(sector_id) == TYPE_FLOAT:
+						_planned_route.append(int(sector_id))
+				var current_sector := int(gameplay_view._snapshot.get("hud", {}).get("sector_id", 0))
+				if not _planned_route.is_empty() and _planned_route[0] == current_sector:
+					_planned_route.pop_front()
+				if _planned_route.is_empty():
+					gameplay_view.set_command_busy(false)
+					gameplay_view.show_notification("Route planner confirms you are already at the destination.")
+					return
+				_route_destination = int(_planned_route.back())
+				gameplay_view.set_command_busy(false)
+				gameplay_view.show_planned_route(_planned_route, _route_destination)
+				gameplay_view.show_notification("Route plotted · review it, then engage Autonav to move.")
+			return
 		if command_name == "planet.colonists.set":
 			gameplay_view.show_notification("Colonist transfer confirmed.%s" % (" · " + summary if not summary.is_empty() else ""))
 			_request_planet_surface_records()
@@ -491,6 +529,61 @@ func _on_trade_requested(direction: String, port_id: int, sector_id: int, commod
 		return
 	_pending_game_commands[request_id] = {"kind": "trade_quote", "label": "Trade quote"}
 	gameplay_view.show_notification("Requesting the server's current trade quote…")
+
+func _route_from_response(data: Dictionary) -> Array:
+	var path = data.get("path", data.get("steps", data.get("sectors", [])))
+	if not (path is Array):
+		return []
+	return path
+
+func _cancel_planned_route() -> void:
+	if _route_running:
+		return
+	_planned_route.clear()
+	_route_destination = 0
+	gameplay_view.clear_planned_route()
+	gameplay_view.show_notification("Plotted route cancelled. No movement was made.")
+
+func _engage_planned_route() -> void:
+	if _route_running or _planned_route.is_empty():
+		return
+	_route_running = true
+	gameplay_view.clear_planned_route()
+	gameplay_view.show_notification("Autonav engaged · waiting for the first warp confirmation.")
+	_send_next_route_hop()
+
+func _send_next_route_hop() -> void:
+	if _planned_route.is_empty():
+		_route_running = false
+		gameplay_view.show_notification("Autonav complete · destination reached and confirmed.")
+		_refresh_after_warp_attempt()
+		return
+	var next := int(_planned_route.pop_front())
+	var request_id: String = transport.request("move.warp", {"to_sector_id": next}, auth_session.session_token)
+	if request_id.is_empty():
+		_route_running = false
+		_planned_route.clear()
+		gameplay_view.show_notification("Autonav stopped · the next warp was not sent.")
+		return
+	_pending_game_commands[request_id] = {"kind": "route_warp", "destination": next}
+	gameplay_view.show_notification("Autonav · requesting warp to Sector %d…" % next)
+
+func _finish_route_warp(response: Dictionary, operation: Dictionary) -> void:
+	var result := Protocol.result_from_response(response)
+	if result.get("kind") != "ok":
+		_route_running = false
+		_planned_route.clear()
+		gameplay_view.show_notification("Autonav stopped · warp refused · %s" % str(result.get("message", "server refusal")))
+		_refresh_after_warp_attempt()
+		return
+	var confirmed_sector = result.get("data", {}).get("current_sector", null)
+	if confirmed_sector != null and int(confirmed_sector) != int(operation.get("destination", 0)):
+		_route_running = false
+		_planned_route.clear()
+		gameplay_view.show_notification("Autonav stopped · server confirmed an unexpected sector.")
+		_refresh_after_warp_attempt()
+		return
+	_send_next_route_hop()
 
 func _finish_trade_quote(response: Dictionary) -> void:
 	var result: Dictionary = Protocol.result_from_response(response)
@@ -587,13 +680,52 @@ func _load_config() -> void:
 		server_ip = str(config.get_value("server", "ip", ""))
 		server_port = int(config.get_value("server", "port", 0))
 		auth_username = str(config.get_value("auth", "username", ""))
+		var stored_profiles: Variant = config.get_value("server", "profiles", [])
+		if stored_profiles is Array:
+			for candidate in stored_profiles:
+				if not candidate is Dictionary:
+					continue
+				var name := str(candidate.get("name", "")).strip_edges()
+				var host := str(candidate.get("host", "")).strip_edges()
+				var port := int(candidate.get("port", 0))
+				if name.is_empty() or host.is_empty() or port < 1 or port > 65535:
+					continue
+				server_profiles.append({"name": name, "host": host, "port": port, "username": str(candidate.get("username", ""))})
+		selected_server_profile = int(config.get_value("server", "selected_profile", -1))
+	if server_profiles.is_empty() and not server_ip.strip_edges().is_empty() and server_port > 0 and server_port <= 65535:
+		var profile_name := "%s:%d" % [server_ip, server_port]
+		if server_ip.to_lower() in ["localhost", "127.0.0.1", "::1"]:
+			profile_name = "Local server"
+		server_profiles.append({"name": profile_name, "host": server_ip, "port": server_port, "username": auth_username})
+		selected_server_profile = 0
+	if selected_server_profile < 0 or selected_server_profile >= server_profiles.size():
+		selected_server_profile = -1
 
 func _save_config() -> void:
 	var config := ConfigFile.new()
+	config.load(CONFIG_PATH)
 	config.set_value("server", "ip", server_ip)
 	config.set_value("server", "port", server_port)
+	config.set_value("server", "profiles", server_profiles.duplicate(true))
+	config.set_value("server", "selected_profile", selected_server_profile)
 	config.set_value("auth", "username", auth_username)
 	config.save(CONFIG_PATH)
+
+func _on_profiles_changed(profiles: Array, selected_index: int) -> void:
+	server_profiles.clear()
+	for profile in profiles:
+		if profile is Dictionary:
+			server_profiles.append({
+				"name": str(profile.get("name", "")),
+				"host": str(profile.get("host", "")),
+				"port": int(profile.get("port", 0)),
+				"username": str(profile.get("username", "")),
+			})
+	selected_server_profile = selected_index if selected_index >= 0 and selected_index < server_profiles.size() else -1
+	server_ip = login_view.host_input.text.strip_edges()
+	server_port = int(login_view.port_input.text)
+	auth_username = login_view.username_input.text.strip_edges()
+	_save_config()
 
 func log_network(kind: String, message: String) -> void:
 	if network_log_file:
