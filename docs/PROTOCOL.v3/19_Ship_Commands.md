@@ -74,6 +74,46 @@ Destroy your own ship (irreversible).
 
 ---
 
+## 3. Cargo System Invariants (Phase 1+)
+
+**Effective:** Protocol v3.1 (February 2026)
+
+Ship cargo is now **commodity-agnostic**: the system no longer has special handling for individual commodity types.
+
+### Storage Model
+- Cargo is stored in a normalized `ship_cargo` table (one row per ship-commodity pair)
+- All commodities (legal or illegal) count identically toward ship holds
+- Empty cargo (0 quantity) does not create database rows
+
+### Capacity Invariant
+```
+SUM(all_commodity_quantities) <= ship.holds
+```
+
+This invariant is **hard-enforced**:
+- **All** cargo operations (buy, sell, transfer, deposit, withdraw) verify this invariant before committing
+- **All** commodities count equally (no exemptions for any commodity)
+- Attempts to exceed capacity return `ERR_HOLD_FULL` (1605)
+
+### Quantity Invariant
+```
+FOR ALL commodities:
+  quantity >= 0 AND quantity IS NOT NULL
+```
+
+This invariant is **hard-enforced**:
+- Negative quantities are never allowed
+- Attempts to create negative quantities return `ERR_DB_MISUSE` (1008)
+
+### Commodity Codes
+Valid commodity codes are:
+- **Legal:** `ORE`, `EQU`, `ORG`, `COL`
+- **Illegal:** `SLV`, `WPN`, `DRG`
+
+All commodity codes in responses and protocol messages are **exactly 3 uppercase ASCII characters**. No full names (`ORE` not `ore`, `SLV` not `slaves`).
+
+---
+
 **See Also**:
 - [22_Trade_and_Port_Commands.md](./22_Trade_and_Port_Commands.md) for cargo trading
 - [23_Combat_and_Weapons.md](./23_Combat_and_Weapons.md) for ship combat

@@ -1,0 +1,19 @@
+{
+    "id": "srv-err",
+    "reply_to": "c-320a6092",
+    "ts": "2026-02-16T17:51:03Z",
+    "status": "error",
+    "type": "error",
+    "error": {
+        "code": 405,
+        "message": "Invalid amount."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}

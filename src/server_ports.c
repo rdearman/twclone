@@ -24,6 +24,9 @@ void free_trade_lines (TradeLine * lines, size_t n);
 #include "db/repo/repo_combat.h"
 #include "db/repo/repo_players.h"
 #include "db/repo/repo_clusters.h"
+#include "db/repo/repo_commodities.h"
+#include "db/repo/repo_cargo.h"
+#include "db/repo/repo_port_rules.h"
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
@@ -271,19 +274,21 @@ h_port_buys_commodity (db_t *db, int port_id, const char *commodity)
 
   int current_quantity = 0;
   int max_capacity = 0;
+  bool buys = false;
 
-  if (db_ports_get_buy_eligibility
+  /* Enforce the generated port_trade B/S pattern as well as capacity. */
+  if (db_ports_get_commodity_details
       (db, port_id, canonical_commodity_code, &current_quantity,
-       &max_capacity) != 0)
+       &max_capacity, &buys, NULL) != 0)
     {
       free (canonical_commodity_code);
       return 0;
     }
 
-  int buys = (current_quantity < max_capacity) ? 1 : 0;
+  int can_buy = buys && current_quantity < max_capacity;
 
   free (canonical_commodity_code);
-  return buys;
+  return can_buy;
 }
 
 
@@ -474,10 +479,14 @@ h_port_sells_commodity (db_t *db, int port_id, const char *commodity)
       return 0;
     }
   int quantity = 0;
-  int rc = h_get_port_commodity_quantity (db, port_id, commodity, &quantity);
+  int max_capacity = 0;
+  bool sells = false;
+  int rc = db_ports_get_commodity_details (db, port_id, commodity,
+                                            &quantity, &max_capacity,
+                                            NULL, &sells);
 
 
-  if (rc == 0 && quantity > 0)
+  if (rc == 0 && sells && quantity > 0)
     {
       return 1;
     }
@@ -2629,6 +2638,31 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	  rc = 0;
 	  goto cleanup;
 	}
+
+      /* Enforce per-transaction maximum quantity for this commodity at this port */
+      {
+	bool rule_found = false;
+	porttype_commodity_rule_t rule;
+	if (repo_port_commodity_rule_get(db, db_ports_get_porttype(db, port_id), canonical_commodity_code, &rule, &rule_found) == 0) {
+	  if (rule_found) {
+	    int base_max = db_get_config_int(db, "market.trade_qty_base_max", 0);
+	    if (base_max > 0) {
+	      int tx_max = (base_max * rule.qty_max_mul) / 100;
+	      if (tx_max > 0 && amount > tx_max) {
+		send_response_refused_steal (ctx,
+					     root,
+					     ERR_COMMODITY_TX_QTY_EXCEEDED,
+					     "Transaction quantity limit exceeded.",
+					     NULL);
+		free (canonical_commodity_code);
+		rc = 0;
+		goto cleanup;
+	      }
+	    }
+	  }
+	}
+      }
+
       int buy_price = h_entity_calculate_buy_price (db,
 						    ENTITY_TYPE_PORT,
 						    port_id,
@@ -3399,6 +3433,52 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 				       NULL);
 	  goto cleanup;
 	}
+
+      /* Enforce per-ship maximum holds for this commodity */
+      {
+	int max_holds = -1;
+	int rc_max = repo_commodities_get_max_holds_per_ship(db, commodity, &max_holds);
+	if (rc_max != ERR_DB_NOT_FOUND && rc_max != 0) {
+	  send_response_error (ctx, root, ERR_DB, "Failed to check commodity limits.");
+	  goto cleanup;
+	}
+	
+	if (max_holds > 0) {
+	  int64_t current_holds = 0;
+	  if (repo_cargo_get(db, player_ship_id, commodity, &current_holds) == 0) {
+	    if (current_holds + qty > max_holds) {
+	      send_response_refused_steal (ctx,
+					   root,
+					   ERR_COMMODITY_MAX_HOLDS_EXCEEDED,
+					   "Commodity hold limit exceeded for this ship.",
+					   NULL);
+	      goto cleanup;
+	    }
+	  }
+	}
+      }
+
+      /* Enforce per-transaction maximum quantity for this commodity at this port */
+      {
+	bool rule_found = false;
+	porttype_commodity_rule_t rule;
+	if (repo_port_commodity_rule_get(db, db_ports_get_porttype(db, port_id), commodity, &rule, &rule_found) == 0) {
+	  if (rule_found) {
+	    int base_max = db_get_config_int(db, "market.trade_qty_base_max", 0);
+	    if (base_max > 0) {
+	      int tx_max = (base_max * rule.qty_max_mul) / 100;
+	      if (tx_max > 0 && qty > tx_max) {
+		send_response_refused_steal (ctx,
+					     root,
+					     ERR_COMMODITY_TX_QTY_EXCEEDED,
+					     "Transaction quantity limit exceeded.",
+					     NULL);
+		goto cleanup;
+	      }
+	    }
+	  }
+	}
+      }
 
       int unit_price = h_entity_calculate_sell_price (db,
 						      ENTITY_TYPE_PORT,

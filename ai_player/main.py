@@ -216,13 +216,14 @@ Rules:
 - Use ONLY commodities in valid_comms.
 - "goto: <id>" to travel.
 - Only "buy:" or "sell:" if at a port.
+- If you have cargo, ALWAYS sell it before buying new commodities.
 
 Output JSON: {{"plan": ["goto: 5", "buy: ORE", "goto: 10", "sell: ORE"]}}
 """
 
 PROMPT_EXPLORE = """Explorer goal: Find new sectors and ports. """ + PROMPT_CONTRACT_BLOCK
 
-PROMPT_STRATEGY = """Trader goal: Identify low-price buy and high-price sell sectors. Flip between them. """ + PROMPT_CONTRACT_BLOCK
+PROMPT_STRATEGY = """Trader goal: Maximize profit. If you have cargo, sell it first. Then identify new buy/sell opportunities. """ + PROMPT_CONTRACT_BLOCK
 
 PROMPT_QA_OBJECTIVE = """You are a QA testing bot for a space game. Your current high-level objective is to "{qa_objective}".
 Based on this objective, provide a detailed strategic plan.
@@ -832,6 +833,7 @@ def main(config_path="config.json"):
     state_manager.set_default("qa_workflow_queue", [])  # Queue of commands from current workflow
     state_manager.set_default("qa_workflow_index", 0)  # Index in round-robin workflow rotation
     state_manager.set_default("qa_tested_commands", [])  # Track which commands have been tested
+    state_manager.set_default("valid_commodity_names", ["ORE", "ORG", "EQU", "DRG", "SLV", "WPN"])  # All tradable commodities
     # We must reset session_id on start, as it's not persistent
     state_manager.set("session_id", None) 
 

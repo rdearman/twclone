@@ -1,0 +1,278 @@
+{
+  "name": "Phase 7: Generic Ship Cargo Model",
+  "version": "2.0.0",
+  "description": "Tests for data-driven cargo system: generic ship_cargo table, holds enforcement across all commodity types, legacy column synchronization.",
+  "setup": [
+    {
+      "name": "setup_players_and_commodities",
+      "commands": [
+        {
+          "fixture": true,
+          "description": "Ensure commodities table has standard set",
+          "sql_provider": "pg",
+          "sql": "INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('ORE', 'Ore', false, 100, 20) ON CONFLICT DO NOTHING; INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('ORG', 'Organics', false, 150, 30) ON CONFLICT DO NOTHING; INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('EQU', 'Equipment', false, 200, 25) ON CONFLICT DO NOTHING; INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('COL', 'Colonists', false, 500, 15) ON CONFLICT DO NOTHING; INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('SLV', 'Slaves', true, 1000, 50) ON CONFLICT DO NOTHING; INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('WPN', 'Weapons', true, 750, 40) ON CONFLICT DO NOTHING; INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('DRG', 'Drugs', true, 500, 60) ON CONFLICT DO NOTHING;"
+        },
+        {
+          "fixture": true,
+          "description": "Create test player with specific alignment",
+          "sql_provider": "pg",
+          "sql": "INSERT INTO players (name, status, sector_id, alignment, experience, credits) VALUES ('testplayer_good', 'active', 1, 5000, 1000, 100000) ON CONFLICT (name) DO UPDATE SET status='active', sector_id=1, alignment=5000, credits=100000 RETURNING player_id;"
+        },
+        {
+          "fixture": true,
+          "description": "Create test ship for good player (150 holds)",
+          "sql_provider": "pg",
+          "sql": "INSERT INTO ships (name, type_id, holds, sector_id, player_id, attack, shields, installed_shields, fighters, genesis, limpets, mines, beacons, colonists, equipment, organics, ore, slaves, weapons, drugs, cloaking_devices) SELECT 'test_ship_good', 1, 150, 1, player_id, 1, 1, 1, 1, 1, 100, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0 FROM players WHERE name='testplayer_good' ON CONFLICT DO NOTHING RETURNING ship_id;"
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "id": "A1",
+      "name": "Holds enforcement: legal cargo fills exactly to capacity",
+      "description": "Add 100 ORE + 50 ORG to 150 hold ship, verify total equals holds and further additions fail",
+      "steps": [
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_good",
+            "commodity_code": "ORE",
+            "delta": 100
+          },
+          "expect": {
+            "success": true,
+            "new_quantity": 100
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_good",
+            "commodity_code": "ORG",
+            "delta": 50
+          },
+          "expect": {
+            "success": true,
+            "new_quantity": 50
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_good",
+            "commodity_code": "EQU",
+            "delta": 1
+          },
+          "expect": {
+            "success": false,
+            "error_code": 2000
+          },
+          "note": "ERR_HOLD_FULL = 2000; adding 1 to full 150-hold ship should fail"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "name": "Holds enforcement: illegal cargo counts toward total",
+      "description": "Fill holds with legal cargo, attempt to add illegal cargo, verify ERR_HOLD_FULL",
+      "steps": [
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_good",
+            "commodity_code": "ORE",
+            "delta": 150
+          },
+          "expect": {
+            "success": true,
+            "new_quantity": 150
+          },
+          "note": "Fill all 150 holds with ORE"
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_good",
+            "commodity_code": "DRG",
+            "delta": 1
+          },
+          "expect": {
+            "success": false,
+            "error_code": 2000
+          },
+          "note": "Attempt to add illegal drug should fail with ERR_HOLD_FULL"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "name": "Mixed cargo sum: legal + illegal commodities count together",
+      "description": "Add various commodity types, verify total is enforced correctly",
+      "steps": [
+        {
+          "setup_cleanup": true,
+          "sql_provider": "pg",
+          "sql": "DELETE FROM ship_cargo WHERE ship_id IN (SELECT ship_id FROM ships WHERE name='test_ship_mixed'); DELETE FROM ships WHERE name='test_ship_mixed'; INSERT INTO ships (name, type_id, holds, sector_id, player_id, attack, shields, installed_shields, fighters, genesis, limpets, mines, beacons, colonists, equipment, organics, ore, slaves, weapons, drugs, cloaking_devices) SELECT 'test_ship_mixed', 1, 200, 1, player_id, 1, 1, 1, 1, 1, 100, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0 FROM players WHERE name='testplayer_good';"
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_mixed",
+            "commodity_code": "ORE",
+            "delta": 50
+          },
+          "expect": {
+            "success": true
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_mixed",
+            "commodity_code": "SLV",
+            "delta": 50
+          },
+          "expect": {
+            "success": true
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_mixed",
+            "commodity_code": "WPN",
+            "delta": 50
+          },
+          "expect": {
+            "success": true
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_mixed",
+            "commodity_code": "DRG",
+            "delta": 50
+          },
+          "expect": {
+            "success": true
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_mixed",
+            "commodity_code": "ORG",
+            "delta": 1
+          },
+          "expect": {
+            "success": false,
+            "error_code": 2000
+          },
+          "note": "Total is 200, adding 1 should fail"
+        }
+      ]
+    },
+    {
+      "id": "B1",
+      "name": "Legacy sync: ship_cargo changes reflect in ships.* columns",
+      "description": "Modify ship_cargo, call sync_legacy_columns, verify ships.ore/organics/equipment etc updated",
+      "steps": [
+        {
+          "setup_cleanup": true,
+          "sql_provider": "pg",
+          "sql": "DELETE FROM ship_cargo WHERE ship_id IN (SELECT ship_id FROM ships WHERE name='test_ship_legacy_sync'); DELETE FROM ships WHERE name='test_ship_legacy_sync'; INSERT INTO ships (name, type_id, holds, sector_id, player_id, attack, shields, installed_shields, fighters, genesis, limpets, mines, beacons, colonists, equipment, organics, ore, slaves, weapons, drugs, cloaking_devices) SELECT 'test_ship_legacy_sync', 1, 150, 1, player_id, 1, 1, 1, 1, 1, 100, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0 FROM players WHERE name='testplayer_good';"
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_legacy_sync",
+            "commodity_code": "ORE",
+            "delta": 100
+          },
+          "expect": {
+            "success": true
+          }
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_legacy_sync",
+            "commodity_code": "ORG",
+            "delta": 50
+          },
+          "expect": {
+            "success": true
+          }
+        },
+        {
+          "rpc": "ship.status",
+          "args": {
+            "ship_name": "test_ship_legacy_sync"
+          },
+          "expect": {
+            "success": true,
+            "ship.ore": 100,
+            "ship.organics": 50
+          },
+          "note": "Legacy columns should reflect ship_cargo totals"
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "name": "Regression: commodity trading still works",
+      "description": "Trade commodities at port, verify cargo is updated correctly via API",
+      "steps": [
+        {
+          "setup_cleanup": true,
+          "sql_provider": "pg",
+          "sql": "DELETE FROM ship_cargo WHERE ship_id IN (SELECT ship_id FROM ships WHERE name='test_ship_trade'); DELETE FROM ships WHERE name='test_ship_trade'; INSERT INTO ships (name, type_id, holds, sector_id, player_id, attack, shields, installed_shields, fighters, genesis, limpets, mines, beacons, colonists, equipment, organics, ore, slaves, weapons, drugs, cloaking_devices) SELECT 'test_ship_trade', 1, 150, 1, player_id, 1, 1, 1, 1, 1, 100, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0 FROM players WHERE name='testplayer_good';"
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_trade",
+            "commodity_code": "ORE",
+            "delta": 100
+          },
+          "expect": {
+            "success": true
+          },
+          "note": "Setup: add 100 ORE to ship"
+        },
+        {
+          "rpc": "ship.cargo.add",
+          "args": {
+            "ship_name": "test_ship_trade",
+            "commodity_code": "ORE",
+            "delta": -50
+          },
+          "expect": {
+            "success": true,
+            "new_quantity": 50
+          },
+          "note": "Simulate selling 50 ORE at port"
+        },
+        {
+          "rpc": "ship.status",
+          "args": {
+            "ship_name": "test_ship_trade"
+          },
+          "expect": {
+            "success": true,
+            "ship.ore": 50
+          },
+          "note": "Verify legacy column reflects final state"
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    {
+      "sql_provider": "pg",
+      "sql": "DELETE FROM ship_cargo WHERE ship_id IN (SELECT ship_id FROM ships WHERE name LIKE 'test_ship%'); DELETE FROM ships WHERE name LIKE 'test_ship%'; DELETE FROM players WHERE name LIKE 'testplayer%';"
+    }
+  ]
+}

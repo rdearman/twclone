@@ -399,15 +399,31 @@ int repo_universe_ensure_ferengi_homeworld(db_t *db, int sector_id, int owner_id
         if (rows > 0) return 0;
     }
 
-    /* If update failed (rows=0), insert with explicit ID 2. */
-    /* SQL_VERBATIM: Q32 */
-    const char *q32_ins = "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
-                          "VALUES (2, {1}, 'Ferenginar', {2}, 'corp', 'M', 1, {3}, 0, FALSE) "
-                          "ON CONFLICT (planet_id) DO UPDATE SET sector_id = {1};"; 
-    
-    char sql_ins[1024]; sql_build(db, q32_ins, sql_ins, sizeof(sql_ins));
-    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_timestamp_text(now_ts) }, 3, &err)) {
-        return err.code;
+    /* If update failed (rows=0), insert with explicit ID 2 only if not exists. */
+    /* SQL_VERBATIM: Q32a - Check if planet 2 exists */
+    const char *q32a = "SELECT 1 FROM planets WHERE planet_id = 2 LIMIT 1;";
+    char sql_check[512]; sql_build(db, q32a, sql_check, sizeof(sql_check));
+    db_res_t *check_res = NULL;
+    if (db_query(db, sql_check, NULL, 0, &check_res, &err) == 0 && db_res_step(check_res, &err) == 0) {
+        /* Planet 2 already exists, just update it */
+        if (check_res) db_res_finalize(check_res);
+        /* SQL_VERBATIM: Q32b */
+        const char *q32b = "UPDATE planets SET sector_id = {1} WHERE planet_id = 2;";
+        char sql_upd[512]; sql_build(db, q32b, sql_upd, sizeof(sql_upd));
+        if (!db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &err)) {
+            return err.code;
+        }
+    } else {
+        /* Planet 2 doesn't exist, insert it */
+        if (check_res) db_res_finalize(check_res);
+        /* SQL_VERBATIM: Q32_ins */
+        const char *q32_ins = "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
+                              "VALUES (2, {1}, 'Ferenginar', {2}, 'corp', 'M', 1, {3}, 0, FALSE);"; 
+        
+        char sql_ins[1024]; sql_build(db, q32_ins, sql_ins, sizeof(sql_ins));
+        if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_timestamp_text(now_ts) }, 3, &err)) {
+            return err.code;
+        }
     }
     return 0;
 }
@@ -429,15 +445,26 @@ int repo_universe_relocate_orion_base(db_t *db, int sector_id, int port_id, int 
         if (rows > 0) return 0;
     }
 
-    /* If planet missing, insert it */
+    /* If planet missing, insert it only if not exists */
     int64_t now_ts = (int64_t)time(NULL);
-    /* SQL_VERBATIM: Q35 */
-    const char *q35 = "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
-                      "VALUES ({1}, {2}, 'Orion Hideout', {3}, 'corp', 'M', 1, {4}, 0, FALSE) "
-                      "ON CONFLICT (planet_id) DO UPDATE SET sector_id = {2};";
-    char sql_ins[1024]; sql_build(db, q35, sql_ins, sizeof(sql_ins));
-    if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_timestamp_text(now_ts) }, 4, &err)) {
-        return err.code;
+    /* SQL_VERBATIM: Q34a - Check if planet exists */
+    const char *q34a = "SELECT 1 FROM planets WHERE planet_id = {1} LIMIT 1;";
+    char sql_check[512]; sql_build(db, q34a, sql_check, sizeof(sql_check));
+    db_res_t *check_res = NULL;
+    db_bind_t check_bind[] = { db_bind_i64(planet_id) };
+    if (db_query(db, sql_check, check_bind, 1, &check_res, &err) == 0 && db_res_step(check_res, &err) == 0) {
+        /* Planet already exists, no need to insert */
+        if (check_res) db_res_finalize(check_res);
+    } else {
+        /* Planet doesn't exist, insert it */
+        if (check_res) db_res_finalize(check_res);
+        /* SQL_VERBATIM: Q35 */
+        const char *q35 = "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_at, created_by, genesis_flag) "
+                          "VALUES ({1}, {2}, 'Orion Hideout', {3}, 'corp', 'M', 1, {4}, 0, FALSE);";
+        char sql_ins[1024]; sql_build(db, q35, sql_ins, sizeof(sql_ins));
+        if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_i64(sector_id), db_bind_i64(owner_id), db_bind_timestamp_text(now_ts) }, 4, &err)) {
+            return err.code;
+        }
     }
 
     return 0;

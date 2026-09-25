@@ -116,6 +116,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry},
   {"citadel_construction_reap", h_citadel_construction_reap},
+  {"market_state_decay", h_market_state_decay},
   {NULL, NULL}			/* required terminator */
 };
 

@@ -1,0 +1,35 @@
+<div class="hud" *ngIf="sector && sector.id !== undefined">
+  <div class="header">
+    <span class="sector-id">Sector {{ sector.id }}</span>
+    <span class="sector-name" *ngIf="sector.name">{{ sector.name }}</span>
+  </div>
+
+  <div class="section" *ngIf="sector.port">
+    <label>Port:</label> {{ sector.port.name || sector.port.id }} (Class {{ sector.port.class }})
+  </div>
+
+  <div class="section" *ngIf="sector.ships?.length">
+    <label>Ships:</label>
+    <ul>
+      <li *ngFor="let s of sector.ships">
+        {{ s.player_name }} ({{ s.ship_name }})
+      </li>
+    </ul>
+  </div>
+
+  <div class="section" *ngIf="sector.planets?.length">
+    <label>Planets:</label>
+    <ul>
+      <li *ngFor="let p of sector.planets">{{ p.name }}</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <label>Adjacency:</label>
+    <div class="adj-list">
+      <span *ngFor="let adj of sector.adjacent_sectors" (click)="move(adj)" class="adj-link">
+        {{ adj }}
+      </span>
+    </div>
+  </div>
+</div>

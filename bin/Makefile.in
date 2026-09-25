@@ -137,9 +137,18 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/repo/repo_communication.$(OBJEXT) \
 	../src/db/repo/repo_planets.$(OBJEXT) \
 	../src/db/repo/repo_ports.$(OBJEXT) \
+	../src/db/repo/repo_port_rules.$(OBJEXT) \
+	../src/db/repo/repo_market_dynamic.$(OBJEXT) \
+	../src/db/repo/repo_cluster_pressure.$(OBJEXT) \
+	../src/db/repo/repo_market_decay.$(OBJEXT) \
 	../src/db/repo/repo_corporation.$(OBJEXT) \
 	../src/db/repo/repo_players.$(OBJEXT) \
 	../src/db/repo/repo_ships.$(OBJEXT) \
+	../src/db/repo/repo_cargo.$(OBJEXT) \
+	../src/db/repo/repo_commodities.$(OBJEXT) \
+	../src/db/repo/repo_shiptypes.$(OBJEXT) \
+	../src/db/repo/repo_porttypes.$(OBJEXT) \
+	../src/db/repo/repo_items.$(OBJEXT) \
 	../src/db/repo/repo_session.$(OBJEXT) \
 	../src/db/repo/repo_stardock.$(OBJEXT) \
 	../src/db/repo/repo_sysop.$(OBJEXT) \
@@ -224,11 +233,14 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/db/repo/$(DEPDIR)/repo_auth.Po \
 	../src/db/repo/$(DEPDIR)/repo_autopilot.Po \
 	../src/db/repo/$(DEPDIR)/repo_bank.Po \
+	../src/db/repo/$(DEPDIR)/repo_cargo.Po \
 	../src/db/repo/$(DEPDIR)/repo_citadel.Po \
+	../src/db/repo/$(DEPDIR)/repo_cluster_pressure.Po \
 	../src/db/repo/$(DEPDIR)/repo_clusters.Po \
 	../src/db/repo/$(DEPDIR)/repo_cmd.Po \
 	../src/db/repo/$(DEPDIR)/repo_cmds.Po \
 	../src/db/repo/$(DEPDIR)/repo_combat.Po \
+	../src/db/repo/$(DEPDIR)/repo_commodities.Po \
 	../src/db/repo/$(DEPDIR)/repo_communication.Po \
 	../src/db/repo/$(DEPDIR)/repo_config.Po \
 	../src/db/repo/$(DEPDIR)/repo_corporation.Po \
@@ -236,16 +248,22 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/db/repo/$(DEPDIR)/repo_database.Po \
 	../src/db/repo/$(DEPDIR)/repo_engine.Po \
 	../src/db/repo/$(DEPDIR)/repo_engine_consumer.Po \
+	../src/db/repo/$(DEPDIR)/repo_items.Po \
 	../src/db/repo/$(DEPDIR)/repo_main.Po \
 	../src/db/repo/$(DEPDIR)/repo_market.Po \
+	../src/db/repo/$(DEPDIR)/repo_market_decay.Po \
+	../src/db/repo/$(DEPDIR)/repo_market_dynamic.Po \
 	../src/db/repo/$(DEPDIR)/repo_news.Po \
 	../src/db/repo/$(DEPDIR)/repo_planets.Po \
 	../src/db/repo/$(DEPDIR)/repo_player_settings.Po \
 	../src/db/repo/$(DEPDIR)/repo_players.Po \
+	../src/db/repo/$(DEPDIR)/repo_port_rules.Po \
 	../src/db/repo/$(DEPDIR)/repo_ports.Po \
+	../src/db/repo/$(DEPDIR)/repo_porttypes.Po \
 	../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po \
 	../src/db/repo/$(DEPDIR)/repo_session.Po \
 	../src/db/repo/$(DEPDIR)/repo_ships.Po \
+	../src/db/repo/$(DEPDIR)/repo_shiptypes.Po \
 	../src/db/repo/$(DEPDIR)/repo_stardock.Po \
 	../src/db/repo/$(DEPDIR)/repo_sysop.Po \
 	../src/db/repo/$(DEPDIR)/repo_universe.Po \
@@ -445,9 +463,18 @@ server_SOURCES = \
 	../src/db/repo/repo_communication.c \
 	../src/db/repo/repo_planets.c \
 	../src/db/repo/repo_ports.c \
+	../src/db/repo/repo_port_rules.c \
+	../src/db/repo/repo_market_dynamic.c \
+	../src/db/repo/repo_cluster_pressure.c \
+	../src/db/repo/repo_market_decay.c \
 	../src/db/repo/repo_corporation.c \
 	../src/db/repo/repo_players.c \
 	../src/db/repo/repo_ships.c \
+	../src/db/repo/repo_cargo.c \
+	../src/db/repo/repo_commodities.c \
+	../src/db/repo/repo_shiptypes.c \
+	../src/db/repo/repo_porttypes.c \
+	../src/db/repo/repo_items.c \
 	../src/db/repo/repo_session.c \
 	../src/db/repo/repo_stardock.c \
 	../src/db/repo/repo_sysop.c \
@@ -658,12 +685,37 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_ports.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_port_rules.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_market_dynamic.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_cluster_pressure.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_market_decay.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_corporation.$(OBJEXT):  \
 	../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_players.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_ships.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_cargo.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_commodities.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_shiptypes.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_porttypes.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_items.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_session.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
@@ -809,11 +861,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_auth.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_autopilot.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_bank.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_cargo.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_citadel.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_cluster_pressure.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_clusters.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_cmd.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_cmds.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_combat.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_commodities.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_communication.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_config.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_corporation.Po@am__quote@ # am--include-marker
@@ -821,16 +876,22 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_database.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_engine.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_engine_consumer.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_items.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_main.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_market.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_market_decay.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_market_dynamic.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_news.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_planets.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_player_settings.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_players.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_port_rules.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_ports.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_porttypes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_session.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_ships.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_shiptypes.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_stardock.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_sysop.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../src/db/repo/$(DEPDIR)/repo_universe.Po@am__quote@ # am--include-marker
@@ -1038,11 +1099,14 @@ distclean: distclean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_auth.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_autopilot.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_bank.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cargo.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_citadel.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cluster_pressure.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_clusters.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_cmd.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_cmds.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_combat.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_commodities.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_communication.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_config.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_corporation.Po
@@ -1050,16 +1114,22 @@ distclean: distclean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_database.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_engine.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_engine_consumer.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_items.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_main.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_market.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_market_decay.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_market_dynamic.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_news.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_planets.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_players.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_port_rules.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ports.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_porttypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_shiptypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_sysop.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_universe.Po
@@ -1153,11 +1223,14 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_auth.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_autopilot.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_bank.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cargo.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_citadel.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_cluster_pressure.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_clusters.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_cmd.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_cmds.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_combat.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_commodities.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_communication.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_config.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_corporation.Po
@@ -1165,16 +1238,22 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_database.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_engine.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_engine_consumer.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_items.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_main.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_market.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_market_decay.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_market_dynamic.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_news.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_planets.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_player_settings.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_players.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_port_rules.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ports.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_porttypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_shiptypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_sysop.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_universe.Po

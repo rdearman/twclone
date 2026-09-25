@@ -149,4 +149,17 @@ int db_ports_get_commodity_details(db_t *db, int port_id, const char *commodity_
 /* Q48: Update Port Sector */
 int db_ports_update_sector(db_t *db, int port_id, int new_sector_id);
 
+/**
+ * Get the porttype_id for a port.
+ *
+ * Parameters:
+ *   db: Database handle
+ *   port_id: Port ID
+ *
+ * Returns:
+ *   porttype_id (> 0) on success
+ *   <= 0 on error or not found
+ */
+int db_ports_get_porttype(db_t *db, int port_id);
+
 #endif

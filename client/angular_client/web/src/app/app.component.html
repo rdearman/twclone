@@ -1,0 +1,79 @@
+<div class="container">
+  <header>
+    <h1>{{ title }}</h1>
+    <div class="connection-bar">
+      <input [(ngModel)]="host" placeholder="Host">
+      <input [(ngModel)]="port" type="number" placeholder="Port">
+      <button (click)="connect()" [disabled]="connected">
+        {{ connected ? 'Connected' : 'Connect' }}
+      </button>
+      <span class="status" [class.connected]="connected">●</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="menu-panel panel">
+      <div *ngIf="activeMenu">
+        <h2>{{ activeMenu.title }}</h2>
+        <ul class="menu-options">
+          <li *ngFor="let opt of activeMenu.options" (click)="selectOption(opt)">
+            <span class="key">[{{ opt.key }}]</span>
+            <span class="label">{{ opt.label }}</span>
+          </li>
+        </ul>
+      </div>
+      <div *ngIf="!activeMenu">
+        Loading menus...
+      </div>
+    </aside>
+
+    <main>
+      <div class="panel hud-panel">
+        <app-sector-hud></app-sector-hud>
+        <div *ngIf="!state.gameState.sector.id" class="placeholder">
+          No sector data. Move or scan to see info.
+        </div>
+      </div>
+
+      <div class="panel inspector">
+        <h2>RPC Inspector</h2>
+        <div class="form-group">
+          <label>Command</label>
+          <input [(ngModel)]="rpcCommand">
+        </div>
+        <div class="form-group">
+          <label>Data (JSON)</label>
+          <textarea [(ngModel)]="rpcData" rows="3"></textarea>
+        </div>
+        <button (click)="sendRpc()" [disabled]="!connected">Send RPC</button>
+        
+        <div class="results" *ngIf="rpcResult || rpcError">
+          <h3>Last Response</h3>
+          <pre *ngIf="rpcResult" class="success">{{ rpcResult | json }}</pre>
+          <pre *ngIf="rpcError" class="error">{{ rpcError | json }}</pre>
+        </div>
+      </div>
+
+      <div class="panel events">
+        <h2>Event Feed</h2>
+        <div class="event-list">
+          <div *ngFor="let e of events" class="event-item">
+            <span class="type">{{ e.type }}</span>
+            <pre>{{ e | json }}</pre>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Prompt -->
+  <div class="modal-overlay" *ngIf="pendingPrompt">
+    <div class="modal panel">
+        <h3>{{ pendingPrompt.label }}</h3>
+        <input [(ngModel)]="promptValue" autofocus (keyup.enter)="submitPrompt()">
+        <div class="modal-actions">
+            <button (click)="submitPrompt()">OK</button>
+        </div>
+    </div>
+  </div>
+</div>

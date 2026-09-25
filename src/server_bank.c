@@ -1267,7 +1267,7 @@ cmd_bank_withdraw (client_ctx_t *ctx, json_t *root)
 
   if (amount <= 0)
     {
-      send_response_error (ctx, root, ERR_MISSING_FIELD, "Invalid amount.");
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Amount must be positive.");
       return 0;
     }
 

@@ -27,14 +27,14 @@
     {
       "name": "Trade Quote",
       "command": "trade.quote",
-      "data": { "port_id": 2, "commodity": "ore", "quantity": 10 },
+      "data": { "port_id": 2, "commodity": "ORE", "quantity": 10 },
       "user": "econ_trader",
       "expect": { "status": "ok" }
     },
     {
       "name": "Trade Jettison (Success)",
       "command": "trade.jettison",
-      "data": { "items": [{"commodity": "ore", "quantity": 1}] },
+      "data": { "items": [{"commodity": "ORE", "quantity": 1}] },
       "user": "econ_trader",
       "expect": { "status": "ok" }
     }

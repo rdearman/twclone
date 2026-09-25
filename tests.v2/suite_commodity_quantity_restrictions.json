@@ -1,0 +1,381 @@
+{
+  "suite": "commodity_quantity_restrictions",
+  "description": "Commodity Quantity Restrictions - Per-ship max holds and per-transaction limits",
+  "version": "1.0",
+  "tests": [
+    {
+      "id": "A1_no_limits_baseline",
+      "name": "Baseline: No limits configured (default behavior unchanged)",
+      "description": "Verify existing commodities work unchanged when max_holds_per_ship is NULL and base_max is 0",
+      "steps": [
+        {
+          "desc": "Ensure market.trade_qty_base_max is 0 (default, no per-transaction cap)",
+          "op": "config.set",
+          "args": {
+            "key": "market.trade_qty_base_max",
+            "value": "0"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_A1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Get active ship",
+          "op": "players.get_ship",
+          "args": { "player_id": "{{player_id}}" },
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to a lawful port with ORE",
+          "op": "universe.warp_to_first_port_selling",
+          "args": {
+            "commodity": "ORE"
+          }
+        },
+        {
+          "desc": "Get port info",
+          "op": "ports.port_info",
+          "args": { "port_id": null },
+          "save": "port_info"
+        },
+        {
+          "desc": "Buy 10 ORE (should succeed - no per-ship or per-tx limit on existing commodities)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ORE", "quantity": 10}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Verify player now has at least 10 ORE",
+          "op": "players.get_cargo",
+          "args": { "player_id": "{{player_id}}" },
+          "check": "response.ore >= 10"
+        }
+      ]
+    },
+    {
+      "id": "B1_per_ship_cap_happy",
+      "name": "Per-ship max: Buy commodity within limit",
+      "description": "Verify buy succeeds when commodity.max_holds_per_ship is set and current+qty <= max",
+      "steps": [
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_B1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Get active ship",
+          "op": "players.get_ship",
+          "args": { "player_id": "{{player_id}}" },
+          "save": "ship_id"
+        },
+        {
+          "desc": "Create commodity ALT with max_holds_per_ship=1 and make it tradable",
+          "op": "db.exec_sql",
+          "args": {
+            "sql": "INSERT INTO commodities (code, name, illegal, base_price, volatility, max_holds_per_ship) VALUES ('ALT', 'Alien Technology', 0, 50000, 100, 1) ON CONFLICT DO NOTHING; INSERT INTO porttype_commodity_rules (porttype_id, commodity_code, can_buy, can_sell, base_price_mul, qty_max_mul) SELECT pt.porttype_id, 'ALT', true, true, 100, 100 FROM porttypes pt WHERE pt.is_stardock = true LIMIT 1 ON CONFLICT DO NOTHING;"
+          }
+        },
+        {
+          "desc": "Warp to a stardock",
+          "op": "universe.warp_to_first_stardock",
+          "args": {}
+        },
+        {
+          "desc": "Buy 1 ALT (should succeed - 0+1 <= 1)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ALT", "quantity": 1}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Verify player has exactly 1 ALT",
+          "op": "db.query",
+          "args": {
+            "sql": "SELECT quantity FROM ship_cargo WHERE ship_id = {{ship_id}} AND commodity_code = 'ALT'"
+          },
+          "check": "response[0].quantity == 1"
+        }
+      ]
+    },
+    {
+      "id": "B2_per_ship_cap_reject",
+      "name": "Per-ship max: Reject buy when limit exceeded",
+      "description": "Verify buy rejects with ERR_COMMODITY_MAX_HOLDS_EXCEEDED when current+qty > max",
+      "steps": [
+        {
+          "desc": "Setup: Use same player/commodity as B1 (1 ALT already held)",
+          "op": "comment",
+          "args": { "text": "Assumes ALT commodity exists with max_holds_per_ship=1 from prior test" }
+        },
+        {
+          "desc": "Attempt to buy 1 more ALT (total would be 2, exceeds limit of 1)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ALT", "quantity": 1}]
+          },
+          "expect_error": "ERR_COMMODITY_MAX_HOLDS_EXCEEDED"
+        }
+      ]
+    },
+    {
+      "id": "B3_per_ship_cap_resets_after_sell",
+      "name": "Per-ship max: Capacity resets after sale",
+      "description": "Verify buy succeeds again after selling commodity back to zero",
+      "steps": [
+        {
+          "desc": "Setup: Player has 1 ALT from B1",
+          "op": "comment",
+          "args": { "text": "Assumes player still has 1 ALT in cargo" }
+        },
+        {
+          "desc": "Sell 1 ALT back to port (inventory returns to 0)",
+          "op": "ports.trade.sell",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ALT", "quantity": 1}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Verify ALT inventory is now 0",
+          "op": "db.query",
+          "args": {
+            "sql": "SELECT COALESCE(quantity, 0) as qty FROM ship_cargo WHERE ship_id = {{ship_id}} AND commodity_code = 'ALT'"
+          },
+          "check": "response[0].qty == 0"
+        },
+        {
+          "desc": "Buy 1 ALT again (should succeed - 0+1 <= 1)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ALT", "quantity": 1}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Verify ALT inventory is 1 again",
+          "op": "db.query",
+          "args": {
+            "sql": "SELECT quantity FROM ship_cargo WHERE ship_id = {{ship_id}} AND commodity_code = 'ALT'"
+          },
+          "check": "response[0].quantity == 1"
+        }
+      ]
+    },
+    {
+      "id": "C1_per_transaction_cap_happy",
+      "name": "Per-transaction max: Buy within limit",
+      "description": "Verify buy succeeds when qty <= calculated transaction max",
+      "steps": [
+        {
+          "desc": "Set market.trade_qty_base_max to 10 (base max per transaction)",
+          "op": "config.set",
+          "args": {
+            "key": "market.trade_qty_base_max",
+            "value": "10"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_C1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Warp to a port with ORE",
+          "op": "universe.warp_to_first_port_selling",
+          "args": {
+            "commodity": "ORE"
+          }
+        },
+        {
+          "desc": "Get port info",
+          "op": "ports.port_info",
+          "args": { "port_id": null },
+          "save": "port_info"
+        },
+        {
+          "desc": "Buy 5 ORE (tx_max = 10 * qty_max_mul(100) / 100 = 10, so 5 <= 10 succeeds)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ORE", "quantity": 5}]
+          },
+          "expect_success": true
+        }
+      ]
+    },
+    {
+      "id": "C2_per_transaction_cap_reject",
+      "name": "Per-transaction max: Reject buy when limit exceeded",
+      "description": "Verify buy rejects with ERR_COMMODITY_TX_QTY_EXCEEDED when qty > tx_max",
+      "steps": [
+        {
+          "desc": "Setup: market.trade_qty_base_max=10 from C1",
+          "op": "comment",
+          "args": { "text": "Assumes base_max=10, qty_max_mul=100 for ORE, so tx_max=10" }
+        },
+        {
+          "desc": "Attempt to buy 15 ORE (15 > tx_max of 10)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ORE", "quantity": 15}]
+          },
+          "expect_error": "ERR_COMMODITY_TX_QTY_EXCEEDED"
+        }
+      ]
+    },
+    {
+      "id": "C3_per_transaction_cap_with_multiplier",
+      "name": "Per-transaction max: Multiplier applied correctly",
+      "description": "Verify qty_max_mul affects transaction limit (e.g., mul=50 halves the limit)",
+      "steps": [
+        {
+          "desc": "Create commodity MOD with qty_max_mul=50 (half of default 100)",
+          "op": "db.exec_sql",
+          "args": {
+            "sql": "INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('MOD', 'Modified Commodity', 0, 1000, 50) ON CONFLICT DO NOTHING; UPDATE porttype_commodity_rules SET qty_max_mul = 50 WHERE commodity_code = 'MOD' OR (SELECT COUNT(*) FROM porttype_commodity_rules WHERE commodity_code = 'MOD') = 0 AND porttype_id = (SELECT porttype_id FROM porttypes WHERE is_stardock = true LIMIT 1);"
+          }
+        },
+        {
+          "desc": "Setup: market.trade_qty_base_max=10",
+          "op": "comment",
+          "args": { "text": "With base_max=10 and mul=50: tx_max = 10*50/100 = 5" }
+        },
+        {
+          "desc": "Buy MOD with qty=5 (should succeed - equals tx_max)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "MOD", "quantity": 5}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Attempt to buy MOD with qty=6 (exceeds tx_max of 5)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "MOD", "quantity": 6}]
+          },
+          "expect_error": "ERR_COMMODITY_TX_QTY_EXCEEDED"
+        }
+      ]
+    },
+    {
+      "id": "D1_baseline_disabled_no_impact",
+      "name": "Regression: Baseline disabled (config=0)",
+      "description": "Verify old behavior: no per-transaction cap when market.trade_qty_base_max=0",
+      "steps": [
+        {
+          "desc": "Set market.trade_qty_base_max to 0 (disable per-transaction cap)",
+          "op": "config.set",
+          "args": {
+            "key": "market.trade_qty_base_max",
+            "value": "0"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_D1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Warp to port with ORE",
+          "op": "universe.warp_to_first_port_selling",
+          "args": { "commodity": "ORE" }
+        },
+        {
+          "desc": "Buy large quantity of ORE (should succeed - no per-tx limit when base_max=0)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "ORE", "quantity": 100}]
+          },
+          "expect_success": true
+        }
+      ]
+    },
+    {
+      "id": "E1_combined_limits",
+      "name": "Combined limits: Per-ship AND per-transaction together",
+      "description": "Verify both limits enforced simultaneously (e.g., ALT: max_holds=3, tx_max=2)",
+      "steps": [
+        {
+          "desc": "Create commodity COMBO with max_holds_per_ship=3",
+          "op": "db.exec_sql",
+          "args": {
+            "sql": "INSERT INTO commodities (code, name, illegal, base_price, volatility, max_holds_per_ship) VALUES ('COMBO', 'Combined Test', 0, 5000, 100, 3) ON CONFLICT DO NOTHING; INSERT INTO porttype_commodity_rules (porttype_id, commodity_code, can_buy, can_sell, qty_max_mul) SELECT pt.porttype_id, 'COMBO', true, true, 50 FROM porttypes pt WHERE pt.is_stardock = true LIMIT 1 ON CONFLICT DO NOTHING;"
+          }
+        },
+        {
+          "desc": "Set market.trade_qty_base_max=4 (so tx_max = 4*50/100 = 2)",
+          "op": "config.set",
+          "args": {
+            "key": "market.trade_qty_base_max",
+            "value": "4"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_E1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Warp to stardock",
+          "op": "universe.warp_to_first_stardock",
+          "args": {}
+        },
+        {
+          "desc": "Buy 2 COMBO (within both limits: 0+2<=3 ship max AND 2<=2 tx max)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "COMBO", "quantity": 2}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Buy 1 COMBO (within both limits: 2+1<=3 ship max AND 1<=2 tx max)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "COMBO", "quantity": 1}]
+          },
+          "expect_success": true
+        },
+        {
+          "desc": "Verify player has 3 COMBO (at ship max)",
+          "op": "db.query",
+          "args": {
+            "sql": "SELECT quantity FROM ship_cargo WHERE commodity_code = 'COMBO' AND ship_id = (SELECT ship_id FROM ships WHERE player_id = {{player_id}} ORDER BY ship_id DESC LIMIT 1)"
+          },
+          "check": "response[0].quantity == 3"
+        },
+        {
+          "desc": "Attempt to buy 1 more COMBO (would fail both: 3+1>3 ship max AND 1>tx_max if no inventory, but ship max hits first)",
+          "op": "ports.trade.buy",
+          "args": {
+            "port_id": null,
+            "items": [{"commodity": "COMBO", "quantity": 1}]
+          },
+          "expect_error": "ERR_COMMODITY_MAX_HOLDS_EXCEEDED"
+        }
+      ]
+    }
+  ]
+}

@@ -219,8 +219,8 @@ BEGIN
     SELECT MAX(sector_id) INTO v_max_sector FROM sectors;
     SET v_sector = 11 + FLOOR(RAND() * (v_max_sector - 10));
     
-    INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash)
-    VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000)
+    INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash, porttype_id)
+    VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000, (SELECT porttype_id FROM porttypes WHERE code = 'CLASS0'))
     ON DUPLICATE KEY UPDATE 
         name = VALUES(name), 
         type = VALUES(type), 

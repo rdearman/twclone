@@ -602,8 +602,10 @@
     - Data Schema: ```json
 {
   "port_id": "<integer>",
-  "commodity": "<string>",
-  "quantity": "<integer>"
+  "items": [{"commodity": "<string>", "quantity": "<integer>"}],
+  "idempotency_key": "<string>",
+  "account": "<integer>",
+  "sector_id": "<integer>"
 }
 ```
 
@@ -639,7 +641,9 @@
     - Data Schema: ```json
 {
   "port_id": "<integer>",
-  "commodity": "<string>",
-  "quantity": "<integer>"
+  "items": [{"commodity": "<string>", "quantity": "<integer>"}],
+  "idempotency_key": "<string>",
+  "account": "<integer>",
+  "sector_id": "<integer>"
 }
 ```

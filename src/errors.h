@@ -158,6 +158,7 @@
 
 /* Port/Market Errors (1800-1899) */
 #define ERR_PORT_NOT_FOUND      1800
+#define ERR_PORT_COMMODITY_UNSUPPORTED 1801  /* Phase 3: Commodity not tradeable at this port */
 #define ERR_LICENSE_REQUIRED    1801
 #define ERR_COMMODITY_UNKNOWN   1802
 #define ERR_COMMODITY_NOT_SOLD  1803
@@ -204,6 +205,24 @@
 
 #define ERR_SHARD_UNAVAILABLE   2002
 
+
+/* Port Type Errors (2050-2099) */
+#define ERR_PORTTYPE_NOT_FOUND   2050  /* Port type does not exist */
+#define ERR_PORT_BUY_DISABLED    2051  /* Port does not allow buying */
+#define ERR_PORT_SELL_DISABLED   2052  /* Port does not allow selling */
+#define ERR_PORT_STARDOCK_ONLY   2053  /* Item only available at Stardock */
+
+/* Item/Device Errors (2054-2069) */
+#define ERR_ITEM_NOT_FOUND              2054  /* Item does not exist */
+#define ERR_ITEM_NOT_AVAILABLE_HERE     2055  /* Item not available at this port */
+#define ERR_ITEM_ILLEGAL                2056  /* Item is illegal; insufficient alignment */
+#define ERR_ITEM_BUY_DISABLED           2057  /* Port does not allow buying this item */
+#define ERR_ITEM_SELL_DISABLED          2058  /* Port does not allow selling this item */
+#define ERR_ITEM_ALIGNMENT_RESTRICTED   2059  /* Player alignment does not meet item requirements */
+
+/* Commodity Quantity Restrictions (2060-2069) */
+#define ERR_COMMODITY_MAX_HOLDS_EXCEEDED  2060  /* Player already holds max allowed for this commodity */
+#define ERR_COMMODITY_TX_QTY_EXCEEDED     2061  /* Transaction quantity exceeds commodity per-transaction max */
 
 /* Asset Errors (2100-2199) */
 #define ERR_CAPABILITY_DISABLED 2100

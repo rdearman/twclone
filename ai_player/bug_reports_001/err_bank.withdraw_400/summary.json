@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_bank.withdraw_400",
+    "first_seen": "20260216_175104_791",
+    "command": "bank.withdraw",
+    "error_code": 400,
+    "error_message": "Amount must be positive."
+}

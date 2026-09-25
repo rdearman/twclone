@@ -81,9 +81,9 @@ LEFT JOIN pc ON pc.sector_id = s.sector_id;
 CREATE OR REPLACE VIEW port_trade_code AS
 WITH m AS (
  SELECT p.port_id AS port_id,
- MAX(CASE WHEN t.commodity='ore' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS ore,
- MAX(CASE WHEN t.commodity='organics' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS org,
- MAX(CASE WHEN t.commodity='equipment' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS eqp
+ MAX(CASE WHEN t.commodity='ORE' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS ore,
+ MAX(CASE WHEN t.commodity='ORG' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS org,
+ MAX(CASE WHEN t.commodity='EQU' THEN (CASE t.mode WHEN 'buy' THEN 'B' ELSE 'S' END) END) AS eqp
  FROM ports p
  LEFT JOIN port_trade t ON t.port_id = p.port_id
  GROUP BY p.port_id

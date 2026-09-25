@@ -72,41 +72,22 @@ int db_ports_get_commodity_code(db_t *db, const char *commodity, char **code) {
     db_error_t err;
     db_error_clear(&err);
     
-    if (!commodity || !*commodity) {
+    if (!commodity || !*commodity || !code) {
         return -1;
     }
     
-    /* Only accept 3-character uppercase codes: ORE, ORG, EQU, SLV, WPN, DRG */
-    const char *valid_codes[] = {"ORE", "ORG", "EQU", "SLV", "WPN", "DRG", NULL};
-    char upper_input[8];
-    strncpy(upper_input, commodity, sizeof(upper_input) - 1);
-    upper_input[sizeof(upper_input) - 1] = '\0';
+    /* Phase 3: Fully DB-driven (no hardcoded whitelist).
+     * Query commodities table directly. Any 3-char code in the database is valid.
+     */
+    const char *q_template = "SELECT code FROM commodities WHERE UPPER(code) = UPPER({1}) LIMIT 1;";
+    char sql[512];
+    sql_build(db, q_template, sql, sizeof(sql));
     
-    /* Convert to uppercase for comparison */
-    for (int i = 0; upper_input[i]; i++) {
-        upper_input[i] = toupper((unsigned char)upper_input[i]);
-    }
-    
-    int is_valid = 0;
-    for (int i = 0; valid_codes[i]; i++) {
-        if (strcmp(upper_input, valid_codes[i]) == 0) {
-            is_valid = 1;
-            break;
-        }
-    }
-    
-    if (!is_valid) {
-        return -1;  /* Invalid code format */
-    }
-    
-    /* SQL_VERBATIM: Q4 */
-    const char *q4 = "SELECT code FROM commodities WHERE UPPER(code) = UPPER({1}) LIMIT 1;";
-    char sql[512]; sql_build(db, q4, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_text(commodity) }, 1, &res, &err) && db_res_step(res, &err)) {
         const char *canonical = db_res_col_text(res, 0, &err);
         *code = canonical ? strdup(canonical) : NULL;
         db_res_finalize(res);
-        return 0;
+        return (*code != NULL) ? 0 : -1;
     }
     if (res) db_res_finalize(res);
     return -1;
@@ -852,9 +833,25 @@ int db_ports_get_commodity_details(db_t *db, int port_id, const char *commodity_
     db_res_t *res = NULL;
     db_error_t err;
     db_error_clear(&err);
-    /* SQL_VERBATIM: Q47 */
-    const char *q47 = "SELECT es.quantity, p.size * 1000 AS max_capacity,        (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS buys_commodity,        (CASE WHEN c.code IN ('ORE', 'ORG', 'EQU') THEN 1 ELSE 0 END) AS sells_commodity FROM ports p LEFT JOIN entity_stock es   ON p.port_id = es.entity_id  AND es.entity_type = 'port'  AND es.commodity_code = {2} JOIN commodities c ON c.code = {2} WHERE p.port_id = {1};";
-    char sql[1024]; sql_build(db, q47, sql, sizeof(sql));
+
+    /* 
+     * Phase 2: DB-driven commodity eligibility
+     * Query port_trade to check if this port buys/sells this commodity (no hardcoding)
+     */
+    const char *q_template = 
+        "SELECT es.quantity, p.size * 1000 AS max_capacity, "
+        "       MAX(CASE WHEN pt.mode = 'buy' THEN 1 ELSE 0 END) AS buys_commodity, "
+        "       MAX(CASE WHEN pt.mode = 'sell' THEN 1 ELSE 0 END) AS sells_commodity "
+        "FROM ports p "
+        "LEFT JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = {2} "
+        "LEFT JOIN port_trade pt ON p.port_id = pt.port_id AND pt.commodity = {2} "
+        "JOIN commodities c ON c.code = {2} "
+        "WHERE p.port_id = {1} "
+        "GROUP BY p.port_id, p.size, es.quantity;";
+
+    char sql[1024];
+    sql_build(db, q_template, sql, sizeof(sql));
+
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (quantity) {
             if (db_res_col_is_null(res, 0)) *quantity = 0;
@@ -879,3 +876,47 @@ int db_ports_update_sector(db_t *db, int port_id, int new_sector_id) {
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(new_sector_id), db_bind_i64(port_id) }, 2, &err)) return err.code;
     return 0;
 }
+
+/**
+ * Get the porttype_id for a port.
+ *
+ * Parameters:
+ *   db: Database handle
+ *   port_id: Port ID
+ *
+ * Returns:
+ *   porttype_id (> 0) on success
+ *   <= 0 on error or not found
+ */
+int db_ports_get_porttype(db_t *db, int port_id) {
+    if (!db || port_id <= 0) {
+        return 0;
+    }
+
+    db_res_t *res = NULL;
+    db_error_t err;
+    db_error_clear(&err);
+
+    const char *q_template = "SELECT porttype_id FROM ports WHERE port_id = {1};";
+
+    char sql[256];
+    sql_build(db, q_template, sql, sizeof(sql));
+
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err)) {
+        return 0;
+    }
+
+    if (!res || !db_res_step(res, &err)) {
+        if (res) db_res_finalize(res);
+        return 0;
+    }
+
+    int porttype_id = (int)db_res_col_i32(res, 0, &err);
+    if (db_res_col_is_null(res, 0)) {
+        porttype_id = 0;
+    }
+
+    db_res_finalize(res);
+    return porttype_id;
+}
+

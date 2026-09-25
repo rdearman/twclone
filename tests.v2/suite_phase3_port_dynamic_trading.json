@@ -1,0 +1,173 @@
+{
+  "test_suite_name": "Phase 3 - Port Dynamic Trading (Commodity-Driven Engine)",
+  "description": "Tests that port trading is fully data-driven: adding a commodity to port_trade automatically enables trading without code changes",
+  "tests": [
+    {
+      "name": "Setup: Auth test user",
+      "setup": "macro_auth_user",
+      "username": "phase3_trader",
+      "password": "testpass123"
+    },
+    {
+      "name": "T1.1: Insert new test commodity ALT (Alternate Tech)",
+      "db_setup": {
+        "sql": [
+          "INSERT INTO commodities (code, name, illegal, base_price, volatility) VALUES ('ALT', 'Alternate Tech', false, 100, 25) ON CONFLICT (code) DO NOTHING;"
+        ]
+      },
+      "command": "ship.inspect",
+      "user": "phase3_trader",
+      "data": { "ship_id": "@phase3_trader_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T1.2: Get normal port ID",
+      "command": "port.get_trade_info",
+      "user": "phase3_trader",
+      "data": { "port_id": 1 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.1: Attempt to trade ALT before adding to port_trade",
+      "command": "port.trade.buy",
+      "user": "phase3_trader",
+      "data": {
+        "ship_id": "@phase3_trader_active_ship_id",
+        "port_id": 1,
+        "commodity_code": "ALT",
+        "quantity": 1
+      },
+      "expect": { "status": "error", "error_code_contains": "not.*sell|not.*trading|out.*stock" }
+    },
+    {
+      "name": "T2.2: Add ALT to port 1 via port_trade",
+      "db_setup": {
+        "sql": [
+          "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) VALUES (1, 'ALT', 'sell', 1000) ON CONFLICT DO NOTHING;"
+        ]
+      },
+      "command": "ship.inspect",
+      "user": "phase3_trader",
+      "data": { "ship_id": "@phase3_trader_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.3: Ensure ALT has stock in entity_stock for port 1",
+      "db_setup": {
+        "sql": [
+          "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', 1, 'ALT', 100, 100, NOW()) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 100, price = 100;"
+        ]
+      },
+      "command": "port.get_trade_info",
+      "user": "phase3_trader",
+      "data": { "port_id": 1 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.4: Buy ALT from port 1 - should work now without code changes",
+      "command": "port.trade.buy",
+      "user": "phase3_trader",
+      "data": {
+        "ship_id": "@phase3_trader_active_ship_id",
+        "port_id": 1,
+        "commodity_code": "ALT",
+        "quantity": 5
+      },
+      "expect": { "status": "ok", "receipt_contains": "total_cost" }
+    },
+    {
+      "name": "T2.5: Verify ALT in ship cargo",
+      "command": "ship.inspect",
+      "user": "phase3_trader",
+      "data": { "ship_id": "@phase3_trader_active_ship_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T3.1: Add ALT to port 1 for SELL mode (test sell path)",
+      "db_setup": {
+        "sql": [
+          "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) VALUES (1, 'ALT', 'buy', 500) ON CONFLICT DO NOTHING;"
+        ]
+      },
+      "command": "port.get_trade_info",
+      "user": "phase3_trader",
+      "data": { "port_id": 1 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T3.2: Sell ALT to port 1 - should work via DB-driven trade path",
+      "command": "port.trade.sell",
+      "user": "phase3_trader",
+      "data": {
+        "ship_id": "@phase3_trader_active_ship_id",
+        "port_id": 1,
+        "items": [
+          { "commodity": "ALT", "quantity": 2 }
+        ]
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.1: Remove ALT from port_trade",
+      "db_setup": {
+        "sql": [
+          "DELETE FROM port_trade WHERE port_id = 1 AND commodity = 'ALT';"
+        ]
+      },
+      "command": "port.get_trade_info",
+      "user": "phase3_trader",
+      "data": { "port_id": 1 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T4.2: Verify ALT no longer available at port 1",
+      "command": "port.trade.buy",
+      "user": "phase3_trader",
+      "data": {
+        "ship_id": "@phase3_trader_active_ship_id",
+        "port_id": 1,
+        "commodity_code": "ALT",
+        "quantity": 1
+      },
+      "expect": { "status": "error", "error_code_contains": "not.*sell|not.*trading" }
+    },
+    {
+      "name": "T5.1: Regression - Verify ORE still trades normally",
+      "command": "port.trade.buy",
+      "user": "phase3_trader",
+      "data": {
+        "ship_id": "@phase3_trader_active_ship_id",
+        "port_id": 1,
+        "commodity_code": "ORE",
+        "quantity": 1
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T5.2: Regression - Verify illegal commodities still gated by alignment",
+      "command": "port.trade.buy",
+      "user": "phase3_trader",
+      "data": {
+        "ship_id": "@phase3_trader_active_ship_id",
+        "port_id": 1,
+        "commodity_code": "DRG",
+        "quantity": 1
+      },
+      "expect": { "status": "error", "error_code_contains": "illegal|alignment|forbidden" }
+    }
+  ],
+  "assertions": [
+    {
+      "name": "Commodities table has ALT entry",
+      "sql": "SELECT COUNT(*) as cnt FROM commodities WHERE code = 'ALT' AND name = 'Alternate Tech';"
+    },
+    {
+      "name": "port_trade has ALT configured dynamically",
+      "sql": "SELECT COUNT(*) as cnt FROM port_trade WHERE commodity = 'ALT' AND port_id = 1;"
+    },
+    {
+      "name": "entity_stock has ALT stock for port",
+      "sql": "SELECT COUNT(*) as cnt FROM entity_stock WHERE entity_type = 'port' AND commodity_code = 'ALT';"
+    }
+  ]
+}

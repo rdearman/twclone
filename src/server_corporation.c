@@ -1044,7 +1044,7 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
 
   if (!json_is_object (data))
     {
-      send_response_error (ctx, root, ERR_BAD_REQUEST,
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
 			   "Missing data object.");
       return 0;
     }
@@ -1056,7 +1056,7 @@ cmd_corp_invite (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx,
 			   root,
-			   ERR_BAD_REQUEST,
+			   ERR_INVALID_ARG,
 			   "Missing or invalid 'target_player_id'.");
       return 0;
     }

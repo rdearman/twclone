@@ -63,6 +63,8 @@ extern "C"
     int shipyard_require_shields_fit;
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
+    /* Phase 4: Ship Types Configuration */
+    char starter_shiptype_name[128];
   };
 
 
@@ -222,6 +224,8 @@ extern "C"
     int planet_treasury_interest_rate_bps;	/* Added to match DB config */
     int64_t bank_min_balance_for_interest;	/* Added to match DB config */
     int64_t bank_max_daily_interest_per_account;	/* Added to match DB config */
+    /* Phase 4: Ship Types Configuration */
+    char starter_shiptype_name[128];	/* Name of shiptype to spawn for new players */
     /* TLS Configuration */
     int tls_enabled;
     int tls_required;

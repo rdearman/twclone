@@ -1,0 +1,7 @@
+{
+    "bug_id": "err_stock.buy_405",
+    "first_seen": "20260216_175055_679",
+    "command": "stock.buy",
+    "error_code": 405,
+    "error_message": "Missing or invalid 'equity_id'."
+}

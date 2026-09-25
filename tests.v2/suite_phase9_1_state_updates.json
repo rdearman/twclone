@@ -1,0 +1,549 @@
+{
+  "suite": "phase9_1_state_updates",
+  "description": "Phase 9.1: Dynamic Pricing State Updates - Verify market state evolves during trades",
+  "version": "1.0",
+  "tests": [
+    {
+      "id": "A1_disabled_no_state_update",
+      "name": "Config disabled: State not updated on trade",
+      "description": "When dynamic_pricing_enabled=false, trading should NOT update port_commodity_state",
+      "steps": [
+        {
+          "desc": "Disable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "false"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_A1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add startup capital",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Query port_commodity_state BEFORE trade (should be stock=0, rolling_volume=0)",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'ORE'",
+            "db": "game"
+          },
+          "save": "state_before"
+        },
+        {
+          "desc": "Buy 10 ORE from port",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "ORE", "qty": 10}],
+            "account": 1
+          },
+          "save": "buy_receipt"
+        },
+        {
+          "desc": "Query port_commodity_state AFTER trade (should be UNCHANGED since dynamic disabled)",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'ORE'",
+            "db": "game"
+          },
+          "save": "state_after"
+        },
+        {
+          "desc": "Verify state unchanged",
+          "op": "assert",
+          "check": "state_before[0].stock_level === state_after[0].stock_level && state_before[0].rolling_volume === state_after[0].rolling_volume"
+        }
+      ]
+    },
+    {
+      "id": "B1_sell_updates_stock_and_volume",
+      "name": "Sell: stock increases, rolling_volume increases",
+      "description": "When player sells commodity to port, stock_level should increase and rolling_volume should increase",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_B1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add cargo (must load it first via cargo.add or purchase)",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Buy ORE first to have it in cargo",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "ORE", "qty": 50}],
+            "account": 1
+          },
+          "save": "initial_buy"
+        },
+        {
+          "desc": "Query state BEFORE sell",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'ORE'",
+            "db": "game"
+          },
+          "save": "state_before_sell"
+        },
+        {
+          "desc": "Extract initial stock and volume",
+          "op": "extract",
+          "src": "state_before_sell",
+          "path": "[0]",
+          "save": "initial_state"
+        },
+        {
+          "desc": "Sell 20 ORE to port",
+          "op": "trade.sell",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "ORE", "qty": 20}],
+            "account": 1
+          },
+          "save": "sell_receipt"
+        },
+        {
+          "desc": "Query state AFTER sell",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'ORE'",
+            "db": "game"
+          },
+          "save": "state_after_sell"
+        },
+        {
+          "desc": "Extract final state",
+          "op": "extract",
+          "src": "state_after_sell",
+          "path": "[0]",
+          "save": "final_state"
+        },
+        {
+          "desc": "Verify stock increased by 20",
+          "op": "assert",
+          "check": "final_state.stock_level === initial_state.stock_level + 20"
+        },
+        {
+          "desc": "Verify rolling_volume increased by 20",
+          "op": "assert",
+          "check": "final_state.rolling_volume === initial_state.rolling_volume + 20"
+        }
+      ]
+    },
+    {
+      "id": "C1_buy_updates_stock_down_and_volume_up",
+      "name": "Buy: stock decreases, rolling_volume increases",
+      "description": "When player buys commodity from port, stock_level should decrease and rolling_volume should increase",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_C1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add startup capital",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Query state BEFORE buy",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'METAL'",
+            "db": "game"
+          },
+          "save": "state_before_buy"
+        },
+        {
+          "desc": "Extract initial state",
+          "op": "extract",
+          "src": "state_before_buy",
+          "path": "[0]",
+          "save": "initial_state"
+        },
+        {
+          "desc": "Buy 15 METAL from port",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "METAL", "qty": 15}],
+            "account": 1
+          },
+          "save": "buy_receipt"
+        },
+        {
+          "desc": "Query state AFTER buy",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'METAL'",
+            "db": "game"
+          },
+          "save": "state_after_buy"
+        },
+        {
+          "desc": "Extract final state",
+          "op": "extract",
+          "src": "state_after_buy",
+          "path": "[0]",
+          "save": "final_state"
+        },
+        {
+          "desc": "Verify stock decreased by 15",
+          "op": "assert",
+          "check": "final_state.stock_level === initial_state.stock_level - 15"
+        },
+        {
+          "desc": "Verify rolling_volume increased by 15",
+          "op": "assert",
+          "check": "final_state.rolling_volume === initial_state.rolling_volume + 15"
+        }
+      ]
+    },
+    {
+      "id": "D1_failed_trade_no_state_update",
+      "name": "Failed trade: State not updated on failure",
+      "description": "If trade fails (e.g., insufficient credits), state should not change",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player with minimal capital",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_D1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add only 100 credits (insufficient)",
+          "op": "bank.deposit",
+          "args": { "amount": 100 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Query state BEFORE failed trade",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'WATER'",
+            "db": "game"
+          },
+          "save": "state_before"
+        },
+        {
+          "desc": "Attempt to buy expensive commodity (should fail)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "WATER", "qty": 1000}],
+            "account": 1
+          },
+          "expect_error": true,
+          "save": "failed_trade"
+        },
+        {
+          "desc": "Query state AFTER failed trade",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'WATER'",
+            "db": "game"
+          },
+          "save": "state_after"
+        },
+        {
+          "desc": "Verify state unchanged after failed trade",
+          "op": "assert",
+          "check": "state_before[0].stock_level === state_after[0].stock_level && state_before[0].rolling_volume === state_after[0].rolling_volume"
+        }
+      ]
+    },
+    {
+      "id": "E1_deterministic_repeated_trades",
+      "name": "Determinism: Repeated trades produce expected deltas",
+      "description": "Trading same quantity multiple times should produce predictable cumulative state changes",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn player",
+          "op": "players.spawn",
+          "args": { "name": "TestPlayer_E1_{{UUID}}" },
+          "save": "player_id"
+        },
+        {
+          "desc": "Add startup capital",
+          "op": "bank.deposit",
+          "args": { "amount": 10000000 }
+        },
+        {
+          "desc": "Get my ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "my_ships"
+        },
+        {
+          "desc": "Extract ship_id",
+          "op": "extract",
+          "src": "my_ships",
+          "path": "ships[0].ship_id",
+          "save": "ship_id"
+        },
+        {
+          "desc": "Warp to port 1",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Query initial state",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'FUEL'",
+            "db": "game"
+          },
+          "save": "state_initial"
+        },
+        {
+          "desc": "Extract initial",
+          "op": "extract",
+          "src": "state_initial",
+          "path": "[0]",
+          "save": "initial"
+        },
+        {
+          "desc": "Buy 10 FUEL (trade 1)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "FUEL", "qty": 10}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query after trade 1",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'FUEL'",
+            "db": "game"
+          },
+          "save": "state_after_1"
+        },
+        {
+          "desc": "Extract state 1",
+          "op": "extract",
+          "src": "state_after_1",
+          "path": "[0]",
+          "save": "state_1"
+        },
+        {
+          "desc": "Buy 10 FUEL again (trade 2)",
+          "op": "trade.buy",
+          "args": {
+            "port_id": 1,
+            "lines": [{"code": "FUEL", "qty": 10}],
+            "account": 1
+          }
+        },
+        {
+          "desc": "Query after trade 2",
+          "op": "database.query",
+          "args": {
+            "query": "SELECT stock_level, rolling_volume FROM port_commodity_state WHERE port_id = 1 AND commodity_code = 'FUEL'",
+            "db": "game"
+          },
+          "save": "state_after_2"
+        },
+        {
+          "desc": "Extract state 2",
+          "op": "extract",
+          "src": "state_after_2",
+          "path": "[0]",
+          "save": "state_2"
+        },
+        {
+          "desc": "Verify trade 1 decreased stock by 10",
+          "op": "assert",
+          "check": "state_1.stock_level === initial.stock_level - 10"
+        },
+        {
+          "desc": "Verify trade 1 increased volume by 10",
+          "op": "assert",
+          "check": "state_1.rolling_volume === initial.rolling_volume + 10"
+        },
+        {
+          "desc": "Verify trade 2 decreased stock by another 10",
+          "op": "assert",
+          "check": "state_2.stock_level === state_1.stock_level - 10"
+        },
+        {
+          "desc": "Verify trade 2 increased volume by another 10",
+          "op": "assert",
+          "check": "state_2.rolling_volume === state_1.rolling_volume + 10"
+        }
+      ]
+    },
+    {
+      "id": "F1_regression_phase8_alignment_gating",
+      "name": "Regression: Phase 8 alignment gating still enforced",
+      "description": "State updates should not interfere with existing alignment/legality gating",
+      "steps": [
+        {
+          "desc": "Enable dynamic pricing",
+          "op": "config.set",
+          "args": {
+            "key": "market.dynamic_pricing_enabled",
+            "value": "true"
+          }
+        },
+        {
+          "desc": "Spawn good player (alignment +90)",
+          "op": "players.spawn",
+          "args": { "name": "GoodPlayer_F1_{{UUID}}", "alignment": 90 },
+          "save": "good_player_id"
+        },
+        {
+          "desc": "Add capital to good player",
+          "op": "bank.deposit",
+          "args": { "amount": 5000000 }
+        },
+        {
+          "desc": "Get good player ships",
+          "op": "ships.get_my_ships",
+          "args": {},
+          "save": "good_ships"
+        },
+        {
+          "desc": "Extract good ship_id",
+          "op": "extract",
+          "src": "good_ships",
+          "path": "ships[0].ship_id",
+          "save": "good_ship_id"
+        },
+        {
+          "desc": "Warp good player to lawful port",
+          "op": "universe.warp_to",
+          "args": { "port_id": 1 }
+        },
+        {
+          "desc": "Good player checks port info (should not see illegal commodities)",
+          "op": "ports.port_info",
+          "args": { "port_id": 1 },
+          "save": "port_info_good"
+        },
+        {
+          "desc": "Verify good player cannot see illegal items in buy list",
+          "op": "assert",
+          "check": "!port_info_good.buy.find(c => c.illegal === true)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+    "id": "srv-refuse",
+    "reply_to": "c-f6b5e269",
+    "ts": "2026-02-16T17:55:55Z",
+    "status": "refused",
+    "type": "error",
+    "error": {
+        "code": 1701,
+        "message": "Port is not buying this commodity right now."
+    },
+    "data": null,
+    "meta": {
+        "rate_limit": {
+            "limit": 60,
+            "remaining": 60,
+            "reset": 60
+        }
+    }
+}
