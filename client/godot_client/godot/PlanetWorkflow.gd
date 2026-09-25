@@ -1,6 +1,7 @@
 extends Control
 
 const OBJECT_ATLAS := preload("res://assets/sector_objects_atlas.png")
+const DialogLayout = preload("res://DialogLayout.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 
@@ -189,11 +190,11 @@ func _confirm_transfer(action: String) -> void:
 		dialog.queue_free()
 	)
 	dialog.canceled.connect(dialog.queue_free)
-	dialog.popup_centered(Vector2i(480, 190))
+	DialogLayout.popup(dialog, Vector2i(500, 210))
 
 func _confirm_launch() -> void:
 	if not _busy and _planet_id > 0:
-		_launch_dialog.popup_centered(Vector2i(500, 190))
+		DialogLayout.popup(_launch_dialog, Vector2i(520, 210))
 
 func launch_confirmed(sector_id: int) -> void:
 	visible = false

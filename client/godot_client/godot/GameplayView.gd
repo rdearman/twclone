@@ -12,6 +12,7 @@ signal route_cancel_requested
 
 const SectorViewScript = preload("res://SectorView.gd")
 const CommandMenuScript = preload("res://CommandMenu.gd")
+const DialogLayout = preload("res://DialogLayout.gd")
 const PortWorkflowScript = preload("res://PortWorkflow.gd")
 const PlanetWorkflowScript = preload("res://PlanetWorkflow.gd")
 const LocalSectorNotes = preload("res://LocalSectorNotes.gd")
@@ -908,7 +909,7 @@ func confirm_trade_quote(direction: String, commodity: String, quantity: int, qu
 	trade_quote_dialog.dialog_text = "%s %d × %s\n\nAuthoritative total: %s CR\nUnit price: %s CR\n\nNo cargo or credits change unless you confirm." % [direction.capitalize(), quantity, commodity, _display_money(total), _display_money(unit)]
 	trade_quote_dialog.ok_button_text = "CONFIRM %s" % direction.to_upper()
 	trade_quote_dialog.cancel_button_text = "CANCEL"
-	trade_quote_dialog.popup_centered(Vector2i(500, 250))
+	DialogLayout.popup(trade_quote_dialog, Vector2i(520, 280))
 
 func _display_money(value) -> String:
 	return "Unavailable" if value == null else str(value)

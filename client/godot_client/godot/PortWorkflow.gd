@@ -1,6 +1,7 @@
 extends Control
 
 const COMMAND_RAIL_CLEARANCE := 292.0
+const DialogLayout = preload("res://DialogLayout.gd")
 
 signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
 signal back_requested
@@ -124,14 +125,16 @@ func _ready() -> void:
 	var quantity_box := VBoxContainer.new()
 	var prompt := Label.new()
 	prompt.text = "Choose a positive quantity. The server quote is required before a trade can be confirmed."
-	prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	DialogLayout.prepare_label(prompt)
 	quantity_box.add_child(prompt)
 	_quantity = SpinBox.new()
+	_quantity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_quantity.min_value = 1
 	_quantity.max_value = 1000000
 	_quantity.step = 1
 	quantity_box.add_child(_quantity)
-	_trade_dialog.add_child(quantity_box)
+	quantity_box.add_theme_constant_override("separation", 10)
+	DialogLayout.attach(_trade_dialog, quantity_box)
 	_trade_dialog.ok_button_text = "REQUEST QUOTE"
 	add_child(_trade_dialog)
 
@@ -300,7 +303,7 @@ func _choose_trade(direction: String, commodity: String, item: Dictionary) -> vo
 		_quantity.max_value = int(capacity) - int(stock)
 	else:
 		_quantity.max_value = 1000000
-	_trade_dialog.popup_centered(Vector2i(440, 220))
+	DialogLayout.popup(_trade_dialog, Vector2i(460, 250))
 
 func _submit_trade() -> void:
 	var port_id = _port.get("id", _port.get("port_id", null))

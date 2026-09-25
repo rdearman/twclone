@@ -1,6 +1,7 @@
 extends PanelContainer
 
 const TwProtocol = preload("res://Protocol.gd")
+const DialogLayout = preload("res://DialogLayout.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 
@@ -196,7 +197,8 @@ func _ready() -> void:
 	_form_dialog.title = "Command details"
 	_form_dialog.confirmed.connect(_submit_form)
 	_form_content = VBoxContainer.new()
-	_form_dialog.add_child(_form_content)
+	_form_content.add_theme_constant_override("separation", 10)
+	DialogLayout.attach(_form_dialog, _form_content)
 	_form_dialog.exclusive = false
 	get_parent().add_child(_form_dialog)
 	_result_dialog = AcceptDialog.new()
@@ -207,9 +209,10 @@ func _ready() -> void:
 	result_margin.add_theme_constant_override("margin_right", 8)
 	result_margin.add_theme_constant_override("margin_top", 8)
 	result_margin.add_theme_constant_override("margin_bottom", 8)
-	_result_dialog.add_child(result_margin)
+	DialogLayout.attach(_result_dialog, result_margin)
 	_result_text = Label.new()
-	_result_text.custom_minimum_size = Vector2(470, 160)
+	_result_text.custom_minimum_size = Vector2(0, 160)
+	_result_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_result_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_result_text.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	result_margin.add_child(_result_text)
@@ -225,8 +228,8 @@ func _ready() -> void:
 	_shipyard_dialog.title = "Shipyard · available hulls"
 	_shipyard_dialog.exclusive = false
 	var shipyard_scroll := ScrollContainer.new()
-	shipyard_scroll.custom_minimum_size = Vector2(500, 340)
-	_shipyard_dialog.add_child(shipyard_scroll)
+	shipyard_scroll.custom_minimum_size = Vector2(0, 340)
+	DialogLayout.attach(_shipyard_dialog, shipyard_scroll)
 	_shipyard_rows = VBoxContainer.new()
 	_shipyard_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	shipyard_scroll.add_child(_shipyard_rows)
@@ -236,10 +239,11 @@ func _ready() -> void:
 	_shipyard_name_dialog.exclusive = false
 	_shipyard_name_dialog.ok_button_text = "CONFIRM UPGRADE"
 	var shipyard_name_column := VBoxContainer.new()
-	_shipyard_name_dialog.add_child(shipyard_name_column)
+	shipyard_name_column.add_theme_constant_override("separation", 10)
+	DialogLayout.attach(_shipyard_name_dialog, shipyard_name_column)
 	var shipyard_note := Label.new()
 	shipyard_note.text = "The server will recheck eligibility and final cost before exchanging your hull."
-	shipyard_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	DialogLayout.prepare_label(shipyard_note)
 	shipyard_name_column.add_child(shipyard_note)
 	_shipyard_name_input = LineEdit.new()
 	_shipyard_name_input.placeholder_text = "Name your new ship"
@@ -306,7 +310,7 @@ func show_result(label: String, payload: Dictionary) -> void:
 	else:
 		_result_dialog.title = label
 		_result_text.text = format_result(label, payload)
-		_result_dialog.popup_centered(Vector2i(560, 380))
+		DialogLayout.popup(_result_dialog, Vector2i(560, 380))
 
 func format_result(label: String, payload: Dictionary) -> String:
 	if label.to_lower().contains("density"):
@@ -385,7 +389,7 @@ func show_activity_history() -> void:
 	else:
 		_result_dialog.title = "Recent server events"
 		_result_text.text = content
-		_result_dialog.popup_centered(Vector2i(620, 420))
+		DialogLayout.popup(_result_dialog, Vector2i(620, 420))
 
 func show_help() -> void:
 	var content := "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape to clear selection.\n\nCOMMAND\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and results appear in the Information panel.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
@@ -395,7 +399,7 @@ func show_help() -> void:
 	else:
 		_result_dialog.title = "Trade Wars · Field Guide"
 		_result_text.text = content
-		_result_dialog.popup_centered(Vector2i(620, 520))
+		DialogLayout.popup(_result_dialog, Vector2i(620, 520))
 
 func show_shipyard(data: Dictionary, current_ship_name: String = "") -> void:
 	for child in _shipyard_rows.get_children():
@@ -420,7 +424,7 @@ func show_shipyard(data: Dictionary, current_ship_name: String = "") -> void:
 			button.disabled = not eligible or not hull.has("type_id")
 			button.pressed.connect(_choose_shipyard_hull.bind(int(hull.get("type_id", 0)), current_ship_name))
 			_shipyard_rows.add_child(button)
-	_shipyard_dialog.popup_centered(Vector2i(580, 450))
+	DialogLayout.popup(_shipyard_dialog, Vector2i(580, 450))
 
 func _choose_shipyard_hull(type_id: int, current_ship_name: String) -> void:
 	if type_id <= 0:
@@ -428,7 +432,7 @@ func _choose_shipyard_hull(type_id: int, current_ship_name: String) -> void:
 	_shipyard_dialog.hide()
 	_shipyard_type_id = type_id
 	_shipyard_name_input.text = current_ship_name
-	_shipyard_name_dialog.popup_centered(Vector2i(500, 190))
+	DialogLayout.popup(_shipyard_name_dialog, Vector2i(520, 220))
 
 func _submit_shipyard_upgrade() -> void:
 	var new_name := _shipyard_name_input.text.strip_edges()
@@ -462,7 +466,7 @@ func show_deployed_assets(data: Dictionary, asset_kind: String, sector_id: int) 
 			if asset_id != null:
 				button.pressed.connect(_recall_asset.bind(int(asset_id)))
 			_shipyard_rows.add_child(button)
-	_shipyard_dialog.popup_centered(Vector2i(580, 450))
+	DialogLayout.popup(_shipyard_dialog, Vector2i(580, 450))
 
 func _recall_asset(asset_id: int) -> void:
 	if asset_id <= 0 or _deployment_sector <= 0 or _deployment_command.is_empty():
@@ -626,7 +630,7 @@ func _choose_action(action: Dictionary) -> void:
 		return
 	if bool(action.get("local_logout", false)):
 		if bool(_snapshot.get("authenticated", false)) and not bool(_snapshot.get("disconnected", true)):
-			_logout_dialog.popup_centered(Vector2i(460, 180))
+			DialogLayout.popup(_logout_dialog, Vector2i(480, 200))
 		else:
 			_add_unavailable("There is no active server session to log out of.")
 		return
@@ -666,7 +670,7 @@ func _choose_action(action: Dictionary) -> void:
 			_form_fields.clear()
 			_form_dialog.dialog_text = "Send %s? The server remains authoritative." % str(action.get("label", "this command"))
 			_form_dialog.ok_button_text = "CONFIRM"
-			_form_dialog.popup_centered(Vector2i(440, 180))
+			DialogLayout.popup(_form_dialog, Vector2i(480, 200))
 			set_meta("pending_data", data)
 		else:
 			command_requested.emit(str(action["command"]), data, str(action["label"]), false)
@@ -682,6 +686,7 @@ func _choose_action(action: Dictionary) -> void:
 		var row := VBoxContainer.new()
 		var label := Label.new()
 		label.text = str(field[2])
+		DialogLayout.prepare_label(label)
 		row.add_child(label)
 		if str(field[1]) == "boolean":
 			var check := CheckBox.new()
@@ -690,6 +695,7 @@ func _choose_action(action: Dictionary) -> void:
 			_form_fields[str(field[0])] = check
 		else:
 			var input := LineEdit.new()
+			input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			input.text = str(field[3])
 			input.placeholder_text = str(field[2])
 			if field.size() > 4:
@@ -699,7 +705,7 @@ func _choose_action(action: Dictionary) -> void:
 		_form_content.add_child(row)
 	_form_dialog.dialog_text = "Enter the requested details."
 	_form_dialog.ok_button_text = "SEND"
-	_form_dialog.popup_centered(Vector2i(480, 330))
+	DialogLayout.popup(_form_dialog, Vector2i(520, 360))
 	set_meta("pending_data", data)
 
 func _confirm_logout() -> void:
