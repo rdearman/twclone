@@ -129,8 +129,8 @@ server: listening on 0.0.0.0:1234
 
 The actively maintained clients are:
 
-* **Godot** — the primary native desktop client with the illustrated sector, port, planet, cargo, navigation, and command-screen workflows. See [`client/godot_client/godot/`](./client/godot_client/godot/).
-* **Python** — the terminal/reference client used for protocol workflows, regression coverage, and automation. See [`client/python_client/README.md`](./client/python_client/README.md).
+* **Godot — recommended.** This is the most advanced and full-featured gameplay client, with an illustrated sector view, object inspection and contextual actions, navigation, port and planet workflows, cargo/status indicators, and a responsive desktop interface. See [`client/godot_client/godot/`](./client/godot_client/godot/).
+* **Python.** Use this terminal client for lightweight protocol workflows, automation, and regression coverage. See [`client/python_client/README.md`](./client/python_client/README.md).
 
 The repository also contains reserve or alternate client implementations. The Angular/web clients and the C client area are kept for reference and future work; they are not the current primary gameplay clients.
 
