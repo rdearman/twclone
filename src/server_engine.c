@@ -25,6 +25,7 @@
 #include "s2s_keyring.h"
 #include "s2s_transport.h"
 #include "db/repo/repo_database.h"
+#include "db/repo/repo_planets.h"
 #include "db/sql_driver.h"
 
 
@@ -68,6 +69,7 @@ static const int64_t CRON_LOCK_STALE_MS = 120000;	/* reclaim after 2 min */
 int h_daily_bank_interest_tick (db_t * db, int64_t now_s);
 static int engine_notice_ttl_sweep (db_t * db, int64_t now_ms);
 static int sweeper_engine_deadletter_retry (db_t * db, int64_t now_ms);
+static int h_planet_id_sequence_reconcile (db_t * db, int64_t now_s);
 int cron_limpet_ttl_cleanup (db_t * db, int64_t now_s);
 
 
@@ -115,10 +117,29 @@ static const CronHandler CRON_REGISTRY[] = {
   {"shield_regen", h_shield_regen_tick},
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry},
+  {"planet_id_sequence_reconcile", h_planet_id_sequence_reconcile},
   {"citadel_construction_reap", h_citadel_construction_reap},
   {"market_state_decay", h_market_state_decay},
   {NULL, NULL}			/* required terminator */
 };
+
+static int
+h_planet_id_sequence_reconcile (db_t *db, int64_t now_s)
+{
+  if (!try_lock (db, "planet_id_sequence_reconcile", now_s))
+    return 0;
+
+  if (db_planets_sync_id_sequence (db) != 0)
+    {
+      LOGE ("[cron] Planet ID sequence reconciliation failed");
+      unlock (db, "planet_id_sequence_reconcile");
+      return -1;
+    }
+
+  LOGI ("[cron] Planet ID sequence reconciled");
+  unlock (db, "planet_id_sequence_reconcile");
+  return 0;
+}
 
 
 /* Lookup by task name (e.g., "fedspace_cleanup"). */

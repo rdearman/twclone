@@ -142,6 +142,18 @@ int repo_engine_update_cron_task_schedule(db_t *db, const char *ts_expr1, const 
     return 0;
 }
 
+int repo_engine_ensure_cron_task(db_t *db, const char *name, const char *schedule) {
+    db_error_t err;
+    const char *tmpl = "INSERT INTO cron_tasks (name, schedule, last_run_at, next_due_at, enabled, payload) "
+                       "VALUES ({1}, {2}, NULL, CURRENT_TIMESTAMP, TRUE, NULL) "
+                       "ON CONFLICT (name) DO NOTHING";
+    char sql[512];
+    sql_build(db, tmpl, sql, sizeof(sql));
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(schedule) }, 2, &err))
+        return err.code ? err.code : -1;
+    return 0;
+}
+
 int repo_engine_sweep_expired_notices(db_t *db, const char *ts_fmt, int64_t now_s, int64_t *out_count) {
     (void)ts_fmt; // Deprecated
     db_error_t err;

@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include "db/db_api.h"
 
+/* Repair the planets serial sequence without moving it backwards. */
+int db_planets_sync_id_sequence(db_t *db);
+
 /* Q1-Q5: Terra Sanctions */
 int db_planets_apply_terra_sanctions(db_t *db, int player_id);
 

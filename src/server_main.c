@@ -28,6 +28,7 @@
 #include "server_cron.h"
 #include "globals.h"
 #include "repo_cmd.h"
+#include "db/repo/repo_engine.h"
 static pid_t g_engine_pid = -1;
 static int g_engine_shutdown_fd = -1;
 static int s2s_listen_fd = -1;
@@ -399,6 +400,13 @@ main (void)
 
   // initalise the player settings if all the other DB stuff is done.
   db_player_settings_init (game_db_get_handle ());
+  if (repo_engine_ensure_cron_task (game_db_get_handle (),
+				    "planet_id_sequence_reconcile",
+				    "daily@00:00Z") != 0)
+    {
+      LOGE ("Failed to register planet ID sequence reconciliation cron task");
+      return EXIT_FAILURE;
+    }
   cron_register_builtins ();
   /* 0.1) Capabilities (restored) */
   build_capabilities ();	/* rebuilds g_capabilities */

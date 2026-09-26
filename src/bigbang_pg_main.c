@@ -1253,6 +1253,14 @@ main (int argc, char **argv)
   exec_sql (app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
   exec_sql (app, "SELECT setup_orion_syndicate()", "setup_orion");
 
+  /* These seed functions assign fixed planet_id values. Keep the serial
+     sequence ahead of all seeded rows before later gameplay inserts. */
+  exec_sql (app,
+	    "SELECT setval('public.planets_planet_id_seq', "
+	    "GREATEST(COALESCE((SELECT MAX(planet_id) FROM public.planets), 1), last_value), TRUE) "
+	    "FROM public.planets_planet_id_seq",
+	    "sync_planet_id_sequence");
+
   // Create clusters AFTER faction homeworlds are set up
   exec_sql (app, "SELECT generate_clusters_v2(50)", "generate_clusters");
   

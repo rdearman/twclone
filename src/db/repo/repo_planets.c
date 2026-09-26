@@ -7,6 +7,31 @@
 #include <stdlib.h>
 #include <time.h>
 
+int db_planets_sync_id_sequence(db_t *db) {
+    db_error_t err;
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err)) return -1;
+
+    /* Serialize reconciliation with planet inserts. Sequence values are not
+       transactional, so preserve the current sequence value as well as MAX. */
+    if (!db_exec(db, "LOCK TABLE public.planets IN ACCESS EXCLUSIVE MODE", NULL, 0, &err)) {
+        db_tx_rollback(db, NULL);
+        return -1;
+    }
+
+    const char *sql = "SELECT setval('public.planets_planet_id_seq', "
+                      "GREATEST(COALESCE((SELECT MAX(planet_id) FROM public.planets), 1), last_value), TRUE) "
+                      "FROM public.planets_planet_id_seq";
+    if (!db_exec(db, sql, NULL, 0, &err)) {
+        db_tx_rollback(db, NULL);
+        return -1;
+    }
+    if (!db_tx_commit(db, &err)) {
+        db_tx_rollback(db, NULL);
+        return -1;
+    }
+    return 0;
+}
+
 int db_planets_apply_terra_sanctions(db_t *db, int player_id) {
     db_error_t err;
     db_bind_t params[] = { db_bind_i64 (player_id) };
@@ -683,4 +708,3 @@ int db_planets_get_equipment_on_hand(db_t *db, int planet_id, int64_t *count) {
     if (res) db_res_finalize(res);
     return -1;
 }
-
