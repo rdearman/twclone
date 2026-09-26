@@ -218,7 +218,7 @@ func _layout_objects() -> void:
 	_layout_warp_markers()
 
 func _sector_scale(kind: String, key: String) -> float:
-	if kind != "ship":
+	if kind not in ["ship", "port"]:
 		return 1.0
 	var scale_rng := RandomNumberGenerator.new()
 	scale_rng.seed = hash("%s|%s|scale" % [_sector_identity, key])
