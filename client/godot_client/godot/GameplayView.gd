@@ -16,7 +16,9 @@ const DialogLayout = preload("res://DialogLayout.gd")
 const PortWorkflowScript = preload("res://PortWorkflow.gd")
 const PlanetWorkflowScript = preload("res://PlanetWorkflow.gd")
 const LocalSectorNotes = preload("res://LocalSectorNotes.gd")
+const WARP_TRANSITION_SHADER := preload("res://WarpTransition.gdshader")
 const COMMAND_RAIL_TOAST_X := 310.0
+const LOCAL_PREFERENCES_PATH := "user://client_ui_preferences.cfg"
 
 var sector_view
 var sector_title: Label
@@ -44,7 +46,8 @@ var port_workflow
 var planet_workflow
 var trade_quote_dialog: ConfirmationDialog
 var center_split: SplitContainer
-var gameplay_body: HBoxContainer
+var gameplay_body: BoxContainer
+var gameplay_scroll: ScrollContainer
 var command_panel: PanelContainer
 var information_panel: PanelContainer
 var information_title: Label
@@ -56,12 +59,14 @@ var contents_scroll: ScrollContainer
 var toast_panel: PanelContainer
 var brand_label: Label
 var sector_subtitle: Label
-var top_row: HBoxContainer
+var top_row: BoxContainer
+var bottom_row: HBoxContainer
 var _snapshot: Dictionary = {}
 var _selected_key := ""
 var _rows: Dictionary = {}
 var _hovered_key := ""
 var _planet_mode := false
+var _reduced_motion := false
 var _route_panel: PanelContainer
 var _route_label: Label
 var _local_notes
@@ -70,6 +75,7 @@ var _note_status: Label
 
 func _ready() -> void:
 	_local_notes = LocalSectorNotes.new()
+	_load_local_preferences()
 	_build()
 	_render_snapshot(_snapshot)
 	resized.connect(_update_responsive_layout)
@@ -93,27 +99,32 @@ func set_connection_notice(disconnected: bool, message: String = "") -> void:
 func show_notification(message: String) -> void:
 	notification_label.text = message
 	notification_label.visible = not message.is_empty()
+	toast_panel.visible = not message.is_empty() and not center_split.vertical
 	if not message.is_empty():
 		var timer := get_tree().create_timer(4.0)
 		timer.timeout.connect(func() -> void:
 			if is_instance_valid(notification_label) and notification_label.text == message:
 				notification_label.visible = false
+				toast_panel.visible = false
 		)
 
 func show_hover_hint(kind: String, title: String) -> void:
 	_hovered_key = "%s:%s" % [kind.to_lower(), title]
 	notification_label.text = "PREVIEW · HOVER · %s · %s" % [kind.to_upper(), title]
 	notification_label.visible = true
+	toast_panel.visible = not center_split.vertical
 
 func clear_hover_hint(_key: String) -> void:
 	_hovered_key = ""
 	if _selected_key.is_empty():
 		notification_label.text = "Select an object to see its contextual actions."
 		notification_label.visible = true
+		toast_panel.visible = not center_split.vertical
 	else:
 		# Selection details live only in the Sector Contents panel. Do not put a
 		# second selection summary over the Information panel/artwork boundary.
 		notification_label.visible = false
+		toast_panel.visible = false
 
 func set_action_pending(pending: bool) -> void:
 	if not is_instance_valid(action_button):
@@ -123,16 +134,34 @@ func set_action_pending(pending: bool) -> void:
 	details_button.disabled = pending or _selected_key.is_empty()
 
 func play_warp_transition() -> void:
+	if _reduced_motion:
+		return
 	transition_cover.visible = true
-	transition_cover.color = Color(0.003, 0.009, 0.018, 0.0)
+	var material := transition_cover.material as ShaderMaterial
+	material.set_shader_parameter("phase", 0.0)
+	material.set_shader_parameter("strength", 0.0)
 	var tween := create_tween()
-	tween.tween_property(transition_cover, "color", Color(0.003, 0.009, 0.018, 0.8), 0.19)
+	tween.tween_method(func(value: float) -> void: material.set_shader_parameter("phase", value), 0.0, 1.0, 0.58).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.parallel().tween_method(func(value: float) -> void: material.set_shader_parameter("strength", value), 0.0, 1.0, 0.14)
 	await tween.finished
-	await get_tree().create_timer(0.08).timeout
 	tween = create_tween()
-	tween.tween_property(transition_cover, "color", Color(0.003, 0.009, 0.018, 0.0), 0.2)
+	tween.tween_method(func(value: float) -> void: material.set_shader_parameter("strength", value), 1.0, 0.0, 0.18)
 	await tween.finished
 	transition_cover.visible = false
+
+func _load_local_preferences() -> void:
+	var config := ConfigFile.new()
+	if config.load(LOCAL_PREFERENCES_PATH) == OK:
+		_reduced_motion = bool(config.get_value("accessibility", "reduced_motion", false))
+
+func _toggle_reduced_motion() -> void:
+	_reduced_motion = not _reduced_motion
+	var config := ConfigFile.new()
+	config.load(LOCAL_PREFERENCES_PATH)
+	config.set_value("accessibility", "reduced_motion", _reduced_motion)
+	config.save(LOCAL_PREFERENCES_PATH)
+	command_menu.set_reduced_motion_enabled(_reduced_motion)
+	show_notification("Reduced motion %s · warp transitions %s." % ["enabled" if _reduced_motion else "disabled", "skipped" if _reduced_motion else "animated"])
 
 func _build() -> void:
 	var base := ColorRect.new()
@@ -157,7 +186,8 @@ func _build() -> void:
 	top.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.027, 0.048, 0.96), Color(0.27, 0.46, 0.52, 0.8)))
 	layout.add_child(top)
 	var top_margin := _inner_margin(top, 17, 10)
-	top_row = HBoxContainer.new()
+	top_row = BoxContainer.new()
+	top_row.vertical = false
 	top_row.add_theme_constant_override("separation", 24)
 	top_margin.add_child(top_row)
 	brand_label = _label("TRADE WARS", 23, Color(0.95, 0.92, 0.82))
@@ -180,10 +210,17 @@ func _build() -> void:
 	turns_label.custom_minimum_size.x = 125
 	top_row.add_child(turns_label)
 
-	gameplay_body = HBoxContainer.new()
+	gameplay_scroll = ScrollContainer.new()
+	gameplay_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	gameplay_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	gameplay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	layout.add_child(gameplay_scroll)
+	gameplay_body = BoxContainer.new()
+	gameplay_body.vertical = false
+	gameplay_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	gameplay_body.add_theme_constant_override("separation", 10)
-	layout.add_child(gameplay_body)
+	gameplay_scroll.add_child(gameplay_body)
 	center_split = SplitContainer.new()
 	center_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -272,6 +309,8 @@ func _build() -> void:
 	command_menu.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
 		command_requested.emit(command, data, label, mutating)
 	)
+	command_menu.reduced_motion_toggle_requested.connect(_toggle_reduced_motion)
+	command_menu.set_reduced_motion_enabled(_reduced_motion)
 	gameplay_body.add_child(command_menu)
 	gameplay_body.move_child(command_menu, 0)
 	_build_information_panel()
@@ -312,7 +351,7 @@ func _build() -> void:
 	bottom.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.027, 0.048, 0.96), Color(0.27, 0.46, 0.52, 0.8)))
 	layout.add_child(bottom)
 	var bottom_margin := _inner_margin(bottom, 17, 8)
-	var bottom_row := HBoxContainer.new()
+	bottom_row = HBoxContainer.new()
 	bottom_row.add_theme_constant_override("separation", 30)
 	bottom_margin.add_child(bottom_row)
 	cargo_label = _label("CARGO  —/—", 13, Color(0.86, 0.88, 0.83))
@@ -327,10 +366,17 @@ func _build() -> void:
 	bottom_row.add_child(freshness_label)
 
 	toast_panel = PanelContainer.new()
-	toast_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	toast_panel.position = Vector2(COMMAND_RAIL_TOAST_X, -79)
+	toast_panel.anchor_left = 0.5
+	toast_panel.anchor_right = 0.5
+	toast_panel.anchor_top = 1.0
+	toast_panel.anchor_bottom = 1.0
+	toast_panel.offset_left = -195
+	toast_panel.offset_top = -79
+	toast_panel.offset_right = 195
+	toast_panel.offset_bottom = -36
 	toast_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	toast_panel.custom_minimum_size = Vector2(390, 43)
+	toast_panel.visible = false
 	toast_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.04, 0.057, 0.94), Color(0.28, 0.72, 0.75, 0.8)))
 	add_child(toast_panel)
 	var toast_margin := _inner_margin(toast_panel, 13, 8)
@@ -391,11 +437,14 @@ func _build() -> void:
 	offline_row.add_child(reconnect)
 	transition_cover = ColorRect.new()
 	transition_cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	transition_cover.color = Color(0.003, 0.009, 0.018, 0.0)
+	transition_cover.color = Color.WHITE
 	transition_cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	transition_cover.z_index = 40
 	transition_cover.visible = false
-	add_child(transition_cover)
+	var transition_material := ShaderMaterial.new()
+	transition_material.shader = WARP_TRANSITION_SHADER
+	transition_cover.material = transition_material
+	sector_view.add_child(transition_cover)
 
 func _render_snapshot(snapshot: Dictionary) -> void:
 	if not is_instance_valid(sector_view):
@@ -427,6 +476,21 @@ func _render_snapshot(snapshot: Dictionary) -> void:
 	cargo_label.text = "CARGO  %s/%s" % [_display(hud.get("cargo_used")), _display(hud.get("cargo_total"))]
 	shields_label.text = "SHIELDS  %s" % _display(hud.get("shields"))
 	fighters_label.text = "FIGHTERS  %s" % _display(hud.get("fighters"))
+	var cargo_used = hud.get("cargo_used", null)
+	var cargo_total = hud.get("cargo_total", null)
+	var hold_full := cargo_used != null and cargo_total != null and float(cargo_total) > 0.0 and float(cargo_used) >= float(cargo_total)
+	if hold_full:
+		cargo_label.text = "FULL HOLD  %s/%s" % [_display(cargo_used), _display(cargo_total)]
+		cargo_label.add_theme_color_override("font_color", Color(1.0, 0.67, 0.43))
+	else:
+		cargo_label.add_theme_color_override("font_color", Color(0.86, 0.88, 0.83))
+	var shield_value = hud.get("shields", null)
+	var low_shields := shield_value != null and float(shield_value) <= 25.0
+	if low_shields:
+		shields_label.text = "LOW SHIELDS  %s" % _display(shield_value)
+		shields_label.add_theme_color_override("font_color", Color(1.0, 0.58, 0.44))
+	else:
+		shields_label.add_theme_color_override("font_color", Color(0.76, 0.88, 0.86))
 	var overall := str(freshness.get("overall", "unavailable")).to_upper()
 	var connected := not bool(snapshot.get("disconnected", false)) and bool(snapshot.get("authenticated", false))
 	freshness_label.text = "LINK %s · DATA %s" % ["ONLINE" if connected else "OFFLINE", overall]
@@ -605,6 +669,7 @@ func _select(key: String, notify: bool) -> void:
 	_render_selection(sector_view.selected_object())
 	var selected: Dictionary = sector_view.selected_object()
 	notification_label.visible = false
+	toast_panel.visible = false
 
 func _on_art_object_selected(key: String, _source: String) -> void:
 	_selected_key = key
@@ -613,11 +678,13 @@ func _on_art_object_selected(key: String, _source: String) -> void:
 	if _rows.has(key):
 		_rows[key].grab_focus()
 	notification_label.visible = false
+	toast_panel.visible = false
 
 func _set_selected_notification(kind: String, title: String) -> void:
 	# Kept as a compatibility seam for callers; selection is rendered in the
 	# right-hand Sector Contents panel, never in the floating notification bar.
 	notification_label.visible = false
+	toast_panel.visible = false
 
 func _on_art_warp_selected(destination: int, _source: String) -> void:
 	var key := "warp:%d" % destination
@@ -1006,11 +1073,30 @@ func _update_responsive_layout() -> void:
 	if not is_instance_valid(center_split):
 		return
 	center_split.vertical = size.x < 980
+	bottom_row.add_theme_constant_override("separation", 8 if size.x < 600 else 30)
+	if size.x < 600:
+		var freshness: Dictionary = _snapshot.get("freshness", {})
+		var overall := str(freshness.get("overall", "unavailable")).to_upper()
+		var connected := not bool(_snapshot.get("disconnected", false)) and bool(_snapshot.get("authenticated", false))
+		freshness_label.text = "%s · %s" % ["ONLINE" if connected else "OFFLINE", overall]
+		freshness_label.add_theme_font_size_override("font_size", 8)
+	else:
+		var freshness: Dictionary = _snapshot.get("freshness", {})
+		var overall := str(freshness.get("overall", "unavailable")).to_upper()
+		var connected := not bool(_snapshot.get("disconnected", false)) and bool(_snapshot.get("authenticated", false))
+		freshness_label.text = "LINK %s · DATA %s" % ["ONLINE" if connected else "OFFLINE", overall]
+		freshness_label.add_theme_font_size_override("font_size", 9)
 	if center_split.vertical:
-		brand_label.visible = true
-		brand_label.add_theme_font_size_override("font_size", 14)
+		gameplay_body.vertical = true
+		gameplay_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		gameplay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		gameplay_body.move_child(center_split, 0)
+		gameplay_body.move_child(command_menu, 1)
+		gameplay_body.move_child(information_panel, 2)
+		top_row.vertical = true
+		brand_label.visible = false
 		sector_subtitle.visible = false
-		top_row.add_theme_constant_override("separation", 10)
+		top_row.add_theme_constant_override("separation", 3)
 		sector_title.add_theme_font_size_override("font_size", 14)
 		player_label.add_theme_font_size_override("font_size", 12)
 		credits_label.add_theme_font_size_override("font_size", 12)
@@ -1019,7 +1105,7 @@ func _update_responsive_layout() -> void:
 		turns_label.custom_minimum_size.x = 90
 		center_split.split_offset = -60
 		sector_view.custom_minimum_size = Vector2(0, 210)
-		command_panel.custom_minimum_size = Vector2(0, 340)
+		command_panel.custom_minimum_size = Vector2(0, 300)
 		panel_column.move_child(contents_scroll, 3)
 		selection_panel.custom_minimum_size.y = 0
 		contents_scroll.custom_minimum_size.y = 78
@@ -1029,6 +1115,12 @@ func _update_responsive_layout() -> void:
 		details_button.visible = true
 		toast_panel.visible = false
 	else:
+		gameplay_body.vertical = false
+		gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		gameplay_body.move_child(command_menu, 0)
+		gameplay_body.move_child(information_panel, 1)
+		gameplay_body.move_child(center_split, 2)
+		top_row.vertical = false
 		brand_label.visible = true
 		brand_label.add_theme_font_size_override("font_size", 23)
 		sector_subtitle.visible = true

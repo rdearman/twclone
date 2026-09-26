@@ -15,6 +15,13 @@ var _quantity: SpinBox
 var _pickup: Button
 var _dropoff: Button
 var _launch_dialog: ConfirmationDialog
+var _workflow_margin: MarginContainer
+var _panel_inner: MarginContainer
+var _heading: BoxContainer
+var _hero: BoxContainer
+var _planet_visual: TextureRect
+var _transfer_row: BoxContainer
+var _dim: ColorRect
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -28,6 +35,7 @@ func _ready() -> void:
 	dim.color = Color(0.006, 0.014, 0.025, 0.985)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
+	_dim = dim
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	margin.offset_top = 88
@@ -37,6 +45,7 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_top", 30)
 	margin.add_theme_constant_override("margin_bottom", 30)
 	add_child(margin)
+	_workflow_margin = margin
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.033, 0.052, 0.99), Color(0.32, 0.66, 0.69, 0.95)))
 	margin.add_child(panel)
@@ -46,11 +55,21 @@ func _ready() -> void:
 	inner.add_theme_constant_override("margin_top", 22)
 	inner.add_theme_constant_override("margin_bottom", 22)
 	panel.add_child(inner)
+	_panel_inner = inner
 	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.add_theme_constant_override("separation", 14)
-	inner.add_child(column)
-	var heading := HBoxContainer.new()
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	inner.add_child(scroll)
+	scroll.add_child(column)
+	var heading := BoxContainer.new()
+	heading.vertical = false
 	column.add_child(heading)
+	_heading = heading
 	var title := Label.new()
 	title.text = "PLANET SURFACE"
 	title.add_theme_font_size_override("font_size", 24)
@@ -62,15 +81,18 @@ func _ready() -> void:
 	_apply_button_style(launch, true)
 	launch.pressed.connect(_confirm_launch)
 	heading.add_child(launch)
-	var hero := HBoxContainer.new()
+	var hero := BoxContainer.new()
+	hero.vertical = false
 	hero.add_theme_constant_override("separation", 26)
 	column.add_child(hero)
+	_hero = hero
 	var planet_visual := TextureRect.new()
 	planet_visual.custom_minimum_size = Vector2(300, 250)
 	planet_visual.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	planet_visual.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	planet_visual.texture = _planet_texture()
 	hero.add_child(planet_visual)
+	_planet_visual = planet_visual
 	_info_label = Label.new()
 	_info_label.text = "Loading the planet's confirmed surface records…"
 	_info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -85,10 +107,13 @@ func _ready() -> void:
 	column.add_child(transfer_title)
 	_colonist_label = Label.new()
 	_colonist_label.text = "Awaiting authoritative colony and ship capacity information."
+	_colonist_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_colonist_label)
-	var transfer_row := HBoxContainer.new()
+	var transfer_row := BoxContainer.new()
+	transfer_row.vertical = false
 	transfer_row.add_theme_constant_override("separation", 10)
 	column.add_child(transfer_row)
+	_transfer_row = transfer_row
 	_quantity = SpinBox.new()
 	_quantity.min_value = 1
 	_quantity.max_value = 1
@@ -116,6 +141,33 @@ func _ready() -> void:
 			command_requested.emit("planet.launch", {}, "Launch from planet", true)
 	)
 	add_child(_launch_dialog)
+	resized.connect(_update_responsive_layout)
+	call_deferred("_update_responsive_layout")
+
+func _update_responsive_layout() -> void:
+	var compact := size.x < 760.0
+	_dim.offset_top = 128.0 if compact else 88.0
+	_workflow_margin.offset_top = 128.0 if compact else 88.0
+	var column: VBoxContainer = _panel_inner.get_child(0).get_child(0)
+	column.add_theme_constant_override("separation", 8 if compact else 14)
+	_workflow_margin.add_theme_constant_override("margin_left", 12 if compact else 36)
+	_workflow_margin.add_theme_constant_override("margin_right", 12 if compact else 36)
+	_workflow_margin.add_theme_constant_override("margin_top", 12 if compact else 30)
+	_panel_inner.add_theme_constant_override("margin_left", 12 if compact else 26)
+	_panel_inner.add_theme_constant_override("margin_right", 12 if compact else 26)
+	_panel_inner.add_theme_constant_override("margin_top", 12 if compact else 22)
+	_panel_inner.add_theme_constant_override("margin_bottom", 12 if compact else 22)
+	_heading.vertical = compact
+	_hero.vertical = compact
+	_hero.add_theme_constant_override("separation", 10 if compact else 26)
+	_planet_visual.custom_minimum_size = Vector2(120, 105) if compact else Vector2(300, 250)
+	_info_label.add_theme_font_size_override("font_size", 13 if compact else 16)
+	_colonist_label.add_theme_font_size_override("font_size", 12 if compact else 16)
+	_transfer_row.vertical = compact
+	_transfer_row.add_theme_constant_override("separation", 6 if compact else 10)
+	_quantity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pickup.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_dropoff.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func open_planet(planet_id: int) -> void:
 	if planet_id <= 0:

@@ -4,6 +4,7 @@ const TwProtocol = preload("res://Protocol.gd")
 const DialogLayout = preload("res://DialogLayout.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
+signal reduced_motion_toggle_requested
 
 const FIELD_INT := "integer"
 const FIELD_TEXT := "text"
@@ -109,6 +110,7 @@ const COMMANDS := {
 		{"label": "Plot route to sector", "command": "move.autopilot.start", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true},
 	],
 	"SETTINGS & NOTES": [
+		{"label": "Reduced motion · OFF", "local_reduced_motion": true},
 		{"label": "View settings and preferences", "command": "player.get_settings"},
 		{"label": "View preferences", "command": "player.get_prefs"},
 		{"label": "Set 24-hour clock preference", "command": "player.set_prefs", "fields": [["value", "boolean", "Use 24-hour clock", "true"]], "preference_key": "ui.clock_24h", "preference_type": "bool", "mutating": true},
@@ -156,6 +158,7 @@ var _deployment_command := ""
 var _deployment_sector := 0
 var _activity_history: Array[String] = []
 var _tavern_access := false
+var _reduced_motion_enabled := false
 
 func _ready() -> void:
 	custom_minimum_size.x = 260
@@ -352,12 +355,12 @@ func _format_density_result(payload: Dictionary) -> String:
 		data = data["sectors"]
 	var rows: Array[String] = ["SECTOR DENSITY", ""]
 	if data is Dictionary and data.has("density"):
-		rows.append("%s: %s" % [str(data.get("sector_id", "?")), _density_value(data.get("density", null))])
+		rows.append("Sector %s · Density: %s" % [_sector_identifier(data.get("sector_id", "?")), _density_value(data.get("density", null))])
 	elif data is Array:
 		if not data.is_empty() and data[0] is Dictionary:
 			for entry in data:
 				if entry is Dictionary and entry.has("sector_id"):
-					rows.append("%s: %s" % [str(entry["sector_id"]), _density_value(entry.get("density", null))])
+					rows.append("Sector %s · Density: %s" % [_sector_identifier(entry["sector_id"]), _density_value(entry.get("density", null))])
 		else:
 			# The compact server form is [sector_id, density, ...]. Keep IDs and
 			# null values intact; never turn array indexes into fake sector IDs.
@@ -365,11 +368,16 @@ func _format_density_result(payload: Dictionary) -> String:
 			while index < data.size():
 				var sid = data[index]
 				var density = data[index + 1] if index + 1 < data.size() else null
-				rows.append("%s: %s" % [str(sid), _density_value(density)])
+				rows.append("Sector %s · Density: %s" % [_sector_identifier(sid), _density_value(density)])
 				index += 2
 	if rows.size() == 2:
 		rows.append("No density values were returned by the server.")
 	return "\n".join(rows)
+
+func _sector_identifier(value: Variant) -> String:
+	if value is float and is_finite(value) and value == floor(value):
+		return str(int(value))
+	return str(value)
 
 func _density_value(value: Variant) -> String:
 	if value == null:
@@ -573,6 +581,9 @@ func _render_actions() -> void:
 	for action in actions:
 		var button := Button.new()
 		button.text = str(action.get("label", action.get("command", "Command")))
+		if bool(action.get("local_reduced_motion", false)):
+			button.text = "Reduced motion · %s" % ("ON" if _reduced_motion_enabled else "OFF")
+			button.tooltip_text = "Skip animated movement and screen transitions when enabled."
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.custom_minimum_size.y = 42
 		_style_button(button, false)
@@ -617,6 +628,11 @@ func set_busy(value: bool) -> void:
 	_busy = value
 	_render_actions()
 
+func set_reduced_motion_enabled(enabled: bool) -> void:
+	_reduced_motion_enabled = enabled
+	if is_instance_valid(_action_list):
+		_render_actions()
+
 func _add_unavailable(message: String) -> void:
 	var label := Label.new()
 	label.text = message
@@ -625,6 +641,9 @@ func _add_unavailable(message: String) -> void:
 	_action_list.add_child(label)
 
 func _choose_action(action: Dictionary) -> void:
+	if bool(action.get("local_reduced_motion", false)):
+		reduced_motion_toggle_requested.emit()
+		return
 	if action.has("unavailable_reason"):
 		_add_unavailable(str(action["unavailable_reason"]))
 		return
@@ -669,6 +688,7 @@ func _choose_action(action: Dictionary) -> void:
 			_form_action = action
 			_form_fields.clear()
 			_form_dialog.dialog_text = "Send %s? The server remains authoritative." % str(action.get("label", "this command"))
+			_form_dialog.get_label().visible = true
 			_form_dialog.ok_button_text = "CONFIRM"
 			DialogLayout.popup(_form_dialog, Vector2i(480, 200))
 			set_meta("pending_data", data)
@@ -703,7 +723,10 @@ func _choose_action(action: Dictionary) -> void:
 			row.add_child(input)
 			_form_fields[str(field[0])] = input
 		_form_content.add_child(row)
-	_form_dialog.dialog_text = "Enter the requested details."
+	# The field labels provide the instructions. A separate AcceptDialog label
+	# can overlap the first row on some Godot themes, so leave it empty here.
+	_form_dialog.dialog_text = ""
+	_form_dialog.get_label().visible = false
 	_form_dialog.ok_button_text = "SEND"
 	DialogLayout.popup(_form_dialog, Vector2i(520, 360))
 	set_meta("pending_data", data)

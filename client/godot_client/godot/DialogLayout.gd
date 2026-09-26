@@ -1,9 +1,9 @@
 class_name DialogLayout
 extends RefCounted
 
-## Put custom content beside AcceptDialog's built-in description label.
-## Adding it directly to the dialog bypasses the internal VBoxContainer and
-## causes labels and controls to occupy the same top-left area.
+## AcceptDialog's built-in description label is a direct child, not a layout
+## container. Put it and custom content in one VBox so neither draws over the
+## other. Keep space at the bottom for the dialog's built-in buttons.
 static func attach(dialog: AcceptDialog, content: Control) -> void:
 	if dialog == null or content == null:
 		return
@@ -12,12 +12,18 @@ static func attach(dialog: AcceptDialog, content: Control) -> void:
 	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	description.custom_minimum_size.x = 280
 	dialog.dialog_autowrap = true
+	var stack := VBoxContainer.new()
+	stack.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	stack.offset_left = 16
+	stack.offset_top = 48
+	stack.offset_right = -16
+	stack.offset_bottom = -58
+	stack.add_theme_constant_override("separation", 8)
+	dialog.add_child(stack)
+	dialog.remove_child(description)
+	stack.add_child(description)
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var content_parent := description.get_parent()
-	if content_parent != null:
-		content_parent.add_child(content)
-	else:
-		dialog.add_child(content)
+	stack.add_child(content)
 
 static func prepare_label(label: Label) -> void:
 	if label == null:

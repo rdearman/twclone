@@ -45,6 +45,9 @@ func _ready() -> void:
 	var showcase_notice := OS.get_environment("TWCLONE_SHOWCASE_NOTICE")
 	if not showcase_notice.is_empty():
 		gameplay.show_notification(showcase_notice)
+	if OS.get_environment("TWCLONE_SHOWCASE_WARP_EFFECT") == "1":
+		gameplay.play_warp_transition()
+		await get_tree().create_timer(0.28).timeout
 	var showcase_category := OS.get_environment("TWCLONE_SHOWCASE_CATEGORY")
 	if not showcase_category.is_empty():
 		gameplay.command_menu._active_category = showcase_category
@@ -77,4 +80,6 @@ func _ready() -> void:
 			push_error("Could not save showcase capture: %s" % error_string(error))
 		else:
 			print("Showcase capture saved: %s" % output_path)
+			if OS.get_environment("TWCLONE_SHOWCASE_WARP_EFFECT") == "1":
+				await get_tree().create_timer(0.55).timeout
 		get_tree().quit(0 if error == OK else 1)

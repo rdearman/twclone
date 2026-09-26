@@ -25,6 +25,12 @@ var _commodity_region: VBoxContainer
 var _tavern_mode := false
 var _hold_label: Label
 var _player_ship: Dictionary = {}
+var _dim: ColorRect
+var _workflow_margin: MarginContainer
+var _panel_inner: MarginContainer
+var _heading: BoxContainer
+var _commodity_headers: Control
+var _compact_layout := false
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -40,6 +46,7 @@ func _ready() -> void:
 	dim.color = Color(0.006, 0.014, 0.025, 0.985)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
+	_dim = dim
 	var margin := MarginContainer.new()
 	margin.name = "WorkflowMargin"
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -51,6 +58,7 @@ func _ready() -> void:
 	margin.add_theme_constant_override("margin_top", 22)
 	margin.add_theme_constant_override("margin_bottom", 22)
 	add_child(margin)
+	_workflow_margin = margin
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.033, 0.052, 0.99), Color(0.32, 0.66, 0.69, 0.95)))
 	margin.add_child(panel)
@@ -60,12 +68,15 @@ func _ready() -> void:
 	inner.add_theme_constant_override("margin_top", 17)
 	inner.add_theme_constant_override("margin_bottom", 17)
 	panel.add_child(inner)
+	_panel_inner = inner
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 12)
 	inner.add_child(column)
-	var heading := HBoxContainer.new()
+	var heading := BoxContainer.new()
+	heading.vertical = false
 	heading.name = "Heading"
 	column.add_child(heading)
+	_heading = heading
 	var title := Label.new()
 	title.name = "Title"
 	title.text = "PORT"
@@ -110,6 +121,7 @@ func _ready() -> void:
 	columns.add_child(_column_heading("INDICATIVE PRICE", 190))
 	columns.add_child(_column_heading("TRADE", 150))
 	_commodity_region.add_child(columns)
+	_commodity_headers = columns
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_commodity_region.add_child(scroll)
@@ -137,6 +149,8 @@ func _ready() -> void:
 	DialogLayout.attach(_trade_dialog, quantity_box)
 	_trade_dialog.ok_button_text = "REQUEST QUOTE"
 	add_child(_trade_dialog)
+	resized.connect(_update_responsive_layout)
+	call_deferred("_update_responsive_layout")
 
 func show_port(payload: Dictionary, sector_id: int) -> void:
 	var port_data = payload.get("port", {})
@@ -153,6 +167,12 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 	_back_button.text = "BACK TO SECTOR"
 	_tavern_button.visible = _is_stardock()
 	_commodity_region.visible = true
+	_rebuild_commodity_rows()
+	visible = true
+	_trade_dialog.hide()
+	_update_responsive_layout()
+
+func _rebuild_commodity_rows() -> void:
 	var list: VBoxContainer = _commodity_list
 	_trade_buttons.clear()
 	for child in list.get_children():
@@ -164,11 +184,8 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 		list.add_child(empty)
 	else:
 		for item in commodities:
-			if not item is Dictionary:
-				continue
-			_add_commodity_row(list, item)
-	visible = true
-	_trade_dialog.hide()
+			if item is Dictionary:
+				_add_commodity_row(list, item)
 
 func set_player_hold(ship: Dictionary) -> void:
 	_player_ship = ship.duplicate(true) if ship is Dictionary else {}
@@ -234,43 +251,80 @@ func _is_stardock() -> bool:
 
 func _add_commodity_row(list: VBoxContainer, item: Dictionary) -> void:
 	var card := PanelContainer.new()
-	card.custom_minimum_size.y = 58
+	var compact := _compact_layout
+	card.custom_minimum_size.y = 94 if compact else 58
 	card.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.055, 0.078, 0.98), Color(0.19, 0.38, 0.43, 0.8)))
 	list.add_child(card)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	card.add_child(row)
 	var code := str(item.get("code", item.get("commodity", "UNKNOWN"))).to_upper()
 	var stock = item.get("quantity", item.get("available", item.get("stock", null)))
 	var capacity = item.get("max_quantity", null)
 	var price: Variant = item.get("price", item.get("base_price", null))
 	var name_label := Label.new()
 	name_label.text = code
-	name_label.custom_minimum_size.x = 180
 	name_label.add_theme_font_size_override("font_size", 16)
-	row.add_child(name_label)
 	var stock_label := Label.new()
 	stock_label.text = "%s / %s" % ["—" if stock == null else _format_amount(stock), "—" if capacity == null else _format_amount(capacity)]
-	stock_label.custom_minimum_size.x = 250
-	row.add_child(stock_label)
 	var price_label := Label.new()
 	price_label.text = "— CR" if price == null else "%s CR" % str(price)
-	price_label.custom_minimum_size.x = 190
-	row.add_child(price_label)
 	var buy := Button.new()
 	buy.text = "BUY"
 	var buy_available: bool = stock != null and int(stock) > 0
 	buy.disabled = not buy_available
 	buy.pressed.connect(_choose_trade.bind("buy", code, item))
-	row.add_child(buy)
 	var sell := Button.new()
 	sell.text = "SELL"
 	var sell_available: bool = stock != null and capacity != null and int(stock) < int(capacity)
 	sell.disabled = not sell_available
 	sell.pressed.connect(_choose_trade.bind("sell", code, item))
-	row.add_child(sell)
+	if compact:
+		var content := VBoxContainer.new()
+		content.add_theme_constant_override("separation", 4)
+		card.add_child(content)
+		var title_row := HBoxContainer.new()
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title_row.add_child(name_label)
+		title_row.add_child(price_label)
+		content.add_child(title_row)
+		stock_label.text = "PORT STOCK / CAPACITY  ·  " + stock_label.text
+		content.add_child(stock_label)
+		var actions := HBoxContainer.new()
+		actions.add_child(buy)
+		actions.add_child(sell)
+		content.add_child(actions)
+	else:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		card.add_child(row)
+		name_label.custom_minimum_size.x = 180
+		row.add_child(name_label)
+		stock_label.custom_minimum_size.x = 250
+		row.add_child(stock_label)
+		price_label.custom_minimum_size.x = 190
+		row.add_child(price_label)
+		row.add_child(buy)
+		row.add_child(sell)
 	_trade_buttons.append({"button": buy, "available": buy_available})
 	_trade_buttons.append({"button": sell, "available": sell_available})
+
+func _update_responsive_layout() -> void:
+	var compact := size.x < 760.0
+	if compact != _compact_layout:
+		_compact_layout = compact
+		if not _port.is_empty() and is_instance_valid(_commodity_list):
+			_rebuild_commodity_rows()
+	_dim.offset_left = 0.0 if compact else COMMAND_RAIL_CLEARANCE
+	_dim.offset_top = 128.0 if compact else 88.0
+	_workflow_margin.offset_left = 0.0 if compact else COMMAND_RAIL_CLEARANCE + 10.0
+	_workflow_margin.offset_top = 128.0 if compact else 88.0
+	_workflow_margin.add_theme_constant_override("margin_left", 12 if compact else 28)
+	_workflow_margin.add_theme_constant_override("margin_right", 12 if compact else 28)
+	_workflow_margin.add_theme_constant_override("margin_top", 12 if compact else 22)
+	_panel_inner.add_theme_constant_override("margin_left", 12 if compact else 22)
+	_panel_inner.add_theme_constant_override("margin_right", 12 if compact else 22)
+	_panel_inner.add_theme_constant_override("margin_top", 12 if compact else 17)
+	_panel_inner.add_theme_constant_override("margin_bottom", 12 if compact else 17)
+	_heading.vertical = compact
+	_commodity_headers.visible = not compact
 
 func set_busy(busy: bool) -> void:
 	_tavern_button.disabled = busy or not _is_stardock() or _tavern_mode
