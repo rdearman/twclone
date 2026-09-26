@@ -716,6 +716,7 @@ func _render_selection(object: Dictionary) -> void:
 		action_button = _add_context_button(_warp_action_text(), true, _on_context_action_pressed)
 		action_button.disabled = not _can_warp_selected()
 	else:
+		selection_detail.text += "\nDisplay position is decorative."
 		var fields: Dictionary = object.get("data", {})
 		var extras: Array[String] = []
 		if fields.has("type"):

@@ -14,7 +14,7 @@ func _run() -> void:
 	var commands = view.command_menu
 	_check(commands is PanelContainer, "general commands are not a docked panel")
 	_check(commands.get_parent() == view.gameplay_body and view.gameplay_body.get_child(0) == commands, "command panel is not persistently placed on the left")
-	_check(view.toast_panel.position.x >= 300.0, "notification ribbon overlaps the persistent left command rail")
+	_check(is_equal_approx(view.toast_panel.anchor_left, 0.5) and is_equal_approx(view.toast_panel.anchor_right, 0.5), "notification ribbon is not centered at the bottom")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": false,

@@ -13,6 +13,7 @@ var selected_key := ""
 var _sprite_nodes: Dictionary = {}
 var _warp_markers: Dictionary = {}
 var _hovered_key := ""
+var _sector_identity := "0"
 var _beacon_panel: PanelContainer
 var _beacon_label: Label
 
@@ -58,6 +59,7 @@ func _ready() -> void:
 	resized.connect(_layout_objects)
 
 func compose(sector: Dictionary, selection_key: String) -> void:
+	_sector_identity = str(sector.get("sector_id", sector.get("id", sector.get("name", "0"))))
 	var beacon := str(sector.get("beacon", "")).strip_edges()
 	_beacon_label.text = "BEACON\n" + beacon if not beacon.is_empty() else "NO BEACON MESSAGE"
 	_beacon_panel.visible = not beacon.is_empty()
@@ -165,7 +167,10 @@ func _rebuild_art_objects() -> void:
 		anchor_label.visible = false
 		anchor_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art_object.add_child(anchor_label)
-		_sprite_nodes[str(object["key"])] = {"root": art_object, "sprite": sprite, "halo": halo, "label": anchor_label}
+		_sprite_nodes[str(object["key"])] = {
+			"root": art_object, "sprite": sprite, "halo": halo,
+			"label": anchor_label, "hit_shape": hit_shape,
+		}
 		world_layer.add_child(art_object)
 	_layout_objects()
 	_update_highlight()
@@ -174,40 +179,50 @@ func _layout_objects() -> void:
 	if not is_instance_valid(world_layer):
 		return
 	var compact := size.y < 300.0 or size.x < 640.0
-	var ports: Array[String] = []
-	var planets: Array[String] = []
-	var ships: Array[String] = []
+	var compact_factor := 0.48 if compact else 1.0
+	var placed: Array[Vector2] = []
+	# Seed each object's decorative position by sector and key so a redraw or
+	# resize keeps the layout stable, while entering another sector changes it.
 	for item in current_objects:
-		match str(item.get("kind", "")):
-			"port": ports.append(str(item["key"]))
-			"planet": planets.append(str(item["key"]))
-			"ship": ships.append(str(item["key"]))
-	_place_group(ports, Vector2(0.54, 0.34) if compact else Vector2(0.54, 0.42), Vector2(0.09, 0.05) if compact else Vector2(0.13, 0.06))
-	_place_group(planets, Vector2(0.80, 0.56) if compact else Vector2(0.78, 0.68), Vector2(0.07, 0.05) if compact else Vector2(0.09, 0.04))
-	_place_ships(ships, compact)
-	for key in _sprite_nodes:
-		var nodes: Dictionary = _sprite_nodes[key]
-		var object := _find_object(str(key))
-		var compact_factor := 0.48 if compact else 1.0
-		nodes["sprite"].scale = Vector2.ONE * _sprite_scale(str(object.get("sprite_kind", ""))) * compact_factor
-		nodes["halo"].scale = Vector2.ONE * compact_factor
-		nodes["label"].scale = Vector2.ONE * (0.85 if compact else 1.0)
-	_layout_warp_markers()
-
-func _place_ships(keys: Array[String], compact: bool) -> void:
-	if keys.is_empty():
-		return
-	var x_positions := [0.12, 0.35, 0.58, 0.22, 0.45, 0.68] if compact else [0.16, 0.37, 0.58, 0.25, 0.49, 0.68]
-	var y_positions := [0.72, 0.72, 0.72, 0.50, 0.50, 0.82] if compact else [0.72, 0.82, 0.68, 0.53, 0.54, 0.82]
-	for index in keys.size():
-		var nodes: Dictionary = _sprite_nodes.get(keys[index], {})
+		var key := str(item.get("key", ""))
+		var nodes: Dictionary = _sprite_nodes.get(key, {})
 		if nodes.is_empty():
 			continue
-		var slot := index % x_positions.size()
-		var row := index / x_positions.size()
-		var x: float = x_positions[slot]
-		var y: float = y_positions[slot] + float(row) * 0.08
-		nodes["root"].position = Vector2(size.x * x, size.y * y)
+		var object_rng := RandomNumberGenerator.new()
+		object_rng.seed = hash("%s|%s|position" % [_sector_identity, key])
+		var best_position := Vector2(0.5, 0.58)
+		var best_spacing := -1.0
+		for attempt in 32:
+			var candidate := Vector2(object_rng.randf_range(0.16, 0.84), object_rng.randf_range(0.34, 0.84))
+			var nearest := INF
+			for previous in placed:
+				nearest = minf(nearest, ((candidate - previous) * size).length())
+			if placed.is_empty():
+				nearest = INF
+			if nearest > best_spacing:
+				best_spacing = nearest
+				best_position = candidate
+			if nearest >= 238.0 * compact_factor:
+				break
+		placed.append(best_position)
+		nodes["root"].position = best_position * size
+		var scale_factor := _sector_scale(str(item.get("kind", "")), key)
+		nodes["sprite"].scale = Vector2.ONE * _sprite_scale(str(item.get("sprite_kind", ""))) * compact_factor * scale_factor
+		nodes["halo"].scale = Vector2.ONE * compact_factor
+		nodes["label"].scale = Vector2.ONE * (0.85 if compact else 1.0)
+		var hit_shape: CollisionShape2D = nodes["hit_shape"]
+		var base_radius := 108.0 if str(item.get("kind", "")) == "ship" else 122.0
+		var hit_circle: CircleShape2D = hit_shape.shape
+		hit_circle.radius = base_radius * compact_factor * scale_factor
+		nodes["hit_radius_factor"] = compact_factor * scale_factor
+	_layout_warp_markers()
+
+func _sector_scale(kind: String, key: String) -> float:
+	if kind != "ship":
+		return 1.0
+	var scale_rng := RandomNumberGenerator.new()
+	scale_rng.seed = hash("%s|%s|scale" % [_sector_identity, key])
+	return scale_rng.randf_range(0.92, 1.08)
 
 func _rebuild_warp_markers(destinations: Variant) -> void:
 	for marker in _warp_markers.values():
@@ -269,20 +284,6 @@ func _marker_style(active: bool) -> StyleBoxFlat:
 	style.content_margin_right = 10
 	return style
 
-func _place_group(keys: Array[String], center: Vector2, step: Vector2) -> void:
-	if keys.is_empty():
-		return
-	for index in keys.size():
-		var object_nodes: Dictionary = _sprite_nodes.get(keys[index], {})
-		if object_nodes.is_empty():
-			continue
-		var offset := Vector2.ZERO
-		if index > 0:
-			var ring := float((index + 1) / 2)
-			var side := -1.0 if index % 2 == 1 else 1.0
-			offset = Vector2(step.x * ring * side, step.y * ring * side)
-		object_nodes["root"].position = Vector2(size.x * center.x, size.y * center.y) + Vector2(size.x * offset.x, size.y * offset.y)
-
 func _update_highlight() -> void:
 	for key in _sprite_nodes:
 		var object_nodes: Dictionary = _sprite_nodes[key]
@@ -330,7 +331,7 @@ func _object_at_position(position: Vector2) -> Dictionary:
 		if not is_instance_valid(root):
 			continue
 		var distance := position.distance_to(root.position)
-		var radius := 108.0 if str(object.get("kind", "")) == "ship" else 122.0
+		var radius := (108.0 if str(object.get("kind", "")) == "ship" else 122.0) * float(nodes.get("hit_radius_factor", 1.0))
 		if distance <= radius and distance < best_distance:
 			best = object
 			best_distance = distance
