@@ -217,9 +217,7 @@ func _layout_objects() -> void:
 		nodes["hit_radius_factor"] = compact_factor * scale_factor
 	_layout_warp_markers()
 
-func _sector_scale(kind: String, key: String) -> float:
-	if kind not in ["ship", "port"]:
-		return 1.0
+func _sector_scale(_kind: String, key: String) -> float:
 	var scale_rng := RandomNumberGenerator.new()
 	scale_rng.seed = hash("%s|%s|scale" % [_sector_identity, key])
 	return scale_rng.randf_range(0.92, 1.08)
