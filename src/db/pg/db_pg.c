@@ -231,7 +231,26 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
     bool free_sql = false;
 
     if (id_col && !strcasestr(sql, "RETURNING")) {
-        if (asprintf(&sql_with_returning, "%s RETURNING %s", sql, id_col) < 0) {
+        /* PostgreSQL requires RETURNING to be part of the INSERT statement.
+         * Repository SQL templates commonly include a trailing semicolon;
+         * appending after it creates a second, invalid statement under
+         * PQexecParams' extended query protocol. */
+        size_t sql_len = strlen(sql);
+        while (sql_len > 0 && (sql[sql_len - 1] == ' ' ||
+                               sql[sql_len - 1] == '\t' ||
+                               sql[sql_len - 1] == '\n' ||
+                               sql[sql_len - 1] == '\r'))
+            sql_len--;
+        if (sql_len > 0 && sql[sql_len - 1] == ';')
+            sql_len--;
+        while (sql_len > 0 && (sql[sql_len - 1] == ' ' ||
+                               sql[sql_len - 1] == '\t' ||
+                               sql[sql_len - 1] == '\n' ||
+                               sql[sql_len - 1] == '\r'))
+            sql_len--;
+
+        if (asprintf(&sql_with_returning, "%.*s RETURNING %s",
+                     (int)sql_len, sql, id_col) < 0) {
             err->code = ERR_DB_QUERY_FAILED;
             strlcpy(err->message, "Memory allocation failed for RETURNING clause", sizeof(err->message));
             return false;
@@ -556,5 +575,4 @@ void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *e
     parent_db->vt = &pg_vt;
     return impl;
 }
-
 

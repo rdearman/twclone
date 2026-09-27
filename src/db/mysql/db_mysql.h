@@ -1,12 +1,9 @@
 #ifndef DB_MYSQL_H
 #define DB_MYSQL_H
 
-/* MySQL backend (Phase 6A skeleton).
- *
- * Phase 6A constraints:
- * - Backend may be stub (ERR_NOT_IMPLEMENTED) but must compile/link.
- * - No gameplay logic changes.
- */
+/* MySQL/MariaDB backend entry point. The operational implementation is
+ * compiled when configured with --enable-mysql; otherwise it reports that
+ * the optional backend is disabled. */
 
 #include "db_api.h" /* db_t, db_config_t, db_error_t */
 

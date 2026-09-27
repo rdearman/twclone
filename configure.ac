@@ -61,6 +61,34 @@ fi
 
 AM_CONDITIONAL([ENABLE_POSTGRES], [test "x$enable_postgres" = "xyes"])
 
+dnl Optional MySQL/MariaDB client backend. Keep it opt-in so PostgreSQL-only
+dnl installations do not acquire a new client-library build dependency.
+AC_ARG_ENABLE([mysql],
+    [AS_HELP_STRING([--enable-mysql], [Enable MySQL/MariaDB backend])],
+    [enable_mysql=$enableval],
+    [enable_mysql=no])
+
+if test "x$enable_mysql" = "xyes"; then
+    AC_PATH_PROG([MYSQL_CONFIG], [mysql_config], [])
+    if test -z "$MYSQL_CONFIG"; then
+        AC_PATH_PROG([MYSQL_CONFIG], [mariadb_config], [])
+    fi
+    if test -z "$MYSQL_CONFIG"; then
+        AC_MSG_ERROR([MySQL/MariaDB client development files not found (mysql_config or mariadb_config missing)])
+    fi
+    MYSQL_CFLAGS=`$MYSQL_CONFIG --cflags 2>/dev/null`
+    MYSQL_LIBS=`$MYSQL_CONFIG --libs 2>/dev/null`
+    if test -z "$MYSQL_CFLAGS" || test -z "$MYSQL_LIBS"; then
+        AC_MSG_ERROR([mysql_config did not provide usable compiler and linker flags])
+    fi
+    CFLAGS="$CFLAGS $MYSQL_CFLAGS"
+    LIBS="$MYSQL_LIBS $LIBS"
+    AC_CHECK_HEADER([mysql.h], [], [AC_MSG_ERROR([mysql.h not found in MySQL client include path])])
+    AC_DEFINE([HAVE_MYSQL], [1], [Define when the MySQL/MariaDB backend is enabled])
+fi
+
+AM_CONDITIONAL([ENABLE_MYSQL], [test "x$enable_mysql" = "xyes"])
+
 dnl Checks for header files.
 AC_CHECK_HEADERS(ctype.h errno.h math.h netdb.h netinet/in.h pthread.h stdio.h stdlib.h string.h sys/ipc.h sys/msg.h sys/poll.h sys/socket.h sys/time.h sys/types.h termios.h time.h unistd.h, , AC_MSG_ERROR("Missing essential header!"))
 

@@ -153,10 +153,9 @@ db_t *db_open(const db_config_t *cfg, db_error_t *err) {
             db->impl = db_pg_open_internal(db, cfg, err); // Pass db_t for internal setup
             break;
         case DB_BACKEND_MYSQL:
-            // Placeholder: MySQL connection string would go here
-            if (!cfg->pg_conninfo) { // Using pg_conninfo for now as a generic conn_str
+            if (!cfg->mysql_host || !cfg->mysql_user || !cfg->mysql_database) {
                 err->code = ERR_DB_CONFIG;
-                strncpy(err->message, "db_open: MySQL conninfo is NULL", sizeof(err->message));
+                strncpy(err->message, "db_open: MySQL host, user, and database are required", sizeof(err->message));
                 free(db);
                 return NULL;
             }
@@ -476,5 +475,4 @@ db_ship_repair_atomic(db_t *db,
                                     out_new_credits,
                                     err);
 }
-
 

@@ -98,6 +98,16 @@ typedef struct
   // Postgres specific configuration
   const char  *pg_conninfo;     // libpq connection string (e.g., "host=localhost dbname=twclone")
 
+  // MySQL/MariaDB connection configuration. These fields are used only when
+  // backend == DB_BACKEND_MYSQL. String values are borrowed for db_open();
+  // db_open copies the config structure, not the pointed-to strings.
+  const char  *mysql_host;      // NULL selects the client-library default
+  const char  *mysql_user;
+  const char  *mysql_password;
+  const char  *mysql_database;
+  const char  *mysql_unix_socket; // NULL for TCP or client-library default
+  uint16_t     mysql_port;      // 0 selects the client-library default
+
   // Generic connection parameters (copied from db_cfg in old db_api.h)
   int connect_timeout_ms;      // Optional, 0 means default
   int statement_timeout_ms;    // Optional, 0 means default
