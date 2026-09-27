@@ -1018,7 +1018,7 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
 
   char sql_update[512];
 
-  sql_build(db, "UPDATE planets SET population = {1}, colonists_unassigned = colonists_unassigned + {2} WHERE planet_id = {3};", sql_update, sizeof(sql_update));
+  sql_build(db, "UPDATE planets SET population = {1}, colonists_unassigned = {2} WHERE planet_id = {3};", sql_update, sizeof(sql_update));
 
 
 
