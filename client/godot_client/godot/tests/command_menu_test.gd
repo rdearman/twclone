@@ -157,6 +157,25 @@ func _run() -> void:
 	_check(menu._logout_dialog.visible, "logout did not require a confirmation step")
 	menu._logout_dialog.confirmed.emit()
 	_check(captured.size() == 17 and captured[16]["command"] == "auth.logout" and captured[16]["data"].is_empty(), "confirmed logout did not send the documented empty payload")
+	var pinned_help := {"label": "Controls and command flow", "local_help": true}
+	menu._pinned_actions.clear()
+	menu._key_bindings.clear()
+	menu._toggle_pin(pinned_help)
+	_check(menu._categories().has("PINNED"), "pinning a command did not add the PINNED category")
+	var help_key := menu._action_storage_key(pinned_help)
+	menu._begin_shortcut_binding(help_key)
+	var modified_key := InputEventKey.new()
+	modified_key.pressed = true
+	modified_key.keycode = KEY_K
+	modified_key.ctrl_pressed = true
+	_check(menu.capture_shortcut(modified_key) and menu._awaiting_binding_command == help_key and not menu._key_bindings.has(help_key), "shortcut binding accepted a modifier combination")
+	var plain_key := InputEventKey.new()
+	plain_key.pressed = true
+	plain_key.keycode = KEY_H
+	_check(menu.capture_shortcut(plain_key) and int(menu._key_bindings.get(help_key, 0)) == KEY_H, "pinned command did not accept a single-key binding")
+	_check(menu.dispatch_shortcut(KEY_H) and menu._result_text.text.contains("PINNED category"), "pinned keyboard shortcut did not run its local command")
+	menu._toggle_pin(pinned_help)
+	_check(not menu._categories().has("PINNED"), "unpinned command left an empty PINNED category")
 	menu._selection.clear()
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
@@ -191,14 +210,14 @@ func _run() -> void:
 	(menu._form_fields["max_hops_between"] as LineEdit).text = "7"
 	(menu._form_fields["limit"] as LineEdit).text = "4"
 	menu._submit_form()
-	_check(captured.size() == count_before_unavailable + 1 and captured.back()["data"] == {"max_hops_between": 7, "limit": 4} and not captured.back()["data"].has("require_two_way"), "route recommendation request promised an unsupported two-way filter")
+	_check(captured.size() == count_before_unavailable + 1 and captured.back()["data"] == {"max_hops_between": 7, "require_two_way": 0, "limit": 4}, "route recommendation request omitted or misformatted its optional two-way filter")
 	var display := menu._format_result({"credits": 0, "session_token": "secret", "cargo": [{"commodity": "ORE", "quantity": 1}]})
 	_check(display.contains("Credits: 0"), "legitimate zero was not displayed")
 	_check(not display.contains("secret") and not display.contains("session token"), "sensitive result data entered player output")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 65 passed")
+		print("Godot command menu tests: 70 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -211,6 +230,16 @@ func _check(condition: bool, message: String) -> void:
 
 func _action_button(menu, label: String) -> Button:
 	for child in menu._action_list.get_children():
-		if child is Button and (child as Button).text == label:
-			return child
+		var found := _find_button(child, label)
+		if found != null:
+			return found
+	return null
+
+func _find_button(node: Node, label: String) -> Button:
+	if node is Button and (node as Button).text == label:
+		return node as Button
+	for child in node.get_children():
+		var found := _find_button(child, label)
+		if found != null:
+			return found
 	return null

@@ -5,6 +5,10 @@ const DialogLayout = preload("res://DialogLayout.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 signal reduced_motion_toggle_requested
+signal hud_settings_requested
+signal shortcut_binding_prompt(message: String)
+
+const LOCAL_PREFERENCES_PATH := "user://client_ui_preferences.cfg"
 
 const FIELD_INT := "integer"
 const FIELD_TEXT := "text"
@@ -19,7 +23,7 @@ const COMMANDS := {
 		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
 		{"label": "Hardware catalogue", "command": "hardware.list", "requires_supported_dock": true, "tooltip": "Dock at a supported hardware port first."},
 		{"label": "Buy ship hardware", "command": "hardware.buy", "requires_supported_dock": true, "fields": [["item_code", FIELD_TEXT, "Hardware item code (from catalogue)", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true, "tooltip": "Dock first; the server catalogue supplies valid hardware codes."},
-		{"label": "Trade routes", "command": "player.computer.recommend_routes", "tooltip": "The server's two-way filter is mismatched; recommendations use its default (false).", "fields": [["max_hops_between", FIELD_INT, "Maximum hops", "10"], ["limit", FIELD_INT, "Result limit", "10"]]},
+		{"label": "Trade routes", "command": "player.computer.recommend_routes", "tooltip": "Use known port profiles and current estimated price spreads. Prices can change before you arrive.", "fields": [["max_hops_between", FIELD_INT, "Maximum hops between ports", "10"], ["require_two_way", "boolean", "Only show pairs with trade in both directions", "false"], ["limit", FIELD_INT, "Result limit", "10"]]},
 	],
 	"COMMUNICATIONS": [
 		{"label": "Recent server events", "local_activity": true},
@@ -111,6 +115,7 @@ const COMMANDS := {
 	],
 	"SETTINGS & NOTES": [
 		{"label": "Reduced motion · OFF", "local_reduced_motion": true},
+		{"label": "Choose HUD status items", "local_hud_settings": true},
 		{"label": "View settings and preferences", "command": "player.get_settings"},
 		{"label": "View preferences", "command": "player.get_prefs"},
 		{"label": "Set 24-hour clock preference", "command": "player.set_prefs", "fields": [["value", "boolean", "Use 24-hour clock", "true"]], "preference_key": "ui.clock_24h", "preference_type": "bool", "mutating": true},
@@ -159,8 +164,12 @@ var _deployment_sector := 0
 var _activity_history: Array[String] = []
 var _tavern_access := false
 var _reduced_motion_enabled := false
+var _pinned_actions: Array[Dictionary] = []
+var _key_bindings: Dictionary = {}
+var _awaiting_binding_command := ""
 
 func _ready() -> void:
+	_load_local_command_preferences()
 	custom_minimum_size.x = 260
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_theme_stylebox_override("panel", _panel_style(Color(0.009, 0.021, 0.034, 0.995), Color(0.25, 0.55, 0.61, 0.96)))
@@ -400,7 +409,7 @@ func show_activity_history() -> void:
 		DialogLayout.popup(_result_dialog, Vector2i(620, 420))
 
 func show_help() -> void:
-	var content := "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape to clear selection.\n\nCOMMAND\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and results appear in the Information panel.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
+	var content := "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape to clear selection.\n\nCOMMANDS AND SHORTCUTS\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and results appear in the Information panel. Use ☆ to pin frequent actions; the PINNED category stays at the top. Press KEY beside a pinned action and then a key to bind it. Press Escape while choosing a key to clear the binding. Shortcuts only run when a text field is not focused.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path. Autonav asks the server to confirm every warp. Cancel stops after the current warp has been confirmed.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
 	var parent := get_parent()
 	if parent and parent.has_method("show_information"):
 		parent.show_information("Trade Wars · Field Guide", content)
@@ -508,6 +517,8 @@ func _append_result(value: Variant, key: String, depth: int, lines: Array[String
 
 func _categories() -> Array[String]:
 	var result: Array[String] = []
+	if not _pinned_actions.is_empty():
+		result.append("PINNED")
 	if not _selection.is_empty():
 		var kind := str(_selection.get("kind", ""))
 		if kind in ["planet", "port", "ship"]:
@@ -569,6 +580,8 @@ func _render_actions() -> void:
 			]
 		_add_unavailable("Private messages need a server handler/schema fix: chat.send currently has no compatible recipient field.")
 		_add_unavailable("Inspection details are unavailable: the current ship.inspect handler ignores the selected ship ID and returns a sector list.")
+	elif _active_category == "PINNED":
+		actions = _pinned_actions
 	else:
 		actions = COMMANDS.get(_active_category, [])
 		if _active_category == "COMMUNICATIONS":
@@ -596,7 +609,31 @@ func _render_actions() -> void:
 		button.disabled = not unavailable_reason.is_empty() or _busy or not connected or context_stale or missing_shipyard_context or missing_supported_dock
 		button.tooltip_text = unavailable_reason if not unavailable_reason.is_empty() else ("Dock at a supported hardware port in this sector first." if missing_supported_dock else ("Dock at a supported shipyard port in this sector first." if missing_shipyard_context else (str(action.get("tooltip", "")) if action.has("tooltip") else ("Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else ""))))))
 		button.pressed.connect(_choose_action.bind(action))
-		_action_list.add_child(button)
+		var action_row := HBoxContainer.new()
+		action_row.add_theme_constant_override("separation", 4)
+		action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		action_row.add_child(button)
+		var action_key := _action_storage_key(action)
+		var pinned := _is_pinned(action_key)
+		var pin_button := Button.new()
+		pin_button.text = "★" if pinned else "☆"
+		pin_button.tooltip_text = "Unpin command" if pinned else "Pin command for quick access"
+		pin_button.custom_minimum_size.x = 30
+		_style_button(pin_button, false)
+		pin_button.disabled = not str(action.get("unavailable_reason", "")).is_empty()
+		pin_button.pressed.connect(_toggle_pin.bind(action))
+		action_row.add_child(pin_button)
+		var binding_button := Button.new()
+		binding_button.custom_minimum_size.x = 42
+		_style_button(binding_button, false)
+		binding_button.disabled = not pinned
+		var bound_key := int(_key_bindings.get(action_key, 0))
+		binding_button.text = "…" if _awaiting_binding_command == action_key else (OS.get_keycode_string(bound_key) if bound_key > 0 else "KEY")
+		binding_button.tooltip_text = "Press to set a keyboard shortcut; Esc clears it." if pinned else "Pin this command before assigning a shortcut."
+		binding_button.pressed.connect(_begin_shortcut_binding.bind(action_key))
+		action_row.add_child(binding_button)
+		_action_list.add_child(action_row)
 
 func _is_docked_at_shipyard() -> bool:
 	var ship: Dictionary = _snapshot.get("ship", {})
@@ -633,6 +670,93 @@ func set_reduced_motion_enabled(enabled: bool) -> void:
 	if is_instance_valid(_action_list):
 		_render_actions()
 
+func _load_local_command_preferences() -> void:
+	var config := ConfigFile.new()
+	if config.load(LOCAL_PREFERENCES_PATH) != OK:
+		return
+	var saved_pins = config.get_value("commands", "pinned", [])
+	if saved_pins is Array:
+		for item in saved_pins:
+			if item is Dictionary:
+				_pinned_actions.append(item.duplicate(true))
+	var saved_bindings = config.get_value("commands", "key_bindings", {})
+	if saved_bindings is Dictionary:
+		_key_bindings = saved_bindings.duplicate(true)
+
+func _save_local_command_preferences() -> void:
+	var config := ConfigFile.new()
+	config.load(LOCAL_PREFERENCES_PATH)
+	config.set_value("commands", "pinned", _pinned_actions)
+	config.set_value("commands", "key_bindings", _key_bindings)
+	config.save(LOCAL_PREFERENCES_PATH)
+
+func _action_storage_key(action: Dictionary) -> String:
+	var command := str(action.get("command", ""))
+	return command if not command.is_empty() else "local:" + str(action.get("label", "Command"))
+
+func _is_pinned(action_key: String) -> bool:
+	for item in _pinned_actions:
+		if _action_storage_key(item) == action_key:
+			return true
+	return false
+
+func _toggle_pin(action: Dictionary) -> void:
+	var key := _action_storage_key(action)
+	for index in _pinned_actions.size():
+		if _action_storage_key(_pinned_actions[index]) == key:
+			_pinned_actions.remove_at(index)
+			_key_bindings.erase(key)
+			_save_local_command_preferences()
+			_rebuild_categories()
+			return
+	_pinned_actions.append(action.duplicate(true))
+	_save_local_command_preferences()
+	_rebuild_categories()
+
+func _begin_shortcut_binding(action_key: String) -> void:
+	_awaiting_binding_command = action_key
+	shortcut_binding_prompt.emit("Press a key to bind this pinned command · Esc clears the binding.")
+	_render_actions()
+
+func capture_shortcut(event: InputEventKey) -> bool:
+	if _awaiting_binding_command.is_empty() or not event.pressed or event.echo:
+		return false
+	if event.ctrl_pressed or event.alt_pressed or event.meta_pressed or event.shift_pressed:
+		shortcut_binding_prompt.emit("Use a single key for this shortcut; modifier combinations are not supported.")
+		return true
+	var key := _awaiting_binding_command
+	_awaiting_binding_command = ""
+	if event.keycode == KEY_ESCAPE:
+		_key_bindings.erase(key)
+	else:
+		if event.keycode == KEY_CTRL or event.keycode == KEY_SHIFT or event.keycode == KEY_ALT or event.keycode == KEY_META:
+			_awaiting_binding_command = key
+			shortcut_binding_prompt.emit("Choose a non-modifier key, or press Escape to clear the binding.")
+			return true
+		for other_key in _key_bindings.keys().duplicate():
+			if int(_key_bindings[other_key]) == int(event.keycode):
+				_key_bindings.erase(other_key)
+		_key_bindings[key] = int(event.keycode)
+	_save_local_command_preferences()
+	_render_actions()
+	shortcut_binding_prompt.emit("Shortcut saved." if event.keycode != KEY_ESCAPE else "Shortcut cleared.")
+	return true
+
+func dispatch_shortcut(keycode: int) -> bool:
+	if not _awaiting_binding_command.is_empty():
+		return false
+	for action_key in _key_bindings:
+		if int(_key_bindings[action_key]) != keycode:
+			continue
+		for action in _pinned_actions:
+			if _action_storage_key(action) == str(action_key):
+				if action.has("command") and (_busy or not bool(_snapshot.get("authenticated", false)) or bool(_snapshot.get("disconnected", true))):
+					_add_unavailable("This shortcut is unavailable while disconnected or while another command is pending.")
+					return true
+				_choose_action(action)
+				return true
+	return false
+
 func _add_unavailable(message: String) -> void:
 	var label := Label.new()
 	label.text = message
@@ -643,6 +767,9 @@ func _add_unavailable(message: String) -> void:
 func _choose_action(action: Dictionary) -> void:
 	if bool(action.get("local_reduced_motion", false)):
 		reduced_motion_toggle_requested.emit()
+		return
+	if bool(action.get("local_hud_settings", false)):
+		hud_settings_requested.emit()
 		return
 	if action.has("unavailable_reason"):
 		_add_unavailable(str(action["unavailable_reason"]))
@@ -759,6 +886,8 @@ func _submit_form() -> void:
 				data[key] = text
 	if bool(_form_action.get("duplicate_mail_read_id", false)):
 		data["id"] = data.get("mail_id", 0)
+	if str(_form_action.get("command", "")) == "player.computer.recommend_routes":
+		data["require_two_way"] = 1 if bool(data.get("require_two_way", false)) else 0
 	if _form_action.has("preference_key"):
 		data = {"items": [{"key": str(_form_action["preference_key"]), "type": str(_form_action.get("preference_type", "string")), "value": data.get("value")}]} 
 	command_requested.emit(str(_form_action["command"]), data, str(_form_action.get("label", "Command")), bool(_form_action.get("mutating", false)))

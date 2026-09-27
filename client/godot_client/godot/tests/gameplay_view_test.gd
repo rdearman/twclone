@@ -9,6 +9,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	var view = GameplayView.new()
+	view.size = Vector2(1400, 900)
 	root.add_child(view)
 	await process_frame
 	var commands = view.command_menu
@@ -24,7 +25,7 @@ func _run() -> void:
 	})
 	view.show_command_result("Sector density scan", {"sectors": [21, 21.0, 213, 100.0, 808, 0, 1793, null]})
 	_check(not view.command_menu._result_dialog.visible, "read-only result opened a modal dialog")
-	_check(view.information_text.text.contains("21: 21") and view.information_text.text.contains("1793: unavailable"), "density result was not rendered in the Information panel")
+	_check(view.information_text.text.contains("Sector 21 · Density: 21") and view.information_text.text.contains("Sector 1793 · Density: unavailable"), "density result was not rendered in the Information panel")
 	var command_calls := 0
 	view.command_requested.connect(func(_command: String, _data: Dictionary, _label: String, _mutating: bool) -> void: command_calls += 1)
 	view.set_snapshot({
@@ -45,7 +46,7 @@ func _run() -> void:
 	view.sector_view._input(port_click)
 	_check(view.selection_title.text == "PORT" and view.selection_detail.text.contains("Batiredigo"), "artwork click did not select the exact port in Sector Contents")
 	_check(not view.notification_label.visible, "artwork selection recreated the floating selection banner")
-	_check(not view.command_menu._result_dialog.visible and view.information_text.text.contains("21: 21"), "port selection covered or replaced the Information panel")
+	_check(not view.command_menu._result_dialog.visible and view.information_text.text.contains("Sector 21 · Density: 21"), "port selection covered or replaced the Information panel")
 	_check(command_calls == 0, "artwork selection emitted a gameplay command")
 	view.set_snapshot({
 		"authenticated": true,
@@ -97,10 +98,19 @@ func _run() -> void:
 	})
 	view.request_warp_now(18)
 	_check(activations == [18], "stale/disconnected state allowed a warp")
+	view.show_trade_routes({"routes": [{"port_a_id": 81, "port_b_id": 92, "sector_a_id": 18, "sector_b_id": 24, "hops_between": 3, "hops_from_player": 1, "is_two_way": true}]})
+	await process_frame
+	_check(view._trade_route_rows.get_child_count() == 1, "legacy route response did not render a recommendation")
+	if view._trade_route_rows.get_child_count() == 1:
+		var route_line: HBoxContainer = view._trade_route_rows.get_child(0).get_child(0).get_child(0)
+		var route_detail: Label = route_line.get_child(0)
+		var route_plot: Button = route_line.get_child(1)
+		_check(route_detail.text.contains("Port 81") and route_detail.text.contains("trade in both directions"), "legacy route response lost its port or direction details")
+		_check(route_detail.text.contains("Price estimate unavailable") and route_plot.text == "PLOT TO 18", "legacy route response did not explain missing estimates or offer a usable plot target")
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot gameplay view tests: 13 passed")
+		print("Godot gameplay view tests: 16 passed")
 		quit(0)
 	else:
 		for failure in failures:

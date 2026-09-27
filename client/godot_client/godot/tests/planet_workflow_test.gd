@@ -27,7 +27,7 @@ func _run() -> void:
 	_check(captured.size() == 3 and captured[2]["command"] == "planet.colonists.set", "colonist transfer did not submit after confirmation")
 	if captured.size() > 2:
 		_check(captured[2]["data"] == {"planet_id": 77, "action": "pickup", "quantity": 4} and captured[2]["mutating"], "colonist transfer payload did not match the implemented handler")
-	workflow._launch_dialog.confirmed.emit()
+	workflow._launch_now()
 	_check(captured.size() == 4 and captured[3]["command"] == "planet.launch" and captured[3]["mutating"], "planet launch action did not use server-confirmed command flow")
 	workflow.queue_free()
 	await process_frame

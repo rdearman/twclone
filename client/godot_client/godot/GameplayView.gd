@@ -46,6 +46,8 @@ var command_menu
 var port_workflow
 var planet_workflow
 var trade_quote_dialog: ConfirmationDialog
+var trade_routes_dialog: AcceptDialog
+var _trade_route_rows: VBoxContainer
 var center_split: SplitContainer
 var gameplay_body: BoxContainer
 var gameplay_scroll: ScrollContainer
@@ -68,8 +70,13 @@ var _rows: Dictionary = {}
 var _hovered_key := ""
 var _planet_mode := false
 var _reduced_motion := false
+var _hud_visible := {"cargo": true, "shields": true, "fighters": true}
+var _hud_settings_dialog: ConfirmationDialog
+var _hud_setting_checks: Dictionary = {}
 var _route_panel: PanelContainer
 var _route_label: Label
+var _route_engage_button: Button
+var _route_cancel_button: Button
 var _local_notes
 var _note_input: LineEdit
 var _note_status: Label
@@ -154,6 +161,11 @@ func _load_local_preferences() -> void:
 	var config := ConfigFile.new()
 	if config.load(LOCAL_PREFERENCES_PATH) == OK:
 		_reduced_motion = bool(config.get_value("accessibility", "reduced_motion", false))
+		var saved_hud = config.get_value("hud", "visible", {})
+		if saved_hud is Dictionary:
+			for key in _hud_visible:
+				if saved_hud.has(key):
+					_hud_visible[key] = bool(saved_hud[key])
 
 func _toggle_reduced_motion() -> void:
 	_reduced_motion = not _reduced_motion
@@ -163,6 +175,46 @@ func _toggle_reduced_motion() -> void:
 	config.save(LOCAL_PREFERENCES_PATH)
 	command_menu.set_reduced_motion_enabled(_reduced_motion)
 	show_notification("Reduced motion %s · warp transitions %s." % ["enabled" if _reduced_motion else "disabled", "skipped" if _reduced_motion else "animated"])
+
+func _open_hud_settings() -> void:
+	if not is_instance_valid(_hud_settings_dialog):
+		_hud_settings_dialog = ConfirmationDialog.new()
+		_hud_settings_dialog.title = "HUD status items"
+		_hud_settings_dialog.ok_button_text = "SAVE"
+		var content := VBoxContainer.new()
+		content.add_theme_constant_override("separation", 8)
+		var labels := {"cargo": "Cargo and hold warning", "shields": "Shields and low-shield warning", "fighters": "Fighter count"}
+		for key in ["cargo", "shields", "fighters"]:
+			var check := CheckBox.new()
+			check.text = str(labels[key])
+			check.button_pressed = bool(_hud_visible[key])
+			_hud_setting_checks[key] = check
+			content.add_child(check)
+		DialogLayout.attach(_hud_settings_dialog, content)
+		_hud_settings_dialog.confirmed.connect(_save_hud_settings)
+		add_child(_hud_settings_dialog)
+	else:
+		for key in _hud_setting_checks:
+			(_hud_setting_checks[key] as CheckBox).button_pressed = bool(_hud_visible[key])
+	DialogLayout.popup(_hud_settings_dialog, Vector2i(500, 300))
+
+func _save_hud_settings() -> void:
+	for key in _hud_setting_checks:
+		_hud_visible[key] = (_hud_setting_checks[key] as CheckBox).button_pressed
+	var config := ConfigFile.new()
+	config.load(LOCAL_PREFERENCES_PATH)
+	config.set_value("hud", "visible", _hud_visible)
+	config.save(LOCAL_PREFERENCES_PATH)
+	_apply_hud_visibility()
+	show_notification("HUD status items saved on this device.")
+
+func _apply_hud_visibility() -> void:
+	if is_instance_valid(cargo_label):
+		cargo_label.visible = bool(_hud_visible.get("cargo", true))
+	if is_instance_valid(shields_label):
+		shields_label.visible = bool(_hud_visible.get("shields", true))
+	if is_instance_valid(fighters_label):
+		fighters_label.visible = bool(_hud_visible.get("fighters", true))
 
 func _build() -> void:
 	var base := ColorRect.new()
@@ -312,6 +364,8 @@ func _build() -> void:
 		command_requested.emit(command, data, label, mutating)
 	)
 	command_menu.reduced_motion_toggle_requested.connect(_toggle_reduced_motion)
+	command_menu.hud_settings_requested.connect(_open_hud_settings)
+	command_menu.shortcut_binding_prompt.connect(show_notification)
 	command_menu.set_reduced_motion_enabled(_reduced_motion)
 	gameplay_body.add_child(command_menu)
 	gameplay_body.move_child(command_menu, 0)
@@ -399,16 +453,16 @@ func _build() -> void:
 	_route_label = _label("ROUTE", 12, Color(0.95, 0.88, 0.7))
 	_route_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	route_row.add_child(_route_label)
-	var engage := Button.new()
-	engage.text = "ENGAGE AUTONAV"
-	engage.tooltip_text = "Execute the confirmed route one server-confirmed warp at a time"
-	engage.pressed.connect(func() -> void: route_engage_requested.emit())
-	route_row.add_child(engage)
-	var cancel := Button.new()
-	cancel.text = "CANCEL ROUTE"
-	cancel.tooltip_text = "Discard the plotted route without moving"
-	cancel.pressed.connect(func() -> void: route_cancel_requested.emit())
-	route_row.add_child(cancel)
+	_route_engage_button = Button.new()
+	_route_engage_button.text = "ENGAGE AUTONAV"
+	_route_engage_button.tooltip_text = "Execute the confirmed route one server-confirmed warp at a time"
+	_route_engage_button.pressed.connect(func() -> void: route_engage_requested.emit())
+	route_row.add_child(_route_engage_button)
+	_route_cancel_button = Button.new()
+	_route_cancel_button.text = "CANCEL ROUTE"
+	_route_cancel_button.tooltip_text = "Discard a plotted route, or stop after the current confirmed warp"
+	_route_cancel_button.pressed.connect(func() -> void: route_cancel_requested.emit())
+	route_row.add_child(_route_cancel_button)
 
 	offline_overlay = PanelContainer.new()
 	offline_overlay.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -497,6 +551,7 @@ func _render_snapshot(snapshot: Dictionary) -> void:
 	var connected := not bool(snapshot.get("disconnected", false)) and bool(snapshot.get("authenticated", false))
 	freshness_label.text = "LINK %s · DATA %s" % ["ONLINE" if connected else "OFFLINE", overall]
 	freshness_label.add_theme_color_override("font_color", Color(0.48, 0.59, 0.61) if overall == "FRESH" else _freshness_color(overall))
+	_apply_hud_visibility()
 	sector_view.compose(sector_for_display, _selected_key)
 	_build_contents(sector_for_display)
 	if not _selected_key.is_empty() and not _rows.has(_selected_key):
@@ -941,10 +996,25 @@ func show_planned_route(path: Array, destination: int) -> void:
 		if typeof(item) == TYPE_INT or typeof(item) == TYPE_FLOAT:
 			ids.append(str(int(item)))
 	_route_label.text = "PLANNED ROUTE · DESTINATION %d · %s · No movement yet" % [destination, " → ".join(ids)]
+	_route_engage_button.visible = true
+	_route_engage_button.disabled = false
+	_route_cancel_button.text = "CANCEL ROUTE"
+	_route_cancel_button.disabled = false
 	_route_panel.visible = not ids.is_empty()
+
+func set_autonav_status(status: String, stop_pending: bool = false) -> void:
+	_route_label.text = status
+	_route_engage_button.visible = false
+	_route_cancel_button.text = "STOPPING…" if stop_pending else "STOP AFTER CURRENT WARP"
+	_route_cancel_button.disabled = stop_pending
+	_route_panel.visible = true
 
 func clear_planned_route() -> void:
 	_route_panel.visible = false
+	_route_engage_button.visible = true
+	_route_engage_button.disabled = false
+	_route_cancel_button.text = "CANCEL ROUTE"
+	_route_cancel_button.disabled = false
 
 func show_shipyard(data: Dictionary) -> void:
 	var ship_state: Dictionary = _snapshot.get("ship", {})
@@ -1007,6 +1077,86 @@ func confirm_trade_quote(direction: String, commodity: String, quantity: int, qu
 	trade_quote_dialog.cancel_button_text = "CANCEL"
 	DialogLayout.popup(trade_quote_dialog, Vector2i(520, 280))
 
+func show_trade_routes(data: Dictionary) -> void:
+	if not is_instance_valid(trade_routes_dialog):
+		trade_routes_dialog = AcceptDialog.new()
+		trade_routes_dialog.title = "Known Trade Routes"
+		trade_routes_dialog.dialog_autowrap = true
+		var scroll := ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(620, 300)
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		_trade_route_rows = VBoxContainer.new()
+		_trade_route_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_trade_route_rows.add_theme_constant_override("separation", 8)
+		scroll.add_child(_trade_route_rows)
+		DialogLayout.attach(trade_routes_dialog, scroll)
+		add_child(trade_routes_dialog)
+	for child in _trade_route_rows.get_children():
+		child.queue_free()
+	var routes: Array = data.get("routes", []) if data.get("routes", []) is Array else []
+	if routes.is_empty():
+		var empty := Label.new()
+		empty.text = "No matching known port pairs were found within those hop limits. Visit and inspect more ports to expand your personal trade data."
+		DialogLayout.prepare_label(empty)
+		_trade_route_rows.add_child(empty)
+	else:
+		for item in routes:
+			if not (item is Dictionary):
+				continue
+			var route: Dictionary = item
+			var approach_sector := int(route.get("approach_sector_id", route.get("sector_a_id", 0)))
+			var commodity := str(route.get("commodity", ""))
+			if commodity.is_empty():
+				commodity = "Known commodity profile"
+			var a_to_b := bool(route.get("a_to_b", false))
+			var b_to_a := bool(route.get("b_to_a", false))
+			var profit_ab := int(route.get("estimated_profit_a_to_b", 0))
+			var profit_ba := int(route.get("estimated_profit_b_to_a", 0))
+			var has_direction_data := route.has("a_to_b") or route.has("b_to_a")
+			var has_price_data := route.has("estimated_profit_a_to_b") or route.has("estimated_profit_b_to_a")
+			var directions: Array[String] = []
+			if a_to_b:
+				directions.append("A→B %s%d CR/unit gross" % ["+" if profit_ab >= 0 else "", profit_ab])
+			if b_to_a:
+				directions.append("B→A %s%d CR/unit gross" % ["+" if profit_ba >= 0 else "", profit_ba])
+			if not has_direction_data:
+				directions.append("trade in both directions" if bool(route.get("is_two_way", false)) else "one-way trade profile")
+			var row := PanelContainer.new()
+			row.add_theme_stylebox_override("panel", _panel_style(Color(0.016, 0.045, 0.061, 0.98), Color(0.20, 0.45, 0.51, 0.85)))
+			var inner := MarginContainer.new()
+			inner.add_theme_constant_override("margin_left", 10)
+			inner.add_theme_constant_override("margin_right", 10)
+			inner.add_theme_constant_override("margin_top", 8)
+			inner.add_theme_constant_override("margin_bottom", 8)
+			row.add_child(inner)
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 10)
+			inner.add_child(line)
+			var detail := Label.new()
+			detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			var sector_a := int(route.get("sector_a_id", 0))
+			var sector_b := int(route.get("sector_b_id", 0))
+			var name_a := str(route.get("port_a_name", "Port %d" % int(route.get("port_a_id", 0))))
+			var name_b := str(route.get("port_b_name", "Port %d" % int(route.get("port_b_id", 0))))
+			var direction_text := " · ".join(directions) if not directions.is_empty() else "No current matching direction"
+			var price_note := "Gross price estimate only; excludes fees and can change before arrival." if has_price_data else "Price estimate unavailable from this server version."
+			detail.text = "%s · %s (Sector %d) ↔ %s (Sector %d)\n%s · %d hops between · %d hops from you\n%s" % [commodity, name_a, sector_a, name_b, sector_b, direction_text, int(route.get("hops_between", 0)), int(route.get("hops_from_player", 0)), price_note]
+			line.add_child(detail)
+			var plot := Button.new()
+			plot.text = "PLOT TO %d" % approach_sector
+			plot.disabled = approach_sector <= 0
+			plot.pressed.connect(func() -> void:
+				trade_routes_dialog.hide()
+				command_requested.emit("move.autopilot.start", {"to_sector_id": approach_sector}, "Plot route to recommended port", false)
+			)
+			line.add_child(plot)
+			_trade_route_rows.add_child(row)
+	var count := routes.size()
+	trade_routes_dialog.dialog_text = "%d known trade candidate%s · choose a port to plot a route. Plotting does not move the ship." % [count, "" if count == 1 else "s"]
+	DialogLayout.popup(trade_routes_dialog, Vector2i(820, 540))
+
 func _display_money(value) -> String:
 	return "Unavailable" if value == null else str(value)
 
@@ -1021,6 +1171,15 @@ func _on_view_details() -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if command_menu.capture_shortcut(event):
+		get_viewport().set_input_as_handled()
+		return
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused is LineEdit or focused is TextEdit or event.ctrl_pressed or event.alt_pressed or event.meta_pressed:
+		return
+	if command_menu.dispatch_shortcut(event.keycode):
+		get_viewport().set_input_as_handled()
 		return
 	if event.keycode == KEY_ESCAPE:
 		_selected_key = ""

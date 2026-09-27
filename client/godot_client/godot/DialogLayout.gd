@@ -9,6 +9,9 @@ static func attach(dialog: AcceptDialog, content: Control) -> void:
 		return
 	var description := dialog.get_label()
 	description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	description.tree_entered.connect(func() -> void:
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	, CONNECT_ONE_SHOT)
 	description.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	description.custom_minimum_size.x = 280
 	dialog.dialog_autowrap = true

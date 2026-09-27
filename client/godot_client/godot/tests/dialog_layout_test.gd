@@ -15,7 +15,7 @@ func _run() -> void:
 
 	var form_label := menu._form_dialog.get_label()
 	_check(menu._form_content.get_parent() == form_label.get_parent(), "command form content bypassed the dialog's vertical layout")
-	_check(form_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "command dialog description does not wrap")
+	_check(form_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "command dialog description wrap mode %d differs from expected %d" % [form_label.autowrap_mode, TextServer.AUTOWRAP_WORD_SMART])
 
 	menu._choose_action({
 		"command": "hardware.buy",
@@ -23,6 +23,7 @@ func _run() -> void:
 		"fields": [["item_code", "text", "A deliberately long hardware item description that must wrap instead of colliding with the input", ""]]
 	})
 	await process_frame
+	_check(not form_label.visible, "command dialog description should stay hidden so it cannot overlap custom field labels")
 	var field_row: VBoxContainer = menu._form_content.get_child(0)
 	var field_label: Label = field_row.get_child(0)
 	_check(field_row.get_child_count() == 2, "command form field did not keep its label and input in one vertical row")

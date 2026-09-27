@@ -12,6 +12,7 @@ func _initialize() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	root.size = Vector2i(1400, 900)
 	var view = PortWorkflow.new()
 	root.add_child(view)
 	await process_frame
