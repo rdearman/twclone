@@ -5,6 +5,17 @@
 -- For new databases: ship_cargo is created directly in 000_tables.sql
 -- For existing databases: Run this migration to populate ship_cargo from legacy columns
 
+-- Older installations predate ship_cargo entirely. Keep this creation
+-- idempotent and use the canonical commodity key definition from 000_tables.
+CREATE TABLE IF NOT EXISTS ship_cargo (
+    ship_id BIGINT NOT NULL,
+    commodity_code VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    quantity BIGINT NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    PRIMARY KEY (ship_id, commodity_code),
+    FOREIGN KEY (ship_id) REFERENCES ships (ship_id) ON DELETE CASCADE,
+    FOREIGN KEY (commodity_code) REFERENCES commodities (code) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
 START TRANSACTION;
 
 -- Insert existing cargo from legacy columns into ship_cargo

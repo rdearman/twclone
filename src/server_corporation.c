@@ -1366,6 +1366,12 @@ cmd_corp_statement (client_ctx_t *ctx, json_t *root)
       if (json_is_integer (j_limit))
 	{
 	  limit = (int) json_integer_value (j_limit);
+	  if (limit <= 0)
+	    {
+	      send_response_error (ctx, root, ERR_INVALID_ARG,
+				   "Limit must be a positive integer.");
+	      return 0;
+	    }
 	}
     }
   int corp_id = h_get_player_corp_id (db, ctx->player_id);

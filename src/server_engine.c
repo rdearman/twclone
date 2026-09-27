@@ -988,6 +988,7 @@ engine_main_loop (int shutdown_fd)
   (void) engine_demo_push (conn);
   LOGI ("[engine] Running Smoke Test\n");
   static time_t last_metrics = 0;
+  static time_t last_engine_tick = 0;
   static time_t last_cmd_tick_ms = 0;
   /* One-time ISS bootstrap */
   int iss_ok = iss_init_once ();	// 1 if ISS+Stardock found, else 0
@@ -1029,11 +1030,15 @@ engine_main_loop (int shutdown_fd)
       time_t now = time (NULL);
 
 
+      if (now - last_engine_tick >= GAME_TICK_INTERVAL_SEC)
+	{
+	  engine_tick (db_handle);
+	  last_engine_tick = now;
+	}
       if (now - last_metrics >= 3600)
 	{
 	  log_s2s_metrics ("engine");
 	  last_metrics = now;
-	  engine_tick (db_handle);
 	}
       // Sleep until next tick or until shutdown pipe changes
       int rc_poll = poll (&pfd, 1, tick_ms);

@@ -88,7 +88,7 @@ int repo_players_delete_avoid(db_t *db, int player_id, int sector_id) {
 int repo_players_disable_subscription(db_t *db, int player_id, const char *topic) {
     db_error_t err;
     /* SQL_VERBATIM: Q6 */
-    const char *q6 = "UPDATE player_subscriptions SET enabled = {3} WHERE player_id = {1} AND topic = {2}";
+    const char *q6 = "UPDATE subscriptions SET enabled = {3} WHERE player_id = {1} AND event_type = {2}";
     char sql[512]; sql_build(db, q6, sql, sizeof(sql));
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_text(topic), db_bind_bool(false) }, 3, &err)) return err.code;
     return 0;
@@ -105,12 +105,12 @@ int repo_players_upsert_subscription(db_t *db, int player_id, const char *topic,
     };
 
     /* 1. Try Update first */
-    const char *q_upd = "UPDATE player_subscriptions SET enabled = TRUE, delivery = {3}, filter = {4} WHERE player_id = {1} AND topic = {2}";
+    const char *q_upd = "UPDATE subscriptions SET enabled = TRUE, delivery = {3}, filter_json = {4} WHERE player_id = {1} AND event_type = {2}";
     char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     if (db_exec_rows_affected(db, sql_upd, params, 4, &rows, &err) && rows > 0) return 0;
 
     /* 2. Try Insert */
-    const char *q_ins = "INSERT INTO player_subscriptions (player_id, topic, enabled, delivery, filter) VALUES ({1}, {2}, TRUE, {3}, {4})";
+    const char *q_ins = "INSERT INTO subscriptions (player_id, event_type, enabled, delivery, filter_json) VALUES ({1}, {2}, TRUE, {3}, {4})";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     if (!db_exec(db, sql_ins, params, 4, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) {
@@ -150,7 +150,7 @@ db_res_t* repo_players_get_avoids(db_t *db, int player_id, db_error_t *err) {
 
 db_res_t* repo_players_get_subscriptions(db_t *db, int player_id, db_error_t *err) {
     /* SQL_VERBATIM: Q12 */
-    const char *q12 = "SELECT topic, locked, enabled, delivery, filter FROM player_subscriptions WHERE player_id={1}";
+    const char *q12 = "SELECT event_type, locked, enabled, delivery, filter_json FROM subscriptions WHERE player_id={1}";
     char sql[512]; sql_build(db, q12, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, err);
@@ -551,8 +551,9 @@ int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sec
     /* SQL_VERBATIM: Q_ROUTES */
     const char *q_routes = 
         "SELECT kp1.port_id, kp2.port_id, p1.sector_id, p2.sector_id, "
-        "SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) as a_to_b_count, "
-        "SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) as b_to_a_count "
+        "p1.name, p2.name, pt1.commodity, "
+        "MAX(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) as a_to_b_count, "
+        "MAX(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) as b_to_a_count "
         "FROM player_known_ports kp1 "
         "JOIN player_known_ports kp2 ON kp1.port_id < kp2.port_id "
         "JOIN ports p1 ON kp1.port_id = p1.port_id "
@@ -560,7 +561,7 @@ int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sec
         "JOIN port_trade pt1 ON kp1.port_id = pt1.port_id "
         "JOIN port_trade pt2 ON kp2.port_id = pt2.port_id AND pt1.commodity = pt2.commodity "
         "WHERE kp1.player_id = {1} AND kp2.player_id = {1} "
-        "GROUP BY kp1.port_id, kp2.port_id, p1.sector_id, p2.sector_id "
+        "GROUP BY kp1.port_id, kp2.port_id, p1.sector_id, p2.sector_id, p1.name, p2.name, pt1.commodity "
         "HAVING SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) > 0 "
         "    OR SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) > 0";
 
@@ -589,8 +590,11 @@ int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sec
         int p_b = db_res_col_i32(res, 1, &err);
         int s_a = db_res_col_i32(res, 2, &err);
         int s_b = db_res_col_i32(res, 3, &err);
-        int a_to_b = db_res_col_i32(res, 4, &err);
-        int b_to_a = db_res_col_i32(res, 5, &err);
+        const char *port_a_name_value = db_res_col_text(res, 4, &err);
+        const char *port_b_name_value = db_res_col_text(res, 5, &err);
+        const char *commodity_value = db_res_col_text(res, 6, &err);
+        int a_to_b = db_res_col_i32(res, 7, &err);
+        int b_to_a = db_res_col_i32(res, 8, &err);
 
         if (require_two_way && (a_to_b == 0 || b_to_a == 0)) continue;
 
@@ -617,10 +621,17 @@ int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sec
         routes[count].port_b_id = p_b;
         routes[count].sector_a_id = s_a;
         routes[count].sector_b_id = s_b;
+        routes[count].port_a_name = port_a_name_value ? strdup(port_a_name_value) : strdup("Port A");
+        routes[count].port_b_name = port_b_name_value ? strdup(port_b_name_value) : strdup("Port B");
+        routes[count].commodity = commodity_value ? strdup(commodity_value) : NULL;
         routes[count].hops_between = dist_ab;
         routes[count].hops_from_player = dist_player;
         routes[count].is_two_way = (a_to_b > 0 && b_to_a > 0) ? 1 : 0;
-        routes[count].commodity = NULL; 
+        routes[count].a_to_b = a_to_b > 0;
+        routes[count].b_to_a = b_to_a > 0;
+        routes[count].approach_sector_id = dist_pa >= 0 && (dist_pb < 0 || dist_pa <= dist_pb) ? s_a : s_b;
+        routes[count].estimated_profit_a_to_b = 0;
+        routes[count].estimated_profit_b_to_a = 0;
         count++;
     }
     db_res_finalize(res);
@@ -638,8 +649,9 @@ int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sec
 void repo_players_free_routes(trade_route_t *routes, int count) {
     if (!routes) return;
     for (int i = 0; i < count; i++) {
+        free(routes[i].port_a_name);
+        free(routes[i].port_b_name);
         if (routes[i].commodity) free(routes[i].commodity);
     }
     free(routes);
 }
-

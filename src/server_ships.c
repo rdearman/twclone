@@ -611,6 +611,50 @@ cmd_ship_info_compat (client_ctx_t *ctx, json_t *root)
 
 
 int
+cmd_ship_tow_status (client_ctx_t *ctx, json_t *root)
+{
+  db_t *db = game_db_get_handle ();
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
+				   "Not authenticated", NULL);
+      return 0;
+    }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "No database handle");
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NO_ACTIVE_SHIP,
+				   "You do not have an active ship.", NULL);
+      return 0;
+    }
+
+  int towing_ship_id = 0;
+  int towed_by_ship_id = 0;
+  if (repo_ships_get_towing_id (db, ship_id, &towing_ship_id) != 0
+      || repo_ships_get_is_being_towed_by (db, ship_id,
+						   &towed_by_ship_id) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Database error");
+      return 0;
+    }
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "ship_id", json_integer (ship_id));
+  json_object_set_new (payload, "towing_ship_id",
+		       towing_ship_id > 0 ? json_integer (towing_ship_id) : json_null ());
+  json_object_set_new (payload, "towed_by_ship_id",
+		       towed_by_ship_id > 0 ? json_integer (towed_by_ship_id) : json_null ());
+  send_response_ok_take (ctx, root, "ship.tow.status", &payload);
+  return 0;
+}
+
+int
 cmd_ship_tow (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();

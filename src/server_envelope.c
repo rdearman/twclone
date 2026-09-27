@@ -294,10 +294,16 @@ cmd_system_describe_schema (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_MAINTENANCE_MODE, "Missing 'name'");
       return 0;
     }
-  if (!have_cmd (name))
+  int command_exists = have_cmd (name);
+  json_t *response_schema = command_exists ? NULL : schema_get (name);
+  if (!command_exists && !response_schema)
     {
       send_response_error (ctx, root, REF_NOT_IN_SECTOR, "Unknown command");
       return 0;
+    }
+  if (response_schema)
+    {
+      json_decref (response_schema);
     }
   if (!schema_type || (strcasecmp (schema_type,
 				   "command") != 0 && strcasecmp (schema_type,

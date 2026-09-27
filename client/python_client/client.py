@@ -10,7 +10,7 @@ test_clientv3.py — Data-driven menu client for TWClone (server-connected, v2 p
 - Generic menu engine (submenu/back/rpc/pycall/flow/post/help)
 - Real socket Conn (v2-compatible), login, sector fetch & normalization
 - Handlers ported/aligned with v2: redisplay header, beacon flow, enter-ship,
-  testing (full), adjacency-aware move, tow placeholder, help, shipyard, warp,
+  testing (full), adjacency-aware move, towing, help, shipyard, warp,
   autopilot route (add/clear/start), intercept, land, computer tools.
 """
 ### from __future__ import annotations
@@ -738,7 +738,10 @@ def compute_flags(ctx: Context) -> dict:
         "has_planet": bool(d.get("planets")),
         "can_set_beacon": (d.get("beacon") in (None, "")),
         "has_boardable": has_boardable_ship(ships, my_ship_id=my_ship_id, my_name=my_name),
-        "has_tow_target": has_tow_target(ships, my_ship_id=my_ship_id),
+        "has_tow_target": (
+            has_tow_target(ships, my_ship_id=my_ship_id)
+            or bool(ctx.state.get("towing_ship_id"))
+        ),
         "on_planet": bool(ctx.state.get("on_planet")),
         "planet_has_products": bool(ctx.state.get("planet_products_available")),
         "is_corp_member": bool(pl.get("corp_id")),
@@ -819,26 +822,19 @@ def pathfind_flow(ctx: Context):
         print("Invalid sector ID."); return
 
     if not cur:
-        # Fallback: fetch current sector from server if we don't have it cached
         try:
-            info = ctx.conn.rpc("move.describe_sector", {"sector_id": 1})
-            data = (info or {}).get("data") or {}
-            cur = data.get("sector_id") or data.get("id")
+            info = ctx.conn.rpc("player.my_info", {})
+            cur = extract_current_sector(info)
+        except (ConnectionError, OSError):
+            raise
         except Exception:
             pass
     if not cur:
         print("Cannot determine current sector."); return
 
-    # Ask server for a path
-    # NOTE: Schema requires from_sector_id/to_sector_id, but code expects from/to.
-    # We send BOTH to be absolutely sure.
-    req = {
-        "from_sector_id": cur, "to_sector_id": target,
-        "from": cur, "to": target
-    }
-    print(f"[DEBUG] Pathfind request: {req}") # ADDED DEBUG PRINT
+    # Use the exact fields accepted by the current move.pathfind API schema.
+    req = {"from_sector_id": cur, "to_sector_id": target}
     resp = ctx.conn.rpc("move.pathfind", req)
-    print(f"[DEBUG] Pathfind response: {resp}") # ADDED DEBUG PRINT
     status = (resp or {}).get("status")
     if status in ("error", "refused"):
         err = (resp.get("error") or {})
@@ -858,7 +854,8 @@ def pathfind_flow(ctx: Context):
                 seq.append(t)
         path = seq
 
-    hops = data.get("hops") or data.get("steps") or (len(path) - 1 if path else None)
+    hops_value = data.get("hops")
+    hops = hops_value if isinstance(hops_value, int) else max(0, len(path) - 1)
     cost = data.get("total_cost") or data.get("cost")
 
     # Pretty print
@@ -890,26 +887,7 @@ def pathfind_flow(ctx: Context):
     for i in range(start_idx, len(path)):
         hop = path[i]
         print(f"→ warping to {hop} ...")
-        r = ctx.conn.rpc("move.warp", {"to_sector_id": hop})
-        st = (r or {}).get("status")
-        if st == "ok":
-            # Refresh sector view only if the hop succeeded
-            new = ctx.conn.rpc("move.describe_sector", {"sector_id": hop})
-            ctx.last_sector_desc = normalize_sector(get_data(new))
-            call_handler("redisplay_sector", ctx)
-        else:
-            err = (r.get("error") or {}).get("message")
-            reason = ((r.get("data") or {}).get("reason"))
-            msg = f"Hop to {hop} "
-            if st == "refused":
-                msg += "refused"
-            else:
-                msg += "failed"
-            if reason:
-                msg += f" ({reason})"
-            if err:
-                msg += f": {err}"
-            print(msg)
+        if not _perform_warp(ctx, hop):
             print("Stopping route.")
             break
 
@@ -1190,11 +1168,26 @@ def has_boardable_ship(ships, my_ship_id: Optional[int] = None, my_name: Optiona
     return False
 
 def has_tow_target(ships, my_ship_id=None) -> bool:
-    for s in ships or []:
-        sid = s.get("id") or s.get("ship_id")
-        if sid is None or sid != my_ship_id:
-            return True
-    return False
+    return bool(_tow_targets(ships, my_ship_id))
+
+
+def _tow_targets(ships, my_ship_id=None):
+    """Return identifiable ships other than our active ship.
+
+    The server remains authoritative for ownership, pilot, and tow eligibility;
+    this only prevents offering malformed rows or our own ship as a target.
+    """
+    targets = []
+    for ship in ships or []:
+        if not isinstance(ship, dict):
+            continue
+        sid = ship.get("id")
+        if not isinstance(sid, int):
+            sid = ship.get("ship_id")
+        if not isinstance(sid, int) or sid <= 0 or sid == my_ship_id:
+            continue
+        targets.append(ship)
+    return targets
 
 def _get_menu_flags(ctx: Context) -> dict:
     d = ctx.state.get("sector_info", {})
@@ -1851,6 +1844,15 @@ def pretty_print_trade_routes(ctx):
     
     data = resp.get("data") or {}
     routes = data.get("routes") or []
+
+    if data.get("pathing_model") or isinstance(data.get("pairs_checked"), int):
+        print("\nRoute search:")
+        if data.get("pathing_model"):
+            print(f"  Pathing model: {data['pathing_model']}")
+        if isinstance(data.get("pairs_checked"), int):
+            print(f"  Port pairs checked: {data['pairs_checked']}")
+        if data.get("truncated") is True:
+            print("  Results were limited; increase the result limit to see more.")
     
     if not routes:
         print("\n(No profitable trade routes found in your known database.)")
@@ -2997,24 +2999,22 @@ def scan_sector(ctx: "Context"):
 # ---------------------------
 @register("help_main")
 def help_main(ctx: Context):
-    d = ctx.last_sector_desc or {}
-    ships = d.get("ships") or []
-    towable_exists = has_tow_target(ships, my_ship_id=get_my_ship_id(ctx.conn, ctx))
-    boardable_exists = has_boardable_ship(ships, my_ship_id=get_my_ship_id(ctx.conn, ctx), my_name=get_my_player_name(ctx.conn, ctx))
+    if ctx.current_menu == "COMPUTER":
+        print("--- Ship's Computer Help ---")
+        print("S: Ship information     P: Planet information")
+        print("F: Scan adjacent sectors   D: Sector density scan")
+        print("R: Rename ship          H: Hardware catalogue")
+        print("J: Jettison cargo       T: Genesis torpedo")
+        print("K: Player rankings      ?: This help")
+        print("Q: Return to the main menu")
+        return
 
+    d = ctx.last_sector_desc or {}
     print("--- Help ---")
-    print("M: Move to a sector")
-    print("D: Re-display current sector info")
-    print("P: Port & Trade (port/stardock flows inside)")
-    print("L: Land on a Planet (opens Planet Menu)")
-    print("C: Ship's Computer (canon submenu)")
-    print("V: View Game Status")
-    print("R: Release Beacon")
-    if towable_exists:
-        print("W: Tow SpaceCraft — shown only when another ship is present")
-    if boardable_exists:
-        print("E: Enter Ship — shown only when a boardable derelict is present (not yours)")
-    print("Y: Testing/Developer menu")
+    print("M: Move   D: Re-display sector   P: Port and trade")
+    print("L: Land on a planet   S: Sector services   F: Operations")
+    print("C: Ship's computer   G: Comms and events   N: News")
+    print("O: Corporation   U: User settings   H: Help")
     print("Q: Quit and disconnect")
 
 # ---------------------------
@@ -3315,16 +3315,105 @@ def enter_ship_menu(ctx: Context):
 
 
 # ---------------------------
-# Tow (placeholder like v2)
+# Tow
 # ---------------------------
 @register("tow_flow")
 def tow_flow(ctx: Context):
     d = ctx.last_sector_desc or {}
-    ships = d.get("ships") or []
-    if not has_tow_target(ships, my_ship_id=get_my_ship_id(ctx.conn, ctx)):
-        print("No towable targets in this sector.")
+    my_ship_id = get_my_ship_id(ctx.conn, ctx)
+    targets = _tow_targets(d.get("ships") or [], my_ship_id=my_ship_id)
+
+    # ship.status is the existing read API, but the current response may omit
+    # tow fields. Retain the last confirmed command result when it does, without
+    # guessing from sector contents.
+    towing_id = ctx.state.get("towing_ship_id")
+    towing_status_reported = False
+    try:
+        status_resp = ctx.conn.rpc("ship.status", {})
+        if isinstance(status_resp, dict) and status_resp.get("status") == "ok":
+            status_data = get_data(status_resp)
+            status_ship = status_data.get("ship") or status_data
+            if isinstance(status_ship, dict):
+                for key in ("towing_ship_id", "towee_ship_id"):
+                    if key in status_ship:
+                        value = status_ship.get(key)
+                        towing_id = value if isinstance(value, int) and value > 0 else None
+                        towing_status_reported = True
+                        if towing_id is None:
+                            ctx.state.pop("towing_ship_id", None)
+                        else:
+                            ctx.state["towing_ship_id"] = towing_id
+                        break
+    except (ConnectionError, OSError):
+        raise
+    except Exception:
+        pass
+
+    if towing_id and towing_status_reported:
+        print(f"Currently towing ship {towing_id} (reported by ship.status).")
+    elif towing_id:
+        print(f"Last confirmed tow response: towing ship {towing_id} (this session).")
     else:
-        print("Not Implemented: Tow SpaceCraft")
+        print("Tow status is not available from ship.status; successful tow actions are tracked for this session.")
+
+    if targets:
+        print("Ships in this sector:")
+        for ship in targets:
+            sid = ship.get("id") if isinstance(ship.get("id"), int) else ship.get("ship_id")
+            name = ship.get("name") or ship.get("ship_name") or "Unnamed ship"
+            ship_type = ship.get("ship_type") or ship.get("type") or "type unknown"
+            owner = ship.get("owner")
+            if isinstance(owner, dict):
+                owner = owner.get("name") or owner.get("username") or "owner unknown"
+            print(f"  {sid}: {name} [{ship_type}], owner={owner or 'unknown'}")
+    else:
+        print("No other ships with usable IDs are listed in this sector.")
+
+    print("Enter a listed ship ID to engage the tow beam, R to release, or Enter to cancel.")
+    choice = input("Tow action: ").strip()
+    if not choice:
+        print("Tow action cancelled.")
+        return
+
+    if choice.lower() == "r":
+        payload = {}
+        action = "release the tow beam"
+    else:
+        try:
+            target_id = int(choice)
+        except ValueError:
+            print("Enter a listed ship ID, R, or Enter to cancel.")
+            return
+        selected = next((ship for ship in targets
+                         if (ship.get("id") if isinstance(ship.get("id"), int) else ship.get("ship_id")) == target_id), None)
+        if selected is None:
+            print("That ship is not listed in the current sector.")
+            return
+        payload = {"target_ship_id": target_id}
+        action = f"tow ship {target_id}"
+
+    response = ctx.conn.rpc("ship.tow", payload)
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = (response.get("error") or {}) if isinstance(response, dict) else {}
+        print(f"[Error] Could not {action}: {error.get('message') or 'The server refused the request.'}")
+        return
+
+    data = get_data(response)
+    response_type = str(response.get("type") or "")
+    result_text = data.get("status") if isinstance(data, dict) else None
+    if response_type.endswith(".engaged"):
+        engaged_id = data.get("towee_ship_id") or payload.get("target_ship_id")
+        ctx.state["towing_ship_id"] = engaged_id
+        print(f"Tow beam engaged with ship {engaged_id}.")
+    elif response_type.endswith(".disengaged"):
+        released_id = data.get("towee_ship_id") or towing_id
+        ctx.state.pop("towing_ship_id", None)
+        print(f"Tow beam released from ship {released_id or '(ID not returned)'}.")
+    elif result_text:
+        print(str(result_text))
+    else:
+        print("Tow command completed.")
 
 # ---------------------------
 # MOVE flows: adjacency-aware move, warp, intercept
@@ -3522,10 +3611,7 @@ def add_route_flow(ctx: Context):
         print("Cannot determine current sector. Please re-display sector (D) first."); return
 
     # Ask server for a path
-    req = {
-        "from_sector_id": cur, "to_sector_id": target,
-        "from": cur, "to": target
-    }
+    req = {"from_sector_id": cur, "to_sector_id": target}
     resp = ctx.conn.rpc("move.pathfind", req)
     status = (resp or {}).get("status")
     if status in ("error", "refused"):
@@ -3574,13 +3660,16 @@ def start_autopilot(ctx: Context):
     if not route:
         print("No route plotted."); return
     print("Running autopilot:", " -> ".join(map(str, route)))
-    for target in route:
-        _ = ctx.conn.rpc("move.warp", {"to_sector_id": target})
-    new = ctx.conn.rpc("move.describe_sector", {"sector_id": route[-1]})
-    ctx.last_sector_desc = normalize_sector(get_data(new))
+    for index, target in enumerate(route):
+        if not _perform_warp(ctx, target):
+            # Keep the uncompleted part visible so the player can inspect or
+            # retry it after resolving the server refusal.
+            ctx.state["ap_route"] = route[index:]
+            ctx.state["ap_route_plotted"] = True
+            print("Autopilot stopped; remaining route: " + " -> ".join(map(str, route[index:])))
+            return
     ctx.state["ap_route"] = []
     ctx.state["ap_route_plotted"] = False
-    call_handler("redisplay_sector", ctx)
 
 # ---------------------------
 # Planet & Computer flows

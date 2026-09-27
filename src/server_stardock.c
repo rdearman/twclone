@@ -1276,6 +1276,14 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
 		       ctx->player_id, ctx->sector_id, event_payload, NULL);
   json_decref (event_payload);
 
+  json_t *response_data = json_object ();
+  json_object_set_new (response_data, "ship_id", json_integer (current_ship_id));
+  json_object_set_new (response_data, "new_type_id", json_integer (new_type_id));
+  json_object_set_new (response_data, "new_ship_name", json_string (new_ship_name));
+  json_object_set_new (response_data, "credits_spent",
+		       json_integer ((json_int_t) final_cost));
+  send_response_ok_take (ctx, root, "shipyard.upgraded_v1", &response_data);
+
   free (cfg);
   return 0;
 }

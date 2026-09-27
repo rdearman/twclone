@@ -1,0 +1,20 @@
+{
+  "name": "market_loop",
+  "start_sector": 10,
+  "starting_credits": 1200,
+  "holds": 5,
+  "max_shields": 100,
+  "turns": 24,
+  "adjacency": {
+    "10": [20, 30],
+    "20": [10, 30],
+    "30": [10, 20]
+  },
+  "explored_sectors": [10, 20],
+  "ports": {
+    "10": {"port_id": 1010, "commodities": {"ORE": {"buy": 100, "sell": 0}}},
+    "20": {"port_id": 1020, "commodities": {"ORE": {"buy": 0, "sell": 170}}},
+    "30": {"port_id": 1030, "commodities": {"ORE": {"buy": 0, "sell": 145}}}
+  },
+  "hazards": {}
+}

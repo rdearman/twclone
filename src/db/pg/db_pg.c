@@ -124,6 +124,10 @@ static char* pg_bind_param_to_string(const db_bind_t *param) {
             buf = strdup(tmp);
             break;
         }
+        case DB_BIND_TIMESTAMP_NATIVE:
+            if (param->v.text.ptr == NULL)
+                return NULL;
+            return strdup(param->v.text.ptr);
         case DB_BIND_TEXT: 
             if (param->v.text.ptr == NULL)
                 return NULL;
@@ -194,6 +198,7 @@ static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params,
             case DB_BIND_I64:  types[i] = INT8OID; break;
             case DB_BIND_I32:  types[i] = INT4OID; break;
             case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
+            case DB_BIND_TIMESTAMP_NATIVE: types[i] = TIMESTAMPTZOID; break;
             case DB_BIND_TEXT: types[i] = TEXTOID; break;
             case DB_BIND_JSON: types[i] = JSONOID; break;
             default: types[i] = 0; break; // Let PG infer
@@ -250,6 +255,7 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
             case DB_BIND_I64:  types[i] = INT8OID; break;
             case DB_BIND_I32:  types[i] = INT4OID; break;
             case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
+            case DB_BIND_TIMESTAMP_NATIVE: types[i] = TIMESTAMPTZOID; break;
             case DB_BIND_TEXT: types[i] = TEXTOID; break;
             case DB_BIND_JSON: types[i] = JSONOID; break;
             default: types[i] = 0; break;
@@ -287,6 +293,7 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
             case DB_BIND_I64:  types[i] = INT8OID; break;
             case DB_BIND_I32:  types[i] = INT4OID; break;
             case DB_BIND_TIMESTAMP: types[i] = TIMESTAMPTZOID; break;
+            case DB_BIND_TIMESTAMP_NATIVE: types[i] = TIMESTAMPTZOID; break;
             case DB_BIND_TEXT: types[i] = TEXTOID; break;
             case DB_BIND_JSON: types[i] = JSONOID; break;
             default: types[i] = 0; break;

@@ -49,7 +49,8 @@ Appendix A defines **per-type payload schemas**.
 * `player.dock.v1` — `{ player_id, sector_id, port_id }`
 * `player.trade.v1` — `{ player_id, port_id, cargo_id, quantity, credits_change, type }`
 * `player.mine.v1` — `{ player_id, sector_id, cargo_id, quantity }`
-* `player.corp_join.v1` — `{ player_id, corp_id }`
+* `player.corp_join.v1` (documented but not currently emitted) —
+  `{ player_id, corp_id }`
 * `player.planet_transfer.v1` — `{ player_id, planet_id, cargo_id, quantity, type }`
 * `player.planet_attack.v1` — `{ player_id, planet_id, damage_dealt, capture_attempt }`
 * `player.port_strike.v1` — `{ player_id, port_id, damage_dealt }`
@@ -150,7 +151,8 @@ These are **client RPCs** (outside S2S) that often **emit events** which the Eng
 * `bank.balance.get` (Stardock-gated) → fast read; no event.
 * `hardware.list` (Stardock & special ports) → fast read; no event.
 *   `hardware.buy` → purchase hardware; no event.
-* `corp.join|leave` → **emits** `player.corp_join.v1`.
+* `corp.join|leave` currently return RPC responses and do not emit
+  `player.corp_join.v1`.
 * `planet.deposit|withdraw` → **emits** `player.planet_transfer.v1`.
 * `combat.attack.port|planet|ship` → **emits** `player.port_strike.v1` or `combat.ship_damage.v1`.
 * `police.bribe|surrender` (fedspace policing) → **emits** `player.illegal_act.v1` (resolution type).
@@ -233,7 +235,7 @@ Example (sector notice on docking):
     "player.dock.v1": { "player_id": "int", "sector_id": "int", "port_id": "int" },
     "player.trade.v1": { "player_id": "int", "port_id": "int", "cargo_id": "int", "quantity": "int", "credits_change": "int", "type": "buy|sell" },
     "player.mine.v1": { "player_id": "int", "sector_id": "int", "cargo_id": "int", "quantity": "int" },
-    "player.corp_join.v1": { "player_id": "int", "corp_id": "int" },
+    "player.corp_join.v1" (planned, not emitted): { "player_id": "int", "corp_id": "int" },
     "player.planet_transfer.v1": { "player_id": "int", "planet_id": "int", "cargo_id": "int", "quantity": "int", "type": "deposit|withdraw" },
     "player.planet_attack.v1": { "player_id": "int", "planet_id": "int", "damage_dealt": "int", "capture_attempt": "bool" },
     "player.port_strike.v1": { "player_id": "int", "port_id": "int", "damage_dealt": "int" },

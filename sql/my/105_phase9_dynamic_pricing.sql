@@ -7,8 +7,8 @@
 -- Used to calculate dynamic_mul for price adjustments
 CREATE TABLE IF NOT EXISTS port_commodity_state (
     port_commodity_state_id int AUTO_INCREMENT PRIMARY KEY,
-    port_id int NOT NULL,
-    commodity_code varchar(64) NOT NULL,
+    port_id BIGINT NOT NULL,
+    commodity_code VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     stock_level int NOT NULL DEFAULT 0,               -- Current inventory level at port
     rolling_volume int NOT NULL DEFAULT 0,            -- Trading volume over period (used for demand signal)
     last_trade_at timestamp NULL DEFAULT NULL,        -- Timestamp of most recent trade
@@ -18,13 +18,39 @@ CREATE TABLE IF NOT EXISTS port_commodity_state (
     UNIQUE KEY unique_port_commodity (port_id, commodity_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Indexes for fast lookups
-CREATE INDEX IF NOT EXISTS idx_port_commodity_state_port_id 
-  ON port_commodity_state (port_id);
-CREATE INDEX IF NOT EXISTS idx_port_commodity_state_commodity_code 
-  ON port_commodity_state (commodity_code);
-CREATE INDEX IF NOT EXISTS idx_port_commodity_state_updated_at 
-  ON port_commodity_state (updated_at);
+-- MySQL does not support CREATE INDEX IF NOT EXISTS; guard each index lookup.
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'port_commodity_state'
+    AND INDEX_NAME = 'idx_port_commodity_state_port_id'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_port_commodity_state_port_id ON port_commodity_state (port_id)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'port_commodity_state'
+    AND INDEX_NAME = 'idx_port_commodity_state_commodity_code'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_port_commodity_state_commodity_code ON port_commodity_state (commodity_code)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'port_commodity_state'
+    AND INDEX_NAME = 'idx_port_commodity_state_updated_at'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_port_commodity_state_updated_at ON port_commodity_state (updated_at)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
 
 -- Seed default state for all existing (port, commodity) combinations
 -- Default: stock_level=5000 (ensures ports can calculate buy/sell prices)

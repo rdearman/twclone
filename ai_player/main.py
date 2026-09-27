@@ -1,11 +1,13 @@
 import sys
 import time
 import socket
+import errno
 import json
 import logging
 import uuid
 import re
 import random # Add this import
+import select
 from datetime import datetime
 
 from bug_reporter import BugReporter
@@ -55,13 +57,17 @@ class GameConnection:
         self.port = port
         self.sock = None
         self.buffer = b""
+        self._send_buffer = bytearray()
+        self.max_frame_bytes = 1024 * 1024
+        self.disconnected_since_poll = False
 
     def connect(self):
         """Establishes connection to the server."""
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.host, self.port))
-            self.sock.setblocking(False)  # Use non-blocking sockets
+            self.disconnect()
+            sock = socket.create_connection((self.host, self.port), timeout=5.0)
+            sock.setblocking(False)
+            self.sock = sock
             logger.info("Successfully connected to game server at %s:%s", self.host, self.port)
             return True
         except socket.error as e:
@@ -72,12 +78,40 @@ class GameConnection:
     def disconnect(self):
         """Closes the socket connection."""
         if self.sock:
+            self.disconnected_since_poll = True
             try:
                 self.sock.close()
                 logger.info("Disconnected from game server.")
             except socket.error as e:
                 logger.error("Error while disconnecting: %s", e)
         self.sock = None
+        self.buffer = b""
+        self._send_buffer.clear()
+
+    def consume_disconnect(self):
+        disconnected = self.disconnected_since_poll
+        self.disconnected_since_poll = False
+        return disconnected
+
+    def flush_writes(self):
+        """Flush queued frames without blocking the decision loop."""
+        if not self.sock or not self._send_buffer:
+            return bool(self.sock)
+        try:
+            _readable, writable, _exceptional = select.select([], [self.sock], [self.sock], 0)
+            if self.sock in _exceptional:
+                raise OSError("socket became unwritable")
+            if not writable:
+                return True
+            sent = self.sock.send(self._send_buffer)
+            if sent <= 0:
+                raise ConnectionError("socket closed while sending")
+            del self._send_buffer[:sent]
+            return True
+        except (OSError, ValueError) as e:
+            logger.error("Socket error while sending queued data: %s", e)
+            self.disconnect()
+            return False
 
     def send_command(self, command_dict):
         """Sends a JSON command to the server, suffixed with a newline."""
@@ -86,9 +120,9 @@ class GameConnection:
             return False
         
         try:
-            message = json.dumps(command_dict) + "\n"
-            self.sock.sendall(message.encode('utf-8'))
-            return True
+            message = json.dumps(command_dict, separators=(",", ":")) + "\n"
+            self._send_buffer.extend(message.encode("utf-8"))
+            return self.flush_writes()
         except socket.error as e:
             logger.error("Error sending command: %s. Reconnecting.", e)
             self.disconnect()
@@ -103,23 +137,35 @@ class GameConnection:
             return []
 
         try:
-            data = self.sock.recv(4096 * 8)
-            if not data:
-                # Server disconnected gracefully
-                logger.warning("Server closed the connection.")
-                self.disconnect()
-                return []
-            
-            self.buffer += data
+            self.flush_writes()
+            closed = False
+            while self.sock:
+                try:
+                    data = self.sock.recv(4096 * 8)
+                except (BlockingIOError, InterruptedError):
+                    break
+                except socket.error as e:
+                    if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+                        break
+                    raise
+                if not data:
+                    logger.warning("Server closed the connection.")
+                    closed = True
+                    break
+                self.buffer += data
+                if len(self.buffer) > self.max_frame_bytes and b"\n" not in self.buffer:
+                    raise ValueError("server frame exceeded configured limit")
         except socket.error as e:
-            if e.errno == socket.errno.EWOULDBLOCK or e.errno == socket.errno.EAGAIN:
+            if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
                 # No data available right now, this is normal for non-blocking
                 return []
-            else:
-                # A real socket error occurred
-                logger.error("Socket error on receive: %s. Disconnecting.", e)
-                self.disconnect()
-                return []
+            logger.error("Socket error on receive: %s. Disconnecting.", e)
+            self.disconnect()
+            return []
+        except ValueError as e:
+            logger.error("Invalid server frame: %s. Disconnecting.", e)
+            self.disconnect()
+            return []
 
         # Process the buffer and extract complete JSON messages
         responses = []
@@ -127,12 +173,22 @@ class GameConnection:
             response_str, self.buffer = self.buffer.split(b'\n', 1)
             response_str = response_str.strip()
             if response_str:
+                if len(response_str) > self.max_frame_bytes:
+                    logger.error("Server frame exceeded configured limit; disconnecting.")
+                    self.disconnect()
+                    return responses
                 try:
                     response_json = json.loads(response_str)
                     responses.append(response_json)
-                except json.JSONDecodeError as e:
+                except (json.JSONDecodeError, UnicodeDecodeError) as e:
                     logger.error("Failed to decode JSON response: %s", e)
                     logger.debug("Invalid JSON string was: %s", response_str)
+
+        if closed:
+            self.disconnect()
+        elif len(self.buffer) > self.max_frame_bytes:
+            logger.error("Server frame exceeded configured limit; disconnecting.")
+            self.disconnect()
         
         return responses
 
@@ -332,8 +388,6 @@ def _get_fallback_plan(game_state, state_manager, planner):
     Provides a simple fallback plan when the LLM fails to respond.
     Prioritizes surveying, then selling cargo, then buying if empty, then exploration.
     """
-    import random
-    
     logger.info("Generating fallback plan (LLM unavailable)")
 
     current_sector = game_state.get("player_location_sector")
@@ -407,46 +461,27 @@ def _get_fallback_plan(game_state, state_manager, planner):
             unsurveyed_ports.append(int(s_id))
     
     if unsurveyed_ports:
-        target = random.choice(unsurveyed_ports)
-        logger.info(f"Fallback: Moving to unsurveyed port in sector {target}")
-        return [f"goto: {target}"]
-
-    # 4. Exploration Logic (Existing)
-    adj = sector_data.get("adjacent_sectors") or sector_data.get("adjacent") or []
-    
-    # Extract adjacent sector IDs
-    adjacent_ids = []
-    for item in adj:
-        if isinstance(item, dict) and "to_sector" in item:
-            adjacent_ids.append(item["to_sector"])
-        elif isinstance(item, int):
-            adjacent_ids.append(item)
-    
-    # Prioritize unexplored adjacent sectors
-    universe_map = game_state.get("universe_map", {})
-    unexplored = [s for s in adjacent_ids if not universe_map.get(str(s), {}).get('is_explored')]
-    
-    if unexplored:
-        target = random.choice(unexplored)
-        logger.info(f"Fallback: Exploring unexplored sector {target}")
-        return [f"goto: {target}"]
-    elif adjacent_ids:
-        # All adjacent explored, pick random one
-        target = random.choice(adjacent_ids)
-        logger.info(f"Fallback: Moving to sector {target}")
-        return [f"goto: {target}"]
-    else:
-        # No adjacent data, explore blindly
-        valid_gotos = state_manager.get_valid_goto_sectors()
-        if valid_gotos:
-            target = random.choice(valid_gotos)
-            logger.info(f"Fallback: Trying known sector {target}")
+        target = planner._nearest_known_sector(game_state, unsurveyed_ports)
+        if target is not None:
+            logger.info(f"Fallback: Moving to nearest unsurveyed port in sector {target}")
             return [f"goto: {target}"]
-        else:
-            logger.warning("Fallback: No navigation options, scanning")
-            return ["scan: density"]
 
-def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective: Optional[str] = None, bot_number: int = 0):
+    # 4. Keep fallback exploration on the planner's known-adjacency route.
+    target = planner._get_next_warp_target(game_state)
+    if target is not None:
+        logger.info("Fallback: Exploring via adjacent sector %s", target)
+        return [f"goto: {target}"]
+
+    valid_gotos = state_manager.get_valid_goto_sectors()
+    target = planner._nearest_known_sector(game_state, valid_gotos)
+    if target is not None:
+        logger.info("Fallback: Moving to nearest known sector %s", target)
+        return [f"goto: {target}"]
+
+    logger.warning("Fallback: No known navigation targets are available.")
+    return ["scan: density"]
+
+def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective: Optional[str] = None, bot_number: int = 0, planner: Optional[Planner] = None):
     """
     Asks the LLM for a high-level strategic plan.
     """
@@ -634,39 +669,11 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
             # 2. Check if the new plan is just "scan again"
             if final_plan[0] == "scan: density" and just_scanned:
                 logger.warning("BOREDOM FILTER: LLM tried to scan twice. Forcing a move!")
-                
-                # 3. Pick an UNEXPLORED neighbor to warp to (prioritize exploration)
-                current_sector_id = game_state.get("player_location_sector")
-                sector_data = game_state.get("sector_data", {}).get(str(current_sector_id), {})
-                adjacent = sector_data.get("adjacent", [])
-                
-                if adjacent:
-                    # Extract sector IDs from adjacent list
-                    adjacent_ids = []
-                    for adj in adjacent:
-                        if isinstance(adj, dict) and "to_sector" in adj:
-                            adjacent_ids.append(adj["to_sector"])
-                        elif isinstance(adj, int):
-                            adjacent_ids.append(adj)
-                    
-                    if adjacent_ids:
-                        # Prioritize unexplored sectors
-                        universe_map = game_state.get("universe_map", {})
-                        unexplored = [s for s in adjacent_ids if not universe_map.get(str(s), {}).get('is_explored')]
-                        
-                        if unexplored:
-                            random_dest = random.choice(unexplored)
-                            logger.info(f"Boredom filter: Moving to unexplored sector {random_dest}")
-                        else:
-                            random_dest = random.choice(adjacent_ids)
-                            logger.info(f"Boredom filter: All adjacent explored, picking random {random_dest}")
-                        
-                        return [f"goto: {random_dest}"]
-                
-                # If no map data, warp blindly to a random sector (Emergency Jump)
-                random_dest = random.randint(1, 1000) # Assuming 1000 sectors
-                logger.warning(f"Boredom filter: Emergency jump to sector {random_dest}")
-                return [f"goto: {random_dest}"]
+                target = planner._get_next_warp_target(game_state) if planner else None
+                if target is not None:
+                    return [f"goto: {target}"]
+                logger.info("Boredom filter found no known adjacent destination; defer to fallback planning.")
+                return None
             # ---------------------------------------------------------------
 
             logger.info(f"LLM provided valid plan: {final_plan}")
@@ -685,20 +692,28 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
     """
     try:
         goal_type, _, goal_target = goal_str.partition(":")
+        goal_type = goal_type.strip().lower()
         goal_target = goal_target.strip().lower()
 
         if goal_type == "goto":
             target_sector_id = int(goal_target)
             
             # This handles the case where the goal is "goto" a sector we are already in.
-            if game_state.get("player_location_sector") == target_sector_id:
-                return True
+            current_sector_id = game_state.get("player_location_sector")
+            try:
+                if current_sector_id is not None and int(current_sector_id) == target_sector_id:
+                    return True
+            except (TypeError, ValueError):
+                pass
 
             # Check if we just arrived from a warp (move.result)
             if response_type == "move.result":
                 new_sector = response_data.get("to_sector_id")
-                if new_sector == target_sector_id:
-                    return True
+                try:
+                    if new_sector is not None and int(new_sector) == target_sector_id:
+                        return True
+                except (TypeError, ValueError):
+                    pass
 
         elif goal_type == "sell":
             if response_type != "trade.sell_receipt_v1": return False
@@ -747,6 +762,14 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
     
     return False
 
+
+def advance_completed_goals(strategy_plan, game_state):
+    """Remove only the completed plan prefix using freshly observed state."""
+    remaining = list(strategy_plan or [])
+    while remaining and is_goal_complete(remaining[0], game_state, {}, "state.snapshot"):
+        remaining.pop(0)
+    return remaining
+
 # --- Main Game Loop ---
 
 
@@ -771,7 +794,8 @@ def bootstrap_schemas(game_conn, state_manager, config):
     }
 
     logger.info("Requesting command list from server...")
-    game_conn.send_command(schema_request)
+    if game_conn.send_command(schema_request):
+        state_manager.record_ai_metric("commands_sent")
 
     # Ensure dict exists
     state_manager.state.setdefault("pending_schema_requests", {})
@@ -853,6 +877,35 @@ def main(config_path="config.json"):
                 process_responses(responses, game_conn, state_manager, bug_reporter, bandit_policy, config, planner)
                 last_heartbeat = time.time()
 
+            if game_conn.consume_disconnect():
+                logger.warning("Connection lost; discarding session-scoped state and requiring a fresh login.")
+                state_manager.clear_connection_state()
+                schemas_bootstrapped = False
+
+            try:
+                response_timeout = max(1.0, float(config.get("command_response_timeout", 30)))
+            except (TypeError, ValueError):
+                response_timeout = 30.0
+            expired_commands = state_manager.expire_pending_commands(response_timeout)
+            if expired_commands:
+                logger.warning("Timed out waiting for %d command response(s); refreshing authoritative player and ship state.", len(expired_commands))
+                for _request_id, expired_command in expired_commands:
+                    state_manager.record_ai_metric("commands_timed_out")
+                    state_manager.record_command_failure(expired_command.get("command", "unknown"))
+                    if expired_command.get("command") in ("move.autopilot.start", "move.autopilot.status"):
+                        state_manager.set("autopilot_status_checked", False)
+                    if expired_command.get("command") == "player.computer.recommend_routes":
+                        state_manager.set("market_recommendations_requested_at", 0)
+                # A timed-out action may have reached the server. Do not repeat
+                # the old plan until fresh player and ship state is available.
+                state_manager.set("player_info", None)
+                state_manager.set("ship_info", None)
+                state_manager.set("player_location_sector", None)
+                state_manager.set("current_path", [])
+                state_manager.set("autopilot_status", None)
+                state_manager.set("autopilot_status_checked", False)
+                state_manager.set("strategy_plan", [])
+
             game_state = state_manager.get_all() # Always get the freshest state here
 
             # --- NEW: Check if a deterministic rule already sent a command ---
@@ -863,29 +916,18 @@ def main(config_path="config.json"):
                 continue
             # -----------------------------------------------------------------
 
-            # 3. Handle Heartbeat (Ping)
-            if time.time() - last_heartbeat > 20:
-                logger.debug("Sending ping to keep connection alive.")
-                idemp = str(uuid.uuid4())
-                ping_cmd = {
-                    "id": f"c-ping-{idemp[:8]}",
-                    "command": "player.ping",
-                    "data": {},
-                    "meta": {
-                        "client_version": config.get("client_version"),
-                        "idempotency_key": idemp,
-                        "session_token": game_state.get("session_id")
-                    }
-                }
-                game_conn.send_command(ping_cmd)
-                last_heartbeat = time.time()
-
             # 1. Handle Connection & Authentication
             if not game_conn.sock:
                 if not game_conn.connect():
                     logger.info("Attempting to reconnect in 5 seconds...")
                     time.sleep(5)
                     continue
+
+            # Serialize actions: choosing against state from before an
+            # unacknowledged mutation can duplicate purchases, warps, or builds.
+            if state_manager.get("pending_commands"):
+                time.sleep(0.1)
+                continue
             
             # --- Check if we are authenticated BEFORE planning ---
             game_state = state_manager.get_all()
@@ -911,11 +953,33 @@ def main(config_path="config.json"):
                     continue
 
                 logger.info("No session detected. Sending login command: %s", login_cmd)
-                game_conn.send_command(login_cmd)
+                if game_conn.send_command(login_cmd):
+                    state_manager.add_pending_command(login_cmd["id"], login_cmd)
+                    state_manager.record_ai_metric("commands_sent")
                 
                 # Wait for login response to avoid spamming login requests
                 # We'll re-loop and process responses in the next iteration
                 time.sleep(1) 
+                continue
+
+            # Send the heartbeat through the same correlated, serialized
+            # command path as gameplay requests.
+            if time.time() - last_heartbeat > 20:
+                idemp = str(uuid.uuid4())
+                ping_cmd = {
+                    "id": f"c-ping-{idemp[:8]}",
+                    "command": "player.ping",
+                    "data": {},
+                    "meta": {
+                        "client_version": config.get("client_version"),
+                        "idempotency_key": idemp,
+                        "session_token": game_state.get("session_id")
+                    }
+                }
+                if game_conn.send_command(ping_cmd):
+                    state_manager.add_pending_command(ping_cmd["id"], ping_cmd)
+                    state_manager.record_ai_metric("commands_sent")
+                    last_heartbeat = time.time()
                 continue
             
             # --- If we are here, we are authenticated ---
@@ -927,6 +991,70 @@ def main(config_path="config.json"):
                 # Give server time to respond to schema requests
                 logger.info("Waiting for schema responses...")
                 time.sleep(2) 
+                continue
+
+            # Reconcile a server-persisted autopilot route after each login.
+            if ("move.autopilot.status" in game_state.get("server_commands", [])
+                    and not game_state.get("autopilot_status_checked", False)):
+                idemp = str(uuid.uuid4())
+                status_cmd = {
+                    "id": f"c-ap-status-{idemp[:8]}",
+                    "command": "move.autopilot.status",
+                    "data": {},
+                    "meta": {"client_version": config.get("client_version"),
+                             "idempotency_key": idemp,
+                             "session_token": game_state.get("session_id")},
+                }
+                if game_conn.send_command(status_cmd):
+                    state_manager.set("autopilot_status_checked", True)
+                    state_manager.add_pending_command(status_cmd["id"], status_cmd)
+                    state_manager.record_ai_metric("commands_sent")
+                continue
+
+            # Poll trade-loop recommendations occasionally, and only when the
+            # connected server advertises the existing command.
+            known_port_count = len(game_state.get("port_info_by_sector", {}))
+            refresh_seconds = max(60, int(config.get("route_recommendation_refresh_seconds", 900)))
+            last_route_request = float(game_state.get("market_recommendations_requested_at", 0) or 0)
+            if (not config.get("qa_mode")
+                    and "player.computer.recommend_routes" in game_state.get("server_commands", [])
+                    and known_port_count >= 2
+                    and time.time() - last_route_request >= refresh_seconds):
+                idemp = str(uuid.uuid4())
+                route_cmd = {
+                    "id": f"c-route-rec-{idemp[:8]}",
+                    "command": "player.computer.recommend_routes",
+                    "data": {"max_hops_between": 10, "max_hops_from_player": 20,
+                             "require_two_way": False, "limit": 20},
+                    "meta": {"client_version": config.get("client_version"),
+                             "idempotency_key": idemp,
+                             "session_token": game_state.get("session_id")},
+                }
+                if game_conn.send_command(route_cmd):
+                    state_manager.set("market_recommendations_requested_at", time.time())
+                    state_manager.add_pending_command(route_cmd["id"], route_cmd)
+                    state_manager.record_ai_metric("commands_sent")
+                continue
+
+            # Events are hints, not authoritative state. Fetch fresh state
+            # before allowing the planner to act on the affected subsystem.
+            refresh_command = state_manager.take_event_refresh_request()
+            if refresh_command:
+                idemp = str(uuid.uuid4())
+                refresh_data = ({"sector_id": int(game_state["player_location_sector"])}
+                                if refresh_command == "sector.info" and game_state.get("player_location_sector") is not None
+                                else {})
+                refresh_cmd = {
+                    "id": f"c-event-refresh-{idemp[:8]}",
+                    "command": refresh_command,
+                    "data": refresh_data,
+                    "meta": {"client_version": config.get("client_version"),
+                             "idempotency_key": idemp,
+                             "session_token": game_state.get("session_id")},
+                }
+                if game_conn.send_command(refresh_cmd):
+                    state_manager.add_pending_command(refresh_cmd["id"], refresh_cmd)
+                    state_manager.record_ai_metric("commands_sent")
                 continue
 
             # 4. Get Current State & Strategy
@@ -967,6 +1095,7 @@ def main(config_path="config.json"):
                 logger.info("Bootstrap command full: %s", full_command)
                 if game_conn.send_command(full_command):
                     state_manager.record_command_sent(bootstrap_cmd["command"])
+                    state_manager.record_ai_metric("commands_sent")
                     # Don't add to pending_commands if we don't need to track specific reply ID for logic
                     # But we should for debugging.
                     state_manager.add_pending_command(full_command['id'], full_command)
@@ -1047,7 +1176,7 @@ def main(config_path="config.json"):
                         if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
                             logger.info("Strategy plan is empty. Requesting a new one from LLM.")
                             logger.debug(f"Calling LLM with model: {config.get('ollama_model')}")
-                            new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage, state_manager) 
+                            new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage, state_manager, planner=planner)
                             if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
                                 state_manager.set("strategy_plan", new_plan)
                                 strategy_plan = new_plan
@@ -1059,6 +1188,14 @@ def main(config_path="config.json"):
                                 strategy_plan = fallback_plan
                                 time.sleep(2) # Wait a moment before continuing
             
+            # Drop goals already satisfied by authoritative state. This also
+            # reconciles a persisted goto/survey goal after a process restart.
+            remaining_plan = advance_completed_goals(strategy_plan, game_state)
+            if len(remaining_plan) != len(strategy_plan):
+                logger.info("Advancing persisted plan past goals satisfied by current state.")
+                strategy_plan = remaining_plan
+                state_manager.set("strategy_plan", strategy_plan)
+
             # 6. Get the current goal
             if strategy_plan:
                 current_goal = strategy_plan[0] # Get the top goal
@@ -1097,6 +1234,7 @@ def main(config_path="config.json"):
                 
                 if game_conn.send_command(full_command):
                     state_manager.add_pending_command(full_command['id'], full_command)
+                    state_manager.record_ai_metric("commands_sent")
                     state_manager.record_command_sent(command_name)
                     
                     # Track tested commands in QA mode
@@ -1126,34 +1264,17 @@ def main(config_path="config.json"):
                     logger.warning("Failed to send command (connection issue).")
 
             else:
-                # --- THIS IS THE FIX for the "stuck goal" loop ---
                 if current_goal:
-                    # If we had a goal and the planner failed, the goal is impossible.
-                    # Clear the plan to force a new one.
-                    logger.warning(f"Planner failed to execute goal '{current_goal}'. Clearing strategy.")
-                    state_manager.set("strategy_plan", []) # Clear the plan
-                    
-                    # FORCE A RANDOM MOVE to unstick the bot
-                    valid_gotos = game_state.get("valid_goto_sectors", [])
-                    if valid_gotos:
-                        random_sector = random.choice(valid_gotos)
-                        logger.info(f"FALLBACK: Attempting random warp to sector {random_sector} to break loop.")
-                        fallback_cmd = {
-                            "id": f"c-fallback-{uuid.uuid4().hex[:8]}",
-                            "command": "move.warp",
-                            "data": {"to_sector_id": random_sector},
-                            "meta": {
-                                "client_version": config.get("client_version"), 
-                                "idempotency_key": str(uuid.uuid4()),
-                                "session_token": game_state.get("session_id")
-                            }
-                        }
-                        game_conn.send_command(fallback_cmd)
-                        state_manager.add_pending_command(fallback_cmd['id'], fallback_cmd)
-                    
-                    # If in QA mode, also clear the current objective to force a new one
-                    if config.get("qa_mode"):
+                    # None can mean the action is on cooldown or this goal is
+                    # waiting for required state. Preserve the multi-step plan;
+                    # known permanent navigation refusals remove their goal in
+                    # process_responses. QA commands remain one-shot.
+                    if config.get("qa_mode") and current_goal.startswith("execute:"):
+                        logger.warning("QA planner could not execute '%s'; advancing the workflow.", current_goal)
+                        state_manager.set("strategy_plan", [])
                         state_manager.set("current_qa_objective", None)
+                    else:
+                        logger.info("No ready action for goal '%s'; retaining plan for retry.", current_goal)
                 else:
                     # If there was no goal, just wait for cooldowns.
                     logger.debug("Planner returned no command (no goal). Waiting for cooldowns.")
@@ -1171,6 +1292,7 @@ def main(config_path="config.json"):
     # --- Cleanup ---
     if game_conn:
         game_conn.disconnect()
+    logger.info("AI simulation metrics: %s", json.dumps(state_manager.get("ai_metrics", {}), sort_keys=True))
     state_manager.save_state()
     logger.info("Bot has shut down.")
 
@@ -1186,15 +1308,36 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
     Processes a list of responses from the server, updates state,
     and checks for goal completion.
     """
-    game_state_before = state_manager.get_all() # Get state before processing
-
     for response in responses:
+        game_state_before = state_manager.get_all()
+        if not isinstance(response, dict):
+            logger.warning("Ignoring non-object frame from server: %r", response)
+            continue
         logger.info("Server response: %s", json.dumps(response, separators=(',', ':')))
+
+        # Unsolicited events have no reply_to. They are not command failures;
+        # retain/deduplicate them and schedule authoritative refreshes instead.
+        if response.get("reply_to") is None and (
+            response.get("id") == "evt" or response.get("event") or
+            (response.get("type") and response.get("status") is None)
+        ):
+            accepted = state_manager.ingest_server_event(response)
+            if accepted:
+                event_type = str(response.get("event") or response.get("type", "unknown"))
+                logger.info("Received server event %s", event_type)
+            continue
         
         request_id = response.get("reply_to")
         sent_command = None
         if request_id:
             sent_command = state_manager.get_pending_command(request_id)
+
+            # Ignore replies to expired or previous-session requests. Schema
+            # bootstrap requests are separately correlated in their own map.
+            schema_request_ids = set((state_manager.get("pending_schema_requests", {}) or {}).values())
+            if sent_command is None and request_id not in schema_request_ids:
+                logger.warning("Ignoring late or uncorrelated reply %s (%s).", request_id, response.get("type"))
+                continue
 
         command_name = "unknown"
         if sent_command:
@@ -1202,6 +1345,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         
         response_type = response.get("type", "unknown")
         response_data = response.get("data", {}) or {}
+        if not isinstance(response_data, dict):
+            logger.warning("Expected object payload in %s reply; ignoring malformed payload.", response_type)
+            response_data = {}
         
         if config.get("qa_mode"):
             bug_reporter.log_response(response)
@@ -1215,6 +1361,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
         try:
             if response.get("status") == "ok":
+                if sent_command:
+                    state_manager.record_ai_metric("commands_succeeded")
                 # --- Feedback Loop: Record Success ---
                 state_manager.record_command_success(command_name)
                 
@@ -1239,6 +1387,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     if port_id:
                         profit = state_manager.update_cargo_after_sell(sold_items, port_id, credits_remaining=credits_remaining)
                         reward = profit / 1000.0 # Normalize profit for the reward
+                        state_manager.record_ai_metric("trade_profit_credits", profit)
+                    state_manager.record_ai_metric("trade_sales")
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.sell.")
                     
@@ -1272,11 +1422,16 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     if schema_name and 'schema' in response_data:
                         state_manager.add_schema(schema_name, response_data['schema'])
                         logger.debug(f"Cached schema for command: {schema_name}")
+                    pending_schemas = state_manager.get("pending_schema_requests", {}) or {}
+                    state_manager.set("pending_schema_requests", {
+                        name: rid for name, rid in pending_schemas.items() if rid != request_id
+                    })
                     continue
 
                 if response_type == "system.cmd_list":
                     commands_to_fetch = [cmd.get("cmd") for cmd in response_data.get("commands", [])]
                     logger.info(f"Received command list from server: {commands_to_fetch}")
+                    state_manager.set("server_commands", commands_to_fetch)
                     
                     commands_to_ignore = [
                         "system.hello", "system.capabilities", "system.describe_schema", "system.cmd_list", "system.schema_list", "player.list_online"
@@ -1302,6 +1457,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         }
                         logger.debug(f"Requesting schema for command: {command_name_to_fetch}")
                         game_conn.send_command(schema_request)
+                        state_manager.record_ai_metric("commands_sent")
                         state_manager.state["pending_schema_requests"][command_name_to_fetch] = request_id_new
                         time.sleep(0.1)
                     continue
@@ -1342,7 +1498,17 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     if response.get("status") == "ok":
                         new_sector = response_data.get("to_sector_id")
                         if new_sector:
+                            state_manager.record_ai_metric("completed_warps")
                             state_manager.set("player_location_sector", new_sector)
+                            current_path = game_state_before.get("current_path", [])
+                            if current_path:
+                                try:
+                                    normalized_path = [int(sector) for sector in current_path]
+                                    arrived_at = normalized_path.index(int(new_sector))
+                                    state_manager.set("current_path", current_path[arrived_at:])
+                                except (TypeError, ValueError):
+                                    # A confirmed move outside the cached route makes it stale.
+                                    state_manager.set("current_path", [])
                             # Update recent sectors directly
                             recents = state_manager.get("recent_sectors", [])
                             recents.append(new_sector)
@@ -1362,16 +1528,21 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                                     "session_token": state_manager.get("session_id")
                                 }
                             }
-                            game_conn.send_command(next_cmd)
+                            if game_conn.send_command(next_cmd):
+                                state_manager.add_pending_command(next_cmd["id"], next_cmd)
+                                state_manager.record_ai_metric("commands_sent")
                 
                 # --- NEW: Handle Pathfind Response ---
-                sent_cmd = state_manager.get_pending_command(request_id)
-                if sent_cmd and sent_cmd.get("command") == "move.pathfind":
+                if sent_command and sent_command.get("command") in ("move.pathfind", "move.autopilot.start"):
                     if response.get("status") == "ok":
-                        # FIX: Protocol returns 'steps', not 'path'
-                        steps = response_data.get("steps", [])
+                        # Pathfind uses `steps`; autopilot returns `path` and
+                        # persists the route on the server for reconnects.
+                        steps = response_data.get("steps") or response_data.get("path", [])
                         if steps:
                             state_manager.set("current_path", steps)
+                            state_manager.record_ai_metric("planned_route_hops", max(0, len(steps) - 1))
+                            if sent_command.get("command") == "move.autopilot.start":
+                                state_manager.set("autopilot_status", response_data)
                             logger.info(f"Received path (steps) from server: {steps}")
                         else:
                             logger.warning("Server returned OK for move.pathfind but steps is empty.")
@@ -1408,6 +1579,20 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 
                 elif response_type == "trade.quote":
                     state_manager.update_price_cache(response_data)
+
+                elif response_type in ("player.computer.trade_routes", "player.computer.trade_routes_v1"):
+                    state_manager.set("market_recommendations", response_data.get("routes", []))
+                    state_manager.set("market_recommendations_refreshed_at", time.time())
+
+                elif response_type in ("move.autopilot.status_v1", "move.autopilot.controlled_v1", "move.autopilot.route_v1"):
+                    state_manager.set("autopilot_status", response_data)
+                    route = response_data.get("path")
+                    if isinstance(route, list) and route:
+                        state_manager.set("current_path", route)
+
+                elif response_type == "move.autopilot.stopped_v1":
+                    state_manager.set("autopilot_status", response_data)
+                    state_manager.set("current_path", response_data.get("path", []))
                 
                 elif response_type == "bank.balance":
                     state_manager.set("bank_balance", response_data.get("balance", 0))
@@ -1426,6 +1611,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         state_manager.set("strategy_plan", strategy_plan)
                 
             else: # Error or refused
+                if sent_command:
+                    state_manager.record_ai_metric("commands_refused")
                 error_data = response.get("error", {})
                 error_msg = error_data.get("message", "Unknown error")
                 error_code = error_data.get("code")
@@ -1444,6 +1631,30 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 # -------------------------------------
                 
                 state_manager.record_command_failure(command_name)
+
+                if command_name == "move.autopilot.status":
+                    state_manager.set("autopilot_status_checked", True)
+                    state_manager.set("autopilot_status", {"state": "unavailable"})
+
+                # A refused hop must not leave a persisted route silently
+                # running. Stop it; replanning will request a fresh route.
+                if (command_name == "move.warp"
+                        and "move.autopilot.stop" in game_state_before.get("server_commands", [])
+                        and (game_state_before.get("autopilot_status") or {}).get("state") == "running"):
+                    idemp = str(uuid.uuid4())
+                    stop_cmd = {
+                        "id": f"c-ap-stop-{idemp[:8]}",
+                        "command": "move.autopilot.stop",
+                        "data": {},
+                        "meta": {"client_version": config.get("client_version"),
+                                 "idempotency_key": idemp,
+                                 "session_token": state_manager.get("session_id")},
+                    }
+                    if game_conn.send_command(stop_cmd):
+                        state_manager.add_pending_command(stop_cmd["id"], stop_cmd)
+                        state_manager.record_ai_metric("commands_sent")
+                    state_manager.set("autopilot_status", {"state": "stopped"})
+                    state_manager.set("current_path", [])
 
                 last_action = game_state_before.get("last_action")
                 last_context = game_state_before.get("last_context_key")
@@ -1470,7 +1681,11 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     to_sector_id = sent_command.get("data", {}).get("to_sector_id")
                     if to_sector_id is not None:
                         logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. RE-SYNCING location.")
-                        # state_manager.add_to_warp_blacklist(to_sector_id) # Don't blacklist yet, location might just be wrong
+                        state_manager.add_to_warp_blacklist(to_sector_id)
+                        state_manager.set("current_path", [])
+                        strategy_plan = state_manager.get("strategy_plan", [])
+                        if strategy_plan and strategy_plan[0].startswith("goto:"):
+                            state_manager.set("strategy_plan", strategy_plan[1:])
                         
                         # FORCE RE-SYNC: Clear cached location and fetch fresh info
                         state_manager.set("player_location_sector", None)
@@ -1487,13 +1702,39 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                                     "session_token": state_manager.get("session_id")
                                 }
                             }
-                            game_conn.send_command(re_sync_cmd)
+                            if game_conn.send_command(re_sync_cmd):
+                                state_manager.add_pending_command(re_sync_cmd["id"], re_sync_cmd)
+                                state_manager.record_ai_metric("commands_sent")
 
-                if sent_command and command_name == "move.warp":
-                    to_sector_id = sent_command.get("data", {}).get("to_sector_id")
-                    if error_code == 1453 and to_sector_id is not None:
-                        logger.warning(f"Move.warp to sector {to_sector_id} failed with 'No warp link'. Blacklisting for future attempts.")
-                        state_manager.add_to_warp_blacklist(to_sector_id)
+                elif sent_command and command_name == "move.warp":
+                    # Other refusals (hazards, insufficient turns, etc.) can
+                    # also leave local route assumptions stale. Drop the
+                    # pending plan and refresh location before selecting again.
+                    state_manager.set("current_path", [])
+                    state_manager.set("strategy_plan", [])
+                    state_manager.set("player_info", None)
+                    state_manager.set("ship_info", None)
+                    state_manager.set("player_location_sector", None)
+                    idemp = str(uuid.uuid4())
+                    refresh_cmd = {
+                        "id": f"c-resync-move-{idemp[:8]}",
+                        "command": "player.my_info",
+                        "data": {},
+                        "meta": {"client_version": config.get("client_version"),
+                                 "idempotency_key": idemp,
+                                 "session_token": state_manager.get("session_id")},
+                    }
+                    if game_conn.send_command(refresh_cmd):
+                        state_manager.add_pending_command(refresh_cmd["id"], refresh_cmd)
+                        state_manager.record_ai_metric("commands_sent")
+
+                if sent_command and command_name in ("move.pathfind", "move.autopilot.start"):
+                    strategy_plan = state_manager.get("strategy_plan", [])
+                    if strategy_plan and strategy_plan[0].startswith("goto:"):
+                        logger.info("Pathfinding was refused; discarding the unreachable navigation goal.")
+                        state_manager.set("current_path", [])
+                        state_manager.set("autopilot_status", {"state": "stopped"})
+                        state_manager.set("strategy_plan", strategy_plan[1:])
                 
                 if sent_command and command_name == "trade.port_info" and error_code == 1800:
                     current_sector = game_state_before.get("player_location_sector")
@@ -1536,7 +1777,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             "session_token": state_manager.get("session_id")
                         }
                     }
-                    game_conn.send_command(resync_cmd)
+                    if game_conn.send_command(resync_cmd):
+                        state_manager.add_pending_command(resync_cmd["id"], resync_cmd)
+                        state_manager.record_ai_metric("commands_sent")
 
                 # --- FIX: Handle "Insufficient Funds" (1403) by re-syncing player info ---
                 if sent_command and command_name == "trade.buy" and error_code == 1403:
@@ -1552,7 +1795,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             "session_token": state_manager.get("session_id")
                         }
                     }
-                    game_conn.send_command(resync_cmd)
+                    if game_conn.send_command(resync_cmd):
+                        state_manager.add_pending_command(resync_cmd["id"], resync_cmd)
+                        state_manager.record_ai_metric("commands_sent")
                 # --------------------------------------------------------------------
 
                 if config.get("qa_mode"):

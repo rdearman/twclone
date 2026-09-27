@@ -39,8 +39,13 @@ def test_subscriptions():
         obs_client.connect()
         if not obs_client.login("observer_user", "password"): return False
         if not pathfind_and_warp(obs_client, "Observer", 1): return False
-        obs_client.send_json({"command": "subscribe.add", "data": {"topic": "sector.1"}})
-        obs_client.recv_next_non_notice()
+        # Verify concrete sector scopes, namespace wildcards, and event-specific
+        # topics all route to one delivery when they match the same event.
+        for topic in ("sector.1", "sector.*", "sector.player_entered"):
+            obs_client.send_json({"command": "subscribe.add", "data": {"topic": topic}})
+            sub_resp = obs_client.recv_next_non_notice()
+            if sub_resp.get("status") != "ok":
+                return False
 
         # Actor
         act_client.connect()
@@ -63,6 +68,15 @@ def test_subscriptions():
                         break
             except socket.timeout: continue
         if not found_enter: return False
+
+        # Overlapping matching subscriptions must not duplicate the event.
+        obs_client.sock.settimeout(0.2)
+        try:
+            duplicate = obs_client.recv_next_non_notice()
+            if duplicate and duplicate.get("type") == "sector.player_entered":
+                return False
+        except socket.timeout:
+            pass
 
         # Action: Leave Sector 1
         if not pathfind_and_warp(act_client, "Actor", 2): return False

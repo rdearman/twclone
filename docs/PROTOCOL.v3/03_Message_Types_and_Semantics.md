@@ -16,6 +16,13 @@ Events are published to topic namespaces. Clients must subscribe to receive most
 *   **`combat.*`**: Combat events involving the player.
 *   **`trade.*`**: Market updates.
 
+The subscription topic and event `type` are separate values. A sector event is
+routed using its concrete scope (`sector.<sector_id>`), then delivered with its
+event type (for example, `sector.player_entered`). A matching exact event topic
+also receives it. Namespace wildcards such as `sector.*` match all types in
+that namespace. If one player has multiple matching subscriptions, the event
+is delivered once.
+
 ### 2.2 Subscription Commands
 
 **Subscribe (Idempotent)**

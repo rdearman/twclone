@@ -1,0 +1,54 @@
+{
+  "name": "Ship Tow Status Suite",
+  "tests": [
+    {
+      "name": "Setup: tow_status_player",
+      "setup": "macro_auth_user",
+      "username": "mover_autopilot",
+      "password": "password"
+    },
+    {
+      "name": "Positive: towing status is readable",
+      "command": "ship.tow.status",
+      "user": "mover_autopilot",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Negative: towing status requires authentication",
+      "command": "ship.tow.status",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Towing status response schema is discoverable",
+      "command": "system.describe_schema",
+      "user": "mover_autopilot",
+      "data": { "name": "ship.tow.status.response", "type": "event" },
+      "asserts": [
+        { "path": "data.schema.properties.towing_ship_id.type.1", "op": "==", "value": "null" },
+        { "path": "data.schema.properties.towed_by_ship_id.type.0", "op": "==", "value": "integer" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tow request schema is discoverable",
+      "command": "system.describe_schema",
+      "user": "mover_autopilot",
+      "data": { "name": "ship.tow", "type": "command" },
+      "asserts": [
+        { "path": "data.schema.properties.target_ship_id.type", "op": "==", "value": "integer" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Tow engagement response schema is discoverable",
+      "command": "system.describe_schema",
+      "user": "mover_autopilot",
+      "data": { "name": "ship.tow.engaged", "type": "event" },
+      "asserts": [
+        { "path": "data.schema.properties.towee_ship_id.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.properties.status.type", "op": "==", "value": "string" }
+      ],
+      "expect": { "status": "ok" }
+    }
+  ]
+}

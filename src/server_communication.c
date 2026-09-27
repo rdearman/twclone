@@ -6,6 +6,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 
 /* local includes */
 #include "server_communication.h"
@@ -251,16 +252,52 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
   int include_expired =
     json_is_true (json_object_get (data, "include_expired"));
   int limit = 100;
+  char cursor_ts_buf[128] = { 0 };
+  const char *cursor_ts = NULL;
+  int64_t cursor_id = 0;
   if (data)
     {
       json_t *jlim = json_object_get (data, "limit");
+      json_t *jcursor = json_object_get (data, "cursor");
 
 
       if (jlim && json_is_integer (jlim))
 	{
 	  limit = (int) json_integer_value (jlim);
 	}
+
+      if (jcursor && !json_is_null (jcursor))
+        {
+          const char *cursor = json_is_string (jcursor) ? json_string_value (jcursor) : NULL;
+          if (!cursor || !cursor[0] || strlen (cursor) >= 128)
+            {
+              send_response_error (ctx, root, ERR_BAD_REQUEST, "invalid cursor");
+              return 0;
+            }
+          snprintf (cursor_ts_buf, sizeof (cursor_ts_buf), "%s", cursor);
+          char *sep = strchr (cursor_ts_buf, '_');
+          if (!sep || sep == cursor_ts_buf || !sep[1])
+            {
+              send_response_error (ctx, root, ERR_BAD_REQUEST, "invalid cursor");
+              return 0;
+            }
+          *sep++ = '\0';
+          cursor_ts = cursor_ts_buf;
+          char *end_id = NULL;
+          errno = 0;
+          cursor_id = strtoll (sep, &end_id, 10);
+          if (errno == ERANGE || strlen (cursor_ts_buf) < 19 || !end_id || *end_id
+              || cursor_id <= 0)
+            {
+              cursor_ts = NULL;
+              send_response_error (ctx, root, ERR_BAD_REQUEST, "invalid cursor");
+              return 0;
+            }
+        }
     }
+
+  if (limit < 1 || limit > 100)
+    limit = 100;
 
   db_t *db = game_db_get_handle ();
 
@@ -286,7 +323,8 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
 
   if ((res =
        repo_comm_list_notices (db, now_expr, ctx->player_id,
-			       include_expired ? 1 : 0, limit, &err)) == NULL)
+			       include_expired ? 1 : 0, limit + 1,
+			       cursor_ts, cursor_id, &err)) == NULL)
     {
       send_response_error (ctx, root, ERR_SERVER_ERROR, "db error");
       rc = 0;
@@ -296,19 +334,27 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
   items = json_array ();
 
 
+  int count = 0;
+  char last_created[128] = { 0 };
+  int last_id = 0;
+  int has_more = 0;
   while (db_res_step (res, &err))
     {
       int id = db_res_col_i32 (res, 0, &err);
       const char *t = db_res_col_text (res, 1, &err);
       const char *b = db_res_col_text (res, 2, &err);
       const char *sv = db_res_col_text (res, 3, &err);
-      int64_t created = db_res_col_i64 (res, 4, &err);
-      int64_t expires = db_res_col_is_null (res, 5) ? 0 : db_res_col_i64 (res,
-									  5,
-									  &err);
-      int64_t seen_at = db_res_col_is_null (res, 6) ? 0 : db_res_col_i64 (res,
-									  6,
-									  &err);
+      const char *created_text = db_res_col_text (res, 4, &err);
+      const char *expires = db_res_col_is_null (res, 5) ? NULL :
+	db_res_col_text (res, 5, &err);
+      const char *seen_at = db_res_col_is_null (res, 6) ? NULL :
+	db_res_col_text (res, 6, &err);
+
+      if (count == limit)
+	{
+	  has_more = 1;
+	  break;
+	}
 
       json_t *row = json_object ();
 
@@ -317,22 +363,39 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (row, "title", json_string (t ? t : ""));
       json_object_set_new (row, "body", json_string (b ? b : ""));
       json_object_set_new (row, "severity", json_string (sv ? sv : "info"));
-      json_object_set_new (row, "created_at", json_integer (created));
+      json_object_set_new (row, "created_at",
+			   json_string (created_text ? created_text : ""));
 
-      if (expires > 0)
+
+      if (expires)
 	{
-	  json_object_set_new (row, "expires_at", json_integer (expires));
+	  json_object_set_new (row, "expires_at", json_string (expires));
 	}
-      if (seen_at > 0)
+
+
+      if (seen_at)
 	{
-	  json_object_set_new (row, "seen_at", json_integer (seen_at));
+	  json_object_set_new (row, "seen_at", json_string (seen_at));
 	}
       json_array_append_new (items, row);
+      count++;
+      if (created_text)
+	snprintf (last_created, sizeof (last_created), "%s", created_text);
+      last_id = id;
     }
 
   resp = json_object ();
   json_object_set_new (resp, "items", items);
   items = NULL;
+  if (has_more && last_created[0] && last_id > 0)
+    {
+      char next_cursor[192];
+      snprintf (next_cursor, sizeof (next_cursor), "%s_%d",
+		last_created, last_id);
+      json_object_set_new (resp, "next_cursor", json_string (next_cursor));
+    }
+  else
+    json_object_set_new (resp, "next_cursor", json_null ());
   send_response_ok_take (ctx, root, "notice.list_v1", &resp);
   resp = NULL;
   rc = 0;
@@ -352,7 +415,10 @@ int
 cmd_notice_ack (client_ctx_t *ctx, json_t *root)
 {
   json_t *data = json_object_get (root, "data");
-  int id = (int) json_integer_value (json_object_get (data, "id"));
+  json_t *j_id = json_object_get (data, "notice_id");
+  if (!j_id)
+    j_id = json_object_get (data, "id");
+  int id = (int) json_integer_value (j_id);
   if (id <= 0)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST, "id required");
@@ -648,8 +714,9 @@ comm_publish_sector_event (int sid, const char *name, json_t *data)
   };
 
 
-  /* db_for_each_subscriber finds players subscribed to 'topic' (exact or wildcard) */
-  db_for_each_subscriber (db, topic, bc_cb, &bc);
+  /* Route by sector scope and event type. The repository de-duplicates players
+   * subscribed through both an exact scope and an event/topic pattern. */
+  db_for_each_scoped_subscriber (db, topic, name, bc_cb, &bc);
 
 
   json_decref (data);
@@ -1062,10 +1129,10 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
   /* Parse inputs */
   const char *to_name = NULL, *subject = NULL, *body = NULL, *idem = NULL;
   int to_id = 0;
-  json_t *j_to_id = json_object_get (data, "to_id");
+  json_t *j_to_id = json_object_get (data, "recipient_id");
   if (!j_to_id)
     {
-      j_to_id = json_object_get (data, "recipient_id");
+      j_to_id = json_object_get (data, "to_id");
     }
 
 
@@ -1074,6 +1141,8 @@ cmd_mail_send (client_ctx_t *ctx, json_t *root)
       to_id = (int) json_integer_value (j_to_id);
     }
   json_t *j_to = json_object_get (data, "to");
+  if (!j_to)
+    j_to = json_object_get (data, "to_player_name");
 
 
   if (j_to && json_is_string (j_to))
@@ -1298,7 +1367,10 @@ cmd_mail_read (client_ctx_t *ctx, json_t *root)
 			   ERR_INVALID_SCHEMA, "Invalid request schema");
       return 0;
     }
-  int id = (int) json_integer_value (json_object_get (data, "id"));
+  json_t *j_id = json_object_get (data, "mail_id");
+  if (!j_id)
+    j_id = json_object_get (data, "id");
+  int id = (int) json_integer_value (j_id);
 
 
   if (id <= 0)
@@ -1412,9 +1484,11 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
     }
   json_t *data = json_object_get (root, "data");
   json_t *ids = data ? json_object_get (data, "ids") : NULL;
+  json_t *single_id = data ? json_object_get (data, "mail_id") : NULL;
 
 
-  if (!ids || !json_is_array (ids))
+  if ((!ids || !json_is_array (ids))
+      && (!single_id || !json_is_integer (single_id)))
     {
       send_response_error (ctx,
 			   root,
@@ -1423,7 +1497,7 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   /* Build a parameterised IN (...) safely (<= 200 ids) */
-  size_t n = json_array_size (ids);
+  size_t n = json_is_array (ids) ? json_array_size (ids) : 1;
 
 
   if (n == 0)
@@ -1452,7 +1526,9 @@ cmd_mail_delete (client_ctx_t *ctx, json_t *root)
 
   for (size_t i = 0; i < n; i++)
     {
-      id_array[i] = (int) json_integer_value (json_array_get (ids, i));
+      id_array[i] = (int) json_integer_value (json_is_array (ids) ?
+							       json_array_get (ids, i) :
+							       single_id);
     }
 
   int64_t rows_affected = 0;

@@ -25,6 +25,7 @@
 #include "server_log.h"
 #include "common.h"
 #include "server_ships.h"
+#include "server_ports.h"
 #include "server_loop.h"
 #include "server_bank.h"
 #include "db/db_api.h"
@@ -67,6 +68,23 @@ route_compare (const void *a, const void *b)
   const trade_route_t *ra = (const trade_route_t *) a;
   const trade_route_t *rb = (const trade_route_t *) b;
 
+  int profit_a = ra->a_to_b ? ra->estimated_profit_a_to_b :
+    ra->estimated_profit_b_to_a;
+  if (ra->b_to_a && (!ra->a_to_b || ra->estimated_profit_b_to_a > profit_a))
+    {
+      profit_a = ra->estimated_profit_b_to_a;
+    }
+  int profit_b = rb->a_to_b ? rb->estimated_profit_a_to_b :
+    rb->estimated_profit_b_to_a;
+  if (rb->b_to_a && (!rb->a_to_b || rb->estimated_profit_b_to_a > profit_b))
+    {
+      profit_b = rb->estimated_profit_b_to_a;
+    }
+  if (profit_a != profit_b)
+    {
+      return profit_a > profit_b ? -1 : 1;
+    }
+
   /* Prefer two-way loops */
   if (ra->is_two_way != rb->is_two_way)
     {
@@ -99,7 +117,15 @@ cmd_player_computer_recommend_routes (client_ctx_t *ctx, json_t *root)
       json_get_int_flexible (data, "max_hops_between", &max_hops_between);
       json_get_int_flexible (data, "max_hops_from_player",
 			     &max_hops_from_player);
-      json_get_int_flexible (data, "require_two_way", &require_two_way);
+      json_t *j_two_way = json_object_get (data, "require_two_way");
+      if (json_is_boolean (j_two_way))
+	{
+	  require_two_way = json_is_true (j_two_way) ? 1 : 0;
+	}
+      else
+	{
+	  json_get_int_flexible (data, "require_two_way", &require_two_way);
+	}
       json_get_int_flexible (data, "limit", &limit);
     }
 
@@ -120,6 +146,34 @@ cmd_player_computer_recommend_routes (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  for (int i = 0; i < count; i++)
+    {
+      if (!routes[i].commodity)
+	{
+	  continue;
+	}
+      if (routes[i].a_to_b)
+	{
+	  int buy_at_a = h_entity_calculate_sell_price (db, "port",
+						       routes[i].port_a_id,
+						       routes[i].commodity);
+	  int sell_at_b = h_entity_calculate_buy_price (db, "port",
+						       routes[i].port_b_id,
+						       routes[i].commodity);
+	  routes[i].estimated_profit_a_to_b = sell_at_b - buy_at_a;
+	}
+      if (routes[i].b_to_a)
+	{
+	  int buy_at_b = h_entity_calculate_sell_price (db, "port",
+						       routes[i].port_b_id,
+						       routes[i].commodity);
+	  int sell_at_a = h_entity_calculate_buy_price (db, "port",
+						       routes[i].port_a_id,
+						       routes[i].commodity);
+	  routes[i].estimated_profit_b_to_a = sell_at_a - buy_at_b;
+	}
+    }
+
   if (count > 0)
     {
       qsort (routes, count, sizeof (trade_route_t), route_compare);
@@ -135,6 +189,14 @@ cmd_player_computer_recommend_routes (client_ctx_t *ctx, json_t *root)
 			   json_integer (routes[i].sector_a_id));
       json_object_set_new (r, "sector_b_id",
 			   json_integer (routes[i].sector_b_id));
+      json_object_set_new (r, "approach_sector_id",
+			   json_integer (routes[i].approach_sector_id));
+      json_object_set_new (r, "port_a_name",
+			   json_string (routes[i].port_a_name ? routes[i].port_a_name : "Port A"));
+      json_object_set_new (r, "port_b_name",
+			   json_string (routes[i].port_b_name ? routes[i].port_b_name : "Port B"));
+      json_object_set_new (r, "commodity",
+			   json_string (routes[i].commodity ? routes[i].commodity : ""));
       json_object_set_new (r, "hops_between",
 			   json_integer (routes[i].hops_between));
       json_object_set_new (r, "hops_from_player",
@@ -142,6 +204,14 @@ cmd_player_computer_recommend_routes (client_ctx_t *ctx, json_t *root)
       json_object_set_new (r, "is_two_way",
 			   routes[i].is_two_way ? json_true () :
 			   json_false ());
+      json_object_set_new (r, "a_to_b",
+			   routes[i].a_to_b ? json_true () : json_false ());
+      json_object_set_new (r, "b_to_a",
+			   routes[i].b_to_a ? json_true () : json_false ());
+      json_object_set_new (r, "estimated_profit_a_to_b",
+			   json_integer (routes[i].estimated_profit_a_to_b));
+      json_object_set_new (r, "estimated_profit_b_to_a",
+			   json_integer (routes[i].estimated_profit_b_to_a));
       json_array_append_new (j_routes, r);
     }
 
@@ -559,22 +629,20 @@ h_set_subscriptions (client_ctx_t *ctx, json_t *list)
 
   json_array_foreach (list, idx, val)
   {
+    const char *topic = NULL;
     if (json_is_string (val))
       {
-	h_db_subscribe_upsert (ctx->player_id,
-			       json_string_value (val), NULL, NULL);
+	topic = json_string_value (val);
       }
     else if (json_is_object (val))
       {
-	const char *topic =
-	  json_string_value (json_object_get (val, "topic"));
-
-
-	if (topic)
-	  {
-	    h_db_subscribe_upsert (ctx->player_id, topic, NULL, NULL);
-	  }
+	topic = json_string_value (json_object_get (val, "topic"));
       }
+    if (!topic || !*topic || strlen (topic) > 64)
+      return -1;
+    int rc = h_db_subscribe_upsert (ctx->player_id, topic, NULL, NULL);
+    if (rc != 0)
+      return rc;
   }
   return 0;
 }
@@ -898,6 +966,11 @@ cmd_nav_avoid_list (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
 {
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
+      return 0;
+    }
   json_t *out = json_object ();
   json_object_set_new (out, "topics",
 		       subscriptions_as_array (ctx->player_id));
@@ -909,8 +982,9 @@ cmd_player_get_topics (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_set_topics (client_ctx_t *ctx, json_t *root)
 {
-  if (ctx->player_id <= 0)
+  if (!ctx || ctx->player_id <= 0)
     {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Auth required");
       return 0;
     }
   json_t *data = json_object_get (root, "data");
@@ -921,7 +995,15 @@ cmd_player_set_topics (client_ctx_t *ctx, json_t *root)
     {
       topics = json_object_get (data, "subscriptions");
     }
-  h_set_subscriptions (ctx, topics);
+  int rc = h_set_subscriptions (ctx, topics);
+  if (rc != 0)
+    {
+      send_response_error (ctx, root,
+			   json_is_array (topics) ? ERR_DB_QUERY_FAILED : ERR_INVALID_SCHEMA,
+			   json_is_array (topics) ? "Unable to update subscriptions" :
+			   "topics or subscriptions array required");
+      return 0;
+    }
   return cmd_player_get_topics (ctx, root);
 }
 

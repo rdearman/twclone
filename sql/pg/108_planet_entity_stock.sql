@@ -24,28 +24,28 @@ ON CONFLICT (entity_type, entity_id, commodity_code) DO NOTHING;
 
 INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts)
 SELECT 'planet', p.planet_id, 'ORE', p.ore_on_hand, 0, EXTRACT(EPOCH FROM NOW())::bigint
-FROM planets p WHERE COALESCE(p.ore_on_hand, 0) > 0
+FROM planets p WHERE COALESCE(p.ore_on_hand, 0) <> 0
 ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE
 SET quantity = entity_stock.quantity + EXCLUDED.quantity,
     last_updated_ts = EXCLUDED.last_updated_ts;
 
 INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts)
 SELECT 'planet', p.planet_id, 'ORG', p.organics_on_hand, 0, EXTRACT(EPOCH FROM NOW())::bigint
-FROM planets p WHERE COALESCE(p.organics_on_hand, 0) > 0
+FROM planets p WHERE COALESCE(p.organics_on_hand, 0) <> 0
 ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE
 SET quantity = entity_stock.quantity + EXCLUDED.quantity,
     last_updated_ts = EXCLUDED.last_updated_ts;
 
 INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts)
 SELECT 'planet', p.planet_id, 'EQU', p.equipment_on_hand, 0, EXTRACT(EPOCH FROM NOW())::bigint
-FROM planets p WHERE COALESCE(p.equipment_on_hand, 0) > 0
+FROM planets p WHERE COALESCE(p.equipment_on_hand, 0) <> 0
 ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE
 SET quantity = entity_stock.quantity + EXCLUDED.quantity,
     last_updated_ts = EXCLUDED.last_updated_ts;
 
 INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts)
 SELECT 'planet', pg.planet_id, pg.commodity, pg.quantity, 0, EXTRACT(EPOCH FROM NOW())::bigint
-FROM planet_goods pg WHERE COALESCE(pg.quantity, 0) > 0
+FROM planet_goods pg WHERE COALESCE(pg.quantity, 0) <> 0
 ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE
 SET quantity = entity_stock.quantity + EXCLUDED.quantity,
     last_updated_ts = EXCLUDED.last_updated_ts;

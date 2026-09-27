@@ -2,6 +2,8 @@
 -- Adds market pressure tracking for deterministic price adjustments based on supply/demand
 -- BACKWARD COMPATIBLE: seed data and disabled-by-default config ensure prices unchanged until explicitly enabled
 
+BEGIN;
+
 -- Table: port_commodity_state
 -- Tracks current supply/demand state (stock level, trading volume) for each (port, commodity) pair
 -- Used to calculate dynamic_mul for price adjustments
@@ -53,3 +55,5 @@ BEGIN
         RAISE NOTICE 'Phase 9: port_commodity_state seeded with % rows (expected ~%)', total_rows, total_expected;
     END IF;
 END $$;
+
+COMMIT;

@@ -153,3 +153,18 @@ def test_submenus_have_functioning_back_action(menus):
         options = list(_iter_options(menu))
         back_opts = [o for o in options if o.get("action", {}).get("back") is True]
         assert len(back_opts) > 0, f"Submenu {menu_id} must contain a Back action"
+
+
+def test_computer_menu_has_contextual_help_shortcut(menus):
+    opts = {o["key"]: o for o in _iter_options(menus["COMPUTER"])}
+    assert opts["?"]["action"] == {"pycall": "help_main"}
+
+
+def test_tow_menu_remains_reachable_for_confirmed_tow_without_sector_targets(
+    ctx_factory, menus
+):
+    ctx = ctx_factory(sector={"id": 1, "ships": []})
+    ctx.state["towing_ship_id"] = 42
+    client.compute_flags(ctx)
+    opts = {o["key"]: o for o in _visible_options(menus["DEPLOYMENT_MAIN"], ctx)}
+    assert opts["w"]["action"] == {"pycall": "tow_flow"}

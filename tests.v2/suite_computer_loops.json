@@ -107,7 +107,28 @@
             }
           ]
         }
-      }
+      },
+      "asserts": [
+        { "path": "data.routes.0", "op": "contains", "value": "approach_sector_id" },
+        { "path": "data.routes.0", "op": "contains", "value": "port_a_name" },
+        { "path": "data.routes.0", "op": "contains", "value": "port_b_name" },
+        { "path": "data.routes.0", "op": "contains", "value": "commodity" },
+        { "path": "data.routes.0", "op": "contains", "value": "a_to_b" },
+        { "path": "data.routes.0", "op": "contains", "value": "b_to_a" },
+        { "path": "data.routes.0", "op": "contains", "value": "estimated_profit_a_to_b" },
+        { "path": "data.routes.0", "op": "contains", "value": "estimated_profit_b_to_a" }
+      ]
+    },
+    {
+      "name": "Recommendation response schema is discoverable",
+      "command": "system.describe_schema",
+      "user": "loop_player",
+      "data": { "name": "player.computer.trade_routes", "type": "event" },
+      "asserts": [
+        { "path": "data.schema.properties.routes.items.properties.estimated_profit_a_to_b.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.properties.routes.items.properties.port_a_name.type", "op": "==", "value": "string" }
+      ],
+      "expect": { "status": "ok" }
     }
   ]
 }

@@ -626,7 +626,7 @@ int db_ports_ban_player_in_cluster(db_t *db, int cluster_id, int player_id) {
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q31 */
-    const char *q31 = "UPDATE cluster_player_status SET banned=1 WHERE cluster_id={1} AND player_id={2} AND wanted_level >= 3";
+    const char *q31 = "UPDATE cluster_player_status SET banned=TRUE WHERE cluster_id={1} AND player_id={2} AND wanted_level >= 3";
     char sql[512]; sql_build(db, q31, sql, sizeof(sql));
     if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &err)) return 0;
     return -1;

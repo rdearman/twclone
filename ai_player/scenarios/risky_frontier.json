@@ -1,0 +1,25 @@
+{
+  "name": "risky_frontier",
+  "start_sector": 40,
+  "starting_credits": 800,
+  "holds": 4,
+  "max_shields": 100,
+  "turns": 18,
+  "adjacency": {
+    "40": [41, 42],
+    "41": [40, 43],
+    "42": [40, 44],
+    "43": [41, 44],
+    "44": [42, 43]
+  },
+  "explored_sectors": [40, 41],
+  "ports": {
+    "41": {"port_id": 1041, "commodities": {"ORG": {"buy": 80, "sell": 0}}},
+    "43": {"port_id": 1043, "commodities": {"ORG": {"buy": 0, "sell": 125}}},
+    "44": {"port_id": 1044, "commodities": {"ORG": {"buy": 0, "sell": 160}}}
+  },
+  "hazards": {
+    "42": [35, 55],
+    "44": [10, 20]
+  }
+}

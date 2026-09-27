@@ -2,6 +2,8 @@
 -- This MUST run AFTER clusters are generated (after 106_phase9_2_cluster_pressure.sql)
 -- Because illegal commodities should only be in evil cluster ports
 
+BEGIN;
+
 /*
  * Seed illegal goods for:
  * 1. ALL ports in evil clusters (alignment < -250)
@@ -60,3 +62,5 @@ BEGIN
     RAISE NOTICE 'Phase 10.7: Seeded illegal commodities in % evil cluster ports and % type-10 ports',
         evil_count, type10_count;
 END $$;
+
+COMMIT;

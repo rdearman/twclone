@@ -312,6 +312,13 @@
           }
         },
         {
+          "key": "?",
+          "label": "(?) Help for this menu",
+          "action": {
+            "pycall": "help_main"
+          }
+        },
+        {
           "key": "g",
           "label": "(G) Get game clock [debug: game.get_clock not implemented]",
           "action": {
@@ -399,6 +406,7 @@
               "command": "player.computer.recommend_routes",
               "data": {
                 "max_hops_between": "<prompt:int:Max hops between ports: [10]>",
+                "max_hops_from_player": "<prompt:int:Max hops from current sector: [20]>",
                 "require_two_way": "<prompt:bool:Require 2-way trade (y/n): [n]>",
                 "limit": "<prompt:int:Result limit: [10]>"
               }

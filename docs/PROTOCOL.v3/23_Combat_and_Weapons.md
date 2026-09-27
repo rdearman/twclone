@@ -6,9 +6,14 @@
 Attack another ship.
 **Args**: `{ "target_ship_id": 123, "weapon": "laser_mk1" }`
 
-### `combat.attack.planet`
-Attack a planet.
-**Events**: Emits `player.planet_attack.v1`.
+### `combat.attack_planet`
+Attack a planet in the current sector.
+**Args**: `{ "planet_id": 123 }`.
+**Response**: `combat.attack_planet` returns `planet_id`,
+`attacker_remaining_fighters`, `defender_remaining_fighters`, and `captured`.
+Successful attacks are recorded as `player.attack_planet.v1` with `planet_id`,
+`result`, `ship_loss`, and `planet_loss`; captures are recorded as
+`player.capture_planet.v1` with `planet_id` and `previous_owner`.
 
 ### `combat.attack.port`
 Attack a port.

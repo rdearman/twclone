@@ -284,6 +284,12 @@ load_sql_files_in_order (PGconn *app, const char *sql_dir)
 	  continue;
 	}
 
+      /* This seed depends on cluster_sectors, created after SQL loading. */
+      if (strcmp (entry->d_name, "107_seed_illegal_commodities.sql") == 0)
+	{
+	  continue;
+	}
+
       if (file_count >= capacity)
 	{
 	  capacity = capacity ? capacity * 2 : 10;
@@ -1262,7 +1268,39 @@ main (int argc, char **argv)
 	    "sync_planet_id_sequence");
 
   // Create clusters AFTER faction homeworlds are set up
-  exec_sql (app, "SELECT generate_clusters_v2(50)", "generate_clusters");
+  if (exec_sql (app, "SELECT generate_clusters_v2(50)", "generate_clusters") != 0)
+    {
+      PQfinish (app);
+      if (jcfg)
+	{
+	  json_decref (jcfg);
+	}
+      free (admin_cs);
+      free (db_name);
+      free (app_cs_tmpl);
+      free (sql_dir);
+      return 2;
+    }
+
+  /* The illegal stock seed depends on generated cluster alignment/membership. */
+  char illegal_stock_path[2048];
+  snprintf (illegal_stock_path, sizeof (illegal_stock_path),
+	    "%s/%s", sql_dir, "107_seed_illegal_commodities.sql");
+  printf ("BIGBANG: Applying 107_seed_illegal_commodities.sql after clusters...\n");
+  if (apply_file (app, illegal_stock_path) != 0)
+    {
+      fprintf (stderr, "ERROR: failed to seed illegal port stock after cluster generation.\n");
+      PQfinish (app);
+      if (jcfg)
+	{
+	  json_decref (jcfg);
+	}
+      free (admin_cs);
+      free (db_name);
+      free (app_cs_tmpl);
+      free (sql_dir);
+      return 2;
+    }
   
   // Spawn Orion trader fleet AFTER clusters are created
   exec_sql (app, "SELECT spawn_orion_fleet()", "spawn_orion_fleet");

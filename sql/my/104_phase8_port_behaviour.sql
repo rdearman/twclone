@@ -4,7 +4,7 @@
 -- Table: porttype_rules
 CREATE TABLE IF NOT EXISTS porttype_rules (
     porttype_rule_id int AUTO_INCREMENT PRIMARY KEY,
-    porttype_id int NOT NULL,
+    porttype_id BIGINT NOT NULL,
     allow_illegal boolean NOT NULL DEFAULT FALSE,
     min_alignment int DEFAULT NULL,
     max_alignment int DEFAULT NULL,
@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS porttype_rules (
 -- Table: porttype_commodity_rules
 CREATE TABLE IF NOT EXISTS porttype_commodity_rules (
     porttype_commodity_rule_id int AUTO_INCREMENT PRIMARY KEY,
-    porttype_id int NOT NULL,
-    commodity_code varchar(10) NOT NULL,
+    porttype_id BIGINT NOT NULL,
+    commodity_code VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     can_buy boolean NOT NULL DEFAULT TRUE,
     can_sell boolean NOT NULL DEFAULT TRUE,
     base_price_mul int NOT NULL DEFAULT 100,
@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS porttype_commodity_rules (
 -- Table: porttype_cluster_modifiers
 CREATE TABLE IF NOT EXISTS porttype_cluster_modifiers (
     porttype_cluster_modifier_id int AUTO_INCREMENT PRIMARY KEY,
-    porttype_id int NOT NULL,
-    cluster_id int NOT NULL,
+    porttype_id BIGINT NOT NULL,
+    cluster_id BIGINT NOT NULL,
     price_mul int NOT NULL DEFAULT 100,
     contraband_price_mul int NOT NULL DEFAULT 100,
     notes text,
@@ -47,12 +47,61 @@ CREATE TABLE IF NOT EXISTS porttype_cluster_modifiers (
     CONSTRAINT unique_porttype_cluster UNIQUE (porttype_id, cluster_id)
 );
 
--- Indexes for frequent lookups
-CREATE INDEX idx_porttype_commodity_rules_porttype_id ON porttype_commodity_rules (porttype_id);
-CREATE INDEX idx_porttype_commodity_rules_commodity_code ON porttype_commodity_rules (commodity_code);
-CREATE INDEX idx_porttype_cluster_modifiers_porttype_id ON porttype_cluster_modifiers (porttype_id);
-CREATE INDEX idx_porttype_cluster_modifiers_cluster_id ON porttype_cluster_modifiers (cluster_id);
-CREATE INDEX idx_porttype_rules_porttype_id ON porttype_rules (porttype_id);
+-- Index creation is guarded because MySQL DDL commits independently.
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'porttype_commodity_rules'
+    AND INDEX_NAME = 'idx_porttype_commodity_rules_porttype_id'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_porttype_commodity_rules_porttype_id ON porttype_commodity_rules (porttype_id)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'porttype_commodity_rules'
+    AND INDEX_NAME = 'idx_porttype_commodity_rules_commodity_code'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_porttype_commodity_rules_commodity_code ON porttype_commodity_rules (commodity_code)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'porttype_cluster_modifiers'
+    AND INDEX_NAME = 'idx_porttype_cluster_modifiers_porttype_id'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_porttype_cluster_modifiers_porttype_id ON porttype_cluster_modifiers (porttype_id)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'porttype_cluster_modifiers'
+    AND INDEX_NAME = 'idx_porttype_cluster_modifiers_cluster_id'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_porttype_cluster_modifiers_cluster_id ON porttype_cluster_modifiers (cluster_id)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'porttype_rules'
+    AND INDEX_NAME = 'idx_porttype_rules_porttype_id'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_porttype_rules_porttype_id ON porttype_rules (porttype_id)', 'SELECT 1');
+PREPARE migration_index_stmt FROM @index_ddl;
+EXECUTE migration_index_stmt;
+DEALLOCATE PREPARE migration_index_stmt;
 
 -- Seed defaults for existing port types (MySQL-style)
 INSERT INTO porttype_rules (porttype_id, allow_illegal, min_alignment, max_alignment, notes)

@@ -14,6 +14,7 @@
 
 /* local includes */
 #include "server_universe.h"
+#include "server_autopilot.h"
 #include "server_ports.h"
 #include "db/repo/repo_database.h"
 #include "game_db.h"
@@ -974,6 +975,12 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
       LOGD ("Player %d warped from %d to %d", ctx->player_id, ctx->sector_id, to);
       ctx->sector_id = to;
+      if (server_autopilot_on_warp (db, ctx->player_id, to) != 0)
+	{
+	  /* Warp is already authoritative; status reconciliation can repair this. */
+	  LOGE ("Failed to advance autopilot route for player %d after warp",
+		ctx->player_id);
+	}
 
       /* Canon #471: Sector assets engage on entry */
       if (server_combat_apply_entry_hazards (db, ctx, to))

@@ -2,6 +2,8 @@
 -- Extend hardware_items with legality and alignment gates
 -- Add porttype_items mapping for availability configuration
 
+BEGIN;
+
 -- Extend hardware_items table with legality and alignment gates
 ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS is_illegal BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE hardware_items ADD COLUMN IF NOT EXISTS min_alignment INTEGER DEFAULT NULL;
@@ -39,3 +41,5 @@ WHERE NOT EXISTS (
     AND pi.hardware_items_id = hi.hardware_items_id
 )
 ON CONFLICT (porttype_id, hardware_items_id) DO NOTHING;
+
+COMMIT;

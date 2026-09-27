@@ -6,7 +6,7 @@
 
 int repo_comm_create_system_notice(db_t *db, int64_t created_at, const char *title, const char *body, const char *severity, int64_t expires_at, int64_t *new_id_out);
 int repo_comm_delete_system_notice(db_t *db, int notice_id);
-db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, int include_expired, int limit, db_error_t *err);
+db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, int include_expired, int limit, const char *cursor_ts, int64_t cursor_id, db_error_t *err);
 int repo_comm_mark_notice_seen(db_t *db, int notice_id, int player_id, int64_t seen_at);
 int repo_comm_get_player_id_by_name(db_t *db, const char *name, int *player_id_out);
 int repo_comm_check_player_blocked(db_t *db, int blocker_id, int blocked_id, int *is_blocked_out);

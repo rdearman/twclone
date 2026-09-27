@@ -18,7 +18,8 @@ Server inserts these when player actions occur. Engine consumes them.
 *   **`player.dock.v1`**: `{ player_id, sector_id, port_id }`
 *   **`player.trade.v1`**: `{ player_id, port_id, cargo_id, quantity, credits_change, type }`
 *   **`player.mine.v1`**: `{ player_id, sector_id, cargo_id, quantity }`
-*   **`player.corp_join.v1`**: `{ player_id, corp_id }`
+*   **`player.corp_join.v1`** (planned; not currently emitted):
+    `{ player_id, corp_id }`
 *   **`player.planet_transfer.v1`**: `{ player_id, planet_id, cargo_id, quantity, type }`
 *   **`player.planet_attack.v1`**: `{ player_id, planet_id, damage_dealt, capture_attempt }`
 *   **`player.port_strike.v1`**: `{ player_id, port_id, damage_dealt }`

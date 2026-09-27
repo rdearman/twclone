@@ -7,6 +7,11 @@ Dock at a port in the current sector.
 **Events**: Emits `player.dock.v1`.
 **Note**: Often implies a check for `sector.info` or `port.info`.
 
+### `dock.status`
+Read or change the active ship's docked state at the port in the current
+sector. An empty data object reads the current state; use
+`{ "action": "dock" }` or `{ "action": "undock" }` to change it.
+
 ### `trade.buy` / `trade.sell`
 Trade commodities.
 

@@ -33,20 +33,21 @@ int repo_comm_delete_system_notice(db_t *db, int notice_id) {
     return 0;
 }
 
-db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, int include_expired, int limit, db_error_t *err) {
-    char sql[512];
+db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, int include_expired, int limit, const char *cursor_ts, int64_t cursor_id, db_error_t *err) {
+    char sql[768];
     /* SQL_VERBATIM: Q2 */
-    char sql_tmpl[512];
+    char sql_tmpl[768];
     snprintf(sql_tmpl, sizeof(sql_tmpl),
         "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
         "FROM system_notice n "
         "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = {1} "
         "WHERE ({2} = 1 OR n.expires_at IS NULL OR n.expires_at > %s) "
-        "ORDER BY n.created_at DESC LIMIT {3};",
+        "AND ({4} = 0 OR n.created_at < {5} OR (n.created_at = {5} AND n.system_notice_id < {6})) "
+        "ORDER BY n.created_at DESC, n.system_notice_id DESC LIMIT {3};",
         now_expr);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
     db_res_t *res = NULL;
-    db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(include_expired), db_bind_i64(limit) }, 3, &res, err);
+    db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(include_expired), db_bind_i64(limit), db_bind_i64(cursor_id > 0), db_bind_timestamp_native(cursor_ts), db_bind_i64(cursor_id) }, 6, &res, err);
     return res;
 }
 
@@ -143,7 +144,7 @@ db_res_t* repo_comm_list_inbox(db_t *db, int recipient_id, int after_id, int lim
     /* SQL_VERBATIM: Q9 */
     const char *q9 = "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.sent_at, m.read_at "
     "FROM mail m JOIN players p ON m.sender_id = p.player_id "
-    "WHERE m.recipient_id={1} AND m.deleted=0 AND m.archived=0 "
+    "WHERE m.recipient_id={1} AND m.deleted=FALSE AND m.archived=FALSE "
     "  AND ({2}=0 OR m.mail_id<{2}) " "ORDER BY m.mail_id DESC " "LIMIT {3};";
     sql_build(db, q9, sql, sizeof(sql));
     db_res_t *res = NULL;
@@ -155,7 +156,7 @@ db_res_t* repo_comm_get_mail_details(db_t *db, int mail_id, int recipient_id, db
     char sql[512];
     /* SQL_VERBATIM: Q10 */
     const char *q10 = "SELECT m.mail_id, m.thread_id, m.sender_id, p.name, m.subject, m.body, m.sent_at, m.read_at "
-    "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id={1} AND m.recipient_id={2} AND m.deleted=0;";
+    "FROM mail m JOIN players p ON m.sender_id = p.player_id WHERE m.mail_id={1} AND m.recipient_id={2} AND m.deleted=FALSE;";
     sql_build(db, q10, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i64(mail_id), db_bind_i64(recipient_id) }, 2, &res, err);
@@ -177,7 +178,7 @@ int repo_comm_delete_mail_bulk(db_t *db, int recipient_id, const int *mail_ids, 
     char sql[4096];
     char *p = sql;
     /* SQL_VERBATIM: Q12 */
-    p += snprintf (p, sizeof (sql), "UPDATE mail SET deleted=1 WHERE recipient_id={1} AND mail_id IN (");
+    p += snprintf (p, sizeof (sql), "UPDATE mail SET deleted=TRUE WHERE recipient_id={1} AND mail_id IN (");
     for (int i = 0; i < n_ids; i++) {
         p += snprintf (p, (size_t) (sql + sizeof (sql) - p), (i ? ",{%d}" : "{%d}"), i + 2);
     }

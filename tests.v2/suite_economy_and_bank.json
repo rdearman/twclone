@@ -37,6 +37,13 @@
       "expect": { "error_code": 1403 }
     },
     {
+      "name": "Bank Deposit rejects non-positive amount",
+      "command": "bank.deposit",
+      "data": { "amount": 0 },
+      "user": "bank_user",
+      "expect": { "status": "error", "error_code": 405 }
+    },
+    {
       "name": "Bank Withdraw (Success)",
       "command": "bank.withdraw",
       "data": { "amount": 50 },
@@ -49,6 +56,13 @@
       "data": { "amount": 1000000 },
       "user": "bank_user",
       "expect": { "error_code": 1403 }
+    },
+    {
+      "name": "Bank Withdraw rejects non-positive amount",
+      "command": "bank.withdraw",
+      "data": { "amount": 0 },
+      "user": "bank_user",
+      "expect": { "status": "error", "error_code": 400 }
     },
     {
       "name": "Bank Transfer (Success)",
@@ -65,9 +79,50 @@
       "expect": { "error_code": 1403 }
     },
     {
+      "name": "Bank Transfer rejects non-positive amount",
+      "command": "bank.transfer",
+      "data": { "recipient_id": "@bank_target_player_id", "amount": 0 },
+      "user": "bank_user",
+      "expect": { "status": "error", "error_code": 400 }
+    },
+    {
       "name": "Bank History",
       "command": "bank.history",
       "user": "bank_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Bank transfer request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "bank.transfer", "type": "command" },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.schema.properties.amount.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.properties.to_player_id.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.properties.recipient_id.type", "op": "==", "value": "integer" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Bank deposit request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "bank.deposit", "type": "command" },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.schema.properties.amount.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.required.0", "op": "==", "value": "amount" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Bank withdraw request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "bank.withdraw", "type": "command" },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.schema.properties.amount.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.required.0", "op": "==", "value": "amount" }
+      ],
       "expect": { "status": "ok" }
     }
   ]

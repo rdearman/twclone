@@ -54,6 +54,46 @@
       "data": { "recipient_type": "corp", "recipient_id": "@corp_id", "amount": 100 },
       "user": "ceo_user",
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Corp statement rejects non-positive limit",
+      "command": "corp.statement",
+      "data": { "limit": 0 },
+      "user": "ceo_user",
+      "expect": { "status": "error", "error_code": 400 }
+    },
+    {
+      "name": "Corp create request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "corp.create", "type": "command" },
+      "user": "ceo_user",
+      "asserts": [
+        { "path": "data.schema.properties.name.type", "op": "==", "value": "string" },
+        { "path": "data.schema.required.0", "op": "==", "value": "name" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Corp deposit request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "corp.deposit", "type": "command" },
+      "user": "ceo_user",
+      "asserts": [
+        { "path": "data.schema.properties.amount.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.required.0", "op": "==", "value": "amount" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Corp roster request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "corp.roster", "type": "command" },
+      "user": "ceo_user",
+      "asserts": [
+        { "path": "data.schema.properties.corp_id.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.required.0", "op": "==", "value": "corp_id" }
+      ],
+      "expect": { "status": "ok" }
     }
   ]
 }

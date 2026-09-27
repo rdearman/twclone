@@ -1,6 +1,8 @@
 -- Phase 9.2: Cluster Commodity Pressure
 -- Add cluster-level market pressure tracking for dynamic pricing
 
+BEGIN;
+
 -- Track pressure and rolling volume at the cluster level for each commodity
 CREATE TABLE IF NOT EXISTS cluster_commodity_pressure (
     cluster_id BIGINT NOT NULL,
@@ -19,3 +21,5 @@ CREATE INDEX IF NOT EXISTS idx_cluster_pressure_updated ON cluster_commodity_pre
 
 -- Seed: Initialize rows lazily (via application logic), no pre-population needed
 -- When a trade occurs in a cluster, application creates row on demand
+
+COMMIT;

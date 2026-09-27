@@ -1,0 +1,108 @@
+{
+  "name": "Movement Autopilot Route Controls",
+  "tests": [
+    {
+      "name": "Setup: mover_autopilot",
+      "setup": "macro_auth_user",
+      "username": "mover_autopilot",
+      "password": "password"
+    },
+    {
+      "name": "Start a persisted route",
+      "command": "move.autopilot.start",
+      "user": "mover_autopilot",
+      "data": { "to_sector_id": 10 },
+      "save": { "@next_hop": "data.path.1" },
+      "asserts": [
+        { "path": "data.path.0", "op": "==", "value": 1 },
+        { "path": "data.from_sector_id", "op": "==", "value": 1 }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Route survives a fresh login",
+      "command": "auth.login",
+      "user": "mover_autopilot",
+      "data": { "username": "mover_autopilot", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Status resumes the saved route",
+      "command": "move.autopilot.status",
+      "user": "mover_autopilot",
+      "asserts": [
+        { "path": "data.state", "op": "==", "value": "running" },
+        { "path": "data.next_sector_id", "op": "==", "value": "@next_hop" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Express mode is acknowledged",
+      "command": "move.autopilot.control",
+      "user": "mover_autopilot",
+      "data": { "action": "express" },
+      "asserts": [
+        { "path": "data.action", "op": "==", "value": "express" },
+        { "path": "data.state", "op": "==", "value": "running" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Stop at the next successful warp",
+      "command": "move.autopilot.control",
+      "user": "mover_autopilot",
+      "data": { "action": "stop_at_next" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "The next route hop uses the normal warp API",
+      "command": "move.warp",
+      "user": "mover_autopilot",
+      "data": { "to_sector_id": "@next_hop" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Stop-at-next is persisted after warp",
+      "command": "move.autopilot.status",
+      "user": "mover_autopilot",
+      "asserts": [
+        { "path": "data.state", "op": "==", "value": "stopped" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Continue resumes from the reconciled cursor",
+      "command": "move.autopilot.control",
+      "user": "mover_autopilot",
+      "data": { "action": "continue" },
+      "asserts": [
+        { "path": "data.action", "op": "==", "value": "continue" },
+        { "path": "data.state", "op": "==", "value": "running" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Immediate stop remains available",
+      "command": "move.autopilot.stop",
+      "user": "mover_autopilot",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Unauthenticated control is rejected",
+      "command": "move.autopilot.control",
+      "data": { "action": "continue" },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Control response schema is discoverable",
+      "command": "system.describe_schema",
+      "user": "mover_autopilot",
+      "data": { "name": "move.autopilot.controlled_v1", "type": "event" },
+      "asserts": [
+        { "path": "data.schema.properties.action.type", "op": "==", "value": "string" },
+        { "path": "data.schema.properties.next_sector_id.type", "op": "==", "value": "integer" }
+      ],
+      "expect": { "status": "ok" }
+    }
+  ]
+}

@@ -92,6 +92,9 @@ build_capabilities (void)
   json_object_set_new (features, "sector.describe", json_true ());
   json_object_set_new (features, "trade.buy", json_true ());
   json_object_set_new (features, "server_autopilot", json_false ());
+  json_object_set_new (features, "autopilot.route_control", json_true ());
+  json_object_set_new (features, "ship.tow.status", json_true ());
+  json_object_set_new (features, "trade.route_profit_hints", json_true ());
   json_object_set_new (g_capabilities, "features", features);
   json_object_set_new (g_capabilities, "version",
 		       json_string ("1.0.0-alpha"));

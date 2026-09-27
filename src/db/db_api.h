@@ -182,7 +182,8 @@ typedef enum
   DB_BIND_TEXT,             // UTF-8, NUL-terminated string
   DB_BIND_JSON,             // JSON string (driver may use native JSON types)
   DB_BIND_BLOB,             // Binary data
-  DB_BIND_TIMESTAMP         // 64-bit epoch -> ISO-8601 UTC string
+  DB_BIND_TIMESTAMP,        // 64-bit epoch -> ISO-8601 UTC string
+  DB_BIND_TIMESTAMP_NATIVE  // Native timestamp text (preserves DB precision)
 } db_bind_type_t;
 
 // Structure for a single parameter to be bound to a query
@@ -221,6 +222,7 @@ static inline db_bind_t db_bind_i32  (int32_t x) { db_bind_t b = { .type = DB_BI
 static inline db_bind_t db_bind_u32  (uint32_t x) { db_bind_t b = { .type = DB_BIND_U32, .v.u32 = x }; return b; }
 static inline db_bind_t db_bind_bool (bool x) { db_bind_t b = { .type = DB_BIND_BOOL, .v.b = x }; return b; }
 static inline db_bind_t db_bind_timestamp_text (int64_t x) { db_bind_t b = { .type = DB_BIND_TIMESTAMP, .v.timestamp = x }; return b; }
+static inline db_bind_t db_bind_timestamp_native (const char *s) { db_bind_t b = { .type = DB_BIND_TIMESTAMP_NATIVE, .v.text = { .ptr = s, .len = 0 } }; return b; }
 
 static inline db_bind_t
 db_bind_text (const char *s)

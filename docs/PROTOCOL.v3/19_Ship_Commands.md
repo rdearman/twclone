@@ -44,6 +44,37 @@ Get detailed status of the player's current ship, including cargo.
 - Possible commodities: `ORE`, `EQU`, `ORG`, `COL`, `SLV`, `DRG`, `WPN`
 - Empty cargo holds are not included in the array
 
+## 2. Towing status
+
+### `ship.tow.status`
+Returns the towing links for the authenticated player's active ship without
+changing them. This is safe to call after reconnecting and is the canonical way
+to reconcile towing state.
+
+**Request**: `{}`
+
+**Response type**: `ship.tow.status`
+
+```json
+{
+  "ship_id": 5,
+  "towing_ship_id": 12,
+  "towed_by_ship_id": null
+}
+```
+
+`towing_ship_id` is the ship being towed by the active ship; `towed_by_ship_id`
+is the ship towing the active ship. Each field is `null` when the relationship
+is absent. Existing `ship.tow` engage/disengage requests and response types
+are unchanged.
+
+### `ship.tow`
+Engage a tow using `{ "target_ship_id": 12 }`. When already towing, omit
+`target_ship_id` (or send the current target) to disengage. The response is
+`ship.tow.engaged` or `ship.tow.disengaged`, with `status` and
+`towee_ship_id`. Target ships must be in the same sector, owned by the player
+or their corporation, and not currently piloted or towed.
+
 ### `ship.info` (Deprecated)
 **Legacy alias** for `ship.status`. Use `ship.status` instead.
 
@@ -71,6 +102,18 @@ Dump cargo into space.
 
 ### `ship.self_destruct`
 Destroy your own ship (irreversible).
+
+### `shipyard.list`
+With no arguments, list hulls available at the shipyard where the player is
+docked. The `shipyard.list_v1` response includes `sector_id`, `is_shipyard`,
+`current_ship` (`type`, `base_price`, `trade_in_value`), and an `available`
+array with each hull's prices, eligibility, and any restriction reasons.
+
+### `shipyard.upgrade`
+Upgrade the active ship while docked at a shipyard. Args:
+`{ "new_type_id": 2, "new_ship_name": "Merchant Vessel" }`.
+On success, `shipyard.upgraded_v1` acknowledges `ship_id`, `new_type_id`,
+`new_ship_name`, and `credits_spent`. Failures retain the existing error codes.
 
 ---
 

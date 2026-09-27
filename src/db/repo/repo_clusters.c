@@ -319,7 +319,7 @@ int repo_clusters_upsert_port_stock(db_t *db, int port_id, const char *commodity
 int repo_clusters_check_incident_active(db_t *db, int cluster_id, int player_id, int *has_incident_out) {
     db_res_t *res = NULL;
     db_error_t err;
-    const char *q = "SELECT (suspicion > 0 OR wanted_level > 0 OR banned = 1) FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+    const char *q = "SELECT (suspicion > 0 OR wanted_level > 0 OR banned = TRUE) FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
     char sql[512]; sql_build(db, q, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
         if (db_res_step (res, &err)) {
@@ -366,7 +366,7 @@ int repo_clusters_promote_wanted_from_suspicion(db_t *db, int cluster_id, int pl
 
 int repo_clusters_clear_incident_state(db_t *db, int cluster_id, int player_id) {
     db_error_t err;
-    const char *q = "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 0, banned = 0 WHERE cluster_id = {1} AND player_id = {2}";
+    const char *q = "UPDATE cluster_player_status SET suspicion = 0, wanted_level = 0, banned = FALSE WHERE cluster_id = {1} AND player_id = {2}";
     char sql[512]; sql_build(db, q, sql, sizeof(sql));
     if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &err)) {
         return err.code;

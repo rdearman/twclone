@@ -2,7 +2,9 @@
 -- Create porttypes table and migrate ports to use it
 
 -- Create porttypes table
-CREATE TABLE porttypes (
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS porttypes (
     porttype_id serial PRIMARY KEY,
     code text NOT NULL UNIQUE,
     description text,
@@ -23,8 +25,19 @@ VALUES
 ON CONFLICT (code) DO NOTHING;
 
 -- Add foreign key constraint to porttype_id (column already exists from 000_tables.sql)
-ALTER TABLE ports ADD CONSTRAINT fk_ports_porttype
-    FOREIGN KEY (porttype_id) REFERENCES porttypes (porttype_id) ON DELETE SET NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'ports'::regclass
+          AND conname = 'fk_ports_porttype'
+    ) THEN
+        ALTER TABLE ports ADD CONSTRAINT fk_ports_porttype
+            FOREIGN KEY (porttype_id) REFERENCES porttypes (porttype_id) ON DELETE SET NULL;
+    END IF;
+END;
+$$;
 
 -- Backfill porttype_id from existing type values
 UPDATE ports
@@ -45,3 +58,5 @@ WHERE porttype_id IS NULL;
 -- Add index for frequent lookups
 CREATE INDEX IF NOT EXISTS idx_ports_porttype_id ON ports (porttype_id);
 CREATE INDEX IF NOT EXISTS idx_porttypes_code ON porttypes (code);
+
+COMMIT;

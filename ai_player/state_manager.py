@@ -1,7 +1,9 @@
 import json
 import os
+import tempfile
 import time
 import logging
+import hashlib
 from helpers import canon_commodity
 
 
@@ -38,7 +40,28 @@ class StateManager:
             "last_quotes": {},          # NEW: Deterministic trade rule support
             "command_sent_in_response_loop": False, # NEW: To prevent double-sending
             "last_port_trade": None,    # NEW: To prevent immediate buy-back or sell-back
+            "server_events": [],       # Bounded event history for strategy/recovery
+            "seen_server_event_ids": [],
+            "event_refresh_requests": [],
+            "market_recommendations": [],
+            "market_recommendations_refreshed_at": 0,
+            "autopilot_status": None,
+            "autopilot_status_checked": False,
+            "ai_metrics": {
+                "commands_sent": 0,
+                "commands_succeeded": 0,
+                "commands_refused": 0,
+                "commands_timed_out": 0,
+                "trade_profit_credits": 0,
+                "trade_sales": 0,
+                "planned_route_hops": 0,
+                "completed_warps": 0,
+                "reconnects": 0,
+                "events_seen": 0,
+                "duplicate_events_ignored": 0,
+            },
         }
+        self._pending_command_times = {}
         self.load_state()
 
     def load_state(self):
@@ -58,6 +81,8 @@ class StateManager:
                     self.state["command_sent_in_response_loop"] = False
                     self.state["current_path"] = [] 
                     self.state["last_action_result"] = None 
+                    self.state["event_refresh_requests"] = []
+                    self.state["autopilot_status"] = None
                     
                     # Persistent fields that MUST NOT be reset
                     # - strategy_plan
@@ -79,11 +104,27 @@ class StateManager:
 
     def save_state(self):
         """Saves the current state to the state file."""
+        temporary_path = None
         try:
-            with open(self.state_file, 'w') as f:
+            target_path = os.path.abspath(self.state_file)
+            target_dir = os.path.dirname(target_path)
+            prefix = f".{os.path.basename(target_path)}."
+            file_descriptor, temporary_path = tempfile.mkstemp(
+                prefix=prefix, suffix=".tmp", dir=target_dir
+            )
+            with os.fdopen(file_descriptor, 'w', encoding='utf-8') as f:
                 json.dump(self.state, f, indent=4)
-        except IOError as e:
-            logger.error(f"Failed to save state to %s: %s", self.state_file, e)
+                f.flush()
+            os.replace(temporary_path, target_path)
+            temporary_path = None
+        except (OSError, TypeError, ValueError) as e:
+            logger.error("Failed to save state to %s: %s", self.state_file, e)
+        finally:
+            if temporary_path:
+                try:
+                    os.unlink(temporary_path)
+                except OSError:
+                    pass
 
     def get(self, key, default=None):
         """Gets a value from the state."""
@@ -312,6 +353,7 @@ class StateManager:
         # Update price for the specific commodity
         self.state["price_cache"][port_id]["buy"][commodity] = quote_data.get("buy_price")
         self.state["price_cache"][port_id]["sell"][commodity] = quote_data.get("sell_price")
+        self.state["price_cache"][port_id].setdefault("quoted_at", {})[commodity] = time.time()
             
         self.save_state()
 
@@ -565,6 +607,7 @@ class StateManager:
     def add_pending_command(self, request_id, command):
         """Adds a sent command to the pending dictionary."""
         self.state["pending_commands"][request_id] = command
+        self._pending_command_times[request_id] = time.monotonic()
         # This state is transient, so we don't save to disk.
 
     def get_pending_command(self, request_id):
@@ -575,6 +618,96 @@ class StateManager:
         """Removes a command from the pending dictionary."""
         if request_id in self.state.get("pending_commands", {}):
             del self.state["pending_commands"][request_id]
+        self._pending_command_times.pop(request_id, None)
+
+    def expire_pending_commands(self, timeout_seconds):
+        """Remove and return requests that have not received a reply in time."""
+        now = time.monotonic()
+        expired_ids = [
+            request_id for request_id, sent_at in self._pending_command_times.items()
+            if now - sent_at >= timeout_seconds
+        ]
+        expired = []
+        for request_id in expired_ids:
+            command = self.state.get("pending_commands", {}).pop(request_id, None)
+            self._pending_command_times.pop(request_id, None)
+            if command is not None:
+                expired.append((request_id, command))
+        return expired
+
+    def clear_connection_state(self):
+        """Drop connection-scoped state and require authoritative re-hydration."""
+        self.state["session_id"] = None
+        self.state["pending_commands"] = {}
+        self._pending_command_times.clear()
+        self.state["pending_schema_requests"] = {}
+        self.state["player_info"] = None
+        self.state["ship_info"] = None
+        self.state["player_location_sector"] = None
+        self.state["current_path"] = []
+        self.state["autopilot_status"] = None
+        self.state["autopilot_status_checked"] = False
+        self.state["strategy_plan"] = []
+        self.state["needs_bootstrap"] = True
+        self.record_ai_metric("reconnects")
+        self.save_state()
+
+    def record_ai_metric(self, name, amount=1):
+        metrics = self.state.setdefault("ai_metrics", {})
+        metrics[name] = metrics.get(name, 0) + amount
+        self.save_state()
+
+    def ingest_server_event(self, envelope):
+        """Record an unsolicited event once and queue refreshes for affected state."""
+        event_type = str(envelope.get("event") or envelope.get("type") or "unknown")
+        data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+        event_id = envelope.get("id")
+        if event_id is None:
+            identity = json.dumps(
+                {"type": event_type, "ts": envelope.get("ts"), "data": data},
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+            event_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        event_id = str(event_id)
+        seen = self.state.setdefault("seen_server_event_ids", [])
+        if event_id in seen:
+            self.record_ai_metric("duplicate_events_ignored")
+            return False
+        seen.append(event_id)
+        del seen[:-256]
+
+        history = self.state.setdefault("server_events", [])
+        history.append({"id": event_id, "type": event_type, "ts": envelope.get("ts"), "data": data})
+        del history[:-100]
+        self.record_ai_metric("events_seen")
+
+        refreshes = self.state.setdefault("event_refresh_requests", [])
+        current_sector = self.state.get("player_location_sector")
+        event_sector = data.get("sector_id", data.get("new_sector"))
+        if event_type.startswith("combat."):
+            for command in ("combat.status", "ship.info"):
+                if command not in refreshes:
+                    refreshes.append(command)
+        elif event_type.startswith("sector.") and event_sector is not None:
+            if str(event_sector) == str(current_sector):
+                cached_sector = self.state.get("sector_data", {}).get(str(current_sector))
+                if isinstance(cached_sector, dict):
+                    cached_sector["_last_refreshed"] = 0
+                if "sector.info" not in refreshes:
+                    refreshes.append("sector.info")
+
+        self.save_state()
+        return True
+
+    def take_event_refresh_request(self):
+        queue = self.state.setdefault("event_refresh_requests", [])
+        if not queue:
+            return None
+        command = queue.pop(0)
+        self.save_state()
+        return command
 
     def add_to_port_trade_blacklist(self, port_id):
         """Adds a port to the trade blacklist."""

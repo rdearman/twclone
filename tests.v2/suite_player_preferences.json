@@ -12,14 +12,202 @@
       "name": "player.get_prefs - Get all preferences",
       "command": "player.get_prefs",
       "user": "pref_user",
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
     },
     {
       "name": "player.set_prefs - Set language preference",
       "command": "player.set_prefs",
-      "data": { "lang": "en" },
+      "data": {
+        "lang": "en"
+      },
       "user": "pref_user",
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "player.set_prefs - Set v3 preference item",
+      "command": "player.set_prefs",
+      "data": {
+        "items": [
+          {
+            "key": "ui_theme",
+            "type": "string",
+            "value": "dark"
+          }
+        ]
+      },
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "player.get_prefs - Read both preference forms",
+      "command": "player.get_prefs",
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.prefs.lang",
+          "op": "==",
+          "value": "en"
+        },
+        {
+          "path": "data.prefs.ui_theme",
+          "op": "==",
+          "value": "dark"
+        }
+      ]
+    },
+    {
+      "name": "player.set_topics accepts compatibility topics field",
+      "command": "player.set_topics",
+      "data": {
+        "topics": [
+          "player.attacked"
+        ]
+      },
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "player.set_subscriptions accepts canonical field",
+      "command": "player.set_subscriptions",
+      "data": {
+        "subscriptions": [
+          {
+            "topic": "system.notice"
+          }
+        ]
+      },
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "player.get_subscriptions returns current subscriptions",
+      "command": "player.get_subscriptions",
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.topics",
+          "op": "contains",
+          "value": "player.attacked"
+        },
+        {
+          "path": "data.topics",
+          "op": "contains",
+          "value": "system.notice"
+        }
+      ]
+    },
+    {
+      "name": "player.set_prefs request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": {
+        "name": "player.set_prefs",
+        "type": "command"
+      },
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.schema.properties.items.type",
+          "op": "==",
+          "value": "array"
+        }
+      ]
+    },
+    {
+      "name": "player.set_topics request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": {
+        "name": "player.set_topics",
+        "type": "command"
+      },
+      "user": "pref_user",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.schema.properties.topics.type",
+          "op": "==",
+          "value": "array"
+        },
+        {
+          "path": "data.schema.properties.subscriptions.type",
+          "op": "==",
+          "value": "array"
+        }
+      ]
+    },
+    {
+      "name": "move.transwarp compatibility request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "move.transwarp", "type": "command" },
+      "user": "pref_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.to_sector_id.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.properties.sector_id.type", "op": "==", "value": "integer" }
+      ]
+    },
+    {
+      "name": "dock.status request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "dock.status", "type": "command" },
+      "user": "pref_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.action.type", "op": "==", "value": "string" }
+      ]
+    },
+    {
+      "name": "news feed command schemas are discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "news.get_feed", "type": "command" },
+      "user": "pref_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.type", "op": "==", "value": "object" }
+      ]
+    },
+    {
+      "name": "shipyard upgrade request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "shipyard.upgrade", "type": "command" },
+      "user": "pref_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.new_type_id.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.required.0", "op": "==", "value": "new_type_id" },
+        { "path": "data.schema.required.1", "op": "==", "value": "new_ship_name" }
+      ]
+    },
+    {
+      "name": "shipyard list response schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "shipyard.list_v1", "type": "event" },
+      "user": "pref_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.current_ship.type", "op": "==", "value": "object" },
+        { "path": "data.schema.properties.available.type", "op": "==", "value": "array" }
+      ]
     }
   ]
 }

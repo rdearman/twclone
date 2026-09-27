@@ -55,6 +55,9 @@ int db_note_list (db_t *db, int64_t player_id, const char *scope_or_null,
 typedef int (*player_id_cb) (int player_id, void *arg);
 int db_for_each_subscriber (db_t *db,  const char *event_type,
                             player_id_cb cb, void *arg);
+int db_for_each_scoped_subscriber (db_t *db, const char *scope_topic,
+                                   const char *event_type,
+                                   player_id_cb cb, void *arg);
 
 int db_prefs_get_all (db_t *db, int64_t player_id, /*out */ db_res_t **it);
 int db_prefs_get_one (db_t *db,

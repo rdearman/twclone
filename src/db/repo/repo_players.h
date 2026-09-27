@@ -41,10 +41,17 @@ typedef struct {
     int port_b_id;
     int sector_a_id;
     int sector_b_id;
+    int approach_sector_id;
+    char *port_a_name;
+    char *port_b_name;
     char *commodity;
     int hops_between;
     int hops_from_player;
     int is_two_way;
+    int a_to_b;
+    int b_to_a;
+    int estimated_profit_a_to_b;
+    int estimated_profit_b_to_a;
 } trade_route_t;
 
 int repo_players_record_port_knowledge(db_t *db, int player_id, int port_id);

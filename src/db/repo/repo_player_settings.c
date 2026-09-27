@@ -326,34 +326,84 @@ db_note_list (db_t *db, int64_t pid, const char *scope, db_res_t **it)
 }
 
 
-int
-db_for_each_subscriber (db_t *db, const char *event, player_id_cb cb, void *arg)
+static void
+subscription_namespace_pattern (const char *topic, char *pattern,
+                                size_t pattern_size)
 {
-  db_res_t *res = NULL; db_error_t err; if (!db || !event || !cb)
+  const char *dot = topic ? strchr (topic, '.') : NULL;
+  if (!dot)
+    {
+      snprintf (pattern, pattern_size, "%s", topic ? topic : "");
+      return;
+    }
+  size_t namespace_size = (size_t) (dot - topic + 1);
+  if (namespace_size + 1 >= pattern_size)
+    {
+      pattern[0] = '\0';
+      return;
+    }
+  memcpy (pattern, topic, namespace_size);
+  pattern[namespace_size] = '*';
+  pattern[namespace_size + 1] = '\0';
+}
+
+static int
+for_each_matching_subscriber (db_t *db, const char *scope_topic,
+                              const char *event_type, player_id_cb cb,
+                              void *arg)
+{
+  if (!db || !scope_topic || !event_type || !cb)
     {
       return -1;
     }
-  char sql[512];
-  sql_build (db,
-             "SELECT DISTINCT player_id FROM subscriptions WHERE event_type = {1} AND enabled = {2};",
-             sql, sizeof (sql));
-  if (db_query (db,
-                sql,
-                (db_bind_t[]){db_bind_text (event), db_bind_bool(true)},
-                2,
-                &res,
-                &err))
+
+  char pattern[128];
+  subscription_namespace_pattern (scope_topic, pattern, sizeof pattern);
+  if (!pattern[0])
     {
-      while (db_res_step (res, &err))
-        {
-          if (cb (db_res_col_i32 (res, 0, &err), arg) != 0)
-            {
-              break;
-            }
-        }
-      db_res_finalize (res); return 0;
+      return -1;
     }
-  return -1;
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  char sql[768];
+  sql_build (db,
+             "SELECT DISTINCT player_id FROM subscriptions WHERE enabled = {1} AND (event_type = {2} OR event_type = {3} OR event_type = {4});",
+             sql, sizeof (sql));
+  if (!db_query (db, sql,
+                 (db_bind_t[]){db_bind_bool (true),
+                               db_bind_text (scope_topic),
+                               db_bind_text (event_type),
+                               db_bind_text (pattern)},
+                 4, &res, &err))
+    {
+      return -1;
+    }
+
+  while (db_res_step (res, &err))
+    {
+      if (cb (db_res_col_i32 (res, 0, &err), arg) != 0)
+        {
+          break;
+        }
+    }
+  db_res_finalize (res);
+  return 0;
+}
+
+int
+db_for_each_subscriber (db_t *db, const char *event, player_id_cb cb,
+                        void *arg)
+{
+  return for_each_matching_subscriber (db, event, event, cb, arg);
+}
+
+int
+db_for_each_scoped_subscriber (db_t *db, const char *scope_topic,
+                               const char *event_type, player_id_cb cb,
+                               void *arg)
+{
+  return for_each_matching_subscriber (db, scope_topic, event_type, cb, arg);
 }
 
 

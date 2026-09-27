@@ -1,0 +1,116 @@
+{
+  "test_suite_name": "Server Navigation and Notes Contracts",
+  "description": "Checks bookmark and note RPC wiring, schemas, and responses",
+  "tests": [
+    {
+      "name": "Setup: Navigation API user",
+      "setup": "macro_auth_user",
+      "username": "nav_api_user",
+      "password": "password"
+    },
+    {
+      "name": "Bookmark add uses the singular add contract",
+      "command": "nav.bookmark.add",
+      "data": { "name": "Home", "sector_id": 1 },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.name", "op": "==", "value": "Home" },
+        { "path": "data.sector_id", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Bookmark list returns items",
+      "command": "nav.bookmark.list",
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0.name", "op": "==", "value": "Home" },
+        { "path": "data.items.0.sector_id", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Bookmark remove uses the name key",
+      "command": "nav.bookmark.remove",
+      "data": { "name": "Home" },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.name", "op": "==", "value": "Home" }
+      ]
+    },
+    {
+      "name": "Avoid add and list responses use items",
+      "command": "nav.avoid.add",
+      "data": { "sector_id": 1 },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Avoid list has added sector",
+      "command": "nav.avoid.list",
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Avoid remove",
+      "command": "nav.avoid.remove",
+      "data": { "sector_id": 1 },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set a scoped note",
+      "command": "notes.set",
+      "data": { "scope": "sector", "key": "sector-home", "note": "Home sector" },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "List scoped notes",
+      "command": "notes.list",
+      "data": { "scope": "sector" },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.notes.0.scope", "op": "==", "value": "sector" },
+        { "path": "data.notes.0.note", "op": "==", "value": "Home sector" }
+      ]
+    },
+    {
+      "name": "Delete scoped note",
+      "command": "notes.delete",
+      "data": { "scope": "sector", "key": "sector-home" },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ok", "op": "==", "value": true }
+      ]
+    },
+    {
+      "name": "Bookmark add schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "nav.bookmark.add", "type": "command" },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.name.type", "op": "==", "value": "string" },
+        { "path": "data.schema.properties.sector_id.type", "op": "==", "value": "integer" }
+      ]
+    },
+    {
+      "name": "Notes set schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "notes.set", "type": "command" },
+      "user": "nav_api_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.scope.type", "op": "==", "value": "string" },
+        { "path": "data.schema.properties.note.type", "op": "==", "value": "string" }
+      ]
+    }
+  ]
+}

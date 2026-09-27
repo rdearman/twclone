@@ -43,7 +43,7 @@
     {
       "name": "Mail Read",
       "command": "mail.read",
-      "data": { "id": "@mail_id" },
+      "data": { "mail_id": "@mail_id" },
       "user": "comm_user_b",
       "expect": {
         "status": "ok",
@@ -136,9 +136,39 @@
     {
       "name": "Notice Ack",
       "command": "notice.ack",
-      "data": { "id": "@notice_id" },
+      "data": { "notice_id": "@notice_id" },
       "user": "comm_user_a",
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Setup: Seed paged notices",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO system_notice (created_at, title, body, severity) VALUES (now(), 'Page A', 'A', 'info'), (now(), 'Page B', 'B', 'info'), (now(), 'Page C', 'C', 'info');" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Notice List First Page",
+      "command": "notice.list",
+      "data": { "limit": 1 },
+      "user": "comm_user_a",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0.title", "op": "==", "value": "Page C" },
+        { "path": "data.items.0.created_at", "op": "contains", "value": "-" },
+        { "path": "data.next_cursor", "op": "contains", "value": "-" }
+      ],
+      "save": { "notice_cursor": "data.next_cursor" }
+    },
+    {
+      "name": "Notice List Second Page",
+      "command": "notice.list",
+      "data": { "limit": 1, "cursor": "@notice_cursor" },
+      "user": "comm_user_a",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0.title", "op": "==", "value": "Page B" }
+      ]
     }
   ]
 }

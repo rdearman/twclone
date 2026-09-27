@@ -21,9 +21,21 @@ VALUES
     ('STARDOCK', 'Shipyard and Hardware Station', TRUE, TRUE, TRUE, FALSE),
     ('BLACKMARKET', 'Black Market Port', TRUE, TRUE, FALSE, TRUE);
 
--- Add foreign key constraint to porttype_id (column already exists from 000_tables.sql)
-ALTER TABLE ports ADD CONSTRAINT fk_ports_porttype
-    FOREIGN KEY (porttype_id) REFERENCES porttypes (porttype_id) ON DELETE SET NULL;
+-- MySQL DDL commits independently. Guard each DDL operation so an interrupted
+-- upgrade can safely be resumed by rerunning this file.
+SET @fk_exists = (
+  SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+  WHERE CONSTRAINT_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'ports'
+    AND CONSTRAINT_NAME = 'fk_ports_porttype'
+    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+);
+SET @fk_ddl = IF(@fk_exists = 0,
+  'ALTER TABLE ports ADD CONSTRAINT fk_ports_porttype FOREIGN KEY (porttype_id) REFERENCES porttypes (porttype_id) ON DELETE SET NULL',
+  'SELECT 1');
+PREPARE porttype_fk_stmt FROM @fk_ddl;
+EXECUTE porttype_fk_stmt;
+DEALLOCATE PREPARE porttype_fk_stmt;
 
 -- Backfill porttype_id from existing type values
 UPDATE ports p
@@ -41,6 +53,25 @@ INNER JOIN porttypes pt ON pt.code = 'CLASS0'
 SET p.porttype_id = pt.porttype_id
 WHERE p.porttype_id IS NULL;
 
--- Add indexes for frequent lookups
-CREATE INDEX idx_ports_porttype_id ON ports (porttype_id);
-CREATE INDEX idx_porttypes_code ON porttypes (code);
+-- Add indexes for frequent lookups only when they are missing.
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ports'
+    AND INDEX_NAME = 'idx_ports_porttype_id'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_ports_porttype_id ON ports (porttype_id)', 'SELECT 1');
+PREPARE porttype_index_stmt FROM @index_ddl;
+EXECUTE porttype_index_stmt;
+DEALLOCATE PREPARE porttype_index_stmt;
+
+SET @index_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'porttypes'
+    AND INDEX_NAME = 'idx_porttypes_code'
+);
+SET @index_ddl = IF(@index_exists = 0,
+  'CREATE INDEX idx_porttypes_code ON porttypes (code)', 'SELECT 1');
+PREPARE porttype_index_stmt FROM @index_ddl;
+EXECUTE porttype_index_stmt;
+DEALLOCATE PREPARE porttype_index_stmt;

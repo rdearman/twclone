@@ -97,6 +97,13 @@ class BanditPolicy:
         self.q_table = q_table
         self.n_table = n_table
 
+def _numeric(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def make_context_key(state: dict, config: dict) -> str:
     """Generates a context key for the bandit policy based on the current state and config."""
     stage = state.get("stage", "bootstrap")
@@ -106,25 +113,25 @@ def make_context_key(state: dict, config: dict) -> str:
     sector_class = sector_data.get("class", "unknown_class")
 
     port_type = "no_port"
-    port_id_str = ""
     if sector_data.get("ports"):
         port_type = "port_present"
-        # If there are ports, try to get the ID of the first one
-        first_port = sector_data["ports"][0]
-        if first_port and first_port.get("id"):
-            port_id_str = f"-port:{first_port['id']}"
 
     ship_info = state.get("ship_info", {})
     holds = ship_info.get("holds", 0)
     cargo_list = ship_info.get("cargo", [])
     # FIX: Robustly calculate cargo total, ignoring malformed string entries
-    if cargo_list:
-        cargo_total = sum(item.get("quantity", 0) for item in cargo_list if isinstance(item, dict))
-    else:
-        cargo_total = 0
+    cargo_total = sum(
+        _numeric(item.get("quantity", 0))
+        for item in cargo_list
+        if isinstance(item, dict)
+    ) if isinstance(cargo_list, list) else 0
+    holds = _numeric(holds)
     holds_full = "full" if cargo_total >= holds and holds > 0 else "not_full"
 
-    credits = state.get("current_credits", 0)
+    credits = state.get("current_credits")
+    if credits is None:
+        credits = (state.get("player_info") or {}).get("player", {}).get("credits", 0)
+    credits = _numeric(credits)
     credits_bucket = "low"
     if credits > 10000:
         credits_bucket = "medium"
@@ -140,7 +147,7 @@ def make_context_key(state: dict, config: dict) -> str:
     has_pending_commands = "pending_cmds" if len(state.get("pending_commands", {})) > 0 else "no_pending_cmds"
 
     return (
-        f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}{port_id_str}-"
+        f"stage:{stage}-sector_class:{sector_class}-port_type:{port_type}-"
         f"holds_full:{holds_full}-credits:{credits_bucket}-qa_mode:{qa_mode}-"
         f"can_sell_any:{can_sell_any}-can_buy_any:{can_buy_any}-has_bank_balance:{has_bank_balance}-"
         f"has_pending_commands:{has_pending_commands}"
@@ -154,17 +161,17 @@ def _can_sell_any(state: dict, config: dict) -> bool:
     cargo_list = ship_info.get("cargo", [])
     if not isinstance(cargo_list, list):
         return False  # Should be a list
-    return any(item.get("quantity", 0) > 0 for item in cargo_list if isinstance(item, dict))
+    return any(_numeric(item.get("quantity", 0)) > 0 for item in cargo_list if isinstance(item, dict))
 
 def _can_buy_any(state: dict, config: dict) -> bool:
     ship_info = state.get("ship_info")
     if not ship_info:
         return False
-    holds = ship_info.get("holds", 0)
+    holds = _numeric(ship_info.get("holds", 0))
     cargo_list = ship_info.get("cargo", [])
     if not isinstance(cargo_list, list):
         return False  # should be a list
-    current_cargo = sum(item.get("quantity", 0) for item in cargo_list if isinstance(item, dict))
+    current_cargo = sum(_numeric(item.get("quantity", 0)) for item in cargo_list if isinstance(item, dict))
     free_holds = holds - current_cargo
     if free_holds <= 0:
         return False

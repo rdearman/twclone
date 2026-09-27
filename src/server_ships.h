@@ -38,6 +38,7 @@ int cmd_ship_status (client_ctx_t * ctx, json_t * root);
 int cmd_ship_info_compat (client_ctx_t * ctx, json_t * root);
 int cmd_ship_self_destruct (client_ctx_t * ctx, json_t * root);
 int cmd_ship_tow (client_ctx_t * ctx, json_t * root);
+int cmd_ship_tow_status (client_ctx_t * ctx, json_t * root);
 int cmd_ship_list (client_ctx_t * ctx, json_t * root);
 int cmd_ship_sell (client_ctx_t * ctx, json_t * root);
 int cmd_ship_transfer (client_ctx_t * ctx, json_t * root);

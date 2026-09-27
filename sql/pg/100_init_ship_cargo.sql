@@ -7,6 +7,17 @@
 
 START TRANSACTION;
 
+-- Older installations may not have received the table from 000_tables.sql.
+-- Keep this DDL here so the documented upgrade path works on those databases.
+CREATE TABLE IF NOT EXISTS ship_cargo (
+    ship_id integer NOT NULL REFERENCES ships(ship_id) ON DELETE CASCADE,
+    commodity_code text NOT NULL REFERENCES commodities(code) ON DELETE RESTRICT,
+    quantity bigint NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+    PRIMARY KEY (ship_id, commodity_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ship_cargo_ship_id ON ship_cargo(ship_id);
+
 -- Insert existing cargo from legacy columns into ship_cargo
 -- Commodity codes: ORE, ORG, EQU, COL, SLV, WPN, DRG
 INSERT INTO ship_cargo (ship_id, commodity_code, quantity)

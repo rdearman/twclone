@@ -2,6 +2,8 @@
 -- Replace hardcoded port trading rules with DB-driven configuration
 -- Enables new port type behaviours via SQL only (no code recompile)
 
+BEGIN;
+
 -- Table: porttype_rules
 -- Stores behaviour flags and alignment gates for entire port types
 CREATE TABLE IF NOT EXISTS porttype_rules (
@@ -215,3 +217,5 @@ AND NOT EXISTS (
     WHERE pcr.porttype_id = pt.porttype_id AND pcr.commodity_code = 'DRG'
 )
 ON CONFLICT (porttype_id, commodity_code) DO NOTHING;
+
+COMMIT;
