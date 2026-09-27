@@ -1,11 +1,13 @@
 extends Control
 
 signal object_selected(selection_key: String, source: String)
+signal object_activated(selection_key: String)
 signal warp_selected(destination: int, source: String)
 signal warp_activated(destination: int)
 
 const BACKDROP := preload("res://assets/sector_starfield.png")
 const OBJECT_ATLAS := preload("res://assets/sector_objects_atlas.png")
+const PlanetArt = preload("res://PlanetArt.gd")
 
 var world_layer: Node2D
 var current_objects: Array[Dictionary] = []
@@ -133,7 +135,18 @@ func _rebuild_art_objects() -> void:
 		art_object.name = str(object["key"]).replace(":", "_")
 		art_object.set_meta("selection_key", object["key"])
 		var sprite := Sprite2D.new()
-		sprite.texture = _atlas_region(str(object["sprite_kind"]))
+		if str(object["kind"]) == "planet":
+			var planet_data: Dictionary = object["data"]
+			var planet_class := PlanetArt.class_for_planet(planet_data)
+			# Crop each class into its own texture so Sprite2D UVs and the cutout
+			# shader never depend on atlas-region coordinate behavior.
+			if not planet_class.is_empty():
+				sprite.texture = PlanetArt.texture_for_class(planet_class)
+				sprite.material = PlanetArt.cutout_material(planet_class)
+			else:
+				sprite.texture = _atlas_region("planet")
+		else:
+			sprite.texture = _atlas_region(str(object["sprite_kind"]))
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		sprite.scale = Vector2.ONE * _sprite_scale(str(object["sprite_kind"]))
 		art_object.add_child(sprite)
@@ -157,7 +170,11 @@ func _rebuild_art_objects() -> void:
 		halo.visible = false
 		art_object.add_child(halo)
 		var anchor_label := Label.new()
-		anchor_label.text = "%s  ·  %s" % [str(object["kind"]).to_upper(), str(object["name"])]
+		var object_label := "%s  ·  %s" % [str(object["kind"]).to_upper(), str(object["name"])]
+		if str(object["kind"]) == "planet":
+			var planet_class := PlanetArt.class_for_planet(object["data"])
+			object_label = "PLANET %s  ·  %s" % [planet_class if not planet_class.is_empty() else "?", str(object["name"])]
+		anchor_label.text = object_label
 		anchor_label.position = Vector2(-116, 92)
 		anchor_label.add_theme_font_size_override("font_size", 12)
 		anchor_label.add_theme_color_override("font_color", Color(0.96, 0.93, 0.83))
@@ -297,6 +314,8 @@ func _update_highlight() -> void:
 func _on_object_input(_viewport: Node, event: InputEvent, _shape_index: int, key: String) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
 		select_object(key, "artwork")
+		if event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
+			object_activated.emit(key)
 		grab_focus()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventScreenTouch and event.pressed:
@@ -313,7 +332,10 @@ func _input(event: InputEvent) -> void:
 		var local_position: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
 		var candidate := _object_at_position(local_position)
 		if not candidate.is_empty():
-			select_object(str(candidate.get("key", "")), "artwork")
+			var key := str(candidate.get("key", ""))
+			select_object(key, "artwork")
+			if event.double_click:
+				object_activated.emit(key)
 			grab_focus()
 			get_viewport().set_input_as_handled()
 

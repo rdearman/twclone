@@ -966,7 +966,10 @@ db_cron_terra_replenish (db_t *db)
 
   db_error_clear (&err);
 
-  if (!db_exec (db, "UPDATE planet_goods SET quantity = max_capacity WHERE planet_id = 1;", NULL, 0, &err)) return -1;
+  const char *replenish_sql = db_backend(db) == DB_BACKEND_POSTGRES
+    ? "UPDATE entity_stock es SET quantity = pg.max_capacity FROM planet_goods pg WHERE es.entity_type='planet' AND es.entity_id=pg.planet_id AND es.commodity_code=pg.commodity AND pg.planet_id=1;"
+    : "UPDATE entity_stock es JOIN planet_goods pg ON es.entity_type='planet' AND es.entity_id=pg.planet_id AND es.commodity_code=pg.commodity SET es.quantity=pg.max_capacity WHERE pg.planet_id=1;";
+  if (!db_exec (db, replenish_sql, NULL, 0, &err)) return -1;
 
   if (!db_exec (db, "UPDATE planets SET terraform_turns_left = 1 WHERE owner_id > 0;", NULL, 0, &err)) return -1;
 
@@ -994,7 +997,10 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
 
   const char *sql =
 
-    "SELECT p.planet_id, p.population, "
+    "SELECT p.planet_id, GREATEST(COALESCE(p.population, 0), "
+    "       p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_mil), "
+    "       p.colonists_unassigned, "
+    "       p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_mil, "
 
     "       COALESCE(pt.maxColonist_ore, 0) + COALESCE(pt.maxColonist_organics, 0) + COALESCE(pt.maxColonist_equipment, 0) AS max_pop "
 
@@ -1002,7 +1008,7 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
 
     "JOIN planettypes pt ON p.type = pt.planettypes_id "
 
-    "WHERE p.owner_id > 0 AND p.population > 0;";
+    "WHERE p.owner_id > 0 AND (COALESCE(p.population, 0) > 0 OR p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_mil > 0);";
 
 
 
@@ -1012,7 +1018,7 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
 
   char sql_update[512];
 
-  sql_build(db, "UPDATE planets SET population = {1} WHERE planet_id = {2};", sql_update, sizeof(sql_update));
+  sql_build(db, "UPDATE planets SET population = {1}, colonists_unassigned = colonists_unassigned + {2} WHERE planet_id = {3};", sql_update, sizeof(sql_update));
 
 
 
@@ -1022,33 +1028,35 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
 
       int planet_id = (int) db_res_col_i32 (res, 0, &err);
 
-      int current_pop = (int) db_res_col_i32 (res, 1, &err);
+      int64_t current_pop = db_res_col_i64 (res, 1, &err);
 
-      int max_pop = (int) db_res_col_i32 (res, 2, &err);
+      int64_t unassigned = db_res_col_i64 (res, 2, &err);
+
+      int64_t represented_population = db_res_col_i64 (res, 3, &err);
+
+      int64_t max_pop = db_res_col_i64 (res, 4, &err);
 
       if (max_pop <= 0) max_pop = 10000;
 
       
 
+      int64_t delta_int = 0;
       if (current_pop < max_pop)
-
         {
-
-          double delta = (double)current_pop * growth_rate * (1.0 - (double)current_pop / (double)max_pop);
-
-          int delta_int = (int)delta;
-
-          if (delta_int < 1 && current_pop < max_pop) delta_int = 1;
-
-          int new_pop = current_pop + delta_int;
-
-          if (new_pop > max_pop) new_pop = max_pop;
-
-
-
-          db_exec (db, sql_update, (db_bind_t[]){ db_bind_i64 (new_pop), db_bind_i64 (planet_id) }, 2, &err);
-
+          double delta = (double) current_pop * growth_rate * (1.0 - (double) current_pop / (double) max_pop);
+          delta_int = (int64_t) delta;
+          if (delta_int < 1) delta_int = 1;
+          if (delta_int > max_pop - current_pop) delta_int = max_pop - current_pop;
         }
+
+      int64_t new_pop = current_pop + delta_int;
+      /* Preserve legacy population not represented by the worker pools,
+       * and make each new colonist available for assignment. */
+      int64_t newly_unassigned = unassigned + current_pop - represented_population + delta_int;
+      if (newly_unassigned < 0) newly_unassigned = delta_int;
+      db_exec (db, sql_update,
+               (db_bind_t[]){ db_bind_i64 (new_pop), db_bind_i64 (newly_unassigned), db_bind_i64 (planet_id) },
+               3, &err);
 
     }
 
@@ -1140,15 +1148,7 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
 
     "SELECT 'planet', p.planet_id, pp.commodity_code, "
 
-    "GREATEST(0, LEAST(CASE pp.commodity_code "
-
-    "  WHEN 'ORE' THEN pltype.maxore "
-
-    "  WHEN 'ORG' THEN pltype.maxorganics "
-
-    "  WHEN 'EQU' THEN pltype.maxequipment "
-
-    "  ELSE 999999 END, "
+    "GREATEST(0, LEAST(pg.max_capacity, "
 
     "COALESCE(es.quantity, 0) + pp.base_prod_rate + "
 
@@ -1168,6 +1168,8 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
 
     "JOIN planet_production pp ON p.type = pp.planet_type_id "
 
+    "JOIN planet_goods pg ON pg.planet_id = p.planet_id AND pg.commodity = pp.commodity_code "
+
     "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
 
     "LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id "
@@ -1176,7 +1178,12 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
 
   
 
-  if (sql_build(db, sql_template, sql_update_commodities, sizeof(sql_update_commodities)) != 0) return -1;
+  const char *upsert_clause = db_backend(db) == DB_BACKEND_POSTGRES
+    ? " ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity, last_updated_ts = EXCLUDED.last_updated_ts"
+    : " ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), last_updated_ts = VALUES(last_updated_ts)";
+  char production_upsert_sql[2048];
+  if (snprintf(production_upsert_sql, sizeof(production_upsert_sql), "%s%s", sql_template, upsert_clause) >= (int)sizeof(production_upsert_sql)) return -1;
+  if (sql_build(db, production_upsert_sql, sql_update_commodities, sizeof(sql_update_commodities)) != 0) return -1;
 
   if (!db_exec (db, sql_update_commodities, (db_bind_t[]){ db_bind_i64 (now_s) }, 1, &err)) return -1;
 
@@ -2384,7 +2391,7 @@ db_cron_get_corp_planet_assets (db_t *db, int corp_id, long long *net_value)
 
   char sql[512];
 
-  if (sql_build(db, "SELECT ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE owner_id = {1} AND owner_type = 'corp'", sql, sizeof(sql)) != 0) return -1;
+  if (sql_build(db, "SELECT es.commodity_code, SUM(es.quantity) FROM planets p JOIN entity_stock es ON es.entity_type='planet' AND es.entity_id=p.planet_id WHERE p.owner_id = {1} AND p.owner_type = 'corp' GROUP BY es.commodity_code", sql, sizeof(sql)) != 0) return -1;
 
 
 
@@ -2396,11 +2403,11 @@ db_cron_get_corp_planet_assets (db_t *db, int corp_id, long long *net_value)
 
         {
 
-          *net_value += db_res_col_i64 (res, 0, &err) * 100;
-
-          *net_value += db_res_col_i64 (res, 1, &err) * 150;
-
-          *net_value += db_res_col_i64 (res, 2, &err) * 200;
+          const char *code = db_res_col_text(res, 0, &err);
+          long long quantity = db_res_col_i64(res, 1, &err);
+          if (code && strcmp(code, "ORE") == 0) *net_value += quantity * 100;
+          else if (code && strcmp(code, "ORG") == 0) *net_value += quantity * 150;
+          else if (code && strcmp(code, "EQU") == 0) *net_value += quantity * 200;
 
         }
 

@@ -253,15 +253,20 @@ CREATE INDEX IF NOT EXISTS idx_traps_due ON traps(arming_at, expires_at);
   * Regenerate stock toward capacity; clamp to `[0, capacity]`.
 * **Idempotency**: compute deltas based on last_run markers; use single transaction per port batch.
 
-### 8.2 Terra population
+### 8.2 Terra stock
 
-* **Cron**: `terra_replenish` daily; add X colonists (config) up to cap.
-* **Notice** on high-water mark.
+* Universe setup seeds Terra (planet 1, sector 1) with unassigned colonists and
+  planet goods.
+* The `terra_replenish` cron currently restores Terra's configured commodity
+  stock and resets terraform turns; it does not add colonists.
 
 ### 8.3 Planet growth & production
 
 * **Cron**: `planet_growth` every 10m.
-* Convert colonist labour to FO/OR/EQ by class ratio; optional fighter production with citadel.
+* Grow non-empty colonies toward their class population cap; new population joins
+  the unassigned colonist pool so it can be assigned to production.
+* Convert assigned colonist labour to FO/OR/EQ by class ratio; optional fighter
+  production with citadel.
 * Clamp outputs; single transaction per batch.
 
 ### 8.4 FedSpace cleanup

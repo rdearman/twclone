@@ -770,7 +770,7 @@ CREATE TABLE podded_status (
 
 CREATE TABLE planet_goods (
     planet_id integer NOT NULL,
-    commodity text NOT NULL CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'FOOD', 'FUEL')),
+    commodity text NOT NULL,
     quantity integer NOT NULL DEFAULT 0,
     max_capacity bigint NOT NULL,
     production_rate bigint NOT NULL,

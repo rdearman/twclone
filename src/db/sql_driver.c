@@ -262,6 +262,11 @@ sql_entity_stock_upsert_epoch_fmt(const db_t *db)
       return "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
              "VALUES ('planet', $1, $2, $3, 0, %s) "
              "ON CONFLICT(entity_type, entity_id, commodity_code) DO UPDATE SET quantity = $3, last_updated_ts = %s;";
+
+    case DB_BACKEND_MYSQL:
+      return "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
+             "VALUES ('planet', ?, ?, ?, 0, %s) "
+             "ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), last_updated_ts = %s;";
     
     default:
       /* Fail fast for unsupported backends */

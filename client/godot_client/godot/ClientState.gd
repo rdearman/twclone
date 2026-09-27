@@ -256,7 +256,7 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 				adjacent_ids.append(int(destination))
 		result["adjacent_sector_ids"] = adjacent_ids
 	result["ports"] = _normalize_entities(data.get("ports", []), ["id", "port_id", "name", "type", "class"])
-	result["planets"] = _normalize_entities(data.get("celestial_objects", data.get("planets", [])), ["id", "planet_id", "name", "type"])
+	result["planets"] = _normalize_entities(data.get("celestial_objects", data.get("planets", [])), ["id", "planet_id", "name", "type", "class", "type_name"])
 	result["ships"] = _normalize_entities(data.get("ships_present", data.get("ships", [])), ["id", "ship_id", "name", "ship_name", "owner"])
 	if data.has("counts") and data["counts"] is Dictionary:
 		var counts := {}

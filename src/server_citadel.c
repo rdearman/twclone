@@ -78,6 +78,15 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_DB, "Database unavailable.");
       return 0;
     }
+  json_t *data = json_object_get (root, "data");
+  int requested_planet_id = 0;
+  if (!json_get_int_flexible (data, "planet_id", &requested_planet_id)
+      || requested_planet_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+			   "A valid planet_id is required.");
+      return 0;
+    }
   // 1. Get Player Location & Planet Info
   int planet_id = get_player_planet (db, ctx->player_id);
 
@@ -89,6 +98,12 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 				   ERR_AUTOPILOT_PATH_INVALID,
 				   "You must be landed on a planet to build or upgrade a citadel.",
 				   NULL);
+      return 0;
+    }
+  if (planet_id != requested_planet_id)
+    {
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+			   "You must be landed on the requested planet.");
       return 0;
     }
 
@@ -269,7 +284,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     }
 
   // Deduct resources
-  if (repo_citadel_deduct_resources (db, r_ore, r_org, r_equip, planet_id) !=
+  if (repo_citadel_deduct_resources (db, r_colonists, r_ore, r_org, r_equip, planet_id) !=
       0)
     {
       db_tx_rollback (db, NULL);

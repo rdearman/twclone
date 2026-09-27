@@ -755,7 +755,7 @@ CREATE TABLE podded_status (
 
 CREATE TABLE planet_goods (
     planet_id bigint NOT NULL,
-    commodity TEXT NOT NULL CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'FOOD', 'FUEL')),
+    commodity TEXT NOT NULL,
     quantity bigint NOT NULL DEFAULT 0,
     max_capacity bigint NOT NULL,
     production_rate bigint NOT NULL,
@@ -1559,4 +1559,3 @@ CREATE TABLE player_visited_sectors (
     FOREIGN KEY (player_id) REFERENCES players(player_id) ON DELETE CASCADE,
     FOREIGN KEY (sector_id) REFERENCES sectors(sector_id) ON DELETE CASCADE
 );
-

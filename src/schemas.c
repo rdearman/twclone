@@ -347,6 +347,7 @@ extern json_t *schema_planet_launch (void);
 extern json_t *schema_planet_transfer_ownership (void);
 extern json_t *schema_planet_harvest (void);
 extern json_t *schema_planet_deposit (void);
+extern json_t *schema_planet_colonists_allocate (void);
 extern json_t *schema_planet_withdraw (void);
 extern json_t *schema_planet_genesis_create (void);
 extern json_t *schema_player_set_trade_account_preference (void);
@@ -455,6 +456,7 @@ static schema_entry_t g_schema_table[] = {
   {"planet.transfer_ownership", NULL, schema_planet_transfer_ownership},
   {"planet.harvest", NULL, schema_planet_harvest},
   {"planet.deposit", NULL, schema_planet_deposit},
+  {"planet.colonists.allocate", NULL, schema_planet_colonists_allocate},
   {"planet.withdraw", NULL, schema_planet_withdraw},
   {"planet.genesis_create", NULL, schema_planet_genesis_create},
   {"player.set_trade_account_preference", NULL,
@@ -2716,10 +2718,11 @@ schema_planet_genesis (void)
 {
   json_t *props = json_object ();
 
-  json_t *name_prop = json_object ();
-  json_object_set_new (name_prop, "type", json_string ("string"));
-  json_object_set_new (name_prop, "minLength", json_integer (1));
-  json_object_set_new (props, "name", name_prop);
+  json_t *new_name_prop = json_object ();
+  json_object_set_new (new_name_prop, "type", json_string ("string"));
+  json_object_set_new (new_name_prop, "minLength", json_integer (3));
+  json_object_set_new (new_name_prop, "maxLength", json_integer (32));
+  json_object_set_new (props, "new_name", new_name_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -2731,7 +2734,7 @@ schema_planet_genesis (void)
   json_object_set_new (root, "properties", props);
 
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("name"));
+  json_array_append_new (required, json_string ("new_name"));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
@@ -2851,10 +2854,19 @@ schema_planet_transfer_ownership (void)
   json_object_set_new (planet_id_prop, "minimum", json_integer (1));
   json_object_set_new (props, "planet_id", planet_id_prop);
 
-  json_t *new_owner_id_prop = json_object ();
-  json_object_set_new (new_owner_id_prop, "type", json_string ("integer"));
-  json_object_set_new (new_owner_id_prop, "minimum", json_integer (1));
-  json_object_set_new (props, "new_owner_id", new_owner_id_prop);
+  json_t *target_id_prop = json_object ();
+  json_object_set_new (target_id_prop, "type", json_string ("integer"));
+  json_object_set_new (target_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "target_id", target_id_prop);
+
+  json_t *target_type_prop = json_object ();
+  json_object_set_new (target_type_prop, "type", json_string ("string"));
+  json_t *target_type_enum = json_array ();
+  json_array_append_new (target_type_enum, json_string ("player"));
+  json_array_append_new (target_type_enum, json_string ("corp"));
+  json_array_append_new (target_type_enum, json_string ("corporation"));
+  json_object_set_new (target_type_prop, "enum", target_type_enum);
+  json_object_set_new (props, "target_type", target_type_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root,
@@ -2869,7 +2881,8 @@ schema_planet_transfer_ownership (void)
 
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
-  json_array_append_new (required, json_string ("new_owner_id"));
+  json_array_append_new (required, json_string ("target_id"));
+  json_array_append_new (required, json_string ("target_type"));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
@@ -2897,6 +2910,32 @@ schema_planet_harvest (void)
 
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
+}
+
+
+json_t *
+schema_planet_colonists_allocate (void)
+{
+  json_t *props = json_object ();
+  const char *fields[] = {"planet_id", "ore", "organics", "equipment"};
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++)
+    {
+      json_t *prop = json_object ();
+      json_object_set_new (prop, "type", json_string ("integer"));
+      json_object_set_new (prop, "minimum", json_integer (i == 0 ? 1 : 0));
+      json_object_set_new (props, fields[i], prop);
+    }
+  json_t *root = json_object ();
+  json_object_set_new (root, "$id", json_string ("ge://schema/planet.colonists.allocate.json"));
+  json_object_set_new (root, "$schema", json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  json_t *required = json_array ();
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++)
+    json_array_append_new (required, json_string (fields[i]));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
@@ -3048,10 +3087,10 @@ schema_citadel_build (void)
 {
   json_t *props = json_object ();
 
-  json_t *sector_id_prop = json_object ();
-  json_object_set_new (sector_id_prop, "type", json_string ("integer"));
-  json_object_set_new (sector_id_prop, "minimum", json_integer (1));
-  json_object_set_new (props, "sector_id", sector_id_prop);
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -3063,7 +3102,7 @@ schema_citadel_build (void)
   json_object_set_new (root, "properties", props);
 
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("sector_id"));
+  json_array_append_new (required, json_string ("planet_id"));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
@@ -3075,10 +3114,10 @@ schema_citadel_upgrade (void)
 {
   json_t *props = json_object ();
 
-  json_t *citadel_id_prop = json_object ();
-  json_object_set_new (citadel_id_prop, "type", json_string ("integer"));
-  json_object_set_new (citadel_id_prop, "minimum", json_integer (1));
-  json_object_set_new (props, "citadel_id", citadel_id_prop);
+  json_t *planet_id_prop = json_object ();
+  json_object_set_new (planet_id_prop, "type", json_string ("integer"));
+  json_object_set_new (planet_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "planet_id", planet_id_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -3090,7 +3129,7 @@ schema_citadel_upgrade (void)
   json_object_set_new (root, "properties", props);
 
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("citadel_id"));
+  json_array_append_new (required, json_string ("planet_id"));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;

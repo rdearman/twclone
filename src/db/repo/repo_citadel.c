@@ -31,7 +31,11 @@ int repo_citadel_get_planet_info(db_t *db, int32_t planet_id, db_res_t **out_res
 {
     /* SQL_VERBATIM: Q2 */
     const char *sql_planet =
-        "SELECT type, owner_id, owner_type, colonist, ore_on_hand, organics_on_hand, equipment_on_hand FROM planets WHERE planet_id = {1};";
+        "SELECT p.type, p.owner_id, p.owner_type, p.colonists_unassigned, "
+        "COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='ORE'),0), "
+        "COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='ORG'),0), "
+        "COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=p.planet_id AND commodity_code='EQU'),0) "
+        "FROM planets p WHERE p.planet_id = {1};";
     char sql_planet_converted[512];
     sql_build(db, sql_planet, sql_planet_converted, sizeof(sql_planet_converted));
 
@@ -99,18 +103,30 @@ int repo_citadel_get_upgrade_reqs(db_t *db, int target_level, int32_t planet_typ
     return err.code;
 }
 
-int repo_citadel_deduct_resources(db_t *db, int64_t ore, int64_t org, int64_t equip, int32_t planet_id)
+int repo_citadel_deduct_resources(db_t *db, int64_t colonists, int64_t ore, int64_t org, int64_t equip, int32_t planet_id)
 {
-    /* SQL_VERBATIM: Q5 */
-    const char *sql_update_planet =
-        "UPDATE planets SET ore_on_hand = ore_on_hand - {1}, organics_on_hand = organics_on_hand - {2}, equipment_on_hand = equipment_on_hand - {3} WHERE planet_id = {4};";
-    char sql_converted[512];
-    sql_build(db, sql_update_planet, sql_converted, sizeof(sql_converted));
-
-    db_bind_t params[] = { db_bind_i64(ore), db_bind_i64(org), db_bind_i64(equip), db_bind_i32(planet_id) };
     db_error_t err;
-    if (!db_exec(db, sql_converted, params, 4, &err)) {
-        return err.code;
+    int64_t affected = 0;
+    const char *codes[] = {"ORE", "ORG", "EQU"};
+    int64_t costs[] = {ore, org, equip};
+    const char *stock_sql = "UPDATE entity_stock SET quantity = quantity - {1} WHERE entity_type='planet' AND entity_id={2} AND commodity_code={3} AND quantity >= {4}";
+    char stock_stmt[512];
+    sql_build(db, stock_sql, stock_stmt, sizeof(stock_stmt));
+    for (int i = 0; i < 3; i++) {
+        if (costs[i] <= 0) continue;
+        if (!db_exec_rows_affected(db, stock_stmt,
+                                   (db_bind_t[]){db_bind_i64(costs[i]), db_bind_i32(planet_id), db_bind_text(codes[i]), db_bind_i64(costs[i])},
+                                   4, &affected, &err)) return err.code;
+        if (affected != 1) return ERR_DB_CONSTRAINT;
+    }
+    if (colonists > 0) {
+        const char *population_sql = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_mil) - {1}), colonists_unassigned = colonists_unassigned - {1} WHERE planet_id = {2} AND colonists_unassigned >= {3}";
+        char population_stmt[512];
+        sql_build(db, population_sql, population_stmt, sizeof(population_stmt));
+        if (!db_exec_rows_affected(db, population_stmt,
+                                   (db_bind_t[]){db_bind_i64(colonists), db_bind_i32(planet_id), db_bind_i64(colonists)},
+                                   3, &affected, &err)) return err.code;
+        if (affected != 1) return ERR_DB_CONSTRAINT;
     }
     return 0;
 }

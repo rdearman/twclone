@@ -15,6 +15,7 @@ const CommandMenuScript = preload("res://CommandMenu.gd")
 const DialogLayout = preload("res://DialogLayout.gd")
 const PortWorkflowScript = preload("res://PortWorkflow.gd")
 const PlanetWorkflowScript = preload("res://PlanetWorkflow.gd")
+const PlanetArt = preload("res://PlanetArt.gd")
 const LocalSectorNotes = preload("res://LocalSectorNotes.gd")
 const WARP_TRANSITION_SHADER := preload("res://WarpTransition.gdshader")
 const COMMAND_RAIL_TOAST_X := 310.0
@@ -51,7 +52,7 @@ var gameplay_scroll: ScrollContainer
 var command_panel: PanelContainer
 var information_panel: PanelContainer
 var information_title: Label
-var information_text: Label
+var information_text: TextEdit
 var information_scroll: ScrollContainer
 var selection_panel: PanelContainer
 var panel_column: VBoxContainer
@@ -232,6 +233,7 @@ func _build() -> void:
 	sector_view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	center_split.add_child(sector_view)
 	sector_view.object_selected.connect(_on_art_object_selected)
+	sector_view.object_activated.connect(_on_art_object_activated)
 	sector_view.warp_selected.connect(_on_art_warp_selected)
 	sector_view.warp_activated.connect(request_warp_now)
 
@@ -549,6 +551,9 @@ func _add_entity_row(kind_label: String, source: Dictionary, kind: String, id_fi
 			identity = source[field]
 			break
 	var name := str(source.get("name", source.get("ship_name", "Unnamed " + kind_label.to_lower())))
+	if kind == "planet":
+		var planet_class := PlanetArt.class_for_planet(source)
+		name += " · Class %s" % (planet_class if not planet_class.is_empty() else "unknown")
 	if identity == null:
 		_add_static_row(kind_label, name + " · selection unavailable")
 		return
@@ -680,6 +685,17 @@ func _on_art_object_selected(key: String, _source: String) -> void:
 	notification_label.visible = false
 	toast_panel.visible = false
 
+func _on_art_object_activated(key: String) -> void:
+	_on_art_object_selected(key, "artwork")
+	var object: Dictionary = sector_view.selected_object()
+	var kind := str(object.get("kind", ""))
+	if kind == "planet":
+		_dispatch_context_action({"label": "Land on planet", "command": "planet.land", "context_id": "planet_id", "mutating": true}, object)
+	elif kind == "port":
+		var port_data: Dictionary = object.get("data", {})
+		if port_data.has("id") or port_data.has("port_id"):
+			_dispatch_context_action({"label": "Dock · open port screen", "command": "port.info", "fixed": {}}, object)
+
 func _set_selected_notification(kind: String, title: String) -> void:
 	# Kept as a compatibility seam for callers; selection is rendered in the
 	# right-hand Sector Contents panel, never in the floating notification bar.
@@ -719,6 +735,9 @@ func _render_selection(object: Dictionary) -> void:
 		selection_detail.text += "\nDisplay position is decorative."
 		var fields: Dictionary = object.get("data", {})
 		var extras: Array[String] = []
+		if kind == "planet":
+			var planet_class := PlanetArt.class_for_planet(fields)
+			extras.append("Class %s" % (planet_class if not planet_class.is_empty() else "unknown"))
 		if fields.has("type"):
 			extras.append("Type %s" % str(fields["type"]))
 		if fields.has("owner"):
@@ -902,9 +921,18 @@ func _build_information_panel() -> void:
 	information_scroll = ScrollContainer.new()
 	information_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	column.add_child(information_scroll)
-	information_text = _label("No result yet. Read-only command results will appear here and will not interrupt the sector view.", 12, Color(0.84, 0.87, 0.83))
-	information_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	information_text = TextEdit.new()
+	information_text.text = "No result yet. Read-only command results will appear here and will not interrupt the sector view."
+	information_text.editable = false
+	information_text.context_menu_enabled = true
+	information_text.shortcut_keys_enabled = true
+	information_text.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	information_text.add_theme_color_override("font_color", Color(0.84, 0.87, 0.83))
+	information_text.add_theme_font_size_override("font_size", 12)
+	information_text.add_theme_stylebox_override("normal", StyleBoxEmpty.new())
+	information_text.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	information_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	information_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	information_scroll.add_child(information_text)
 
 func show_planned_route(path: Array, destination: int) -> void:

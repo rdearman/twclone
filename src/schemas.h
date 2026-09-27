@@ -123,6 +123,7 @@ json_t *schema_planet_launch (void);
 json_t *schema_planet_transfer_ownership (void);
 json_t *schema_planet_harvest (void);
 json_t *schema_planet_deposit (void);
+json_t *schema_planet_colonists_allocate (void);
 json_t *schema_planet_withdraw (void);
 json_t *schema_planet_genesis_create (void);
 json_t *schema_player_set_trade_account_preference (void);

@@ -159,10 +159,11 @@ func _on_transport_reply(request_id: String, response: Dictionary, command: Stri
 		elif operation.get("kind") == "planet_info" or operation.get("kind") == "planet_colonists":
 			var planet_result: Dictionary = Protocol.result_from_response(response)
 			if planet_result.get("kind") == "ok":
+				var planet_data := _response_data_dictionary(planet_result.get("data", {}))
 				if operation.get("kind") == "planet_info":
-					gameplay_view.set_planet_information(planet_result.get("data", {}))
+					gameplay_view.set_planet_information(planet_data)
 				else:
-					gameplay_view.set_planet_colonist_state(planet_result.get("data", {}))
+					gameplay_view.set_planet_colonist_state(planet_data)
 			else:
 				gameplay_view.show_notification("Planet records unavailable · %s" % str(planet_result.get("message", "The server refused the request.")))
 			_planet_pending_count = maxi(0, _planet_pending_count - 1)
@@ -395,7 +396,7 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 	var result: Dictionary = Protocol.result_from_response(response)
 	var label := str(operation.get("label", operation.get("command", "Command")))
 	if result.get("kind") == "ok":
-		var data: Dictionary = result.get("data", {})
+		var data := _response_data_dictionary(result.get("data", {}))
 		var summary := _result_summary(data)
 		var command_name := str(operation.get("command", ""))
 		if command_name == "auth.logout":
@@ -462,6 +463,8 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 		if bool(operation.get("mutating", false)):
 			if str(operation.get("command", "")) in ["trade.buy", "trade.sell"]:
 				_pending_trade["refresh_port_after"] = true
+			if _landed_planet_id > 0:
+				_request_planet_surface_records()
 			_refresh_after_command()
 		else:
 			gameplay_view.set_command_busy(false)
@@ -514,6 +517,17 @@ func _result_summary(data: Dictionary) -> String:
 		if data.has(key) and not str(data[key]).is_empty():
 			return "%s: %s" % [key.replace("_", " ").capitalize(), str(data[key])]
 	return ""
+
+func _response_data_dictionary(value: Variant) -> Dictionary:
+	if value is Dictionary:
+		return value
+	if value is Array:
+		# Older server builds return planet.info as a one-row JSON array, while
+		# newer builds return the row object directly.
+		if value.size() == 1 and value[0] is Dictionary:
+			return value[0]
+		return {"items": value}
+	return {}
 
 func _on_trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int) -> void:
 	if not auth_session.is_authenticated() or not _pending_trade.is_empty() or _pending_game_commands.size() > 0 or _command_refresh_pending:

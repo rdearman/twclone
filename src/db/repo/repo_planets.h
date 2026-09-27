@@ -102,7 +102,7 @@ int db_planets_consume_genesis(db_t *db, int ship_id);
 int db_planets_update_navhaz(db_t *db, int sector_id, int delta);
 
 /* Q36: Genesis Idempotency Insert */
-int db_planets_insert_genesis_idem(db_t *db, const char *key, const char *payload, long long ts);
+int db_planets_insert_genesis_idem(db_t *db, const char *key, const char *request_fingerprint, const char *payload, long long ts);
 
 /* Q37: Get Entity Stock */
 int db_planets_get_stock(db_t *db, int planet_id, const char *code, int *stock);
@@ -130,7 +130,7 @@ int db_planets_get_fuel_stock(db_t *db, int planet_id, int *stock);
 int db_planets_set_sector(db_t *db, int planet_id, int sector_id);
 
 /* Q46: Market Move Stock Info */
-int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, int *current_qty, int *max_ore, int *max_org, int *max_equ);
+int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, int *current_qty, int *capacity);
 
 /* Q47: Upsert Entity Stock */
 int db_planets_upsert_stock(db_t *db, int planet_id, const char *code, int quantity);

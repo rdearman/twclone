@@ -7,12 +7,14 @@
 #include <time.h>
 #include <jansson.h>
 #include <stdbool.h>
+#include <limits.h>
 
 /* local includes */
 #include "common.h"
 #include "server_config.h"
 #include "game_db.h"
 #include "repo_cmd.h"
+#include "repo_planets.h"
 #include "server_log.h"
 #include "server_cron.h"
 #include "errors.h"
@@ -954,36 +956,7 @@ db_planet_get_goods_on_hand (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-  db_res_t *res = NULL;
-  db_error_t err = {0};
-  int rc = ERR_DB;
-  const char *sql =
-    "SELECT quantity FROM planet_goods WHERE planet_id = {1} AND commodity = {2};";
-  db_bind_t params[] = { db_bind_i64 (planet_id), db_bind_text (code) };
-
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_query (db, sql_converted, params, 2, &res, &err))
-    {
-      rc = err.code;
-      goto cleanup;
-    }
-  if (db_res_step (res, &err))
-    {
-      *out_qty = db_res_col_i32 (res, 0, &err);
-      rc = 0;
-    }
-  else
-    {
-      *out_qty = 0;
-      rc = 0;
-    }
-
-cleanup:
-  if (res)
-    db_res_finalize (res);
-  return rc;
+  return db_planets_get_stock(db, planet_id, code, out_qty);
 }
 
 
@@ -997,28 +970,12 @@ db_planet_update_goods_on_hand (db_t *db,
     {
       return ERR_DB_MISUSE;
     }
-    db_error_t err;
-    int64_t rows = 0;
-
-    /* 1. Try Update first */
-    const char *q_upd = "UPDATE planet_goods SET quantity = GREATEST(quantity + {1}, 0) WHERE planet_id = {2} AND commodity = {3};";
-    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i64(delta), db_bind_i64(planet_id), db_bind_text(code) };
-    if (db_exec_rows_affected(db, sql_upd, upd_params, 3, &rows, &err) && rows > 0) return 0;
-
-    /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES ({1}, {2}, GREATEST({3}, 0), 1000000, 0);";
-    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
-    db_bind_t ins_params[] = { db_bind_i64(planet_id), db_bind_text(code), db_bind_i64(delta) };
-    if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
-        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
-        if (err.code == ERR_DB_CONSTRAINT) {
-            if (db_exec(db, sql_upd, upd_params, 3, &err)) return 0;
-        }
-        return err.code;
-    }
-
-    return 0;
+    int current = 0;
+    if (db_planets_get_stock(db, planet_id, code, &current) != 0) current = 0;
+    if (delta > 0 && current > INT_MAX - delta) return ERR_INVALID_ARG;
+    int updated = current + delta;
+    if (updated < 0) updated = 0;
+    return db_planets_upsert_stock(db, planet_id, code, updated);
 }
 
 
@@ -3151,7 +3108,10 @@ db_planets_at_sector_json (db_t *db, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
-  const char *sql_template = "SELECT planet_id, name, type FROM planets WHERE sector_id = {1};";
+  const char *sql_template =
+    "SELECT p.planet_id, p.name, p.type, p.class, pt.typename AS type_name "
+    "FROM planets p LEFT JOIN planettypes pt ON pt.planettypes_id = p.type "
+    "WHERE p.sector_id = {1};";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
@@ -3439,18 +3399,70 @@ db_planet_get_details_json (db_t *db, int pid, json_t **out)
     {
       return -1;
     }
+  *out = NULL;
   db_res_t *res = NULL;
   db_error_t err = {0};
   int rc = -1;
 
-  const char *sql_template = "SELECT * FROM planets WHERE planet_id = {1};";
-  char sql[256];
+  const char *sql_template =
+    "SELECT p.*, pt.typename AS type_name, pt.typedescription AS type_description, "
+    "pt.maxColonist_ore AS max_colonists_ore, pt.maxColonist_organics AS max_colonists_organics, "
+    "pt.maxColonist_equipment AS max_colonists_equipment, pt.organicsProduction AS organics_production_per_worker, "
+    "pt.equipmentProduction AS equipment_production_per_worker, pt.fuelProduction AS fuel_production_per_worker "
+    "FROM planets p LEFT JOIN planettypes pt ON pt.planettypes_id = p.type "
+    "WHERE p.planet_id = {1};";
+  char sql[1024];
   sql_build(db, sql_template, sql, sizeof sql);
 
   if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))
     {
-      rc = stmt_to_json_array (res, out, &err);
+      json_t *rows = NULL;
+      rc = stmt_to_json_array (res, &rows, &err);
+      if (rc == 0 && json_is_array (rows) && json_array_size (rows) > 0)
+	{
+	  json_t *planet = json_array_get (rows, 0);
+	  if (json_is_object (planet))
+	    {
+	      *out = json_incref (planet);
+	      /* Older planets can have a NULL or stale population field even though
+	       * their colonist pools contain people. Report the tracked headcount
+	       * until the next growth tick normalizes the stored population. */
+	      int64_t population = 0;
+	      json_t *population_value = json_object_get (planet, "population");
+	      if (json_is_number (population_value))
+	        population = (int64_t) json_number_value (population_value);
+	      int64_t colonist_total = 0;
+	      const char *colonist_fields[] = {
+	        "colonists_unassigned", "colonists_ore", "colonists_org",
+	        "colonists_eq", "colonists_mil"
+	      };
+	      for (size_t i = 0; i < sizeof colonist_fields / sizeof colonist_fields[0]; i++)
+	        {
+	          json_t *value = json_object_get (planet, colonist_fields[i]);
+	          if (json_is_number (value))
+	            colonist_total += (int64_t) json_number_value (value);
+	        }
+	      if (population < colonist_total)
+	        population = colonist_total;
+	      json_object_set_new (*out, "population", json_integer (population));
+	      json_t *goods = NULL;
+	      if (db_planet_get_goods_json (db, pid, &goods) != 0 || !goods)
+	        {
+	          json_decref (*out);
+	          *out = NULL;
+	          rc = -1;
+	        }
+	      else
+	        json_object_set_new (*out, "goods", goods);
+	    }
+	  else
+	    rc = -1;
+	}
+      else
+	rc = -1;
+      if (rows)
+	json_decref (rows);
       goto cleanup;
     }
 
@@ -3472,7 +3484,12 @@ db_planet_get_goods_json (db_t *db, int pid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
-  const char *sql_template = "SELECT * FROM planet_goods WHERE planet_id = {1};";
+  const char *sql_template =
+    "SELECT pg.planet_id, pg.commodity, COALESCE(es.quantity, 0) AS quantity, "
+    "pg.max_capacity "
+    "FROM planet_goods pg LEFT JOIN entity_stock es ON es.entity_type = 'planet' "
+    "AND es.entity_id = pg.planet_id AND es.commodity_code = pg.commodity "
+    "WHERE pg.planet_id = {1} ORDER BY pg.commodity;";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
@@ -5187,50 +5204,16 @@ h_update_planet_stock (db_t *db, int planet_id, const char *commodity_code,
 
   db_error_t err;
   db_error_clear(&err);
-  
-  const char *sql = "UPDATE planet_goods SET quantity = quantity + {1} "
-                    "WHERE planet_id = {2} AND commodity = {3}";
-  db_bind_t params[] = {
-    db_bind_i64 (quantity_change),
-    db_bind_i64 (planet_id),
-    db_bind_text (commodity_code)
-  };
-  
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-  if (!db_exec(db, sql_converted, params, 3, &err))
-    {
-      LOGE ("h_update_planet_stock: Failed to update: %s", err.message);
+  int current = 0;
+  if (db_planets_get_stock(db, planet_id, commodity_code, &current) != 0) current = 0;
+  if (quantity_change > 0 && current > INT_MAX - quantity_change) return ERR_INVALID_ARG;
+  int updated = current + quantity_change;
+  if (updated < 0) updated = 0;
+  if (db_planets_upsert_stock(db, planet_id, commodity_code, updated) != 0) {
+      LOGE("h_update_planet_stock: failed to update canonical entity stock");
       return ERR_DB;
-    }
-  
-  if (new_quantity)
-    {
-      const char *qty_sql = "SELECT quantity FROM planet_goods "
-                            "WHERE planet_id = {1} AND commodity = {2}";
-      db_bind_t qty_params[] = {
-        db_bind_i64 (planet_id),
-        db_bind_text (commodity_code)
-      };
-      
-      db_res_t *res = NULL;
-      char qty_sql_converted[256];
-      sql_build(db, qty_sql, qty_sql_converted, sizeof(qty_sql_converted));
-      if (db_query(db, qty_sql_converted, qty_params, 2, &res, &err))
-        {
-          if (db_res_step(res, &err))
-            {
-              *new_quantity = (int)db_res_col_int(res, 0, &err);
-            }
-          db_res_finalize(res);
-        }
-      else
-        {
-          LOGE ("h_update_planet_stock: Failed to query quantity: %s", err.message);
-        }
-    }
-  
+  }
+  if (new_quantity) *new_quantity = updated;
   return 0;
 }
 

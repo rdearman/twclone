@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <math.h>
+#include <inttypes.h>
 
 /* local includes */
 #include "server_planets.h"
@@ -18,6 +19,7 @@
 #include "db/repo/repo_clusters.h"
 #include "db/repo/repo_commodities.h"
 #include "db/repo/repo_ships.h"
+#include "db/repo/repo_citadel.h"
 #include "game_db.h"
 #include "errors.h"
 #include "server_cmds.h"
@@ -1134,6 +1136,23 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
       target_commodity = "COLONISTS";
     }
 
+  if (strcasecmp(target_commodity, "ORGANICS") == 0) target_commodity = "ORG";
+  if (strcasecmp(target_commodity, "EQUIPMENT") == 0) target_commodity = "EQU";
+  if (strcasecmp(target_commodity, "COLONISTS") != 0) {
+      int current = 0, capacity = 0;
+      if (db_planets_get_market_move_info(db, planet_id, target_commodity,
+                                          &current, &capacity) != 0) {
+          db_tx_rollback(db, NULL);
+          send_response_error(ctx, root, ERR_INVALID_ARG, "Commodity is not configured for this planet.");
+          return 0;
+      }
+      if (quantity > capacity - current) {
+          db_tx_rollback(db, NULL);
+          send_response_error(ctx, root, ERR_INVALID_ARG, "Planet storage capacity would be exceeded.");
+          return 0;
+      }
+  }
+
   /* Deduct from ship */
   int rc = h_update_ship_cargo (db, ship_id, commodity, -quantity, NULL);
   if (rc != 0)
@@ -1149,23 +1168,9 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
     {
       prc = db_planets_add_colonists_unassigned (db, planet_id, quantity);
     }
-  else if (strcasecmp (target_commodity, "ORE") == 0)
-    {
-      prc = db_planets_add_ore_on_hand (db, planet_id, quantity);
-    }
-  else if (strcasecmp (target_commodity, "ORG") == 0 || strcasecmp (target_commodity, "ORGANICS") == 0)
-    {
-      prc = db_planets_add_organics_on_hand (db, planet_id, quantity);
-    }
-  else if (strcasecmp (target_commodity, "EQU") == 0 || strcasecmp (target_commodity, "EQUIPMENT") == 0)
-    {
-      prc = db_planets_add_equipment_on_hand (db, planet_id, quantity);
-    }
   else
     {
-      db_tx_rollback (db, NULL);
-      send_response_error (ctx, root, ERR_INVALID_ARG, "Unsupported commodity for deposit.");
-      return 0;
+      prc = h_update_entity_stock(db, ENTITY_TYPE_PLANET, planet_id, target_commodity, quantity, NULL);
     }
 
   if (prc != 0)
@@ -1392,22 +1397,16 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
     {
       prc = db_planets_get_colonists_unassigned (db, planet_id, &planet_qty);
     }
-  else if (strcasecmp (commodity, "ORE") == 0)
-    {
-      prc = db_planets_get_ore_on_hand (db, planet_id, &planet_qty);
-    }
-  else if (strcasecmp (commodity, "ORG") == 0 || strcasecmp (commodity, "ORGANICS") == 0)
-    {
-      prc = db_planets_get_organics_on_hand (db, planet_id, &planet_qty);
-    }
-  else if (strcasecmp (commodity, "EQU") == 0 || strcasecmp (commodity, "EQUIPMENT") == 0)
-    {
-      prc = db_planets_get_equipment_on_hand (db, planet_id, &planet_qty);
-    }
   else
     {
-       send_response_error (ctx, root, ERR_INVALID_ARG, "Unsupported commodity for withdrawal.");
-       return 0;
+       const char *stock_code = commodity;
+       if (strcasecmp(stock_code, "ORGANICS") == 0) stock_code = "ORG";
+       if (strcasecmp(stock_code, "EQUIPMENT") == 0) stock_code = "EQU";
+       int current = 0, capacity = 0;
+       prc = db_planets_get_market_move_info(db, planet_id, stock_code,
+                                             &current, &capacity);
+       planet_qty = current;
+       target_commodity = stock_code;
     }
 
   if (prc != 0)
@@ -1434,17 +1433,9 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
     {
       prc = db_planets_add_colonists_unassigned (db, planet_id, -quantity);
     }
-  else if (strcasecmp (commodity, "ORE") == 0)
+  else
     {
-      prc = db_planets_add_ore_on_hand (db, planet_id, -quantity);
-    }
-  else if (strcasecmp (commodity, "ORG") == 0 || strcasecmp (commodity, "ORGANICS") == 0)
-    {
-      prc = db_planets_add_organics_on_hand (db, planet_id, -quantity);
-    }
-  else if (strcasecmp (commodity, "EQU") == 0 || strcasecmp (commodity, "EQUIPMENT") == 0)
-    {
-      prc = db_planets_add_equipment_on_hand (db, planet_id, -quantity);
+      prc = h_update_entity_stock(db, ENTITY_TYPE_PLANET, planet_id, target_commodity, -quantity, NULL);
     }
 
   if (prc != 0)
@@ -1788,9 +1779,15 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
   if (idempotency_key)
     {
       char *payload_str = json_dumps (response_json, 0);
-      db_planets_insert_genesis_idem (db, idempotency_key, payload_str,
-				      current_unix_ts);
+      char *request_fingerprint = json_dumps (data, JSON_COMPACT | JSON_SORT_KEYS);
+      if (!payload_str || !request_fingerprint
+	  || db_planets_insert_genesis_idem (db, idempotency_key,
+					     request_fingerprint, payload_str,
+					     current_unix_ts) != 0)
+	LOGE ("Failed to persist Genesis idempotency record for planet %" PRId64,
+	      new_planet_id);
       free (payload_str);
+      free (request_fingerprint);
     }
 
   send_response_ok_take (ctx, root, "planet.genesis_created_v1",
@@ -1927,6 +1924,13 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 				   "Illegal trade refused.", NULL);
       return 0;
     }
+
+  int capacity_stock = 0, planet_capacity = 0;
+  if (db_planets_get_market_move_info(db, planet_id, commodity_code,
+                                      &capacity_stock, &planet_capacity) != 0) {
+      send_response_error(ctx, root, ERR_INVALID_ARG, "Commodity is not configured for this planet.");
+      return 0;
+  }
 
   int current_stock = 0;
   db_planets_get_stock (db, planet_id, commodity_code, &current_stock);
@@ -2115,6 +2119,15 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 				   NULL);
       return 0;
     }
+
+  int capacity_stock = 0, planet_capacity = 0;
+  if (db_planets_get_market_move_info(db, planet_id, commodity_code,
+                                      &capacity_stock, &planet_capacity) != 0 ||
+      quantity_total > planet_capacity - capacity_stock) {
+      send_response_error(ctx, root, ERR_INVALID_ARG,
+                          "Commodity is not configured or the order exceeds planet storage capacity.");
+      return 0;
+  }
 
   int commodity_id = 0;
   db_planets_get_commodity_id (db, commodity_code, &commodity_id);
@@ -2476,6 +2489,125 @@ cmd_planet_colonists_get (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+int
+cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE, "Database unavailable");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  int planet_id = 0, ore = 0, organics = 0, equipment = 0;
+  if (!json_get_int_flexible (data, "planet_id", &planet_id) || planet_id <= 0
+      || !json_get_int_flexible (data, "ore", &ore) || ore < 0
+      || !json_get_int_flexible (data, "organics", &organics) || organics < 0
+      || !json_get_int_flexible (data, "equipment", &equipment) || equipment < 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Provide planet_id and non-negative ore, organics, and equipment worker targets.");
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  int landed_planet_id = 0;
+  if (ship_id <= 0 || repo_citadel_get_onplanet (db, ship_id, &landed_planet_id) != 0
+      || landed_planet_id != planet_id)
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "You must be landed on this planet to assign its colonists.", NULL);
+      return 0;
+    }
+
+  db_error_t err;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Planet is busy; try again.");
+      return 0;
+    }
+  char sql[1024];
+  const char *query =
+    "SELECT p.owner_id, p.owner_type, p.colonists_unassigned, p.colonists_ore, p.colonists_org, p.colonists_eq, "
+    "COALESCE(pt.maxColonist_ore,0), COALESCE(pt.maxColonist_organics,0), COALESCE(pt.maxColonist_equipment,0) "
+    "FROM planets p LEFT JOIN planettypes pt ON pt.planettypes_id=p.type WHERE p.planet_id={1};";
+  sql_build (db, query, sql, sizeof sql);
+  db_res_t *res = NULL;
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (planet_id)}, 1, &res, &err)
+      || !db_res_step (res, &err))
+    {
+      if (res) db_res_finalize (res);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Planet not found.");
+      return 0;
+    }
+  int owner_id = db_res_col_i32 (res, 0, &err);
+  const char *owner_type_db = db_res_col_text (res, 1, &err);
+  char *owner_type = owner_type_db ? strdup (owner_type_db) : NULL;
+  int64_t unassigned = db_res_col_i64 (res, 2, &err);
+  int64_t old_ore = db_res_col_i64 (res, 3, &err);
+  int64_t old_org = db_res_col_i64 (res, 4, &err);
+  int64_t old_eq = db_res_col_i64 (res, 5, &err);
+  int max_ore = db_res_col_i32 (res, 6, &err);
+  int max_org = db_res_col_i32 (res, 7, &err);
+  int max_eq = db_res_col_i32 (res, 8, &err);
+  db_res_finalize (res);
+
+  bool allowed = owner_type &&
+    ((strcmp (owner_type, "player") == 0 && owner_id == ctx->player_id)
+     || ((strcmp (owner_type, "corp") == 0 || strcmp (owner_type, "corporation") == 0)
+         && ctx->corp_id > 0 && owner_id == ctx->corp_id));
+  free (owner_type);
+  if (!allowed)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "You do not control this planet.", NULL);
+      return 0;
+    }
+  if (ore > max_ore || organics > max_org || equipment > max_eq)
+    {
+      db_tx_rollback (db, NULL);
+      json_t *details = json_object ();
+      json_object_set_new (details, "max_ore_workers", json_integer (max_ore));
+      json_object_set_new (details, "max_organics_workers", json_integer (max_org));
+      json_object_set_new (details, "max_equipment_workers", json_integer (max_eq));
+      send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                   "Worker assignment exceeds this planet class capacity.", details);
+      return 0;
+    }
+  int64_t next_unassigned = unassigned + old_ore + old_org + old_eq - ore - organics - equipment;
+  if (next_unassigned < 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                   "There are not enough unassigned colonists for these jobs.", NULL);
+      return 0;
+    }
+  const char *update = "UPDATE planets SET population=GREATEST(COALESCE(population,0), {1}+{2}+{3}+{4}+colonists_mil), colonists_ore={1}, colonists_org={2}, colonists_eq={3}, colonists_unassigned={4} WHERE planet_id={5};";
+  sql_build (db, update, sql, sizeof sql);
+  if (!db_exec (db, sql,
+                (db_bind_t[]){db_bind_i64 (ore), db_bind_i64 (organics),
+                              db_bind_i64 (equipment), db_bind_i64 (next_unassigned),
+                              db_bind_i64 (planet_id)}, 5, &err)
+      || !db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "Could not save colonist assignments.");
+      return 0;
+    }
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "planet_id", json_integer (planet_id));
+  json_object_set_new (payload, "colonists_unassigned", json_integer ((json_int_t) next_unassigned));
+  json_object_set_new (payload, "colonists_ore", json_integer (ore));
+  json_object_set_new (payload, "colonists_org", json_integer (organics));
+  json_object_set_new (payload, "colonists_eq", json_integer (equipment));
+  send_response_ok_take (ctx, root, "planet.colonists.allocate", &payload);
+  return 0;
+}
+
 
 int
 cmd_planet_transwarp (client_ctx_t *ctx, json_t *root)
@@ -2650,30 +2782,14 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
   // 1. Get current quantity and capacity
   int current_quantity = 0;
   int max_capacity = 0;
-  int maxore, maxorg, maxequ;
 
   if (db_planets_get_market_move_info
-      (db, pid, code, &current_quantity, &maxore, &maxorg, &maxequ) != 0)
+      (db, pid, code, &current_quantity, &max_capacity) != 0)
     {
       return ERR_NOT_FOUND;
     }
 
-  if (strcasecmp (code, "ORE") == 0)
-    {
-      max_capacity = maxore;
-    }
-  else if (strcasecmp (code, "ORG") == 0)
-    {
-      max_capacity = maxorg;
-    }
-  else if (strcasecmp (code, "EQU") == 0)
-    {
-      max_capacity = maxequ;
-    }
-  else
-    {
-      max_capacity = 999999;
-    }
+  /* Q46 returns the configured per-commodity planet_goods capacity. */
 
   // 2. Calculate new quantity with overflow and bounds checking
   int new_quantity;

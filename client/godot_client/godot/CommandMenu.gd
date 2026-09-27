@@ -684,6 +684,11 @@ func _choose_action(action: Dictionary) -> void:
 		data[str(action["context_id"])] = int(value)
 	var fields: Array = action.get("fields", [])
 	if fields.is_empty():
+		# Landing is an immediate navigation action. The server still validates
+		# whether the ship can land and reports any refusal.
+		if str(action.get("command", "")) == "planet.land":
+			command_requested.emit(str(action["command"]), data, str(action["label"]), true)
+			return
 		if action.get("mutating", false):
 			_form_action = action
 			_form_fields.clear()

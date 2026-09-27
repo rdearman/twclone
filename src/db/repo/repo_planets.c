@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <limits.h>
 
 int db_planets_sync_id_sequence(db_t *db) {
     db_error_t err;
@@ -443,7 +444,36 @@ int db_planets_create(db_t *db, int sector_id, const char *name, int owner_id, c
         db_bind_text (owner_type), db_bind_text (class_str), db_bind_i64 (type_id),
         db_bind_timestamp_text (ts), db_bind_i64 (created_by)
     };
-    if (db_exec_insert_id(db, sql, params, 8, "planet_id", new_id, &err)) return 0;
+    if (db_exec_insert_id(db, sql, params, 8, "planet_id", new_id, &err)) {
+        /* New planets begin with the built-in commodity capacities of their class.
+         * These rows also define which goods the planet accepts. */
+        db_res_t *type_res = NULL;
+        char type_sql[256];
+        sql_build(db, "SELECT maxore, maxorganics, maxequipment FROM planettypes WHERE planettypes_id = {1}", type_sql, sizeof(type_sql));
+        if (!db_query(db, type_sql,
+                      (db_bind_t[]){db_bind_i64(type_id)}, 1, &type_res, &err) ||
+            !db_res_step(type_res, &err)) {
+            if (type_res) db_res_finalize(type_res);
+            return -1;
+        }
+        int capacities[] = {db_res_col_i32(type_res, 0, &err),
+                            db_res_col_i32(type_res, 1, &err),
+                            db_res_col_i32(type_res, 2, &err)};
+        db_res_finalize(type_res);
+        const char *codes[] = {"ORE", "ORG", "EQU"};
+        char capacity_stmt[512];
+        sql_build(db, "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES ({1}, {2}, 0, {3}, 0)", capacity_stmt, sizeof(capacity_stmt));
+        for (int i = 0; i < 3; i++) {
+            if (!db_exec(db, capacity_stmt,
+                         (db_bind_t[]){db_bind_i64(*new_id), db_bind_text(codes[i]), db_bind_i64(capacities[i])}, 3, &err)) return -1;
+        }
+        if (db_planets_upsert_stock(db, (int)*new_id, "ORE", 0) != 0 ||
+            db_planets_upsert_stock(db, (int)*new_id, "ORG", 0) != 0 ||
+            db_planets_upsert_stock(db, (int)*new_id, "EQU", 0) != 0) {
+            return -1;
+        }
+        return 0;
+    }
     return -1;
 }
 
@@ -466,12 +496,12 @@ int db_planets_update_navhaz(db_t *db, int sector_id, int delta) {
     return -1;
 }
 
-int db_planets_insert_genesis_idem(db_t *db, const char *key, const char *payload, long long ts) {
+int db_planets_insert_genesis_idem(db_t *db, const char *key, const char *request_fingerprint, const char *payload, long long ts) {
     db_error_t err;
     /* SQL_VERBATIM: Q36 */
-    const char *q36 = "INSERT INTO idempotency (key, cmd, response, created_at) VALUES ({1}, 'planet.genesis_create', {2}, {3});";
+    const char *q36 = "INSERT INTO idempotency (key, cmd, req_fp, response, created_at) VALUES ({1}, 'planet.genesis_create', {2}, {3}, {4}) ON CONFLICT (key) DO NOTHING;";
     char sql[1024]; sql_build(db, q36, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_text(payload), db_bind_timestamp_text(ts) }, 3, &err)) return 0;
+    if (db_exec(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_text(request_fingerprint), db_bind_text(payload), db_bind_timestamp_text(ts) }, 4, &err)) return 0;
     return -1;
 }
 
@@ -569,17 +599,15 @@ int db_planets_set_sector(db_t *db, int planet_id, int sector_id) {
     return -1;
 }
 
-int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, int *current_qty, int *max_ore, int *max_org, int *max_equ) {
+int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, int *current_qty, int *capacity) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q46 */
-    const char *q46 = "SELECT es.quantity, pt.maxore, pt.maxorganics, pt.maxequipment FROM planets p JOIN planettypes pt ON p.type = pt.planettypes_id LEFT JOIN entity_stock es ON p.planet_id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = {2} WHERE p.planet_id = {1};";
+    const char *q46 = "SELECT COALESCE(es.quantity, 0), pg.max_capacity FROM planets p JOIN planet_goods pg ON pg.planet_id = p.planet_id AND pg.commodity = {2} LEFT JOIN entity_stock es ON p.planet_id = es.entity_id AND es.entity_type = 'planet' AND es.commodity_code = pg.commodity WHERE p.planet_id = {1};";
     char sql[1024]; sql_build(db, q46, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id), db_bind_text(code) }, 2, &res, &err) && db_res_step(res, &err)) {
         *current_qty = db_res_col_i32(res, 0, &err);
-        *max_ore = db_res_col_i32(res, 1, &err);
-        *max_org = db_res_col_i32(res, 2, &err);
-        *max_equ = db_res_col_i32(res, 3, &err);
+        *capacity = db_res_col_i32(res, 1, &err);
         db_res_finalize(res);
         return 0;
     }
@@ -588,6 +616,10 @@ int db_planets_get_market_move_info(db_t *db, int planet_id, const char *code, i
 }
 
 int db_planets_upsert_stock(db_t *db, int planet_id, const char *code, int quantity) {
+    int current_quantity = 0, capacity = 0;
+    if (!db || !code || quantity < 0 ||
+        db_planets_get_market_move_info(db, planet_id, code, &current_quantity, &capacity) != 0 ||
+        quantity > capacity) return -1;
     db_error_t err;
     const char *epoch_expr = sql_epoch_now(db);
     const char *sql_fmt = sql_entity_stock_upsert_epoch_fmt(db);
@@ -616,7 +648,7 @@ int db_planets_get_commodity_id_v2(db_t *db, const char *code, int *id) {
 int db_planets_add_colonists_unassigned(db_t *db, int planet_id, int quantity) {
     db_error_t err;
     /* SQL_VERBATIM: Q90 */
-    const char *q90 = "UPDATE planets SET colonists_unassigned = GREATEST(0, colonists_unassigned + {1}) WHERE planet_id = {2}";
+    const char *q90 = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_mil) + {1}), colonists_unassigned = GREATEST(0, colonists_unassigned + {1}) WHERE planet_id = {2}";
     char sql[512]; sql_build(db, q90, sql, sizeof(sql));
     if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;
@@ -638,73 +670,49 @@ int db_planets_get_colonists_unassigned(db_t *db, int planet_id, int64_t *count)
 }
 
 int db_planets_add_ore_on_hand(db_t *db, int planet_id, int quantity) {
-    db_error_t err;
-    /* SQL_VERBATIM: Q92 */
-    const char *q92 = "UPDATE planets SET ore_on_hand = GREATEST(0, ore_on_hand + {1}) WHERE planet_id = {2}";
-    char sql[512]; sql_build(db, q92, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
-    return -1;
+    int current = 0;
+    if (db_planets_get_stock(db, planet_id, "ORE", &current) != 0) current = 0;
+    int64_t updated = (int64_t)current + quantity;
+    if (updated < 0) updated = 0;
+    if (updated > INT_MAX) return -1;
+    return db_planets_upsert_stock(db, planet_id, "ORE", (int)updated);
 }
 
 int db_planets_get_ore_on_hand(db_t *db, int planet_id, int64_t *count) {
-    db_res_t *res = NULL;
-    db_error_t err;
-    /* SQL_VERBATIM: Q93 */
-    const char *q93 = "SELECT ore_on_hand FROM planets WHERE planet_id={1}";
-    char sql[512]; sql_build(db, q93, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        if (count) *count = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
-    }
-    if (res) db_res_finalize(res);
-    return -1;
+    int stock = 0;
+    int rc = db_planets_get_stock(db, planet_id, "ORE", &stock);
+    if (count) *count = rc == 0 ? stock : 0;
+    return rc;
 }
 
 int db_planets_add_organics_on_hand(db_t *db, int planet_id, int quantity) {
-    db_error_t err;
-    /* SQL_VERBATIM: Q94 */
-    const char *q94 = "UPDATE planets SET organics_on_hand = GREATEST(0, organics_on_hand + {1}) WHERE planet_id = {2}";
-    char sql[512]; sql_build(db, q94, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
-    return -1;
+    int current = 0;
+    if (db_planets_get_stock(db, planet_id, "ORG", &current) != 0) current = 0;
+    int64_t updated = (int64_t)current + quantity;
+    if (updated < 0) updated = 0;
+    if (updated > INT_MAX) return -1;
+    return db_planets_upsert_stock(db, planet_id, "ORG", (int)updated);
 }
 
 int db_planets_get_organics_on_hand(db_t *db, int planet_id, int64_t *count) {
-    db_res_t *res = NULL;
-    db_error_t err;
-    /* SQL_VERBATIM: Q95 */
-    const char *q95 = "SELECT organics_on_hand FROM planets WHERE planet_id={1}";
-    char sql[512]; sql_build(db, q95, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        if (count) *count = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
-    }
-    if (res) db_res_finalize(res);
-    return -1;
+    int stock = 0;
+    int rc = db_planets_get_stock(db, planet_id, "ORG", &stock);
+    if (count) *count = rc == 0 ? stock : 0;
+    return rc;
 }
 
 int db_planets_add_equipment_on_hand(db_t *db, int planet_id, int quantity) {
-    db_error_t err;
-    /* SQL_VERBATIM: Q96 */
-    const char *q96 = "UPDATE planets SET equipment_on_hand = GREATEST(0, equipment_on_hand + {1}) WHERE planet_id = {2}";
-    char sql[512]; sql_build(db, q96, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
-    return -1;
+    int current = 0;
+    if (db_planets_get_stock(db, planet_id, "EQU", &current) != 0) current = 0;
+    int64_t updated = (int64_t)current + quantity;
+    if (updated < 0) updated = 0;
+    if (updated > INT_MAX) return -1;
+    return db_planets_upsert_stock(db, planet_id, "EQU", (int)updated);
 }
 
 int db_planets_get_equipment_on_hand(db_t *db, int planet_id, int64_t *count) {
-    db_res_t *res = NULL;
-    db_error_t err;
-    /* SQL_VERBATIM: Q97 */
-    const char *q97 = "SELECT equipment_on_hand FROM planets WHERE planet_id={1}";
-    char sql[512]; sql_build(db, q97, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
-        if (count) *count = db_res_col_i64(res, 0, &err);
-        db_res_finalize(res);
-        return 0;
-    }
-    if (res) db_res_finalize(res);
-    return -1;
+    int stock = 0;
+    int rc = db_planets_get_stock(db, planet_id, "EQU", &stock);
+    if (count) *count = rc == 0 ? stock : 0;
+    return rc;
 }

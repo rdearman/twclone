@@ -28,6 +28,7 @@ int cmd_planet_market_buy_order (client_ctx_t * ctx, json_t * root);
 int cmd_planet_transwarp (client_ctx_t * ctx, json_t * root);
 int cmd_planet_colonists_set (client_ctx_t * ctx, json_t * root);
 int cmd_planet_colonists_get (client_ctx_t * ctx, json_t * root);
+int cmd_planet_colonists_allocate (client_ctx_t * ctx, json_t * root);
 
 int h_planet_check_trade_legality (db_t * db,
 				   int pid,

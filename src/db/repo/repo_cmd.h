@@ -32,6 +32,7 @@ int db_player_set_sector (int player_id, int sector_id);
 int db_player_set_alignment (db_t *db, int player_id, int alignment);
 int db_player_get_sector (db_t *db, int player_id, int *out_sector);
 int db_planet_get_details_json (db_t *db, int pid, json_t **out);
+int db_planet_get_goods_json (db_t *db, int pid, json_t **out);
 int db_planet_info_json (db_t *db, int player_id, json_t **out);
 int db_player_info_json (db_t *db, int player_id, json_t **out);
 int db_player_info_selected_fields (db_t *db,
