@@ -1,0 +1,161 @@
+{
+  "name": "Daily planetary taxation",
+  "tests": [
+    {
+      "name": "Setup: Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Save admin balance before assessment",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT credits FROM players WHERE player_id = @{admin_player_id};" },
+      "save": { "credits_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Configure deterministic taxable activity on an owned test planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE planets SET owner_type = 'player', owner_id = @{admin_player_id} WHERE planet_id = 1;" }
+    },
+    {
+      "name": "Enable ten percent tax for the test planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_tax_policies (planet_id, rate_bps, enabled) VALUES (1, 1000, TRUE) ON CONFLICT (planet_id) DO UPDATE SET rate_bps = 1000, enabled = TRUE;" }
+    },
+    {
+      "name": "Clear prior assessment and fixture activity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_tax_assessments WHERE planet_id = 1 AND tax_date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date;" }
+    },
+    {
+      "name": "Clear prior deterministic activity row",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_economic_activity WHERE idempotency_key = 'v2-taxation-e2e-planet-1';" }
+    },
+    {
+      "name": "Record 10000 credits of taxable activity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_economic_activity (planet_id, activity_type, commodity_code, quantity, unit_value, taxable_value, idempotency_key) VALUES (1, 'market_trade', 'ORE', 10, 1000, 10000, 'v2-taxation-e2e-planet-1');" }
+    },
+    {
+      "name": "Run the daily planet-tax cron",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_planet_tax';" }
+    },
+    {
+      "name": "Wait for tax assessment",
+      "command": "delay",
+      "data": { "seconds": 5 }
+    },
+    {
+      "name": "Verify assessment and player receipt",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.credits - @{credits_before}, ta.tax_amount, ta.taxable_value FROM players p JOIN planet_tax_assessments ta ON ta.owner_type = 'player' AND ta.owner_id = p.player_id WHERE p.player_id = @{admin_player_id} AND ta.planet_id = 1 AND ta.tax_date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date;" },
+      "save": { "balance_increase": "data.rows.0.0", "tax_amount": "data.rows.0.1" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1000 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1000 },
+        { "path": "data.rows.0.2", "op": "==", "value": 10000 }
+      ]
+    },
+    {
+      "name": "Save balance before retry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT credits FROM players WHERE player_id = @{admin_player_id};" },
+      "save": { "credits_after_first": "data.rows.0.0" }
+    },
+    {
+      "name": "Retry the daily tax task",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_planet_tax';" }
+    },
+    {
+      "name": "Wait for idempotent tax retry",
+      "command": "delay",
+      "data": { "seconds": 5 }
+    },
+    {
+      "name": "Verify a repeated task does not credit twice",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT credits - @{credits_after_first} FROM players WHERE player_id = @{admin_player_id};" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 0 } ]
+    },
+    {
+      "name": "Choose a second planet and corporation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT planet_id FROM planets WHERE planet_id <> 1 ORDER BY planet_id LIMIT 1), (SELECT corporation_id FROM corporations ORDER BY corporation_id LIMIT 1);" },
+      "save": { "corp_tax_planet_id": "data.rows.0.0", "tax_corporation_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Save corporate account pre-tax balance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT COALESCE((SELECT balance FROM corp_accounts WHERE corp_id = @{tax_corporation_id}), 0);" },
+      "save": { "corp_credits_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Configure a corporation-owned taxable planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE planets SET owner_type = 'corp', owner_id = @{tax_corporation_id} WHERE planet_id = @{corp_tax_planet_id};" }
+    },
+    {
+      "name": "Configure corporate planet tax policy",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_tax_policies (planet_id, rate_bps, enabled) VALUES (@{corp_tax_planet_id}, 1000, TRUE) ON CONFLICT (planet_id) DO UPDATE SET rate_bps = 1000, enabled = TRUE;" }
+    },
+    {
+      "name": "Clear isolated activity and current assessment for corporate test planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_economic_activity WHERE planet_id = @{corp_tax_planet_id};" }
+    },
+    {
+      "name": "Clear current assessment for corporate test planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_tax_assessments WHERE planet_id = @{corp_tax_planet_id} AND tax_date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date;" }
+    },
+    {
+      "name": "Record taxable corporate colony activity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_economic_activity (planet_id, activity_type, commodity_code, quantity, unit_value, taxable_value, idempotency_key) VALUES (@{corp_tax_planet_id}, 'market_trade', 'ORE', 10, 1000, 10000, 'v2-taxation-e2e-corp-planet');" }
+    },
+    {
+      "name": "Run daily tax cron for corporate colony",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_planet_tax';" }
+    },
+    {
+      "name": "Wait for corporate tax receipt",
+      "command": "delay",
+      "data": { "seconds": 5 }
+    },
+    {
+      "name": "Verify corporation receives the daily colony tax",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT ca.balance - @{corp_credits_before}, tx.amount, ta.tax_amount, ta.taxable_value FROM corp_accounts ca JOIN corp_tx tx ON tx.corp_id = ca.corp_id AND tx.idempotency_key = 'planet-tax-receipt:' || @{corp_tax_planet_id} || ':' || (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date::text JOIN planet_tax_assessments ta ON ta.planet_id = @{corp_tax_planet_id} AND ta.tax_date = (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date WHERE ca.corp_id = @{tax_corporation_id};" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1000 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1000 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1000 },
+        { "path": "data.rows.0.3", "op": "==", "value": 10000 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "name": "Ferengi travelling traders",
+  "version": "2.0.0",
+  "protocol_category": "22_NPC_Ferengi",
+  "description": "Persistent Ferengi traders, data-only roster provisioning, encounter offers, relationship history, acceptance, rejection, and expiry",
+  "tests": [
+    { "name": "Setup trader test player", "setup": "macro_auth_user", "username": "ferengi_trader_test", "password": "password123" },
+    { "name": "Ensure named Ferengi trader ships exist", "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {}, "expect": { "status": "ok" } },
+    {
+      "name": "Move test player into Gaila's sector",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id = (SELECT s.sector_id FROM ferengi_traders ft JOIN ships s USING (ship_id) WHERE ft.trader_code = 'gaila'), credits = 100000 WHERE player_id = @{ferengi_trader_test_player_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Move test ship into Gaila's sector",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id = (SELECT s.sector_id FROM ferengi_traders ft JOIN ships s USING (ship_id) WHERE ft.trader_code = 'gaila') WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{ferengi_trader_test_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear test player ORE cargo",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 0 FROM players WHERE player_id = @{ferengi_trader_test_player_id} ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = 0;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset test player's previous Gaila relationship",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ferengi_player_relationships WHERE player_id = @{ferengi_trader_test_player_id} AND ferengi_trader_id = (SELECT ferengi_trader_id FROM ferengi_traders WHERE trader_code = 'gaila');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset test player's previous Gaila relationship and open offers",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ferengi_trader_interactions WHERE player_id = @{ferengi_trader_test_player_id} AND ferengi_trader_id = (SELECT ferengi_trader_id FROM ferengi_traders WHERE trader_code = 'gaila');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset Gaila's open offers for this player",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ferengi_trader_deals WHERE player_id = @{ferengi_trader_test_player_id} AND ferengi_trader_id = (SELECT ferengi_trader_id FROM ferengi_traders WHERE trader_code = 'gaila') AND status = 'open';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset Gaila's test inventory",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 30 FROM ferengi_traders WHERE trader_code = 'gaila' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = 30;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh player sector context",
+      "command": "auth.login", "user": "ferengi_trader_test",
+      "data": { "username": "ferengi_trader_test", "passwd": "password123" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Encounter returns a persistent named trader and offer",
+      "command": "ferengi.traders", "user": "ferengi_trader_test",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.traders", "op": "contains", "value": "gaila" },
+        { "path": "data.traders.*[trader_code=gaila].display_name", "op": "==", "value": "Gaila the Wayfarer" }
+      ]
+    },
+    {
+      "name": "NPC visit creates a persistent encounter offer",
+      "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {},
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Offer remains visible after the trader moves away",
+      "command": "ferengi.traders", "user": "ferengi_trader_test",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.offers", "op": "contains", "value": "gaila" } ]
+    },
+    {
+      "name": "Save the generated offer ID",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT ferengi_trader_deal_id FROM ferengi_trader_deals WHERE player_id = @{ferengi_trader_test_player_id} AND ferengi_trader_id = (SELECT ferengi_trader_id FROM ferengi_traders WHERE trader_code = 'gaila') AND idempotency_key LIKE 'visit:%' ORDER BY ferengi_trader_deal_id DESC LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "generated_deal_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Accept trader offer settles cargo and records relationship",
+      "command": "ferengi.deal.accept", "user": "ferengi_trader_test",
+      "data": { "deal_id": "@{generated_deal_id}" },
+      "expect": { "status": "ferengi.deal.accepted_v1" },
+      "asserts": [
+        { "path": "data.status", "op": "==", "value": "settled" },
+        { "path": "data.reputation", "op": "==", "value": 5 }
+      ]
+    },
+    {
+      "name": "Repeated acceptance returns remembered settled deal",
+      "command": "ferengi.deal.accept", "user": "ferengi_trader_test",
+      "data": { "deal_id": "@{generated_deal_id}" },
+      "expect": { "status": "ferengi.deal.accepted_v1" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "settled" } ]
+    },
+    {
+      "name": "Reject subsequent trader offer",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ferengi_trader_deals (ferengi_trader_deal_id, ferengi_trader_id, player_id, commodity_code, side, quantity, unit_price, status, idempotency_key, expires_at) SELECT 889100002, ferengi_trader_id, @{ferengi_trader_test_player_id}, 'ORE', 'trader_buys', 1, 5, 'open', 'integration-reject-889100002', CURRENT_TIMESTAMP + INTERVAL '1 hour' FROM ferengi_traders WHERE trader_code = 'gaila' ON CONFLICT (ferengi_trader_deal_id) DO UPDATE SET status = 'open', expires_at = CURRENT_TIMESTAMP + INTERVAL '1 hour';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject records remembered refusal",
+      "command": "ferengi.deal.reject", "user": "ferengi_trader_test",
+      "data": { "deal_id": 889100002 },
+      "expect": { "status": "ferengi.deal.rejected_v1" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "declined" } ]
+    },
+    {
+      "name": "Expired deal is not accepted",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ferengi_trader_deals (ferengi_trader_deal_id, ferengi_trader_id, player_id, commodity_code, side, quantity, unit_price, status, idempotency_key, created_at, expires_at) SELECT 889100003, ferengi_trader_id, @{ferengi_trader_test_player_id}, 'ORE', 'trader_sells', 1, 5, 'open', 'integration-expire-889100003', CURRENT_TIMESTAMP - INTERVAL '1 hour', CURRENT_TIMESTAMP - INTERVAL '1 second' FROM ferengi_traders WHERE trader_code = 'gaila' ON CONFLICT (ferengi_trader_deal_id) DO UPDATE SET status = 'open', created_at = CURRENT_TIMESTAMP - INTERVAL '1 hour', expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture another expired offer for cron cleanup",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ferengi_trader_deals (ferengi_trader_deal_id, ferengi_trader_id, player_id, commodity_code, side, quantity, unit_price, status, idempotency_key, created_at, expires_at) SELECT 889100004, ferengi_trader_id, @{ferengi_trader_test_player_id}, 'ORE', 'trader_sells', 1, 5, 'open', 'integration-cron-expire-889100004', CURRENT_TIMESTAMP - INTERVAL '1 hour', CURRENT_TIMESTAMP - INTERVAL '1 second' FROM ferengi_traders WHERE trader_code = 'gaila' ON CONFLICT (ferengi_trader_deal_id) DO UPDATE SET status = 'open', created_at = CURRENT_TIMESTAMP - INTERVAL '1 hour', expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "NPC cron expires old trader deals",
+      "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {},
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify cron expiry is durable",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT status FROM ferengi_trader_deals WHERE ferengi_trader_deal_id = 889100004;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "expired" } ]
+    },
+    {
+      "name": "Expired offer transitions on player action",
+      "command": "ferengi.deal.accept", "user": "ferengi_trader_test",
+      "data": { "deal_id": 889100003 },
+      "expect": { "status": "ferengi.deal.expired_v1" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "expired" } ]
+    },
+    {
+      "name": "Remembered interaction rows survive offer lifecycle",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN COUNT(*) >= 3 THEN 'yes' ELSE 'no' END FROM ferengi_trader_interactions WHERE player_id = @{ferengi_trader_test_player_id} AND ferengi_trader_id = (SELECT ferengi_trader_id FROM ferengi_traders WHERE trader_code = 'gaila');" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "yes" } ]
+    },
+    {
+      "name": "Clean up interrupted data-only trader fixture",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ships WHERE ship_id IN (SELECT ship_id FROM ferengi_traders WHERE trader_code = 'codex_fixture_roster_only');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clean up interrupted trader definition",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ferengi_trader_definitions WHERE trader_code = 'codex_fixture_roster_only';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Add temporary trader using data only",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ferengi_trader_definitions (trader_code, display_name, ship_type_id, active) SELECT 'codex_fixture_roster_only', 'Configured Roster Trader', shiptypes_id, TRUE FROM shiptypes WHERE name = 'Merchant Freighter' ON CONFLICT (trader_code) DO UPDATE SET active = TRUE, display_name = EXCLUDED.display_name, ship_type_id = EXCLUDED.ship_type_id;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Configure temporary trader commodity rotation",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ferengi_trader_definition_rotation (trader_code, position, commodity_code) VALUES ('codex_fixture_roster_only', 1, 'ORE') ON CONFLICT (trader_code, position) DO UPDATE SET commodity_code = EXCLUDED.commodity_code;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Configure temporary trader starting cargo",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ferengi_trader_definition_cargo (trader_code, commodity_code, quantity) VALUES ('codex_fixture_roster_only', 'ORE', 3) ON CONFLICT (trader_code, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "NPC tick provisions the configured trader",
+      "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {},
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify data-only trader was provisioned with its configured name",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT display_name FROM ferengi_traders WHERE trader_code = 'codex_fixture_roster_only';" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "Configured Roster Trader" } ]
+    },
+    {
+      "name": "Remove temporary data-only trader",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ships WHERE ship_id IN (SELECT ship_id FROM ferengi_traders WHERE trader_code = 'codex_fixture_roster_only');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove temporary trader definition",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ferengi_trader_definitions WHERE trader_code = 'codex_fixture_roster_only';" },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

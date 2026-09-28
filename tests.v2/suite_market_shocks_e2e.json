@@ -1,0 +1,135 @@
+{
+  "name": "Temporary market shock pricing and expiry",
+  "tests": [
+    {
+      "name": "Setup: Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Choose a port commodity for quote verification",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT port_id, commodity FROM port_trade ORDER BY port_id, commodity LIMIT 1;"
+      },
+      "save": {
+        "shock_port_id": "data.rows.0.0",
+        "shock_commodity": "data.rows.0.1"
+      }
+    },
+    {
+      "name": "Clear prior test shocks",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM market_shocks WHERE idempotency_key = 'v2-market-shock-e2e';"
+      }
+    },
+    {
+      "name": "Read baseline quote",
+      "command": "trade.quote",
+      "user": "admin",
+      "data": {
+        "port_id": "@{shock_port_id}",
+        "commodity": "@{shock_commodity}",
+        "quantity": 1
+      },
+      "save": {
+        "shock_baseline_buy": "data.buy_price",
+        "shock_baseline_sell": "data.sell_price"
+      }
+    },
+    {
+      "name": "Create a scoped temporary shock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO market_shocks (trigger_source, player_id, scope_type, port_id, commodity_code, multiplier_bps, starts_at, expires_at, idempotency_key) VALUES ('player', @{admin_player_id}, 'port', @{shock_port_id}, '@{shock_commodity}', 40000, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '2 seconds', 'v2-market-shock-e2e');"
+      }
+    },
+    {
+      "name": "Verify scoped multiplier changes quoted prices",
+      "command": "trade.quote",
+      "user": "admin",
+      "data": {
+        "port_id": "@{shock_port_id}",
+        "commodity": "@{shock_commodity}",
+        "quantity": 1
+      },
+      "asserts": [
+        {
+          "path": "data.buy_price",
+          "op": ">",
+          "value": { "sql_int": "SELECT floor(@{shock_baseline_buy})::integer + 1;" }
+        },
+        {
+          "path": "data.sell_price",
+          "op": ">",
+          "value": { "sql_int": "SELECT floor(@{shock_baseline_sell})::integer + 1;" }
+        }
+      ]
+    },
+    {
+      "name": "Verify the shock scope and duration are stored",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN scope_type = 'port' AND port_id = @{shock_port_id} AND commodity_code = '@{shock_commodity}' AND multiplier_bps = 40000 AND expires_at - starts_at = INTERVAL '2 seconds' THEN 1 ELSE 0 END FROM market_shocks WHERE idempotency_key = 'v2-market-shock-e2e';"
+      },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Wait for the shock to expire",
+      "command": "delay",
+      "data": { "seconds": 3 }
+    },
+    {
+      "name": "Force the expiry cleanup task due",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'market_shock_tick';"
+      }
+    },
+    {
+      "name": "Wait for automatic shock expiry cleanup",
+      "command": "delay",
+      "data": { "seconds": 5 }
+    },
+    {
+      "name": "Verify the expired shock was removed",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM market_shocks WHERE idempotency_key = 'v2-market-shock-e2e';"
+      },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Verify quotes return to baseline after expiry",
+      "command": "trade.quote",
+      "user": "admin",
+      "data": {
+        "port_id": "@{shock_port_id}",
+        "commodity": "@{shock_commodity}",
+        "quantity": 1
+      },
+      "asserts": [
+        {
+          "path": "data.buy_price",
+          "op": "==",
+          "value": { "sql_int": "SELECT round(@{shock_baseline_buy})::integer;" }
+        },
+        {
+          "path": "data.sell_price",
+          "op": "==",
+          "value": { "sql_int": "SELECT round(@{shock_baseline_sell})::integer;" }
+        }
+      ]
+    }
+  ]
+}

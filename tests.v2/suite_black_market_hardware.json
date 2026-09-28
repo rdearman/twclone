@@ -1,0 +1,212 @@
+{
+  "name": "Special port hardware availability",
+  "version": "2.0.0",
+  "protocol_category": "22_Trade_and_Port_Commands",
+  "description": "Black-market hardware list and buy authorization follow porttype_items",
+  "tests": [
+    {
+      "name": "Setup: black market hardware tester",
+      "setup": "macro_auth_user",
+      "username": "black_market_hardware_tester",
+      "password": "password123"
+    },
+    {
+      "name": "Rig: remove stale isolated test port type",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ports WHERE name = 'V2 hardware test black market';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: remove stale isolated test port type",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM porttypes WHERE code = 'V2_TEST_BLACKMARKET';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: create isolated black-market port type",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO porttypes (code, description, can_buy, can_sell, is_stardock, is_black_market) VALUES ('V2_TEST_BLACKMARKET', 'Test-only black market', TRUE, TRUE, FALSE, TRUE);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: create isolated black-market port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO ports (name, sector_id, type, porttype_id) SELECT 'V2 hardware test black market', s.sector_id, 10, pt.porttype_id FROM sectors s CROSS JOIN porttypes pt WHERE pt.code = 'V2_TEST_BLACKMARKET' AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id) ORDER BY s.sector_id LIMIT 1;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: move tester to test port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM ports WHERE name = 'V2 hardware test black market') WHERE player_id = @{black_market_hardware_tester_player_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: move tester ship to test port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id = (SELECT sector_id FROM ports WHERE name = 'V2 hardware test black market') WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{black_market_hardware_tester_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: reset tester hardware capacity for repeatable stock checks",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET holds = 10, shields = 0 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{black_market_hardware_tester_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: allow holds and deny shields in catalogue",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO porttype_items (porttype_id, hardware_items_id, can_buy, can_sell) SELECT (SELECT porttype_id FROM porttypes WHERE code = 'V2_TEST_BLACKMARKET'), hardware_items_id, (code = 'HOLDS'), FALSE FROM hardware_items WHERE code IN ('HOLDS', 'SHIELDS');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: configure stock for mapped hardware",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO port_hardware_stock (port_id, hardware_items_id, stock_quantity, max_stock, restock_quantity, restock_interval_seconds, next_restock_at) SELECT (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market'), hardware_items_id, 10, 20, 2, 86400, CURRENT_TIMESTAMP + INTERVAL '1 day' FROM hardware_items WHERE code = 'HOLDS';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh player context at black-market sector",
+      "command": "auth.login",
+      "user": "black_market_hardware_tester",
+      "data": { "username": "black_market_hardware_tester", "passwd": "password123" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "hardware.list identifies special port and configured item",
+      "command": "hardware.list",
+      "user": "black_market_hardware_tester",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.location_type", "op": "==", "value": "BLACK_MARKET" },
+        { "path": "data.items", "op": "contains", "value": "HOLDS" },
+        { "path": "data.items.0.price", "op": "==", "value": 50 },
+        { "path": "data.items.0.base_price", "op": "==", "value": 50 },
+        { "path": "data.items.0.stock_quantity", "op": "==", "value": 10 }
+      ]
+    },
+    {
+      "name": "hardware.list discounts full stock without changing base price",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE port_hardware_stock SET stock_quantity = max_stock WHERE port_id = (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market') AND hardware_items_id = (SELECT hardware_items_id FROM hardware_items WHERE code = 'HOLDS');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "hardware.list reports full-stock price and stable base price",
+      "command": "hardware.list",
+      "user": "black_market_hardware_tester",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0.price", "op": "==", "value": 25 },
+        { "path": "data.items.0.base_price", "op": "==", "value": 50 },
+        { "path": "data.items.0.stock_quantity", "op": "==", "value": 20 }
+      ]
+    },
+    {
+      "name": "Set mapped hardware stock to zero",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE port_hardware_stock SET stock_quantity = 0 WHERE port_id = (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market') AND hardware_items_id = (SELECT hardware_items_id FROM hardware_items WHERE code = 'HOLDS');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "hardware.list price rises at zero stock",
+      "command": "hardware.list",
+      "user": "black_market_hardware_tester",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0.price", "op": "==", "value": 75 }
+      ]
+    },
+    {
+      "name": "hardware.buy refuses empty stock",
+      "command": "hardware.buy",
+      "user": "black_market_hardware_tester",
+      "data": { "code": "HOLDS", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Restore hardware stock for purchase",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE port_hardware_stock SET stock_quantity = 10 WHERE port_id = (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market') AND hardware_items_id = (SELECT hardware_items_id FROM hardware_items WHERE code = 'HOLDS');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "hardware.buy permits mapped item",
+      "command": "hardware.buy",
+      "user": "black_market_hardware_tester",
+      "data": { "code": "HOLDS", "quantity": 1 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify purchase consumed exactly one unit",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT stock_quantity FROM port_hardware_stock WHERE port_id = (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market') AND hardware_items_id = (SELECT hardware_items_id FROM hardware_items WHERE code = 'HOLDS');" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 9 }
+      ]
+    },
+    {
+      "name": "Make hardware stock eligible for scheduled restock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE port_hardware_stock SET next_restock_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE port_id = (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market') AND hardware_items_id = (SELECT hardware_items_id FROM hardware_items WHERE code = 'HOLDS');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Make hardware restock task due",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'port_hardware_restock';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Wait for port hardware restock cron",
+      "command": "delay",
+      "data": { "seconds": 2 }
+    },
+    {
+      "name": "Verify scheduled restock adds configured quantity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT stock_quantity FROM port_hardware_stock WHERE port_id = (SELECT port_id FROM ports WHERE name = 'V2 hardware test black market') AND hardware_items_id = (SELECT hardware_items_id FROM hardware_items WHERE code = 'HOLDS');" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 11 }
+      ]
+    },
+    {
+      "name": "hardware.buy rejects unmapped item",
+      "command": "hardware.buy",
+      "user": "black_market_hardware_tester",
+      "data": { "code": "SHIELDS", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Cleanup: remove test port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ports WHERE name = 'V2 hardware test black market';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Cleanup: remove isolated test port type",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM porttypes WHERE code = 'V2_TEST_BLACKMARKET';" },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

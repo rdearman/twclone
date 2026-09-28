@@ -1,0 +1,136 @@
+{
+  "name": "Player trade offers",
+  "tests": [
+    { "setup": "macro_auth_user", "username": "offer_sender", "password": "password" },
+    { "setup": "macro_auth_user", "username": "offer_recipient", "password": "password" },
+    { "setup": "macro_auth_user", "username": "offer_intruder", "password": "password" },
+    {
+      "name": "Clear prior rows using this suite's idempotency keys",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM trade_offers WHERE sender_player_id = (SELECT player_id FROM players WHERE name = 'offer_sender') AND idempotency_key IN ('trade-offer-e2e-sell', 'trade-offer-e2e-cancel', 'trade-offer-e2e-expire');" }
+    },
+    {
+      "name": "Rig offer balances and cargo",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET credits = 10000 WHERE player_id IN (@{offer_sender_player_id}, @{offer_recipient_player_id});" }
+    },
+    {
+      "name": "Rig sender cargo",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 10 FROM players WHERE player_id = @{offer_sender_player_id} ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = 10;" }
+    },
+    {
+      "name": "Rig recipient cargo",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 0 FROM players WHERE player_id = @{offer_recipient_player_id} ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = 0;" }
+    },
+    {
+      "name": "Create sell offer",
+      "command": "trade.offer",
+      "user": "offer_sender",
+      "data": { "to_player_id": "@{offer_recipient_player_id}", "commodity": "ORE", "quantity": 3, "price": 25, "mode": "sell", "idempotency_key": "trade-offer-e2e-sell" },
+      "save": { "@offer_id": "data.offer_id" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "pending" } ]
+    },
+    {
+      "name": "Create retry resolves original offer",
+      "command": "trade.offer",
+      "user": "offer_sender",
+      "data": { "to_player_id": "@{offer_recipient_player_id}", "commodity": "ORE", "quantity": 3, "price": 25, "mode": "sell", "idempotency_key": "trade-offer-e2e-sell" },
+      "asserts": [ { "path": "data.offer_id", "op": "==", "value": "@{offer_id}" } ]
+    },
+    {
+      "name": "Non-recipient cannot accept the offer",
+      "command": "trade.accept",
+      "user": "offer_intruder",
+      "data": { "offer_id": "@{offer_id}" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Recipient accepts offer",
+      "command": "trade.accept",
+      "user": "offer_recipient",
+      "data": { "offer_id": "@{offer_id}" },
+      "expect": { "status": "trade.offer.accepted_v1" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "accepted" } ]
+    },
+    {
+      "name": "Repeat acceptance does not settle twice",
+      "command": "trade.accept",
+      "user": "offer_recipient",
+      "data": { "offer_id": "@{offer_id}" },
+      "expect": { "status": "trade.offer.accepted_v1" }
+    },
+    {
+      "name": "Offer creation retry after settlement returns original offer",
+      "command": "trade.offer",
+      "user": "offer_sender",
+      "data": { "to_player_id": "@{offer_recipient_player_id}", "commodity": "ORE", "quantity": 3, "price": 25, "mode": "sell", "idempotency_key": "trade-offer-e2e-sell" },
+      "asserts": [
+        { "path": "data.offer_id", "op": "==", "value": "@{offer_id}" },
+        { "path": "data.status", "op": "==", "value": "accepted" }
+      ]
+    },
+    {
+      "name": "Settlement updates cargo once",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM ship_cargo WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{offer_sender_player_id}) AND commodity_code = 'ORE') + (SELECT quantity FROM ship_cargo WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{offer_recipient_player_id}) AND commodity_code = 'ORE');" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 10 } ]
+    },
+    {
+      "name": "Create cancellable offer",
+      "command": "trade.offer",
+      "user": "offer_sender",
+      "data": { "to_player_id": "@{offer_recipient_player_id}", "commodity": "ORE", "quantity": 1, "price": 10, "mode": "sell", "idempotency_key": "trade-offer-e2e-cancel" },
+      "save": { "@cancel_offer_id": "data.offer_id" }
+    },
+    {
+      "name": "Sender cancels offer",
+      "command": "trade.cancel",
+      "user": "offer_sender",
+      "data": { "offer_id": "@{cancel_offer_id}" },
+      "expect": { "status": "trade.offer.cancelled_v1" }
+    },
+    {
+      "name": "Repeated cancellation is idempotent",
+      "command": "trade.cancel",
+      "user": "offer_sender",
+      "data": { "offer_id": "@{cancel_offer_id}" },
+      "expect": { "status": "trade.offer.cancelled_v1" }
+    },
+    {
+      "name": "Create offer for expiry test",
+      "command": "trade.offer",
+      "user": "offer_sender",
+      "data": { "to_player_id": "@{offer_recipient_player_id}", "commodity": "ORE", "quantity": 1, "price": 10, "mode": "sell", "expires_in": 60, "idempotency_key": "trade-offer-e2e-expire" },
+      "save": { "@expired_offer_id": "data.offer_id" }
+    },
+    {
+      "name": "Expire pending offer",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE trade_offers SET created_at = CURRENT_TIMESTAMP - INTERVAL '2 seconds', expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE trade_offer_id = @{expired_offer_id};" }
+    },
+    {
+      "name": "Accept records expiry instead of settlement",
+      "command": "trade.accept",
+      "user": "offer_recipient",
+      "data": { "offer_id": "@{expired_offer_id}" },
+      "expect": { "status": "trade.offer.expired_v1" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "expired" } ]
+    },
+    {
+      "name": "Repeated acceptance returns the expired state",
+      "command": "trade.accept",
+      "user": "offer_recipient",
+      "data": { "offer_id": "@{expired_offer_id}" },
+      "expect": { "status": "trade.offer.expired_v1" },
+      "asserts": [ { "path": "data.status", "op": "==", "value": "expired" } ]
+    }
+  ]
+}

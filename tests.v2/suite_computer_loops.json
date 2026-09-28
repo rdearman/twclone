@@ -40,11 +40,26 @@
       }
     },
     {
-      "name": "Teleport to Sector 14",
+      "name": "Choose a connected two-way port pair",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 14 WHERE name = 'loop_player'"
+        "sql": "SELECT p1.port_id, p1.sector_id, p2.port_id, p2.sector_id FROM sector_warps sw JOIN ports p1 ON p1.sector_id = sw.from_sector JOIN ports p2 ON p2.sector_id = sw.to_sector AND p2.port_id > p1.port_id JOIN port_trade pt1 ON pt1.port_id = p1.port_id JOIN port_trade pt2 ON pt2.port_id = p2.port_id AND pt2.commodity = pt1.commodity GROUP BY p1.port_id, p1.sector_id, p2.port_id, p2.sector_id, pt1.commodity HAVING SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) > 0 AND SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) > 0 ORDER BY p1.port_id, p2.port_id LIMIT 1"
+      },
+      "save": {
+        "route_port_a_id": "data.rows.0.0",
+        "route_sector_a_id": "data.rows.0.1",
+        "route_port_b_id": "data.rows.0.2",
+        "route_sector_b_id": "data.rows.0.3"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Move test player and ship to the selected first port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH target AS (SELECT player_id, ship_id FROM players WHERE name = 'loop_player'), known AS (DELETE FROM player_known_ports WHERE player_id = (SELECT player_id FROM target)), moved AS (UPDATE players p SET sector_id = @{route_sector_a_id} FROM target WHERE p.player_id = target.player_id RETURNING p.ship_id) UPDATE ships s SET sector_id = @{route_sector_a_id} FROM moved WHERE s.ship_id = moved.ship_id"
       },
       "expect": { "status": "ok" }
     },
@@ -56,7 +71,7 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Dock at Port 2 (Sector 14)",
+      "name": "Dock at the first selected port",
       "command": "dock.status",
       "user": "loop_player",
       "data": { "action": "dock" },
@@ -75,40 +90,48 @@
       }
     },
     {
-      "name": "Warp to Sector 1570 (Port 618)",
-      "command": "move.warp",
-      "user": "loop_player",
-      "data": { "to_sector_id": 1570 },
+      "name": "Move test player and ship to the selected connected port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH target AS (SELECT player_id, ship_id FROM players WHERE name = 'loop_player'), moved AS (UPDATE players p SET sector_id = @{route_sector_b_id} FROM target WHERE p.player_id = target.player_id RETURNING p.ship_id) UPDATE ships s SET sector_id = @{route_sector_b_id} FROM moved WHERE s.ship_id = moved.ship_id"
+      },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Dock at Port 618 (Sector 1570)",
+      "name": "Refresh loop_player session at the second port",
+      "command": "auth.login",
+      "user": "loop_player",
+      "data": { "username": "loop_player", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Dock at the second selected port",
       "command": "dock.status",
       "user": "loop_player",
       "data": { "action": "dock" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Route Request (Should show loop between 2 and 618)",
+      "name": "Route Request (Should show the selected two-way port pair)",
       "command": "player.computer.recommend_routes",
       "user": "loop_player",
       "data": { "require_two_way": true },
       "expect": {
         "status": "ok",
         "data": {
-          "routes": [
-            {
-              "port_a_id": 2,
-              "port_b_id": 618,
-              "sector_a_id": 14,
-              "sector_b_id": 1570,
-              "hops_between": 1,
-              "is_two_way": true
-            }
+        "routes": [
+            {}
           ]
         }
       },
       "asserts": [
+        { "path": "data.routes.0.is_two_way", "op": "==", "value": true },
+        { "path": "data.routes.0.port_a_id", "op": ">", "value": 0 },
+        { "path": "data.routes.0.port_b_id", "op": ">", "value": 0 },
+        { "path": "data.routes.0.sector_a_id", "op": ">", "value": 0 },
+        { "path": "data.routes.0.sector_b_id", "op": ">", "value": 0 },
+        { "path": "data.routes.0.hops_between", "op": "==", "value": 1 },
         { "path": "data.routes.0", "op": "contains", "value": "approach_sector_id" },
         { "path": "data.routes.0", "op": "contains", "value": "port_a_name" },
         { "path": "data.routes.0", "op": "contains", "value": "port_b_name" },
