@@ -1,0 +1,116 @@
+{
+  "name": "Environmental sector hazard entry regression",
+  "version": "2.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Uses the disposable v2 test rig and migration 110 to verify typed hazard damage and player-visible movement reporting.",
+  "tests": [
+    {
+      "name": "Setup hazard victim",
+      "setup": "macro_auth_user",
+      "username": "hazard_victim",
+      "password": "password"
+    },
+    {
+      "name": "Clear test sector environmental hazards",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM sector_hazards WHERE sector_id = 555" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Clear pre-existing combat assets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id = 555" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Configure supported hazard types",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO sector_hazards (sector_id, hazard_type, severity) VALUES (555, 'volcanic', 7), (555, 'nebula', 11), (555, 'radiation', 13) ON CONFLICT (sector_id, hazard_type) DO UPDATE SET severity = EXCLUDED.severity;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Configure test warp and player position",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 555), (555, 1) ON CONFLICT DO NOTHING" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Position player at source sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id = 1 WHERE name = 'hazard_victim'" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Position and repair test ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id = 1, hull = 100, shields = 100, fighters = 20 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Capture shield level before entry",
+      "command": "combat.status",
+      "user": "hazard_victim",
+      "expect": { "status": "ok" },
+      "save": { "shields_before": "data.shields" }
+    },
+    {
+      "name": "Warp into multi-hazard sector",
+      "command": "move.warp",
+      "user": "hazard_victim",
+      "data": { "to_sector_id": 555 },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "==", "value": 555 },
+        { "path": "data.message", "op": "==", "value": "Environmental hazards damaged your ship." },
+        { "path": "data.hazards.0.type", "op": "==", "value": "nebula" },
+        { "path": "data.hazards.0.damage", "op": "==", "value": 11 },
+        { "path": "data.hazards.1.type", "op": "==", "value": "radiation" },
+        { "path": "data.hazards.1.damage", "op": "==", "value": 13 },
+        { "path": "data.hazards.2.type", "op": "==", "value": "volcanic" },
+        { "path": "data.hazards.2.damage", "op": "==", "value": 7 }
+      ]
+    },
+    {
+      "name": "Environmental damage persisted",
+      "command": "combat.status",
+      "user": "hazard_victim",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.shields", "op": "<", "value": "@shields_before" }
+      ]
+    },
+    {
+      "name": "Reset ship for transwarp entry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id = 1 WHERE name = 'hazard_victim'" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Enable transwarp and restore defenses",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id = 1, hull = 100, shields = 100, fighters = 20, has_transwarp = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Transwarp into multi-hazard sector",
+      "command": "move.transwarp",
+      "user": "hazard_victim",
+      "data": { "to_sector_id": 555 },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.message", "op": "==", "value": "Environmental hazards damaged your ship." },
+        { "path": "data.hazards.0.type", "op": "==", "value": "nebula" },
+        { "path": "data.hazards.1.type", "op": "==", "value": "radiation" },
+        { "path": "data.hazards.2.type", "op": "==", "value": "volcanic" }
+      ]
+    }
+  ]
+}
