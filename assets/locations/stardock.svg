@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">TWClone Stardock</title>
+  <desc id="desc">A vast orbital commerce hub with radial docks, a fortified central core and illuminated approach beacons.</desc>
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#71899b"/><stop offset=".28" stop-color="#263b4c"/><stop offset=".62" stop-color="#111e2a"/><stop offset="1" stop-color="#526b7d"/>
+    </linearGradient>
+    <linearGradient id="deck" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#526a79"/><stop offset=".5" stop-color="#1c2d3a"/><stop offset="1" stop-color="#090f17"/>
+    </linearGradient>
+    <radialGradient id="core"><stop stop-color="#f5c66c"/><stop offset=".16" stop-color="#bd7732"/><stop offset=".18" stop-color="#253746"/><stop offset=".83" stop-color="#111b26"/><stop offset="1" stop-color="#778896"/></radialGradient>
+    <filter id="glow" x="-.8" y="-.8" width="2.6" height="2.6"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g fill="none" stroke="#8ba0ac" stroke-width="12" opacity=".42">
+    <ellipse cx="512" cy="520" rx="403" ry="152" transform="rotate(-24 512 520)"/>
+    <ellipse cx="512" cy="520" rx="403" ry="152" transform="rotate(24 512 520)"/>
+  </g>
+  <g fill="url(#hull)" stroke="#91a3ae" stroke-width="10" stroke-linejoin="round">
+    <path d="M111 475 62 433 45 378 94 347 221 370 282 428 268 493 205 523Z"/>
+    <path d="m913 475 49-42 17-55-49-31-127 23-61 58 14 65 63 30Z"/>
+    <path d="m385 229 53-133 75-48 74 48 53 133-55 86H440Z"/>
+    <path d="m385 795 53 133 75 48 74-48 53-133-55-86H440Z"/>
+  </g>
+  <g fill="url(#deck)" stroke="#9aacb5" stroke-width="13">
+    <ellipse cx="512" cy="520" rx="335" ry="174" transform="rotate(-14 512 520)"/>
+    <ellipse cx="512" cy="520" rx="280" ry="130" transform="rotate(-14 512 520)" fill="#172733"/>
+    <ellipse cx="512" cy="520" rx="185" ry="93" transform="rotate(-14 512 520)" fill="url(#core)"/>
+  </g>
+  <g fill="#f6c66a" filter="url(#glow)">
+    <path d="M232 457h79v16h-79zm-92-5h44v13h-44zm626 0h44v13h-44zm-95 5h79v16h-79z"/>
+    <path d="M487 191h50v17h-50zm-1 625h52v17h-52z"/>
+  </g>
+  <g fill="#59d8e0" filter="url(#glow)">
+    <circle cx="92" cy="375" r="12"/><circle cx="932" cy="375" r="12"/>
+    <circle cx="512" cy="92" r="13"/><circle cx="512" cy="947" r="13"/>
+  </g>
+  <g fill="#dfaa58" opacity=".88">
+    <path d="m414 494 98-31 98 31v25l-98 31-98-31z"/>
+    <path d="M452 564h120l-19 87-41 44-41-44z"/>
+  </g>
+</svg>

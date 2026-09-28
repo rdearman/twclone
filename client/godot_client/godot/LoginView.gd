@@ -3,7 +3,7 @@ extends Control
 signal login_requested(host: String, port: int, username: String, password: String)
 signal profiles_changed(profiles: Array, selected_index: int)
 
-const BACKDROP := preload("res://assets/sector_backdrop.png")
+const AssetCatalog = preload("res://AssetCatalog.gd")
 
 var host_input: LineEdit
 var port_input: LineEdit
@@ -73,7 +73,7 @@ func set_overlay_mode(enabled: bool) -> void:
 func _build() -> void:
 	_background = TextureRect.new()
 	_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_background.texture = BACKDROP
+	_background.texture = AssetCatalog.texture_for_id("location.sector-background", "large")
 	_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_background.mouse_filter = Control.MOUSE_FILTER_IGNORE

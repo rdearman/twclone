@@ -225,11 +225,10 @@
         },
         {
           "key": "k",
-          "label": "(K) Autopilot Controls (Y/N/E) [debug: move.autopilot.control not implemented]",
+          "label": "(K) Autopilot Controls (Y/N/E)",
           "action": {
             "pycall": "cli_autopilot_control"
-          },
-          "show_if_ctx": ["debug"]
+          }
         }
       ]
     },
@@ -317,17 +316,6 @@
           "action": {
             "pycall": "help_main"
           }
-        },
-        {
-          "key": "g",
-          "label": "(G) Get game clock [debug: game.get_clock not implemented]",
-          "action": {
-            "rpc": {
-              "command": "game.get_clock",
-              "data": {}
-            }
-          },
-          "show_if_ctx": ["debug"]
         },
         {
           "key": "p",
@@ -513,6 +501,17 @@
           "label": "(U) Upgrade Ship",
           "action": {
             "pycall": "shipyard_upgrade_flow"
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Repair Ship",
+          "action": {
+            "rpc": {
+              "command": "ship.repair",
+              "data": {}
+            },
+            "post": "print_last_rpc"
           }
         },
         {
@@ -778,27 +777,25 @@
       "options": [
         {
           "key": "l",
-          "label": "(L) List Stocks [debug: server subcommand not implemented]",
+          "label": "(L) List Stocks",
           "action": {
             "rpc": {
-              "command": "stock.exchange.list_stocks",
+              "command": "equity.exchange.list",
               "data": {}
             },
             "post": "print_last_rpc"
-          },
-          "show_if_ctx": ["debug"]
+          }
         },
         {
           "key": "p",
-          "label": "(P) View Portfolio [debug: server subcommand not implemented]",
+          "label": "(P) View Portfolio",
           "action": {
             "rpc": {
-              "command": "stock.portfolio.list",
+              "command": "equity.portfolio.list",
               "data": {}
             },
             "post": "print_last_rpc"
-          },
-          "show_if_ctx": ["debug"]
+          }
         },
         {
           "key": "i",
@@ -818,11 +815,11 @@
         },
         {
           "key": "d",
-          "label": "(D) Declare Dividend (CEO only) [debug: unconfirmed]",
+          "label": "(D) Declare Dividend (CEO only)",
           "action": {
             "pycall": "stock_dividend_set_flow"
           },
-          "show_if_ctx": ["debug", "is_ceo"]
+          "show_if_ctx": ["is_ceo"]
         },
         {
           "key": "q",

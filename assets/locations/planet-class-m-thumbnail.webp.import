@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b4vbyaxpnwee"
-path="res://.godot/imported/planet_classes_atlas.png-046fe24252f04b286ae1fa845954d5bb.ctex"
+uid="uid://dh78osku43ja4"
+path="res://.godot/imported/planet-class-m-thumbnail.webp-c3571c31b5e21a8a2f44122deacae73c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/planet_classes_atlas.png"
-dest_files=["res://.godot/imported/planet_classes_atlas.png-046fe24252f04b286ae1fa845954d5bb.ctex"]
+source_file="res://assets/locations/planet-class-m-thumbnail.webp"
+dest_files=["res://.godot/imported/planet-class-m-thumbnail.webp-c3571c31b5e21a8a2f44122deacae73c.ctex"]
 
 [params]
 

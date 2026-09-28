@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "catalog_version": "1.0.0",
+  "description": "Canonical, client-neutral TWClone artwork catalogue. Paths are relative to the repository asset root.",
+  "variant_guidance": {
+    "thumbnail": "compact lists and low-bandwidth mobile views; max edge 128 px for sprites",
+    "standard": "normal client display; max edge 384 px for sprites",
+    "large": "high-density displays; max edge 768 px for sprites; use scalable vector sources where supplied"
+  },
+  "assets": [
+    {
+      "asset_id": "location.port.station",
+      "display_name": "Orbital port",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/port-station-thumbnail.webp",
+        "standard": "assets/locations/port-station-standard.webp",
+        "large": "assets/locations/port-station-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "location.stardock",
+      "display_name": "Stardock",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/stardock.svg",
+        "standard": "assets/locations/stardock.svg",
+        "large": "assets/locations/stardock.svg"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/svg+xml",
+      "scalable": true
+    },
+    {
+      "asset_id": "location.sector-background",
+      "display_name": "Sector backdrop",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/sector-background-thumbnail.webp",
+        "standard": "assets/locations/sector-background-standard.webp",
+        "large": "assets/locations/sector-background-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "location.sector-starfield",
+      "display_name": "Sector starfield",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/sector-starfield-thumbnail.webp",
+        "standard": "assets/locations/sector-starfield-standard.webp",
+        "large": "assets/locations/sector-starfield-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.m",
+      "display_name": "Terran planet · class M",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-m-thumbnail.webp",
+        "standard": "assets/locations/planet-class-m-standard.webp",
+        "large": "assets/locations/planet-class-m-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.k",
+      "display_name": "Desert planet · class K",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-k-thumbnail.webp",
+        "standard": "assets/locations/planet-class-k-standard.webp",
+        "large": "assets/locations/planet-class-k-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.o",
+      "display_name": "Ocean planet · class O",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-o-thumbnail.webp",
+        "standard": "assets/locations/planet-class-o-standard.webp",
+        "large": "assets/locations/planet-class-o-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.l",
+      "display_name": "Mountain planet · class L",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-l-thumbnail.webp",
+        "standard": "assets/locations/planet-class-l-standard.webp",
+        "large": "assets/locations/planet-class-l-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.h",
+      "display_name": "Volcanic planet · class H",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-h-thumbnail.webp",
+        "standard": "assets/locations/planet-class-h-standard.webp",
+        "large": "assets/locations/planet-class-h-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.u",
+      "display_name": "Gas giant planet · class U",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-u-thumbnail.webp",
+        "standard": "assets/locations/planet-class-u-standard.webp",
+        "large": "assets/locations/planet-class-u-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "planet.class.c",
+      "display_name": "Glacial planet · class C",
+      "category": "locations",
+      "paths": {
+        "thumbnail": "assets/locations/planet-class-c-thumbnail.webp",
+        "standard": "assets/locations/planet-class-c-standard.webp",
+        "large": "assets/locations/planet-class-c-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "ship.generic-hauler",
+      "display_name": "Freighter / transport artwork",
+      "category": "ships",
+      "paths": {
+        "thumbnail": "assets/ships/ship-hauler-thumbnail.webp",
+        "standard": "assets/ships/ship-hauler-standard.webp",
+        "large": "assets/ships/ship-hauler-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    },
+    {
+      "asset_id": "ship.generic-fighter",
+      "display_name": "Combat ship artwork",
+      "category": "ships",
+      "paths": {
+        "thumbnail": "assets/ships/ship-fighter-thumbnail.webp",
+        "standard": "assets/ships/ship-fighter-standard.webp",
+        "large": "assets/ships/ship-fighter-large.webp"
+      },
+      "supported_sizes": [
+        "thumbnail",
+        "standard",
+        "large"
+      ],
+      "mime_type": "image/webp",
+      "scalable": false
+    }
+  ],
+  "object_mappings": {
+    "port": {
+      "by_type_id": {
+        "9": "location.stardock"
+      },
+      "default": "location.port.station"
+    },
+    "planet": {
+      "by_class": {
+        "M": "planet.class.m",
+        "K": "planet.class.k",
+        "O": "planet.class.o",
+        "L": "planet.class.l",
+        "H": "planet.class.h",
+        "U": "planet.class.u",
+        "C": "planet.class.c"
+      },
+      "by_type_id": {
+        "1": "planet.class.m",
+        "2": "planet.class.l",
+        "3": "planet.class.o",
+        "4": "planet.class.k",
+        "5": "planet.class.h",
+        "6": "planet.class.u",
+        "7": "planet.class.c"
+      }
+    },
+    "ship": {
+      "by_type_name": {
+        "merchant cruiser": "ship.generic-hauler",
+        "scout marauder": "ship.generic-fighter",
+        "missile frigate": "ship.generic-fighter",
+        "battleship": "ship.generic-fighter",
+        "corporate flagship": "ship.generic-fighter",
+        "colonial transport": "ship.generic-hauler",
+        "cargo transport": "ship.generic-hauler",
+        "merchant freighter": "ship.generic-hauler",
+        "imperial starship": "ship.generic-fighter",
+        "havoc gunstar": "ship.generic-fighter",
+        "constellation": "ship.generic-fighter",
+        "t'khasi orion": "ship.generic-hauler",
+        "tholian sentinel": "ship.generic-fighter",
+        "taurean mule": "ship.generic-hauler",
+        "interdictor cruiser": "ship.generic-fighter",
+        "ferengi warship": "ship.generic-fighter",
+        "imperial starship (npc)": "ship.generic-fighter",
+        "orion heavy fighter patrol": "ship.generic-fighter",
+        "orion scout/looter": "ship.generic-fighter",
+        "orion contraband runner": "ship.generic-hauler",
+        "orion smuggler's kiss": "ship.generic-fighter",
+        "orion black market guard": "ship.generic-fighter",
+        "escape pod": "ship.generic-fighter",
+        "ferrengi warship": "ship.generic-fighter"
+      },
+      "default": "ship.generic-fighter"
+    }
+  },
+  "server_asset_id_convention": {
+    "field": "asset_id",
+    "examples": [
+      "location.stardock",
+      "planet.class.k",
+      "ship.generic-hauler"
+    ],
+    "fallback": "Clients should resolve asset_id when present, then fall back to object_mappings in this catalogue."
+  }
+}

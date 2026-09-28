@@ -7,6 +7,8 @@ client/server protocol.
 For architecture, completed work, server-contract details, known
 limitations, and the continuation backlog, see the authoritative
 [development handover](../../docs/python-client-development-handover.md).
+For the current audit of player-facing news, notices, ship services, and
+server-dependent gameplay backlog, see the [v2 client gameplay audit](../../docs/V2_CLIENT_GAMEPLAY_BACKLOG.md).
 
 ## Setup
 

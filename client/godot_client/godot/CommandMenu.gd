@@ -16,6 +16,7 @@ const COMMANDS := {
 	"COMPUTER": [
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
+		{"label": "Repair ship at shipyard", "command": "ship.repair", "mutating": true, "requires_shipyard_dock": true, "tooltip": "Repair restores hull to 100; the server checks the final cost and your credits."},
 		{"label": "Rename ship · unavailable", "unavailable_reason": "The ship.rename schema accepts name, but its handler requires ship_id and new_name."},
 		{"label": "Scan adjacent sectors", "command": "move.scan"},
 		{"label": "Sector density scan", "command": "sector.scan.density", "fixed": {}},
@@ -329,7 +330,55 @@ func format_result(label: String, payload: Dictionary) -> String:
 		return _format_density_result(payload)
 	if label.to_lower().contains("scan"):
 		return _format_scan_result(payload)
+	if label.to_lower().contains("news"):
+		return _format_news_result(payload)
+	if label.to_lower().contains("notice"):
+		return _format_notice_result(payload)
 	return _format_result(payload)
+
+func _format_news_result(payload: Dictionary) -> String:
+	var data: Variant = payload.get("data", payload)
+	if not (data is Dictionary):
+		return "The server returned an unreadable news response."
+	var articles: Variant = data.get("articles", [])
+	if not (articles is Array) or articles.is_empty():
+		return "No news articles are available."
+	var lines: Array[String] = []
+	for article in articles:
+		if not (article is Dictionary):
+			continue
+		var headline := str(article.get("headline", "News")).strip_edges()
+		var category := str(article.get("category", "General")).strip_edges()
+		var timestamp := str(article.get("timestamp", article.get("created_at", "Time unavailable"))).strip_edges()
+		var body := str(article.get("body", "")).strip_edges()
+		lines.append("%s · %s · %s" % [headline if not headline.is_empty() else "News", category, timestamp])
+		if not body.is_empty():
+			lines.append(body)
+	if lines.is_empty():
+		return "No readable news articles were returned."
+	return "\n\n".join(lines).substr(0, 5000)
+
+func _format_notice_result(payload: Dictionary) -> String:
+	var data: Variant = payload.get("data", payload)
+	if not (data is Dictionary):
+		return "The server returned an unreadable notice response."
+	var items: Variant = data.get("items", data.get("notices", []))
+	if not (items is Array) or items.is_empty():
+		return "No current notices."
+	var lines: Array[String] = []
+	for notice in items:
+		if not (notice is Dictionary):
+			continue
+		var title := str(notice.get("title", "Notice")).strip_edges()
+		var scope := str(notice.get("scope", "global")).strip_edges()
+		var read_state := "READ" if notice.has("seen_at") and notice.get("seen_at") != null else "NEW"
+		var body := str(notice.get("body", "")).strip_edges()
+		lines.append("[%s] %s · %s" % [read_state, title if not title.is_empty() else "Notice", scope])
+		if not body.is_empty():
+			lines.append(body)
+	if lines.is_empty():
+		return "No readable notices were returned."
+	return "\n\n".join(lines).substr(0, 5000)
 
 func _format_scan_result(payload: Dictionary) -> String:
 	var data = payload.get("data", payload)
@@ -409,7 +458,7 @@ func show_activity_history() -> void:
 		DialogLayout.popup(_result_dialog, Vector2i(620, 420))
 
 func show_help() -> void:
-	var content := "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape to clear selection.\n\nCOMMANDS AND SHORTCUTS\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and results appear in the Information panel. Use ☆ to pin frequent actions; the PINNED category stays at the top. Press KEY beside a pinned action and then a key to bind it. Press Escape while choosing a key to clear the binding. Shortcuts only run when a text field is not focused.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path. Autonav asks the server to confirm every warp. Cancel stops after the current warp has been confirmed.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
+	var content := "SELECT\nClick an illustrated object or its contents row. Keyboard focus and selection stay synchronized. Use Tab to move between controls, arrow keys to move through focused lists, Enter to activate, and Escape to clear selection.\n\nCOMMANDS AND SHORTCUTS\nChoose an available action from the command drawer. Actions are discrete requests; the server confirms or refuses them, and results appear in the Information panel. Use ☆ to pin frequent actions; the PINNED category stays at the top. Press KEY beside a pinned action and then a key to bind it. Press Escape while choosing a key to clear the binding. Shortcuts only run when a text field is not focused.\n\nSHIP AND PORT SERVICES\nRepair ship restores hull to 100 at a shipyard and charges the server-calculated cost. Hull exchanges and hardware purchases are separate shipyard/catalogue actions. Jettison permanently discards the selected cargo quantity.\n\nNEWS AND NOTICES\nNews feed shows published game headlines. Notices lists current server notices and their read state. Daily top-trader/fighter announcements appear here only if the server publishes them.\n\nMOVE\nSelect an adjacent warp destination, then confirm Move. The screen position of a marker is decorative; it does not represent distance or a flight path. Autonav asks the server to confirm every warp. Cancel stops after the current warp has been confirmed.\n\nPORT AND PLANET\nDock opens the port view after port information is confirmed. Land is a server command; the planet surface opens only after success. Trading requires a server quote and your confirmation.\n\nCONNECTION\nAfter a disconnect, the last confirmed scene is marked stale. Reconnect to refresh it before acting. Zero values are distinct from unavailable values."
 	var parent := get_parent()
 	if parent and parent.has_method("show_information"):
 		parent.show_information("Trade Wars · Field Guide", content)

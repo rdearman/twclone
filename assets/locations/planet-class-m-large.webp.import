@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://byq85vqqjcxkx"
-path="res://.godot/imported/sector_backdrop.png-b4f1b483918460d122ef80c5410ba5fc.ctex"
+uid="uid://g3s3fhglj1dw"
+path="res://.godot/imported/planet-class-m-large.webp-55ccc2ddcfdc8d3f1c47b5c0900077ce.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sector_backdrop.png"
-dest_files=["res://.godot/imported/sector_backdrop.png-b4f1b483918460d122ef80c5410ba5fc.ctex"]
+source_file="res://assets/locations/planet-class-m-large.webp"
+dest_files=["res://.godot/imported/planet-class-m-large.webp-55ccc2ddcfdc8d3f1c47b5c0900077ce.ctex"]
 
 [params]
 

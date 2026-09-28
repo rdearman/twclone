@@ -2,6 +2,7 @@ extends Control
 
 const DialogLayout = preload("res://DialogLayout.gd")
 const PlanetArt = preload("res://PlanetArt.gd")
+const AssetCatalog = preload("res://AssetCatalog.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 
@@ -107,6 +108,7 @@ func _ready() -> void:
 	planet_visual.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	planet_visual.texture = _planet_texture()
 	planet_visual.material = PlanetArt.cutout_material()
+	planet_visual.tooltip_text = "ART · planet.class.m"
 	hero.add_child(planet_visual)
 	_planet_visual = planet_visual
 	_info_label = Label.new()
@@ -228,6 +230,8 @@ func set_planet_info(data: Dictionary) -> void:
 	if not planet_class.is_empty():
 		_planet_visual.texture = _planet_texture(planet_class)
 		_planet_visual.material = PlanetArt.cutout_material(planet_class)
+	var planet_asset_id := AssetCatalog.asset_id_for_object("planet", data)
+	_planet_visual.tooltip_text = "ART · " + (planet_asset_id if not planet_asset_id.is_empty() else "UNMAPPED")
 	if data.has("planet") and data["planet"] is Dictionary:
 		for key in ["name", "class", "type_name", "owner", "citadel_level"]:
 			if data["planet"].has(key):

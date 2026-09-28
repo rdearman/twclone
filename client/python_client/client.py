@@ -180,28 +180,47 @@ def _handle_known_broadcast(envelope: dict):
 def cli_autopilot_status(ctx):
     """Query and display autopilot status."""
     r = ctx.conn.rpc("move.autopilot.status", {})
+    if (r or {}).get("status") in ("error", "refused"):
+        error = (r.get("error") or {})
+        print(f"[Error] Failed to get autopilot status: {error.get('message', 'Unknown error')}")
+        return
     data = (r or {}).get("data") or {}
     state = data.get("state")
     nxt = data.get("next")
     print(f"Autopilot: {state or 'unknown'}; next: {nxt if nxt is not None else '-'}")
+    ctx.state["autopilot_status"] = data
     ctx.state["last_rpc"] = r
 
 @register("cli_autopilot_control")
 def cli_autopilot_control(ctx):
-    """Send Y/N/E-style controls to autopilot."""
+    """Send a control action and display the server-confirmed result."""
     print("Controls: [Y] stop at next  |  [N] continue  |  [E] express  |  [Q] back")
     while True:
         k = input("> ").strip().lower()
+        action = None
         if k == "y":
-            _ = ctx.conn.rpc("move.autopilot.control", {"action":"stop_at_next"})
+            action = "stop_at_next"
         elif k == "n":
-            _ = ctx.conn.rpc("move.autopilot.control", {"action":"continue"})
+            action = "continue"
         elif k == "e":
-            _ = ctx.conn.rpc("move.autopilot.control", {"action":"express"})
+            action = "express"
         elif k == "q" or k == "":
             return
         else:
             print("Y/N/E or Q")
+            continue
+
+        response = ctx.conn.rpc("move.autopilot.control", {"action": action})
+        if (response or {}).get("status") in ("error", "refused"):
+            error = (response.get("error") or {})
+            print(f"[Error] Autopilot {action} refused: {error.get('message', 'Unknown error')}")
+            continue
+
+        data = (response or {}).get("data") or {}
+        ctx.state["autopilot_status"] = data
+        next_sector = data.get("next_sector_id")
+        detail = f"; next sector {next_sector}" if next_sector is not None else ""
+        print(f"Autopilot {action} confirmed: {data.get('state', 'updated')}{detail}.")
 # --- END AUTO-ADDED AUTOPILOT ---
 
 

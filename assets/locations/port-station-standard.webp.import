@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bbg8y7g78en7t"
-path="res://.godot/imported/sector_objects_atlas.png-f3ed6ec055aff7f586c81195284687d8.ctex"
+uid="uid://syhibyxcgb2b"
+path="res://.godot/imported/port-station-standard.webp-93245dcc8fa585e8dd0ac27c60b5d0de.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sector_objects_atlas.png"
-dest_files=["res://.godot/imported/sector_objects_atlas.png-f3ed6ec055aff7f586c81195284687d8.ctex"]
+source_file="res://assets/locations/port-station-standard.webp"
+dest_files=["res://.godot/imported/port-station-standard.webp-93245dcc8fa585e8dd0ac27c60b5d0de.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://boaq55km77vcs"
-path="res://.godot/imported/sector_starfield.png-043d07c825b24164ab16b72eb14f91db.ctex"
+uid="uid://csaj7rnh3ljn"
+path="res://.godot/imported/stardock.svg-fae96a4f7aca05bcd927748c1499f0ca.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sector_starfield.png"
-dest_files=["res://.godot/imported/sector_starfield.png-043d07c825b24164ab16b72eb14f91db.ctex"]
+source_file="res://assets/locations/stardock.svg"
+dest_files=["res://.godot/imported/stardock.svg-fae96a4f7aca05bcd927748c1499f0ca.ctex"]
 
 [params]
 
@@ -38,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

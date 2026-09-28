@@ -5,9 +5,8 @@ signal object_activated(selection_key: String)
 signal warp_selected(destination: int, source: String)
 signal warp_activated(destination: int)
 
-const BACKDROP := preload("res://assets/sector_starfield.png")
-const OBJECT_ATLAS := preload("res://assets/sector_objects_atlas.png")
 const PlanetArt = preload("res://PlanetArt.gd")
+const AssetCatalog = preload("res://AssetCatalog.gd")
 
 var world_layer: Node2D
 var current_objects: Array[Dictionary] = []
@@ -16,6 +15,7 @@ var _sprite_nodes: Dictionary = {}
 var _warp_markers: Dictionary = {}
 var _hovered_key := ""
 var _sector_identity := "0"
+var _asset_debug_enabled := false
 var _beacon_panel: PanelContainer
 var _beacon_label: Label
 
@@ -27,7 +27,7 @@ func _ready() -> void:
 	focus_mode = Control.FOCUS_ALL
 	var background := TextureRect.new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	background.texture = BACKDROP
+	background.texture = AssetCatalog.texture_for_id("location.sector-starfield", "large")
 	background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -138,15 +138,11 @@ func _rebuild_art_objects() -> void:
 		if str(object["kind"]) == "planet":
 			var planet_data: Dictionary = object["data"]
 			var planet_class := PlanetArt.class_for_planet(planet_data)
-			# Crop each class into its own texture so Sprite2D UVs and the cutout
-			# shader never depend on atlas-region coordinate behavior.
 			if not planet_class.is_empty():
 				sprite.texture = PlanetArt.texture_for_class(planet_class)
 				sprite.material = PlanetArt.cutout_material(planet_class)
-			else:
-				sprite.texture = _atlas_region("planet")
 		else:
-			sprite.texture = _atlas_region(str(object["sprite_kind"]))
+			sprite.texture = AssetCatalog.texture_for_object(str(object["kind"]), object["data"], "large")
 		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		sprite.scale = Vector2.ONE * _sprite_scale(str(object["sprite_kind"]))
 		art_object.add_child(sprite)
@@ -184,9 +180,19 @@ func _rebuild_art_objects() -> void:
 		anchor_label.visible = false
 		anchor_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art_object.add_child(anchor_label)
+		var asset_id_label := Label.new()
+		var asset_id := AssetCatalog.asset_id_for_object(str(object["kind"]), object["data"])
+		asset_id_label.text = "ASSET · " + (asset_id if not asset_id.is_empty() else "UNMAPPED")
+		asset_id_label.position = Vector2(-116, 111)
+		asset_id_label.add_theme_font_size_override("font_size", 10)
+		asset_id_label.add_theme_color_override("font_color", Color(0.45, 0.88, 0.9))
+		asset_id_label.visible = false
+		asset_id_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art_object.add_child(asset_id_label)
 		_sprite_nodes[str(object["key"])] = {
 			"root": art_object, "sprite": sprite, "halo": halo,
-			"label": anchor_label, "hit_shape": hit_shape,
+			"label": anchor_label, "asset_id_label": asset_id_label,
+			"hit_shape": hit_shape,
 		}
 		world_layer.add_child(art_object)
 	_layout_objects()
@@ -306,6 +312,7 @@ func _update_highlight() -> void:
 		object_nodes["halo"].visible = active
 		object_nodes["root"].z_index = 5 if active else 1
 		object_nodes["label"].visible = active or str(key) == _hovered_key
+		object_nodes["asset_id_label"].visible = active and _asset_debug_enabled
 	for destination in _warp_markers:
 		var marker: Button = _warp_markers[destination]
 		var active := selected_key == "warp:%d" % int(destination)
@@ -324,6 +331,12 @@ func _on_object_input(_viewport: Node, event: InputEvent, _shape_index: int, key
 		get_viewport().set_input_as_handled()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
+		if OS.is_debug_build():
+			_asset_debug_enabled = not _asset_debug_enabled
+			_update_highlight()
+			get_viewport().set_input_as_handled()
+		return
 	# Area2D is the normal path, but a Control parent or a renderer/input
 	# backend can prevent physics picking from reaching a child Node2D. Use the
 	# same object geometry as a deterministic fallback hit test on the artwork
@@ -382,19 +395,6 @@ func _on_warp_unhovered(destination: int) -> void:
 	var parent := get_parent()
 	if parent and parent.has_method("clear_hover_hint"):
 		parent.clear_hover_hint("warp:%d" % destination)
-
-func _atlas_region(kind: String) -> AtlasTexture:
-	var texture := AtlasTexture.new()
-	texture.atlas = OBJECT_ATLAS
-	var cell := Vector2(627, 627)
-	var cell_position := Vector2.ZERO
-	match kind:
-		"port": cell_position = Vector2.ZERO
-		"ship": cell_position = Vector2(627, 0)
-		"ship_alt": cell_position = Vector2(0, 627)
-		"planet": cell_position = Vector2(627, 627)
-	texture.region = Rect2(cell_position, cell)
-	return texture
 
 func _sprite_scale(kind: String) -> float:
 	match kind:

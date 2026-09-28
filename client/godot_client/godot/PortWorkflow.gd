@@ -2,6 +2,7 @@ extends Control
 
 const COMMAND_RAIL_CLEARANCE := 292.0
 const DialogLayout = preload("res://DialogLayout.gd")
+const AssetCatalog = preload("res://AssetCatalog.gd")
 
 signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
 signal back_requested
@@ -14,6 +15,7 @@ var _sector_id := 0
 var _trade_dialog: ConfirmationDialog
 var _quantity: SpinBox
 var _port_title: Label
+var _port_artwork: TextureRect
 var _commodity_list: VBoxContainer
 var _pending_direction := ""
 var _pending_commodity := ""
@@ -77,6 +79,13 @@ func _ready() -> void:
 	heading.name = "Heading"
 	column.add_child(heading)
 	_heading = heading
+	_port_artwork = TextureRect.new()
+	_port_artwork.name = "PortArtwork"
+	_port_artwork.custom_minimum_size = Vector2(112, 92)
+	_port_artwork.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_port_artwork.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_port_artwork.tooltip_text = "Port illustration from the shared asset catalogue."
+	heading.add_child(_port_artwork)
 	var title := Label.new()
 	title.name = "Title"
 	title.text = "PORT"
@@ -161,6 +170,9 @@ func show_port(payload: Dictionary, sector_id: int) -> void:
 		tavern_exited.emit()
 	_port = port_data.duplicate(true)
 	_sector_id = sector_id
+	_port_artwork.texture = AssetCatalog.texture_for_object("port", _port, "large")
+	var art_id := AssetCatalog.asset_id_for_object("port", _port)
+	_port_artwork.tooltip_text = "ART · " + (art_id if not art_id.is_empty() else "UNMAPPED")
 	_port_title.text = str(_port.get("name", "PORT")).to_upper()
 	_description.text = "Authoritative port inventory · choose a commodity and request a quote before committing a trade."
 	_update_hold_label()
@@ -324,6 +336,7 @@ func _update_responsive_layout() -> void:
 	_panel_inner.add_theme_constant_override("margin_top", 12 if compact else 17)
 	_panel_inner.add_theme_constant_override("margin_bottom", 12 if compact else 17)
 	_heading.vertical = compact
+	_port_artwork.custom_minimum_size = Vector2(90, 72) if compact else Vector2(112, 92)
 	_commodity_headers.visible = not compact
 
 func set_busy(busy: bool) -> void:
