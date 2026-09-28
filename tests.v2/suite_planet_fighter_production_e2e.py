@@ -129,11 +129,14 @@ def main():
                 )
             for commodity in ("ORE", "ORG", "EQU"):
                 quantity = equipment if commodity == "EQU" else 0
+                stock_capacity = (
+                    100 if key == "no_citadel" and commodity == "EQU" else 5000
+                )
                 execute(
                     "INSERT INTO planet_goods (planet_id, commodity, quantity, "
                     "max_capacity, production_rate) VALUES (" + str(planet_id)
                     + ", " + quote(commodity) + ", " + str(quantity)
-                    + ", 5000, 0)"
+                    + ", " + str(stock_capacity) + ", 0)"
                 )
                 execute(
                     "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, "
