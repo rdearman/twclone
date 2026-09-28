@@ -24,7 +24,7 @@ repo_items_get_by_code (db_t * db, const char *code, item_t * out_item)
       return false;
     }
 
-  if (!res || db_res_step (res, &err) != 0)
+  if (!res || !db_res_step (res, &err))
     {
       if (res)
         db_res_finalize (res);
@@ -73,7 +73,7 @@ repo_items_get_by_id (db_t * db, int item_id, item_t * out_item)
       return false;
     }
 
-  if (!res || db_res_step (res, &err) != 0)
+  if (!res || !db_res_step (res, &err))
     {
       if (res)
         db_res_finalize (res);
@@ -121,7 +121,7 @@ repo_items_is_available_at_porttype (db_t * db, int item_id, int porttype_id,
       return false;
     }
 
-  if (!res || db_res_step (res, &err) != 0)
+  if (!res || !db_res_step (res, &err))
     {
       if (res)
         db_res_finalize (res);
