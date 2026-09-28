@@ -174,6 +174,8 @@ func _run() -> void:
 	plain_key.keycode = KEY_H
 	_check(menu.capture_shortcut(plain_key) and int(menu._key_bindings.get(help_key, 0)) == KEY_H, "pinned command did not accept a single-key binding")
 	_check(menu.dispatch_shortcut(KEY_H) and menu._result_text.text.contains("PINNED category"), "pinned keyboard shortcut did not run its local command")
+	menu._choose_action(pinned_help)
+	_check(menu._result_text.text.contains("Repair ship restores hull") and menu._result_text.text.contains("News feed shows published game headlines"), "field guide omitted ship service and news guidance")
 	menu._toggle_pin(pinned_help)
 	_check(not menu._categories().has("PINNED"), "unpinned command left an empty PINNED category")
 	menu._selection.clear()
@@ -214,10 +216,38 @@ func _run() -> void:
 	var display := menu._format_result({"credits": 0, "session_token": "secret", "cargo": [{"commodity": "ORE", "quantity": 1}]})
 	_check(display.contains("Credits: 0"), "legitimate zero was not displayed")
 	_check(not display.contains("secret") and not display.contains("session token"), "sensitive result data entered player output")
+	var news_text := menu.format_result("News feed", {"articles": [{"headline": "Frontier Trade", "category": "market", "timestamp": "2026-09-27", "body": "Ports report increased demand."}]})
+	_check(news_text.contains("Frontier Trade · market · 2026-09-27") and news_text.contains("Ports report increased demand."), "news feed was not rendered as readable article content")
+	_check(menu.format_result("News feed", {"articles": []}) == "No news articles are available.", "empty news response was not explained clearly")
+	var notice_text := menu.format_result("Notices", {"items": [{"title": "Beacon alert", "body": "Traffic ahead", "scope": "sector", "seen_at": null}]})
+	_check(notice_text.contains("[NEW] Beacon alert · sector") and notice_text.contains("Traffic ahead"), "notice list was not rendered with read state and message")
+	_check(menu.format_result("Notices", {"items": []}) == "No current notices.", "empty notice response was not explained clearly")
+	var repair_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("COMPUTER", []):
+		if str(candidate.get("command", "")) == "ship.repair":
+			repair_action = candidate
+	_check(not repair_action.is_empty(), "ship computer does not expose ship repair")
+	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 17}, "ship": {"ported": 0}, "sector": {"ports": [{"id": 55, "type": 9}]}}
+	menu._selection.clear()
+	menu._active_category = "COMPUTER"
+	menu._render_actions()
+	await process_frame
+	var repair_button := _action_button(menu, "Repair ship at shipyard")
+	_check(repair_button != null and repair_button.disabled, "ship repair was available without a shipyard dock")
+	menu._snapshot["ship"] = {"ported": 55}
+	menu._render_actions()
+	await process_frame
+	repair_button = _action_button(menu, "Repair ship at shipyard")
+	_check(repair_button != null and not repair_button.disabled, "ship repair stayed unavailable at a confirmed shipyard")
+	var before_repair := captured.size()
+	menu._choose_action(repair_action)
+	_check(menu._form_dialog.visible, "ship repair did not present its explicit action confirmation")
+	menu._submit_form()
+	_check(captured.size() == before_repair + 1 and captured.back()["command"] == "ship.repair" and captured.back()["data"].is_empty() and captured.back()["mutating"], "ship repair did not send the server-supported empty request")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 70 passed")
+		print("Godot command menu tests: 80 passed")
 		quit(0)
 	else:
 		for failure in failures:

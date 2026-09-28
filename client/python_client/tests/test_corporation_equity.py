@@ -50,7 +50,7 @@ def test_update_corp_context_hydrates_membership_and_ceo_officer_roles(ctx_facto
     assert ctx.state["is_ceo_or_officer"] is True
 
 
-def test_dividend_action_hidden_in_normal_mode(ctx_factory, menus):
+def test_dividend_action_visible_to_ceo_in_normal_mode(ctx_factory, menus):
     ctx = ctx_factory(debug=False)
     ctx.state["is_ceo"] = True
     ctx.state["corp_is_public"] = True
@@ -59,7 +59,7 @@ def test_dividend_action_hidden_in_normal_mode(ctx_factory, menus):
         opt["key"] for opt in _iter_options(menus["EXCHANGE_MAIN"])
         if client._option_visible_with_ctx(ctx, opt)
     ]
-    assert "d" not in visible
+    assert "d" in visible
 
 
 def test_dividend_action_hidden_for_non_ceo_in_debug_mode(ctx_factory, menus):
@@ -74,8 +74,8 @@ def test_dividend_action_hidden_for_non_ceo_in_debug_mode(ctx_factory, menus):
     assert "d" not in visible
 
 
-def test_dividend_action_visible_for_ceo_in_debug_mode_regardless_of_public_flag(ctx_factory, menus):
-    ctx = ctx_factory(debug=True)
+def test_dividend_action_visible_for_ceo_regardless_of_public_flag(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
     ctx.state["is_ceo"] = True
     ctx.state["corp_is_public"] = False
 

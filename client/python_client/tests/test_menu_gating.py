@@ -15,7 +15,6 @@ import client
 # these is a bug.
 KNOWN_ABSENT_COMMANDS = {
     "game.get_clock",
-    "move.autopilot.control",
     "ship.set_primary",
     "move.intercept",
     "map.render",
@@ -58,6 +57,7 @@ def _collect_rpc_commands(menus: dict, menu_id: str, ctx, seen=None):
 
 def test_normal_mode_excludes_debug_only_menu_entries(ctx_factory, menus):
     ctx = ctx_factory(debug=False)
+    ctx.state["is_ceo"] = True
 
     main_keys = {o["key"] for o in _visible_options(menus["MAIN"], ctx)}
     assert "y" not in main_keys  # Testing Menu
@@ -67,15 +67,23 @@ def test_normal_mode_excludes_debug_only_menu_entries(ctx_factory, menus):
     assert "t" not in dock_keys  # raw JSON Trade
 
     move_keys = {o["key"] for o in _visible_options(menus["MOVE"], ctx)}
-    assert "k" not in move_keys  # Autopilot Controls (Y/N/E)
+    assert "k" in move_keys  # Supported autopilot controls are normal play.
 
     computer_keys = {o["key"] for o in _visible_options(menus["COMPUTER"], ctx)}
-    assert "g" not in computer_keys  # Get game clock
+    assert "g" not in computer_keys  # Unsupported game.get_clock is not offered.
 
     exchange_keys = {o["key"] for o in _visible_options(menus["EXCHANGE_MAIN"], ctx)}
-    assert "l" not in exchange_keys  # List Stocks (server subcommand not implemented)
-    assert "p" not in exchange_keys  # View Portfolio (server subcommand not implemented)
-    assert "d" not in exchange_keys  # Declare Dividend (no test evidence)
+    assert "l" in exchange_keys  # Canonical equity exchange list.
+    assert "p" in exchange_keys  # Canonical equity portfolio list.
+    # CEO-only dividend controls are covered by an implemented equity flow.
+    assert "d" in exchange_keys
+
+    exchange_commands = {
+        opt.get("action", {}).get("rpc", {}).get("command")
+        for opt in _visible_options(menus["EXCHANGE_MAIN"], ctx)
+    }
+    assert "equity.exchange.list" in exchange_commands
+    assert "equity.portfolio.list" in exchange_commands
 
 
 def test_debug_mode_exposes_retained_diagnostic_actions(ctx_factory, menus):
@@ -92,7 +100,7 @@ def test_debug_mode_exposes_retained_diagnostic_actions(ctx_factory, menus):
     assert "k" in move_keys
 
     computer_keys = {o["key"] for o in _visible_options(menus["COMPUTER"], ctx)}
-    assert "g" in computer_keys
+    assert "g" not in computer_keys
 
     exchange_keys = {o["key"] for o in _visible_options(menus["EXCHANGE_MAIN"], ctx)}
     assert "l" in exchange_keys
