@@ -40,3 +40,16 @@ accepts `id`, and `mail.delete` accepts one `mail_id`.
 
 `notice.ack` accepts `notice_id` and returns `notice.acknowledged`. The legacy
 `id` field remains accepted.
+
+### Sector notices
+
+Sector actions can publish durable `sector.notice` events. The event `data`
+contains `notice_id`, `sector_id`, `subtype`, `player_id`, Unix timestamp
+seconds in `created_at` and `expires_at`, and a `details` object. Notices are
+stored with `scope: "sector"` and expire after seven days. `notice.list`
+includes unexpired global notices and sector notices for the player's current
+sector; sector rows include `scope`, `sector_id`, and `meta` (the details
+object). `notice.ack` uses the same `notice_id`/legacy `id` contract for both
+global and sector notices. Subscribe to `sector.<id>`, `sector.*`, or the exact
+`sector.notice` topic to receive live events; overlapping subscriptions still
+deliver only one copy.

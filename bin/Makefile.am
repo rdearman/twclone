@@ -63,6 +63,8 @@ server_SOURCES = \
 	../src/db/repo/repo_main.c \
 	../src/db/repo/repo_news.c \
 	../src/db/repo/repo_player_settings.c \
+	../src/db/repo/repo_sector_notices.c \
+	../src/db/repo/repo_trade_offers.c \
 	../src/db/repo/repo_cron.c \
 	../src/db/repo/repo_combat.c \
 	../src/db/repo/repo_communication.c \
@@ -116,6 +118,7 @@ server_SOURCES = \
 	../src/server_ports.c \
 	../src/server_s2s.c \
 	../src/server_ships.c \
+	../src/server_sector_notices.c \
 	../src/server_stardock.c \
 	../src/server_sysop.c \
 	../src/server_universe.c \

@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <math.h>
 #include <inttypes.h>
+#include <time.h>
 
 /* local includes */
 #include "server_planets.h"
@@ -34,6 +35,38 @@
 #include "server_ports.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
+
+static int
+planet_record_taxable_trade (db_t *db, int planet_id, const char *commodity,
+                             int quantity, int unit_price, const char *kind,
+                             json_t *root)
+{
+  if (!db || db_backend (db) != DB_BACKEND_POSTGRES || planet_id <= 0
+      || !commodity || quantity <= 0 || unit_price < 0 || !kind)
+    return db && db_backend (db) != DB_BACKEND_POSTGRES ? 0 : -1;
+
+  const char *request_id = json_string_value (json_object_get (root, "id"));
+  char fallback[37] = {0};
+  if (!request_id)
+    {
+      h_generate_hex_uuid (fallback, sizeof fallback);
+      request_id = fallback;
+    }
+  char key[256];
+  snprintf (key, sizeof key, "planet-trade:%s:%d:%s", kind, planet_id,
+            request_id);
+  const char *sql =
+    "INSERT INTO planet_economic_activity (planet_id,activity_type,commodity_code,quantity,unit_value,taxable_value,idempotency_key) "
+    "VALUES ({1},'market_trade',{2},{3},{4},{3}::bigint*{4},{5}) ON CONFLICT (idempotency_key) DO NOTHING;";
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_exec (db, sql,
+                (db_bind_t[]){db_bind_i64 (planet_id),db_bind_text ((char *)commodity),
+                              db_bind_i64 (quantity),db_bind_i64 (unit_price),
+                              db_bind_text (key)}, 5, &err))
+    return err.code ? err.code : -1;
+  return 0;
+}
 
 #ifndef GENESIS_ENABLED
 #define GENESIS_ENABLED 1
@@ -760,8 +793,12 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
   ctx->sector_id = sector_id;
 
   /* Canon #471: Sector assets engage on entry */
-  if (server_combat_apply_entry_hazards (db, ctx, sector_id))
+  json_t *hazard_report = NULL;
+  if (server_combat_apply_entry_hazards_report (db, ctx, sector_id,
+                                                &hazard_report))
     {
+      if (hazard_report)
+        json_decref (hazard_report);
       send_response_error (ctx, root, 403, "Ship destroyed by sector hazards on launch.");
       return 0;
     }
@@ -2226,6 +2263,17 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       h_deduct_player_petty_cash_unlocked (db, ctx->player_id, cost, NULL);
       db_planets_add_treasury_buy (db, planet_id, cost);
 
+      if (planet_record_taxable_trade (db, planet_id, commodity_code,
+                                       quantity_total,
+                                       (int)(cost / quantity_total), "buy",
+                                       root) != 0)
+	{
+	  db_tx_rollback (db, NULL);
+	  send_response_error (ctx, root, ERR_SERVER_ERROR,
+	                       "Failed to record planetary trade activity.");
+	  return 0;
+	}
+
       if (!db_tx_commit (db, &err))
 	{
 	  db_tx_rollback (db, NULL);
@@ -2511,7 +2559,7 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *data = json_object_get (root, "data");
-  int planet_id = 0, ore = 0, organics = 0, equipment = 0;
+  int planet_id = 0, ore = 0, organics = 0, equipment = 0, weapons = 0;
   if (!json_get_int_flexible (data, "planet_id", &planet_id) || planet_id <= 0
       || !json_get_int_flexible (data, "ore", &ore) || ore < 0
       || !json_get_int_flexible (data, "organics", &organics) || organics < 0
@@ -2519,6 +2567,15 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
                            "Provide planet_id and non-negative ore, organics, and equipment worker targets.");
+      return 0;
+    }
+  json_t *weapons_value = json_object_get (data, "weapons");
+  if (weapons_value
+      && (!json_is_integer (weapons_value)
+          || (weapons = (int) json_integer_value (weapons_value)) < 0))
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Weapons workers must be a non-negative integer.");
       return 0;
     }
 
@@ -2540,7 +2597,7 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
     }
   char sql[1024];
   const char *query =
-    "SELECT p.owner_id, p.owner_type, p.colonists_unassigned, p.colonists_ore, p.colonists_org, p.colonists_eq, "
+    "SELECT p.owner_id, p.owner_type, p.colonists_unassigned, p.colonists_ore, p.colonists_org, p.colonists_eq, p.colonists_weapons, "
     "COALESCE(pt.maxColonist_ore,0), COALESCE(pt.maxColonist_organics,0), COALESCE(pt.maxColonist_equipment,0) "
     "FROM planets p LEFT JOIN planettypes pt ON pt.planettypes_id=p.type WHERE p.planet_id={1};";
   sql_build (db, query, sql, sizeof sql);
@@ -2560,10 +2617,13 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
   int64_t old_ore = db_res_col_i64 (res, 3, &err);
   int64_t old_org = db_res_col_i64 (res, 4, &err);
   int64_t old_eq = db_res_col_i64 (res, 5, &err);
-  int max_ore = db_res_col_i32 (res, 6, &err);
-  int max_org = db_res_col_i32 (res, 7, &err);
-  int max_eq = db_res_col_i32 (res, 8, &err);
+  int64_t old_weapons = db_res_col_i64 (res, 6, &err);
+  int max_ore = db_res_col_i32 (res, 7, &err);
+  int max_org = db_res_col_i32 (res, 8, &err);
+  int max_eq = db_res_col_i32 (res, 9, &err);
   db_res_finalize (res);
+  if (!weapons_value)
+    weapons = (int) old_weapons;
 
   bool allowed = owner_type &&
     ((strcmp (owner_type, "player") == 0 && owner_id == ctx->player_id)
@@ -2584,11 +2644,12 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
       json_object_set_new (details, "max_ore_workers", json_integer (max_ore));
       json_object_set_new (details, "max_organics_workers", json_integer (max_org));
       json_object_set_new (details, "max_equipment_workers", json_integer (max_eq));
+      json_object_set_new (details, "max_weapons_workers", json_integer (unassigned + old_ore + old_org + old_eq + old_weapons));
       send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
                                    "Worker assignment exceeds this planet class capacity.", details);
       return 0;
     }
-  int64_t next_unassigned = unassigned + old_ore + old_org + old_eq - ore - organics - equipment;
+  int64_t next_unassigned = unassigned + old_ore + old_org + old_eq + old_weapons - ore - organics - equipment - weapons;
   if (next_unassigned < 0)
     {
       db_tx_rollback (db, NULL);
@@ -2596,12 +2657,13 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
                                    "There are not enough unassigned colonists for these jobs.", NULL);
       return 0;
     }
-  const char *update = "UPDATE planets SET population=GREATEST(COALESCE(population,0), {1}+{2}+{3}+{4}+colonists_mil), colonists_ore={1}, colonists_org={2}, colonists_eq={3}, colonists_unassigned={4} WHERE planet_id={5};";
+  const char *update = "UPDATE planets SET population=GREATEST(COALESCE(population,0), {1}+{2}+{3}+{4}+{5}), colonists_ore={1}, colonists_org={2}, colonists_eq={3}, colonists_weapons={4}, colonists_unassigned={5} WHERE planet_id={6};";
   sql_build (db, update, sql, sizeof sql);
   if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (ore), db_bind_i64 (organics),
-                              db_bind_i64 (equipment), db_bind_i64 (next_unassigned),
-                              db_bind_i64 (planet_id)}, 5, &err)
+                              db_bind_i64 (equipment), db_bind_i64 (weapons),
+                              db_bind_i64 (next_unassigned),
+                              db_bind_i64 (planet_id)}, 6, &err)
       || !db_tx_commit (db, &err))
     {
       db_tx_rollback (db, NULL);
@@ -2614,6 +2676,7 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
   json_object_set_new (payload, "colonists_ore", json_integer (ore));
   json_object_set_new (payload, "colonists_org", json_integer (organics));
   json_object_set_new (payload, "colonists_eq", json_integer (equipment));
+  json_object_set_new (payload, "colonists_weapons", json_integer (weapons));
   send_response_ok_take (ctx, root, "planet.colonists.allocate", &payload);
   return 0;
 }

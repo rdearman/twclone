@@ -107,6 +107,11 @@ extern int cmd_equity_dividend_set (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_accept (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_cancel (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_offer (client_ctx_t * ctx, json_t * root);
+extern int cmd_ferengi_traders (client_ctx_t *ctx, json_t *root);
+extern int cmd_ferengi_deal_accept (client_ctx_t *ctx, json_t *root);
+extern int cmd_ferengi_deal_reject (client_ctx_t *ctx, json_t *root);
+extern json_t *schema_ferengi_traders (void);
+extern json_t *schema_ferengi_deal_action (void);
 extern int cmd_ship_list (client_ctx_t * ctx, json_t * root);
 extern int cmd_ship_sell (client_ctx_t * ctx, json_t * root);
 extern int cmd_ship_transfer (client_ctx_t * ctx, json_t * root);
@@ -667,6 +672,15 @@ static const command_entry_t k_command_registry[] = {
    schema_trade_jettison, 0, false, NULL},
   {"trade.offer", cmd_trade_offer, "Create a trade offer to another player",
    schema_trade_offer, 0, false, NULL},
+  {"ferengi.traders", cmd_ferengi_traders,
+   "View named Ferengi traders and their offers", schema_ferengi_traders,
+   0, false, NULL},
+  {"ferengi.deal.accept", cmd_ferengi_deal_accept,
+   "Accept a Ferengi trader offer", schema_ferengi_deal_action,
+   0, false, NULL},
+  {"ferengi.deal.reject", cmd_ferengi_deal_reject,
+   "Reject a Ferengi trader offer", schema_ferengi_deal_action,
+   0, false, NULL},
   {"trade.port_info", cmd_trade_port_info, "Port prices/stock in sector",
    schema_trade_port_info, 0, false, NULL},
   {"trade.quote", cmd_trade_quote, "Get a price quote from a port",

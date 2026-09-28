@@ -331,6 +331,14 @@ extern json_t *schema_trade_jettison (void);
 extern json_t *schema_trade_offer (void);
 extern json_t *schema_trade_accept (void);
 extern json_t *schema_trade_cancel (void);
+extern json_t *schema_trade_offer_created_response (void);
+extern json_t *schema_trade_offer_accepted_response (void);
+extern json_t *schema_trade_offer_cancelled_response (void);
+extern json_t *schema_trade_offer_expired_response (void);
+extern json_t *schema_sector_notice_event (void);
+extern json_t *schema_ferengi_traders_response (void);
+extern json_t *schema_ferengi_deal_response (void);
+extern json_t *schema_ferengi_offer_event (void);
 extern json_t *schema_trade_history (void);
 extern json_t *schema_move_describe_sector (void);
 extern json_t *schema_move_scan (void);
@@ -480,6 +488,16 @@ static schema_entry_t g_schema_table[] = {
   {"trade.accept", NULL, schema_trade_accept},
   {"trade.cancel", NULL, schema_trade_cancel},
   {"trade.history", NULL, schema_trade_history},
+  {"trade.offer.created_v1", NULL, schema_trade_offer_created_response},
+  {"trade.offer.accepted_v1", NULL, schema_trade_offer_accepted_response},
+  {"trade.offer.cancelled_v1", NULL, schema_trade_offer_cancelled_response},
+  {"trade.offer.expired_v1", NULL, schema_trade_offer_expired_response},
+  {"sector.notice", NULL, schema_sector_notice_event},
+  {"ferengi.traders_v1", NULL, schema_ferengi_traders_response},
+  {"ferengi.deal.accepted_v1", NULL, schema_ferengi_deal_response},
+  {"ferengi.deal.rejected_v1", NULL, schema_ferengi_deal_response},
+  {"ferengi.deal.expired_v1", NULL, schema_ferengi_deal_response},
+  {"ferengi.trader.offer_v1", NULL, schema_ferengi_offer_event},
   {"move.describe_sector", NULL, schema_move_describe_sector},
   {"move.scan", NULL, schema_move_scan},
   {"move.warp", NULL, schema_move_warp},
@@ -2381,15 +2399,47 @@ schema_trade_jettison (void)
 }
 
 
+static json_t *schema_trade_offer_action_request (const char *id,
+                                                   json_t *properties,
+                                                   json_t *any_required);
+
 json_t *
 schema_trade_offer (void)
 {
   json_t *props = json_object ();
-
-  json_t *trade_id_prop = json_object ();
-  json_object_set_new (trade_id_prop, "type", json_string ("integer"));
-  json_object_set_new (trade_id_prop, "minimum", json_integer (1));
-  json_object_set_new (props, "trade_id", trade_id_prop);
+  json_t *recipient = json_object ();
+  json_object_set_new (recipient, "type", json_string ("integer"));
+  json_object_set_new (recipient, "minimum", json_integer (1));
+  json_object_set_new (props, "to_player_id", recipient);
+  json_t *commodity = json_object ();
+  json_object_set_new (commodity, "type", json_string ("string"));
+  json_object_set_new (commodity, "pattern", json_string ("^[A-Za-z0-9]{3}$"));
+  json_object_set_new (props, "commodity", commodity);
+  json_t *quantity = json_object ();
+  json_object_set_new (quantity, "type", json_string ("integer"));
+  json_object_set_new (quantity, "minimum", json_integer (1));
+  json_object_set_new (props, "quantity", quantity);
+  json_t *price = json_object ();
+  json_object_set_new (price, "type", json_string ("integer"));
+  json_object_set_new (price, "minimum", json_integer (0));
+  json_object_set_new (props, "price", price);
+  json_t *mode = json_object ();
+  json_object_set_new (mode, "type", json_string ("string"));
+  json_t *mode_values = json_array ();
+  json_array_append_new (mode_values, json_string ("buy"));
+  json_array_append_new (mode_values, json_string ("sell"));
+  json_object_set_new (mode, "enum", mode_values);
+  json_object_set_new (props, "mode", mode);
+  json_t *expires_in = json_object ();
+  json_object_set_new (expires_in, "type", json_string ("integer"));
+  json_object_set_new (expires_in, "minimum", json_integer (60));
+  json_object_set_new (expires_in, "maximum", json_integer (604800));
+  json_object_set_new (props, "expires_in", expires_in);
+  json_t *key = json_object ();
+  json_object_set_new (key, "type", json_string ("string"));
+  json_object_set_new (key, "minLength", json_integer (1));
+  json_object_set_new (key, "maxLength", json_integer (128));
+  json_object_set_new (props, "idempotency_key", key);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -2401,7 +2451,9 @@ schema_trade_offer (void)
   json_object_set_new (root, "properties", props);
 
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("trade_id"));
+  const char *fields[] = {"to_player_id", "commodity", "quantity", "price", "mode"};
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+    json_array_append_new (required, json_string (fields[i]));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
@@ -2411,26 +2463,26 @@ schema_trade_offer (void)
 json_t *
 schema_trade_accept (void)
 {
-  json_t *props = json_object ();
-
-  json_t *trade_id_prop = json_object ();
-  json_object_set_new (trade_id_prop, "type", json_string ("integer"));
-  json_object_set_new (trade_id_prop, "minimum", json_integer (1));
-  json_object_set_new (props, "trade_id", trade_id_prop);
-
-  json_t *root = json_object ();
-  json_object_set_new (root,
-		       "$id", json_string ("ge://schema/trade.accept.json"));
-  json_object_set_new (root, "$schema",
-		       json_string
-		       ("https://json-schema.org/draft/2020-12/schema"));
-  json_object_set_new (root, "type", json_string ("object"));
-  json_object_set_new (root, "properties", props);
-
+  json_t *properties = json_object ();
+  json_t *id = json_object ();
+  json_object_set_new (id, "type", json_string ("integer"));
+  json_object_set_new (id, "minimum", json_integer (1));
+  json_object_set (properties, "offer_id", id);
+  json_object_set (properties, "trade_id", id);
+  json_decref (id);
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("trade_id"));
-  json_object_set_new (root, "required", required);
-  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  json_t *offer_id = json_object ();
+  json_t *offer_required = json_array ();
+  json_array_append_new (offer_required, json_string ("offer_id"));
+  json_object_set_new (offer_id, "required", offer_required);
+  json_t *legacy_id = json_object ();
+  json_t *legacy_required = json_array ();
+  json_array_append_new (legacy_required, json_string ("trade_id"));
+  json_object_set_new (legacy_id, "required", legacy_required);
+  json_array_append_new (required, offer_id);
+  json_array_append_new (required, legacy_id);
+  json_t *root = schema_trade_offer_action_request (
+    "ge://schema/trade.accept.json", properties, required);
   return root;
 }
 
@@ -2438,27 +2490,110 @@ schema_trade_accept (void)
 json_t *
 schema_trade_cancel (void)
 {
-  json_t *props = json_object ();
-
-  json_t *trade_id_prop = json_object ();
-  json_object_set_new (trade_id_prop, "type", json_string ("integer"));
-  json_object_set_new (trade_id_prop, "minimum", json_integer (1));
-  json_object_set_new (props, "trade_id", trade_id_prop);
-
-  json_t *root = json_object ();
-  json_object_set_new (root,
-		       "$id", json_string ("ge://schema/trade.cancel.json"));
-  json_object_set_new (root, "$schema",
-		       json_string
-		       ("https://json-schema.org/draft/2020-12/schema"));
-  json_object_set_new (root, "type", json_string ("object"));
-  json_object_set_new (root, "properties", props);
-
+  json_t *properties = json_object ();
+  json_t *id = json_object ();
+  json_object_set_new (id, "type", json_string ("integer"));
+  json_object_set_new (id, "minimum", json_integer (1));
+  json_object_set (properties, "offer_id", id);
+  json_object_set (properties, "trade_id", id);
+  json_decref (id);
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("trade_id"));
+  json_t *offer_id = json_object ();
+  json_t *offer_required = json_array ();
+  json_array_append_new (offer_required, json_string ("offer_id"));
+  json_object_set_new (offer_id, "required", offer_required);
+  json_t *legacy_id = json_object ();
+  json_t *legacy_required = json_array ();
+  json_array_append_new (legacy_required, json_string ("trade_id"));
+  json_object_set_new (legacy_id, "required", legacy_required);
+  json_array_append_new (required, offer_id);
+  json_array_append_new (required, legacy_id);
+  return schema_trade_offer_action_request (
+    "ge://schema/trade.cancel.json", properties, required);
+}
+
+static json_t *
+schema_trade_offer_action_request (const char *id, json_t *properties,
+                                   json_t *any_required)
+{
+  json_t *root = json_object ();
+  json_object_set_new (root, "$id", json_string (id));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
+  json_object_set_new (root, "anyOf", any_required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
+}
+
+static json_t *
+schema_trade_offer_lifecycle_response (const char *id)
+{
+  json_t *properties = json_object ();
+  json_t *offer_id = json_object ();
+  json_object_set_new (offer_id, "type", json_string ("integer"));
+  json_object_set_new (offer_id, "minimum", json_integer (1));
+  json_object_set_new (properties, "offer_id", offer_id);
+  const char *integer_fields[] = {"sender_player_id", "recipient_player_id",
+                                  "quantity", "unit_price"};
+  for (size_t i = 0; i < sizeof integer_fields / sizeof integer_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("integer"));
+      json_object_set_new (properties, integer_fields[i], field);
+    }
+  const char *string_fields[] = {"commodity", "mode", "status", "created_at",
+                                 "expires_at"};
+  for (size_t i = 0; i < sizeof string_fields / sizeof string_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("string"));
+      json_object_set_new (properties, string_fields[i], field);
+    }
+  json_t *required = json_array ();
+  const char *all_fields[] = {"offer_id", "sender_player_id", "recipient_player_id",
+                              "commodity", "mode", "quantity", "unit_price",
+                              "status", "created_at", "expires_at"};
+  for (size_t i = 0; i < sizeof all_fields / sizeof all_fields[0]; ++i)
+    json_array_append_new (required, json_string (all_fields[i]));
+  json_t *root = json_object ();
+  json_object_set_new (root, "$id", json_string (id));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
+}
+
+json_t *
+schema_trade_offer_created_response (void)
+{
+  return schema_trade_offer_lifecycle_response (
+    "ge://schema/trade.offer.created_v1.json");
+}
+
+json_t *
+schema_trade_offer_accepted_response (void)
+{
+  return schema_trade_offer_lifecycle_response (
+    "ge://schema/trade.offer.accepted_v1.json");
+}
+
+json_t *
+schema_trade_offer_cancelled_response (void)
+{
+  return schema_trade_offer_lifecycle_response (
+    "ge://schema/trade.offer.cancelled_v1.json");
+}
+
+json_t *
+schema_trade_offer_expired_response (void)
+{
+  return schema_trade_offer_lifecycle_response (
+    "ge://schema/trade.offer.expired_v1.json");
 }
 
 
@@ -3242,7 +3377,7 @@ json_t *
 schema_planet_colonists_allocate (void)
 {
   json_t *props = json_object ();
-  const char *fields[] = {"planet_id", "ore", "organics", "equipment"};
+  const char *fields[] = {"planet_id", "ore", "organics", "equipment", "weapons"};
   for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++)
     {
       json_t *prop = json_object ();
@@ -3256,7 +3391,7 @@ schema_planet_colonists_allocate (void)
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
   json_t *required = json_array ();
-  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++)
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0] - 1; i++)
     json_array_append_new (required, json_string (fields[i]));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
@@ -4079,6 +4214,47 @@ schema_sys_notice_create (void)
 
 
 json_t *
+schema_sector_notice_event (void)
+{
+  json_t *root = json_object ();
+  json_t *properties = json_object ();
+  const char *integer_fields[] = {"notice_id", "sector_id", "player_id",
+                                  "created_at", "expires_at"};
+  const char *string_fields[] = {"subtype"};
+  for (size_t i = 0; i < sizeof integer_fields / sizeof integer_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("integer"));
+      json_object_set_new (properties, integer_fields[i], field);
+    }
+  for (size_t i = 0; i < sizeof string_fields / sizeof string_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("string"));
+      json_object_set_new (properties, string_fields[i], field);
+    }
+  json_t *details = json_object ();
+  json_object_set_new (details, "type", json_string ("object"));
+  json_object_set_new (properties, "details", details);
+
+  json_t *required = json_array ();
+  const char *fields[] = {"notice_id", "sector_id", "subtype", "player_id",
+                          "created_at", "expires_at", "details"};
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+    json_array_append_new (required, json_string (fields[i]));
+  json_object_set_new (root, "$id",
+                       json_string ("ge://schema/sector.notice.json"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
+}
+
+
+json_t *
 schema_notice_list (void)
 {
   json_t *root = json_object ();
@@ -4364,9 +4540,14 @@ schema_subscribe_add (void)
 {
   json_t *props = json_object ();
 
-  json_t *event_type_prop = json_object ();
-  json_object_set_new (event_type_prop, "type", json_string ("string"));
-  json_object_set_new (props, "event_type", event_type_prop);
+  json_t *topic_prop = json_object ();
+  json_object_set_new (topic_prop, "type", json_string ("string"));
+  json_object_set (props, "topic", topic_prop);
+  json_object_set (props, "event_type", topic_prop);
+  json_decref (topic_prop);
+  json_t *filter_prop = json_object ();
+  json_object_set_new (filter_prop, "type", json_string ("string"));
+  json_object_set_new (props, "filter_json", filter_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -4377,9 +4558,18 @@ schema_subscribe_add (void)
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
 
-  json_t *required = json_array ();
-  json_array_append_new (required, json_string ("event_type"));
-  json_object_set_new (root, "required", required);
+  json_t *any_of = json_array ();
+  json_t *topic_required = json_object ();
+  json_t *topic_array = json_array ();
+  json_array_append_new (topic_array, json_string ("topic"));
+  json_object_set_new (topic_required, "required", topic_array);
+  json_array_append_new (any_of, topic_required);
+  json_t *event_required = json_object ();
+  json_t *event_array = json_array ();
+  json_array_append_new (event_array, json_string ("event_type"));
+  json_object_set_new (event_required, "required", event_array);
+  json_array_append_new (any_of, event_required);
+  json_object_set_new (root, "anyOf", any_of);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
@@ -4390,9 +4580,11 @@ schema_subscribe_remove (void)
 {
   json_t *props = json_object ();
 
-  json_t *event_type_prop = json_object ();
-  json_object_set_new (event_type_prop, "type", json_string ("string"));
-  json_object_set_new (props, "event_type", event_type_prop);
+  json_t *topic_prop = json_object ();
+  json_object_set_new (topic_prop, "type", json_string ("string"));
+  json_object_set (props, "topic", topic_prop);
+  json_object_set (props, "event_type", topic_prop);
+  json_decref (topic_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -4403,9 +4595,18 @@ schema_subscribe_remove (void)
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
 
-  json_t *required = json_array ();
-  json_array_append_new (required, json_string ("event_type"));
-  json_object_set_new (root, "required", required);
+  json_t *any_of = json_array ();
+  json_t *topic_required = json_object ();
+  json_t *topic_array = json_array ();
+  json_array_append_new (topic_array, json_string ("topic"));
+  json_object_set_new (topic_required, "required", topic_array);
+  json_array_append_new (any_of, topic_required);
+  json_t *event_required = json_object ();
+  json_t *event_array = json_array ();
+  json_array_append_new (event_array, json_string ("event_type"));
+  json_object_set_new (event_required, "required", event_array);
+  json_array_append_new (any_of, event_required);
+  json_object_set_new (root, "anyOf", any_of);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
@@ -5577,4 +5778,133 @@ schema_hardware_buy (void)
   json_object_set_new (data_schema, "required", data_required);
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
   return data_schema;
+}
+
+static json_t *
+ferengi_deal_payload_schema (const char *id)
+{
+  json_t *root = json_object ();
+  json_t *properties = json_object ();
+  const char *integer_fields[] = {"deal_id", "trader_id", "quantity",
+                                  "unit_price", "reputation"};
+  const char *string_fields[] = {"trader_code", "display_name", "commodity",
+                                 "side", "status", "expires_at"};
+  for (size_t i = 0; i < sizeof integer_fields / sizeof integer_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("integer"));
+      json_object_set_new (properties, integer_fields[i], field);
+    }
+  for (size_t i = 0; i < sizeof string_fields / sizeof string_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("string"));
+      json_object_set_new (properties, string_fields[i], field);
+    }
+  json_t *required = json_array ();
+  const char *fields[] = {"deal_id", "trader_id", "trader_code", "display_name",
+                          "commodity", "side", "quantity", "unit_price",
+                          "status", "expires_at", "reputation"};
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+    json_array_append_new (required, json_string (fields[i]));
+  json_object_set_new (root, "$id", json_string (id));
+  json_object_set_new (root, "$schema", json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
+}
+
+json_t *
+schema_ferengi_deal_response (void)
+{
+  return ferengi_deal_payload_schema ("ge://schema/ferengi.deal.response.json");
+}
+
+json_t *
+schema_ferengi_offer_event (void)
+{
+  return ferengi_deal_payload_schema ("ge://schema/ferengi.trader.offer_v1.json");
+}
+
+static json_t *
+ferengi_offer_list_item_schema (void)
+{
+  json_t *item = json_object ();
+  json_t *properties = json_object ();
+  const char *integer_fields[] = {"deal_id", "trader_id", "quantity",
+                                  "unit_price", "trader_sector_id"};
+  const char *string_fields[] = {"trader_code", "display_name", "commodity",
+                                 "side", "status", "expires_at"};
+  for (size_t i = 0; i < sizeof integer_fields / sizeof integer_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("integer"));
+      json_object_set_new (properties, integer_fields[i], field);
+    }
+  for (size_t i = 0; i < sizeof string_fields / sizeof string_fields[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("string"));
+      json_object_set_new (properties, string_fields[i], field);
+    }
+  json_object_set_new (item, "type", json_string ("object"));
+  json_object_set_new (item, "properties", properties);
+  json_object_set_new (item, "additionalProperties", json_boolean (0));
+  return item;
+}
+
+json_t *
+schema_ferengi_traders_response (void)
+{
+  json_t *root = json_object ();
+  json_t *properties = json_object ();
+  json_t *sector = json_object ();
+  json_object_set_new (sector, "type", json_string ("integer"));
+  json_object_set_new (properties, "sector_id", sector);
+
+  json_t *trader = json_object ();
+  json_object_set_new (trader, "type", json_string ("object"));
+  json_t *trader_props = json_object ();
+  const char *trader_ints[] = {"trader_id", "faction_reputation", "reputation",
+                               "ship_id", "sector_id", "visit_number"};
+  const char *trader_strings[] = {"trader_code", "display_name"};
+  for (size_t i = 0; i < sizeof trader_ints / sizeof trader_ints[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("integer"));
+      json_object_set_new (trader_props, trader_ints[i], field);
+    }
+  for (size_t i = 0; i < sizeof trader_strings / sizeof trader_strings[0]; ++i)
+    {
+      json_t *field = json_object ();
+      json_object_set_new (field, "type", json_string ("string"));
+      json_object_set_new (trader_props, trader_strings[i], field);
+    }
+  json_t *offers = json_object ();
+  json_object_set_new (offers, "type", json_string ("array"));
+  json_object_set_new (offers, "items", ferengi_offer_list_item_schema ());
+  json_object_set_new (trader_props, "offers", offers);
+  json_object_set_new (trader, "properties", trader_props);
+  json_t *traders = json_object ();
+  json_object_set_new (traders, "type", json_string ("array"));
+  json_object_set_new (traders, "items", trader);
+  json_object_set_new (properties, "traders", traders);
+
+  json_t *open_offers = json_object ();
+  json_object_set_new (open_offers, "type", json_string ("array"));
+  json_object_set_new (open_offers, "items", ferengi_offer_list_item_schema ());
+  json_object_set_new (properties, "offers", open_offers);
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("sector_id"));
+  json_array_append_new (required, json_string ("traders"));
+  json_array_append_new (required, json_string ("offers"));
+  json_object_set_new (root, "$id", json_string ("ge://schema/ferengi.traders.response.json"));
+  json_object_set_new (root, "$schema", json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
 }

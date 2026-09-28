@@ -40,6 +40,7 @@ int cmd_shipyard_sell (client_ctx_t * ctx, json_t * root);
 // Function prototypes for hardware-related commands
 int cmd_hardware_list (client_ctx_t * ctx, json_t * root);
 int cmd_hardware_buy (client_ctx_t * ctx, json_t * root);
+int h_port_hardware_restock_tick (db_t *db, int64_t now_s);
 // Function prototypes for Tavern commands
 int cmd_tavern_lottery_buy_ticket (client_ctx_t * ctx, json_t * root);
 int cmd_tavern_lottery_status (client_ctx_t * ctx, json_t * root);

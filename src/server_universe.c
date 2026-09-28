@@ -27,6 +27,7 @@
 #include "server_envelope.h"
 #include "server_loop.h"
 #include "server_communication.h"
+#include "server_sector_notices.h"
 #include "schemas.h"
 #include "common.h"
 #include "errors.h"
@@ -44,6 +45,8 @@
 #include "db/repo/repo_corporation.h"
 #include "db/repo/repo_cmds.h"
 #include "db/repo/repo_ports.h"
+#include "db/repo/repo_cargo.h"
+#include "db/repo/repo_bank.h"
 
 #define UUID_STR_LEN 37
 
@@ -52,6 +55,8 @@ static db_t *g_fer_db = NULL;
 static int g_fer_inited = 0;
 static int g_fer_corp_id = 0;
 static int g_fer_player_id = 0;
+static int g_fer_home_sector = 0;
+static int64_t g_fer_last_tick_s = 0;
 
 /* ============ ISS (Interpolar Security Station) Globals ============ */
 static int g_iss_inited = 0;
@@ -1059,11 +1064,11 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 
   if (data)
     {
-      json_get_int_flexible (data, "from", &from);
-      if (!json_get_int_flexible (data, "to", &to))
-	{
-	  json_get_int_flexible (data, "sector_id", &to);
-	}
+      if (!json_get_int_flexible (data, "from_sector_id", &from))
+        json_get_int_flexible (data, "from", &from);
+      if (!json_get_int_flexible (data, "to_sector_id", &to)
+          && !json_get_int_flexible (data, "to", &to))
+        json_get_int_flexible (data, "sector_id", &to);
     }
 
   if (to <= 0)
@@ -1600,8 +1605,20 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
           send_response_error (ctx, root, ERR_DB,
     			   "Database error updating beacon.");
           return 1;
-        }
-  }
+      }
+    }
+
+  json_t *notice_details = json_object ();
+  if (notice_details)
+    {
+      if (!collision)
+        json_object_set_new (notice_details, "beacon",
+                             json_string (beacon_text));
+      server_sector_notice_publish (ctx, root, req_sector_id,
+                                    collision ? "beacon_destroyed" :
+                                    "beacon_set", notice_details);
+      json_decref (notice_details);
+    }
 
   json_t *payload = build_sector_info_json (db, req_sector_id);
   if (!payload)
@@ -1957,7 +1974,8 @@ fer_init_once (db_t *db)
 	  g_fer_player_id = (int) system_pid;
 	  LOGI ("[fer] Ferengi Alliance created with ID %d (owner=%d).", g_fer_corp_id, g_fer_player_id);
 	  /* Ensure bank account exists */
-	  repo_corp_create_bank_account (db, g_fer_corp_id);
+	  repo_bank_create_account_if_not_exists (db, "corp", g_fer_corp_id,
+	                                          1000000);
 	}
     }
 
@@ -1975,6 +1993,7 @@ fer_init_once (db_t *db)
       LOGW ("[fer] Ferengi homeworld not found; disabling traders");
       return 0;
     }
+  g_fer_home_sector = home;
 
   int ship_type_id = 0;
   if (repo_universe_get_ferengi_warship_type_id (db, &ship_type_id) != 0
@@ -1984,32 +2003,372 @@ fer_init_once (db_t *db)
       /* Non-fatal: traders can still trade (conceptually), just can't spawn warships */
     }
 
+  if (repo_bank_create_account_if_not_exists (db, "corp", g_fer_corp_id,
+	                                              1000000) != 0)
+    {
+      LOGW ("[fer] Ferengi treasury unavailable; trader purchases disabled");
+    }
+  if (repo_universe_ensure_ferengi_traders (db, g_fer_corp_id, home) != 0)
+    {
+      LOGE ("[fer] Could not ensure named travelling trader records");
+      return 0;
+    }
+
   g_fer_inited = 1;
   LOGI ("[fer] Ferengi traders initialized");
   return 1;
 }
 
 
+static json_t *
+ferengi_deal_json (const ferengi_deal_t *deal, int reputation)
+{
+  json_t *out = json_object ();
+  if (!out) return NULL;
+  json_object_set_new (out, "deal_id", json_integer (deal->deal_id));
+  json_object_set_new (out, "trader_id", json_integer (deal->trader_id));
+  json_object_set_new (out, "trader_code", json_string (deal->trader_code));
+  json_object_set_new (out, "display_name", json_string (deal->display_name));
+  json_object_set_new (out, "commodity", json_string (deal->commodity_code));
+  json_object_set_new (out, "side", json_string (deal->side));
+  json_object_set_new (out, "quantity", json_integer (deal->quantity));
+  json_object_set_new (out, "unit_price", json_integer (deal->unit_price));
+  json_object_set_new (out, "status", json_string (deal->status));
+  json_object_set_new (out, "expires_at", json_string (deal->expires_at));
+  json_object_set_new (out, "reputation", json_integer (reputation));
+  return out;
+}
+
+static void
+ferengi_copy_text (char *out, size_t out_size, const char *in)
+{
+  if (!out || out_size == 0) return;
+  snprintf (out, out_size, "%s", in ? in : "");
+}
+
+static json_t *
+ferengi_empty_object_schema (const char *id)
+{
+  json_t *schema = json_object ();
+  json_object_set_new (schema, "$id", json_string (id));
+  json_object_set_new (schema, "$schema", json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (schema, "type", json_string ("object"));
+  json_object_set_new (schema, "properties", json_object ());
+  json_object_set_new (schema, "required", json_array ());
+  json_object_set_new (schema, "additionalProperties", json_false ());
+  return schema;
+}
+
+json_t *schema_ferengi_traders (void)
+{
+  return ferengi_empty_object_schema ("ge://schema/ferengi.traders.json");
+}
+
+json_t *schema_ferengi_deal_action (void)
+{
+  json_t *schema = ferengi_empty_object_schema ("ge://schema/ferengi.deal.action.json");
+  json_t *properties = json_object ();
+  json_t *deal_id = json_object ();
+  json_object_set_new (deal_id, "type", json_string ("integer"));
+  json_object_set_new (deal_id, "minimum", json_integer (1));
+  json_object_set_new (properties, "deal_id", deal_id);
+  json_object_set_new (schema, "properties", properties);
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("deal_id"));
+  json_object_set_new (schema, "required", required);
+  return schema;
+}
+
+static int
+ferengi_get_reputation (db_t *db, int trader_id, int player_id, int *out)
+{
+  const char *q = "SELECT COALESCE(reputation,0) FROM ferengi_player_relationships WHERE ferengi_trader_id={1} AND player_id={2}";
+  char sql[512]; sql_build (db, q, sql, sizeof sql);
+  db_res_t *res = NULL; db_error_t err;
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (trader_id), db_bind_i64 (player_id)}, 2, &res, &err)) return err.code;
+  if (db_res_step (res, &err)) *out = db_res_col_i32 (res, 0, &err);
+  else *out = 0;
+  db_res_finalize (res);
+  return err.code;
+}
+
+static void
+ferengi_send_deal_state (client_ctx_t *ctx, json_t *root, const char *type,
+                         ferengi_deal_t *deal)
+{
+  int reputation = 0;
+  (void) ferengi_get_reputation (game_db_get_handle (), deal->trader_id,
+                                 ctx->player_id, &reputation);
+  json_t *data = ferengi_deal_json (deal, reputation);
+  if (data) send_response_ok_take (ctx, root, type, &data);
+  else send_response_error (ctx, root, ERR_NOMEM, "Could not serialize trader deal");
+}
+
+int
+cmd_ferengi_traders (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    { send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required"); return 0; }
+  db_t *db = game_db_get_handle ();
+  db_error_t err;
+  db_res_t *res = repo_universe_get_ferengi_traders_at_sector (db, ctx->sector_id,
+                                                                ctx->player_id, &err);
+  if (!res) { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not load traders"); return 0; }
+  json_t *traders = json_array ();
+  while (db_res_step (res, &err))
+    {
+      json_t *trader = json_object ();
+      json_object_set_new (trader, "trader_id", json_integer (db_res_col_i32 (res, 0, &err)));
+      const char *code = db_res_col_text (res, 1, &err);
+      const char *name = db_res_col_text (res, 2, &err);
+      json_object_set_new (trader, "trader_code", json_string (code ? code : ""));
+      json_object_set_new (trader, "display_name", json_string (name ? name : ""));
+      json_object_set_new (trader, "faction_reputation", json_integer (db_res_col_i32 (res, 3, &err)));
+      json_object_set_new (trader, "reputation", json_integer (db_res_col_i32 (res, 4, &err)));
+      json_object_set_new (trader, "ship_id", json_integer (db_res_col_i32 (res, 5, &err)));
+      json_object_set_new (trader, "sector_id", json_integer (db_res_col_i32 (res, 6, &err)));
+      json_object_set_new (trader, "visit_number", json_integer (db_res_col_i64 (res, 7, &err)));
+      json_object_set_new (trader, "offers", json_array ());
+      json_array_append_new (traders, trader);
+    }
+  db_res_finalize (res);
+
+  res = repo_universe_get_ferengi_trader_deals (db, ctx->player_id, &err);
+  if (!res) { json_decref (traders); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not load trader offers"); return 0; }
+  json_t *offers = json_array ();
+  while (db_res_step (res, &err))
+    {
+      int trader_id = db_res_col_i32 (res, 1, &err);
+      json_t *offer = json_object ();
+      json_object_set_new (offer, "deal_id", json_integer (db_res_col_i64 (res, 0, &err)));
+      json_object_set_new (offer, "trader_id", json_integer (trader_id));
+      const char *code = db_res_col_text (res, 2, &err);
+      const char *name = db_res_col_text (res, 3, &err);
+      const char *commodity = db_res_col_text (res, 4, &err);
+      const char *side = db_res_col_text (res, 5, &err);
+      const char *expires = db_res_col_text (res, 9, &err);
+      int trader_sector_id = db_res_col_i32 (res, 10, &err);
+      json_object_set_new (offer, "trader_code", json_string (code ? code : ""));
+      json_object_set_new (offer, "display_name", json_string (name ? name : ""));
+      json_object_set_new (offer, "commodity", json_string (commodity ? commodity : ""));
+      json_object_set_new (offer, "side", json_string (side ? side : ""));
+      json_object_set_new (offer, "quantity", json_integer (db_res_col_i32 (res, 6, &err)));
+      json_object_set_new (offer, "unit_price", json_integer (db_res_col_i64 (res, 7, &err)));
+      json_object_set_new (offer, "status", json_string (db_res_col_text (res, 8, &err)));
+      json_object_set_new (offer, "expires_at", json_string (expires ? expires : ""));
+      json_object_set_new (offer, "trader_sector_id", json_integer (trader_sector_id));
+      json_array_append (offers, offer);
+      for (size_t i = 0; i < json_array_size (traders); ++i)
+        {
+          json_t *trader = json_array_get (traders, i);
+          if (json_integer_value (json_object_get (trader, "trader_id")) == trader_id)
+            { json_array_append (json_object_get (trader, "offers"), offer); break; }
+        }
+      json_decref (offer);
+    }
+  db_res_finalize (res);
+  json_t *data = json_object ();
+  json_object_set_new (data, "sector_id", json_integer (ctx->sector_id));
+  json_object_set_new (data, "traders", traders);
+  json_object_set_new (data, "offers", offers);
+  send_response_ok_take (ctx, root, "ferengi.traders_v1", &data);
+  return 0;
+}
+
+static int
+ferengi_settle_deal (db_t *db, client_ctx_t *ctx, ferengi_deal_t *deal)
+{
+  if (deal->quantity <= 0 || deal->unit_price < 0
+      || (deal->unit_price > 0 && deal->quantity > INT64_MAX / deal->unit_price))
+    return ERR_INVALID_ARG;
+  int64_t total = deal->unit_price * deal->quantity;
+  int player_ship = h_get_active_ship_id (db, ctx->player_id);
+  if (player_ship <= 0 || player_ship == deal->ship_id) return ERR_NO_ACTIVE_SHIP;
+  int account_id = repo_corp_get_bank_account_id (db, deal->corporation_id);
+  if (account_id <= 0) return ERR_DB_NOT_FOUND;
+  int rc;
+  if (strcmp (deal->side, "trader_sells") == 0)
+    {
+      long long credits = 0;
+      if (repo_players_get_credits (db, ctx->player_id, &credits) != 0 || credits < total)
+        return ERR_INSUFFICIENT_FUNDS;
+      rc = repo_cargo_add (db, deal->ship_id, deal->commodity_code, -deal->quantity, NULL);
+      if (rc != 0) return ERR_BAD_STATE;
+      rc = repo_cargo_add (db, player_ship, deal->commodity_code, deal->quantity, NULL);
+      if (rc != 0) return rc;
+      rc = repo_players_update_credits_safe (db, ctx->player_id, -total, NULL);
+      if (rc != 0) return ERR_INSUFFICIENT_FUNDS;
+      rc = repo_bank_add_credits_returning (db, account_id, total, NULL);
+      return rc == 0 ? 0 : rc;
+    }
+  if (strcmp (deal->side, "trader_buys") == 0)
+    {
+      rc = repo_cargo_add (db, player_ship, deal->commodity_code, -deal->quantity, NULL);
+      if (rc != 0) return ERR_BAD_STATE;
+      rc = repo_cargo_add (db, deal->ship_id, deal->commodity_code, deal->quantity, NULL);
+      if (rc != 0) return rc;
+      rc = repo_bank_deduct_credits_returning (db, account_id, total, NULL);
+      if (rc != 0) return ERR_INSUFFICIENT_FUNDS;
+      rc = repo_players_update_credits_safe (db, ctx->player_id, total, NULL);
+      return rc == 0 ? 0 : rc;
+    }
+  return ERR_BAD_STATE;
+}
+
+static int
+ferengi_deal_action (client_ctx_t *ctx, json_t *root, bool accept)
+{
+  if (!ctx || ctx->player_id <= 0)
+    { send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required"); return 0; }
+  json_t *data_in = json_object_get (root, "data");
+  json_t *j_id = json_object_get (data_in, "deal_id");
+  int64_t deal_id = json_is_integer (j_id) ? json_integer_value (j_id) : 0;
+  if (deal_id <= 0) { send_response_error (ctx, root, ERR_BAD_REQUEST, "deal_id is required"); return 0; }
+  db_t *db = game_db_get_handle (); db_error_t err;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    { send_response_error (ctx, root, ERR_DB_BUSY, "Could not lock trader offer"); return 0; }
+  ferengi_deal_t deal;
+  int rc = repo_universe_get_ferengi_deal (db, deal_id, 1, &deal);
+  if (rc != 0)
+    { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_NOT_FOUND, "Trader offer not found"); return 0; }
+  if (deal.player_id != ctx->player_id)
+    { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_PERMISSION_DENIED, "This offer belongs to another player"); return 0; }
+  const char *success_type = accept ? "ferengi.deal.accepted_v1" : "ferengi.deal.rejected_v1";
+  if (strcmp (deal.status, "settled") == 0 && accept)
+    { db_tx_commit (db, &err); ferengi_send_deal_state (ctx, root, success_type, &deal); return 0; }
+  if (strcmp (deal.status, "declined") == 0 && !accept)
+    { db_tx_commit (db, &err); ferengi_send_deal_state (ctx, root, success_type, &deal); return 0; }
+  if (strcmp (deal.status, "expired") == 0)
+    { db_tx_commit (db, &err); ferengi_send_deal_state (ctx, root, "ferengi.deal.expired_v1", &deal); return 0; }
+  if (strcmp (deal.status, "open") != 0)
+    { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_BAD_STATE, "Offer already completed differently"); return 0; }
+
+  int changed = 0; int64_t now_s = (int64_t) time (NULL);
+  rc = repo_universe_transition_ferengi_deal (db, deal_id, "expired", now_s, &changed);
+  if (rc != 0)
+    { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not validate expiry"); return 0; }
+  if (changed)
+    {
+      strcpy (deal.status, "expired");
+      char key[64]; snprintf (key, sizeof key, "deal:%" PRId64 ":expired", deal_id);
+      (void) repo_universe_record_ferengi_interaction (db, &deal, "expired", 0, key);
+      if (!db_tx_commit (db, &err)) { db_tx_rollback (db, &err); }
+      ferengi_send_deal_state (ctx, root, "ferengi.deal.expired_v1", &deal); return 0;
+    }
+  if (accept)
+    {
+      rc = ferengi_settle_deal (db, ctx, &deal);
+      if (rc != 0)
+        { db_tx_rollback (db, &err); send_response_error (ctx, root, rc, "Trader offer cannot be settled"); return 0; }
+      rc = repo_universe_transition_ferengi_deal (db, deal_id, "settled", now_s, &changed);
+      if (rc != 0 || !changed)
+        { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_BAD_STATE, "Trader offer state changed"); return 0; }
+      strcpy (deal.status, "settled");
+    }
+  else
+    {
+      rc = repo_universe_transition_ferengi_deal (db, deal_id, "declined", now_s, &changed);
+      if (rc != 0 || !changed)
+        { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_BAD_STATE, "Trader offer state changed"); return 0; }
+      strcpy (deal.status, "declined");
+    }
+  char key[64]; snprintf (key, sizeof key, "deal:%" PRId64 ":%s", deal_id, accept ? "accepted" : "rejected");
+  rc = repo_universe_record_ferengi_interaction (db, &deal,
+       accept ? "accepted" : "declined", accept ? 5 : -1, key);
+  if (rc < 0 || !db_tx_commit (db, &err))
+    { db_tx_rollback (db, &err); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not record trader relationship"); return 0; }
+  ferengi_send_deal_state (ctx, root, success_type, &deal);
+  return 0;
+}
+
+int cmd_ferengi_deal_accept (client_ctx_t *ctx, json_t *root)
+{ return ferengi_deal_action (ctx, root, true); }
+
+int cmd_ferengi_deal_reject (client_ctx_t *ctx, json_t *root)
+{ return ferengi_deal_action (ctx, root, false); }
+
 void
 fer_tick (db_t *db, int64_t now_ms)
 {
-  (void) now_ms;
-  if (!g_fer_inited)
-    {
-      if (!fer_init_once (db))
-	{
-	  return;
-	}
-    }
+  if (!g_fer_inited && !fer_init_once (db)) return;
+  if (!db) db = g_fer_db;
+  if (!db) return;
+  int64_t now_s = (int64_t) time (NULL);
+  if (now_ms != 0 && g_fer_last_tick_s && now_s - g_fer_last_tick_s < 900) return;
+  g_fer_last_tick_s = now_s;
+  if (repo_universe_ensure_ferengi_traders (db, g_fer_corp_id,
+                                             g_fer_home_sector) != 0)
+    LOGW ("[fer] could not provision configured trader definitions");
+  if (repo_universe_expire_ferengi_deals (db, now_s) != 0)
+    LOGW ("[fer] offer expiry pass failed");
 
-  if (!db)
+  db_error_t err;
+  db_res_t *traders = repo_universe_get_all_ferengi_traders (db, &err);
+  if (!traders) { LOGE ("[fer] could not load travelling trader records"); return; }
+  while (db_res_step (traders, &err))
     {
-      db = g_fer_db;
-      if (!db)
-	return;
+      int trader_id = db_res_col_i32 (traders, 0, &err);
+      const char *trader_code_ptr = db_res_col_text (traders, 1, &err);
+      const char *display_name_ptr = db_res_col_text (traders, 2, &err);
+      int ship_id = db_res_col_i32 (traders, 3, &err);
+      int corporation_id = db_res_col_i32 (traders, 4, &err);
+      int sector_id = db_res_col_i32 (traders, 5, &err);
+      int visit_number = (int) db_res_col_i64 (traders, 6, &err);
+      char trader_code[32], display_name[96];
+      ferengi_copy_text (trader_code, sizeof trader_code, trader_code_ptr);
+      ferengi_copy_text (display_name, sizeof display_name, display_name_ptr);
+      db_res_t *players = repo_universe_get_players_in_sector (db, sector_id, &err);
+      if (players)
+        {
+          while (db_res_step (players, &err))
+            {
+              int player_id = db_res_col_i32 (players, 0, &err);
+              ferengi_deal_t encounter = {0};
+              encounter.trader_id = trader_id; encounter.player_id = player_id;
+              char encounter_key[96];
+              snprintf (encounter_key, sizeof encounter_key,
+                        "encounter:%d:%d:%d", trader_id, visit_number, player_id);
+              if (repo_universe_record_ferengi_interaction (db, &encounter,
+                    "encounter", 0, encounter_key) != 0) continue;
+              int64_t deal_id = 0;
+              int created = repo_universe_create_ferengi_offer (db, trader_id,
+                    player_id, visit_number, ship_id, corporation_id, now_s,
+                    &deal_id);
+              if (created == 0 && deal_id > 0)
+                {
+                  ferengi_deal_t deal;
+                  if (repo_universe_get_ferengi_deal (db, deal_id, 0, &deal) == 0)
+                    {
+                      int reputation = 0;
+                      (void) ferengi_get_reputation (db, trader_id, player_id,
+                                                     &reputation);
+                      json_t *payload = ferengi_deal_json (&deal, reputation);
+                      if (payload)
+                        {
+                          json_object_set_new (payload, "trader_code", json_string (trader_code));
+                          json_object_set_new (payload, "display_name", json_string (display_name));
+                          (void) server_deliver_to_player (player_id,
+                            "ferengi.trader.offer_v1", payload);
+                          json_decref (payload);
+                        }
+                    }
+                }
+            }
+          db_res_finalize (players);
+        }
+      int next_sector = nav_random_neighbor (db, sector_id);
+      if (next_sector > 0 && next_sector != sector_id)
+        (void) repo_universe_advance_ferengi_trader (db, trader_id, ship_id,
+                                                     next_sector);
+      else
+        {
+          /* A trader's visit advances even in a dead-end sector, so an
+           * encounter can recur after the next route discovery. */
+          (void) repo_universe_advance_ferengi_trader (db, trader_id, ship_id,
+                                                       sector_id);
+        }
     }
-
-  LOGD ("[fer] tick: traders system active");
+  db_res_finalize (traders);
 }
 
 

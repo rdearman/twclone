@@ -41,6 +41,13 @@ Move to an adjacent sector.
 - Triggers `sector.player_left` (origin) and `sector.player_entered` (dest).
 - **Hazard Trigger**: If the destination sector contains hostile fighters, mines (Armid), or limpets, they trigger immediately upon entry.
 
+When environmental hazards damage the entering ship, the successful movement
+response includes a `hazards` array. Each reported hazard uses `hazard_type`
+(for example, `nebula`, `radiation`, or `volcanic`), `severity`, `damage`,
+`shields_lost`, `fighters_lost`, `hull_lost`, and a `message`. `hazard_type` is
+the protocol field name for the hazard kind; it is distinct from the event
+envelope's `type`.
+
 ### `move.transwarp`
 Long-range jump (requires equipment).
 **Args**: `{ "to_sector_id": 50 }`; legacy clients may use `{ "sector_id": 50 }`.

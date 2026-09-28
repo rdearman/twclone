@@ -29,6 +29,8 @@ is delivered once.
 ```json
 { "command": "subscribe.add", "data": { "topic": "sector.*" } }
 ```
+`topic` is canonical; `event_type` remains accepted as a legacy alias by
+`subscribe.add` and `subscribe.remove`.
 Response: `subscribe.ack_v1`
 
 **Unsubscribe (Idempotent)**

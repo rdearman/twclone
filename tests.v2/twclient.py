@@ -16,6 +16,7 @@ class TWClient:
         self.sock: Optional[socket.socket] = None
         self.session_token: Optional[str] = None
         self.player_id: Optional[int] = None
+        self._last_request_id: Optional[str] = None
 
     def connect(self):
         """Establishes a connection to the server."""
@@ -44,6 +45,12 @@ class TWClient:
         """Sends a JSON object as a line."""
         if not self.sock:
             raise ConnectionError("Not connected")
+
+        request_id = data.get("id")
+        if not isinstance(request_id, str) or not request_id:
+            request_id = "test-" + uuid.uuid4().hex
+            data["id"] = request_id
+        self._last_request_id = request_id
         
         # Inject session if available and not present
         if self.session_token and "auth" not in data:
@@ -84,6 +91,11 @@ class TWClient:
             if not resp:
                 raise ConnectionError("Connection closed or empty response")
             
+            # Events and RPC replies share the same socket. With request IDs,
+            # the protocol's reply_to field lets tests ignore an event that
+            # arrived before the command response.
+            if self._last_request_id and resp.get("reply_to") != self._last_request_id:
+                continue
             if resp.get("type") == "system.notice":
                 continue
             return resp

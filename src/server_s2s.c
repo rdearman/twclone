@@ -129,7 +129,7 @@ server_s2s_dispatch (s2s_conn_t *c, json_t *env)
   char *why = NULL;
 
 
-  if (schema_validate_payload (type, payload, &why) != 0)
+  if (s2s_validate_payload (type, payload, &why) != 0)
     {
       json_t *err = s2s_make_error ("server", "engine", s2s_env_id (env),
 				    "bad_request",

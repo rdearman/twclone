@@ -20,6 +20,7 @@
 #include "server_config.h"
 #include "globals.h"
 #include "server_planets.h"
+#include "server_sector_notices.h"
 #include "game_db.h"
 #include "repo_cmd.h"
 #include "repo_combat.h"
@@ -668,6 +669,18 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   if (sid >= 1 && sid <= 10)
     iss_summon (sid, ctx->player_id);
 
+  json_t *notice_details = json_object ();
+  if (notice_details)
+    {
+      json_object_set_new (notice_details, "asset_id", json_integer (aid));
+      json_object_set_new (notice_details, "count", json_integer (amount));
+      json_object_set_new (notice_details, "offense",
+                           json_integer (offense));
+      server_sector_notice_publish (ctx, root, sid, "fighters_deployed",
+                                    notice_details);
+      json_decref (notice_details);
+    }
+
   json_t *out = json_object ();
   json_object_set_new (out, "asset_id", json_integer (aid));
   json_object_set_new (out, "count_added", json_integer (amount));
@@ -1182,22 +1195,49 @@ cmd_mines_recall (client_ctx_t *ctx, json_t *root)
 int
 cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
 {
+  if (!require_auth (ctx, root))
+    return 0;
   db_t *db = game_db_get_handle ();
   if (!db)
     return 0;
   json_t *data = json_object_get (root, "data");
   int tsid =
     (int) json_integer_value (json_object_get (data, "target_sector_id"));
+  if (tsid <= 0 || tsid != ctx->sector_id)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "target_sector_id must be the current sector");
+      return 0;
+    }
   json_t *mines = NULL;
-  db_combat_select_mines_locked (db, tsid, 1, &mines);
+  if (db_combat_select_mines_locked (db, tsid, 1, &mines) != 0 || !mines)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not read sector mines");
+      return 0;
+    }
   size_t i;
   json_t *m;
+  int removed = 0;
   json_array_foreach (mines, i, m)
   {
     int aid = (int) json_integer_value (json_object_get (m, "id"));
-    db_combat_delete_sector_asset (db, aid);
+    if (db_combat_delete_sector_asset (db, aid) == 0)
+      removed++;
   }
   json_decref (mines);
+  if (removed > 0)
+    {
+      json_t *notice_details = json_object ();
+      if (notice_details)
+        {
+          json_object_set_new (notice_details, "mines_removed",
+                               json_integer (removed));
+          server_sector_notice_publish (ctx, root, tsid, "mine_swept",
+                                        notice_details);
+          json_decref (notice_details);
+        }
+    }
   json_t *out = json_object ();
   json_object_set_new (out, "success", json_true ());
   send_response_ok_take (ctx, root, "combat.mines_swept_v1", &out);

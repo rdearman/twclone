@@ -15,7 +15,16 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_by, colonist, ore_on_hand, organics_on_hand, equipment_on_hand, fighters) VALUES (7777, 1, 'Construction World', @{upgrade_user_player_id}, 'player', 'M', 1, @{admin_player_id}, 1000000, 1000, 1000, 1000, 1000) ON CONFLICT (planet_id) DO UPDATE SET owner_id=@{upgrade_user_player_id}, type=1, colonist=1000000, ore_on_hand=1000, organics_on_hand=1000, equipment_on_hand=1000, fighters=1000;"
+        "sql": "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_by, population, colonist, colonists_unassigned, ore_on_hand, organics_on_hand, equipment_on_hand, fighters) VALUES (7777, 1, 'Construction World', @{upgrade_user_player_id}, 'player', 'M', 1, @{admin_player_id}, 1000000, 1000000, 1000000, 1000, 1000, 1000, 1000) ON CONFLICT (planet_id) DO UPDATE SET owner_id=@{upgrade_user_player_id}, type=1, population=1000000, colonist=1000000, colonists_unassigned=1000000, ore_on_hand=1000, organics_on_hand=1000, equipment_on_hand=1000, fighters=1000;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed canonical construction stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', 7777, 'ORE', 1000), ('planet', 7777, 'ORG', 1000), ('planet', 7777, 'EQU', 1000) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity=EXCLUDED.quantity;"
       },
       "expect": { "status": "ok" }
     },
@@ -60,7 +69,7 @@
       "name": "Start Upgrade to Level 1",
       "command": "citadel.upgrade",
       "user": "upgrade_user",
-      "data": { "citadel_id": "@test_citadel_id" },
+      "data": { "planet_id": 7777 },
       "expect": { "status": "ok", "type": "citadel.upgrade_started" },
       "asserts": [
         { "path": "data.target_level", "op": "==", "value": 1 }

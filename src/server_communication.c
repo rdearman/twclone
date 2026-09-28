@@ -76,6 +76,7 @@ is_allowed_topic (const char *t)
     "system.notice",
     "sector.*",
     "sector.player_entered",
+    "npc.*",
     "chat.sector",
     "chat.global",
     "combat.*",
@@ -349,6 +350,11 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
 	db_res_col_text (res, 5, &err);
       const char *seen_at = db_res_col_is_null (res, 6) ? NULL :
 	db_res_col_text (res, 6, &err);
+      const char *scope = db_res_col_text (res, 7, &err);
+      int sector_id = db_res_col_is_null (res, 8) ? 0 :
+	db_res_col_i32 (res, 8, &err);
+      const char *meta_text = db_res_col_is_null (res, 9) ? NULL :
+	db_res_col_text (res, 9, &err);
 
       if (count == limit)
 	{
@@ -363,6 +369,17 @@ cmd_notice_list (client_ctx_t *ctx, json_t *root)
       json_object_set_new (row, "title", json_string (t ? t : ""));
       json_object_set_new (row, "body", json_string (b ? b : ""));
       json_object_set_new (row, "severity", json_string (sv ? sv : "info"));
+      json_object_set_new (row, "scope",
+			   json_string (scope ? scope : "global"));
+      if (sector_id > 0)
+	json_object_set_new (row, "sector_id", json_integer (sector_id));
+      if (meta_text)
+	{
+	  json_error_t meta_error;
+	  json_t *meta = json_loads (meta_text, 0, &meta_error);
+	  if (meta)
+	    json_object_set_new (row, "meta", meta);
+	}
       json_object_set_new (row, "created_at",
 			   json_string (created_text ? created_text : ""));
 
@@ -1600,6 +1617,8 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *v = json_object_get (data, "topic");
+  if (!v)
+    v = json_object_get (data, "event_type");
 
 
   if (!json_is_string (v))
@@ -1718,6 +1737,8 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   json_t *v = json_object_get (data, "topic");
+  if (!v)
+    v = json_object_get (data, "event_type");
 
 
   if (!json_is_string (v))
@@ -1872,6 +1893,10 @@ topic_desc (const char *pattern)
   if (strcasecmp (pattern, "corp.log") == 0)
     {
       return "Corporation activity log (membership required)";
+    }
+  if (strcasecmp (pattern, "npc.*") == 0)
+    {
+      return "Events from persistent and travelling NPCs";
     }
   if (strcasecmp (pattern, "chat.global") == 0)
     {

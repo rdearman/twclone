@@ -96,7 +96,7 @@
     {
       "name": "Wait for automatic shock expiry cleanup",
       "command": "delay",
-      "data": { "seconds": 5 }
+      "data": { "seconds": 65 }
     },
     {
       "name": "Verify the expired shock was removed",

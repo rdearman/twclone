@@ -72,16 +72,86 @@ The server enforces two optional quantity restrictions on trades:
 
 **Events**: Emits `player.trade.v1` and `trade.deal.matched`.
 
+### Player trade offers
+
+`trade.offer` creates a persisted offer addressed to `to_player_id`. Required
+fields are `commodity` (three-character commodity code), `quantity`, `price`
+(integer credits per unit), and `mode` (`sell` or `buy`). In `sell` mode the
+sender offers their cargo for the recipient's credits; in `buy` mode the
+sender offers credits for the recipient's cargo. The sender must have the
+offered cargo or total credits when creating the offer. Assets are not
+reserved: the recipient's acceptance rechecks both ships and balances and
+settles the exchange atomically, or returns an error without changing the
+offer.
+
+`expires_in` is optional (default 86400 seconds; valid range 60–604800).
+`idempotency_key` is optional; a repeated key from the same sender returns the
+original offer if recipient, commodity, mode, quantity, and price match, and
+is rejected if they differ. The original expiry is retained. When the RPC
+request has an ID, it is also used to deduplicate retries.
+
+`trade.accept` takes `offer_id` (legacy `trade_id` is accepted) and can be
+called only by the addressed recipient. `trade.cancel` takes the same ID and
+can be called only by the sender. Both return the persisted offer fields and
+state through `trade.offer.accepted_v1`, `trade.offer.cancelled_v1`, or
+`trade.offer.expired_v1`; creation returns `trade.offer.created_v1`. Repeating
+acceptance or cancellation by the authorized player is idempotent. Pending
+offers expire automatically, and an accept/cancel request also detects and
+records expiry immediately.
+
 ## 2. Hardware & Services (Stardock)
 
 ### `hardware.list`
-List available upgrades (ships, equipment) at the current port.
+List available upgrades (ships, equipment) at the current port. At a
+configured special hardware port, `data.location_type` is `BLACK_MARKET` and
+only hardware mapped by `porttype_items.can_buy` with positive per-port stock
+is returned. Its `price` is the stock-adjusted unit price; additive
+`base_price` and `stock_quantity` fields report the unchanged catalogue price
+and remaining stock. Other port types retain their existing response and price
+behavior.
 
 ### `hardware.buy`
-Purchase equipment.
+Purchase equipment. At a configured special hardware port, a purchase is
+accepted only for mapped hardware with enough stock. Credits, installed
+hardware, and stock are updated atomically. Insufficient stock returns
+`REF_PORT_OUT_OF_STOCK`.
 
 ### `shipyard.*`
 Commands for buying/selling ships (specifics usually covered under `hardware` or specific shipyard commands).
+
+## Ferengi travelling traders
+
+Ferengi traders have stable named identities and persistent ships. Their
+location is their ship's current sector. `ferengi.traders` returns active
+traders in the caller's sector, their per-player reputation, and outstanding
+offers. Traders move through connected sectors on the existing NPC schedule;
+when a trader encounters a player it may create a durable offer and emit
+`ferengi.trader.offer_v1` to that player. Returning traders retain the same
+identity and relationship history. Open offers remain available through
+`ferengi.traders` until accepted, rejected, or expired, even after the trader
+has moved to another sector.
+
+The seeded roster is configured by database definitions rather than compiled
+into the command handler. An active definition includes a stable `trader_code`,
+display name, and ship type. Ordered commodity rotation and starting stock are
+stored separately with validated commodity codes. The server provisions new
+active definitions on its next trader-processing pass (within 15 minutes), or
+on a forced sysop tick. Offers last six hours by default;
+operators can tune this with the
+integer config key `ferengi.offer_lifetime_seconds` (60 to 604800 seconds).
+Offer generation uses the first available commodity in the configured order,
+up to 10 units, at 110% of base price. If the trader has no stock, it may offer
+to buy 5 units at 90% of base price when its faction account can pay. These
+terms remain fixed for an offer. Reputation is stored per player and trader
+and currently does not affect pricing.
+
+`ferengi.deal.accept` and `ferengi.deal.reject` take `deal_id`. Acceptance
+settles the fixed commodity, quantity, and unit price from the trader's offer
+after rechecking player credits/cargo, trader cargo/funds, and ship capacity.
+Rejection records a declined deal. Both outcomes update per-player reputation
+and interaction history. Actions are idempotent for already-settled,
+declined, or expired deals. Open offers expire on the NPC cron pass and are
+also checked when acted on. No haggling or price negotiation is defined.
 
 ## 3. Events
 

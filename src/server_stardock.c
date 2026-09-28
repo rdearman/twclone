@@ -1,6 +1,7 @@
 #include "db/repo/repo_stardock.h"
 #include "db/repo/repo_shiptypes.h"
 #include "db/repo/repo_porttypes.h"
+#include "db/repo/repo_items.h"
 #include <jansson.h>
 
 #ifndef DB_OK
@@ -12,6 +13,7 @@
 #include <string.h>		// For strcasecmp
 #include <math.h>		// For floor() function
 #include <ctype.h>		// For isalnum, isspace
+#include <limits.h>
 #include "server_stardock.h"
 #include "common.h"
 #include "db/repo/repo_database.h"
@@ -33,6 +35,24 @@
 #include "game_db.h"
 #include "db/repo/repo_database.h"
 struct tavern_settings g_tavern_cfg;
+
+static int64_t
+black_market_hardware_price (int64_t base_price, int64_t stock,
+                             int64_t max_stock)
+{
+  if (base_price <= 0 || stock < 0 || max_stock <= 0 || stock > max_stock)
+    return 0;
+  /* Bounded stock curve: 1.5x at empty, base at half stock, 0.5x full. */
+  int64_t numerator = 3 * max_stock - 2 * stock;
+  int64_t denominator = 2 * max_stock;
+  return (base_price * numerator + denominator - 1) / denominator;
+}
+
+int
+h_port_hardware_restock_tick (db_t *db, int64_t now_s)
+{
+  return repo_stardock_restock_hardware (db, now_s);
+}
 
 
 // Static Forward Declarations for helper functions
@@ -87,6 +107,10 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 	  strncpy (location_type, LOCATION_STARDOCK,
 		   sizeof (location_type) - 1);
 	}
+      else if (repo_porttypes_is_black_market (db, porttype_id))
+	{
+	  strncpy (location_type, "BLACK_MARKET", sizeof (location_type) - 1);
+	}
       else
 	{			// Class-0
 	  strncpy (location_type, LOCATION_CLASS0,
@@ -95,7 +119,7 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
     }
 
   if (port_id == 0)
-    {				// No Stardock or Class-0 port in this sector
+    {				// No supported hardware port in this sector
       json_t *res = json_object ();
 
 
@@ -151,7 +175,11 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 
   json_t *items_array = json_array ();
   db_res_t *res_items = NULL;
-  if (repo_stardock_get_hardware_items (db, location_type, &res_items) != 0)
+  int item_query_rc = strcmp (location_type, "BLACK_MARKET") == 0 ?
+    repo_stardock_get_black_market_hardware_items (db, port_id, porttype_id,
+                                                    &res_items) :
+    repo_stardock_get_hardware_items (db, location_type, &res_items);
+  if (item_query_rc != 0)
     {
       send_response_error (ctx,
 			   root,
@@ -163,12 +191,21 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
     {
       const char *code = db_res_col_text (res_items, 0, &err);
       const char *name = db_res_col_text (res_items, 1, &err);
-      int price = (int) db_res_col_i64 (res_items, 2, &err);
+      int64_t base_price = db_res_col_i64 (res_items, 2, &err);
+      int64_t price = base_price;
       int max_per_ship_hw = db_res_col_is_null (res_items,
 						3) ? -1 :
 	(int) db_res_col_i64 (res_items,
 			      3, &err);	// -1 means use shiptype max
       const char *category = db_res_col_text (res_items, 4, &err);
+      int stock_quantity = -1;
+      if (strcmp (location_type, "BLACK_MARKET") == 0)
+        {
+          stock_quantity = (int) db_res_col_i64 (res_items, 5, &err);
+          int max_stock = (int) db_res_col_i64 (res_items, 6, &err);
+          price = black_market_hardware_price (base_price, stock_quantity,
+                                               max_stock);
+        }
       int max_purchase = 0;
       bool ship_has_capacity = true;
       bool item_supported = true;
@@ -266,8 +303,12 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 	{
 	  ship_has_capacity = false;
 	}
+
+      if (stock_quantity >= 0)
+	max_purchase = MIN (max_purchase, stock_quantity);
       if (item_supported
-	  && (max_purchase > HW_MIN_QUANTITY
+	  && (stock_quantity == 0
+	      || max_purchase > HW_MIN_QUANTITY
 	      || strcmp (category, HW_CATEGORY_MODULE) == 0))
 	{
 	  json_t *item_obj = json_object ();
@@ -276,6 +317,12 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 	  json_object_set_new (item_obj, "code", json_string (code));
 	  json_object_set_new (item_obj, "name", json_string (name));
 	  json_object_set_new (item_obj, "price", json_integer (price));
+	  if (stock_quantity >= 0)
+	    {
+	      json_object_set_new (item_obj, "base_price", json_integer (base_price));
+	      json_object_set_new (item_obj, "stock_quantity",
+	                           json_integer (stock_quantity));
+	    }
 	  json_object_set_new (item_obj, "max_purchase",
 			       json_integer (max_purchase));
 	  json_object_set_new (item_obj, "ship_has_capacity",
@@ -339,7 +386,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "No active ship.");
       return 0;
     }
-  // 2. Check Port Location (Stardock or Class 0)
+  // 2. Check Port Location (Stardock, Class 0, or black market)
   int porttype_id = -1;
   int port_id_tmp = 0;
   if (repo_stardock_get_port_by_sector
@@ -353,11 +400,14 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx,
 			   root,
 			   ERR_PORTTYPE_NOT_FOUND,
-			   "Hardware can only be purchased at Stardock or Class-0 ports.");
+			   "Hardware can only be purchased at a supported hardware port.");
       return 0;
     }
+  bool is_black_market = repo_porttypes_is_black_market (db, porttype_id);
+  int32_t black_market_max_stock = 0;
   // 3. Get Item Details
-  int price = 0;
+  int64_t price = 0;
+  int64_t base_price = 0;
   int requires_stardock = 0;
   int sold_in_class0 = 0;
   int max_per_ship = 0;
@@ -370,7 +420,8 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
     {
       if (db_res_step (res_item, &err))
 	{
-	  price = (int) db_res_col_i64 (res_item, 0, &err);
+	  base_price = db_res_col_i64 (res_item, 0, &err);
+	  price = base_price;
 	  requires_stardock = (int) db_res_col_i64 (res_item, 1, &err);
 	  sold_in_class0 = (int) db_res_col_i64 (res_item, 2, &err);
 	  if (!db_res_col_is_null (res_item, 3))
@@ -395,8 +446,46 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
 			   "Invalid or unavailable hardware item.");
       return 0;
     }
-  // 4. Validate Port Type vs Item Requirements
-  if (requires_stardock && !repo_porttypes_is_stardock (db, porttype_id))
+  // Special-port hardware uses the existing porttype_items availability map.
+  // Preserve the legacy flag checks for Stardock and Class-0 purchases.
+  if (is_black_market)
+    {
+      item_t item;
+      bool can_buy = false;
+      int32_t stock_quantity = 0;
+      if (!repo_items_get_by_code (db, code, &item)
+          || !repo_items_is_available_at_porttype (db, item.item_id,
+                                                   porttype_id, &can_buy, NULL)
+	  || !can_buy)
+	{
+	  send_response_error (ctx, root, ERR_PORTTYPE_NOT_FOUND,
+	                       "This hardware is not sold at this special port.");
+	  return 0;
+	}
+      if (repo_stardock_get_black_market_hardware_stock (
+	    db, port_id_tmp, code, &stock_quantity,
+	    &black_market_max_stock) != 0)
+	{
+	  send_response_error (ctx, root, REF_PORT_OUT_OF_STOCK,
+	                       "This special port is out of stock.");
+	  return 0;
+	}
+      if (quantity > stock_quantity)
+	{
+	  send_response_error (ctx, root, REF_PORT_OUT_OF_STOCK,
+	                       "Insufficient special-port hardware stock.");
+	  return 0;
+	}
+      price = black_market_hardware_price (base_price, stock_quantity,
+	                                          black_market_max_stock);
+      if (price <= 0)
+	{
+	  send_response_error (ctx, root, ERR_SERVER_ERROR,
+	                       "Could not calculate special-port price.");
+	  return 0;
+	}
+    }
+  else if (requires_stardock && !repo_porttypes_is_stardock (db, porttype_id))
     {
       send_response_error (ctx,
 			   root,
@@ -404,7 +493,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
 			   "This hardware item is only sold at Stardock ports.");
       return 0;
     }
-  if (!sold_in_class0 && !repo_porttypes_is_stardock (db, porttype_id))
+  if (!is_black_market && !sold_in_class0 && !repo_porttypes_is_stardock (db, porttype_id))
     {
       send_response_error (ctx,
 			   root,
@@ -585,13 +674,15 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   long long total_cost = (long long) price * quantity;
   long long balance = 0;
 
-
-  h_get_player_petty_cash (db, player_id, &balance);
-  if (balance < total_cost)
+  if (!is_black_market)
     {
-      send_response_error (ctx, root, 1813,
-			   "Insufficient credits on ship for purchase.");
-      return 0;
+      h_get_player_petty_cash (db, player_id, &balance);
+      if (balance < total_cost)
+	{
+	  send_response_error (ctx, root, 1813,
+			       "Insufficient credits on ship for purchase.");
+	  return 0;
+	}
     }
 
 /* 8. Execute transaction (deduct + update must be atomic) */
@@ -606,6 +697,42 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
 	    err_tx.message, err_tx.code, err_tx.backend_code);
       send_response_error (ctx, root, 500, "Database busy.");
       return 0;
+    }
+
+  if (is_black_market)
+    {
+      int64_t remaining_stock = 0;
+      if (repo_stardock_consume_black_market_hardware_stock (
+	    db, port_id_tmp, code, quantity, &remaining_stock) != 0)
+	{
+	  db_tx_rollback (db, &err_tx);
+	  send_response_error (ctx, root, REF_PORT_OUT_OF_STOCK,
+	                       "Special-port stock changed; retry the purchase.");
+	  return 0;
+	}
+
+      /* The stock decrement locks the inventory row and returns its new
+       * quantity. Price from the same transaction snapshot used to reserve
+       * these units, so concurrent buyers cannot receive a stale quote. */
+      price = black_market_hardware_price (base_price,
+	                                        remaining_stock + quantity,
+	                                        black_market_max_stock);
+      if (price <= 0 || quantity > LLONG_MAX / price)
+	{
+	  db_tx_rollback (db, &err_tx);
+	  send_response_error (ctx, root, ERR_SERVER_ERROR,
+	                       "Could not calculate special-port price.");
+	  return 0;
+	}
+      total_cost = price * quantity;
+      if (h_get_player_petty_cash (db, player_id, &balance) != 0
+	  || balance < total_cost)
+	{
+	  db_tx_rollback (db, &err_tx);
+	  send_response_error (ctx, root, 1813,
+	                       "Insufficient credits on ship for purchase.");
+	  return 0;
+	}
     }
 
 /* Deduct player petty cash */

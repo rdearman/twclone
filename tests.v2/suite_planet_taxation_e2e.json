@@ -57,7 +57,7 @@
     {
       "name": "Wait for tax assessment",
       "command": "delay",
-      "data": { "seconds": 5 }
+      "data": { "seconds": 65 }
     },
     {
       "name": "Verify assessment and player receipt",
@@ -87,7 +87,7 @@
     {
       "name": "Wait for idempotent tax retry",
       "command": "delay",
-      "data": { "seconds": 5 }
+      "data": { "seconds": 65 }
     },
     {
       "name": "Verify a repeated task does not credit twice",
@@ -102,6 +102,12 @@
       "user": "admin",
       "data": { "sql": "SELECT (SELECT planet_id FROM planets WHERE planet_id NOT IN (1, 2) ORDER BY planet_id LIMIT 1), (SELECT corporation_id FROM corporations ORDER BY corporation_id LIMIT 1);" },
       "save": { "corp_tax_planet_id": "data.rows.0.0", "tax_corporation_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Clear a previous corporate receipt for this test date",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM corp_tx WHERE idempotency_key = 'planet-tax-receipt:' || @{corp_tax_planet_id} || ':' || (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date::text;" }
     },
     {
       "name": "Save corporate account pre-tax balance",
@@ -149,7 +155,7 @@
     {
       "name": "Wait for corporate tax receipt",
       "command": "delay",
-      "data": { "seconds": 5 }
+      "data": { "seconds": 65 }
     },
     {
       "name": "Verify corporation receives the daily colony tax",

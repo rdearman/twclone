@@ -12,6 +12,11 @@ void universe_shutdown (void);
 void fer_attach_db (db_t * db);
 int fer_init_once (db_t * db);
 void fer_tick (db_t * db, int64_t now_ms);
+int cmd_ferengi_traders (client_ctx_t *ctx, json_t *root);
+int cmd_ferengi_deal_accept (client_ctx_t *ctx, json_t *root);
+int cmd_ferengi_deal_reject (client_ctx_t *ctx, json_t *root);
+json_t *schema_ferengi_traders (void);
+json_t *schema_ferengi_deal_action (void);
 
 void ori_attach_db (db_t * db);
 int ori_init_once (db_t * db);

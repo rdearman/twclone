@@ -1,5 +1,6 @@
 /* src/server_ports.c */
 #include <string.h>
+#include <ctype.h>
 #include <jansson.h>
 #include <stdlib.h>
 #include <time.h>		// For snprintf
@@ -26,13 +27,16 @@ void free_trade_lines (TradeLine * lines, size_t n);
 #include "db/repo/repo_clusters.h"
 #include "db/repo/repo_commodities.h"
 #include "db/repo/repo_cargo.h"
+#include "db/repo/repo_trade_offers.h"
 #include "db/repo/repo_port_rules.h"
+#include "db/repo/repo_market_dynamic.h"
 #include "repo_cmd.h"
 #include "errors.h"
 #include "config.h"
 #include "server_envelope.h"
 #include "server_cmds.h"
 #include "server_ships.h"
+#include "server_sector_notices.h"
 #include "server_players.h"
 #include "server_cron.h"
 #include "server_log.h"
@@ -319,39 +323,475 @@ commodity_to_code (db_t *db, const char *commodity)
 }
 
 
-/////////// STUBS ///////////////////////
-int
-cmd_trade_offer (client_ctx_t *ctx, json_t *root)
+/////////// Player-to-player offers ///////////////////////
+static json_t *
+trade_offer_json (const trade_offer_t *offer)
 {
-  // Option A: Hide/Refuse for v1.0
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Trading handshake disabled in v1.0");
+  json_t *out = json_object ();
+  if (!out)
+    return NULL;
+  json_object_set_new (out, "offer_id", json_integer (offer->offer_id));
+  json_object_set_new (out, "sender_player_id",
+                       json_integer (offer->sender_player_id));
+  json_object_set_new (out, "recipient_player_id",
+                       json_integer (offer->recipient_player_id));
+  json_object_set_new (out, "commodity", json_string (offer->commodity_code));
+  json_object_set_new (out, "mode", json_string (offer->mode));
+  json_object_set_new (out, "quantity", json_integer (offer->quantity));
+  json_object_set_new (out, "unit_price", json_integer (offer->unit_price));
+  json_object_set_new (out, "status", json_string (offer->status));
+  json_object_set_new (out, "created_at", json_string (offer->created_at));
+  json_object_set_new (out, "expires_at", json_string (offer->expires_at));
+  return out;
+}
+
+static int
+trade_offer_require_auth (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx && ctx->player_id > 0)
+    return 1;
+  send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                       "Authentication required");
   return 0;
 }
 
+static void
+trade_offer_send_current_state (client_ctx_t *ctx, json_t *root,
+                                const char *type,
+                                const trade_offer_t *offer)
+{
+  json_t *payload = trade_offer_json (offer);
+  if (payload)
+    send_response_ok_take (ctx, root, type, &payload);
+  else
+    send_response_error (ctx, root, ERR_SERVER_ERROR, "Out of memory");
+}
+
+int
+cmd_trade_offer (client_ctx_t *ctx, json_t *root)
+{
+  if (!trade_offer_require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  json_t *j_recipient = json_object_get (data, "to_player_id");
+  json_t *j_commodity = json_object_get (data, "commodity");
+  json_t *j_quantity = json_object_get (data, "quantity");
+  json_t *j_price = json_object_get (data, "price");
+  json_t *j_mode = json_object_get (data, "mode");
+  json_t *j_key = json_object_get (data, "idempotency_key");
+  json_t *j_ttl = json_object_get (data, "expires_in");
+
+  if (!db || !json_is_integer (j_recipient) || !json_is_string (j_commodity)
+      || !json_is_integer (j_quantity) || !json_is_integer (j_price)
+      || !json_is_string (j_mode)
+      || (j_key && !json_is_string (j_key))
+      || (j_ttl && !json_is_integer (j_ttl)))
+    {
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+                           "Invalid trade offer fields");
+      return 0;
+    }
+
+  json_int_t recipient_raw = json_integer_value (j_recipient);
+  json_int_t quantity_raw = json_integer_value (j_quantity);
+  json_int_t ttl_raw = j_ttl ? json_integer_value (j_ttl) : 86400;
+  if (recipient_raw <= 0 || recipient_raw > INT_MAX
+      || quantity_raw <= 0 || quantity_raw > INT_MAX
+      || ttl_raw < 60 || ttl_raw > 604800)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Trade offer values are out of range");
+      return 0;
+    }
+
+  int recipient_id = (int) recipient_raw;
+  int quantity = (int) quantity_raw;
+  int64_t unit_price = json_integer_value (j_price);
+  const char *mode = json_string_value (j_mode);
+  const char *commodity_input = json_string_value (j_commodity);
+  const char *idempotency_key = j_key ? json_string_value (j_key) : NULL;
+  char rpc_idempotency_key[128] = { 0 };
+  if (!idempotency_key)
+    {
+      json_t *request_id = json_object_get (root, "id");
+      if (json_is_string (request_id))
+        snprintf (rpc_idempotency_key, sizeof rpc_idempotency_key, "rpc:%s",
+                  json_string_value (request_id));
+      else if (json_is_integer (request_id))
+        snprintf (rpc_idempotency_key, sizeof rpc_idempotency_key, "rpc:%lld",
+                  (long long) json_integer_value (request_id));
+      if (rpc_idempotency_key[0])
+        idempotency_key = rpc_idempotency_key;
+    }
+  int ttl = (int) ttl_raw;
+
+  if (recipient_id <= 0 || recipient_id == ctx->player_id || quantity <= 0
+      || unit_price < 0 || (strcmp (mode, "buy") != 0
+                            && strcmp (mode, "sell") != 0)
+      || strlen (commodity_input) != 3 || ttl < 60 || ttl > 604800
+      || (idempotency_key && (strlen (idempotency_key) == 0
+                              || strlen (idempotency_key) > 128)))
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Trade offer values are out of range");
+      return 0;
+    }
+
+  char commodity[4];
+  for (int i = 0; i < 3; ++i)
+    commodity[i] = (char) toupper ((unsigned char) commodity_input[i]);
+  commodity[3] = '\0';
+
+  trade_offer_t offer;
+  if (idempotency_key)
+    {
+      int existing_rc = repo_trade_offer_find_idempotent (
+        db, ctx->player_id, recipient_id, commodity, mode, quantity,
+        unit_price, idempotency_key, &offer);
+      if (existing_rc == 0)
+        {
+          trade_offer_send_current_state (ctx, root,
+                                          "trade.offer.created_v1", &offer);
+          return 0;
+        }
+      if (existing_rc != ERR_DB_NOT_FOUND)
+        {
+          send_response_error (ctx, root,
+                               existing_rc == ERR_INVALID_ARG ?
+                               ERR_INVALID_ARG : ERR_SERVER_ERROR,
+                               existing_rc == ERR_INVALID_ARG ?
+                               "Idempotency key reused with different offer data" :
+                               "Could not check trade offer idempotency");
+          return 0;
+        }
+    }
+
+  int exists = 0;
+  if (repo_players_check_exists (db, recipient_id, &exists) != 0 || !exists)
+    {
+      send_response_error (ctx, root, ERR_USER_NOT_FOUND,
+                           "Trade recipient not found");
+      return 0;
+    }
+
+  int max_holds = -1;
+  if (repo_commodities_get_max_holds_per_ship (db, commodity,
+                                               &max_holds) != 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Unknown commodity");
+      return 0;
+    }
+  (void) max_holds;
+
+  if (unit_price > 0 && quantity > LLONG_MAX / unit_price)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Trade offer total is too large");
+      return 0;
+    }
+  int64_t total_price = unit_price * quantity;
+  int sender_ship = h_get_active_ship_id (db, ctx->player_id);
+  if (sender_ship <= 0)
+    {
+      send_response_error (ctx, root, ERR_NO_ACTIVE_SHIP,
+                           "No active ship found");
+      return 0;
+    }
+  if (strcmp (mode, "sell") == 0)
+    {
+      int64_t held = 0;
+      if (repo_cargo_get (db, sender_ship, commodity, &held) != 0
+          || held < quantity)
+        {
+          send_response_error (ctx, root, ERR_BAD_STATE,
+                               "Insufficient commodity cargo for offer");
+          return 0;
+        }
+    }
+  else
+    {
+      long long credits = 0;
+      if (repo_players_get_credits (db, ctx->player_id, &credits) != 0
+          || credits < total_price)
+        {
+          send_response_error (ctx, root, ERR_INSUFFICIENT_FUNDS,
+                               "Insufficient credits for offer");
+          return 0;
+        }
+    }
+
+  int64_t expires_at = (int64_t) time (NULL) + ttl;
+  int created = 0;
+  int rc = repo_trade_offer_create (db, ctx->player_id, recipient_id,
+                                   commodity, mode, quantity, unit_price,
+                                   expires_at, idempotency_key, &offer,
+                                   &created);
+  if (rc != 0)
+    {
+      send_response_error (ctx, root, rc == ERR_INVALID_ARG ?
+                           ERR_INVALID_ARG : ERR_SERVER_ERROR,
+                           rc == ERR_INVALID_ARG ?
+                           "Idempotency key reused with different offer data" :
+                           "Could not create trade offer");
+      return 0;
+    }
+
+  (void) created;
+  trade_offer_send_current_state (ctx, root, "trade.offer.created_v1", &offer);
+  return 0;
+}
+
+static int
+trade_offer_settle (db_t *db, const trade_offer_t *offer)
+{
+  int buyer_id = strcmp (offer->mode, "sell") == 0 ?
+    offer->recipient_player_id : offer->sender_player_id;
+  int seller_id = strcmp (offer->mode, "sell") == 0 ?
+    offer->sender_player_id : offer->recipient_player_id;
+  int buyer_ship = h_get_active_ship_id (db, buyer_id);
+  int seller_ship = h_get_active_ship_id (db, seller_id);
+  if (buyer_ship <= 0 || seller_ship <= 0 || buyer_ship == seller_ship)
+    return ERR_NO_ACTIVE_SHIP;
+
+  if (offer->quantity <= 0 || offer->unit_price < 0
+      || (offer->unit_price > 0
+          && offer->quantity > LLONG_MAX / offer->unit_price))
+    return ERR_INVALID_ARG;
+  int64_t total_price = offer->unit_price * offer->quantity;
+  long long buyer_credits = 0;
+  int64_t seller_cargo = 0;
+  if (repo_players_get_credits (db, buyer_id, &buyer_credits) != 0
+      || buyer_credits < total_price)
+    return ERR_INSUFFICIENT_FUNDS;
+  if (repo_cargo_get (db, seller_ship, offer->commodity_code,
+                      &seller_cargo) != 0 || seller_cargo < offer->quantity)
+    return ERR_BAD_STATE;
+
+  int rc = repo_cargo_add (db, seller_ship, offer->commodity_code,
+                           -offer->quantity, NULL);
+  if (rc != 0)
+    return rc;
+  rc = repo_cargo_add (db, buyer_ship, offer->commodity_code,
+                       offer->quantity, NULL);
+  if (rc != 0)
+    return rc;
+  rc = repo_players_update_credits_safe (db, buyer_id, -total_price, NULL);
+  if (rc != 0)
+    return ERR_INSUFFICIENT_FUNDS;
+  rc = repo_players_update_credits_safe (db, seller_id, total_price, NULL);
+  return rc == 0 ? 0 : rc;
+}
 
 int
 cmd_trade_accept (client_ctx_t *ctx, json_t *root)
 {
-  // Option A: Hide/Refuse for v1.0
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Trading handshake disabled in v1.0");
+  if (!trade_offer_require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  json_t *j_id = json_object_get (data, "offer_id");
+  if (!j_id)
+    j_id = json_object_get (data, "trade_id");
+  int64_t offer_id = json_is_integer (j_id) ? json_integer_value (j_id) : 0;
+  if (!db || offer_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "offer_id required");
+      return 0;
+    }
+
+  db_error_t err;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_BUSY, "Could not lock offer");
+      return 0;
+    }
+  trade_offer_t offer;
+  int rc = repo_trade_offer_get (db, offer_id, 1, &offer);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Trade offer not found");
+      return 0;
+    }
+  if (ctx->player_id != offer.recipient_player_id)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Only the recipient can accept this offer");
+      return 0;
+    }
+  if (strcmp (offer.status, "accepted") == 0)
+    {
+      db_tx_commit (db, &err);
+      trade_offer_send_current_state (ctx, root,
+                                     "trade.offer.accepted_v1", &offer);
+      return 0;
+    }
+  if (strcmp (offer.status, "expired") == 0)
+    {
+      db_tx_commit (db, &err);
+      trade_offer_send_current_state (ctx, root,
+                                     "trade.offer.expired_v1", &offer);
+      return 0;
+    }
+  if (strcmp (offer.status, "pending") != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_BAD_STATE,
+                           "Trade offer is no longer pending");
+      return 0;
+    }
+
+  int changed = 0;
+  int64_t now_s = (int64_t) time (NULL);
+  rc = repo_trade_offer_transition (db, offer_id, "expired", now_s, &changed);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not check offer expiry");
+      return 0;
+    }
+  if (changed)
+    {
+      db_tx_commit (db, &err);
+      snprintf (offer.status, sizeof offer.status, "expired");
+      trade_offer_send_current_state (ctx, root,
+                                      "trade.offer.expired_v1", &offer);
+      return 0;
+    }
+
+  rc = trade_offer_settle (db, &offer);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, rc, "Trade offer cannot be settled");
+      return 0;
+    }
+  rc = repo_trade_offer_transition (db, offer_id, "accepted", now_s,
+                                    &changed);
+  if (rc != 0 || !changed)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_BAD_STATE,
+                           "Trade offer state changed");
+      return 0;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not commit trade settlement");
+      return 0;
+    }
+
+  snprintf (offer.status, sizeof offer.status, "accepted");
+  trade_offer_send_current_state (ctx, root, "trade.offer.accepted_v1",
+                                  &offer);
   return 0;
 }
-
 
 int
 cmd_trade_cancel (client_ctx_t *ctx, json_t *root)
 {
-  // Option A: Hide/Refuse for v1.0
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Trading handshake disabled in v1.0");
+  if (!trade_offer_require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  json_t *j_id = json_object_get (data, "offer_id");
+  if (!j_id)
+    j_id = json_object_get (data, "trade_id");
+  int64_t offer_id = json_is_integer (j_id) ? json_integer_value (j_id) : 0;
+  if (!db || offer_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_BAD_REQUEST, "offer_id required");
+      return 0;
+    }
+
+  db_error_t err;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_BUSY, "Could not lock offer");
+      return 0;
+    }
+  trade_offer_t offer;
+  int rc = repo_trade_offer_get (db, offer_id, 1, &offer);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Trade offer not found");
+      return 0;
+    }
+  if (ctx->player_id != offer.sender_player_id)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Only the sender can cancel this offer");
+      return 0;
+    }
+  if (strcmp (offer.status, "cancelled") == 0)
+    {
+      db_tx_commit (db, &err);
+      trade_offer_send_current_state (ctx, root,
+                                      "trade.offer.cancelled_v1", &offer);
+      return 0;
+    }
+  if (strcmp (offer.status, "expired") == 0)
+    {
+      db_tx_commit (db, &err);
+      trade_offer_send_current_state (ctx, root,
+                                     "trade.offer.expired_v1", &offer);
+      return 0;
+    }
+  if (strcmp (offer.status, "pending") != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_BAD_STATE,
+                           "Trade offer is no longer pending");
+      return 0;
+    }
+
+  int changed = 0;
+  int64_t now_s = (int64_t) time (NULL);
+  rc = repo_trade_offer_transition (db, offer_id, "expired", now_s, &changed);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not check offer expiry");
+      return 0;
+    }
+  if (changed)
+    {
+      db_tx_commit (db, &err);
+      snprintf (offer.status, sizeof offer.status, "expired");
+      trade_offer_send_current_state (ctx, root,
+                                      "trade.offer.expired_v1", &offer);
+      return 0;
+    }
+
+  rc = repo_trade_offer_transition (db, offer_id, "cancelled", now_s,
+                                    &changed);
+  if (rc != 0 || !changed)
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_BAD_STATE,
+                           "Trade offer state changed");
+      return 0;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not commit offer cancellation");
+      return 0;
+    }
+
+  snprintf (offer.status, sizeof offer.status, "cancelled");
+  trade_offer_send_current_state (ctx, root, "trade.offer.cancelled_v1",
+                                  &offer);
   return 0;
 }
 
@@ -456,6 +896,11 @@ h_calculate_port_sell_price (db_t *db, int port_id, const char *commodity)
 
   /* Adjust for techlevel (higher techlevel means better prices for the port, so higher sell price) */
   price_multiplier *= (1.0 + (techlevel - 1) * 0.05);
+
+  int shock_bps = 10000;
+  if (repo_market_shock_multiplier_bps (db, port_id, canonical_commodity,
+                                         &shock_bps) == 0)
+    price_multiplier *= (double) shock_bps / 10000.0;
 
   return (int) ceil (base_price * price_multiplier);
 }
@@ -1068,6 +1513,7 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
     }
 
   int new_ported_status = resolved_port_id;
+  int previous_ported_status = 0;
 
 
   if (action && strcasecmp (action, "undock") == 0)
@@ -1085,6 +1531,13 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
 
   if (action)
     {
+      if (db_ports_get_ported_status (db, player_ship_id,
+                                      &previous_ported_status) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB, "Database error.");
+          return -1;
+        }
+
       if (new_ported_status > 0 && !cluster_can_trade (db,
 						       ctx->sector_id,
 						       ctx->player_id))
@@ -1197,6 +1650,16 @@ cmd_dock_status (client_ctx_t *ctx, json_t *root)
 
 	  db_notice_create (db, "Docking Log", notice_body, "info",
 			    time (NULL) + (86400 * 7));
+
+          if (previous_ported_status != new_ported_status)
+            {
+              json_t *details = json_object ();
+              json_object_set_new (details, "port_id",
+                                   json_integer (new_ported_status));
+              server_sector_notice_publish (ctx, root, ctx->sector_id,
+                                            "docked", details);
+              json_decref (details);
+            }
 	}
 
       /* Use new status for response */
@@ -1309,6 +1772,11 @@ h_calculate_port_buy_price (db_t *db, int port_id, const char *commodity)
 
   // Adjust for techlevel (higher techlevel means better prices for the port, so lower buy price)
   price_multiplier *= (1.0 - (techlevel - 1) * 0.02);	// Port wants to buy low
+
+  int shock_bps = 10000;
+  if (repo_market_shock_multiplier_bps (db, port_id, canonical_commodity,
+                                         &shock_bps) == 0)
+    price_multiplier *= (double) shock_bps / 10000.0;
 
   long long price = (long long) (base_price * price_multiplier + 0.999999);	/* ceil */
 
