@@ -40,6 +40,13 @@ CREATE TABLE sectors (
     navhaz INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE sector_hazards (
+    sector_id integer NOT NULL REFERENCES sectors (sector_id) ON DELETE CASCADE,
+    hazard_type text NOT NULL CHECK (hazard_type IN ('volcanic', 'nebula', 'radiation')),
+    severity integer NOT NULL CHECK (severity BETWEEN 1 AND 1000),
+    PRIMARY KEY (sector_id, hazard_type)
+);
+
 CREATE TABLE commission (
     commission_id serial PRIMARY KEY,
     is_evil boolean NOT NULL DEFAULT FALSE CHECK (is_evil IN (TRUE, FALSE)),
@@ -76,6 +83,7 @@ CREATE TABLE shiptypes (
     max_cloaks integer NOT NULL DEFAULT 0,
     can_purchase boolean DEFAULT TRUE,
     has_escape_pod boolean NOT NULL DEFAULT FALSE,
+    default_personality text CHECK (default_personality IS NULL OR default_personality IN ('balanced', 'offensive', 'defensive', 'looter', 'blockader')),
     enabled boolean DEFAULT TRUE,
     FOREIGN KEY (required_commission) REFERENCES commission (commission_id)
 );
@@ -126,6 +134,7 @@ CREATE TABLE ships (
     destroyed boolean NOT NULL DEFAULT FALSE,
     hull bigint NOT NULL DEFAULT 100,
     perms bigint NOT NULL DEFAULT 731,
+    personality text CHECK (personality IS NULL OR personality IN ('balanced', 'offensive', 'defensive', 'looter', 'blockader')),
     towing_ship_id integer DEFAULT 0,
     is_being_towed_by integer DEFAULT 0,
     CONSTRAINT check_current_cargo_limit CHECK ((colonists + ore + organics + equipment + slaves + weapons + drugs) <= holds),
@@ -228,6 +237,7 @@ CREATE TABLE corporations (
     credit_rating bigint NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ship_personality text CHECK (ship_personality IS NULL OR ship_personality IN ('balanced', 'offensive', 'defensive', 'looter', 'blockader')),
     CHECK (tag IS NULL OR (length(tag) BETWEEN 2 AND 5 AND tag ~ '^[A-Za-z0-9].*$'))
 );
 
@@ -500,7 +510,10 @@ CREATE TABLE planets (
     colonists_ore bigint NOT NULL DEFAULT 0,
     colonists_org bigint NOT NULL DEFAULT 0,
     colonists_eq bigint NOT NULL DEFAULT 0,
-    colonists_mil bigint NOT NULL DEFAULT 0,
+    colonists_mil bigint NOT NULL DEFAULT 0, -- deprecated legacy compatibility field
+    colonists_weapons bigint NOT NULL DEFAULT 0,
+    fighter_production_remainder bigint NOT NULL DEFAULT 0,
+    fighter_production_last_tick bigint NOT NULL DEFAULT -1,
     colonists_unassigned bigint NOT NULL DEFAULT 0,
     terraform_turns_left bigint NOT NULL DEFAULT 1,
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id),

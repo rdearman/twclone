@@ -4,7 +4,8 @@
 
 UPDATE planettypes SET fighterProduction = 77 WHERE code = 'M';
 UPDATE planets
-   SET population = 123, colonists_unassigned = 100, colonists_mil = 23
+   SET population = 123, colonists_unassigned = 100,
+       colonists_weapons = 0, colonists_mil = 23
  WHERE planet_id = 1;
 \ir ../sql/pg/114_planet_fighter_production.sql
 

@@ -529,6 +529,33 @@ db_insert_commodity_trade (db_t *db,
       return -1;
     }
 
+  if (db_backend (db) == DB_BACKEND_POSTGRES)
+    {
+      const char *activity_sql =
+        "INSERT INTO planet_economic_activity (planet_id,activity_type,commodity_code,quantity,unit_value,taxable_value,idempotency_key) "
+        "SELECT {1},'market_trade',c.code,{3},{4},{3}::bigint*{4}, "
+        "'commodity-market-trade:'||{2}||':'||{1} FROM commodities c WHERE c.commodities_id={5} "
+        "AND {6}='planet' ON CONFLICT (idempotency_key) DO NOTHING;";
+      if (!db_exec (db, activity_sql,
+                    (db_bind_t[]){db_bind_i64 (buyer_actor_id),
+                                  db_bind_i64 (new_id),
+                                  db_bind_i64 (quantity),
+                                  db_bind_i64 (price),
+                                  db_bind_i64 (commodity_id),
+                                  db_bind_text ((char *)buyer_actor_type)},
+                    6, &err))
+        return -1;
+      if (!db_exec (db, activity_sql,
+                    (db_bind_t[]){db_bind_i64 (seller_actor_id),
+                                  db_bind_i64 (new_id),
+                                  db_bind_i64 (quantity),
+                                  db_bind_i64 (price),
+                                  db_bind_i64 (commodity_id),
+                                  db_bind_text ((char *)seller_actor_type)},
+                    6, &err))
+        return -1;
+    }
+
   return (int)new_id;
 }
 
@@ -736,4 +763,3 @@ db_orders_summary (db_t *db, int filter_commodity_id, json_t **out_summary)
   db_res_finalize (res);
   return 0;
 }
-

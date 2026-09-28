@@ -1,9 +1,12 @@
 # PostgreSQL v2 database upgrade
 
-This guide covers the PostgreSQL schema/data migrations through 109. Run it
+This guide covers the PostgreSQL schema/data migrations through 114. Run it
 against a restorable backup or disposable clone before production. Stop game
 and engine writes for the migration window, especially while migrations 107,
-108, and 109 update stock, planet balances, and notices.
+108 and 109 update stock, planet balances, and notices; 110 adds typed sector
+environmental hazards, 111 adds ship personalities, 112 adds economy and
+commerce data, 113 adds Ferengi configuration, and 114 enables planetary
+fighter production.
 
 `sql/pg/000_tables.sql` is the fresh-install schema, not an upgrade script. It
 already creates `ship_cargo`; migration 100 creates that table if it is absent
@@ -28,6 +31,11 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/106_phase9_2_cluster_pressure.
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/107_seed_illegal_commodities.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/108_planet_entity_stock.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/109_v2_sector_notices_trade_offers.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/110_sector_environmental_hazards.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/111_ship_personalities.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/112_v2_economy_commerce.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/113_ferengi_trader_configuration.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/114_planet_fighter_production.sql
 ```
 
 The sequence assumes the existing database has the v2 baseline tables and
@@ -47,7 +55,27 @@ matching server release. It passed both its isolated replay fixture and the
 combined 100–109 run against a restored synthetic backup. A representative
 production backup rehearsal is still required for release timing and locks.
 
-These scripts can be replayed after success. Migrations 100–109 use
+Migration 110 creates the `sector_hazards` table used by movement/combat entry
+resolution. It is safe to run on a fresh install where `000_tables.sql` has
+already created the table. It does not backfill existing `nebulae` or `navhaz`
+values because those columns do not encode a reliable hazard type or severity.
+Add configured hazards explicitly after deployment if desired.
+
+Migration 111 adds nullable ship/corporation personality overrides and
+ship-type defaults. It assigns defaults to the existing Orion ship types only
+where no default is already configured; replay preserves explicit non-NULL
+values. Fresh installs already have these columns in `000_tables.sql`.
+
+Migration 112 creates economy/commerce tables for special-port hardware,
+Ferengi traders, market shocks, and planet tax activity, and seeds their cron
+tasks. Migration 113 adds the Ferengi roster, cargo, and offer configuration.
+Migration 114 adds weapons-worker fighter production state, maps legacy
+`colonists_mil` assignments to weapons workers, and initializes class factors.
+All three files are transaction-wrapped; 114's guarded column additions,
+legacy-field clearing, and nonzero-factor preservation make its data conversion
+safe to replay.
+
+These scripts can be replayed after success. Migrations 100–114 use
 `ON CONFLICT`, `IF NOT EXISTS`, or guarded updates for replay safety. The
 multi-statement PostgreSQL scripts are transaction-wrapped, so `ON_ERROR_STOP`
 causes a failed script to leave its transaction uncommitted. Migration 108
@@ -60,7 +88,7 @@ For a fresh world, configure `bigbang.json`, build the project, and run
 `./bin/bigbang` from the repository root. Big Bang loads the SQL files in
 numeric filename order, then generates sectors, ports, planets, clusters, and
 warps. It applies migration 107 after cluster generation. The current SQL
-directory therefore applies 100–109 as part of this fresh-install path.
+directory therefore applies 100–114 as part of this fresh-install path.
 
 **Big Bang drops and recreates the `public` schema.** Run it only against a
 new, disposable database. Never use it to upgrade an existing game database.
@@ -73,8 +101,12 @@ release's SQL directory intact: the loader discovers every `.sql` file there.
 
 ## Isolated migration fixtures
 
-The SQL fixtures below create temporary tables in the test session and shadow
-the application relations; they do not alter persistent tables:
+The test list includes both session-local fixtures and scripts that apply
+migrations to the initialized database. In particular, tests 112–114 execute
+the migration files, and test 114 updates seeded planet rows to check legacy
+assignment conversion and replay. Use only a disposable initialized database
+through `TEST_DATABASE_URL`; do not point these tests at a shared or production
+database:
 
 ```sh
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_100_ship_cargo_upgrade.sql
@@ -82,12 +114,16 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_migration_102_port
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_migration_107_illegal_stock.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_migration_108_planet_entity_stock.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_109_sector_notices_trade_offers.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_sector_environmental_hazards.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_111_ship_personalities.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_112_economy_commerce.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_113_ferengi_trader_configuration.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_114_planet_fighter_production.sql
 ```
 
-Use the tests only with a PostgreSQL database where the test account may create
-temporary tables. They validate data preservation and replay behavior; they
-do not substitute for a full upgrade rehearsal against a disposable database
-restored from a representative backup.
+The fixtures validate schema/data behavior and replay safety; they do not
+substitute for a full upgrade rehearsal against a disposable database restored
+from a representative backup.
 
 After seeding, run the COL seed assertion against both an isolated fresh
 database (after 090 and 091) and an isolated upgrade database (after 091):
@@ -159,7 +195,7 @@ described in `MYSQL_BACKEND_COMPLETION_PLAN.md`.
 
 1. Pin the exact PostgreSQL and server release versions; confirm MySQL is not
    advertised as a supported runtime.
-2. Take a restorable backup and rehearse the ordered 100–109 upgrade on a
+2. Take a restorable backup and rehearse the ordered 100–114 upgrade on a
    production-shaped clone with game and engine writes disabled.
 3. Confirm all scripts finish with `ON_ERROR_STOP=1`; record completion order
    and duration. Do not skip a numbered migration or run `000_tables.sql` on
@@ -210,7 +246,12 @@ for f in \
   sql/pg/106_phase9_2_cluster_pressure.sql \
   sql/pg/107_seed_illegal_commodities.sql \
   sql/pg/108_planet_entity_stock.sql \
-  sql/pg/109_v2_sector_notices_trade_offers.sql; do
+  sql/pg/109_v2_sector_notices_trade_offers.sql \
+  sql/pg/110_sector_environmental_hazards.sql \
+  sql/pg/111_ship_personalities.sql \
+  sql/pg/112_v2_economy_commerce.sql \
+  sql/pg/113_ferengi_trader_configuration.sql \
+  sql/pg/114_planet_fighter_production.sql; do
   psql "$QA_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1
 done
 ```

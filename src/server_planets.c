@@ -772,6 +772,11 @@ cmd_planet_launch (client_ctx_t *ctx, json_t *root)
   json_object_set_new (response_data, "message",
 		       json_string ("Launched successfully."));
   json_object_set_new (response_data, "sector_id", json_integer (sector_id));
+  if (hazard_report && json_array_size (hazard_report) > 0)
+    json_object_set_new (response_data, "message",
+                         json_string ("Launched into environmental hazards; your ship was damaged."));
+  json_object_set_new (response_data, "hazards",
+                       hazard_report ? hazard_report : json_array ());
   send_response_ok_take (ctx, root, "planet.launch.success", &response_data);
   return 0;
 }
@@ -1986,6 +1991,11 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       LOGE ("cmd_planet_market_sell: Failed to credit player %d.",
 	    ctx->player_id);
     }
+
+  if (planet_record_taxable_trade (db, planet_id, commodity_code, quantity,
+                                   unit_price, "sell", root) != 0)
+    LOGE ("cmd_planet_market_sell: failed to record taxable activity for planet %d",
+          planet_id);
 
   json_t *resp = json_object ();
 

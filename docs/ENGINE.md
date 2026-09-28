@@ -306,6 +306,73 @@ CREATE INDEX IF NOT EXISTS idx_traps_due ON traps(arming_at, expires_at);
   * destroy `idem_key="destroy:"||offender||":"||event.id"`
 * **Audit** each sanction/destruction.
 
+### 8.10 Environmental sector hazards
+
+* **Source of truth**: `sector_hazards` rows keyed by `(sector_id, hazard_type)`.
+  Supported types are `volcanic`, `nebula`, and `radiation`; `severity` is
+  damage points applied on entry (1–1000).
+* **Resolution**: the existing `server_combat_apply_entry_hazards()` path runs
+  environmental damage after quasars, mines, fighters, and limpets. Damage is
+  absorbed by shields, then fighters, then hull, matching the existing mine
+  damage rule. The same resolver covers warp, transwarp, and planet launch.
+* **Persistence and audit**: successful damage updates the active ship and
+  writes a `combat.hit.environment` engine event with type, severity, and
+  damage breakdown. A fatal hull hit follows the existing ship destruction
+  hook.
+* **Player report**: movement and launch success data include a `hazards` array
+  with type, severity, applied damage breakdown, and a message. Empty arrays
+  mean the destination had no configured environmental damage.
+* **Configuration**: set/remove hazard rows through DB administration or
+  controlled seed tooling. Existing `sectors.nebulae` contains descriptive
+  sector names in generated worlds and is not an authoritative hazard flag;
+  `sectors.navhaz` is not implicitly converted into these typed hazards.
+* **Migration**: apply `110_sector_environmental_hazards.sql` after migration
+  109. Fresh installs have the table in `000_tables.sql`; migration 110 is
+  guarded so it safely completes a fresh-install chain as well.
+
+### 8.11 NPC ship personalities
+
+* **Scope**: automated Orion fleet movement in `ori_tick()`; no player AI or
+  encounter behavior is changed.
+* **Precedence**: `ships.personality` override, then
+  `corporations.ship_personality`, then `shiptypes.default_personality`, then
+  `balanced`. Allowed values: `balanced`, `offensive`, `defensive`, `looter`,
+  `blockader`.
+* **Effect**: offensive ships choose a random unprotected sector; defensive
+  ships patrol an adjacent sector; looters target a sector with a port;
+  blockaders return to the Orion home sector. Balanced ships retain the
+  previous 60% home / 40% random target policy. If a policy has no valid target,
+  the ship remains where it is (except balanced/offensive retain the old
+  anti-stall fallback).
+* **Configuration**: update one of the three personality fields directly in
+  the DB. Ship override takes precedence over corporation and type defaults.
+  Migration 111 assigns existing Orion shiptype defaults and adds these fields.
+* **Testing**: `gcc -Isrc tests.v2/test_ship_personality_rules.c -o /tmp/test_ship_personality_rules && /tmp/test_ship_personality_rules`; on an isolated PostgreSQL DB, also run `psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_111_ship_personalities.sql`.
+
+### 8.12 Planet fighter production
+
+* **Tick and formula**: `planet_growth` runs every 10 minutes. Each assigned
+  weapons worker contributes one worker-tick; `planettypes.fighterProduction`
+  is the number of worker-ticks required per fighter (M 10, K/O 15, L 12,
+  C 25, H 50, U 0). Fractional labor carries in
+  `planets.fighter_production_remainder`.
+* **Citadel and cost**: level 1+ is required; level 0 produces none. Every
+  fighter consumes one EQU from the stock available after this tick's normal
+  production/consumption. No separate military-colonist or soldier pool is
+  used. Existing citadel levels, costs, and effects are unchanged.
+* **Capacity and pools**: production adds to `planets.fighters` up to
+  `planettypes.maxfighters`. A stable 10-minute interval marker prevents a
+  repeated fighter-production pass from awarding or charging twice. Ship
+  fighters and sector fighters stay in their existing stores.
+* **Migration**: apply `114_planet_fighter_production.sql` after migration 113.
+  It adds weapon-worker and production-tracking columns, converts legacy
+  `colonists_mil` assignments to weapons workers, and initializes only
+  zero/unset class factors. Fresh PostgreSQL installs include these columns in
+  `000_tables.sql`.
+* **Tests**: compile and run `tests.v2/test_planet_fighter_production.c`; on a
+  disposable PostgreSQL database, run
+  `psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_114_planet_fighter_production.sql`.
+
 ---
 
 ## 9) Concurrency & safety

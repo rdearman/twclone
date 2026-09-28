@@ -253,24 +253,38 @@ repo_cargo_add (db_t *db, int32_t ship_id, const char *commodity_code, int64_t d
   /* Insert or update ship_cargo using portable approach */
   if (current_qty == 0 && new_qty > 0)
     {
-      /* Insert new row */
+      /* A zero-quantity row is valid and may already exist. Update it first;
+       * insert only when the commodity has no row for this ship. */
       /* SQL_VERBATIM: Q5 */
-      const char *sql =
-          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) "
-          "VALUES ({1}, {2}, {3});";
-
-      db_bind_t params[] = {
+      const char *update_sql =
+          "UPDATE ship_cargo SET quantity = {1} "
+          "WHERE ship_id = {2} AND commodity_code = {3};";
+      db_bind_t update_params[] = {
+          db_bind_i64 (new_qty),
           db_bind_i32 (ship_id),
           db_bind_text (code_upper),
-          db_bind_i64 (new_qty),
       };
-
       char sql_converted[512];
-      sql_build (db, sql, sql_converted, sizeof (sql_converted));
-
-      if (!db_exec (db, sql_converted, params, 3, &err))
+      int64_t rows_updated = 0;
+      sql_build (db, update_sql, sql_converted, sizeof (sql_converted));
+      if (!db_exec_rows_affected (db, sql_converted, update_params, 3,
+                                  &rows_updated, &err))
         {
           return err.code;
+        }
+      if (rows_updated == 0)
+        {
+          const char *insert_sql =
+              "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) "
+              "VALUES ({1}, {2}, {3});";
+          db_bind_t insert_params[] = {
+              db_bind_i32 (ship_id),
+              db_bind_text (code_upper),
+              db_bind_i64 (new_qty),
+          };
+          sql_build (db, insert_sql, sql_converted, sizeof (sql_converted));
+          if (!db_exec (db, sql_converted, insert_params, 3, &err))
+            return err.code;
         }
     }
   else if (current_qty > 0)
@@ -414,4 +428,3 @@ repo_cargo_sync_legacy_columns (db_t *db, int32_t ship_id)
 
   return 0;
 }
-

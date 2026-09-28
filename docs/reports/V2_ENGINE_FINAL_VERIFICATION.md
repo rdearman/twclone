@@ -1,6 +1,6 @@
-CODEX NUMBER: CODEX #3  
-ASSIGNMENT: V2 RC engine and database final verification  
-CURRENT STATUS: PARTIAL — migrations and fighter cron passed; hazard response contract failed and production-backup verification is blocked
+CODEX NUMBER: CODEX #3
+ASSIGNMENT: V2 RC final QA fixes only
+CURRENT STATUS: PASS for the targeted hazard, restart, cron, and S2S checks; representative pre-v2 restore remains blocked
 
 # V2 Engine and Database Final Verification
 
@@ -17,14 +17,50 @@ CURRENT STATUS: PARTIAL — migrations and fighter cron passed; hazard response 
 | S2S dispatcher unit check | PASS | `tests.v2/run_server_s2s_dispatch_test.sh` passed the isolated `command.push` dispatcher regression. |
 | Server/player smoke | PASS | Against the disposable DB: System and `newguy` login, `system.hello` with required `client_version`, and `player.my_info` all succeeded. |
 | Hazard damage and persistence | PASS | Live warp and transwarp applied damage; the suite's persisted-damage assertions passed. |
-| Hazard response type field | FAIL | The live hazard suite expected `data.hazards[].type`, but the assertions found no value there. Engine source currently emits `hazard_type` in each player-visible event. The hazard damage itself resolved and persisted. |
+| Hazard response type fields | PASS | Added the established `type` field alongside `hazard_type` in each player-visible event. The live hazard suite now asserts both names for warp and transwarp and passed. |
 | `planet_growth` fighter production | PASS | The live `suite_planet_fighter_production_e2e.py` passed through server and engine, including no-citadel gating, citadel production, EQU use, cap, shortage, and same-interval retry. |
-| Server restart and database reconnect | PASS | Stopped and restarted the server. After restart, System login and `sys.raw_sql_exec` succeeded; the persisted `planet_growth.last_run_at IS NOT NULL` query returned `t`. The inline check exited 1 only because it expected a Python boolean while `sys.raw_sql_exec` serializes PostgreSQL booleans as `t` strings. |
-| Engine cron after restart | BLOCKED | The server restart runs the engine spawn path, but the post-restart check read the existing cron marker rather than observing a new cron execution. The separate pre-restart fighter cron integration passed. |
-| S2S health handshake | BLOCKED | The server reached its client listener before and after restart, but temporary logs were discarded before the hello/ack line could be retained. The isolated dispatcher test is not a substitute for handshake evidence. |
+| Server restart and database reconnect | PASS | The new deterministic rehearsal stopped the server/engine process group cleanly, restarted the server against the same disposable database, and waited for the new listener and S2S handshake. Post-restart System login, SQL fixture creation, and integration tests succeeded. |
+| Engine cron after restart | PASS | After restart, `suite_planet_fighter_production_e2e.py` created uniquely named planet fixtures and verified production state changed through `planet_growth`. The test passed, including citadel gating, EQU consumption, capacity, shortage, and repeated-tick protection. This uses newly created fixtures, not a preexisting cron timestamp. |
+| S2S health handshake | PASS | Both server boots logged `accepted hello` and `ack send rc=0`; the evidence excerpt is retained below. The same run also completed the real engine `command.push` smoke path (`notice.publish player:42:hello:001`, engine ACK). |
 | Representative pre-v2 restore | BLOCKED | No representative pre-v2 backup was available. Upgrade evidence is limited to isolated migration fixtures and the documented synthetic schema path. |
 
-The initial fresh-schema check found a test-only column-name casing error (`fighterProduction` folds to `fighterproduction` in PostgreSQL); it was corrected and passed on rerun. The live hazard suite found a response field mismatch, and the restart wrapper had a boolean parsing false negative (`t` versus Python `True`). No gameplay rules or migrations were changed.
+The initial fresh-schema check found a test-only column-name casing error (`fighterProduction` folds to `fighterproduction` in PostgreSQL); it was corrected and passed on rerun. The live hazard suite found a response field mismatch; the response now preserves both field names. No gameplay rules or migrations were changed.
+
+## Final QA fix evidence
+
+The runtime fix is additive: each hazard item contains both `type` (the
+established contract) and `hazard_type` (the explicit name already in use).
+`tests.v2/suite_sector_environmental_hazards.json` checks both fields for all
+three hazard types on both warp and transwarp.
+
+The repeatable disposable restart test is
+`tests.v2/restart_engine_cron_rehearsal.py`. It requires a local PostgreSQL URL
+whose database name starts with `twclone_qa_`, a migrated/seeded QA database,
+and `bin/server`. It sets private listener ports in that QA database, starts
+the server/engine twice, retains S2S evidence, then runs new fighter fixtures
+and the live hazard suite after the second boot. Run it with:
+
+```sh
+QA_DATABASE_URL='postgresql://user@127.0.0.1:55439/twclone_qa_restart' \
+QA_EVIDENCE_DIR=/tmp/twclone-qa-evidence \
+python3 tests.v2/restart_engine_cron_rehearsal.py
+```
+
+Run evidence on 2026-09-28 used PostgreSQL 16.15 and the disposable database
+`twclone_qa_restart` in a temporary cluster under `/tmp`. Both fresh boots
+completed the S2S hello/ack. The retained log lines were:
+
+```text
+2026-09-28 11:48:02 [server]  accepted hello
+2026-09-28 11:48:02 [server]  ack send rc=0
+2026-09-28 11:48:03 [server]  accepted hello
+2026-09-28 11:48:03 [server]  ack send rc=0
+```
+
+The post-restart test output was `planet_growth fighter production
+integration checks passed`; the hazard response suite ended with `ALL SUITES
+PASSED.` Evidence files were retained at
+`/tmp/twclone-qa-restart-evidence` for this run.
 
 ## Environment and commands
 
@@ -35,9 +71,13 @@ The initial fresh-schema check found a test-only column-name casing error (`figh
 - Replay path applied migration scripts 100–114 a second time on the same database.
 - SQL assertions included `test_pg_migration_100_ship_cargo_upgrade.sql`, `test_migration_102_porttypes.sql`, `test_migration_107_illegal_stock.sql`, `test_migration_108_planet_entity_stock.sql`, `test_pg_migration_109_sector_notices_trade_offers.sql`, `test_pg_sector_environmental_hazards.sql`, `test_pg_migration_111_ship_personalities.sql`, `test_pg_migration_112_economy_commerce.sql`, `test_pg_migration_113_ferengi_trader_configuration.sql`, `test_pg_migration_110_114_fresh_schema.sql`, and `test_pg_migration_114_planet_fighter_production.sql`.
 - Unit checks: `tests.v2/run_engine_regressions.sh`, `tests.v2/run_server_s2s_dispatch_test.sh`, `python3 -m py_compile tests.v2/suite_planet_fighter_production_e2e.py`, and `git diff --check` on the regression/report files.
+- Final QA checks: `make -j2 -C bin server`, `python3 -m py_compile tests.v2/restart_engine_cron_rehearsal.py`, `python3 -m json.tool tests.v2/suite_sector_environmental_hazards.json`, and the disposable `restart_engine_cron_rehearsal.py` live run.
 
 ## Release assessment
 
-Migration behavior is PASS for the exercised fresh install, ordered chain, replay, and synthetic upgrade fixtures. Fighter production, server/player smoke, and database reconnect after server restart passed in a disposable application run. Release verification remains BLOCKED on the hazard response field mismatch, a confirmed post-restart engine cron run, retained S2S hello/ack evidence, and a representative pre-v2 backup rehearsal. The missing player ID 42 encountered on the first startup attempt was a fixture omission documented by the upgrade guide; a later run seeded it before startup.
+Migration behavior is PASS for the exercised fresh install, ordered chain, replay, and synthetic upgrade fixtures. The hazard response contract, server restart, engine reconnect, post-restart `planet_growth`, and S2S hello/ack now have live disposable evidence. A representative pre-v2 backup restore rehearsal remains BLOCKED because no production-shaped pre-v2 backup was available. The missing player ID 42 encountered on the first startup attempt was a fixture omission documented by the upgrade guide; the final disposable rehearsal seeded it before startup.
 
-The existing [PostgreSQL upgrade guide](../POSTGRESQL_V2_UPGRADE.md) records a known integration risk: the repository's real S2S command-push path still needs retesting after its dispatcher uses the S2S validator. The standalone dispatcher unit test passing does not clear that runtime risk.
+The restart rehearsal also exercised S2S `command.push`: the server logged
+`notice.publish player:42:hello:001`, and the engine logged `ack
+duplicate=true`. This verifies delivery and acknowledgement for the seeded
+idempotency probe; it does not verify first-time insertion of a new command.

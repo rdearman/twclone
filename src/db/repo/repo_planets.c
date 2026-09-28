@@ -648,7 +648,7 @@ int db_planets_get_commodity_id_v2(db_t *db, const char *code, int *id) {
 int db_planets_add_colonists_unassigned(db_t *db, int planet_id, int quantity) {
     db_error_t err;
     /* SQL_VERBATIM: Q90 */
-    const char *q90 = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_mil) + {1}), colonists_unassigned = GREATEST(0, colonists_unassigned + {1}) WHERE planet_id = {2}";
+    const char *q90 = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_weapons) + {1}), colonists_unassigned = GREATEST(0, colonists_unassigned + {1}) WHERE planet_id = {2}";
     char sql[512]; sql_build(db, q90, sql, sizeof(sql));
     if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
     return -1;

@@ -975,9 +975,102 @@ h_decloak_ship (db_t *db, int ship_id)
 }
 
 static int
-server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int sector_id)
+server_combat_apply_environmental_hazards (db_t *db, client_ctx_t *ctx,
+                                           int sector_id, json_t **report)
 {
-  (void) db;
+  if (!db || !ctx || sector_id <= 0)
+    return 0;
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    return 0;
+
+  json_t *hazards = NULL;
+  if (db_combat_get_sector_hazards (db, sector_id, &hazards) != 0 || !hazards)
+    {
+      LOGE ("Could not read environmental hazards for sector %d", sector_id);
+      return 0;
+    }
+
+  ship_t ship = { 0 };
+  if (db_ship_get_combat_stats (db, ship_id, &ship, NULL) != 1)
+    {
+      json_decref (hazards);
+      return 0;
+    }
+
+  json_t *results = json_array ();
+  int destroyed = 0;
+  size_t index;
+  json_t *hazard;
+  json_array_foreach (hazards, index, hazard)
+    {
+      const char *type = json_string_value (json_object_get (hazard, "type"));
+      int severity = (int) json_integer_value (json_object_get (hazard, "severity"));
+      if (!type || severity <= 0)
+        continue;
+
+      armid_damage_breakdown_t damage = { 0 };
+      apply_armid_damage_to_ship (&ship, severity, &damage);
+      int applied = damage.shields_lost + damage.fighters_lost + damage.hull_lost;
+      if (applied == 0)
+        continue;
+
+      if (db_combat_persist_ship_damage (db, ship_id, ship.hull, ship.shields,
+                                         damage.fighters_lost) != 0)
+        {
+          LOGE ("Failed to persist %s hazard damage to ship %d", type, ship_id);
+          break;
+        }
+
+      json_t *event = json_object ();
+      if (event)
+        {
+          /* Preserve the established hazards[].type response while exposing
+           * the explicit hazard_type field used by newer consumers. */
+          json_object_set_new (event, "type", json_string (type));
+          json_object_set_new (event, "hazard_type", json_string (type));
+          json_object_set_new (event, "severity", json_integer (severity));
+          json_object_set_new (event, "damage", json_integer (applied));
+          json_object_set_new (event, "shields_lost", json_integer (damage.shields_lost));
+          json_object_set_new (event, "fighters_lost", json_integer (damage.fighters_lost));
+          json_object_set_new (event, "hull_lost", json_integer (damage.hull_lost));
+          db_log_engine_event ((long long) time (NULL), "combat.hit.environment",
+                               "player", ctx->player_id, sector_id, event, NULL);
+
+          json_t *shown = json_copy (event);
+          if (shown && results)
+            {
+              char message[128];
+              snprintf (message, sizeof message,
+                        "Environmental hazard (%s) caused %d damage.", type,
+                        applied);
+              json_object_set_new (shown, "message", json_string (message));
+              json_array_append_new (results, shown);
+            }
+          json_decref (event);
+        }
+
+      if (ship.hull <= 0)
+        {
+          destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
+          destroyed = 1;
+          break;
+        }
+    }
+
+  json_decref (hazards);
+  if (report)
+    *report = results;
+  else
+    json_decref (results);
+  return destroyed;
+}
+
+static int
+server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int sector_id,
+                                          json_t **report)
+{
   armid_encounter_t enc = { 0 };
 
   /* 1. Quasars fire first */
@@ -996,16 +1089,32 @@ server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int secto
   /* 4. Limpets attach last */
   apply_limpet_mines_on_entry (ctx, sector_id, &enc);
 
+  /* 5. Environmental hazards resolve after existing armed defenses. */
+  if (server_combat_apply_environmental_hazards (db, ctx, sector_id, report))
+    return 1;
+
   return 0;
 }
 
 int
 server_combat_apply_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id)
 {
+  return server_combat_apply_entry_hazards_report (db, ctx, sector_id, NULL);
+}
+
+int
+server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
+                                          int sector_id, json_t **report)
+{
+  if (!db || !ctx || ctx->player_id <= 0 || sector_id <= 0)
+    return 0;
+  if (report)
+    *report = json_array ();
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   
   /* Apply to entering ship */
-  int destroyed = server_combat_apply_entry_hazards_single (db, ctx, sector_id);
+  int destroyed = server_combat_apply_entry_hazards_single (db, ctx, sector_id,
+                                                            report);
   
   /* Apply to towed ship if any */
   if (ship_id > 0)
@@ -1019,7 +1128,8 @@ server_combat_apply_entry_hazards (db_t *db, client_ctx_t *ctx, int sector_id)
           towed_ctx.corp_id = towed_cid;
           towed_ctx.sector_id = sector_id;
           
-          if (server_combat_apply_entry_hazards_single (db, &towed_ctx, sector_id))
+          if (server_combat_apply_entry_hazards_single (db, &towed_ctx, sector_id,
+                                                        NULL))
             {
               /* Towed ship destroyed! Disengage beam. */
               repo_ships_clear_is_being_towed_by (db, towed_sid);

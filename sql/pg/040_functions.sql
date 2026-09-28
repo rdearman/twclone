@@ -315,19 +315,23 @@ BEGIN
                 (v_port_rec.port_id, 'EQU', 'sell');
 
         ELSIF v_port_rec.type = 10 THEN
-            /* Black Market Port - buy and sell ALL commodities (legal + illegal) */
+            /* Black Market Ports trade every tradable commodity. COL is
+             * internal ship colonist cargo, not port inventory, and is
+             * intentionally excluded by port_trade's commodity constraint. */
             INSERT INTO port_trade (port_id, commodity, mode)
             SELECT
                 v_port_rec.port_id AS port_id,
                 c.code AS commodity,
                 'buy' AS mode
             FROM commodities c
+            WHERE c.code IN ('ORE', 'ORG', 'EQU', 'SLV', 'WPN', 'DRG')
             UNION ALL
             SELECT
                 v_port_rec.port_id AS port_id,
                 c.code AS commodity,
                 'sell' AS mode
-            FROM commodities c;
+            FROM commodities c
+            WHERE c.code IN ('ORE', 'ORG', 'EQU', 'SLV', 'WPN', 'DRG');
         END IF;
 
         /*

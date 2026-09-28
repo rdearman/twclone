@@ -28,6 +28,8 @@ int apply_sector_quasar_on_entry (client_ctx_t * ctx, int sector_id);
 
 int server_combat_apply_entry_hazards (db_t * db, client_ctx_t * ctx,
 				   int sector_id);
+int server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
+                                             int sector_id, json_t **report);
 int h_trigger_atmosphere_quasar (db_t * db, client_ctx_t * ctx,
 				 int planet_id);
 

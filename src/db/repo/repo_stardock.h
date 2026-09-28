@@ -11,6 +11,11 @@ int repo_stardock_get_ship_state(db_t *db, int32_t ship_id, db_res_t **out_res);
 
 int repo_stardock_get_hardware_items(db_t *db, const char *location_type, db_res_t **out_res);
 
+int repo_stardock_get_black_market_hardware_items(db_t *db, int32_t port_id, int32_t porttype_id, db_res_t **out_res);
+int repo_stardock_get_black_market_hardware_stock(db_t *db, int32_t port_id, const char *code, int32_t *out_stock, int32_t *out_max_stock);
+int repo_stardock_consume_black_market_hardware_stock(db_t *db, int32_t port_id, const char *code, int32_t quantity, int64_t *out_remaining);
+int repo_stardock_restock_hardware(db_t *db, int64_t now_s);
+
 int repo_stardock_get_hardware_item_details(db_t *db, const char *code, db_res_t **out_res);
 
 int repo_stardock_get_ship_limit_info(db_t *db, int32_t ship_id, const char *col_name, const char *limit_col, bool is_max_check_needed, db_res_t **out_res);

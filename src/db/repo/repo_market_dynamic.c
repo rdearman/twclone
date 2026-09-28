@@ -177,3 +177,78 @@ repo_market_dynamic_mul(db_t *db, int port_id, const char *commodity_code,
 
     return dynamic_mul;
 }
+
+int
+repo_market_shock_multiplier_bps(db_t *db, int port_id,
+                                 const char *commodity_code,
+                                 int *out_multiplier_bps)
+{
+    if (!db || port_id <= 0 || !commodity_code || !out_multiplier_bps)
+        return -1;
+
+    db_res_t *res = NULL;
+    db_error_t err;
+    db_error_clear(&err);
+    const char *query =
+        "SELECT multiplier_bps FROM market_shocks ms "
+        "JOIN ports p ON p.port_id = {1} "
+        "WHERE ms.starts_at <= CURRENT_TIMESTAMP AND ms.expires_at > CURRENT_TIMESTAMP "
+        "AND (ms.commodity_code IS NULL OR ms.commodity_code = {2}) "
+        "AND (ms.scope_type = 'universe' OR "
+        "(ms.scope_type = 'sector' AND ms.sector_id = p.sector_id) OR "
+        "(ms.scope_type = 'port' AND ms.port_id = p.port_id)) "
+        "ORDER BY ms.market_shock_id;";
+    if (!db_query(db, query,
+                  (db_bind_t[]){db_bind_i64(port_id), db_bind_text((char *)commodity_code)},
+                  2, &res, &err))
+        return err.code ? err.code : -1;
+
+    long double multiplier = 1.0L;
+    while (db_res_step(res, &err))
+    {
+        int64_t factor_bps = db_res_col_i64(res, 0, &err);
+        multiplier *= (long double)factor_bps / 10000.0L;
+        if (multiplier >= 4.0L)
+            multiplier = 4.0L;
+        else if (multiplier <= 0.25L)
+            multiplier = 0.25L;
+    }
+    db_res_finalize(res);
+    if (err.code)
+        return err.code;
+    long long result = (long long)(multiplier * 10000.0L + 0.5L);
+    if (result < 2500) result = 2500;
+    if (result > 40000) result = 40000;
+    *out_multiplier_bps = (int)result;
+    return 0;
+}
+
+int
+repo_market_shock_tick(db_t *db, int64_t now_s)
+{
+    if (!db || now_s <= 0)
+        return -1;
+    db_error_t err;
+    db_error_clear(&err);
+    const char *expire_sql = "DELETE FROM market_shocks WHERE expires_at <= to_timestamp({1});";
+    if (!db_exec(db, expire_sql, (db_bind_t[]){db_bind_i64(now_s)}, 1, &err))
+        return err.code ? err.code : -1;
+
+    const char *insert_sql =
+        "WITH choice AS (SELECT floor(random()*3)::int AS scope_roll, "
+        "floor(random()*15001 + 5000)::int AS multiplier_bps, "
+        "floor(random()*19801 + 1800)::int AS duration_seconds, "
+        "floor(extract(epoch FROM to_timestamp({1}))/300)::bigint AS window_id), "
+        "selected AS (SELECT c.*, "
+        "CASE WHEN scope_roll = 0 THEN 'universe' WHEN scope_roll = 1 THEN 'sector' ELSE 'port' END AS scope_type, "
+        "CASE WHEN scope_roll = 1 THEN (SELECT sector_id FROM sectors ORDER BY random() LIMIT 1) END AS sector_id, "
+        "CASE WHEN scope_roll = 2 THEN (SELECT port_id FROM ports ORDER BY random() LIMIT 1) END AS port_id, "
+        "CASE WHEN random() < 0.5 THEN NULL ELSE (SELECT code FROM commodities ORDER BY random() LIMIT 1) END AS commodity_code "
+        "FROM choice c) "
+        "INSERT INTO market_shocks (trigger_source, scope_type, sector_id, port_id, commodity_code, multiplier_bps, starts_at, expires_at, idempotency_key) "
+        "SELECT 'random', scope_type, sector_id, port_id, commodity_code, multiplier_bps, to_timestamp({1}), "
+        "to_timestamp({1}) + duration_seconds * INTERVAL '1 second', 'market-shock-random:' || window_id "
+        "FROM selected WHERE random() < 0.05 ON CONFLICT (idempotency_key) DO NOTHING;";
+    return db_exec(db, insert_sql, (db_bind_t[]){db_bind_i64(now_s)}, 1, &err)
+           ? 0 : (err.code ? err.code : -1);
+}

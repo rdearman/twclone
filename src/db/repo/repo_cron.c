@@ -10,6 +10,7 @@
 #include "repo_cron.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
+#include "planet_fighter_production.h"
 
 /* ==================================================================== */
 /* CRON HELPERS (Migrated from server_cron.c)                           */
@@ -998,9 +999,9 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
   const char *sql =
 
     "SELECT p.planet_id, GREATEST(COALESCE(p.population, 0), "
-    "       p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_mil), "
+    "       p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_weapons), "
     "       p.colonists_unassigned, "
-    "       p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_mil, "
+    "       p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_weapons, "
 
     "       COALESCE(pt.maxColonist_ore, 0) + COALESCE(pt.maxColonist_organics, 0) + COALESCE(pt.maxColonist_equipment, 0) AS max_pop "
 
@@ -1008,7 +1009,7 @@ db_cron_planet_pop_growth_tick (db_t *db, double growth_rate)
 
     "JOIN planettypes pt ON p.type = pt.planettypes_id "
 
-    "WHERE p.owner_id > 0 AND (COALESCE(p.population, 0) > 0 OR p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_mil > 0);";
+    "WHERE p.owner_id > 0 AND (COALESCE(p.population, 0) > 0 OR p.colonists_unassigned + p.colonists_ore + p.colonists_org + p.colonists_eq + p.colonists_weapons > 0);";
 
 
 
@@ -1131,62 +1132,217 @@ int
 db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
 
 {
-
   if (!db) return -1;
 
+  typedef struct
+  {
+    int64_t planet_id, fighters, remainder, last_tick, citadel_level;
+    int64_t fighter_factor, fighter_capacity;
+    int64_t weapons_workers;
+    char commodity[16];
+    int64_t quantity, stock_capacity, net_delta;
+  } production_row_t;
+
   db_error_t err;
-
   db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return err.code ? err.code : -1;
 
-  char sql_update_commodities[2048];
-
-  
-
-  const char *sql_template = 
-
-    "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) "
-
-    "SELECT 'planet', p.planet_id, pp.commodity_code, "
-
-    "GREATEST(0, LEAST(pg.max_capacity, "
-
-    "COALESCE(es.quantity, 0) + pp.base_prod_rate + "
-
-    "(CASE pp.commodity_code "
-
-    "  WHEN 'ORE' THEN p.colonists_ore * 1 "
-
-    "  WHEN 'ORG' THEN p.colonists_org * pltype.organicsProduction "
-
-    "  WHEN 'EQU' THEN p.colonists_eq * pltype.equipmentProduction "
-
-    "  WHEN 'FUE' THEN p.colonists_unassigned * pltype.fuelProduction "
-
-    "  ELSE p.colonists_unassigned * 1 END) - pp.base_cons_rate)) AS new_quantity, 0, {1} "
-
-    "FROM planets p "
-
-    "JOIN planet_production pp ON p.type = pp.planet_type_id "
-
+  const char *select_template =
+    "SELECT p.planet_id, COALESCE(p.fighters, 0), "
+    "COALESCE(p.fighter_production_remainder, 0), "
+    "COALESCE(p.fighter_production_last_tick, -1), "
+    "COALESCE(c.level, p.citadel_level, 0), "
+    "COALESCE(pt.fighterProduction, 0), COALESCE(pt.maxfighters, 0), "
+    "COALESCE(p.colonists_weapons, 0), "
+    "pp.commodity_code, COALESCE(es.quantity, 0), pg.max_capacity, "
+    "COALESCE(pp.base_prod_rate, 0) + CASE pp.commodity_code "
+    "WHEN 'ORE' THEN p.colonists_ore "
+    "WHEN 'ORG' THEN p.colonists_org * COALESCE(pt.organicsProduction, 0) "
+    "WHEN 'EQU' THEN p.colonists_eq * COALESCE(pt.equipmentProduction, 0) "
+    "WHEN 'FUE' THEN p.colonists_unassigned * COALESCE(pt.fuelProduction, 0) "
+    "ELSE p.colonists_unassigned END - COALESCE(pp.base_cons_rate, 0) "
+    "FROM planets p JOIN planet_production pp ON p.type = pp.planet_type_id "
     "JOIN planet_goods pg ON pg.planet_id = p.planet_id AND pg.commodity = pp.commodity_code "
-
     "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
+    "LEFT JOIN planettypes pt ON p.type = pt.planettypes_id "
+    "LEFT JOIN citadels c ON c.planet_id = p.planet_id "
+    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_weapons > 0 OR p.colonists_unassigned > 0) "
+    "ORDER BY p.planet_id, pp.commodity_code FOR UPDATE OF p";
+  char select_sql[2048];
+  if (sql_build (db, select_template, select_sql, sizeof select_sql) != 0)
+    {
+      db_tx_rollback (db, &err);
+      return -1;
+    }
 
-    "LEFT JOIN planettypes pltype ON p.type = pltype.planettypes_id "
+  db_res_t *res = NULL;
+  if (!db_query (db, select_sql, NULL, 0, &res, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : -1;
+    }
 
-    "WHERE (pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_unassigned > 0)";
+  production_row_t *rows = NULL;
+  size_t row_count = 0, row_capacity = 0;
+  while (db_res_step (res, &err))
+    {
+      if (row_count == row_capacity)
+        {
+          size_t next_capacity = row_capacity ? row_capacity * 2 : 64;
+          production_row_t *next = realloc (rows, next_capacity * sizeof *rows);
+          if (!next)
+            {
+              err.code = -1;
+              break;
+            }
+          rows = next;
+          row_capacity = next_capacity;
+        }
 
-  
+      production_row_t *row = &rows[row_count++];
+      memset (row, 0, sizeof *row);
+      row->planet_id = db_res_col_i64 (res, 0, &err);
+      row->fighters = db_res_col_i64 (res, 1, &err);
+      row->remainder = db_res_col_i64 (res, 2, &err);
+      row->last_tick = db_res_col_i64 (res, 3, &err);
+      row->citadel_level = db_res_col_i64 (res, 4, &err);
+      row->fighter_factor = db_res_col_i64 (res, 5, &err);
+      row->fighter_capacity = db_res_col_i64 (res, 6, &err);
+      row->weapons_workers = db_res_col_i64 (res, 7, &err);
+      const char *commodity = db_res_col_text (res, 8, &err);
+      if (!commodity || strlen (commodity) >= sizeof row->commodity)
+        {
+          err.code = -1;
+          break;
+        }
+      strcpy (row->commodity, commodity);
+      row->quantity = db_res_col_i64 (res, 9, &err);
+      row->stock_capacity = db_res_col_i64 (res, 10, &err);
+      row->net_delta = db_res_col_i64 (res, 11, &err);
+      if (err.code != 0)
+        break;
+    }
+  db_res_finalize (res);
+  if (err.code != 0)
+    {
+      free (rows);
+      db_tx_rollback (db, &err);
+      return err.code;
+    }
 
-  const char *upsert_clause = db_backend(db) == DB_BACKEND_POSTGRES
+  const char *upsert_clause = db_backend (db) == DB_BACKEND_POSTGRES
     ? " ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity, last_updated_ts = EXCLUDED.last_updated_ts"
     : " ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), last_updated_ts = VALUES(last_updated_ts)";
-  char production_upsert_sql[2048];
-  if (snprintf(production_upsert_sql, sizeof(production_upsert_sql), "%s%s", sql_template, upsert_clause) >= (int)sizeof(production_upsert_sql)) return -1;
-  if (sql_build(db, production_upsert_sql, sql_update_commodities, sizeof(sql_update_commodities)) != 0) return -1;
+  char stock_tmpl[1024], stock_sql[1024], planet_sql[512];
+  if (snprintf (stock_tmpl, sizeof stock_tmpl,
+                "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('planet', {1}, {2}, {3}, 0, {4})%s",
+                upsert_clause) >= (int) sizeof stock_tmpl
+      || sql_build (db, stock_tmpl, stock_sql, sizeof stock_sql) != 0
+      || sql_build (db,
+                    "UPDATE planets SET fighters = LEAST({1}, GREATEST(COALESCE(fighters, 0), 0) + {2}), fighter_production_remainder = {3}, fighter_production_last_tick = {4} WHERE planet_id = {5} AND COALESCE((SELECT c.level FROM citadels c WHERE c.planet_id = planets.planet_id), planets.citadel_level, 0) >= 1 AND COALESCE(fighter_production_last_tick, -1) < {4}",
+                    planet_sql, sizeof planet_sql) != 0)
+    {
+      free (rows);
+      db_tx_rollback (db, &err);
+      return -1;
+    }
 
-  if (!db_exec (db, sql_update_commodities, (db_bind_t[]){ db_bind_i64 (now_s) }, 1, &err)) return -1;
+  for (size_t begin = 0; begin < row_count;)
+    {
+      size_t end = begin + 1;
+      while (end < row_count && rows[end].planet_id == rows[begin].planet_id)
+        end++;
 
+      production_row_t *planet = &rows[begin];
+      int64_t equipment_available = 0;
+      for (size_t i = begin; i < end; i++)
+        if (strcmp (rows[i].commodity, "EQU") == 0)
+          {
+            equipment_available = rows[i].quantity + rows[i].net_delta;
+            if (equipment_available < 0) equipment_available = 0;
+            if (rows[i].stock_capacity >= 0
+                && equipment_available > rows[i].stock_capacity)
+              equipment_available = rows[i].stock_capacity;
+            break;
+          }
+
+      planet_fighter_plan_t fighter_plan = {0};
+      if (planet->citadel_level >= 1 && planet->fighter_factor > 0)
+        fighter_plan = planet_fighter_plan (
+          planet->citadel_level, planet->weapons_workers,
+          planet->fighter_factor, equipment_available, planet->fighters,
+          planet->fighter_capacity, planet->remainder, now_s / 600,
+          planet->last_tick);
+
+      for (size_t i = begin; i < end; i++)
+        {
+          production_row_t *row = &rows[i];
+          int64_t quantity = row->quantity + row->net_delta;
+          if (strcmp (row->commodity, "EQU") == 0)
+            quantity -= fighter_plan.equipment_consumed;
+          if (quantity < 0) quantity = 0;
+          if (row->stock_capacity >= 0 && quantity > row->stock_capacity)
+            quantity = row->stock_capacity;
+
+          if (!db_exec (db, stock_sql,
+                        (db_bind_t[]){db_bind_i64 (row->planet_id),
+                                      db_bind_text (row->commodity),
+                                      db_bind_i64 (quantity),
+                                      db_bind_i64 (now_s)},
+                        4, &err))
+            {
+              free (rows);
+              db_tx_rollback (db, &err);
+              return err.code ? err.code : -1;
+            }
+
+          int64_t produced_quantity = quantity - row->quantity;
+          if (produced_quantity > 0)
+            {
+              const char *activity_sql =
+                "INSERT INTO planet_economic_activity (planet_id,activity_type,commodity_code,quantity,unit_value,taxable_value,idempotency_key) "
+                "SELECT {1},'production',c.code,{3},c.base_price,{3}::bigint*c.base_price, "
+                "'planet-production:'||{1}||':'||{2}||':'||{4} FROM commodities c WHERE c.code={2} "
+                "ON CONFLICT (idempotency_key) DO NOTHING;";
+              if (!db_exec (db, activity_sql,
+                            (db_bind_t[]){db_bind_i64 (row->planet_id),
+                                          db_bind_text (row->commodity),
+                                          db_bind_i64 (produced_quantity),
+                                          db_bind_i64 (now_s)},
+                            4, &err))
+                {
+                  free (rows);
+                  db_tx_rollback (db, &err);
+                  return err.code ? err.code : -1;
+                }
+            }
+        }
+
+      if (planet->citadel_level >= 1 && planet->fighter_factor > 0
+          && !fighter_plan.duplicate_tick)
+        if (!db_exec (db, planet_sql,
+                      (db_bind_t[]){db_bind_i64 (planet->fighter_capacity),
+                                    db_bind_i64 (fighter_plan.fighters_added),
+                                    db_bind_i64 (fighter_plan.remainder),
+                                    db_bind_i64 (fighter_plan.last_tick),
+                                    db_bind_i64 (planet->planet_id)},
+                      5, &err))
+          {
+            free (rows);
+            db_tx_rollback (db, &err);
+            return err.code ? err.code : -1;
+          }
+
+      begin = end;
+    }
+
+  free (rows);
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : -1;
+    }
   return 0;
 
 }
@@ -2044,6 +2200,24 @@ db_cron_lottery_update_state (db_t *db, const char *date_str, int winning_number
 }
 
 
+int
+db_cron_expire_trade_offers (db_t *db, int64_t now_s)
+{
+  if (!db)
+    return -1;
+  db_error_t err;
+  db_error_clear (&err);
+  char sql[512];
+  sql_build (db,
+             "UPDATE trade_offers SET status = 'expired', expired_at = {1} WHERE status = 'pending' AND expires_at <= {1};",
+             sql, sizeof sql);
+  if (!db_exec (db, sql,
+                (db_bind_t[]){db_bind_timestamp_text (now_s)}, 1, &err))
+    return err.code ? err.code : -1;
+  return 0;
+}
+
+
 
 int
 
@@ -2467,4 +2641,46 @@ db_cron_shield_regen (db_t *db, int percent)
 
   return 0;
 
+}
+
+int
+db_cron_planet_tax_tick (db_t *db, int64_t now_s)
+{
+  if (!db || now_s <= 0)
+    return -1;
+
+  const char *query =
+    "WITH day AS (SELECT (to_timestamp({1}) AT TIME ZONE 'UTC')::date AS tax_date), "
+    "src AS MATERIALIZED (SELECT p.planet_id, p.owner_type, p.owner_id, "
+    "CASE WHEN COALESCE(tp.enabled,FALSE) THEN COALESCE(tp.rate_bps,0) ELSE 0 END AS rate_bps "
+    "FROM planets p LEFT JOIN planet_tax_policies tp ON tp.planet_id=p.planet_id "
+    "CROSS JOIN day d WHERE p.owner_id>0 AND p.owner_type IN ('player','corp','corporation') "
+    "AND NOT EXISTS (SELECT 1 FROM planet_tax_assessments ta WHERE ta.planet_id=p.planet_id AND ta.tax_date=d.tax_date)), "
+    "activity AS (UPDATE planet_economic_activity a SET assessed_at=to_timestamp({1}) FROM src "
+    "WHERE a.planet_id=src.planet_id AND a.assessed_at IS NULL AND a.occurred_at<=to_timestamp({1}) "
+    "RETURNING a.planet_id,a.taxable_value), "
+    "totals AS (SELECT src.planet_id, CASE WHEN src.owner_type IN ('corp','corporation') THEN 'corp' ELSE 'player' END AS owner_type, "
+    "src.owner_id, src.rate_bps, COALESCE(SUM(activity.taxable_value),0)::bigint AS taxable_value "
+    "FROM src LEFT JOIN activity USING (planet_id) GROUP BY src.planet_id,src.owner_type,src.owner_id,src.rate_bps), "
+    "assessed AS (INSERT INTO planet_tax_assessments (planet_id,tax_date,owner_type,owner_id,taxable_value,rate_bps,tax_amount,assessed_at) "
+    "SELECT totals.planet_id,day.tax_date,totals.owner_type,totals.owner_id,totals.taxable_value,totals.rate_bps, "
+    "floor(totals.taxable_value::numeric*totals.rate_bps/10000)::bigint,to_timestamp({1}) FROM totals CROSS JOIN day "
+    "ON CONFLICT (planet_id,tax_date) DO NOTHING RETURNING planet_id,owner_type,owner_id,tax_amount,tax_date), "
+    "player_receipts AS (UPDATE players p SET credits=p.credits+assessed.tax_amount FROM assessed "
+    "WHERE assessed.owner_type='player' AND assessed.tax_amount>0 AND p.player_id=assessed.owner_id RETURNING p.player_id), "
+    "corp_receipts AS (INSERT INTO corp_tx (corp_id,kind,amount,currency,memo,idempotency_key) "
+    "SELECT assessed.owner_id,'adjustment',assessed.tax_amount,'CRD','Planet tax receipt', "
+    "'planet-tax-receipt:'||assessed.planet_id||':'||assessed.tax_date::text FROM assessed "
+    "WHERE assessed.owner_type='corp' AND assessed.tax_amount>0 "
+    "ON CONFLICT (idempotency_key) DO NOTHING RETURNING corp_id) "
+    "SELECT (SELECT COUNT(*) FROM assessed) + (SELECT COUNT(*) FROM player_receipts) + (SELECT COUNT(*) FROM corp_receipts);";
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear(&err);
+  if (!db_query(db, query, (db_bind_t[]){db_bind_i64(now_s)}, 1,
+                &res, &err))
+    return err.code ? err.code : -1;
+  if (res)
+    db_res_finalize(res);
+  return err.code ? err.code : 0;
 }

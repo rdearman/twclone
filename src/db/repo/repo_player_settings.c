@@ -53,8 +53,8 @@ db_subscribe_upsert (db_t *db,
   if (!db) return -1;
   const char *q_upd = "UPDATE subscriptions SET filter_json = {3}, locked = {4}, enabled = {5} "
                       "WHERE player_id = {1} AND event_type = {2};";
-  const char *q_ins = "INSERT INTO subscriptions (player_id, event_type, filter_json, locked, enabled) "
-                      "VALUES ({1}, {2}, {3}, {4}, {5});";
+  const char *q_ins = "INSERT INTO subscriptions (player_id, event_type, delivery, filter_json, locked, enabled) "
+                      "VALUES ({1}, {2}, 'push', {3}, {4}, {5});";
   
   char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
   char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));

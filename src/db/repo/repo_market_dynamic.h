@@ -58,6 +58,16 @@ int repo_market_dynamic_mul(db_t *db, int port_id, const char *commodity_code,
                             int min_mul, int max_mul,
                             int k_vol_div, int k_stock_div);
 
+/* Compose matching active #297 shocks for one port quote. Returns basis
+ * points (10000 = neutral), clamped to 2500..40000. */
+int repo_market_shock_multiplier_bps(db_t *db, int port_id,
+                                     const char *commodity_code,
+                                     int *out_multiplier_bps);
+
+/* Expire old shocks and create at most one random event per five-minute
+ * window. */
+int repo_market_shock_tick(db_t *db, int64_t now_s);
+
 /**
  * Constants for multiplier calculation
  * Defaults can be overridden via config keys

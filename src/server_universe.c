@@ -1,4 +1,5 @@
 #include "db/repo/repo_universe.h"
+#include "ship_personality.h"
 #include "db/repo/repo_players.h"
 #include "db/repo/repo_cmd.h"
 #include "db/repo/repo_clusters.h"
@@ -288,31 +289,48 @@ ori_move_all_ships (void)
     {
       int ship_id = db_res_col_i32 (res, 0, &err);
       int current_sector = db_res_col_i32 (res, 1, &err);
-      int new_target = current_sector;
+      const char *ship_override = db_res_col_text (res, 2, &err);
+      const char *corp_default = db_res_col_text (res, 3, &err);
+      const char *type_default = db_res_col_text (res, 4, &err);
+      ship_personality_t personality = ship_personality_resolve (
+        ship_override, corp_default, type_default);
+      int balanced_target = current_sector;
+      int random_sector = 0;
+      int adjacent_sector = 0;
+      int port_sector = 0;
 
       /* Core Orion Movement Strategy:
          60% chance to target Black Market home sector for resupply/patrol
          40% chance to target a random unprotected sector for piracy */
       if (rand () % 10 < 6 && ori_home_sector_id != -1)
-	{
-	  new_target = ori_home_sector_id;
-	}
+        balanced_target = ori_home_sector_id;
       else
-	{
-	  /* Random sector in unprotected range (11..999) */
-	  new_target = (rand () % (999 - 11 + 1)) + 11;
-	}
-      /* Don't target the current sector */
-      if (new_target == current_sector)
-	{
-	  new_target = (new_target % 999) + 1;
-	}
+        balanced_target = (rand () % (999 - 11 + 1)) + 11;
+
+      if (personality == SHIP_PERSONALITY_OFFENSIVE)
+        (void) repo_universe_get_random_unprotected_sector (ori_db,
+                                                            &random_sector);
+      else if (personality == SHIP_PERSONALITY_DEFENSIVE)
+        (void) repo_universe_get_random_neighbor (ori_db, current_sector,
+                                                 &adjacent_sector);
+      else if (personality == SHIP_PERSONALITY_LOOTER)
+        (void) repo_universe_get_random_port_sector (ori_db, &port_sector);
+
+      int new_target = ship_personality_target (personality, current_sector,
+                                                ori_home_sector_id,
+                                                balanced_target, random_sector,
+                                                adjacent_sector, port_sector);
+      if ((personality == SHIP_PERSONALITY_BALANCED
+           || personality == SHIP_PERSONALITY_OFFENSIVE)
+          && new_target == current_sector)
+        new_target = (new_target % 999) + 1;
 
       /* Move the ship to the new sector */
       if (repo_universe_update_ship_sector (ori_db, ship_id, new_target) == 0)
 	{
-	  LOGD ("[cron] ori_move: Ship %d moved to sector %d (from %d).",
-	      ship_id, new_target, current_sector);
+	  LOGD ("[cron] ori_move: Ship %d (%s) moved to sector %d (from %d).",
+	      ship_id, ship_personality_name (personality),
+	      new_target, current_sector);
 	}
       else
 	{
@@ -983,8 +1001,12 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 	}
 
       /* Canon #471: Sector assets engage on entry */
-      if (server_combat_apply_entry_hazards (db, ctx, to))
+      json_t *hazard_report = NULL;
+      if (server_combat_apply_entry_hazards_report (db, ctx, to,
+                                                    &hazard_report))
         {
+          if (hazard_report)
+            json_decref (hazard_report);
           send_response_error (ctx, root, 403, "Ship destroyed by sector hazards.");
           return 0;
         }
@@ -992,6 +1014,11 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       json_t *resp = json_object ();
       json_object_set_new (resp, "sector_id", json_integer (to));
       json_object_set_new (resp, "to_sector_id", json_integer (to));
+      if (hazard_report && json_array_size (hazard_report) > 0)
+        json_object_set_new (resp, "message",
+                             json_string ("Environmental hazards damaged your ship."));
+      json_object_set_new (resp, "hazards",
+                           hazard_report ? hazard_report : json_array ());
       send_response_ok_take (ctx, root, "move.result", &resp);
     }
   else
@@ -1663,8 +1690,12 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   ctx->sector_id = to_sector_id;
 
   /* Canon #471: Sector assets engage on entry */
-  if (server_combat_apply_entry_hazards (db, ctx, to_sector_id))
+  json_t *hazard_report = NULL;
+  if (server_combat_apply_entry_hazards_report (db, ctx, to_sector_id,
+                                                &hazard_report))
     {
+      if (hazard_report)
+        json_decref (hazard_report);
       send_response_error (ctx, root, 403, "Ship destroyed by sector hazards during transwarp.");
       return 0;
     }
@@ -1672,6 +1703,11 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object ();
   json_object_set_new (data, "sector_id", json_integer (to_sector_id));
   json_object_set_new (data, "status", json_string ("transwarp_complete"));
+  if (hazard_report && json_array_size (hazard_report) > 0)
+    json_object_set_new (data, "message",
+                         json_string ("Environmental hazards damaged your ship."));
+  json_object_set_new (data, "hazards",
+                       hazard_report ? hazard_report : json_array ());
 
   send_response_ok_take (ctx, root, "move.transwarp", &data);
   return 0;

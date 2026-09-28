@@ -69,10 +69,13 @@
         { "path": "data.sector_id", "op": "==", "value": 555 },
         { "path": "data.message", "op": "==", "value": "Environmental hazards damaged your ship." },
         { "path": "data.hazards.0.type", "op": "==", "value": "nebula" },
+        { "path": "data.hazards.0.hazard_type", "op": "==", "value": "nebula" },
         { "path": "data.hazards.0.damage", "op": "==", "value": 11 },
         { "path": "data.hazards.1.type", "op": "==", "value": "radiation" },
+        { "path": "data.hazards.1.hazard_type", "op": "==", "value": "radiation" },
         { "path": "data.hazards.1.damage", "op": "==", "value": 13 },
         { "path": "data.hazards.2.type", "op": "==", "value": "volcanic" },
+        { "path": "data.hazards.2.hazard_type", "op": "==", "value": "volcanic" },
         { "path": "data.hazards.2.damage", "op": "==", "value": 7 }
       ]
     },
@@ -108,8 +111,11 @@
       "asserts": [
         { "path": "data.message", "op": "==", "value": "Environmental hazards damaged your ship." },
         { "path": "data.hazards.0.type", "op": "==", "value": "nebula" },
+        { "path": "data.hazards.0.hazard_type", "op": "==", "value": "nebula" },
         { "path": "data.hazards.1.type", "op": "==", "value": "radiation" },
-        { "path": "data.hazards.2.type", "op": "==", "value": "volcanic" }
+        { "path": "data.hazards.1.hazard_type", "op": "==", "value": "radiation" },
+        { "path": "data.hazards.2.type", "op": "==", "value": "volcanic" },
+        { "path": "data.hazards.2.hazard_type", "op": "==", "value": "volcanic" }
       ]
     }
   ]

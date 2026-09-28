@@ -1176,7 +1176,16 @@ h_broadcast_ttl_cleanup (db_t *db, int64_t now_s)
 
   if (db_cron_broadcast_cleanup (db, now_s) != 0)
     {
-      // Log if needed
+      LOGE ("Expired notice cleanup failed");
+      unlock (db, "broadcast_ttl_cleanup");
+      return -1;
+    }
+
+  if (db_cron_expire_trade_offers (db, now_s) != 0)
+    {
+      LOGE ("Expired trade offer cleanup failed");
+      unlock (db, "broadcast_ttl_cleanup");
+      return -1;
     }
 
   unlock (db, "broadcast_ttl_cleanup");

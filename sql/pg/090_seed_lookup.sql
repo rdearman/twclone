@@ -29,7 +29,8 @@ INSERT INTO commodities (code, name, base_price, volatility, illegal)
     ('EQU', 'Equipment', 200, 25, FALSE),
     ('SLV', 'Slaves', 1000, 50, TRUE),
     ('WPN', 'Weapons', 750, 40, TRUE),
-    ('DRG', 'Drugs', 500, 60, TRUE)
+    ('DRG', 'Drugs', 500, 60, TRUE),
+    ('COL', 'Colonists', 0, 0, FALSE)
 ON CONFLICT (code)
     DO NOTHING;
 -- 5. Ship Roles
@@ -93,13 +94,13 @@ ON CONFLICT (commission_id)
     DO NOTHING;
 -- 7. Planet Types
 INSERT INTO planettypes (code, typeDescription, typeName, citadelUpgradeTime_lvl1, citadelUpgradeTime_lvl2, citadelUpgradeTime_lvl3, citadelUpgradeTime_lvl4, citadelUpgradeTime_lvl5, citadelUpgradeTime_lvl6, citadelUpgradeOre_lvl1, citadelUpgradeOre_lvl2, citadelUpgradeOre_lvl3, citadelUpgradeOre_lvl4, citadelUpgradeOre_lvl5, citadelUpgradeOre_lvl6, citadelUpgradeOrganics_lvl1, citadelUpgradeOrganics_lvl2, citadelUpgradeOrganics_lvl3, citadelUpgradeOrganics_lvl4, citadelUpgradeOrganics_lvl5, citadelUpgradeOrganics_lvl6, citadelUpgradeEquipment_lvl1, citadelUpgradeEquipment_lvl2, citadelUpgradeEquipment_lvl3, citadelUpgradeEquipment_lvl4, citadelUpgradeEquipment_lvl5, citadelUpgradeEquipment_lvl6, citadelUpgradeColonist_lvl1, citadelUpgradeColonist_lvl2, citadelUpgradeColonist_lvl3, citadelUpgradeColonist_lvl4, citadelUpgradeColonist_lvl5, citadelUpgradeColonist_lvl6, maxColonist_ore, maxColonist_organics, maxColonist_equipment, fighters, fuelProduction, organicsProduction, equipmentProduction, fighterProduction, maxore, maxorganics, maxequipment, maxfighters, breeding)
-    VALUES ('M', 'Earth type', 'Earth', 4, 4, 5, 10, 5, 15, 300, 200, 500, 1000, 300, 1000, 200, 50, 250, 1200, 400, 1200, 250, 250, 500, 1000, 1000, 2000, 1000000, 2000000, 4000000, 6000000, 6000000, 6000000, 100000, 100000, 100000, 0, 0, 0, 0, 0, 10000000, 100000, 100000, 1000000, 0.75),
-    ('L', 'Mountainous', 'Mountain', 2, 5, 5, 8, 5, 12, 150, 200, 600, 1000, 300, 1000, 100, 50, 250, 1200, 400, 1200, 150, 250, 700, 1000, 1000, 2000, 400000, 1400000, 3600000, 5600000, 7000000, 5600000, 200000, 200000, 200000, 0, 0, 0, 0, 0, 200000, 200000, 100000, 1000000, 0.24),
-    ('O', 'Oceanic', 'Ocean', 6, 5, 8, 5, 4, 8, 500, 200, 600, 700, 300, 700, 200, 50, 400, 900, 400, 900, 400, 300, 650, 800, 1000, 1600, 1400000, 2400000, 4400000, 7000000, 8000000, 7000000, 100000, 1000000, 1000000, 0, 0, 0, 0, 0, 50000, 1000000, 50000, 1000000, 0.30),
-    ('K', 'Desert Wasteland', 'Desert', 6, 5, 8, 5, 4, 8, 400, 300, 700, 700, 300, 700, 300, 80, 900, 900, 400, 900, 600, 400, 800, 800, 1000, 1600, 1000000, 2400000, 4000000, 7000000, 8000000, 7000000, 20000, 50000, 50000, 0, 0, 0, 0, 0, 20000, 50000, 10000, 1000000, 0.50),
-    ('H', 'Volcanic', 'Volcano', 4, 5, 8, 12, 18, 8, 500, 300, 1200, 2000, 3000, 2000, 300, 100, 400, 2000, 1200, 2000, 600, 400, 1500, 2500, 2000, 5000, 800000, 1600000, 4400000, 7000000, 10000000, 7000000, 1000000, 10000, 10000, 0, 0, 0, 0, 0, 1000000, 10000, 100000, 1000000, 0.30),
+    VALUES ('M', 'Earth type', 'Earth', 4, 4, 5, 10, 5, 15, 300, 200, 500, 1000, 300, 1000, 200, 50, 250, 1200, 400, 1200, 250, 250, 500, 1000, 1000, 2000, 1000000, 2000000, 4000000, 6000000, 6000000, 6000000, 100000, 100000, 100000, 0, 0, 0, 0, 10, 10000000, 100000, 100000, 1000000, 0.75),
+    ('L', 'Mountainous', 'Mountain', 2, 5, 5, 8, 5, 12, 150, 200, 600, 1000, 300, 1000, 100, 50, 250, 1200, 400, 1200, 150, 250, 700, 1000, 1000, 2000, 400000, 1400000, 3600000, 5600000, 7000000, 5600000, 200000, 200000, 200000, 0, 0, 0, 0, 12, 200000, 200000, 100000, 1000000, 0.24),
+    ('O', 'Oceanic', 'Ocean', 6, 5, 8, 5, 4, 8, 500, 200, 600, 700, 300, 700, 200, 50, 400, 900, 400, 900, 400, 300, 650, 800, 1000, 1600, 1400000, 2400000, 4400000, 7000000, 8000000, 7000000, 100000, 1000000, 1000000, 0, 0, 0, 0, 15, 50000, 1000000, 50000, 1000000, 0.30),
+    ('K', 'Desert Wasteland', 'Desert', 6, 5, 8, 5, 4, 8, 400, 300, 700, 700, 300, 700, 300, 80, 900, 900, 400, 900, 600, 400, 800, 800, 1000, 1600, 1000000, 2400000, 4000000, 7000000, 8000000, 7000000, 20000, 50000, 50000, 0, 0, 0, 0, 15, 20000, 50000, 10000, 1000000, 0.50),
+    ('H', 'Volcanic', 'Volcano', 4, 5, 8, 12, 18, 8, 500, 300, 1200, 2000, 3000, 2000, 300, 100, 400, 2000, 1200, 2000, 600, 400, 1500, 2500, 2000, 5000, 800000, 1600000, 4400000, 7000000, 10000000, 7000000, 1000000, 10000, 10000, 0, 0, 0, 0, 50, 1000000, 10000, 100000, 1000000, 0.30),
     ('U', 'Gaseous', 'Gas Giant', 8, 4, 5, 5, 4, 8, 1200, 300, 500, 500, 200, 500, 400, 100, 500, 200, 200, 200, 2500, 400, 2000, 600, 600, 1200, 3000000, 3000000, 8000000, 6000000, 8000000, 6000000, 10000, 10000, 10000, 0, 0, 0, 0, 0, 10000, 10000, 10000, 1000000, -0.10),
-    ('C', 'Glacial/Ice', 'Ice World', 5, 5, 7, 5, 4, 8, 400, 300, 600, 700, 300, 700, 300, 80, 400, 900, 400, 900, 600, 400, 650, 700, 1000, 1400, 1000000, 24000000, 4400000, 6600000, 9000000, 6600000, 20000, 50000, 20000, 0, 0, 0, 0, 0, 20000, 50000, 10000, 1000000, -0.10)
+    ('C', 'Glacial/Ice', 'Ice World', 5, 5, 7, 5, 4, 8, 400, 300, 600, 700, 300, 700, 300, 80, 400, 900, 400, 900, 600, 400, 650, 700, 1000, 1400, 1000000, 24000000, 4400000, 6600000, 9000000, 6600000, 20000, 50000, 20000, 0, 0, 0, 0, 25, 20000, 50000, 10000, 1000000, -0.10)
 ON CONFLICT (code)
     DO NOTHING;
 -- 8. Ship Types
@@ -136,4 +137,3 @@ INSERT INTO player_types (type, description)
 ON CONFLICT (type)
     DO NOTHING;
 COMMIT;
-

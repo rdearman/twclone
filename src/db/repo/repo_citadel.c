@@ -120,7 +120,7 @@ int repo_citadel_deduct_resources(db_t *db, int64_t colonists, int64_t ore, int6
         if (affected != 1) return ERR_DB_CONSTRAINT;
     }
     if (colonists > 0) {
-        const char *population_sql = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_mil) - {1}), colonists_unassigned = colonists_unassigned - {1} WHERE planet_id = {2} AND colonists_unassigned >= {3}";
+        const char *population_sql = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_weapons) - {1}), colonists_unassigned = colonists_unassigned - {1} WHERE planet_id = {2} AND colonists_unassigned >= {3}";
         char population_stmt[512];
         sql_build(db, population_sql, population_stmt, sizeof(population_stmt));
         if (!db_exec_rows_affected(db, population_stmt,

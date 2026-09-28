@@ -20,7 +20,7 @@ repo_porttypes_get_by_id (db_t * db, int porttype_id, porttype_t * out_porttype)
       return false;
     }
 
-  if (!res || db_res_step (res, &err) != 0)
+  if (!res || !db_res_step (res, &err))
     {
       if (res)
         db_res_finalize (res);
@@ -36,10 +36,10 @@ repo_porttypes_get_by_id (db_t * db, int porttype_id, porttype_t * out_porttype)
     strncpy (out_porttype->description, desc, sizeof (out_porttype->description) - 1);
   out_porttype->description[sizeof (out_porttype->description) - 1] = '\0';
 
-  out_porttype->can_buy = db_res_col_i64 (res, 3, &err) != 0;
-  out_porttype->can_sell = db_res_col_i64 (res, 4, &err) != 0;
-  out_porttype->is_stardock = db_res_col_i64 (res, 5, &err) != 0;
-  out_porttype->is_black_market = db_res_col_i64 (res, 6, &err) != 0;
+  out_porttype->can_buy = db_res_col_bool (res, 3, &err);
+  out_porttype->can_sell = db_res_col_bool (res, 4, &err);
+  out_porttype->is_stardock = db_res_col_bool (res, 5, &err);
+  out_porttype->is_black_market = db_res_col_bool (res, 6, &err);
 
   db_res_finalize (res);
   return true;
@@ -63,7 +63,7 @@ repo_porttypes_get_by_code (db_t * db, const char *code, porttype_t * out_portty
       return false;
     }
 
-  if (!res || db_res_step (res, &err) != 0)
+  if (!res || !db_res_step (res, &err))
     {
       if (res)
         db_res_finalize (res);
@@ -79,10 +79,10 @@ repo_porttypes_get_by_code (db_t * db, const char *code, porttype_t * out_portty
     strncpy (out_porttype->description, desc, sizeof (out_porttype->description) - 1);
   out_porttype->description[sizeof (out_porttype->description) - 1] = '\0';
 
-  out_porttype->can_buy = db_res_col_i64 (res, 3, &err) != 0;
-  out_porttype->can_sell = db_res_col_i64 (res, 4, &err) != 0;
-  out_porttype->is_stardock = db_res_col_i64 (res, 5, &err) != 0;
-  out_porttype->is_black_market = db_res_col_i64 (res, 6, &err) != 0;
+  out_porttype->can_buy = db_res_col_bool (res, 3, &err);
+  out_porttype->can_sell = db_res_col_bool (res, 4, &err);
+  out_porttype->is_stardock = db_res_col_bool (res, 5, &err);
+  out_porttype->is_black_market = db_res_col_bool (res, 6, &err);
 
   db_res_finalize (res);
   return true;

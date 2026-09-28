@@ -8,11 +8,12 @@
 int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_port_id, int32_t *out_porttype_id)
 {
     /* SQL_VERBATIM: Q1 */
-    /* Get port from sector, preferring stardock/class0 */
+    /* Get a hardware-service port. Preserve legacy Stardock/Class-0
+     * precedence while allowing explicitly flagged black markets. */
     const char *sql = "SELECT p.port_id, COALESCE(p.porttype_id, 0) FROM ports p "
                       "LEFT JOIN porttypes pt ON p.porttype_id = pt.porttype_id "
-                      "WHERE p.sector_id = {1} AND (pt.is_stardock = true OR pt.code = 'CLASS0') "
-                      "ORDER BY pt.is_stardock DESC LIMIT 1;";
+                      "WHERE p.sector_id = {1} AND (pt.is_stardock = true OR pt.code = 'CLASS0' OR pt.is_black_market = true) "
+                      "ORDER BY pt.is_stardock DESC, (pt.code = 'CLASS0') DESC LIMIT 1;";
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;
@@ -54,6 +55,120 @@ int repo_stardock_get_hardware_items(db_t *db, const char *location_type, db_res
         return 0;
     }
     return err.code;
+}
+
+int repo_stardock_get_black_market_hardware_items(db_t *db, int32_t port_id,
+                                                   int32_t porttype_id,
+                                                   db_res_t **out_res)
+{
+    if (!db || port_id <= 0 || porttype_id <= 0 || !out_res)
+        return -1;
+    /* Special-port catalogue entries must be explicitly mapped and have a
+     * configured stock row. Keep empty entries visible so clients can show
+     * their effective price and unavailable state. */
+    const char *sql =
+        "SELECT hi.code, hi.name, hi.price, hi.max_per_ship, hi.category, "
+        "phs.stock_quantity, phs.max_stock "
+        "FROM hardware_items hi JOIN porttype_items pti "
+        "ON pti.hardware_items_id = hi.hardware_items_id "
+        "JOIN port_hardware_stock phs ON phs.hardware_items_id = hi.hardware_items_id "
+        "WHERE hi.enabled = {1} AND pti.porttype_id = {2} AND pti.can_buy = {3} "
+        "AND phs.port_id = {4} ORDER BY hi.code;";
+    char sql_converted[768];
+    sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    db_error_t err;
+    if (db_query(db, sql_converted,
+                 (db_bind_t[]){ db_bind_bool(true), db_bind_i64(porttype_id),
+                                db_bind_bool(true), db_bind_i64(port_id) },
+                 4, out_res, &err))
+        return 0;
+    return err.code;
+}
+
+int
+repo_stardock_get_black_market_hardware_stock(db_t *db, int32_t port_id,
+                                               const char *code,
+                                               int32_t *out_stock,
+                                               int32_t *out_max_stock)
+{
+    if (!db || port_id <= 0 || !code || !out_stock || !out_max_stock)
+        return -1;
+    const char *sql =
+        "SELECT phs.stock_quantity, phs.max_stock "
+        "FROM port_hardware_stock phs JOIN hardware_items hi "
+        "ON hi.hardware_items_id = phs.hardware_items_id "
+        "WHERE phs.port_id = {1} AND hi.code = {2} AND hi.enabled = {3};";
+    char sql_converted[512];
+    sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    db_res_t *res = NULL;
+    db_error_t err;
+    if (!db_query(db, sql_converted,
+                  (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(code),
+                                 db_bind_bool(true) }, 3, &res, &err))
+        return err.code;
+    if (!db_res_step(res, &err))
+      {
+        db_res_finalize(res);
+        return 1;
+      }
+    *out_stock = (int32_t) db_res_col_i64(res, 0, &err);
+    *out_max_stock = (int32_t) db_res_col_i64(res, 1, &err);
+    db_res_finalize(res);
+    return 0;
+}
+
+int
+repo_stardock_consume_black_market_hardware_stock(db_t *db, int32_t port_id,
+                                                   const char *code,
+                                                   int32_t quantity,
+                                                   int64_t *out_remaining)
+{
+    if (!db || port_id <= 0 || !code || quantity <= 0)
+        return -1;
+    const char *sql =
+        "UPDATE port_hardware_stock phs SET stock_quantity = phs.stock_quantity - {1}, "
+        "updated_at = CURRENT_TIMESTAMP FROM hardware_items hi "
+        "WHERE phs.hardware_items_id = hi.hardware_items_id AND phs.port_id = {2} "
+        "AND hi.code = {3} AND phs.stock_quantity >= {1} "
+        "RETURNING phs.stock_quantity;";
+    char sql_converted[768];
+    sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    db_res_t *res = NULL;
+    db_error_t err;
+    if (!db_exec_returning(db, sql_converted,
+                           (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(port_id),
+                                          db_bind_text(code) }, 3, &res, &err))
+        return err.code;
+    if (!db_res_step(res, &err))
+      {
+        db_res_finalize(res);
+        return 1;
+      }
+    if (out_remaining)
+      *out_remaining = db_res_col_i64(res, 0, &err);
+    db_res_finalize(res);
+    return 0;
+}
+
+int
+repo_stardock_restock_hardware(db_t *db, int64_t now_s)
+{
+    if (!db)
+        return -1;
+    const char *sql =
+        "UPDATE port_hardware_stock SET "
+        "stock_quantity = LEAST(max_stock, stock_quantity + restock_quantity), "
+        "next_restock_at = CAST({1} AS timestamptz) + "
+        "(restock_interval_seconds * INTERVAL '1 second'), "
+        "updated_at = CAST({1} AS timestamptz) "
+        "WHERE restock_quantity > 0 AND next_restock_at <= CAST({1} AS timestamptz);";
+    char sql_converted[768];
+    sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    db_error_t err;
+    if (!db_exec(db, sql_converted,
+                 (db_bind_t[]){ db_bind_timestamp_text(now_s) }, 1, &err))
+        return err.code ? err.code : -1;
+    return 0;
 }
 
 int repo_stardock_get_hardware_item_details(db_t *db, const char *code, db_res_t **out_res)

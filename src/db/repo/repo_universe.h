@@ -4,9 +4,27 @@
 #include "db/db_api.h"
 #include <stdbool.h>
 
+typedef struct {
+    int64_t deal_id;
+    int trader_id;
+    int player_id;
+    int ship_id;
+    int corporation_id;
+    char trader_code[32];
+    char display_name[96];
+    char commodity_code[16];
+    char side[16];
+    char status[16];
+    int quantity;
+    int64_t unit_price;
+    char expires_at[40];
+} ferengi_deal_t;
+
 int repo_universe_log_engine_event(db_t *db, const char *type, int sector_id, const char *payload);
 db_res_t* repo_universe_get_adjacent_sectors(db_t *db, int sector_id, db_error_t *err);
 int repo_universe_get_random_neighbor(db_t *db, int sector_id, int *neighbor_out);
+int repo_universe_get_random_unprotected_sector(db_t *db, int *sector_out);
+int repo_universe_get_random_port_sector(db_t *db, int *sector_out);
 int repo_universe_update_ship_sector(db_t *db, int ship_id, int sector_id);
 int repo_universe_mass_randomize_zero_sector_ships(db_t *db);
 db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err);
@@ -28,6 +46,17 @@ int repo_universe_set_beacon(db_t *db, int sector_id, const char *text);
 int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out);
 int repo_universe_update_player_sector(db_t *db, int player_id, int sector_id);
 int repo_universe_get_ferengi_corp_info(db_t *db, int *corp_id_out, int *player_id_out);
+int repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id, int home_sector);
+db_res_t *repo_universe_get_all_ferengi_traders(db_t *db, db_error_t *err);
+db_res_t *repo_universe_get_players_in_sector(db_t *db, int sector_id, db_error_t *err);
+db_res_t *repo_universe_get_ferengi_traders_at_sector(db_t *db, int sector_id, int player_id, db_error_t *err);
+db_res_t *repo_universe_get_ferengi_trader_deals(db_t *db, int player_id, db_error_t *err);
+int repo_universe_get_ferengi_deal(db_t *db, int64_t deal_id, int for_update, ferengi_deal_t *out);
+int repo_universe_create_ferengi_offer(db_t *db, int trader_id, int player_id, int visit_number, int ship_id, int corporation_id, int64_t now_s, int64_t *deal_id_out);
+int repo_universe_record_ferengi_interaction(db_t *db, const ferengi_deal_t *deal, const char *type, int reputation_delta, const char *idempotency_key);
+int repo_universe_transition_ferengi_deal(db_t *db, int64_t deal_id, const char *status, int64_t now_s, int *changed_out);
+int repo_universe_expire_ferengi_deals(db_t *db, int64_t now_s);
+int repo_universe_advance_ferengi_trader(db_t *db, int trader_id, int ship_id, int sector_id);
 int repo_universe_get_ferengi_homeworld_sector(db_t *db, int *sector_out);
 int repo_universe_get_ferengi_warship_type_id(db_t *db, int *type_id_out);
 int repo_universe_get_random_wormhole_neighbor(db_t *db, int sector_id, int *neighbor_out);

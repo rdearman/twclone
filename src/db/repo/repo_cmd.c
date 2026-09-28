@@ -3408,8 +3408,10 @@ db_planet_get_details_json (db_t *db, int pid, json_t **out)
     "SELECT p.*, pt.typename AS type_name, pt.typedescription AS type_description, "
     "pt.maxColonist_ore AS max_colonists_ore, pt.maxColonist_organics AS max_colonists_organics, "
     "pt.maxColonist_equipment AS max_colonists_equipment, pt.organicsProduction AS organics_production_per_worker, "
-    "pt.equipmentProduction AS equipment_production_per_worker, pt.fuelProduction AS fuel_production_per_worker "
+    "pt.equipmentProduction AS equipment_production_per_worker, pt.fuelProduction AS fuel_production_per_worker, "
+    "COALESCE(c.level, p.citadel_level, 0) AS citadel_level "
     "FROM planets p LEFT JOIN planettypes pt ON pt.planettypes_id = p.type "
+    "LEFT JOIN citadels c ON c.planet_id = p.planet_id "
     "WHERE p.planet_id = {1};";
   char sql[1024];
   sql_build(db, sql_template, sql, sizeof sql);
@@ -3435,7 +3437,7 @@ db_planet_get_details_json (db_t *db, int pid, json_t **out)
 	      int64_t colonist_total = 0;
 	      const char *colonist_fields[] = {
 	        "colonists_unassigned", "colonists_ore", "colonists_org",
-	        "colonists_eq", "colonists_mil"
+	        "colonists_eq", "colonists_weapons"
 	      };
 	      for (size_t i = 0; i < sizeof colonist_fields / sizeof colonist_fields[0]; i++)
 	        {
@@ -3652,7 +3654,7 @@ db_notice_list_unseen_for_player (db_t *db, int player_id, json_t **out_array)
   db_res_t *res = NULL; db_error_t err;
   
   const char *sql_template =
-    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = {1} WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > %s);";
+    "SELECT n.system_notice_id as id, n.title, n.body, n.severity FROM system_notice n LEFT JOIN notice_seen r ON n.system_notice_id = r.notice_id AND r.player_id = {1} WHERE r.player_id IS NULL AND (n.expires_at IS NULL OR n.expires_at > %s) AND (n.scope = 'global' OR (n.scope = 'player' AND n.player_id = {1}));";
 
   char sql_dialect[1024];
   sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);

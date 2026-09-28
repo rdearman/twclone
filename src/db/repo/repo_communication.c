@@ -38,10 +38,12 @@ db_res_t* repo_comm_list_notices(db_t *db, const char *now_expr, int player_id, 
     /* SQL_VERBATIM: Q2 */
     char sql_tmpl[768];
     snprintf(sql_tmpl, sizeof(sql_tmpl),
-        "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at "
+        "SELECT n.system_notice_id, n.title, n.body, n.severity, n.created_at, n.expires_at, s.seen_at, n.scope, n.sector_id, n.meta "
         "FROM system_notice n "
         "LEFT JOIN notice_seen s ON s.notice_id = n.system_notice_id AND s.player_id = {1} "
         "WHERE ({2} = 1 OR n.expires_at IS NULL OR n.expires_at > %s) "
+        "AND (n.scope = 'global' OR (n.scope = 'player' AND n.player_id = {1}) "
+        "OR (n.scope = 'sector' AND n.sector_id = (SELECT sector_id FROM players WHERE player_id = {1}))) "
         "AND ({4} = 0 OR n.created_at < {5} OR (n.created_at = {5} AND n.system_notice_id < {6})) "
         "ORDER BY n.created_at DESC, n.system_notice_id DESC LIMIT {3};",
         now_expr);

@@ -1,6 +1,7 @@
 #define TW_DB_INTERNAL 1
 #include "db_int.h"
 #include "repo_universe.h"
+#include "repo_engine.h"
 #include "db/sql_driver.h"
 #include <string.h>
 #include <stdio.h>
@@ -67,7 +68,10 @@ int repo_universe_mass_randomize_zero_sector_ships(db_t *db) {
 db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err) {
     (void) owner_id;  /* Not used - we get Orion ships from corporation membership */
     /* SQL_VERBATIM: Q7 */
-    const char *q7 = "SELECT s.ship_id, s.sector_id FROM ships s "
+    const char *q7 = "SELECT DISTINCT s.ship_id, s.sector_id, s.personality, "
+                     "c.ship_personality, st.default_personality "
+                     "FROM ships s "
+                     "LEFT JOIN shiptypes st ON st.shiptypes_id = s.type_id "
                      "JOIN ship_ownership so ON s.ship_id = so.ship_id "
                      "JOIN corp_members cm ON so.player_id = cm.player_id "
                      "JOIN corporations c ON cm.corporation_id = c.corporation_id "
@@ -76,6 +80,30 @@ db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err)
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){}, 0, &res, err);
     return res;
+}
+
+int repo_universe_get_random_unprotected_sector(db_t *db, int *sector_out) {
+    if (!db || !sector_out) return -1;
+    *sector_out = 0;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, "SELECT sector_id FROM sectors WHERE sector_id > 10 ORDER BY RANDOM() LIMIT 1", NULL, 0, &res, &err)) return -1;
+    int found = db_res_step(res, &err);
+    if (found) *sector_out = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    return (found && err.code == 0) ? 0 : -1;
+}
+
+int repo_universe_get_random_port_sector(db_t *db, int *sector_out) {
+    if (!db || !sector_out) return -1;
+    *sector_out = 0;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, "SELECT sector_id FROM (SELECT DISTINCT sector_id FROM ports) AS port_sectors ORDER BY RANDOM() LIMIT 1", NULL, 0, &res, &err)) return -1;
+    int found = db_res_step(res, &err);
+    if (found) *sector_out = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    return (found && err.code == 0) ? 0 : -1;
 }
 
 int repo_universe_update_ship_target(db_t *db, int ship_id, int target_sector) {
@@ -314,6 +342,339 @@ int repo_universe_get_ferengi_corp_info(db_t *db, int *corp_id_out, int *player_
     }
     if (res) db_res_finalize(res);
     return err.code ? err.code : -1;
+}
+
+static void
+ferengi_copy_text(char *out, size_t out_size, const char *in)
+{
+    if (!out || out_size == 0) return;
+    snprintf(out, out_size, "%s", in ? in : "");
+}
+
+int
+repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id,
+                                      int home_sector)
+{
+    if (!db || corporation_id <= 0 || home_sector <= 0) return -1;
+    db_error_t err;
+    db_res_t *res = NULL;
+    if (!db_query(db,
+          "SELECT trader_code, display_name, ship_type_id, active FROM ferengi_trader_definitions ORDER BY trader_code",
+          NULL, 0, &res, &err)) return err.code ? err.code : -1;
+
+    while (db_res_step(res, &err)) {
+        char trader_code[96], display_name[128];
+        ferengi_copy_text(trader_code, sizeof trader_code, db_res_col_text(res, 0, &err));
+        ferengi_copy_text(display_name, sizeof display_name, db_res_col_text(res, 1, &err));
+        int ship_type_id = db_res_col_i32(res, 2, &err);
+        bool active = db_res_col_bool(res, 3, &err);
+        if (err.code || ship_type_id <= 0) {
+            db_res_finalize(res);
+            return err.code ? err.code : -1;
+        }
+        char lookup[256];
+        sql_build(db, "SELECT ship_id FROM ferengi_traders WHERE trader_code = {1}",
+                  lookup, sizeof lookup);
+        db_res_t *existing = NULL;
+        if (!db_query(db, lookup, (db_bind_t[]){db_bind_text(trader_code)},
+                      1, &existing, &err)) {
+            db_res_finalize(res);
+            return err.code ? err.code : -1;
+        }
+        int exists = db_res_step(existing, &err);
+        db_res_finalize(existing);
+        if (exists) {
+            char rename_sql[512];
+            sql_build(db, "UPDATE ferengi_traders SET display_name = {1}, active = {2} WHERE trader_code = {3}",
+                      rename_sql, sizeof rename_sql);
+            if (!db_exec(db, rename_sql,
+                         (db_bind_t[]){db_bind_text(display_name), db_bind_bool(active),
+                                       db_bind_text(trader_code)}, 3, &err)) {
+                db_res_finalize(res);
+                return err.code ? err.code : -1;
+            }
+            continue;
+        }
+        if (!active) continue;
+
+        db_error_t tx_err;
+        if (!db_tx_begin(db, DB_TX_DEFAULT, &tx_err)) {
+            db_res_finalize(res);
+            return tx_err.code;
+        }
+        int64_t ship_id = 0;
+        char insert_ship[512];
+        sql_build(db,
+          "INSERT INTO ships (name, type_id, holds, fighters, shields, sector_id, hull) VALUES ({1}, {2}, 100, 0, 100, {3}, 100)",
+          insert_ship, sizeof insert_ship);
+        if (!db_exec_insert_id(db, insert_ship,
+              (db_bind_t[]){db_bind_text(display_name),
+                            db_bind_i64(ship_type_id), db_bind_i64(home_sector)},
+              3, "ship_id", &ship_id, &err)) {
+            db_tx_rollback(db, &tx_err);
+            db_res_finalize(res);
+            return err.code ? err.code : -1;
+        }
+        char insert_trader[512];
+        sql_build(db,
+          "INSERT INTO ferengi_traders (trader_code, display_name, corporation_id, ship_id) VALUES ({1}, {2}, {3}, {4})",
+          insert_trader, sizeof insert_trader);
+        if (!db_exec(db, insert_trader,
+              (db_bind_t[]){db_bind_text(trader_code),
+                            db_bind_text(display_name),
+                            db_bind_i64(corporation_id), db_bind_i64(ship_id)},
+              4, &err)) {
+            db_tx_rollback(db, &tx_err);
+            db_res_finalize(res);
+            return err.code ? err.code : -1;
+        }
+        char cargo[512];
+        sql_build(db,
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT {1}, commodity_code, quantity FROM ferengi_trader_definition_cargo WHERE trader_code = {2} ON CONFLICT (ship_id, commodity_code) DO NOTHING",
+          cargo, sizeof cargo);
+        if (!db_exec(db, cargo,
+                     (db_bind_t[]){db_bind_i64(ship_id), db_bind_text(trader_code)},
+                     2, &err)
+            || !db_tx_commit(db, &tx_err)) {
+            db_tx_rollback(db, &tx_err);
+            db_res_finalize(res);
+            return err.code ? err.code : -1;
+        }
+    }
+    int rc = err.code ? err.code : 0;
+    db_res_finalize(res);
+    return rc;
+}
+
+db_res_t *
+repo_universe_get_all_ferengi_traders(db_t *db, db_error_t *err)
+{
+    const char *query =
+      "SELECT ft.ferengi_trader_id, ft.trader_code, ft.display_name, ft.ship_id, "
+      "ft.corporation_id, s.sector_id, ft.visit_number FROM ferengi_traders ft "
+      "JOIN ships s ON s.ship_id=ft.ship_id WHERE ft.active=TRUE ORDER BY ft.ferengi_trader_id";
+    db_res_t *res = NULL;
+    if (!db_query(db, query, NULL, 0, &res, err)) return NULL;
+    return res;
+}
+
+db_res_t *
+repo_universe_get_players_in_sector(db_t *db, int sector_id, db_error_t *err)
+{
+    char sql[512];
+    sql_build(db,
+      "SELECT player_id FROM players WHERE sector_id={1} AND COALESCE(is_npc,FALSE)=FALSE ORDER BY player_id",
+      sql, sizeof sql);
+    db_res_t *res = NULL;
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(sector_id)}, 1, &res, err)) return NULL;
+    return res;
+}
+
+db_res_t *
+repo_universe_get_ferengi_traders_at_sector(db_t *db, int sector_id,
+                                             int player_id, db_error_t *err)
+{
+    const char *query =
+      "SELECT ft.ferengi_trader_id, ft.trader_code, ft.display_name, ft.reputation, "
+      "COALESCE(rel.reputation, 0), ft.ship_id, s.sector_id, ft.visit_number "
+      "FROM ferengi_traders ft JOIN ships s ON s.ship_id = ft.ship_id "
+      "LEFT JOIN ferengi_player_relationships rel ON rel.ferengi_trader_id = ft.ferengi_trader_id AND rel.player_id = {2} "
+      "WHERE ft.active = TRUE AND s.sector_id = {1} ORDER BY ft.display_name";
+    char sql[1024]; sql_build(db, query, sql, sizeof sql);
+    db_res_t *res = NULL;
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(sector_id), db_bind_i64(player_id)}, 2, &res, err)) return NULL;
+    return res;
+}
+
+db_res_t *
+repo_universe_get_ferengi_trader_deals(db_t *db, int player_id,
+                                        db_error_t *err)
+{
+    const char *query =
+      "SELECT d.ferengi_trader_deal_id, d.ferengi_trader_id, ft.trader_code, ft.display_name, "
+      "d.commodity_code, d.side, d.quantity, d.unit_price, d.status, d.expires_at, s.sector_id "
+      "FROM ferengi_trader_deals d JOIN ferengi_traders ft ON ft.ferengi_trader_id = d.ferengi_trader_id "
+      "JOIN ships s ON s.ship_id = ft.ship_id WHERE d.player_id = {1} "
+      "AND d.status = 'open' AND d.expires_at > CURRENT_TIMESTAMP ORDER BY d.created_at, d.ferengi_trader_deal_id";
+    char sql[1024]; sql_build(db, query, sql, sizeof sql);
+    db_res_t *res = NULL;
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(player_id)}, 1, &res, err)) return NULL;
+    return res;
+}
+
+int
+repo_universe_get_ferengi_deal(db_t *db, int64_t deal_id, int for_update,
+                                ferengi_deal_t *out)
+{
+    if (!db || deal_id <= 0 || !out) return -1;
+    const char *base =
+      "SELECT d.ferengi_trader_deal_id, d.ferengi_trader_id, d.player_id, ft.ship_id, ft.corporation_id, "
+      "ft.trader_code, ft.display_name, d.commodity_code, d.side, d.status, d.quantity, d.unit_price, "
+      "d.expires_at::text FROM ferengi_trader_deals d "
+      "JOIN ferengi_traders ft ON ft.ferengi_trader_id = d.ferengi_trader_id WHERE d.ferengi_trader_deal_id = {1}";
+    char q[768], sql[1024];
+    snprintf(q, sizeof q, "%s%s", base, for_update ? " FOR UPDATE" : "");
+    sql_build(db, q, sql, sizeof sql);
+    db_res_t *res = NULL; db_error_t err;
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(deal_id)}, 1, &res, &err)) return err.code ? err.code : -1;
+    if (!db_res_step(res, &err)) { db_res_finalize(res); return 1; }
+    memset(out, 0, sizeof *out);
+    out->deal_id = db_res_col_i64(res, 0, &err);
+    out->trader_id = db_res_col_i32(res, 1, &err);
+    out->player_id = db_res_col_i32(res, 2, &err);
+    out->ship_id = db_res_col_i32(res, 3, &err);
+    out->corporation_id = db_res_col_i32(res, 4, &err);
+    ferengi_copy_text(out->trader_code, sizeof out->trader_code, db_res_col_text(res, 5, &err));
+    ferengi_copy_text(out->display_name, sizeof out->display_name, db_res_col_text(res, 6, &err));
+    ferengi_copy_text(out->commodity_code, sizeof out->commodity_code, db_res_col_text(res, 7, &err));
+    ferengi_copy_text(out->side, sizeof out->side, db_res_col_text(res, 8, &err));
+    ferengi_copy_text(out->status, sizeof out->status, db_res_col_text(res, 9, &err));
+    out->quantity = db_res_col_i32(res, 10, &err);
+    out->unit_price = db_res_col_i64(res, 11, &err);
+    ferengi_copy_text(out->expires_at, sizeof out->expires_at,
+                      db_res_col_text(res, 12, &err));
+    db_res_finalize(res);
+    return err.code ? err.code : 0;
+}
+
+int
+repo_universe_create_ferengi_offer(db_t *db, int trader_id, int player_id,
+                                    int visit_number, int ship_id,
+                                    int corporation_id, int64_t now_s,
+                                    int64_t *deal_id_out)
+{
+    if (!db || trader_id <= 0 || player_id <= 0 || visit_number < 0 || ship_id <= 0 || corporation_id <= 0) return -1;
+    db_res_t *res = NULL; db_error_t err;
+    if (!db_query(db,
+      "SELECT c.code, c.base_price, COALESCE(sc.quantity, 0) "
+      "FROM ferengi_traders ft "
+      "JOIN ferengi_trader_definitions td ON td.trader_code = ft.trader_code "
+      "JOIN ferengi_trader_definition_rotation rotation ON rotation.trader_code = td.trader_code "
+      "JOIN commodities c ON c.code = rotation.commodity_code "
+      "LEFT JOIN ship_cargo sc ON sc.commodity_code = c.code AND sc.ship_id = ft.ship_id "
+      "WHERE ft.ferengi_trader_id = {1} ORDER BY rotation.position",
+      (db_bind_t[]){db_bind_i64(trader_id)}, 1, &res, &err)) return err.code ? err.code : -1;
+    char commodity[16] = "ORE"; int64_t stock = 0, base_price = 0;
+    while (db_res_step(res, &err)) {
+        const char *code = db_res_col_text(res, 0, &err);
+        int64_t price = db_res_col_i64(res, 1, &err);
+        int64_t qty = db_res_col_i64(res, 2, &err);
+        if (qty > 0) { ferengi_copy_text(commodity, sizeof commodity, code); stock = qty; base_price = price; break; }
+        if (base_price == 0) base_price = price;
+    }
+    db_res_finalize(res);
+    if (base_price <= 0) return -1;
+    const char *side = stock > 0 ? "trader_sells" : "trader_buys";
+    int quantity = stock > 0 ? (stock < 10 ? (int)stock : 10) : 5;
+    int64_t price = stock > 0 ? (base_price * 11 + 9) / 10 : (base_price * 9) / 10;
+    if (strcmp(side, "trader_buys") == 0)
+      {
+        char treasury_sql[512];
+        sql_build(db,
+          "SELECT COALESCE((SELECT balance FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1} AND is_active = TRUE LIMIT 1), 0)",
+          treasury_sql, sizeof treasury_sql);
+        res = NULL;
+        if (!db_query(db, treasury_sql, (db_bind_t[]){db_bind_i64(corporation_id)},
+                      1, &res, &err) || !db_res_step(res, &err))
+          {
+            if (res) db_res_finalize(res);
+            return err.code ? err.code : -1;
+          }
+        int64_t treasury = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        if (err.code) return err.code;
+        if (price > 0 && quantity > INT64_MAX / price) return -1;
+        if (treasury < price * quantity) return 1;
+      }
+    int offer_lifetime = 21600;
+    if (repo_engine_get_config_int(db, "ferengi.offer_lifetime_seconds",
+                                   &offer_lifetime) != 0
+        || offer_lifetime < 60 || offer_lifetime > 604800)
+      offer_lifetime = 21600;
+    char idem[96];
+    snprintf(idem, sizeof idem, "visit:%d:%d:%d", trader_id, visit_number, player_id);
+    const char *query =
+      "INSERT INTO ferengi_trader_deals (ferengi_trader_id, player_id, commodity_code, side, quantity, unit_price, idempotency_key, expires_at) "
+      "VALUES ({1},{2},{3},{4},{5},{6},{7},CAST({8} AS timestamptz) + ({9} * INTERVAL '1 second')) ON CONFLICT (ferengi_trader_id,idempotency_key) DO NOTHING RETURNING ferengi_trader_deal_id";
+    char sql[1024]; sql_build(db, query, sql, sizeof sql);
+    if (!db_exec_returning(db, sql,
+       (db_bind_t[]){db_bind_i64(trader_id), db_bind_i64(player_id), db_bind_text(commodity), db_bind_text(side),
+                     db_bind_i64(quantity), db_bind_i64(price), db_bind_text(idem),
+                     db_bind_timestamp_text(now_s), db_bind_i64(offer_lifetime)},
+       9, &res, &err)) return err.code ? err.code : -1;
+    int inserted = db_res_step(res, &err);
+    if (inserted && deal_id_out) *deal_id_out = db_res_col_i64(res, 0, &err);
+    db_res_finalize(res);
+    return err.code ? err.code : (inserted ? 0 : 1);
+}
+
+int
+repo_universe_record_ferengi_interaction(db_t *db, const ferengi_deal_t *deal,
+                                          const char *type, int delta,
+                                          const char *key)
+{
+    if (!db || !deal || !type || !key) return -1;
+    const char *query =
+      "WITH inserted AS (INSERT INTO ferengi_trader_interactions (ferengi_trader_id, player_id, deal_id, interaction_type, reputation_delta, idempotency_key) "
+      "VALUES ({1},{2},NULLIF({3},0),{4},{5},{6}) ON CONFLICT (idempotency_key) DO NOTHING "
+      "RETURNING ferengi_trader_id, player_id, reputation_delta), "
+      "rel AS (INSERT INTO ferengi_player_relationships (ferengi_trader_id, player_id, reputation, encounters, last_interaction_at) "
+      "SELECT ferengi_trader_id, player_id, reputation_delta, 1, CURRENT_TIMESTAMP FROM inserted "
+      "ON CONFLICT (ferengi_trader_id,player_id) DO UPDATE SET reputation = GREATEST(-10000,LEAST(10000,ferengi_player_relationships.reputation + EXCLUDED.reputation)), encounters = ferengi_player_relationships.encounters + 1, last_interaction_at = CURRENT_TIMESTAMP RETURNING ferengi_trader_id), "
+      "global_rep AS (UPDATE ferengi_traders SET reputation = GREATEST(-10000,LEAST(10000,reputation + {5})), last_interaction_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE ferengi_trader_id IN (SELECT ferengi_trader_id FROM inserted) RETURNING ferengi_trader_id) SELECT COUNT(*) FROM rel";
+    char sql[2048]; sql_build(db, query, sql, sizeof sql);
+    db_res_t *res = NULL; db_error_t err;
+    if (!db_query(db, sql,
+      (db_bind_t[]){db_bind_i64(deal->trader_id), db_bind_i64(deal->player_id), db_bind_i64(deal->deal_id),
+                    db_bind_text(type), db_bind_i64(delta), db_bind_text(key)}, 6, &res, &err)) return err.code ? err.code : -1;
+    int changed = res && db_res_step(res, &err)
+                  && db_res_col_i64(res, 0, &err) > 0;
+    if (res) db_res_finalize(res);
+    return err.code ? err.code : (changed ? 0 : 1);
+}
+
+int
+repo_universe_transition_ferengi_deal(db_t *db, int64_t deal_id,
+                                       const char *status, int64_t now_s,
+                                       int *changed_out)
+{
+    if (!db || deal_id <= 0 || !status || !changed_out) return -1;
+    const char *query = NULL;
+    if (strcmp(status, "settled") == 0) query = "UPDATE ferengi_trader_deals SET status={1},settled_at=CAST({2} AS timestamptz) WHERE ferengi_trader_deal_id={3} AND status='open' AND expires_at>CAST({2} AS timestamptz)";
+    else if (strcmp(status, "declined") == 0) query = "UPDATE ferengi_trader_deals SET status={1} WHERE ferengi_trader_deal_id={3} AND status='open' AND expires_at>CAST({2} AS timestamptz)";
+    else if (strcmp(status, "expired") == 0) query = "UPDATE ferengi_trader_deals SET status={1} WHERE ferengi_trader_deal_id={3} AND status='open' AND expires_at<=CAST({2} AS timestamptz)";
+    else return -1;
+    char sql[768]; sql_build(db, query, sql, sizeof sql); int64_t rows = 0; db_error_t err;
+    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){db_bind_text(status),db_bind_timestamp_text(now_s),db_bind_i64(deal_id)}, 3, &rows, &err)) return err.code ? err.code : -1;
+    *changed_out = rows > 0; return 0;
+}
+
+int
+repo_universe_expire_ferengi_deals(db_t *db, int64_t now_s)
+{
+    char sql[2048]; sql_build(db,
+      "WITH expired AS (UPDATE ferengi_trader_deals SET status='expired' WHERE status='open' AND expires_at<=CAST({1} AS timestamptz) RETURNING ferengi_trader_deal_id,ferengi_trader_id,player_id), "
+      "ins AS (INSERT INTO ferengi_trader_interactions (ferengi_trader_id,player_id,deal_id,interaction_type,reputation_delta,idempotency_key) "
+      "SELECT ferengi_trader_id,player_id,ferengi_trader_deal_id,'expired',0,'deal:'||ferengi_trader_deal_id||':expired' FROM expired ON CONFLICT (idempotency_key) DO NOTHING "
+      "RETURNING ferengi_trader_id,player_id,reputation_delta), "
+      "rel AS (INSERT INTO ferengi_player_relationships (ferengi_trader_id,player_id,reputation,encounters,last_interaction_at) "
+      "SELECT ferengi_trader_id,player_id,SUM(reputation_delta),COUNT(*),CURRENT_TIMESTAMP FROM ins GROUP BY ferengi_trader_id,player_id ON CONFLICT (ferengi_trader_id,player_id) "
+      "DO UPDATE SET reputation=ferengi_player_relationships.reputation+EXCLUDED.reputation, encounters=ferengi_player_relationships.encounters+EXCLUDED.encounters,last_interaction_at=CURRENT_TIMESTAMP RETURNING ferengi_trader_id) "
+      "UPDATE ferengi_traders SET last_interaction_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE ferengi_trader_id IN (SELECT ferengi_trader_id FROM rel)",
+      sql, sizeof sql);
+    db_error_t err;
+    return db_exec(db, sql, (db_bind_t[]){db_bind_timestamp_text(now_s)}, 1, &err) ? 0 : (err.code ? err.code : -1);
+}
+
+int
+repo_universe_advance_ferengi_trader(db_t *db, int trader_id, int ship_id,
+                                      int sector_id)
+{
+    char sql[512]; sql_build(db,
+      "WITH moved AS (UPDATE ships SET sector_id={1},ported=0 WHERE ship_id={2} RETURNING ship_id) UPDATE ferengi_traders SET visit_number=visit_number+1,updated_at=CURRENT_TIMESTAMP WHERE ferengi_trader_id={3} AND EXISTS (SELECT 1 FROM moved)",
+      sql, sizeof sql);
+    db_error_t err;
+    return db_exec(db, sql, (db_bind_t[]){db_bind_i64(sector_id),db_bind_i64(ship_id),db_bind_i64(trader_id)}, 3, &err) ? 0 : (err.code ? err.code : -1);
 }
 
 int repo_universe_get_ferengi_homeworld_sector(db_t *db, int *sector_out) {

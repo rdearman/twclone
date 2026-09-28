@@ -26,6 +26,8 @@
 #include "s2s_transport.h"
 #include "db/repo/repo_database.h"
 #include "db/repo/repo_planets.h"
+#include "db/repo/repo_market_dynamic.h"
+#include "db/repo/repo_cron.h"
 #include "db/sql_driver.h"
 
 
@@ -46,6 +48,7 @@ get_utc_epoch_day (int64_t ts)
 #include "server_log.h"
 #include "server_ports.h"
 #include "server_cron.h"
+#include "server_stardock.h"
 #include "common.h"
 #include "server_config.h"
 #include "server_clusters.h"
@@ -67,6 +70,8 @@ static const int64_t CRON_LOCK_STALE_MS = 120000;	/* reclaim after 2 min */
 
 
 int h_daily_bank_interest_tick (db_t * db, int64_t now_s);
+static int h_market_shock_tick (db_t *db, int64_t now_s);
+static int h_daily_planet_tax_tick (db_t *db, int64_t now_s);
 static int engine_notice_ttl_sweep (db_t * db, int64_t now_ms);
 static int sweeper_engine_deadletter_retry (db_t * db, int64_t now_ms);
 static int h_planet_id_sequence_reconcile (db_t * db, int64_t now_s);
@@ -114,6 +119,9 @@ static const CronHandler CRON_REGISTRY[] = {
   {"cluster_black_market", cluster_black_market_step},
   {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
   {"port_economy", h_port_economy_tick},
+  {"port_hardware_restock", h_port_hardware_restock_tick},
+  {"market_shock_tick", h_market_shock_tick},
+  {"daily_planet_tax", h_daily_planet_tax_tick},
   {"shield_regen", h_shield_regen_tick},
   {"system_notice_ttl", engine_notice_ttl_sweep},
   {"deadletter_retry", sweeper_engine_deadletter_retry},
@@ -122,6 +130,18 @@ static const CronHandler CRON_REGISTRY[] = {
   {"market_state_decay", h_market_state_decay},
   {NULL, NULL}			/* required terminator */
 };
+
+static int
+h_market_shock_tick (db_t *db, int64_t now_s)
+{
+  return repo_market_shock_tick (db, now_s);
+}
+
+static int
+h_daily_planet_tax_tick (db_t *db, int64_t now_s)
+{
+  return db_cron_planet_tax_tick (db, now_s);
+}
 
 static int
 h_planet_id_sequence_reconcile (db_t *db, int64_t now_s)

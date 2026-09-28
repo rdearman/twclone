@@ -35,6 +35,7 @@ int db_cron_citadel_treasury_tick (db_t *db, int rate_bps);
 int db_cron_planet_update_production_stock (db_t *db, int64_t now_s);
 int db_cron_planet_get_market_data_json (db_t *db, json_t **out_array);
 int db_cron_broadcast_cleanup (db_t *db, int64_t now_s);
+int db_cron_expire_trade_offers (db_t *db, int64_t now_s);
 int db_cron_traps_process (db_t *db, int64_t now_s);
 int db_cron_port_get_economy_data_json (db_t *db, json_t **out_array);
 int db_cron_get_all_commodities_json (db_t *db, json_t **out_array);
@@ -61,5 +62,6 @@ int db_cron_get_stocks_json (db_t *db, json_t **out_array);
 int db_cron_get_corp_planet_assets (db_t *db, int corp_id, long long *net_value);
 int db_cron_update_stock_price (db_t *db, int stock_id, long long new_price);
 int db_cron_shield_regen (db_t *db, int percent);
+int db_cron_planet_tax_tick (db_t *db, int64_t now_s);
 
 #endif

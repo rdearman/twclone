@@ -79,6 +79,7 @@ int db_combat_check_limpet_attached(db_t *db, int ship_id, int owner_id, bool *a
 int db_combat_decrement_or_delete_asset(db_t *db, int asset_id, int quantity);
 int db_combat_attach_limpet(db_t *db, int ship_id, int owner_id, int64_t created_ts);
 int db_combat_get_planet_quasar_info(db_t *db, int sector_id, json_t **out_array);
+int db_combat_get_sector_hazards(db_t *db, int sector_id, json_t **out_array);
 int db_combat_get_planet_atmosphere_quasar(db_t *db, int planet_id, int *owner_id, char *owner_type_buf, int *base_str, int *reaction);
 
 /* Mines Recall */

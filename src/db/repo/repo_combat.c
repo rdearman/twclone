@@ -451,6 +451,35 @@ int db_combat_get_planet_quasar_info(db_t *db, int sector_id, json_t **out_array
     return (err.code == 0) ? 0 : -1;
 }
 
+int db_combat_get_sector_hazards(db_t *db, int sector_id, json_t **out_array) {
+    if (!db || sector_id <= 0 || !out_array) return -1;
+    *out_array = NULL;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    char sql[512];
+    sql_build(db, "SELECT hazard_type, severity FROM sector_hazards WHERE sector_id = {1} ORDER BY hazard_type", sql, sizeof(sql));
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) return -1;
+    json_t *items = json_array();
+    if (!items) { db_res_finalize(res); return -1; }
+    while (db_res_step(res, &err)) {
+        const char *type = db_res_col_text(res, 0, &err);
+        int severity = db_res_col_i32(res, 1, &err);
+        json_t *item = json_object();
+        if (!item || !type || json_object_set_new(item, "type", json_string(type)) != 0 ||
+            json_object_set_new(item, "severity", json_integer(severity)) != 0 ||
+            json_array_append_new(items, item) != 0) {
+            if (item) json_decref(item);
+            json_decref(items);
+            db_res_finalize(res);
+            return -1;
+        }
+    }
+    db_res_finalize(res);
+    if (err.code != 0) { json_decref(items); return -1; }
+    *out_array = items;
+    return 0;
+}
+
 int db_combat_get_planet_atmosphere_quasar(db_t *db, int planet_id, int *owner_id, char *owner_type_buf, int *base_str, int *reaction) {
     if (!db || !owner_id || !owner_type_buf || !base_str || !reaction) return -1;
     db_res_t *res = NULL;
