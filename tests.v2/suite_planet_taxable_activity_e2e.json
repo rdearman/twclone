@@ -1,0 +1,110 @@
+{
+  "name": "Planet market activity is taxable",
+  "version": "2.0.0",
+  "protocol_category": "21_Planetary_Operations",
+  "description": "Verifies that a successful planet.market.sell command durably records one taxable market activity row.",
+  "tests": [
+    { "name": "Setup: Admin", "setup": "macro_bootstrap_admin" },
+    { "name": "Setup: Tax activity seller", "setup": "macro_auth_user", "username": "taxable_activity_seller", "password": "password123" },
+    {
+      "name": "Remove prior isolated planet goods",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_goods WHERE planet_id IN (SELECT planet_id FROM planets WHERE name = 'V2 taxable activity test');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior isolated planet stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM entity_stock WHERE entity_type = 'planet' AND entity_id IN (SELECT planet_id FROM planets WHERE name = 'V2 taxable activity test');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior isolated planet citadels",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM citadels WHERE planet_id IN (SELECT planet_id FROM planets WHERE name = 'V2 taxable activity test');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior isolated planet tax policies and assessments",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_tax_policies WHERE planet_id IN (SELECT planet_id FROM planets WHERE name = 'V2 taxable activity test');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior isolated planet assessments",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_tax_assessments WHERE planet_id IN (SELECT planet_id FROM planets WHERE name = 'V2 taxable activity test');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior isolated taxable activity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_economic_activity WHERE planet_id IN (SELECT planet_id FROM planets WHERE name = 'V2 taxable activity test');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior isolated test planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planets WHERE name = 'V2 taxable activity test';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Grant genesis device for planet creation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET genesis = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'taxable_activity_seller');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create isolated market activity planet",
+      "command": "planet.create",
+      "user": "taxable_activity_seller",
+      "data": { "sector_id": 11, "name": "V2 taxable activity test", "owner_entity_type": "player" },
+      "expect": { "status": "ok" },
+      "save": { "test_planet_id": "data.planet_id" }
+    },
+    {
+      "name": "Seed planet ORE stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', @{test_planet_id}, 'ORE', 100) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed citadel for market access",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id) VALUES (@{test_planet_id}, 1, 500, @{taxable_activity_seller_player_id}) ON CONFLICT (planet_id) DO UPDATE SET level = 1, owner_id = EXCLUDED.owner_id;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Update planet citadel level",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE planets SET citadel_level = 1 WHERE planet_id = @{test_planet_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Sell planet ORE through the client API",
+      "command": "planet.market.sell",
+      "user": "taxable_activity_seller",
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 10 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify one durable taxable activity row was recorded",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT COUNT(*) FROM planet_economic_activity WHERE planet_id = @{test_planet_id} AND activity_type = 'market_trade' AND commodity_code = 'ORE' AND quantity = 10 AND idempotency_key LIKE 'planet-trade:sell:%';" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    }
+  ]
+}

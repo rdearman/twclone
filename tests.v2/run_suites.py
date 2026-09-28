@@ -20,6 +20,7 @@ SUITES = [
     "tests.v2/suite_movement_parity.py",
     "tests.v2/suite_subscriptions_e2e.py",
     "tests.v2/suite_trade_offers_e2e.json",
+    "tests.v2/suite_planet_taxable_activity_e2e.json",
     # "tests.v2/suite_concurrency.py",  # Uncomment when ready to run
     # "tests.v2/suite_auth_and_settings.json",
     # "tests.v2/suite_economy_and_bank.json",

@@ -13,6 +13,12 @@
       "save": { "credits_before": "data.rows.0.0" }
     },
     {
+      "name": "Create deterministic player-owned tax test planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, created_by) VALUES (1, 1, 1, 'V2 Player Tax Test Planet', @{admin_player_id}, 'player', 'M', @{admin_player_id}) ON CONFLICT (planet_id) DO UPDATE SET sector_id = EXCLUDED.sector_id, name = EXCLUDED.name, owner_id = EXCLUDED.owner_id, owner_type = EXCLUDED.owner_type, created_by = EXCLUDED.created_by;" }
+    },
+    {
       "name": "Configure deterministic taxable activity on an owned test planet",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -94,7 +100,7 @@
       "name": "Choose a second planet and corporation",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "SELECT (SELECT planet_id FROM planets WHERE planet_id <> 1 ORDER BY planet_id LIMIT 1), (SELECT corporation_id FROM corporations ORDER BY corporation_id LIMIT 1);" },
+      "data": { "sql": "SELECT (SELECT planet_id FROM planets WHERE planet_id NOT IN (1, 2) ORDER BY planet_id LIMIT 1), (SELECT corporation_id FROM corporations ORDER BY corporation_id LIMIT 1);" },
       "save": { "corp_tax_planet_id": "data.rows.0.0", "tax_corporation_id": "data.rows.0.1" }
     },
     {
@@ -132,7 +138,7 @@
       "name": "Record taxable corporate colony activity",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "INSERT INTO planet_economic_activity (planet_id, activity_type, commodity_code, quantity, unit_value, taxable_value, idempotency_key) VALUES (@{corp_tax_planet_id}, 'market_trade', 'ORE', 10, 1000, 10000, 'v2-taxation-e2e-corp-planet');" }
+      "data": { "sql": "INSERT INTO planet_economic_activity (planet_id, activity_type, commodity_code, quantity, unit_value, taxable_value, idempotency_key) VALUES (@{corp_tax_planet_id}, 'market_trade', 'ORE', 10, 1000, 10000, 'v2-taxation-e2e-corp-planet:' || @{corp_tax_planet_id}::text);" }
     },
     {
       "name": "Run daily tax cron for corporate colony",

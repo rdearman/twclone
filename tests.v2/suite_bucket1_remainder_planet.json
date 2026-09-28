@@ -77,17 +77,6 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Regression: planet market sell records taxable activity once",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(*) FROM planet_economic_activity WHERE planet_id = @{test_planet_id} AND activity_type = 'market_trade' AND commodity_code = 'ORE' AND quantity = 10 AND idempotency_key LIKE 'planet-trade:sell:%';" },
-      "user": "admin",
-      "expect": { "status": "ok" },
-      "save": { "taxable_market_sell_activity_count": "data.rows.0.0" },
-      "asserts": [
-        { "path": "taxable_market_sell_activity_count", "op": "equals", "value": 1 }
-      ]
-    },
-    {
       "name": "planet.market.sell - Negative (No Auth)",
       "command": "planet.market.sell",
       "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 10 },

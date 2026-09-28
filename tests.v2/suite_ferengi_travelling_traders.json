@@ -7,6 +7,13 @@
     { "name": "Setup trader test player", "setup": "macro_auth_user", "username": "ferengi_trader_test", "password": "password123" },
     { "name": "Ensure named Ferengi trader ships exist", "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {}, "expect": { "status": "ok" } },
     {
+      "name": "Install isolated Ferengi homeworld fixture required by NPC initialization",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, created_by) SELECT 2, 1, 11, 'Ferengi Test Homeworld', c.corporation_id, 'corp', 'M', p.player_id FROM corporations c CROSS JOIN players p WHERE c.tag = 'FENG' AND p.name = 'System' ON CONFLICT (planet_id) DO UPDATE SET sector_id = EXCLUDED.sector_id, name = EXCLUDED.name, owner_id = EXCLUDED.owner_id, owner_type = EXCLUDED.owner_type, created_by = EXCLUDED.created_by;" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Provision travelling traders now the homeworld fixture exists", "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {}, "expect": { "status": "ok" } },
+    {
       "name": "Move test player into Gaila's sector",
       "command": "sys.raw_sql_exec", "user": "admin",
       "data": { "sql": "UPDATE players SET sector_id = (SELECT s.sector_id FROM ferengi_traders ft JOIN ships s USING (ship_id) WHERE ft.trader_code = 'gaila'), credits = 100000 WHERE player_id = @{ferengi_trader_test_player_id};" },

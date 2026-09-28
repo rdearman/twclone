@@ -175,7 +175,7 @@
     {
       "name": "Wait for port hardware restock cron",
       "command": "delay",
-      "data": { "seconds": 2 }
+      "data": { "seconds": 5 }
     },
     {
       "name": "Verify scheduled restock adds configured quantity",

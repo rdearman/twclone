@@ -63,6 +63,8 @@ BEGIN
 
   SELECT planet_id INTO v_planet FROM planets LIMIT 1;
   IF v_planet IS NOT NULL THEN
+    DELETE FROM planet_tax_assessments
+     WHERE planet_id = v_planet AND tax_date = CURRENT_DATE;
     INSERT INTO planet_tax_assessments
       (planet_id, tax_date, owner_type, owner_id, taxable_value, rate_bps,
        tax_amount)
