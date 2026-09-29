@@ -3,8 +3,12 @@
 ## 1. Profile & Info
 
 ### `player.my_info`
-Get current player, ship, and location data.
-**Response**: `{ "player": {...}, "ships": [...], "location": {...} }`
+Get the authenticated player's current summary. The existing response type is
+`player.info`; `data.player` contains `id`, `username`, `credits` (a decimal
+string), `turns_remaining`, `sector`, `ship_id`, `corp_id`, `alignment`, and
+`experience`. This command does not currently return ship or location objects.
+The player's `id` is authoritative and must be taken from the authenticated
+session rather than caller-supplied request data.
 
 ### `player.list_online`
 List online players.

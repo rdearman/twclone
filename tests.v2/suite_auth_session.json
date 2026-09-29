@@ -44,11 +44,30 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Auth Refresh",
+      "name": "Auth Refresh rotates the bearer in auth.session",
       "command": "auth.refresh",
-      "data": { "session_token": "@session" },
       "user": "session_user",
+      "save": { "refreshed_session": "data.session_token" },
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Auth Refresh invalidates the prior token",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT COUNT(*) FROM sessions WHERE token = '@session';" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Refreshed token authenticates player information",
+      "command": "player.my_info",
+      "user": "session_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.player.id", "op": "==", "value": "@session_user_player_id" },
+        { "path": "data.player.username", "op": "==", "value": "session_user" }
+      ]
     },
     {
       "name": "Auth Logout",
@@ -60,6 +79,19 @@
       "name": "Verify Logout (Ping Fail)",
       "command": "player.my_info",
       "user": "session_user",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Expire the admin session",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE sessions SET expires = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE token = '@admin_session';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Expired session cannot call authenticated APIs",
+      "command": "player.my_info",
+      "user": "admin",
       "expect": { "status": "error", "error_code": 401 }
     }
   ]

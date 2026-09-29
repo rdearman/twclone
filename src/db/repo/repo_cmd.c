@@ -5146,10 +5146,73 @@ db_session_revoke (const char *token)
 int
 db_session_refresh (const char *token, int ttl, char new_tok[65], int *out_exp)
 {
-  (void) token;
-  (void) ttl;
-  (void) new_tok;
-  (void) out_exp;
+  if (!token || !*token || ttl <= 0 || !new_tok || !out_exp)
+    return -1;
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return -1;
+
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return err.code ? err.code : -1;
+
+  char select_sql[256];
+  if (sql_build (db,
+                 "SELECT player_id FROM sessions WHERE token = {1} "
+                 "AND expires > CURRENT_TIMESTAMP FOR UPDATE;",
+                 select_sql, sizeof select_sql) != 0)
+    {
+      db_tx_rollback (db, &err);
+      return -1;
+    }
+
+  db_res_t *res = NULL;
+  if (!db_query (db, select_sql, (db_bind_t[]){db_bind_text (token)}, 1,
+                 &res, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : -1;
+    }
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : 1;
+    }
+
+  int player_id = db_res_col_i32 (res, 0, &err);
+  db_res_finalize (res);
+  if (err.code != 0 || player_id <= 0)
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : -1;
+    }
+
+  long long expires_at = (long long) time (NULL) + ttl;
+  char update_sql[256];
+  if (sql_build (db,
+                 "UPDATE sessions SET token = {1}, expires = {2}, "
+                 "created_at = CURRENT_TIMESTAMP WHERE token = {3};",
+                 update_sql, sizeof update_sql) != 0
+      || !db_exec (db, update_sql,
+                   (db_bind_t[]){db_bind_text (new_tok),
+                                 db_bind_timestamp_text (expires_at),
+                                 db_bind_text (token)},
+                   3, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : -1;
+    }
+
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : -1;
+    }
+
+  *out_exp = player_id;
   return 0;
 }
 

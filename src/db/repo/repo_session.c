@@ -12,8 +12,9 @@ int repo_session_lookup(db_t *db, const char *token, int32_t *out_player_id, int
     }
 
     char sql_template[512];
-    snprintf(sql_template, sizeof(sql_template), 
-             "SELECT player_id, %s FROM sessions WHERE token = {1} LIMIT 1;", 
+    snprintf(sql_template, sizeof(sql_template),
+             "SELECT player_id, %s FROM sessions WHERE token = {1} "
+             "AND expires > CURRENT_TIMESTAMP LIMIT 1;",
              epoch_expr);
 
     char sql_converted[512];

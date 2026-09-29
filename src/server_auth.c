@@ -525,105 +525,70 @@ cmd_auth_refresh (client_ctx_t *ctx, json_t *root)
     }
 
   int pid = 0;
+  int64_t expires_at = 0;
+  json_t *jauth = json_object_get (root, "auth");
   json_t *jdata = json_object_get (root, "data");
+  json_t *jmeta = json_object_get (root, "meta");
   const char *tok = NULL;
 
-
+  if (json_is_object (jauth))
+    {
+      json_t *jt = json_object_get (jauth, "session");
+      if (json_is_string (jt))
+        tok = json_string_value (jt);
+    }
   if (json_is_object (jdata))
     {
       json_t *jt = json_object_get (jdata, "session_token");
 
-
-      if (json_is_string (jt))
+      if (!tok && json_is_string (jt))
 	{
 	  tok = json_string_value (jt);
 	}
     }
 
-  if (!tok)
+  if (!tok && json_is_object (jmeta))
     {
-      json_t *jmeta = json_object_get (root, "meta");
-
-
-      if (json_is_object (jmeta))
-	{
-	  json_t *jt = json_object_get (jmeta, "session_token");
-
-
-	  if (json_is_string (jt))
-	    {
-	      tok = json_string_value (jt);
-	    }
-	}
+      json_t *jt = json_object_get (jmeta, "session_token");
+      if (json_is_string (jt))
+	tok = json_string_value (jt);
     }
 
-  if (!tok && ctx->player_id > 0)
+  if (!tok || ctx->player_id <= 0)
     {
-      bool is_sysop = player_is_sysop (db, ctx->player_id);
-
-
-      subs_upsert_locked_defaults (db, ctx->player_id, is_sysop);
-
-      char newtok[65];
-
-
-      h_generate_hex_uuid (newtok, sizeof (newtok));
-      if (db_session_create (ctx->player_id,
-			     newtok, (long long) time (NULL) + 86400) != 0)
-	{
-	  send_response_error (ctx, root, ERR_PLANET_NOT_FOUND,
-			       "Database error");
-	}
-      else
-	{
-	  json_t *data = json_object ();
-
-
-	  json_object_set_new (data, "player_id",
-			       json_integer (ctx->player_id));
-	  json_object_set_new (data, "session_token", json_string (newtok));
-	  send_response_ok_take (ctx, root, "auth.session", &data);
-	}
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "A valid session is required");
+      return 0;
     }
-  else if (tok)
+
+  int lookup_rc = repo_session_lookup (db, tok, &pid, &expires_at);
+  if (lookup_rc != 0 || pid != ctx->player_id)
     {
-      char newtok[65];
-
-
-      h_generate_hex_uuid (newtok, sizeof (newtok));
-      if (db_session_refresh (tok, 86400, newtok, &pid) == 0)
-	{
-	  bool is_sysop = player_is_sysop (db, pid);
-
-
-	  subs_upsert_locked_defaults (db, pid, is_sysop);
-
-	  ctx->player_id = pid;
-	  if (ctx->sector_id <= 0)
-	    {
-	      ctx->sector_id = 1;
-	    }
-
-	  json_t *data = json_object ();
-
-
-	  json_object_set_new (data, "player_id", json_integer (pid));
-	  json_object_set_new (data, "session_token", json_string (newtok));
-	  send_response_ok_take (ctx, root, "auth.session", &data);
-	}
-      else
-	{
-	  send_response_error (ctx,
-			       root,
-			       ERR_SECTOR_NOT_FOUND,
-			       "Invalid or expired session");
-	}
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Invalid or expired session");
+      return 0;
     }
-  else
+
+  char newtok[65];
+  h_generate_hex_uuid (newtok, sizeof (newtok));
+  int refresh_rc = db_session_refresh (tok, 86400, newtok, &pid);
+  if (refresh_rc != 0)
     {
-      send_response_error (ctx,
-			   root, ERR_MISSING_FIELD, "Missing required field");
+      send_response_error (ctx, root,
+                           refresh_rc == 1 ? ERR_NOT_AUTHENTICATED : ERR_DB,
+                           refresh_rc == 1 ? "Invalid or expired session" :
+                           "Database error refreshing session");
+      return 0;
     }
+
+  bool is_sysop = player_is_sysop (db, pid);
+  subs_upsert_locked_defaults (db, pid, is_sysop);
+  ctx->player_id = pid;
+
+  json_t *data = json_object ();
+  json_object_set_new (data, "player_id", json_integer (pid));
+  json_object_set_new (data, "session_token", json_string (newtok));
+  send_response_ok_take (ctx, root, "auth.session", &data);
   return 0;
 }
 

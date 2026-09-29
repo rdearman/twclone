@@ -1324,6 +1324,11 @@ schema_auth_logout (void)
 json_t *
 schema_auth_refresh (void)
 {
+  json_t *properties = json_object ();
+  json_t *session_token = json_object ();
+  json_object_set_new (session_token, "type", json_string ("string"));
+  json_object_set_new (properties, "session_token", session_token);
+
   json_t *data_schema = json_object ();
   json_object_set_new (data_schema, "$id",
 		       json_string ("ge://schema/auth.refresh.json"));
@@ -1331,7 +1336,7 @@ schema_auth_refresh (void)
 		       json_string
 		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (data_schema, "type", json_string ("object"));
-  json_object_set_new (data_schema, "properties", json_object ());
+  json_object_set_new (data_schema, "properties", properties);
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
   return data_schema;
 }

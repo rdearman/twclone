@@ -2,7 +2,8 @@
 
 ## 1. Authentication Methods
 
-*   **Session Token**: The primary method. JWT (JSON Web Token) or opaque string provided upon login.
+*   **Session Token**: Opaque bearer string issued by the server at login and
+    stored in the server session table.
 *   **HMAC (S2S)**: Used for Server-to-Engine communication.
 
 ## 2. Auth Commands
@@ -72,22 +73,38 @@ Invalidates the session.
 ```
 
 ### 2.4 `auth.refresh`
-Refreshes a session token.
+Rotates the authenticated session token. Session tokens are opaque bearer
+secrets stored by the server and are checked against the session table on each
+command. A newly issued login or refresh token expires after 24 hours.
 
 **Request**
 ```json
 { "command": "auth.refresh", "auth": { "session": "..." } }
 ```
+The token in `auth.session` is canonical. `data.session_token` and
+`meta.session_token` remain accepted for legacy callers when they identify the
+same player as `auth.session`.
+
 **Response**
 ```json
 { "status": "ok", "type": "auth.session", "data": { "session_token": "new_token..." } }
 ```
+Refresh atomically replaces the submitted token with the returned token. The
+old token stops authenticating commands as soon as the refresh succeeds. A
+missing, revoked, or expired token is rejected; refresh does not create a
+second independent session.
+
+`auth.logout` revokes the authenticated session. The client must discard that
+token; subsequent commands using it are unauthenticated.
 
 ## 3. Security Rules
 
 *   **Sanitization**: The server sanitizes all user-provided strings (stripping ANSI codes, scripts, etc.) before storage and before broadcasting.
 *   **Secrets**: Passwords must never be echoed in responses or logs.
-*   **Tokens**: Session tokens should be treated as secrets by the client.
+*   **Tokens**: Session tokens are opaque bearer secrets. Send them in
+    `auth.session`; never place them in URLs, logs, or user-visible data.
+    Clients must replace their local token with the value returned by
+    `auth.refresh` and discard the old value.
 
 ## 4. S2S Authentication (HMAC)
 
