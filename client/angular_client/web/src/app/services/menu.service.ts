@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
-import { TransportService } from './transport.service';
+import { GameCommandTransport } from './transport.service';
 import { StateService } from './state.service';
 import { ResolverService } from './resolver.service';
 
@@ -39,7 +39,7 @@ export class MenuService {
 
   constructor(
     private http: HttpClient,
-    private transport: TransportService,
+    private transport: GameCommandTransport,
     private state: StateService,
     private resolver: ResolverService
   ) {
@@ -78,7 +78,7 @@ export class MenuService {
       }
     } else if (action.rpc) {
       const resolvedData = await this.resolver.resolve(action.rpc.data);
-      this.transport.sendRpc(action.rpc.command, resolvedData).subscribe(res => {
+      this.transport.sendCommand(action.rpc.command, resolvedData).subscribe(res => {
         this.state.lastRpcResponse$.next(res);
         this.state.updateFromRpc(res);
       });

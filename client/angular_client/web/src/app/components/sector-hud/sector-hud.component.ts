@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { StateService } from '../../services/state.service';
-import { TransportService } from '../../services/transport.service';
+import { GameCommandTransport } from '../../services/transport.service';
 
 @Component({
   selector: 'app-sector-hud',
@@ -13,7 +13,7 @@ import { TransportService } from '../../services/transport.service';
 export class SectorHudComponent {
   constructor(
     public state: StateService,
-    private transport: TransportService
+    private transport: GameCommandTransport
   ) {}
 
   get sector() {
@@ -21,7 +21,7 @@ export class SectorHudComponent {
   }
 
   move(sectorId: number) {
-    this.transport.sendRpc('move.to', { sector_id: sectorId }).subscribe(res => {
+    this.transport.sendCommand('move.warp', { to_sector_id: sectorId }).subscribe(res => {
         this.state.updateFromRpc(res);
     });
   }

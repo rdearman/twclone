@@ -1,79 +1,136 @@
-<div class="container">
-  <header>
-    <h1>{{ title }}</h1>
-    <div class="connection-bar">
-      <input [(ngModel)]="host" placeholder="Host">
-      <input [(ngModel)]="port" type="number" placeholder="Port">
-      <button (click)="connect()" [disabled]="connected">
-        {{ connected ? 'Connected' : 'Connect' }}
-      </button>
-      <span class="status" [class.connected]="connected">●</span>
+<div class="page-shell">
+  <header class="topbar">
+    <div>
+      <h1>{{ title }}</h1>
+      <p>V3 browser access · game server authoritative</p>
     </div>
+    <span class="gateway-state"><span class="status-light"></span> HTTPS GATEWAY</span>
   </header>
 
-  <div class="layout">
-    <aside class="menu-panel panel">
-      <div *ngIf="activeMenu">
-        <h2>{{ activeMenu.title }}</h2>
-        <ul class="menu-options">
-          <li *ngFor="let opt of activeMenu.options" (click)="selectOption(opt)">
-            <span class="key">[{{ opt.key }}]</span>
-            <span class="label">{{ opt.label }}</span>
-          </li>
-        </ul>
+  <main>
+    <section class="panel login-panel" *ngIf="!playerDetails">
+      <h2>Captain login</h2>
+      <p class="muted">Sign in with your existing TWClone account.</p>
+      <div class="gateway-config" *ngIf="isNative">
+        <label for="gateway-origin">HTTPS gateway address</label>
+        <input id="gateway-origin" name="gatewayOrigin" [(ngModel)]="gatewayOrigin" type="url"
+          autocomplete="url" placeholder="https://game.example.com" inputmode="url">
+        <button type="button" class="secondary" (click)="saveGatewayOrigin()">SAVE GATEWAY</button>
+        <p class="muted">Use the production HTTPS address. Plain HTTP is accepted only for private-network development hosts.</p>
       </div>
-      <div *ngIf="!activeMenu">
-        Loading menus...
-      </div>
-    </aside>
+      <form (ngSubmit)="login()">
+        <label for="username">Username</label>
+        <input id="username" name="username" [(ngModel)]="username" autocomplete="username" required maxlength="128">
+        <label for="password">Password</label>
+        <input id="password" name="password" [(ngModel)]="password" type="password" autocomplete="current-password" required maxlength="1024">
+        <button type="submit" [disabled]="busy || !username.trim() || !password">
+          {{ busy ? 'CONNECTING…' : 'LOGIN' }}
+        </button>
+      </form>
+      <p class="error" role="alert" *ngIf="errorMessage">{{ errorMessage }}</p>
+    </section>
 
-    <main>
-      <div class="panel hud-panel">
-        <app-sector-hud></app-sector-hud>
-        <div *ngIf="!state.gameState.sector.id" class="placeholder">
-          No sector data. Move or scan to see info.
+    <section class="panel player-panel" *ngIf="playerDetails">
+      <div class="player-heading">
+        <div>
+          <h2>Command deck</h2>
+          <p class="muted" *ngIf="playerSummary">Player ID {{ playerSummary.id }}</p>
+          <p class="connection" [class.offline]="clientState.session.connection !== 'online'">
+            {{ clientState.session.connection | uppercase }} · {{ clientState.session.authentication | uppercase }}
+          </p>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="secondary" (click)="refreshGameplayState()" [disabled]="clientState.session.connection !== 'online'">REFRESH</button>
+          <button type="button" class="secondary" (click)="logout()" [disabled]="busy">LOG OUT</button>
         </div>
       </div>
+      <p class="error" role="alert" *ngIf="commandError">{{ commandError }}</p>
+      <nav class="game-menu" aria-label="Game actions">
+        <a href="#player">PLAYER</a><a href="#ship">SHIP</a><a href="#sector">SECTOR</a>
+        <a href="#port">PORT & TRADE</a><a href="#combat">COMBAT</a><a href="#notices">NOTICES</a>
+      </nav>
 
-      <div class="panel inspector">
-        <h2>RPC Inspector</h2>
-        <div class="form-group">
-          <label>Command</label>
-          <input [(ngModel)]="rpcCommand">
-        </div>
-        <div class="form-group">
-          <label>Data (JSON)</label>
-          <textarea [(ngModel)]="rpcData" rows="3"></textarea>
-        </div>
-        <button (click)="sendRpc()" [disabled]="!connected">Send RPC</button>
-        
-        <div class="results" *ngIf="rpcResult || rpcError">
-          <h3>Last Response</h3>
-          <pre *ngIf="rpcResult" class="success">{{ rpcResult | json }}</pre>
-          <pre *ngIf="rpcError" class="error">{{ rpcError | json }}</pre>
-        </div>
-      </div>
-
-      <div class="panel events">
-        <h2>Event Feed</h2>
-        <div class="event-list">
-          <div *ngFor="let e of events" class="event-item">
-            <span class="type">{{ e.type }}</span>
-            <pre>{{ e | json }}</pre>
+      <div class="dashboard-grid">
+        <section class="data-card" id="player">
+          <h3>PLAYER INFORMATION</h3>
+          <pre>{{ playerDetails | json }}</pre>
+        </section>
+        <section class="data-card" id="ship">
+          <div class="card-heading"><h3>SHIP STATUS</h3><span>{{ clientState.ship.freshness | uppercase }}</span></div>
+          <pre *ngIf="shipDetails; else shipEmpty">{{ shipDetails | json }}</pre>
+          <ng-template #shipEmpty><p class="muted">No ship snapshot received.</p></ng-template>
+        </section>
+        <section class="data-card wide" id="sector">
+          <div class="card-heading"><h3>SECTOR NAVIGATION</h3><span>{{ clientState.sector.freshness | uppercase }}</span></div>
+          <pre *ngIf="sectorDetails; else sectorEmpty">{{ sectorDetails | json }}</pre>
+          <ng-template #sectorEmpty><p class="muted">No sector snapshot received.</p></ng-template>
+          <div class="action-row">
+            <label for="destination">Destination sector</label>
+            <input id="destination" name="destination" type="number" min="1" step="1" [(ngModel)]="destinationSector">
+            <button type="button" (click)="warp()" [disabled]="clientState.session.connection !== 'online'">WARP</button>
           </div>
-        </div>
+          <p class="muted" *ngIf="adjacentSectors.length">Adjacent sectors:</p>
+          <div class="port-list" *ngIf="adjacentSectors.length">
+            <button *ngFor="let destination of adjacentSectors" type="button" class="port-choice"
+              [disabled]="clientState.session.connection !== 'online'" (click)="warpTo(destination.id)">
+              {{ destination.id }}{{ destination.name ? ' · ' + destination.name : '' }}
+            </button>
+          </div>
+        </section>
+        <section class="data-card wide" id="port">
+          <div class="card-heading"><h3>PORT & TRADE</h3><span>{{ clientState.port.freshness | uppercase }}</span></div>
+          <p class="muted">Choose a port reported in the current sector to inspect it.</p>
+          <div class="port-list" *ngIf="clientState.sector.value?.['ports'] as ports">
+            <button *ngFor="let port of ports" type="button" class="port-choice" (click)="selectPort(port)">
+              {{ port['name'] || 'Port' }} · ID {{ port['port_id'] || port['id'] }}
+            </button>
+            <p class="muted" *ngIf="ports.length === 0">No ports reported in this sector.</p>
+          </div>
+          <pre *ngIf="portDetails">{{ portDetails | json }}</pre>
+          <div class="trade-controls">
+            <label for="commodity">Commodity</label>
+            <select id="commodity" name="commodity" [(ngModel)]="commodity">
+              <option>ORE</option><option>ORG</option><option>EQU</option><option>COL</option>
+              <option>SLV</option><option>DRG</option><option>WPN</option>
+            </select>
+            <label for="quantity">Quantity</label>
+            <input id="quantity" name="quantity" type="number" min="1" step="1" [(ngModel)]="tradeQuantity">
+            <label for="account">Account</label>
+            <select id="account" name="account" [(ngModel)]="account"><option [ngValue]="0">Petty cash</option><option [ngValue]="1">Bank</option></select>
+            <button type="button" (click)="quoteTrade()" [disabled]="!clientState.port.value">QUOTE</button>
+            <button type="button" (click)="trade('trade.buy')" [disabled]="!clientState.port.value">BUY</button>
+            <button type="button" (click)="trade('trade.sell')" [disabled]="!clientState.port.value">SELL</button>
+          </div>
+          <pre *ngIf="commandResult">{{ commandResult | json }}</pre>
+        </section>
+        <section class="data-card wide" id="combat">
+          <div class="card-heading"><h3>COMBAT</h3><span>SERVER VALIDATES EVERY ACTION</span></div>
+          <p class="muted">Ships reported in the current sector are selectable targets. Attacks may be refused by sector rules or game state.</p>
+          <pre *ngIf="combatDetails; else combatEmpty">{{ combatDetails | json }}</pre>
+          <ng-template #combatEmpty><p class="muted">No combat status received.</p></ng-template>
+          <div class="port-list">
+            <button *ngFor="let ship of sectorShips" type="button" class="port-choice" (click)="selectCombatTarget(ship)">
+              {{ ship['name'] || 'Ship' }} · ID {{ ship['ship_id'] || ship['id'] }}
+            </button>
+            <p class="muted" *ngIf="sectorShips.length === 0">No ships reported in this sector.</p>
+          </div>
+          <div class="action-row">
+            <label for="target-ship">Target ship ID</label>
+            <input id="target-ship" name="targetShipId" type="number" min="1" step="1" [(ngModel)]="targetShipId">
+            <button type="button" (click)="attackTarget()" [disabled]="clientState.session.connection !== 'online' || !targetShipId">ATTACK SHIP</button>
+            <button type="button" class="secondary" (click)="runCombatStatus()" [disabled]="clientState.session.connection !== 'online'">REFRESH COMBAT</button>
+          </div>
+        </section>
+        <section class="data-card wide" id="notices">
+          <div class="card-heading"><h3>NOTICES & EVENTS</h3><span>{{ notices.length + clientState.notices.length }}</span></div>
+          <pre *ngIf="notices.length">{{ notices | json }}</pre>
+          <ul class="event-list">
+            <li *ngFor="let notice of clientState.notices">{{ notice.type }} · {{ notice.data | json }}</li>
+          </ul>
+          <p class="muted" *ngIf="!notices.length && !clientState.notices.length">No notices received.</p>
+        </section>
       </div>
-    </main>
-  </div>
-
-  <!-- Modal Prompt -->
-  <div class="modal-overlay" *ngIf="pendingPrompt">
-    <div class="modal panel">
-        <h3>{{ pendingPrompt.label }}</h3>
-        <input [(ngModel)]="promptValue" autofocus (keyup.enter)="submitPrompt()">
-        <div class="modal-actions">
-            <button (click)="submitPrompt()">OK</button>
-        </div>
-    </div>
-  </div>
+      <p class="error" role="alert" *ngIf="errorMessage">{{ errorMessage }}</p>
+    </section>
+  </main>
 </div>

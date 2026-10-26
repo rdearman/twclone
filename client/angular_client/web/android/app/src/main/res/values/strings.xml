@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TWClone</string>
+    <string name="title_activity_main">TWClone</string>
+    <string name="package_name">com.twclone.game</string>
+    <string name="custom_url_scheme">com.twclone.game</string>
+</resources>
