@@ -8,11 +8,18 @@ import time
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-# You might want to move these to your config.json eventually
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-#DEFAULT_MODEL = "phi3:latest"
-DEFAULT_MODEL = "dolphin-max:latest"
+DEFAULT_OLLAMA_URL = "http://192.168.25.20:11434"
+OLLAMA_API_PATH = "/api/generate"
+DEFAULT_MODEL = "qwen3:8b"
 REQUEST_TIMEOUT = 300  # 5 minutes - account for Ollama queueing with concurrent bots
+
+
+def ollama_generate_url(endpoint=None):
+    """Return the Ollama generate URL from the existing AI-player config value."""
+    base = (endpoint or DEFAULT_OLLAMA_URL).rstrip("/")
+    if base.endswith(OLLAMA_API_PATH):
+        return base
+    return base + OLLAMA_API_PATH
 
 def parse_llm_json(response_text):
     """
@@ -45,12 +52,14 @@ def parse_llm_json(response_text):
     except Exception:
         return None
 
-def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None):
+def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None,
+                        endpoint=None, error_report=None):
     """
     Sends a prompt and game state to the Ollama server and gets a response.
     
     :param game_state: The full state dictionary.
-    :param model: The model to use (e.g., "llama3:latest").
+    :param model: The model to use (e.g., "qwen3:8b").
+    :param endpoint: Configured Ollama base URL or generate endpoint.
     :param prompt_key: The key for a pre-defined prompt (not used here, but good practice).
     :param override_prompt: The full prompt string to send.
     :return: The JSON response string from the model, or None on failure.
@@ -58,6 +67,11 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
     
     if not model:
         model = DEFAULT_MODEL
+    api_url = ollama_generate_url(endpoint)
+
+    def record_error(status, reason):
+        if error_report is not None:
+            error_report.update({"status": status, "reason": reason})
     
     # Use the override_prompt if provided, otherwise build one (though we expect one)
     if override_prompt:
@@ -72,9 +86,11 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
             full_prompt = override_prompt.replace("{game_state}", state_str)
         except Exception as e:
             logger.error(f"Failed to serialize game state for LLM: {e}")
+            record_error("invalid_request", f"Game state serialization failed: {type(e).__name__}")
             return None
     else:
         logger.error("get_ollama_response called without a prompt.")
+        record_error("invalid_request", "No prompt was provided to Ollama client")
         return None
 
     # --- Build the request payload for Ollama ---
@@ -93,7 +109,7 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
     # --- Make the API call ---
     try:
         with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            response = client.post(OLLAMA_API_URL, json=payload)
+            response = client.post(api_url, json=payload)
             response.raise_for_status()  # Raise an exception for bad status codes
 
         response_data = response.json()
@@ -106,22 +122,28 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
             return model_response_str
         else:
             logger.error("Ollama response received, but 'response' key was empty.")
+            record_error("empty_response", "Ollama response did not contain generated text")
             return None
 
     except httpx.TimeoutException as e:
         logger.error(f"Timeout calling Ollama after {REQUEST_TIMEOUT}s: {e}")
+        record_error("timeout", f"Ollama request timed out after {REQUEST_TIMEOUT}s")
         return None
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error calling Ollama: {e.response.status_code} - {e.response.text}")
+        record_error("http_error", f"Ollama returned HTTP {e.response.status_code}")
         return None
     except httpx.RequestError as e:
-        logger.error(f"Error connecting to Ollama at {OLLAMA_API_URL}. Is it running? Error: {e}")
+        logger.error(f"Error connecting to Ollama at {api_url}. Is it running? Error: {e}")
+        record_error("connection_error", f"Ollama request failed: {type(e).__name__}")
         return None
     except json.JSONDecodeError as e:
         logger.error(f"Failed to decode Ollama's response as JSON: {e}")
+        record_error("invalid_response", "Ollama returned a non-JSON HTTP response")
         return None
     except Exception as e:
         logger.error(f"Unexpected error in get_ollama_response: {e}", exc_info=True)
+        record_error("client_error", f"Ollama client failed: {type(e).__name__}")
         return None
 
 # --- Main entry point for testing ---
@@ -167,4 +189,4 @@ if __name__ == "__main__":
             print("\n--- Model response was not valid JSON ---")
     else:
         print("\nFailed to get a response from Ollama.")
-        print(f"Make sure Ollama is running and serving '{DEFAULT_MODEL}' at {OLLAMA_API_URL}")
+        print(f"Make sure Ollama is running and serving '{DEFAULT_MODEL}' at {ollama_generate_url()}")

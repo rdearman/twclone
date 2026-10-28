@@ -25,6 +25,8 @@ class StateManager:
             "bank_balance": 0,
             "command_retry_info": {},   # Tracks failures/cooldowns
             "strategy_plan": [],        # NEW: For multi-stage plans
+            "strategy_plan_source": None,
+            "strategy_inference_status": None,
             "trade_successful": False,  # For bandit reward,
             "q_table": {},              # Persist learning
             "n_table": {},              # Persist learning

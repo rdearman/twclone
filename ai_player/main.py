@@ -529,7 +529,10 @@ def _get_fallback_plan(game_state, state_manager, planner):
     logger.warning("Fallback: No known navigation targets are available.")
     return ["scan: density"]
 
-def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective: Optional[str] = None, bot_number: int = 0, planner: Optional[Planner] = None):
+def get_strategy_from_llm(game_state, model, stage, state_manager,
+                          qa_objective: Optional[str] = None, bot_number: int = 0,
+                          planner: Optional[Planner] = None, ollama_url: Optional[str] = None,
+                          inference_diagnostics: Optional[dict] = None):
     """
     Asks the LLM for a high-level strategic plan.
     """
@@ -562,14 +565,22 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
         prompt = "You are a master space trader. Your goal is to make profit.\n" + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
 
     try:
+        client_error = {}
         response_text = get_ollama_response(
             filtered_game_state,
             model,
             "PROMPT_STRATEGY",
-            override_prompt=prompt
+            override_prompt=prompt,
+            endpoint=ollama_url,
+            error_report=client_error,
         )
         
         if not response_text:
+            if inference_diagnostics is not None:
+                inference_diagnostics.update({
+                    "status": client_error.get("status", "failed"),
+                    "reason": client_error.get("reason", "Ollama returned no response"),
+                })
             return None
 
         raw_plan = []
@@ -719,20 +730,68 @@ def get_strategy_from_llm(game_state, model, stage, state_manager, qa_objective:
                 logger.warning("BOREDOM FILTER: LLM tried to scan twice. Forcing a move!")
                 target = planner._get_next_warp_target(game_state) if planner else None
                 if target is not None:
+                    if inference_diagnostics is not None:
+                        inference_diagnostics.update({"status": "safely_rejected", "reason": "Ollama plan suppressed by repeated-scan safeguard"})
                     return [f"goto: {target}"]
                 logger.info("Boredom filter found no known adjacent destination; defer to fallback planning.")
+                if inference_diagnostics is not None:
+                    inference_diagnostics.update({"status": "safely_rejected", "reason": "Ollama plan suppressed by repeated-scan safeguard; no known adjacent destination"})
                 return None
             # ---------------------------------------------------------------
 
             logger.info(f"LLM provided valid plan: {final_plan}")
+            if inference_diagnostics is not None:
+                inference_diagnostics.update({"status": "succeeded", "reason": None})
             return final_plan
         
         logger.warning(f"LLM response yielded no valid goals after validation. Raw goals: {raw_plan}, response_text: {response_text}")
+        if inference_diagnostics is not None:
+            inference_diagnostics.update({
+                "status": "invalid_response",
+                "reason": "Ollama responded, but no strategy goal passed parsing and validation",
+            })
         return None
 
     except Exception as e:
         logger.error(f"Error parsing strategy from LLM response: {e}", exc_info=True)
+        if inference_diagnostics is not None:
+            inference_diagnostics.update({"status": "failed", "reason": f"Strategy processing failed: {type(e).__name__}"})
         return None
+
+
+def select_strategy_plan(game_state, config, state_manager, planner):
+    """Ask Ollama for the existing high-level plan, retaining the established fallback."""
+    diagnostics = {}
+    plan = get_strategy_from_llm(
+        game_state,
+        config.get("ollama_model"),
+        planner.current_stage,
+        state_manager,
+        planner=planner,
+        ollama_url=config.get("ollama_url"),
+        inference_diagnostics=diagnostics,
+    )
+    if plan and isinstance(plan, list) and all(
+        isinstance(goal, str) and ":" in goal for goal in plan
+    ):
+        if diagnostics.get("status") == "safely_rejected":
+            source = "controller_safety_override"
+            logger.info("Strategy decision source=%s plan=%s", source, plan)
+        else:
+            source = "ollama"
+            logger.info("Strategy decision source=ollama model=%s plan=%s", config.get("ollama_model"), plan)
+    else:
+        source = "fallback"
+        diagnostics.setdefault("status", "invalid_response")
+        diagnostics.setdefault("reason", "Ollama strategy was empty or invalid")
+        logger.warning(
+            "Strategy decision source=fallback inference_status=%s reason=%s",
+            diagnostics["status"], diagnostics["reason"],
+        )
+        plan = _get_fallback_plan(game_state, state_manager, planner)
+    state_manager.set("strategy_plan_source", source)
+    state_manager.set("strategy_inference_status", diagnostics)
+    return plan
 
 def is_goal_complete(goal_str, game_state, response_data, response_type):
     """
@@ -1247,25 +1306,20 @@ def main(config_path="config.json"):
                             goal = f"execute: {next_cmd}"  # Raw command, needs execution wrapper
                         strategy_plan = [goal]
                         state_manager.set("strategy_plan", strategy_plan)
+                        state_manager.set("strategy_plan_source", "qa_workflow")
                         logger.info(f"QA: Next workflow command: {next_cmd}")
                 else: # Not in QA mode, revert to old strategy logic
                     if survey_needed:
                         logger.info("At a port, but survey is incomplete. Setting goal to survey.")
                         state_manager.set("strategy_plan", ["survey: port"])
+                        state_manager.set("strategy_plan_source", "controller")
                     else:
                         if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
                             logger.info("Strategy plan is empty. Requesting a new one from LLM.")
-                            logger.debug(f"Calling LLM with model: {config.get('ollama_model')}")
-                            new_plan = get_strategy_from_llm(game_state, config.get("ollama_model"), planner.current_stage, state_manager, planner=planner)
-                            if new_plan and isinstance(new_plan, list) and all(isinstance(g, str) and ":" in g for g in new_plan):
-                                state_manager.set("strategy_plan", new_plan)
-                                strategy_plan = new_plan
-                            else:
-                                logger.warning(f"LLM provided an invalid plan: {new_plan}. Using fallback plan.")
-                                # Fallback: Create a simple exploration plan
-                                fallback_plan = _get_fallback_plan(game_state, state_manager, planner)
-                                state_manager.set("strategy_plan", fallback_plan)
-                                strategy_plan = fallback_plan
+                            new_plan = select_strategy_plan(game_state, config, state_manager, planner)
+                            state_manager.set("strategy_plan", new_plan)
+                            strategy_plan = new_plan
+                            if state_manager.get("strategy_plan_source") == "fallback":
                                 time.sleep(2) # Wait a moment before continuing
             
             # Drop goals already satisfied by authoritative state. This also
