@@ -637,7 +637,7 @@ class StateManager:
                 expired.append((request_id, command))
         return expired
 
-    def clear_connection_state(self):
+    def clear_connection_state(self, record_reconnect=True):
         """Drop connection-scoped state and require authoritative re-hydration."""
         self.state["session_id"] = None
         self.state["pending_commands"] = {}
@@ -651,7 +651,8 @@ class StateManager:
         self.state["autopilot_status_checked"] = False
         self.state["strategy_plan"] = []
         self.state["needs_bootstrap"] = True
-        self.record_ai_metric("reconnects")
+        if record_reconnect:
+            self.record_ai_metric("reconnects")
         self.save_state()
 
     def record_ai_metric(self, name, amount=1):

@@ -9,7 +9,7 @@ import uuid
 import re
 import random # Add this import
 import select
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from bug_reporter import BugReporter, redact_secrets
 from planner import Planner
@@ -56,6 +56,136 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # --- Global Shutdown Flag ---
 shutdown_flag = False
+
+
+def _utc_clock_minutes(value):
+    try:
+        hour_text, minute_text = str(value).split(":", 1)
+        hour, minute = int(hour_text), int(minute_text)
+        if 0 <= hour < 24 and 0 <= minute < 60:
+            return hour * 60 + minute
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def population_pause_seconds(config, state_manager, now=None, turns_remaining=None):
+    """Return seconds until the next active period, or zero while population is active.
+
+    Population pacing is opt-in. Turn use is counted from observed server
+    `turns_remaining` decreases; this function never estimates or grants turns.
+    """
+    if not config.get("population_mode", False):
+        return 0.0
+    now = time.time() if now is None else float(now)
+    state = state_manager.state
+    updates = {}
+
+    start_minute = _utc_clock_minutes(config.get("population_daily_start_utc", "00:00"))
+    end_minute = _utc_clock_minutes(config.get("population_daily_end_utc", "00:00"))
+    if start_minute is not None and end_minute is not None and start_minute != end_minute:
+        current = datetime.fromtimestamp(now, timezone.utc)
+        minute = current.hour * 60 + current.minute
+        if start_minute < end_minute:
+            in_window = start_minute <= minute < end_minute
+        else:
+            in_window = minute >= start_minute or minute < end_minute
+        if not in_window:
+            if state.get("population_active_since") is not None:
+                updates.update({
+                    "population_active_since": None,
+                    "population_turns_used": 0,
+                    "population_last_turns": None,
+                })
+            if updates:
+                state.update(updates)
+                state_manager.save_state()
+            next_start = current.replace(hour=start_minute // 60,
+                                         minute=start_minute % 60,
+                                         second=0, microsecond=0)
+            if next_start.timestamp() <= now:
+                next_start += timedelta(days=1)
+            return max(1.0, next_start.timestamp() - now)
+
+    if state.get("population_turns_unverified"):
+        try:
+            return max(1.0, float(config.get("population_turn_readback_retry_seconds", 60)))
+        except (TypeError, ValueError):
+            return 60.0
+
+    inactive_until = state.get("population_inactive_until")
+    try:
+        remaining_inactive = float(inactive_until) - now if inactive_until is not None else 0.0
+    except (TypeError, ValueError):
+        remaining_inactive = 0.0
+    if remaining_inactive > 0:
+        return remaining_inactive
+    if inactive_until is not None:
+        updates["population_inactive_until"] = None
+        updates["population_active_since"] = now
+        updates["population_turns_used"] = 0
+        updates["population_last_turns"] = turns_remaining
+    elif state.get("population_active_since") is None:
+        updates.update({
+            "population_active_since": now,
+            "population_turns_used": 0,
+            "population_last_turns": turns_remaining,
+        })
+
+    active_since = updates.get("population_active_since", state.get("population_active_since"))
+    turns_used = int(updates.get("population_turns_used", state.get("population_turns_used", 0)) or 0)
+    last_turns = updates.get("population_last_turns", state.get("population_last_turns"))
+    try:
+        current_turns = int(turns_remaining) if turns_remaining is not None else None
+        previous_turns = int(last_turns) if last_turns is not None else None
+    except (TypeError, ValueError):
+        current_turns = previous_turns = None
+    if current_turns is not None:
+        if previous_turns is not None and current_turns < previous_turns:
+            turns_used += previous_turns - current_turns
+            updates["population_turns_used"] = turns_used
+        if current_turns != previous_turns:
+            updates["population_last_turns"] = current_turns
+
+    try:
+        active_seconds = max(60.0, float(config.get("population_active_minutes", 30)) * 60.0)
+    except (TypeError, ValueError):
+        active_seconds = 1800.0
+    try:
+        inactive_seconds = max(0.0, float(config.get("population_inactive_minutes", 120)) * 60.0)
+    except (TypeError, ValueError):
+        inactive_seconds = 7200.0
+    try:
+        turn_budget = max(1, int(config.get("population_max_turns_per_period", 12)))
+    except (TypeError, ValueError):
+        turn_budget = 12
+
+    elapsed = now - float(active_since) if active_since is not None else 0.0
+    if elapsed >= active_seconds or turns_used >= turn_budget:
+        inactive_until = now + inactive_seconds
+        updates.update({
+            "population_active_since": None,
+            "population_inactive_until": inactive_until if inactive_seconds else None,
+            "population_turns_used": turns_used,
+        })
+        wait = inactive_seconds
+    else:
+        wait = 0.0
+    if updates:
+        state.update(updates)
+        state_manager.save_state()
+    return wait
+
+
+def population_turn_readback_required(command_name, config):
+    """Whether a successful command may have consumed a server turn."""
+    read_only = {
+        "auth.login", "auth.register", "player.my_info", "player.info", "player.ping",
+        "ship.info", "ship.status", "sector.info", "trade.port_info", "trade.quote",
+        "system.schema", "system.cmd_list", "system.schema_list",
+        "player.computer.recommend_routes", "move.autopilot.status",
+    }
+    return bool(command_name) and command_name not in read_only and not command_name.startswith("system.")
 
 # --- Game Connection Class ---
 class GameConnection:
@@ -529,10 +659,23 @@ def _get_fallback_plan(game_state, state_manager, planner):
     logger.warning("Fallback: No known navigation targets are available.")
     return ["scan: density"]
 
+def _behavior_profile_guidance(profile):
+    guidance = {
+        "trader": "Prioritize viable market trades and profit from public quotes; sell carried cargo before considering another purchase.",
+        "explorer": "Prioritize unexplored reachable sectors and discovering ports; trade when public information shows a worthwhile opportunity.",
+        "cautious": "Prefer known, surveyed reachable locations and avoid unnecessary uncertainty; follow normal resource and safety constraints.",
+        "opportunist": "Prioritize fresh public route recommendations with positive estimated returns; otherwise explore a reachable frontier.",
+        "balanced": "Balance exploration and trading using only the information currently available to this player.",
+    }
+    normalized = str(profile or "balanced").strip().lower()
+    return guidance.get(normalized, guidance["balanced"])
+
+
 def get_strategy_from_llm(game_state, model, stage, state_manager,
                           qa_objective: Optional[str] = None, bot_number: int = 0,
                           planner: Optional[Planner] = None, ollama_url: Optional[str] = None,
-                          inference_diagnostics: Optional[dict] = None):
+                          inference_diagnostics: Optional[dict] = None,
+                          behavior_profile: Optional[str] = None):
     """
     Asks the LLM for a high-level strategic plan.
     """
@@ -560,9 +703,17 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
         prompt = qa_intro + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
         logger.info(f"Using QA Objective prompt for LLM: {qa_objective}")
     elif stage == "explore":
-        prompt = "You are a master space explorer. Your goal is to find new sectors and ports.\n" + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+        prompt = (
+            "You are a space explorer. Choose a useful exploration plan.\n"
+            f"Behaviour profile: {_behavior_profile_guidance(behavior_profile)}\n"
+            + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+        )
     else:
-        prompt = "You are a master space trader. Your goal is to make profit.\n" + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+        prompt = (
+            "You are a space trader. Choose a useful trade or exploration plan.\n"
+            f"Behaviour profile: {_behavior_profile_guidance(behavior_profile)}\n"
+            + PROMPT_CONTRACT_BLOCK.format(game_state=json.dumps(filtered_game_state, indent=2))
+        )
 
     try:
         client_error = {}
@@ -762,6 +913,10 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
 def select_strategy_plan(game_state, config, state_manager, planner):
     """Ask Ollama for the existing high-level plan, retaining the established fallback."""
     diagnostics = {}
+    try:
+        profile = planner._behavior_profile(game_state)
+    except (AttributeError, TypeError):
+        profile = config.get("behavior_profile", "balanced")
     plan = get_strategy_from_llm(
         game_state,
         config.get("ollama_model"),
@@ -770,6 +925,7 @@ def select_strategy_plan(game_state, config, state_manager, planner):
         planner=planner,
         ollama_url=config.get("ollama_url"),
         inference_diagnostics=diagnostics,
+        behavior_profile=profile,
     )
     if plan and isinstance(plan, list) and all(
         isinstance(goal, str) and ":" in goal for goal in plan
@@ -1030,6 +1186,21 @@ def main(config_path="config.json"):
                 time.sleep(0.5)
                 continue
             # -----------------------------------------------------------------
+
+            if (config.get("population_mode") and not config.get("qa_mode")
+                    and not game_state.get("pending_commands")):
+                player = (game_state.get("player_info") or {}).get("player") or {}
+                pause_seconds = population_pause_seconds(
+                    config, state_manager, turns_remaining=player.get("turns_remaining")
+                )
+                if pause_seconds > 0:
+                    logger.info("Population schedule inactive; pausing for %.0f seconds.", pause_seconds)
+                    if game_conn.sock or game_state.get("session_id"):
+                        game_conn.disconnect()
+                        state_manager.clear_connection_state(record_reconnect=False)
+                        schemas_bootstrapped = False
+                    time.sleep(min(60.0, max(1.0, pause_seconds)))
+                    continue
 
             # 1. Handle Connection & Authentication
             if not game_conn.sock:
@@ -1634,6 +1805,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         # Server might return flat data, wrap it if so
                         response_data = {"player": response_data}
                     state_manager.update_player_info(response_data)
+                    if config.get("population_mode") and not config.get("qa_mode"):
+                        state_manager.set("population_turns_unverified", False)
                 
                 elif response_type in ("ship.info", "ship.status", "ship.claimed"):
                     ship_obj = response_data.get("ship", response_data)
@@ -1757,7 +1930,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         logger.info(f"Strategic goal '{current_goal}' is complete. Removing from plan.")
                         strategy_plan.pop(0)
                         state_manager.set("strategy_plan", strategy_plan)
-                
+
             else: # Error or refused
                 if sent_command:
                     state_manager.record_ai_metric("commands_refused")
@@ -1954,6 +2127,34 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     # Database outages are transient; permit one later public
                     # registration attempt after the command backoff expires.
                     state_manager._registration_attempted = False
+
+            if (config.get("population_mode") and not config.get("qa_mode") and sent_command
+                    and population_turn_readback_required(command_name, config)):
+                # Fail closed until an authoritative player.my_info confirms
+                # the server's current turn balance, including after refusals.
+                state_manager.set("population_turns_unverified", True)
+                audit_already_reads_player = (
+                    config.get("live_gameplay_audit")
+                    and command_name in ("move.warp", "trade.buy", "trade.sell")
+                    and response.get("status") == "ok"
+                )
+                if not audit_already_reads_player:
+                    idempotency_key = str(uuid.uuid4())
+                    refresh = {
+                        "id": f"c-pop-turns-{idempotency_key[:8]}",
+                        "command": "player.my_info",
+                        "data": {},
+                        "meta": {
+                            "client_version": config.get("client_version"),
+                            "idempotency_key": idempotency_key,
+                            "session_token": state_manager.get("session_id"),
+                        },
+                    }
+                    if game_conn.send_command(refresh):
+                        state_manager.add_pending_command(refresh["id"], refresh)
+                        state_manager.record_ai_metric("commands_sent")
+                    else:
+                        logger.warning("Population turn-budget player.my_info refresh could not be sent.")
 
         except Exception as e:
             logger.error("Critical error in process_responses: %s", e, exc_info=True)

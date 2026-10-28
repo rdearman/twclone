@@ -66,7 +66,7 @@ class Planner:
                     except (TypeError, ValueError):
                         continue
             return "explorer"
-        return profile if profile in {"balanced", "explorer", "trader", "cautious"} else "balanced"
+        return profile if profile in {"balanced", "explorer", "trader", "cautious", "opportunist"} else "balanced"
 
     def _stage_epsilon(self):
         """Return the configured exploration rate for the current planner stage."""
@@ -1709,6 +1709,37 @@ class Planner:
             if isinstance(port, dict) and port.get("sector_id") is not None
         )
 
+        # Prefer only the existing server-generated recommendations, which are
+        # based on the player's surveyed/public markets. The execution planner
+        # still requires fresh quotes and validates every trade independently.
+        recommendation_sectors = set()
+        recommendations = current_state.get("market_recommendations", [])
+        refreshed_at = current_state.get("market_recommendations_refreshed_at", 0)
+        try:
+            recommendation_fresh = (
+                time.time() - float(refreshed_at or 0)
+                <= max(60.0, float(self.config.get("route_recommendation_max_age_seconds", 1800)))
+            )
+        except (TypeError, ValueError):
+            recommendation_fresh = False
+        if recommendation_fresh and isinstance(recommendations, list):
+            for route in recommendations:
+                if not isinstance(route, dict):
+                    continue
+                try:
+                    profitable = (
+                        route.get("a_to_b") and float(route.get("estimated_profit_a_to_b", 0)) > 0
+                    ) or (
+                        route.get("b_to_a") and float(route.get("estimated_profit_b_to_a", 0)) > 0
+                    )
+                    if profitable:
+                        recommendation_sectors.update(
+                            str(int(route[field])) for field in ("sector_a_id", "sector_b_id")
+                            if route.get(field) is not None
+                        )
+                except (TypeError, ValueError):
+                    continue
+
         profile = self._behavior_profile(current_state)
 
         def rank(sector):
@@ -1720,6 +1751,8 @@ class Planner:
                 novelty_rank = 0 if not explored else 1
             if profile == "trader":
                 destination_rank = 0 if sector_key in known_port_sectors else 1
+            elif profile == "opportunist":
+                destination_rank = 0 if sector_key in recommendation_sectors else 1
             else:
                 destination_rank = 0
             revisit_rank = 1 if sector_key in recent else 0

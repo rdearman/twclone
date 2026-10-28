@@ -1,4 +1,5 @@
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -39,6 +40,22 @@ def test_profiles_choose_targets_according_to_their_priorities():
     assert make_planner("balanced")._get_next_warp_target(navigation_state("balanced")) == 30
     assert make_planner("trader")._get_next_warp_target(navigation_state("trader")) == 40
     assert make_planner("cautious")._get_next_warp_target(navigation_state("cautious")) == 40
+
+
+def test_opportunist_prefers_a_fresh_public_recommended_market_route():
+    state = navigation_state("opportunist")
+    state.update({
+        "market_recommendations_refreshed_at": time.time(),
+        "market_recommendations": [{
+            "sector_a_id": 20,
+            "sector_b_id": 50,
+            "a_to_b": True,
+            "estimated_profit_a_to_b": 75,
+        }],
+    })
+
+    assert make_planner("opportunist")._behavior_profile(state) == "opportunist"
+    assert make_planner("opportunist")._get_next_warp_target(state) == 20
 
 
 def test_navigation_ignores_current_sector_and_blacklisted_warps():

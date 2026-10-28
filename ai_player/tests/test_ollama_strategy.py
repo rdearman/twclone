@@ -41,7 +41,8 @@ def test_ollama_plan_is_selected_and_retained_as_controller_strategy(monkeypatch
 
     def fake_ollama(state, model, prompt_key, override_prompt=None, endpoint=None,
                     error_report=None):
-        call.update({"state": state, "model": model, "endpoint": endpoint})
+        call.update({"state": state, "model": model, "endpoint": endpoint,
+                     "prompt": override_prompt})
         return json.dumps({"plan": ["goto: 42"]})
 
     monkeypatch.setattr(main, "get_ollama_response", fake_ollama)
@@ -49,17 +50,43 @@ def test_ollama_plan_is_selected_and_retained_as_controller_strategy(monkeypatch
 
     plan = main.select_strategy_plan(
         _game_state(),
-        {"ollama_model": "qwen3:8b", "ollama_url": "http://192.168.25.20:11434"},
+        {"ollama_model": "qwen3:8b", "ollama_url": "http://192.168.25.20:11434",
+         "behavior_profile": "trader"},
         manager,
         PlannerStub(),
     )
 
     assert call["model"] == "qwen3:8b"
     assert call["endpoint"] == "http://192.168.25.20:11434"
+    assert "Prioritize viable market trades" in call["prompt"]
     assert "current_sector" in call["state"]
     assert plan == ["goto: 42"]
     assert manager.get("strategy_plan_source") == "ollama"
     assert manager.get("strategy_inference_status") == {"status": "succeeded", "reason": None}
+
+
+def test_ollama_prompt_uses_the_selected_population_profile(monkeypatch, tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("valid_commodity_names", ["ORE", "ORG", "EQU"])
+    prompts = []
+
+    def fake_ollama(_state, _model, _key, override_prompt=None, **_kwargs):
+        prompts.append(override_prompt)
+        return json.dumps({"plan": ["goto: 42"]})
+
+    monkeypatch.setattr(main, "get_ollama_response", fake_ollama)
+    monkeypatch.setattr(main.time, "sleep", lambda _seconds: None)
+    for profile in ("explorer", "cautious", "opportunist"):
+        main.select_strategy_plan(
+            _game_state(),
+            {"ollama_model": "qwen3:8b", "behavior_profile": profile},
+            manager,
+            PlannerStub(),
+        )
+
+    assert "Prioritize unexplored reachable sectors" in prompts[0]
+    assert "Prefer known, surveyed reachable locations" in prompts[1]
+    assert "fresh public route recommendations" in prompts[2]
 
 
 def test_ollama_failure_uses_existing_fallback_and_records_failure(monkeypatch, tmp_path, caplog):

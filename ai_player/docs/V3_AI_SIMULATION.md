@@ -22,11 +22,29 @@ combat autonomously, and random special encounters still lack a server-provided
 encounter/action interface.
 
 Supported navigation profiles are `balanced`, `trader`/`merchant`,
-`explorer`/`scout`, `cautious`/`survivor`, and `adaptive`. Adaptive behavior
-switches to cautious navigation below `adaptive_caution_threshold` shield
-fraction (default 0.4), prioritizes known-port travel while carrying cargo,
-and explores when neither condition applies. Set `behavior_profile` in the AI
-configuration to select a profile; the default remains `balanced`.
+`explorer`/`scout`, `cautious`/`survivor`, `opportunist`, and `adaptive`.
+Trader favors known port sectors; explorer favors unexplored reachable
+sectors; cautious favors already explored sectors; opportunist favors sectors
+in fresh positive public route recommendations. These are preferences within
+the existing planner, and quotes, resources, reachable navigation and trade
+validation remain authoritative. The same resolved profile is included in the
+existing Ollama strategy prompt. Adaptive behavior switches to cautious
+navigation below `adaptive_caution_threshold` shield fraction (default 0.4),
+prioritizes known-port travel while carrying cargo, and explores when neither
+condition applies. Set `behavior_profile` in each player's existing config;
+the default remains `balanced`.
+
+Intermittent population activity is opt-in with `population_mode: true` in the
+same per-player config and applies to normal autonomous play; deterministic
+`qa_mode` workflows retain their existing behavior. `population_daily_start_utc` and
+`population_daily_end_utc` define a UTC participation window (both default to
+`00:00`, meaning all day). Within that window, `population_active_minutes`
+(default 30), `population_inactive_minutes` (default 120), and
+`population_max_turns_per_period` (default 12) bound each active stint. Turn use
+is counted only from observed decreases in the server-provided
+`turns_remaining`; inactivity disconnects the session, persists state, and
+reattaches with a fresh login when activity resumes. Leaving `population_mode`
+unset or false preserves the existing continuously active controller.
 
 ## Current deterministic baseline
 

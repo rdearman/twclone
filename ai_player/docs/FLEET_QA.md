@@ -37,5 +37,13 @@ persisted planner, exploration and bandit state. Use this only against a
 disposable QA universe; this tool does not establish that the target endpoint
 is isolated.
 
+Each existing player config may also select a `behavior_profile` and opt in to
+intermittent population pacing with `population_mode: true`. Available profiles
+include `trader`, `explorer`, `cautious`, and `opportunist`; configure UTC daily
+hours, active/inactive minutes, and a maximum observed turn budget in that same
+config. The details and defaults are in `V3_AI_SIMULATION.md`. These settings
+reuse the normal planner and Ollama strategy layer; no separate population
+controller is started.
+
 `spawn.py` remains a legacy provisioning utility. It performs direct database
 equipment changes after public registration and is not used by this runner.
