@@ -387,15 +387,28 @@ func _format_scan_result(payload: Dictionary) -> String:
 		return "No scan data was returned by the server."
 	var sector_id = data.get("sector_id", data.get("id", "unavailable"))
 	var name := str(data.get("name", "Unknown"))
+	var adjacent_known: bool = data.has("adjacent") or data.has("adjacent_sectors")
 	var adjacent = data.get("adjacent", data.get("adjacent_sectors", []))
 	var raw_counts = data.get("counts", {})
 	var counts: Dictionary = raw_counts if raw_counts is Dictionary else {}
-	var raw_port = data.get("port", {})
-	var port: Dictionary = raw_port if raw_port is Dictionary else {}
-	var lines: Array[String] = ["Sector %s · %s" % [str(sector_id), name], "", "Adjacent: %s" % _scan_list(adjacent), "Port: %s" % ("present" if bool(port.get("present", false)) else "none"), "Ships: %s" % str(counts.get("ships", data.get("ships", 0))), "Planets: %s" % str(counts.get("planets", data.get("planets", 0))), "Mines: %s" % str(counts.get("mines", data.get("mines", 0))), "Fighters: %s" % str(counts.get("fighters", data.get("fighters", 0)))]
+	var port_known: bool = data.has("ports") or data.has("port")
+	var port_present := false
+	if data.get("ports") is Array:
+		port_present = not data["ports"].is_empty()
+	elif data.get("port") is Dictionary and data["port"].has("present"):
+		port_present = bool(data["port"]["present"])
+	var port_status := ("present" if port_present else "none") if port_known else "not reported"
+	var lines: Array[String] = ["Sector %s · %s" % [str(sector_id), name], "", "Adjacent: %s" % (_scan_list(adjacent) if adjacent_known else "not reported"), "Port: %s (class/details not disclosed by scan)" % port_status, "Ships: %s" % _scan_count(data, counts, "ships", ["ship_count", "ships_count"]), "Planets: %s" % _scan_count(data, counts, "planets", ["planet_count", "planets_count"]), "Mines: %s" % _scan_count(data, counts, "mines"), "Fighters: %s" % _scan_count(data, counts, "fighters")]
 	var beacon := str(data.get("beacon", "")).strip_edges()
 	lines.append("Beacon: %s" % (beacon if not beacon.is_empty() else "none"))
 	return "\n".join(lines)
+
+func _scan_count(data: Dictionary, counts: Dictionary, key: String, aliases: Array = []) -> String:
+	for field in [key] + aliases:
+		var value = counts.get(field, data.get(field, null))
+		if (typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT) and is_finite(float(value)):
+			return str(int(value))
+	return "unknown"
 
 func _scan_list(value: Variant) -> String:
 	if not (value is Array) or value.is_empty():

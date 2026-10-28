@@ -247,6 +247,7 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 	_copy_string(data, result, "beacon")
 	if not result.has("beacon"):
 		_copy_string(data, result, "beacon_text", "beacon")
+	var adjacent_known := data.has("adjacent_sectors") or data.has("adjacent")
 	var adjacent = data.get("adjacent_sectors", data.get("adjacent", null))
 	if adjacent is Array:
 		var adjacent_ids := []
@@ -255,9 +256,28 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 			if _is_integral_number(destination):
 				adjacent_ids.append(int(destination))
 		result["adjacent_sector_ids"] = adjacent_ids
-	result["ports"] = _normalize_entities(data.get("ports", []), ["id", "port_id", "name", "type", "class"])
+	var ports_known := data.has("ports") or data.has("port")
+	var ports: Array = []
+	if data.get("ports") is Array:
+		ports = _normalize_entities(data["ports"], ["id", "port_id", "name"])
+	elif data.get("port") is Dictionary:
+		var port: Dictionary = data["port"]
+		if bool(port.get("present", true)):
+			var normalized_port := {}
+			_copy_int(port, normalized_port, "id")
+			_copy_int(port, normalized_port, "port_id")
+			_copy_string(port, normalized_port, "name")
+			if not normalized_port.is_empty():
+				ports.append(normalized_port)
+	result["ports"] = ports
 	result["planets"] = _normalize_entities(data.get("celestial_objects", data.get("planets", [])), ["id", "planet_id", "name", "type", "class", "type_name"])
 	result["ships"] = _normalize_entities(data.get("ships_present", data.get("ships", [])), ["id", "ship_id", "name", "ship_name", "owner"])
+	result["knowledge"] = {
+		"adjacent": adjacent_known,
+		"ports": ports_known,
+		"planets": data.has("celestial_objects") or data.has("planets"),
+		"ships": data.has("ships_present") or data.has("ships"),
+	}
 	if data.has("counts") and data["counts"] is Dictionary:
 		var counts := {}
 		_copy_int(data["counts"], counts, "fighters")

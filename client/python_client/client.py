@@ -604,12 +604,12 @@ def ctx_refresh_port_context(ctx):
     ``port.info`` is the only read needed for the trading screen.  In
     particular, do not probe a collection of guessed command names here.
     """
-    ctx.state.setdefault('is_stardock', False)
-    ctx.state.setdefault('is_shipyard_port', False)
-    ctx.state.setdefault('has_exchange_access', False)
-    ctx.state.setdefault('has_insurance_access', False)
-    ctx.state.setdefault('has_tavern_access', False)
-    ctx.state.setdefault('has_hardware_access', False)
+    for key in ('is_stardock', 'is_shipyard_port', 'has_exchange_access',
+                'has_insurance_access', 'has_tavern_access', 'has_hardware_access'):
+        ctx.state[key] = False
+    # A previous dock's inventory must never remain usable after a refusal.
+    ctx.state.pop("port_inventory", None)
+    ctx.state.pop("port_info_error", None)
 
     conn = getattr(ctx, 'conn', None)
     if conn is None:
@@ -624,6 +624,10 @@ def ctx_refresh_port_context(ctx):
     if r.get("status") == "ok":
         port_data = (r.get("data") or {}).get("port") or {}
         ctx.state["is_stardock"] = bool(_infer_is_stardock({"port": port_data}))
+    else:
+        error = r.get("error") if isinstance(r, dict) else {}
+        message = error.get("message") if isinstance(error, dict) else None
+        print(f"Port details unavailable · {message or 'the server did not disclose this port here.'}")
 
 
 def normalize_port_info(resp: dict) -> dict:
@@ -658,10 +662,20 @@ def _refresh_port_info(ctx, data=None):
     normalized = normalize_port_info(resp)
     if normalized:
         ctx.state["port_inventory"] = normalized
+        ctx.state.pop("port_info_error", None)
         ctx.last_sector_desc.setdefault("port", {})
         ctx.last_sector_desc["port"].update({k: normalized[k] for k in ("id", "name")
                                               if normalized.get(k) is not None})
         ctx.last_sector_desc["port"]["commodities"] = normalized["commodities"]
+    else:
+        # Do not leave a previous port's stock/prices available after a
+        # proximity refusal or malformed response.
+        ctx.state.pop("port_inventory", None)
+        if isinstance(ctx.last_sector_desc, dict) and isinstance(ctx.last_sector_desc.get("port"), dict):
+            ctx.last_sector_desc["port"].pop("commodities", None)
+        error = resp.get("error") if isinstance(resp, dict) else {}
+        message = error.get("message") if isinstance(error, dict) else None
+        ctx.state["port_info_error"] = message or "The server did not disclose port details in this sector."
     return resp
 
 
@@ -682,7 +696,11 @@ def render_port_summary(port: dict) -> list:
 
 
 def _print_port_summary(ctx):
-    for line in render_port_summary(ctx.state.get("port_inventory") or {}):
+    inventory = ctx.state.get("port_inventory")
+    if not inventory:
+        print(f"Port details unavailable · {ctx.state.get('port_info_error', 'inspect a port in your current sector first.')}")
+        return
+    for line in render_port_summary(inventory):
         print(line)
 # --- END AUTO-ADDED DOCK_CONTEXT_REFRESH ---
 
@@ -2737,6 +2755,7 @@ def redisplay_sector(ctx: Context):
     port = d.get("port")
     ships = d.get("ships") or []
     planets = d.get("planets") or []
+    knowledge = d.get("knowledge") if isinstance(d.get("knowledge"), dict) else {}
     beacon = d.get("beacon")
 
     print(f"\nYou are in sector {sid}{' — ' + name if name else ''}.")
@@ -2747,16 +2766,22 @@ def redisplay_sector(ctx: Context):
             adj_nums.append(str(a.get("to_sector", "?")))
         else:
             adj_nums.append(str(a))
-    print(f"Adjacent sectors: {', '.join(adj_nums) if adj_nums else 'none'}")
+    if knowledge.get("adjacent", d.get("adjacent") is not None):
+        print(f"Adjacent sectors: {', '.join(adj_nums) if adj_nums else 'none'}")
+    else:
+        print("Adjacent sectors: not reported")
 
-    if port:
-        cls = port.get("class", "?")
-        pnm = port.get("name") or f"class {cls}"
+    if not knowledge.get("ports", port is not None):
+        print("Ports here: not reported")
+    elif port and port.get("present", True):
+        pnm = port.get("name") or "Port (details undisclosed)"
         print(f"Ports here: {pnm}")
     else:
         print("Ports here: none")
 
-    if ships:
+    if not knowledge.get("ships", d.get("ships") is not None):
+        print("Ships here: not reported")
+    elif ships:
         names = []
         for s in ships:
             nm = s.get("name") or s.get("ship_name") or s.get("player_name") or "Unnamed"
@@ -2778,7 +2803,9 @@ def redisplay_sector(ctx: Context):
         if isinstance(mines, int) and mines > 0:
             print(f"Deployed Mines: {mines}")
 
-    if planets:
+    if not knowledge.get("planets", d.get("planets") is not None):
+        print("Planets: not reported")
+    elif planets:
         print("Planets: " + ", ".join(pl.get("name") or "Unnamed" for pl in planets))
     else:
         print("Planets: none")
@@ -3009,25 +3036,26 @@ def _render_scan_card(scan: dict) -> str:
         safe = bool(sec.get("safe_zone"))
         locked = bool(sec.get("combat_locked"))
 
-        adj = d.get("adjacent") or []
+        adjacent_known = "adjacent" in d or "adjacent_sectors" in d
+        adj = d.get("adjacent", d.get("adjacent_sectors", []))
         if not isinstance(adj, list):
             adj = []
 
-        port = d.get("port") or {}
-        port_present = bool(port.get("present"))
+        if "ports" in d and isinstance(d["ports"], list):
+            port_status = "present" if d["ports"] else "none"
+        elif isinstance(d.get("port"), dict) and "present" in d["port"]:
+            port_status = "present" if bool(d["port"]["present"]) else "none"
+        else:
+            port_status = "not reported"
 
         # Counts: prefer nested object; else reconstruct from flat fields
-        counts = d.get("counts")
-        if isinstance(counts, dict):
-            ships = int(counts.get("ships") or 0)
-            planets = int(counts.get("planets") or 0)
-            mines = int(counts.get("mines") or 0)
-            fighters = int(counts.get("fighters") or 0)
-        else:
-            ships = int((d.get("ships") or d.get("ship_count") or d.get("ships_count") or 0) or 0)
-            planets = int((d.get("planets") or d.get("planet_count") or d.get("planets_count") or 0) or 0)
-            mines = int(d.get("mines") or 0)
-            fighters = int(d.get("fighters") or 0)
+        counts = d.get("counts") if isinstance(d.get("counts"), dict) else {}
+        def count_value(key, aliases=()):
+            for candidate in (key, *aliases):
+                value = counts.get(candidate, d.get(candidate))
+                if isinstance(value, int) and not isinstance(value, bool):
+                    return str(value)
+            return "unknown"
 
         beacon = d.get("beacon")
         # normalise beacon: allow string or explicit null
@@ -3036,10 +3064,13 @@ def _render_scan_card(scan: dict) -> str:
         # Render
         lines = []
         lines.append(f"\n── Fast Scan: Sector {sid if sid is not None else '∅'} — {name}")
-        lines.append(f"   Adjacent: {', '.join(map(str, adj)) if adj else 'none'}")
+        lines.append(f"   Adjacent: {', '.join(map(str, adj)) if adj else ('none' if adjacent_known else 'not reported')}")
         lines.append(f"   Security: fedspace={fed}, safe_zone={safe}, combat_locked={locked}")
-        lines.append(f"   Port: {'present' if port_present else 'none'}")
-        lines.append(f"   Counts: ships={ships}, planets={planets}, mines={mines}, fighters={fighters}")
+        lines.append(f"   Port: {port_status} (class/details not disclosed by scan)")
+        lines.append("   Counts: ships=%s, planets=%s, mines=%s, fighters=%s" % (
+            count_value("ships", ("ship_count", "ships_count")),
+            count_value("planets", ("planet_count", "planets_count")),
+            count_value("mines"), count_value("fighters")))
         lines.append(f"   Beacon: {beacon_str if beacon_str else 'none'}")
         return "\n".join(lines)
 
@@ -3082,12 +3113,18 @@ def scan_sector(ctx: "Context"):
             merged["adjacent"] = d["adjacent"]
 
         # Represent scan’s port presence as a minimal port object
-        port = d.get("port") or {}
-        if isinstance(port, dict):
-            merged["port"] = {"present": bool(port.get("present"))}
-            # keep old 'class' if we had one previously
-            if isinstance(cur.get("port"), dict) and "class" in cur["port"]:
-                merged["port"]["class"] = cur["port"]["class"]
+        if "ports" in d and isinstance(d["ports"], list):
+            ports = d["ports"]
+            port = ports[0] if ports and isinstance(ports[0], dict) else {}
+            merged["port"] = {"present": bool(ports)}
+            if port.get("id", port.get("port_id")) is not None:
+                merged["port"]["id"] = port.get("id", port.get("port_id"))
+            if isinstance(port.get("name"), str):
+                merged["port"]["name"] = port["name"]
+            merged.setdefault("knowledge", {})["ports"] = True
+        elif isinstance(d.get("port"), dict) and "present" in d["port"]:
+            merged["port"] = {"present": bool(d["port"]["present"])}
+            merged.setdefault("knowledge", {})["ports"] = True
 
         # Beacon string if present
         if d.get("beacon"):
@@ -3576,7 +3613,8 @@ def dock_trade_flow(ctx: Context, direction: str):
         return
     port = ctx.state.get("port_inventory") or {}
     if not port.get("commodities"):
-        print("No port inventory is available. Please re-enter the dock.")
+        reason = ctx.state.get("port_info_error")
+        print(f"Port inventory unavailable · {reason or 'inspect a port in your current sector first.'}")
         return
     rows = _trade_rows(ctx, direction)
     if not rows:

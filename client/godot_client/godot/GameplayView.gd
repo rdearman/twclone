@@ -594,8 +594,18 @@ func _build_contents(sector: Dictionary) -> void:
 		if typeof(destination) == TYPE_INT:
 			_add_destination_row(destination)
 			has_any = true
+	var knowledge: Dictionary = sector.get("knowledge", {})
+	for item in [
+		{"key": "ports", "label": "PORTS"},
+		{"key": "planets", "label": "PLANETS"},
+		{"key": "ships", "label": "SHIPS"},
+		{"key": "adjacent", "label": "WARP LINKS"},
+	]:
+		if not bool(knowledge.get(item["key"], true)):
+			_add_static_row(item["label"], "Not reported by the server")
+			has_any = true
 	if not has_any:
-		var empty := _label("No ports, planets, ships, hazards, or adjacent sectors were reported.", 13, Color(0.68, 0.75, 0.78))
+		var empty := _label("No ports, planets, ships, hazards, or adjacent sectors were found here.", 13, Color(0.68, 0.75, 0.78))
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		contents_list.add_child(empty)
 
@@ -793,7 +803,7 @@ func _render_selection(object: Dictionary) -> void:
 		if kind == "planet":
 			var planet_class := PlanetArt.class_for_planet(fields)
 			extras.append("Class %s" % (planet_class if not planet_class.is_empty() else "unknown"))
-		if fields.has("type"):
+		if kind != "port" and fields.has("type"):
 			extras.append("Type %s" % str(fields["type"]))
 		if fields.has("owner"):
 			extras.append("Owner %s" % str(fields["owner"]))

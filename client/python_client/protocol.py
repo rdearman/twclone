@@ -300,31 +300,43 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
 
     adj = d.get("adjacent_sectors") or d.get("adjacent") or d.get("adjacent_sectors_info") or d.get("neighbors")
 
-    # Port/class synthesis
+    # Port presence is public sector information; port class and trade mode
+    # are only available from an in-sector port.info response. Older server
+    # payloads may still include type/class, so intentionally drop those keys.
     port_obj = None
     ports = d.get("ports")
-    if ports and isinstance(ports, list) and len(ports) > 0:
-        port_obj = {}
-        p0 = ports[0]
-        if p0.get("port_id"): port_obj["id"] = p0["port_id"]
-        elif p0.get("id"): port_obj["id"] = p0["id"]
-
-        pcls = p0.get("class") or p0.get("type")
-        if isinstance(pcls, int) or (isinstance(pcls, str) and pcls.isdigit()):
-            port_obj["class"] = int(pcls)
-        if p0.get("name"):
-            port_obj["name"] = p0["name"]
+    ports_known = "ports" in d or "port" in d
+    if isinstance(ports, list):
+        if ports and isinstance(ports[0], dict):
+            p0 = ports[0]
+            port_obj = {"present": True}
+            port_id = p0.get("port_id", p0.get("id"))
+            if port_id is not None:
+                port_obj["id"] = port_id
+            if isinstance(p0.get("name"), str) and p0["name"]:
+                port_obj["name"] = p0["name"]
+        else:
+            port_obj = {"present": False}
     elif isinstance(d.get("port"), dict):
-        port_obj = dict(d.get("port"))
-        if "id" not in port_obj and d["port"].get("id"):
-            port_obj["id"] = d["port"]["id"]
-        if "class" not in port_obj:
-            pcls = port_obj.get("class") or port_obj.get("type")
-            if isinstance(pcls, int) or (isinstance(pcls, str) and pcls.isdigit()):
-                port_obj["class"] = int(pcls)
+        source_port = d["port"]
+        port_obj = {"present": bool(source_port.get("present", True))}
+        port_id = source_port.get("id", source_port.get("port_id"))
+        if port_id is not None:
+            port_obj["id"] = port_id
+        if isinstance(source_port.get("name"), str) and source_port["name"]:
+            port_obj["name"] = source_port["name"]
+    elif ports_known:
+        port_obj = {"present": False}
 
-    planets = d.get("celestial_objects") or d.get("planets")
-    ships = d.get("ships_present") or d.get("ships") or d.get("entities", {}).get("ships")
+    planet_keys = ("celestial_objects", "planets")
+    ship_keys = ("ships_present", "ships")
+    planets_known = any(key in d for key in planet_keys)
+    ships_known = any(key in d for key in ship_keys) or (
+        isinstance(d.get("entities"), dict) and "ships" in d["entities"])
+    planets = d.get("celestial_objects", d.get("planets"))
+    ships = d.get("ships_present", d.get("ships"))
+    if ships is None and isinstance(d.get("entities"), dict):
+        ships = d["entities"].get("ships")
     beacon = d.get("beacon") or d.get("beacon_text")
 
     return {
@@ -334,5 +346,11 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
         "planets": planets,
         "ships": ships,
         "beacon": beacon,
-        "counts": d.get("counts")
+        "counts": d.get("counts"),
+        "knowledge": {
+            "adjacent": any(key in d for key in ("adjacent_sectors", "adjacent", "adjacent_sectors_info", "neighbors")),
+            "ports": ports_known,
+            "planets": planets_known,
+            "ships": ships_known,
+        },
     }

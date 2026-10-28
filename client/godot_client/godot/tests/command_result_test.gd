@@ -25,6 +25,22 @@ func _run() -> void:
 	)
 	_check(app.gameplay_view.notification_label.text.contains("Password changed"), "password change success was not acknowledged")
 	_check(not app.gameplay_view.notification_label.text.contains("qa-new-ephemeral"), "password change success notification exposed a credential")
+	app.gameplay_view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 3},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"ship": {},
+		"sector": {},
+	})
+	app.gameplay_view.enter_port_workflow({"port": {"id": 99, "name": "Previously inspected", "type": 9, "commodities": []}})
+	_check(app.gameplay_view.port_workflow.visible, "port refusal fixture did not open the prior port screen")
+	await app._finish_command_reply(
+		{"status": "refused", "error": {"message": "Port information is available only in its sector"}},
+		{"label": "Open port", "command": "port.info", "mutating": false}
+	)
+	_check(not app.gameplay_view.port_workflow.visible, "refused remote port.info left stale port inventory visible")
+	_check(app.gameplay_view.notification_label.text.contains("Port information refused") and app.gameplay_view.notification_label.text.contains("only in its sector"), "port proximity refusal was not explained")
 	await app._finish_command_reply(
 		{"status": "error", "error": {"code": 1101, "message": "Invalid old password"}},
 		{"label": "Change password", "command": "auth.change_password", "mutating": true}
@@ -34,7 +50,7 @@ func _run() -> void:
 	app.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command/password tests: 6 passed")
+		print("Godot command/password tests: 9 passed")
 		quit(0)
 	else:
 		for failure in failures:

@@ -255,6 +255,7 @@ func _on_transport_reply(request_id: String, response: Dictionary, command: Stri
 			if port_result.get("kind") == "ok":
 				gameplay_view.enter_port_workflow(port_result.get("data", {}))
 			else:
+				gameplay_view.port_workflow.close_for_location_change()
 				gameplay_view.show_notification("Port refresh refused · %s" % str(port_result.get("message", "No current port data.")))
 		elif operation.get("kind") == "route_warp":
 			_finish_route_warp(response, operation)
@@ -571,6 +572,10 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.set_command_busy(false)
 	else:
 		gameplay_view.set_command_busy(false)
+		if str(operation.get("command", "")) == "port.info":
+			gameplay_view.port_workflow.close_for_location_change()
+			gameplay_view.show_notification("Port information refused · %s" % str(result.get("message", "Details are not available from this location.")))
+			return
 		if str(operation.get("command", "")) == "auth.change_password":
 			var error_value = response.get("error", {})
 			if error_value is Dictionary and int(error_value.get("code", 0)) == 1101:
