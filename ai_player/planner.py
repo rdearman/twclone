@@ -575,8 +575,14 @@ class Planner:
                 sector_data = current_state.get("sector_data", {}).get(sector_id, {})
                 
                 if sector_data.get("has_planet"):
-                     logger.info("Executing goal 'planet: land'")
-                     return {"command": "planet.land", "data": {}}
+                     planet_id = self._generate_required_field(
+                         "planet_id", "planet.land", current_state
+                     )
+                     if planet_id is not None:
+                         logger.info("Executing goal 'planet: land' on observed planet %s", planet_id)
+                         return {"command": "planet.land", "data": {"planet_id": planet_id}}
+                     logger.info("Deferring planet landing: no public planet ID was observed.")
+                     return None
                 else:
                      logger.warning("Goal 'planet: land' failed: No planet in sector.")
                      return None
@@ -587,8 +593,14 @@ class Planner:
                 sector_data = current_state.get("sector_data", {}).get(sector_id, {})
                 
                 if sector_data.get("has_planet"):
-                     logger.info("Executing goal 'planet: info'")
-                     return {"command": "planet.info", "data": {}}
+                     planet_id = self._generate_required_field(
+                         "planet_id", "planet.info", current_state
+                     )
+                     if planet_id is not None:
+                         logger.info("Inspecting observed planet %s", planet_id)
+                         return {"command": "planet.info", "data": {"planet_id": planet_id}}
+                     logger.info("Deferring planet inspection: no public planet ID was observed.")
+                     return None
                 else:
                      logger.warning("Goal 'planet: info' failed: No planet in sector.")
                      return None
@@ -1047,10 +1059,6 @@ class Planner:
     
     def _is_command_ready(self, command_name, retry_info):
         """Checks if a single command is on cooldown or has failed too many times."""
-        # TEMP FIX: Always allow trade.quote (needed for surveys)
-        if command_name in ["trade.quote"]:
-            return True
-
         info = retry_info.get(command_name, {})
         
         next_retry_time = info.get("next_retry_time", 0)
@@ -1186,6 +1194,24 @@ class Planner:
             return context
 
         current_state = self.state_manager.get_all()
+        if command_name == "trade.quote":
+            # Quote requests can be built from the observed current port and
+            # advertised market commodities even when a schema is unavailable.
+            # Never send an empty request that the server must refuse.
+            sector_id = current_state.get("player_location_sector")
+            port_id = self._find_port_in_sector(current_state, sector_id)
+            port_info = current_state.get("port_info_by_sector", {}).get(str(sector_id))
+            if port_info is None:
+                logger.info("Deferring trade.quote until current port information is inspected.")
+                return None
+            commodity = self._generate_required_field(
+                "commodity", command_name, current_state
+            )
+            if port_id is None or commodity is None:
+                logger.info("Deferring trade.quote: no observed port commodity is available.")
+                return None
+            return {"port_id": port_id, "commodity": commodity, "quantity": 1}
+
         if command_name in {"combat.attack", "combat.deploy_fighters", "combat.deploy_mines", "combat.lay_mines"} and self._is_protected_sector(current_state):
             logger.warning("Refusing %s in protected FedSpace.", command_name)
             return None
@@ -1358,7 +1384,11 @@ class Planner:
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
                 planets = sector_data.get("celestial_objects") or sector_data.get("planets", [])
                 if planets:
-                    return random.choice(planets).get("planet_id")
+                    planet = random.choice(planets)
+                    if isinstance(planet, dict):
+                        return planet.get("planet_id", planet.get("id"))
+                    if isinstance(planet, (str, int)):
+                        return planet
                 return None
         
         if field_name == "player_id":
@@ -1807,6 +1837,13 @@ class Planner:
             quantity = item.get("quantity", 0)
             purchase_price = item.get("purchase_price")
             origin_port_id = item.get("origin_port_id")
+
+            # A successful buy is authoritative evidence that this port sells
+            # the commodity. Standard port trade modes do not also buy it;
+            # a positive quote alone is not proof that a sale is eligible.
+            if origin_port_id is not None and str(origin_port_id) == str(port_id):
+                logger.debug("Skipping %s sale at its observed origin port %s.", commodity, port_id)
+                continue
 
             # NEW: Prevent immediate sell-back if we just bought it at THIS port and haven't moved
             last_trade = current_state.get("last_port_trade")

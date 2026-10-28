@@ -9,6 +9,7 @@ sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from bandit_policy import make_context_key  # noqa: E402
 from planner import Planner  # noqa: E402
+from main import is_goal_complete  # noqa: E402
 
 
 def make_planner(profile="balanced"):
@@ -56,6 +57,50 @@ def test_opportunist_prefers_a_fresh_public_recommended_market_route():
 
     assert make_planner("opportunist")._behavior_profile(state) == "opportunist"
     assert make_planner("opportunist")._get_next_warp_target(state) == 20
+
+
+def test_planet_landing_uses_a_planet_id_from_visible_sector_state():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 12,
+        "sector_data": {
+            "12": {
+                "has_planet": True,
+                "celestial_objects": [{"planet_id": 321, "name": "QA World"}],
+            }
+        },
+    }
+
+    assert planner._achieve_goal(state, "planet: land") == {
+        "command": "planet.land", "data": {"planet_id": 321}
+    }
+
+
+def test_planet_landing_defers_when_sector_state_has_no_planet_id():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 12,
+        "sector_data": {"12": {"has_planet": True, "celestial_objects": []}},
+    }
+
+    assert planner._achieve_goal(state, "planet: land") is None
+
+
+def test_planet_land_goal_completes_only_after_authoritative_landing_response():
+    assert not is_goal_complete(
+        "planet: land", {}, {"planet_id": 321}, "planet.info"
+    )
+    assert is_goal_complete(
+        "planet: land", {}, {"planet_id": 321, "status": "landed"}, "planet.land"
+    )
+    assert not is_goal_complete(
+        "planet: land", {}, {"planet_id": 321, "status": "refused"}, "planet.land"
+    )
+
+
+def test_planet_info_goal_completes_after_public_info_response():
+    assert is_goal_complete("planet: info", {}, {"planet_id": 321}, "planet.info")
+    assert not is_goal_complete("planet: info", {}, {"planet_id": 321}, "planet.land")
 
 
 def test_navigation_ignores_current_sector_and_blacklisted_warps():

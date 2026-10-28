@@ -1015,10 +1015,13 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
         elif goal_type == "scan" and goal_target == "density":
             return response_type == "sector.density.scan"
         
-        elif goal_type == "planet.land":
-             # Assume success if we got a planet.info or planet.land response, or just OK
-             # This is a bit loose but sufficient for now
-             return response_type in ["planet.info", "planet.land"]
+        elif goal_type == "planet" and goal_target == "land":
+            # Landing is complete only after the public land command succeeds;
+            # an information read alone must not advance this goal.
+            return response_type == "planet.land" and response_data.get("status") == "landed"
+
+        elif goal_type == "planet" and goal_target == "info":
+            return response_type == "planet.info"
 
     except Exception as e:
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
@@ -1033,12 +1036,59 @@ def advance_completed_goals(strategy_plan, game_state):
         remaining.pop(0)
     return remaining
 
+
+AI_SCHEMA_BOOTSTRAP_COMMANDS = frozenset({
+    "player.my_info", "ship.info", "ship.status", "sector.info",
+    "sector.scan.density", "move.warp", "move.pathfind",
+    "move.autopilot.start", "move.autopilot.status", "move.autopilot.stop",
+    "trade.port_info", "trade.quote", "trade.buy", "trade.sell",
+    "bank.balance", "bank.withdraw", "planet.info", "planet.land",
+})
+
+
+def cache_server_command_catalogue(response_data, state_manager):
+    """Store only public command names needed for planner validation."""
+    commands = [
+        item.get("cmd")
+        for item in (response_data.get("commands") or [])
+        if isinstance(item, dict) and isinstance(item.get("cmd"), str)
+    ]
+    state_manager.set("server_commands", commands)
+    # Schema fetches are not part of gameplay planning. Discard pending IDs
+    # from older saved state so they cannot hold the controller in bootstrap.
+    state_manager.set("pending_schema_requests", {})
+    logger.info("Received public command catalogue (%d commands).", len(commands))
+    return commands
+
+
+def schema_commands_to_fetch(commands, cached_schemas=None):
+    """Return missing schemas for the bounded public gameplay command set."""
+    cached_schemas = cached_schemas or {}
+    return [
+        command for command in commands
+        if command in AI_SCHEMA_BOOTSTRAP_COMMANDS and command not in cached_schemas
+    ]
+
+
+def should_attempt_registration(config, state_manager):
+    """Registration is opt-in and attempted at most once across restarts."""
+    return bool(
+        config.get("register_if_missing")
+        and not state_manager.get("registration_attempted", False)
+    )
+
+
 # --- Main Game Loop ---
 
 
 def bootstrap_schemas(game_conn, state_manager, config):
     """
-    Fetches all command schemas from the server on startup.
+    Fetch the server's public command catalogue.
+
+    The planner uses the advertised command names to check availability and
+    consumes schemas for its bounded public gameplay command set. Fetching a
+    schema for every server-advertised command floods the authenticated rate
+    limit and delays gameplay.
     """
     logger.info("Bootstrapping command schemas...")
 
@@ -1130,7 +1180,7 @@ def main(config_path="config.json"):
     state_manager.set_default("valid_commodity_names", ["ORE", "ORG", "EQU", "DRG", "SLV", "WPN"])  # All tradable commodities
     # We must reset session_id on start, as it's not persistent
     state_manager.set("session_id", None) 
-    state_manager._registration_attempted = False
+    state_manager.set_default("registration_attempted", False)
 
     last_heartbeat = time.time()
     schemas_bootstrapped = False
@@ -1159,11 +1209,20 @@ def main(config_path="config.json"):
                 response_timeout = 30.0
             expired_commands = state_manager.expire_pending_commands(response_timeout)
             if expired_commands:
-                logger.warning("Timed out waiting for %d command response(s); refreshing authoritative player and ship state.", len(expired_commands))
+                expired_names = [
+                    str(command.get("command") or "unknown")
+                    for _, command in expired_commands
+                ]
+                logger.warning(
+                    "Timed out waiting for %d command response(s) (%s); "
+                    "refreshing authoritative player and ship state.",
+                    len(expired_commands), ", ".join(expired_names),
+                )
                 for _request_id, expired_command in expired_commands:
-                    state_manager.record_ai_metric("commands_timed_out")
-                    state_manager.record_command_failure(expired_command.get("command", "unknown"))
-                    if expired_command.get("command") in ("move.autopilot.start", "move.autopilot.status"):
+                    command_name = expired_command.get("command", "unknown")
+                    state_manager.record_command_timeout(command_name)
+                    state_manager.record_command_failure(command_name)
+                    if command_name in ("move.autopilot.start", "move.autopilot.status"):
                         state_manager.set("autopilot_status_checked", False)
                     if expired_command.get("command") == "player.computer.recommend_routes":
                         state_manager.set("market_recommendations_requested_at", 0)
@@ -1230,8 +1289,7 @@ def main(config_path="config.json"):
                 # enabled, use the public auth.register command once, then
                 # fall back to login if the username already exists. A lost
                 # registration reply is reconciled by login, never blind retry.
-                if (config.get("register_if_missing")
-                        and not getattr(state_manager, "_registration_attempted", False)):
+                if should_attempt_registration(config, state_manager):
                     retry_info = game_state.get("command_retry_info", {})
                     if not planner._is_command_ready("auth.register", retry_info):
                         time.sleep(1)
@@ -1239,7 +1297,7 @@ def main(config_path="config.json"):
                     registration_key = str(uuid.uuid4())
                     registration = build_registration_command(config, registration_key)
                     if game_conn.send_command(registration):
-                        state_manager._registration_attempted = True
+                        state_manager.set("registration_attempted", True)
                         state_manager.add_pending_command(registration["id"], registration)
                         state_manager.record_command_sent("auth.register")
                         state_manager.record_ai_metric("commands_sent")
@@ -1748,36 +1806,27 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     continue
 
                 if response_type == "system.cmd_list":
-                    commands_to_fetch = [cmd.get("cmd") for cmd in response_data.get("commands", [])]
-                    logger.info(f"Received command list from server: {commands_to_fetch}")
-                    state_manager.set("server_commands", commands_to_fetch)
-                    
-                    commands_to_ignore = [
-                        "system.hello", "system.capabilities", "system.describe_schema", "system.cmd_list", "system.schema_list", "player.list_online"
-                    ]
-
-                    for command_name_to_fetch in commands_to_fetch:
-                        if command_name_to_fetch in commands_to_ignore:
-                            continue
+                    commands = cache_server_command_catalogue(response_data, state_manager)
+                    for command_name_to_fetch in schema_commands_to_fetch(
+                        commands, state_manager.get("command_schemas", {})
+                    ):
                         if command_name_to_fetch in state_manager.get("schema_blacklist", []):
-                            logger.debug(f"Skipping schema request for blacklisted command: {command_name_to_fetch}")
                             continue
-
                         idempotency_key = str(uuid.uuid4())
                         request_id_new = f"c-{idempotency_key[:8]}"
                         schema_request = {
-                            "id": request_id_new, "command": "system.describe_schema",
+                            "id": request_id_new,
+                            "command": "system.describe_schema",
                             "data": {"type": "command", "name": command_name_to_fetch},
                             "meta": {
                                 "client_version": config.get("client_version"),
                                 "idempotency_key": idempotency_key,
-                                "session_token": state_manager.get("session_id")
-                            }
+                                "session_token": state_manager.get("session_id"),
+                            },
                         }
-                        logger.debug(f"Requesting schema for command: {command_name_to_fetch}")
-                        game_conn.send_command(schema_request)
-                        state_manager.record_ai_metric("commands_sent")
-                        state_manager.state["pending_schema_requests"][command_name_to_fetch] = request_id_new
+                        if game_conn.send_command(schema_request):
+                            state_manager.record_ai_metric("commands_sent")
+                            state_manager.state["pending_schema_requests"][command_name_to_fetch] = request_id_new
                         time.sleep(0.1)
                     continue
 
@@ -1785,6 +1834,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     # Fix: Use session_token, not session (server returns session_token)
                     session_token = response_data.get("session_token") or response_data.get("session")
                     state_manager.set("session_id", session_token)
+                    if config.get("register_if_missing"):
+                        state_manager.set("registration_attempted", True)
                     
                     # Clear cached ship_info to force resync from server.
                     # This prevents stale cargo from persisting if items were deleted from the DB.
@@ -1793,6 +1844,12 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     
                     # Wrap in 'player' key if it looks like player info but is missing the wrapper
                     p_info = response_data if "player" in response_data else {"player": response_data}
+
+                    # The session token is needed in memory for public commands,
+                    # but must never be copied into the persistent player snapshot.
+                    p_info = {"player": dict(p_info.get("player") or {})}
+                    p_info["player"].pop("session_token", None)
+                    p_info["player"].pop("session", None)
                     
                     # Ensure player_id is present in the player object for downstream logic
                     if "player_id" in response_data and "id" not in p_info["player"]:
@@ -2126,7 +2183,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 if command_name == "auth.register" and error_code == 1000:
                     # Database outages are transient; permit one later public
                     # registration attempt after the command backoff expires.
-                    state_manager._registration_attempted = False
+                    state_manager.set("registration_attempted", False)
 
             if (config.get("population_mode") and not config.get("qa_mode") and sent_command
                     and population_turn_readback_required(command_name, config)):

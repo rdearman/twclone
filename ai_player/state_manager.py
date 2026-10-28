@@ -17,6 +17,9 @@ class StateManager:
             "session_id": None,
             "player_info": None,
             "ship_info": None,
+            # Locally observed purchase lots survive authoritative ship-status
+            # refreshes, which omit purchase price and origin-port details.
+            "cargo_metadata": [],
             "player_location_sector": None,
             "sector_data": {},          # Caches for sector.info
             "universe_map": {},         # NEW: For systematic exploration
@@ -108,6 +111,20 @@ class StateManager:
         """Saves the current state to the state file."""
         temporary_path = None
         try:
+            # Session credentials are runtime-only. Reauthentication is already
+            # required on process start, so there is no reason to persist them.
+            persisted_state = dict(self.state)
+            persisted_state["session_id"] = None
+            player_info = persisted_state.get("player_info")
+            if isinstance(player_info, dict):
+                persisted_player_info = dict(player_info)
+                player = persisted_player_info.get("player")
+                if isinstance(player, dict):
+                    persisted_player = dict(player)
+                    persisted_player.pop("session_token", None)
+                    persisted_player.pop("session", None)
+                    persisted_player_info["player"] = persisted_player
+                persisted_state["player_info"] = persisted_player_info
             target_path = os.path.abspath(self.state_file)
             target_dir = os.path.dirname(target_path)
             prefix = f".{os.path.basename(target_path)}."
@@ -115,7 +132,7 @@ class StateManager:
                 prefix=prefix, suffix=".tmp", dir=target_dir
             )
             with os.fdopen(file_descriptor, 'w', encoding='utf-8') as f:
-                json.dump(self.state, f, indent=4)
+                json.dump(persisted_state, f, indent=4)
                 f.flush()
             os.replace(temporary_path, target_path)
             temporary_path = None
@@ -415,6 +432,10 @@ class StateManager:
                 "commodity": commodity,
                 "type": "buy"
             }
+        self.state["cargo_metadata"] = [
+            dict(item) for item in self.state["ship_info"].get("cargo", [])
+            if isinstance(item, dict)
+        ]
         logger.info(f"Cargo updated after buy: {self.state['ship_info']['cargo']}")
         self.save_state()
 
@@ -469,6 +490,10 @@ class StateManager:
             
             # Combine the remaining parts of sold commodity with the other items
             self.state['ship_info']['cargo'] = other_items + new_cargo_list
+            self.state["cargo_metadata"] = [
+                dict(item) for item in self.state["ship_info"]["cargo"]
+                if isinstance(item, dict)
+            ]
             
             # Record last trade
             self.state["last_port_trade"] = {
@@ -526,6 +551,8 @@ class StateManager:
             # Trust server cargo if provided, but PRESERVE local tracking data (prices, origins)
             server_cargo = player_data['ship'].get('cargo')
             local_cargo = (self.state.get('ship_info') or {}).get('cargo', [])
+            if not local_cargo:
+                local_cargo = self.state.get("cargo_metadata", [])
             
             # Save local cargo metadata in a map for quick lookup during merge
             # Key: commodity name, Value: list of batches with metadata
@@ -575,6 +602,11 @@ class StateManager:
                     self.state['ship_info']['cargo'] = merged_cargo
             else:
                 self.state['ship_info']['cargo'] = local_cargo
+
+            self.state["cargo_metadata"] = [
+                dict(item) for item in self.state["ship_info"].get("cargo", [])
+                if isinstance(item, dict)
+            ]
 
             # Update location from ship info (authoritative GPS)
             if 'location' in player_data['ship'] and 'sector_id' in player_data['ship']['location']:
@@ -658,6 +690,16 @@ class StateManager:
     def record_ai_metric(self, name, amount=1):
         metrics = self.state.setdefault("ai_metrics", {})
         metrics[name] = metrics.get(name, 0) + amount
+        self.save_state()
+
+    def record_command_timeout(self, command_name):
+        """Record aggregate and per-command timeout metrics without request data."""
+        command = str(command_name or "unknown")
+        suffix = "".join(ch if ch.isalnum() else "_" for ch in command)[:80] or "unknown"
+        metrics = self.state.setdefault("ai_metrics", {})
+        metrics["commands_timed_out"] = metrics.get("commands_timed_out", 0) + 1
+        metric_name = f"command_timeout_{suffix}"
+        metrics[metric_name] = metrics.get(metric_name, 0) + 1
         self.save_state()
 
     def ingest_server_event(self, envelope):

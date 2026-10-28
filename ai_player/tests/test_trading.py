@@ -48,6 +48,47 @@ def test_buy_decision_selects_commodity_with_known_positive_margin():
     assert planner._can_buy(state) is True
 
 
+def test_quote_payload_uses_observed_port_and_advertised_commodity_without_schema():
+    planner = make_planner()
+    state = market_state()
+    state["price_cache"]["101"] = {"buy": {}, "sell": {}}
+    planner.state_manager.get_all.return_value = state
+    planner.state_manager.get_schema.return_value = None
+
+    payload = planner._build_payload("trade.quote", state)
+
+    assert payload == {"port_id": 101, "commodity": "ORE", "quantity": 1}
+
+
+def test_quote_is_deferred_until_port_is_inspected():
+    planner = make_planner()
+    state = market_state()
+    state["port_info_by_sector"] = {}
+    planner.state_manager.get_all.return_value = state
+
+    assert planner._build_payload("trade.quote", state) is None
+
+
+def test_quote_refusal_uses_retry_cooldown_instead_of_repeating():
+    planner = make_planner()
+    assert planner._is_command_ready("trade.quote", {})
+    assert not planner._is_command_ready(
+        "trade.quote", {"trade.quote": {"next_retry_time": time.time() + 10}}
+    )
+
+
+def test_sell_planner_never_targets_the_port_that_sold_the_cargo():
+    planner = make_planner()
+    state = market_state()
+    state["ship_info"]["cargo"] = [{
+        "commodity": "ORE", "quantity": 5, "purchase_price": 100,
+        "origin_port_id": 101,
+    }]
+    state["price_cache"]["101"]["sell"]["ORE"] = 200
+
+    assert planner._get_best_commodity_to_sell(state) is None
+
+
 def test_buy_decision_skips_commodity_without_known_buyer():
     planner = make_planner()
     state = market_state()
