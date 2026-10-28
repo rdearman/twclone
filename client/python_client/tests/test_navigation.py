@@ -146,6 +146,51 @@ def test_moved_tactical_actions_preserve_handlers_and_rpcs(menus):
     assert opts["e"]["action"] == {"pycall": "enter_ship_menu"}
 
 
+def test_transwarp_is_a_reachable_documented_movement_action(menus):
+    options = {item["key"]: item for item in _iter_options(menus["MOVE"])}
+    assert options["t"]["action"] == {"pycall": "transwarp_flow"}
+
+
+def test_transwarp_flow_uses_server_command_then_refreshes_authoritative_sector(
+    ctx_factory, fake_conn, monkeypatch
+):
+    ctx = ctx_factory(sector={"id": 4, "name": "Old Sector"})
+    fake_conn.queue("move.transwarp", {"status": "ok", "data": {"current_sector": 77}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {
+        "sector_id": 77, "name": "New Sector", "adjacent_sectors": [],
+        "ports": [], "ships_present": [], "players_present": [],
+    }})
+    monkeypatch.setattr("builtins.input", lambda *_: "77")
+    monkeypatch.setattr(client, "call_handler", lambda name, _ctx: name == "redisplay_sector")
+
+    client.transwarp_flow(ctx)
+
+    assert fake_conn.calls[0] == {
+        "command": "move.transwarp", "data": {"to_sector_id": 77},
+    }
+    assert fake_conn.calls[1] == {
+        "command": "move.describe_sector", "data": {"sector_id": 77},
+    }
+    assert ctx.last_sector_desc["id"] == 77
+
+
+def test_transwarp_refusal_does_not_refresh_or_replace_cached_sector(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    old_sector = {"id": 4, "name": "Old Sector"}
+    ctx = ctx_factory(sector=old_sector)
+    fake_conn.queue("move.transwarp", {
+        "status": "refused", "error": {"message": "Transwarp drive not installed."},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "77")
+
+    client.transwarp_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["move.transwarp"]
+    assert ctx.last_sector_desc == old_sector
+    assert "Transwarp drive not installed" in capsys.readouterr().out
+
+
 def test_submenus_have_functioning_back_action(menus):
     for menu_id, menu in menus.items():
         if menu_id == "MAIN":

@@ -18,7 +18,7 @@ def test_tow_flow_engages_selected_ship_and_reports_server_confirmation(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = _ctx(ctx_factory)
-    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {"ship_id": 10, "towing_ship_id": None, "towed_by_ship_id": None}})
     fake_conn.queue("ship.tow", {
         "status": "ok", "type": "ship.tow.engaged",
         "data": {"status": "Towing beam engaged", "towee_ship_id": 20},
@@ -37,7 +37,7 @@ def test_tow_flow_releases_current_tow_with_empty_data(
 ):
     ctx = _ctx(ctx_factory)
     ctx.state["towing_ship_id"] = 20
-    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {"ship_id": 10, "towing_ship_id": 20, "towed_by_ship_id": None}})
     fake_conn.queue("ship.tow", {
         "status": "ok", "type": "ship.tow.disengaged",
         "data": {"status": "Towing beam disengaged", "towee_ship_id": 20},
@@ -55,23 +55,23 @@ def test_tow_flow_cancels_without_sending_mutating_command(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = _ctx(ctx_factory)
-    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {"ship_id": 10, "towing_ship_id": None, "towed_by_ship_id": None}})
     monkeypatch.setattr("builtins.input", lambda *_: "")
 
     client.tow_flow(ctx)
 
-    assert [call["command"] for call in fake_conn.calls] == ["ship.status"]
+    assert [call["command"] for call in fake_conn.calls] == ["ship.tow.status"]
     assert "cancelled" in capsys.readouterr().out.lower()
 
 
 def test_tow_flow_rejects_ship_not_in_current_sector(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = _ctx(ctx_factory)
-    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {"ship_id": 10, "towing_ship_id": None, "towed_by_ship_id": None}})
     monkeypatch.setattr("builtins.input", lambda *_: "999")
 
     client.tow_flow(ctx)
 
-    assert [call["command"] for call in fake_conn.calls] == ["ship.status"]
+    assert [call["command"] for call in fake_conn.calls] == ["ship.tow.status"]
     assert "not listed" in capsys.readouterr().out
 
 
@@ -79,7 +79,7 @@ def test_tow_flow_surfaces_authoritative_server_refusal(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = _ctx(ctx_factory)
-    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {"ship_id": 10, "towing_ship_id": None, "towed_by_ship_id": None}})
     fake_conn.queue("ship.tow", {
         "status": "refused", "error": {"message": "Target ship is currently piloted."},
     })
@@ -89,6 +89,26 @@ def test_tow_flow_surfaces_authoritative_server_refusal(
 
     assert fake_conn.calls[-1]["command"] == "ship.tow"
     assert "Target ship is currently piloted" in capsys.readouterr().out
+
+
+def test_tow_status_reconciles_existing_tow_after_reconnect(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {
+        "ship_id": 10, "towing_ship_id": 20, "towed_by_ship_id": None,
+    }})
+    fake_conn.queue("ship.tow", {
+        "status": "ok", "type": "ship.tow.disengaged",
+        "data": {"status": "Towing beam disengaged", "towee_ship_id": 20},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "r")
+
+    client.tow_flow(ctx)
+
+    assert fake_conn.calls[0] == {"command": "ship.tow.status", "data": {}}
+    assert "Currently towing ship 20" in capsys.readouterr().out
+    assert "towing_ship_id" not in ctx.state
 
 
 def test_has_tow_target_requires_real_non_player_ship_id():

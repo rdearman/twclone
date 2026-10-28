@@ -195,6 +195,13 @@
           }
         },
         {
+          "key": "t",
+          "label": "(T) Transwarp to Sector",
+          "action": {
+            "pycall": "transwarp_flow"
+          }
+        },
+        {
           "key": "p",
           "label": "(P) Pathfind to Sector",
           "action": {

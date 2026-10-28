@@ -1039,6 +1039,37 @@ def warp_flow(ctx: Context):
     _perform_warp(ctx, target)
 
 
+@register("transwarp_flow")
+def transwarp_flow(ctx: Context):
+    """Request the server's long-range move.transwarp operation."""
+    raw = input("Transwarp to sector id: ").strip()
+    try:
+        target = int(raw)
+    except ValueError:
+        print("Invalid sector ID.")
+        return
+    if target <= 0:
+        print("Sector ID must be greater than zero.")
+        return
+    response = ctx.conn.rpc("move.transwarp", {"to_sector_id": target})
+    ok, message = present_move_result(response)
+    if not ok:
+        print(message)
+        return
+    new_sector = ctx.conn.rpc("move.describe_sector", {"sector_id": target})
+    if isinstance(new_sector, dict) and new_sector.get("status") == "ok":
+        ctx.last_sector_desc = normalize_sector(get_data(new_sector))
+        ctx.hud = hud_module.merge_hud(ctx.hud, hud_module.extract_sector_fields(ctx.last_sector_desc))
+    else:
+        # The move itself is confirmed; mark the old sector context stale
+        # instead of pretending the destination details were retrieved.
+        ctx.last_sector_desc = {}
+        print("Transwarp succeeded, but destination details could not be refreshed.")
+    _hud_rpc(ctx, "player.my_info", {})
+    print(f"Transwarped to sector {target}.")
+    call_handler("redisplay_sector", ctx)
+
+
 def _perform_warp(ctx: Context, target: int) -> bool:
     """
     Single, authoritative move.warp caller used by every movement flow.
@@ -1644,9 +1675,29 @@ def pretty_print_hardware_list(ctx):
 
 @register("hardware_buy_flow")
 def hardware_buy_flow(ctx: Context):
-    item_code = input("Enter item code to buy: ").strip().upper()
-    if not item_code:
-        print("Cancelled.")
+    catalogue = ctx.conn.rpc("hardware.list", {})
+    ctx.state["last_rpc"] = catalogue
+    if not isinstance(catalogue, dict) or catalogue.get("status") != "ok":
+        print(f"[Error] Could not load the hardware catalogue: {_planet_error(catalogue)}")
+        return
+    data = get_data(catalogue)
+    items = data.get("hardware", []) if isinstance(data, dict) else []
+    items = [row for row in items if isinstance(row, dict) and row.get("item_code")]
+    if not items:
+        print("No hardware is available at this dock.")
+        return
+    print("\n--- Hardware available at this dock ---")
+    for index, item in enumerate(items, 1):
+        extra_stock = f" · stock {item['stock_quantity']}" if item.get("stock_quantity") is not None else ""
+        print(f"  {index}. {item.get('name', item['item_code'])} [{item['item_code']}] · {item.get('price', '?')} CR{extra_stock}")
+    selection = input("Hardware number or displayed item code: ").strip().upper()
+    try:
+        selected_index = int(selection)
+        item = items[selected_index - 1] if 1 <= selected_index <= len(items) else None
+    except ValueError:
+        item = next((row for row in items if str(row["item_code"]).upper() == selection), None)
+    if item is None:
+        print("Cancelled: choose a hardware item from the server catalogue.")
         return
 
     try:
@@ -1659,7 +1710,7 @@ def hardware_buy_flow(ctx: Context):
         return
 
     payload = {
-        "item_code": item_code,
+        "item_code": str(item["item_code"]).upper(),
         "quantity": quantity
     }
 
@@ -1667,14 +1718,17 @@ def hardware_buy_flow(ctx: Context):
     ctx.state["last_rpc"] = resp
 
     if resp.get("status") == "ok":
-        print(f"Successfully purchased {quantity} units of {item_code}.")
+        print(f"Successfully purchased {quantity} units of {payload['item_code']}.")
         _pp(resp)
-        # Refresh player info to update cargo/equipment display
+        # Refresh credits and ship equipment through the authoritative views.
         my_info_resp = _hud_rpc(ctx, "player.my_info", {})
         if my_info_resp.get("status") == "ok":
             ctx.player_info = get_data(my_info_resp)
         else:
             print("[Warning] Could not refresh player info after hardware purchase.")
+        ship_resp = _hud_rpc(ctx, "ship.status", {})
+        if ship_resp.get("status") != "ok":
+            print("[Warning] Could not refresh ship status after hardware purchase.")
     else:
         print(f"[Error] Hardware purchase failed: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)
@@ -3526,38 +3580,33 @@ def tow_flow(ctx: Context):
     my_ship_id = get_my_ship_id(ctx.conn, ctx)
     targets = _tow_targets(d.get("ships") or [], my_ship_id=my_ship_id)
 
-    # ship.status is the existing read API, but the current response may omit
-    # tow fields. Retain the last confirmed command result when it does, without
-    # guessing from sector contents.
+    # Reconcile towing through the documented read endpoint. Sector contents
+    # identify possible targets, but do not prove the current tow relationship.
     towing_id = ctx.state.get("towing_ship_id")
     towing_status_reported = False
     try:
-        status_resp = ctx.conn.rpc("ship.status", {})
+        status_resp = ctx.conn.rpc("ship.tow.status", {})
         if isinstance(status_resp, dict) and status_resp.get("status") == "ok":
             status_data = get_data(status_resp)
-            status_ship = status_data.get("ship") or status_data
-            if isinstance(status_ship, dict):
-                for key in ("towing_ship_id", "towee_ship_id"):
-                    if key in status_ship:
-                        value = status_ship.get(key)
-                        towing_id = value if isinstance(value, int) and value > 0 else None
-                        towing_status_reported = True
-                        if towing_id is None:
-                            ctx.state.pop("towing_ship_id", None)
-                        else:
-                            ctx.state["towing_ship_id"] = towing_id
-                        break
+            if isinstance(status_data, dict) and "towing_ship_id" in status_data:
+                value = status_data.get("towing_ship_id")
+                towing_id = value if isinstance(value, int) and value > 0 else None
+                towing_status_reported = True
+                if towing_id is None:
+                    ctx.state.pop("towing_ship_id", None)
+                else:
+                    ctx.state["towing_ship_id"] = towing_id
     except (ConnectionError, OSError):
         raise
     except Exception:
         pass
 
     if towing_id and towing_status_reported:
-        print(f"Currently towing ship {towing_id} (reported by ship.status).")
+        print(f"Currently towing ship {towing_id} (reported by ship.tow.status).")
     elif towing_id:
         print(f"Last confirmed tow response: towing ship {towing_id} (this session).")
     else:
-        print("Tow status is not available from ship.status; successful tow actions are tracked for this session.")
+        print("No active tow is reported." if towing_status_reported else "Tow status could not be confirmed; successful tow actions are tracked for this session.")
 
     if targets:
         print("Ships in this sector:")

@@ -16,6 +16,8 @@ const COMMANDS := {
 	"COMPUTER": [
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
+		{"label": "Ship towing status", "command": "ship.tow.status", "fixed": {}},
+		{"label": "Release current tow beam", "command": "ship.tow", "fixed": {}, "mutating": true, "tooltip": "Releases the active tow relationship if your ship is towing another vessel."},
 		{"label": "Repair ship at shipyard", "command": "ship.repair", "mutating": true, "requires_shipyard_dock": true, "tooltip": "Repair restores hull to 100; the server checks the final cost and your credits."},
 		{"label": "Rename ship · unavailable", "unavailable_reason": "The ship.rename schema accepts name, but its handler requires ship_id and new_name."},
 		{"label": "Scan adjacent sectors", "command": "move.scan"},
@@ -105,6 +107,7 @@ const COMMANDS := {
 	],
 	"NAVIGATION": [
 		{"label": "Warp to sector number", "command": "move.warp", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "mutating": true},
+		{"label": "Transwarp to sector", "command": "move.transwarp", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "mutating": true, "tooltip": "The server checks transwarp equipment, destination and turn cost."},
 		{"label": "Bookmarks", "command": "nav.bookmark.list"},
 		{"label": "Add current sector bookmark", "command": "nav.bookmark.add", "fields": [["name", FIELD_TEXT, "Bookmark name", ""]], "context_sector": true, "mutating": true},
 		{"label": "Remove bookmark", "command": "nav.bookmark.remove", "fields": [["name", FIELD_TEXT, "Bookmark name", ""]], "mutating": true},
