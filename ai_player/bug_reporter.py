@@ -1,7 +1,8 @@
 import os
 import json
 import logging
-from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +10,10 @@ _SECRET_FIELDS = {
     "password", "passwd", "session", "session_id", "session_token",
     "access_token", "refresh_token", "authorization", "secret",
 }
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 
 
 def redact_secrets(value):
@@ -43,7 +48,7 @@ class BugReporter:
 
     def _get_timestamp(self):
         """Returns a sortable timestamp string."""
-        return datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        return _utc_now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
     def log_command(self, command_dict, state_before=None):
         """
@@ -52,7 +57,7 @@ class BugReporter:
         """
         try:
             log_entry = {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": _utc_now().isoformat().replace("+00:00", "Z"),
                 "type": "command",
                 "data": redact_secrets(command_dict),
                 "state_before": redact_secrets(state_before) if state_before is not None else None,
@@ -70,7 +75,7 @@ class BugReporter:
         """
         try:
             log_entry = {
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": _utc_now().isoformat().replace("+00:00", "Z"),
                 "type": "response",
                 "data": redact_secrets(response_dict),
                 "command": redact_secrets(command) if command is not None else None,
@@ -96,6 +101,16 @@ class BugReporter:
                 for item in ship.get("cargo", []) if isinstance(item, dict)
             ],
         }
+
+    @staticmethod
+    def _credits_match(expected, actual):
+        """Compare public credit values numerically across decimal formats."""
+        if expected is None or actual is None:
+            return None
+        try:
+            return Decimal(str(expected)) == Decimal(str(actual))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
 
     def log_gameplay_outcome(self, *, identity, seed, command, response,
                              state_before, state_after, events=None,
@@ -148,9 +163,12 @@ class BugReporter:
             actual["cargo_delta"] = actual_delta
             expected["credits"] = response_data.get("credits_remaining")
             actual["credits"] = after.get("credits")
-            consistent = expected_delta == actual_delta and (
-                expected["credits"] is None or str(expected["credits"]) == str(actual["credits"])
-            )
+            credits_match = self._credits_match(expected["credits"], actual["credits"])
+            if expected["credits"] is not None and credits_match is None:
+                verification_complete = False
+                consistent = None
+            else:
+                consistent = expected_delta == actual_delta and (credits_match is None or credits_match)
 
         outcome = {
             "ai_identity": identity,
@@ -169,7 +187,7 @@ class BugReporter:
         }
         try:
             with open(self.qa_log_file, "a", encoding="utf-8") as f:
-                json.dump({"timestamp": datetime.utcnow().isoformat() + "Z",
+                json.dump({"timestamp": _utc_now().isoformat().replace("+00:00", "Z"),
                            "type": "gameplay_outcome", "data": redact_secrets(outcome)}, f)
                 f.write("\n")
         except OSError as exc:

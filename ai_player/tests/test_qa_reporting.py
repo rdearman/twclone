@@ -78,6 +78,47 @@ def test_successful_trade_mismatch_creates_reproducible_defect(tmp_path):
     assert json.loads(report.read_text())["severity"] == "major"
 
 
+def test_trade_outcome_accepts_equivalent_decimal_credit_formats(tmp_path):
+    reporter = BugReporter(str(tmp_path))
+    result = reporter.log_gameplay_outcome(
+        identity="qa-player", seed=12,
+        command={"command": "trade.buy", "data": {
+            "items": [{"commodity": "ORE", "quantity": 2}],
+        }},
+        response={"status": "ok", "type": "trade.buy_receipt_v1", "data": {
+            "credits_remaining": "4900.00",
+            "lines": [{"commodity": "ORE", "quantity": 2}],
+        }},
+        state_before={"player_info": {"player": {"credits": "5000.00"}},
+                      "ship_info": {"cargo": []}},
+        state_after={"player_info": {"player": {"credits": "4900"}},
+                     "ship_info": {"cargo": [{"commodity": "ORE", "quantity": 2}]}},
+    )
+
+    assert result["consistent"] is True
+    assert list(tmp_path.glob("live_*/defect.json")) == []
+
+
+def test_missing_authoritative_trade_credits_are_incomplete_not_a_defect(tmp_path):
+    reporter = BugReporter(str(tmp_path))
+    result = reporter.log_gameplay_outcome(
+        identity="qa-player", seed=13,
+        command={"command": "trade.buy", "data": {
+            "items": [{"commodity": "ORE", "quantity": 1}],
+        }},
+        response={"status": "ok", "type": "trade.buy_receipt_v1", "data": {
+            "credits_remaining": "4900.00",
+            "lines": [{"commodity": "ORE", "quantity": 1}],
+        }},
+        state_before={"ship_info": {"cargo": []}},
+        state_after={"ship_info": {"cargo": [{"commodity": "ORE", "quantity": 1}]}},
+    )
+
+    assert result["consistent"] is None
+    assert result["verification_complete"] is False
+    assert list(tmp_path.glob("live_*/defect.json")) == []
+
+
 def test_expected_refusal_is_not_reported_as_a_defect(tmp_path):
     reporter = BugReporter(str(tmp_path))
     result = reporter.log_gameplay_outcome(
