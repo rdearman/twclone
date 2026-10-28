@@ -1012,6 +1012,18 @@ func show_planned_route(path: Array, destination: int) -> void:
 	_route_cancel_button.disabled = false
 	_route_panel.visible = not ids.is_empty()
 
+func show_restored_autopilot_route(path: Array, destination: int, state: String, mode: String) -> void:
+	var ids: Array[String] = []
+	for item in path:
+		if typeof(item) == TYPE_INT or typeof(item) == TYPE_FLOAT:
+			ids.append(str(int(item)))
+	_route_label.text = "SAVED ROUTE · %s · MODE %s · DESTINATION %d · %s · Review, then engage to move" % [state.to_upper(), mode.to_upper(), destination, " → ".join(ids)]
+	_route_engage_button.visible = true
+	_route_engage_button.disabled = ids.is_empty()
+	_route_cancel_button.text = "STOP SAVED ROUTE"
+	_route_cancel_button.disabled = false
+	_route_panel.visible = not ids.is_empty()
+
 func set_autonav_status(status: String, stop_pending: bool = false) -> void:
 	_route_label.text = status
 	_route_engage_button.visible = false

@@ -181,22 +181,59 @@ def _handle_known_broadcast(envelope: dict):
 @register("cli_autopilot_status")
 def cli_autopilot_status(ctx):
     """Query and display autopilot status."""
-    r = ctx.conn.rpc("move.autopilot.status", {})
-    if (r or {}).get("status") in ("error", "refused"):
-        error = (r.get("error") or {})
+    data = refresh_autopilot_status(ctx)
+    if data is None:
+        response = ctx.state.get("autopilot_status_response") or {}
+        error = response.get("error") if isinstance(response, dict) else {}
+        error = error if isinstance(error, dict) else {}
         print(f"[Error] Failed to get autopilot status: {error.get('message', 'Unknown error')}")
         return
-    data = (r or {}).get("data") or {}
-    state = data.get("state")
-    nxt = data.get("next")
-    print(f"Autopilot: {state or 'unknown'}; next: {nxt if nxt is not None else '-'}")
+    print_autopilot_status(data)
+
+
+def refresh_autopilot_status(ctx, announce=False):
+    """Refresh the server-owned route snapshot after login or reconnect."""
+    try:
+        response = ctx.conn.rpc("move.autopilot.status", {})
+    except ConnectionError:
+        raise
+    except Exception:
+        return None
+    ctx.state["autopilot_status_response"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        return None
+    data = response.get("data")
+    if not isinstance(data, dict):
+        return None
     ctx.state["autopilot_status"] = data
-    ctx.state["last_rpc"] = r
+    if announce and data.get("state") not in (None, "idle", "complete"):
+        next_sector = data.get("next_sector_id", data.get("next"))
+        print("Saved autopilot route restored: %s; next sector %s. No movement will resume until you start it." % (
+            data.get("state", "unknown"),
+            next_sector if next_sector is not None else "unavailable"))
+    return data
+
+
+def print_autopilot_status(data):
+    """Display only authoritative fields returned by move.autopilot.status."""
+    next_sector = data.get("next_sector_id", data.get("next"))
+    details = [f"Autopilot: {data.get('state', 'unknown')} ({data.get('mode', 'unknown')})"]
+    if data.get("current_sector_id") is not None:
+        details.append(f"current sector {data['current_sector_id']}")
+    if data.get("target_sector_id") is not None:
+        details.append(f"destination {data['target_sector_id']}")
+    details.append(f"next {next_sector if next_sector is not None else '-'}")
+    path = data.get("path")
+    if isinstance(path, list) and path:
+        details.append("path " + " → ".join(map(str, path)))
+    print("; ".join(details))
+    if data.get("last_error"):
+        print(f"Last route error: {data['last_error']}")
 
 @register("cli_autopilot_control")
 def cli_autopilot_control(ctx):
     """Send a control action and display the server-confirmed result."""
-    print("Controls: [Y] stop at next  |  [N] continue  |  [E] express  |  [Q] back")
+    print("Controls: [Y] stop at next  |  [N] continue  |  [E] express  |  [S] stop now  |  [Q] back")
     while True:
         k = input("> ").strip().lower()
         action = None
@@ -206,10 +243,13 @@ def cli_autopilot_control(ctx):
             action = "continue"
         elif k == "e":
             action = "express"
+        elif k == "s":
+            cli_autopilot_stop(ctx)
+            continue
         elif k == "q" or k == "":
             return
         else:
-            print("Y/N/E or Q")
+            print("Y/N/E/S or Q")
             continue
 
         response = ctx.conn.rpc("move.autopilot.control", {"action": action})
@@ -223,6 +263,27 @@ def cli_autopilot_control(ctx):
         next_sector = data.get("next_sector_id")
         detail = f"; next sector {next_sector}" if next_sector is not None else ""
         print(f"Autopilot {action} confirmed: {data.get('state', 'updated')}{detail}.")
+
+
+@register("cli_autopilot_stop")
+def cli_autopilot_stop(ctx):
+    """Stop the persisted server route immediately, without moving the ship."""
+    response = ctx.conn.rpc("move.autopilot.stop", {})
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = response.get("error") if isinstance(response, dict) else {}
+        error = error if isinstance(error, dict) else {}
+        print(f"[Error] Autopilot stop refused: {error.get('message', 'Unknown error')}")
+        ctx.state["autopilot_status_response"] = response
+        return False
+    data = response.get("data")
+    if not isinstance(data, dict):
+        data = {}
+    ctx.state["autopilot_status"] = data
+    ctx.state["autopilot_status_response"] = response
+    current = data.get("current_sector_id")
+    suffix = f" at sector {current}" if current is not None else ""
+    print(f"Autopilot stopped{suffix}; no movement was made by this command.")
+    return True
 # --- END AUTO-ADDED AUTOPILOT ---
 
 
@@ -4556,6 +4617,13 @@ def main():
 
             # Initial update of corporation context after login
             _update_corp_context(ctx)
+
+            # Re-read the server-persisted route after every login/reconnect.
+            # A saved route is displayed for review; movement remains an
+            # explicit player action in the normal warp-by-warp workflow.
+            route_status = refresh_autopilot_status(ctx, announce=True)
+            if route_status is None:
+                print("Saved autopilot status is unavailable; navigation remains manual.")
 
             # First render sector header once
             call_handler("redisplay_sector", ctx)

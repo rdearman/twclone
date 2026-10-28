@@ -113,6 +113,10 @@ const COMMANDS := {
 		{"label": "Remove sector from avoid list", "command": "nav.avoid.remove", "fields": [["sector_id", FIELD_INT, "Sector ID", ""]], "mutating": true},
 		{"label": "Autopilot status", "command": "move.autopilot.status"},
 		{"label": "Plot route to sector", "command": "move.autopilot.start", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true},
+		{"label": "Autopilot · stop at next sector", "command": "move.autopilot.control", "fixed": {"action": "stop_at_next"}, "mutating": true},
+		{"label": "Autopilot · continue route", "command": "move.autopilot.control", "fixed": {"action": "continue"}, "mutating": true},
+		{"label": "Autopilot · express mode", "command": "move.autopilot.control", "fixed": {"action": "express"}, "mutating": true, "tooltip": "Express keeps each hop server-validated; it does not skip per-hop checks."},
+		{"label": "Autopilot · stop saved route now", "command": "move.autopilot.stop", "fixed": {}, "mutating": true},
 	],
 	"SETTINGS & NOTES": [
 		{"label": "Reduced motion · OFF", "local_reduced_motion": true},

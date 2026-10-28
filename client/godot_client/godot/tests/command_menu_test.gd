@@ -140,6 +140,25 @@ func _run() -> void:
 	_check(not autopilot_status_action.is_empty(), "navigation menu does not expose the implemented autopilot status query")
 	menu._choose_action(autopilot_status_action)
 	_check(captured.size() == 15 and captured[14]["command"] == "move.autopilot.status" and captured[14]["data"].is_empty() and not captured[14]["mutating"], "autopilot status did not issue the empty read-only command")
+	var expected_controls := [
+		{"label": "Autopilot · stop at next sector", "command": "move.autopilot.control", "data": {"action": "stop_at_next"}},
+		{"label": "Autopilot · continue route", "command": "move.autopilot.control", "data": {"action": "continue"}},
+		{"label": "Autopilot · express mode", "command": "move.autopilot.control", "data": {"action": "express"}},
+		{"label": "Autopilot · stop saved route now", "command": "move.autopilot.stop", "data": {}},
+	]
+	for expected in expected_controls:
+		var control_action: Dictionary = {}
+		for candidate in navigation_actions:
+			if str(candidate.get("label", "")) == str(expected["label"]):
+				control_action = candidate
+		_check(not control_action.is_empty(), "%s is not exposed in navigation controls" % str(expected["label"]))
+		if control_action.is_empty():
+			continue
+		menu._choose_action(control_action)
+		_check(menu._form_dialog.visible, "%s did not confirm its state-changing server request" % str(expected["label"]))
+		menu._form_dialog.confirmed.emit()
+		var sent: Dictionary = captured.back() if not captured.is_empty() else {}
+		_check(sent.get("command") == expected["command"] and sent.get("data") == expected["data"] and sent.get("mutating", false), "%s sent a payload outside the documented autopilot contract" % str(expected["label"]))
 	var warp_action: Dictionary = {}
 	for candidate in navigation_actions:
 		if str(candidate.get("command", "")) == "move.warp":
@@ -149,14 +168,14 @@ func _run() -> void:
 	menu._choose_action(warp_action)
 	(menu._form_fields["to_sector_id"] as LineEdit).text = "18"
 	menu._submit_form()
-	_check(captured.size() == 16 and captured[15]["command"] == "move.warp" and captured[15]["data"] == {"to_sector_id": 18} and captured[15]["mutating"], "numeric warp did not use the direct authoritative move command")
+	_check(captured.size() == 20 and captured[19]["command"] == "move.warp" and captured[19]["data"] == {"to_sector_id": 18} and captured[19]["mutating"], "numeric warp did not use the direct authoritative move command")
 	menu._snapshot["disconnected"] = false
 	var session_commands: Array = CommandMenu.COMMANDS.get("SESSION", [])
 	_check(session_commands.size() == 1 and session_commands[0].get("local_logout", false), "session category does not expose confirmed logout")
 	menu._choose_action(session_commands[0])
 	_check(menu._logout_dialog.visible, "logout did not require a confirmation step")
 	menu._logout_dialog.confirmed.emit()
-	_check(captured.size() == 17 and captured[16]["command"] == "auth.logout" and captured[16]["data"].is_empty(), "confirmed logout did not send the documented empty payload")
+	_check(captured.size() == 21 and captured[20]["command"] == "auth.logout" and captured[20]["data"].is_empty(), "confirmed logout did not send the documented empty payload")
 	var pinned_help := {"label": "Controls and command flow", "local_help": true}
 	menu._pinned_actions.clear()
 	menu._key_bindings.clear()

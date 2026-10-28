@@ -225,7 +225,7 @@
         },
         {
           "key": "k",
-          "label": "(K) Autopilot Controls (Y/N/E)",
+          "label": "(K) Autopilot Controls (Y/N/E/S)",
           "action": {
             "pycall": "cli_autopilot_control"
           }

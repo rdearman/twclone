@@ -38,6 +38,8 @@ var _planned_route: Array[int] = []
 var _route_destination := 0
 var _route_running := false
 var _route_stop_requested := false
+var _route_stop_after_next := false
+var _autopilot_mode := "continue"
 var _route_total_hops := 0
 var _route_completed_hops := 0
 
@@ -225,7 +227,9 @@ func _on_transport_reply(request_id: String, response: Dictionary, command: Stri
 	if _pending_game_commands.has(request_id):
 		var operation: Dictionary = _pending_game_commands[request_id]
 		_pending_game_commands.erase(request_id)
-		if operation.get("kind") == "tavern_probe":
+		if operation.get("kind") == "autopilot_status":
+			_finish_autopilot_status(response)
+		elif operation.get("kind") == "tavern_probe":
 			var tavern_result: Dictionary = Protocol.result_from_response(response)
 			gameplay_view.set_command_busy(false)
 			if tavern_result.get("kind") == "ok":
@@ -259,6 +263,14 @@ func _on_transport_reply(request_id: String, response: Dictionary, command: Stri
 				gameplay_view.show_notification("Port refresh refused · %s" % str(port_result.get("message", "No current port data.")))
 		elif operation.get("kind") == "route_warp":
 			_finish_route_warp(response, operation)
+		elif operation.get("kind") == "route_stop_confirmation":
+			var stop_result: Dictionary = Protocol.result_from_response(response)
+			gameplay_view.set_command_busy(false)
+			if stop_result.get("kind") == "ok":
+				gameplay_view.show_notification("Saved route stopped after the last confirmed warp.")
+			else:
+				gameplay_view.show_notification("Local route stopped, but the server could not confirm the saved-route stop · %s" % str(stop_result.get("message", "request failed")))
+			_refresh_after_warp_attempt()
 		else:
 			await _finish_command_reply(response, operation)
 		return
@@ -282,6 +294,7 @@ func _on_authenticated() -> void:
 	client_state.mark_authenticated()
 	_save_config()
 	_subscribe_to_player_events()
+	_request_autopilot_status()
 	if _landed_planet_id > 0:
 		if not refresh_coordinator.refresh(false, ["player", "ship"]):
 			gameplay_view.show_notification("Unable to refresh player and ship state.")
@@ -469,6 +482,9 @@ func _on_command_requested(command: String, data: Dictionary, label: String, mut
 	if command == "move.warp":
 		_on_warp_requested(int(data.get("to_sector_id", 0)))
 		return
+	if _route_running and command in ["move.autopilot.start", "move.autopilot.control", "move.autopilot.stop"]:
+		gameplay_view.show_notification("Use the route bar to stop safely after the current confirmed warp; change saved-route controls when idle.")
+		return
 	var is_planet_read := _landed_planet_id > 0 and command in ["planet.info", "planet.colonists.get"]
 	if not auth_session.is_authenticated() or (not is_planet_read and _pending_game_commands.size() > 0) or not _pending_trade.is_empty() or _warp_refresh_pending or (_command_refresh_pending and not is_planet_read):
 		gameplay_view.show_notification("A command is already pending, or the connection is unavailable.")
@@ -535,9 +551,39 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 					gameplay_view.show_notification("Route planner confirms you are already at the destination.")
 					return
 				_route_destination = int(_planned_route.back())
+				_autopilot_mode = "continue"
+				_route_stop_after_next = false
 				gameplay_view.set_command_busy(false)
 				gameplay_view.show_planned_route(_planned_route, _route_destination)
 				gameplay_view.show_notification("Route plotted · review it, then engage Autonav to move.")
+			return
+		if command_name == "move.autopilot.control":
+			_autopilot_mode = str(data.get("action", "continue"))
+			if _autopilot_mode == "stop_at_next":
+				_route_stop_after_next = true
+				if _route_running:
+					_route_stop_requested = true
+					_planned_route.clear()
+			elif _autopilot_mode == "continue":
+				_route_stop_after_next = false
+				if _route_running:
+					_route_stop_requested = false
+			gameplay_view.set_command_busy(false)
+			gameplay_view.show_notification("Autopilot %s confirmed · next sector %s." % [_autopilot_mode.replace("_", " "), str(data.get("next_sector_id", "unavailable"))])
+			return
+		if command_name == "move.autopilot.stop":
+			_autopilot_mode = "manual"
+			_route_stop_after_next = false
+			if _route_running:
+				_route_stop_requested = true
+				_planned_route.clear()
+				gameplay_view.set_autonav_status("AUTONAV · stopping after the current confirmed warp.", true)
+			else:
+				_planned_route.clear()
+				_route_destination = 0
+				gameplay_view.clear_planned_route()
+			gameplay_view.set_command_busy(false)
+			gameplay_view.show_notification("Saved autopilot route stopped · no movement was made by this command.")
 			return
 		if command_name == "planet.colonists.set":
 			gameplay_view.show_notification("Colonist transfer confirmed.%s" % (" · " + summary if not summary.is_empty() else ""))
@@ -663,6 +709,50 @@ func _route_from_response(data: Dictionary) -> Array:
 		return []
 	return path
 
+func _request_autopilot_status() -> void:
+	if not auth_session.is_authenticated() or not _pending_game_commands.is_empty():
+		return
+	var request_id: String = transport.request("move.autopilot.status", {}, auth_session.session_token)
+	if not request_id.is_empty():
+		_pending_game_commands[request_id] = {"kind": "autopilot_status"}
+
+func _finish_autopilot_status(response: Dictionary) -> void:
+	var result := Protocol.result_from_response(response)
+	if result.get("kind") != "ok":
+		return
+	var data := _response_data_dictionary(result.get("data", {}))
+	_autopilot_mode = str(data.get("mode", "manual"))
+	var state := str(data.get("state", "idle"))
+	if state in ["idle", "complete"]:
+		_planned_route.clear()
+		_route_destination = 0
+		gameplay_view.clear_planned_route()
+		return
+	if state == "reconcile_required":
+		_planned_route.clear()
+		_route_destination = 0
+		gameplay_view.clear_planned_route()
+		gameplay_view.show_notification("Saved route needs reconciliation · current sector is outside its path.")
+		return
+	var path: Array = data.get("path", []) if data.get("path", []) is Array else []
+	var current_index := path.find(int(data.get("current_sector_id", 0)))
+	if current_index < 0 or current_index + 1 >= path.size():
+		_planned_route.clear()
+		_route_destination = 0
+		gameplay_view.clear_planned_route()
+		return
+	_planned_route.clear()
+	for index in range(current_index + 1, path.size()):
+		var sector = path[index]
+		if typeof(sector) == TYPE_INT or typeof(sector) == TYPE_FLOAT:
+			_planned_route.append(int(sector))
+	if _planned_route.is_empty():
+		gameplay_view.clear_planned_route()
+		return
+	_route_destination = int(data.get("target_sector_id", _planned_route.back()))
+	_route_stop_after_next = _autopilot_mode == "stop_at_next"
+	gameplay_view.show_restored_autopilot_route(_planned_route, _route_destination, state, _autopilot_mode)
+
 func _cancel_planned_route() -> void:
 	if _route_running:
 		if not _route_stop_requested:
@@ -671,16 +761,15 @@ func _cancel_planned_route() -> void:
 			gameplay_view.set_autonav_status("AUTONAV · finishing the current server-confirmed warp before stopping.", true)
 			gameplay_view.show_notification("Autonav stop requested · the in-flight warp cannot be recalled.")
 		return
-	_planned_route.clear()
-	_route_destination = 0
-	gameplay_view.clear_planned_route()
-	gameplay_view.show_notification("Plotted route cancelled. No movement was made.")
+	_on_command_requested("move.autopilot.stop", {}, "Stop saved autopilot route", true)
 
 func _engage_planned_route() -> void:
 	if _route_running or _planned_route.is_empty():
 		return
 	_route_running = true
 	_route_stop_requested = false
+	if _autopilot_mode == "stop_at_next":
+		_route_stop_after_next = true
 	_route_total_hops = _planned_route.size()
 	_route_completed_hops = 0
 	gameplay_view.set_autonav_status("AUTONAV · %d confirmed warp%s planned · preparing first leg." % [_route_total_hops, "" if _route_total_hops == 1 else "s"])
@@ -690,6 +779,7 @@ func _engage_planned_route() -> void:
 func _send_next_route_hop() -> void:
 	if _planned_route.is_empty():
 		_route_running = false
+		_route_stop_after_next = false
 		var was_stopped := _route_stop_requested
 		_route_stop_requested = false
 		gameplay_view.clear_planned_route()
@@ -732,9 +822,23 @@ func _finish_route_warp(response: Dictionary, operation: Dictionary) -> void:
 	if _route_stop_requested:
 		_route_running = false
 		_route_stop_requested = false
+		_route_stop_after_next = false
+		_planned_route.clear()
+		gameplay_view.set_autonav_status("AUTONAV · sector %d confirmed · saving the stopped route." % int(operation.get("destination", 0)), true)
+		var stop_request_id: String = transport.request("move.autopilot.stop", {}, auth_session.session_token)
+		if stop_request_id.is_empty():
+			gameplay_view.clear_planned_route()
+			gameplay_view.show_notification("Autonav stopped locally · server route stop could not be sent; it will be reconciled after reconnect.")
+			_refresh_after_warp_attempt()
+			return
+		_pending_game_commands[stop_request_id] = {"kind": "route_stop_confirmation"}
+		return
+	if _route_stop_after_next:
+		_route_running = false
+		_route_stop_after_next = false
 		_planned_route.clear()
 		gameplay_view.clear_planned_route()
-		gameplay_view.show_notification("Autonav stopped · Sector %d confirmed; no further warp was sent." % int(operation.get("destination", 0)))
+		gameplay_view.show_notification("Autopilot stopped at the next confirmed sector.")
 		_refresh_after_warp_attempt()
 		return
 	_send_next_route_hop()

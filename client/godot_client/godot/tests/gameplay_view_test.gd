@@ -107,6 +107,9 @@ func _run() -> void:
 		var route_plot: Button = route_line.get_child(1)
 		_check(route_detail.text.contains("Port 81") and route_detail.text.contains("trade in both directions"), "legacy route response lost its port or direction details")
 		_check(route_detail.text.contains("Price estimate unavailable") and route_plot.text == "PLOT TO 18", "legacy route response did not explain missing estimates or offer a usable plot target")
+	view.show_restored_autopilot_route([18, 21, 24], 24, "stopped", "manual")
+	_check(view._route_panel.visible and view._route_label.text.contains("SAVED ROUTE · STOPPED") and view._route_label.text.contains("18 → 21 → 24"), "reconnected persisted autopilot route was not presented with its authoritative state")
+	_check(view._route_engage_button.visible and not view._route_engage_button.disabled and command_calls == 0, "restoring a saved route moved the ship or prevented explicit review/engagement")
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
