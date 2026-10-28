@@ -71,11 +71,11 @@ const COMMANDS := {
 	],
 	"CORPORATION": [
 		{"label": "Corporation status", "command": "corp.status"},
-		{"label": "Member roster", "command": "corp.roster"},
+		{"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true},
 		{"label": "Corporation directory", "command": "corp.list"},
 		{"label": "Treasury balance", "command": "corp.balance"},
 		{"label": "Treasury statement", "command": "corp.statement"},
-		{"label": "Create corporation", "command": "corp.create", "fields": [["name", FIELD_TEXT, "Corporation name", ""], ["tag", FIELD_TEXT, "Corporation tag", ""]], "mutating": true},
+		{"label": "Create corporation", "command": "corp.create", "fields": [["name", FIELD_TEXT, "Corporation name", ""]], "mutating": true},
 		{"label": "Join corporation", "command": "corp.join", "fields": [["corp_id", FIELD_INT, "Corporation ID", ""]], "mutating": true},
 		{"label": "Invite player", "command": "corp.invite", "fields": [["target_player_id", FIELD_INT, "Player ID", ""]], "mutating": true},
 		{"label": "Kick member", "command": "corp.kick", "fields": [["target_player_id", FIELD_INT, "Player ID", ""]], "mutating": true},
@@ -869,6 +869,13 @@ func _choose_action(action: Dictionary) -> void:
 		_add_unavailable("Refresh the current sector before planning from its location.")
 		return
 	var data: Dictionary = action.get("fixed", {}).duplicate(true)
+	if bool(action.get("context_player_corp_id", false)):
+		var player: Dictionary = _snapshot.get("player", {})
+		var corp_id := int(player.get("corp_id", 0))
+		if corp_id <= 0:
+			_add_unavailable("Your confirmed player state does not include a corporation ID.")
+			return
+		data["corp_id"] = corp_id
 	if bool(action.get("context_sector", false)):
 		var current_sector = _snapshot.get("hud", {}).get("sector_id", null)
 		if current_sector == null:

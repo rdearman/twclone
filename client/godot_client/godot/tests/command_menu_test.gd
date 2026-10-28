@@ -284,10 +284,22 @@ func _run() -> void:
 		_check(password_request["command"] == "auth.change_password" and password_request["mutating"], "password change used the wrong command or was not marked mutating")
 		_check(password_request["data"].keys().size() == 2 and password_request["data"].has("old_password") and password_request["data"].has("new_password"), "password confirmation leaked into or altered the published request fields")
 		_check(not password_request["data"].has("confirm_password") and (menu._form_fields["old_password"] as LineEdit).text.is_empty() and (menu._form_fields["new_password"] as LineEdit).text.is_empty(), "password values remained in the form after submission")
+	var before_corporation_actions := captured.size()
+	menu._choose_action({"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true})
+	_check(captured.size() == before_corporation_actions, "corporation roster guessed a missing corporation ID")
+	menu._snapshot["player"] = {"corp_id": 10}
+	menu._choose_action({"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true})
+	_check(captured.size() == before_corporation_actions + 1 and captured.back()["command"] == "corp.roster", "corporation roster action did not emit")
+	if captured.size() > before_corporation_actions:
+		_check(captured.back()["data"] == {"corp_id": 10}, "corporation roster did not use confirmed player corp_id")
+	menu._choose_action({"label": "Create corporation", "command": "corp.create", "mutating": true, "fields": [["name", "text", "Corporation name", ""]]})
+	(menu._form_fields["name"] as LineEdit).text = "Nova"
+	menu._submit_form()
+	_check(captured.size() == before_corporation_actions + 2 and captured.back()["data"] == {"name": "Nova"}, "corporation create included fields outside the published request schema")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 87 passed")
+		print("Godot command menu tests: 90 passed")
 		quit(0)
 	else:
 		for failure in failures:

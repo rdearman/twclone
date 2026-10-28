@@ -1531,9 +1531,15 @@ def _update_corp_context(ctx: Context, force: bool = False):
     Should be called after player_info changes or a corp-related action.
     """
     if not force and ctx.player_info:
-        # Just update flags from existing player_info if not forcing a refresh
+        # player.my_info publishes membership as player.corp_id. Older client
+        # code looked for a nested corporation object the server does not send.
         corp_data = ctx.player_info.get("corporation")
-        ctx.state["in_corporation"] = bool(corp_data and isinstance(corp_data, dict))
+        player_data = ctx.player_info.get("player", {})
+        corp_id = player_data.get("corp_id") if isinstance(player_data, dict) else None
+        if corp_id is None:
+            corp_id = ctx.player_info.get("corp_id")
+        ctx.state["corp_id"] = int(corp_id) if isinstance(corp_id, int) and corp_id > 0 else None
+        ctx.state["in_corporation"] = bool(ctx.state["corp_id"] or (corp_data and isinstance(corp_data, dict)))
         ctx.state["is_corp_member"] = ctx.state["in_corporation"]
         return
 
@@ -1552,7 +1558,12 @@ def _update_corp_context(ctx: Context, force: bool = False):
         return
 
     corp_data = ctx.player_info.get("corporation")
-    if corp_data and isinstance(corp_data, dict):
+    player_data = ctx.player_info.get("player", {})
+    corp_id = player_data.get("corp_id") if isinstance(player_data, dict) else None
+    if corp_id is None:
+        corp_id = ctx.player_info.get("corp_id")
+    ctx.state["corp_id"] = int(corp_id) if isinstance(corp_id, int) and corp_id > 0 else None
+    if ctx.state["corp_id"] or (corp_data and isinstance(corp_data, dict)):
         ctx.state["in_corporation"] = True
         ctx.state["is_corp_member"] = True
         
@@ -1564,7 +1575,8 @@ def _update_corp_context(ctx: Context, force: bool = False):
         corp_status_resp = ctx.conn.rpc("corp.status", {})
         if corp_status_resp.get("status") == "ok":
             corp_status_data = get_data(corp_status_resp)
-            if corp_status_data.get("your_role") == "Leader":
+            ctx.state["corp_id"] = corp_status_data.get("corp_id", ctx.state.get("corp_id"))
+            if corp_status_data.get("your_role") in ("Leader", "CEO"):
                 ctx.state["is_ceo"] = True
                 ctx.state["is_ceo_or_officer"] = True
             elif corp_status_data.get("your_role") == "Officer":
@@ -2201,25 +2213,35 @@ def corp_create_flow(ctx: Context):
         print("Corporation name cannot be empty. Cancelled.")
         return
     
-    corp_tag = input("Enter corporation tag (3-5 characters): ").strip().upper()
-    if not (3 <= len(corp_tag) <= 5):
-        print("Corporation tag must be 3-5 characters. Cancelled.")
-        return
-
-    resp = ctx.conn.rpc("corp.create", {"name": corp_name, "tag": corp_tag})
+    resp = ctx.conn.rpc("corp.create", {"name": corp_name})
     ctx.state["last_rpc"] = resp
 
     if resp.get("status") == "ok":
         print("Corporation created successfully!")
         _pp(resp)
         # Refresh player info to update corporation status
-        my_info_resp = _hud_rpc(ctx, "player.my_info", {})
-        if my_info_resp.get("status") == "ok":
-            ctx.player_info = get_data(my_info_resp)
-            _update_corp_context(ctx) # Update context flags
+        _update_corp_context(ctx, force=True)
     else:
         print(f"[Error] Failed to create corporation: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)
+
+@register("corp_roster_flow")
+def corp_roster_flow(ctx: Context):
+    """Use the authenticated corporation status to supply the required roster ID."""
+    status = ctx.conn.rpc("corp.status", {})
+    if status.get("status") != "ok":
+        print(f"[Error] Failed to get corporation status: {status.get('error', {}).get('message', 'Unknown error')}")
+        _pp(status)
+        return
+    data = get_data(status)
+    corp_id = data.get("corp_id") if isinstance(data, dict) else None
+    if not isinstance(corp_id, int) or corp_id <= 0:
+        print("[Error] The server did not provide a valid corporation ID.")
+        _pp(status)
+        return
+    resp = ctx.conn.rpc("corp.roster", {"corp_id": corp_id})
+    ctx.state["last_rpc"] = resp
+    call_handler("pretty_print_corp_roster", ctx)
 
 @register("corp_join_flow")
 def corp_join_flow(ctx: Context):
@@ -2300,7 +2322,16 @@ def corp_kick_flow(ctx: Context):
         return
     
     # Optional: confirm target name
-    resp_roster = ctx.conn.rpc("corp.roster", {})
+    status = ctx.conn.rpc("corp.status", {})
+    status_data = get_data(status) if status.get("status") == "ok" else {}
+    corp_id = status_data.get("corp_id") if isinstance(status_data, dict) else None
+    if not isinstance(corp_id, int) or corp_id <= 0:
+        print("Unable to confirm your corporation ID; no member action was sent.")
+        return
+    resp_roster = ctx.conn.rpc("corp.roster", {"corp_id": corp_id})
+    if resp_roster.get("status") != "ok":
+        print(f"Unable to load the corporation roster: {resp_roster.get('error', {}).get('message', 'Unknown error')}")
+        return
     roster = resp_roster.get("data", {}).get("roster", [])
     target_name = "Unknown Player"
     for member in roster:
@@ -2461,7 +2492,16 @@ def corp_transfer_ceo_flow(ctx: Context):
         return
 
     # Optional: confirm target name
-    resp_roster = ctx.conn.rpc("corp.roster", {})
+    status = ctx.conn.rpc("corp.status", {})
+    status_data = get_data(status) if status.get("status") == "ok" else {}
+    corp_id = status_data.get("corp_id") if isinstance(status_data, dict) else None
+    if not isinstance(corp_id, int) or corp_id <= 0:
+        print("Unable to confirm your corporation ID; leadership was not changed.")
+        return
+    resp_roster = ctx.conn.rpc("corp.roster", {"corp_id": corp_id})
+    if resp_roster.get("status") != "ok":
+        print(f"Unable to load the corporation roster: {resp_roster.get('error', {}).get('message', 'Unknown error')}")
+        return
     roster = resp_roster.get("data", {}).get("roster", [])
     target_name = "Unknown Player"
     for member in roster:

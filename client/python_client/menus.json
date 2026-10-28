@@ -748,11 +748,7 @@
           "key": "r",
           "label": "(R) Roster",
           "action": {
-            "rpc": {
-              "command": "corp.roster",
-              "data": {}
-            },
-            "post": "pretty_print_corp_roster"
+            "pycall": "corp_roster_flow"
             },
             "show_if_ctx": ["in_corporation"]
         },

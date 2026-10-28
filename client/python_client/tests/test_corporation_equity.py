@@ -17,7 +17,7 @@ def test_update_corp_context_never_calls_list_stocks_or_equity_list(ctx_factory,
     ctx = ctx_factory()
     fake_conn.queue("player.my_info", {
         "status": "ok",
-        "data": {"player": {"id": 1, "corp_id": 10}, "corporation": {"id": 10, "name": "Test Corp"}}
+        "data": {"player": {"id": 1, "corp_id": 10}}
     })
     fake_conn.queue("corp.status", {
         "status": "ok",
@@ -35,7 +35,7 @@ def test_update_corp_context_hydrates_membership_and_ceo_officer_roles(ctx_facto
     ctx = ctx_factory()
     fake_conn.queue("player.my_info", {
         "status": "ok",
-        "data": {"player": {"id": 1, "corp_id": 10}, "corporation": {"id": 10, "name": "Test Corp"}}
+        "data": {"player": {"id": 1, "corp_id": 10}}
     })
     fake_conn.queue("corp.status", {
         "status": "ok",
@@ -48,6 +48,53 @@ def test_update_corp_context_hydrates_membership_and_ceo_officer_roles(ctx_facto
     assert ctx.state["is_corp_member"] is True
     assert ctx.state["is_ceo"] is True
     assert ctx.state["is_ceo_or_officer"] is True
+
+
+def test_corporation_roster_sends_server_required_corp_id(ctx_factory, fake_conn, capsys):
+    ctx = ctx_factory()
+    fake_conn.queue("corp.status", {"status": "ok", "data": {"corp_id": 10}})
+    fake_conn.queue("corp.roster", {"status": "ok", "data": {"corp_id": 10, "roster": []}})
+
+    client.corp_roster_flow(ctx)
+
+    assert [(call["command"], call["data"]) for call in fake_conn.calls] == [
+        ("corp.status", {}), ("corp.roster", {"corp_id": 10})
+    ]
+    assert "No members" in capsys.readouterr().out
+
+
+def test_corporation_create_uses_only_published_name_field(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory()
+    fake_conn.queue("corp.create", {"status": "ok", "data": {"corp_id": 10, "name": "Nova"}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "corp_id": 10}}})
+    fake_conn.queue("corp.status", {"status": "ok", "data": {"corp_id": 10, "your_role": "Leader"}})
+    inputs = iter(["Nova"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+
+    client.corp_create_flow(ctx)
+
+    assert fake_conn.calls[0] == {"command": "corp.create", "data": {"name": "Nova"}}
+    assert ctx.state["in_corporation"] and ctx.state["is_ceo"]
+
+
+def test_corporation_context_reads_published_player_corp_id(ctx_factory, fake_conn):
+    ctx = ctx_factory()
+    ctx.player_info = {"player": {"corp_id": 10}}
+
+    client._update_corp_context(ctx)
+
+    assert ctx.state["in_corporation"] is True
+    assert ctx.state["corp_id"] == 10
+
+
+def test_corporation_roster_refuses_to_guess_missing_corp_id(ctx_factory, fake_conn, capsys):
+    ctx = ctx_factory()
+    fake_conn.queue("corp.status", {"status": "ok", "data": {}})
+
+    client.corp_roster_flow(ctx)
+
+    assert len(fake_conn.calls) == 1
+    assert "valid corporation ID" in capsys.readouterr().out
 
 
 def test_dividend_action_visible_to_ceo_in_normal_mode(ctx_factory, menus):
