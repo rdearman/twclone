@@ -1759,6 +1759,11 @@
           "action": { "pycall": "combat_attack_flow" }
         },
         {
+          "key": "p",
+          "label": "(P) Attack Listed Planet",
+          "action": { "pycall": "combat_attack_planet_flow" }
+        },
+        {
           "key": "f",
           "label": "(F) Deploy Fighters",
           "action": {

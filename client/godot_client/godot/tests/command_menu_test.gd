@@ -288,18 +288,39 @@ func _run() -> void:
 	menu._choose_action({"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true})
 	_check(captured.size() == before_corporation_actions, "corporation roster guessed a missing corporation ID")
 	menu._snapshot["player"] = {"corp_id": 10}
+	menu._snapshot["freshness"] = {"sector": "fresh"}
 	menu._choose_action({"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true})
 	_check(captured.size() == before_corporation_actions + 1 and captured.back()["command"] == "corp.roster", "corporation roster action did not emit")
 	if captured.size() > before_corporation_actions:
 		_check(captured.back()["data"] == {"corp_id": 10}, "corporation roster did not use confirmed player corp_id")
+	menu._active_category = "PLANET"
+	menu._selection = {"kind": "planet", "name": "Nereid", "data": {"planet_id": 19}}
+	menu._snapshot["hud"]["sector_id"] = 17
+	menu._render_actions()
+	var attack_planet_button := _action_button(menu, "Attack this planet")
+	_check(attack_planet_button != null and not attack_planet_button.disabled, "listed non-FedSpace planet attack was not available")
+	menu._choose_action({"label": "Attack this planet", "command": "combat.attack_planet", "context_id": "planet_id", "mutating": true})
+	menu._submit_form()
+	_check(captured.size() == before_corporation_actions + 2 and captured.back()["data"] == {"planet_id": 19}, "planet attack did not use the selected authoritative planet ID")
+	menu._snapshot["hud"]["sector_id"] = 5
+	menu._render_actions()
+	await process_frame
+	attack_planet_button = _action_button(menu, "Attack this planet")
+	_check(attack_planet_button != null and attack_planet_button.disabled and attack_planet_button.tooltip_text.contains("FedSpace"), "planet attack remained enabled in FedSpace")
+	menu._snapshot["hud"]["sector_id"] = 17
+	menu._selection["data"] = {"planet_id": 1}
+	menu._render_actions()
+	await process_frame
+	attack_planet_button = _action_button(menu, "Attack this planet")
+	_check(attack_planet_button != null and attack_planet_button.disabled and attack_planet_button.tooltip_text.contains("Terra"), "planet attack remained enabled against protected Terra")
 	menu._choose_action({"label": "Create corporation", "command": "corp.create", "mutating": true, "fields": [["name", "text", "Corporation name", ""]]})
 	(menu._form_fields["name"] as LineEdit).text = "Nova"
 	menu._submit_form()
-	_check(captured.size() == before_corporation_actions + 2 and captured.back()["data"] == {"name": "Nova"}, "corporation create included fields outside the published request schema")
+	_check(captured.size() == before_corporation_actions + 3 and captured.back()["data"] == {"name": "Nova"}, "corporation create included fields outside the published request schema")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 90 passed")
+		print("Godot command menu tests: 94 passed")
 		quit(0)
 	else:
 		for failure in failures:

@@ -6,6 +6,7 @@ const AuthSession = preload("res://AuthSession.gd")
 const ClientState = preload("res://ClientState.gd")
 const AuthoritativeRefresh = preload("res://AuthoritativeRefresh.gd")
 const EventPresenter = preload("res://EventPresenter.gd")
+const PlanetCombatPresenter = preload("res://PlanetCombatPresenter.gd")
 const CONFIG_PATH := "user://client_config.cfg"
 
 @onready var gameplay_view = $GameplayView
@@ -534,6 +535,11 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 				gameplay_view.set_command_busy(false)
 				gameplay_view.show_notification("Landing succeeded, but the response omitted the planet ID.")
 			return
+		if command_name == "combat.attack_planet":
+			gameplay_view.show_notification(PlanetCombatPresenter.attack_result(data))
+			gameplay_view.show_command_result("Planet attack", data)
+			_refresh_after_command(["player", "ship", "sector"])
+			return
 		if command_name == "move.autopilot.start":
 			var path: Array = _route_from_response(data)
 			if path.is_empty():
@@ -619,6 +625,17 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.set_command_busy(false)
 	else:
 		gameplay_view.set_command_busy(false)
+		if str(operation.get("command", "")) == "planet.land":
+			var landing_report := PlanetCombatPresenter.landing_refusal(response)
+			if bool(landing_report.get("has_combat", false)):
+				gameplay_view.show_notification(str(landing_report.get("message", "Landing refused after planetary combat.")))
+				_refresh_after_command(["player", "ship", "sector"])
+			else:
+				gameplay_view.show_notification("%s refused · %s" % [label, str(result.get("message", "The server did not permit landing."))])
+			return
+		if str(operation.get("command", "")) == "combat.attack_planet":
+			gameplay_view.show_notification("Planet attack refused · %s" % str(result.get("message", "The server did not accept the attack.")))
+			return
 		if str(operation.get("command", "")) == "port.info":
 			gameplay_view.port_workflow.close_for_location_change()
 			gameplay_view.show_notification("Port information refused · %s" % str(result.get("message", "Details are not available from this location.")))

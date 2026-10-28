@@ -2,6 +2,7 @@ extends PanelContainer
 
 const TwProtocol = preload("res://Protocol.gd")
 const DialogLayout = preload("res://DialogLayout.gd")
+const PlanetCombatPresenter = preload("res://PlanetCombatPresenter.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 signal reduced_motion_toggle_requested
@@ -632,6 +633,15 @@ func _render_actions() -> void:
 			actions.append({"label": "Launch from planet", "command": "planet.launch", "fixed": {}, "mutating": true})
 		else:
 			actions.append({"label": "Land on planet", "command": "planet.land", "context_id": "planet_id", "mutating": true})
+		var selected: Dictionary = _selection.get("data", {})
+		var selected_id := int(selected.get("id", selected.get("planet_id", 0)))
+		var sector_id := int(_snapshot.get("hud", {}).get("sector_id", 0))
+		var attack_action := {"label": "Attack this planet", "command": "combat.attack_planet", "context_id": "planet_id", "mutating": true}
+		if selected_id == 1:
+			attack_action["unavailable_reason"] = "Attacking Terra destroys your ship and forfeits your assets. This action is blocked in the client."
+		elif sector_id >= 1 and sector_id <= 10:
+			attack_action["unavailable_reason"] = "Planet attacks are disabled in protected FedSpace sectors 1–10."
+		actions.append(attack_action)
 	elif _active_category == "PORT":
 		actions = [
 			{"label": "Dock · open port screen", "command": "port.info", "fixed": {}},

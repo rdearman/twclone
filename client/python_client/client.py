@@ -4512,6 +4512,118 @@ def land_flow(ctx: Context):
     else:
         err = r.get("error", {}).get("message", "Unknown error")
         print(f"Landing failed: {err}")
+        outcome = _planet_landing_outcome_lines(r)
+        for line in outcome:
+            print(line)
+        # Defensive landing refusals can still have changed ship or planet
+        # combat state. Refresh the player's authoritative ship state; never
+        # infer damage or retry the landing.
+        if outcome:
+            player_resp = _hud_rpc(ctx, "player.my_info", {})
+            if player_resp.get("status") == "ok":
+                ctx.player_info = get_data(player_resp)
+                _update_corp_context(ctx)
+            _hud_rpc(ctx, "ship.status", {})
+
+
+def _planet_landing_outcome_lines(response: dict) -> list[str]:
+    error = response.get("error", {}) if isinstance(response, dict) else {}
+    details = error.get("data", {}) if isinstance(error, dict) else {}
+    if not isinstance(details, dict):
+        return []
+    combat = details.get("combat", [])
+    if not isinstance(combat, list) or not combat:
+        return []
+    lines = ["Authoritative planetary defense report:"]
+    for item in combat:
+        if not isinstance(item, dict):
+            continue
+        if item.get("defense") == "atmosphere_quasar":
+            lines.append(
+                "  Atmospheric Quasar: %s damage; shields lost %s, hull lost %s; "
+                "remaining shields %s, hull %s%s."
+                % (item.get("damage", "unknown"), item.get("shields_lost", "unknown"),
+                   item.get("hull_lost", "unknown"), item.get("shields_remaining", "unknown"),
+                   item.get("hull_remaining", "unknown"),
+                   "; ship destroyed" if item.get("destroyed") is True else "")
+            )
+        else:
+            lines.append(
+                "  Planetary fighters %s: ship lost %s fighters (%s remain); "
+                "planet lost %s fighters (%s remain); citadel shields absorbed %s (%s remain)%s."
+                % (item.get("result", "engaged"), item.get("attacker_fighters_lost", "unknown"),
+                   item.get("attacker_fighters_remaining", "unknown"),
+                   item.get("planet_fighters_lost", "unknown"),
+                   item.get("planet_fighters_remaining", "unknown"),
+                   item.get("citadel_shields_absorbed", "unknown"),
+                   item.get("citadel_shields_remaining", "unknown"),
+                   "; ship destroyed" if item.get("destroyed") is True else "")
+            )
+    if details.get("ship_remains_in_sector") is False:
+        lines.append("  The server reports that your ship did not remain in the sector.")
+    lines.append("  Landing was refused; no planetary access was granted.")
+    return lines
+
+
+@register("combat_attack_planet_flow")
+def combat_attack_planet_flow(ctx: Context):
+    """Attack only an explicitly listed current-sector planet, with server outcome authoritative."""
+    sector = ctx.last_sector_desc if isinstance(ctx.last_sector_desc, dict) else {}
+    sector_id = sector.get("id", sector.get("sector_id"))
+    if not isinstance(sector_id, int):
+        player = ctx.player_info.get("player", {}) if isinstance(ctx.player_info, dict) else {}
+        sector_id = player.get("sector") if isinstance(player, dict) else None
+    if isinstance(sector_id, int) and 1 <= sector_id <= 10:
+        print("Planet attacks are disabled in protected FedSpace sectors 1–10.")
+        return
+    planets = sector.get("planets", [])
+    listed = [p for p in planets if isinstance(p, dict) and isinstance(p.get("id", p.get("planet_id")), int)]
+    listed = [p for p in listed if int(p.get("id", p.get("planet_id"))) != 1]
+    if not listed:
+        print("No attackable listed planets are available in the current sector.")
+        return
+    print("Current-sector planets:")
+    for index, planet in enumerate(listed, 1):
+        print(f"  {index}. {planet.get('name', 'Unnamed')} [ID: {planet.get('id', planet.get('planet_id'))}]")
+    raw = input("Attack planet number or listed ID: ").strip()
+    if not raw:
+        print("Cancelled.")
+        return
+    try:
+        selected = int(raw)
+    except ValueError:
+        print("Invalid selection.")
+        return
+    planet = listed[selected - 1] if 1 <= selected <= len(listed) else next(
+        (p for p in listed if int(p.get("id", p.get("planet_id"))) == selected), None
+    )
+    if planet is None:
+        print("Choose a planet listed in the current sector; no request was sent.")
+        return
+    planet_id = int(planet.get("id", planet.get("planet_id")))
+    if input(f"Attack {planet.get('name', 'this planet')} (ID {planet_id})? This can destroy fighters and change ownership. (y/N): ").strip().lower() != "y":
+        print("Cancelled.")
+        return
+    response = ctx.conn.rpc("combat.attack_planet", {"planet_id": planet_id})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        error = response.get("error", {}) if isinstance(response, dict) else {}
+        print(f"Planet attack refused: {error.get('message', 'The server did not accept the attack.')}")
+        for line in _planet_landing_outcome_lines(response):
+            print(line)
+        return
+    data = get_data(response)
+    print("Authoritative planet attack result:")
+    print(f"  Planet ID: {data.get('planet_id', planet_id)}")
+    print(f"  Captured: {data.get('captured', 'not reported')}")
+    print(f"  Attacker fighters remaining: {data.get('attacker_remaining_fighters', 'not reported')}")
+    print(f"  Planet fighters remaining: {data.get('defender_remaining_fighters', 'not reported')}")
+    player_resp = _hud_rpc(ctx, "player.my_info", {})
+    if player_resp.get("status") == "ok":
+        ctx.player_info = get_data(player_resp)
+        _update_corp_context(ctx)
+    _hud_rpc(ctx, "ship.status", {})
+    call_handler("redisplay_sector", ctx)
 
 @register("launch_flow")
 def launch_flow(ctx: Context):

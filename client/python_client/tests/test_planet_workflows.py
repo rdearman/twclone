@@ -277,3 +277,87 @@ def test_planet_rename_server_error_is_displayed_without_refresh(
         "command": "planet.rename", "data": {"planet_id": 77, "new_name": "New Terra"},
     }]
     assert "Database temporarily unavailable" in capsys.readouterr().out
+
+
+def test_hostile_planet_landing_reports_server_damage_and_refreshes_ship(
+    ctx_factory, fake_conn, capsys
+):
+    ctx = ctx_factory(sector={"id": 42, "planets": [{"id": 77, "name": "Citadel"}]})
+    fake_conn.queue("planet.land", {
+        "status": "error",
+        "error": {"message": "Planetary defenses engaged your ship; landing refused.", "data": {
+            "planet_id": 77,
+            "landing_allowed": False,
+            "ship_remains_in_sector": True,
+            "combat": [
+                {"defense": "atmosphere_quasar", "damage": 80, "shields_lost": 50,
+                 "hull_lost": 30, "shields_remaining": 0, "hull_remaining": 70,
+                 "destroyed": False},
+                {"result": "repelled", "attacker_fighters_lost": 10,
+                 "attacker_fighters_remaining": 5, "planet_fighters_lost": 5,
+                 "planet_fighters_remaining": 15, "citadel_shields_absorbed": 20,
+                 "citadel_shields_remaining": 0},
+            ],
+        }},
+    })
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 42}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "hull": 70}}})
+
+    client.land_flow(ctx)
+
+    out = capsys.readouterr().out
+    assert "shields lost 50" in out and "hull lost 30" in out
+    assert "Planetary fighters repelled" in out
+    assert "ship lost 10 fighters (5 remain)" in out
+    assert "Landing was refused" in out
+    assert [call["command"] for call in fake_conn.calls] == [
+        "planet.land", "player.my_info", "ship.status",
+    ]
+    assert ctx.state.get("on_planet") is not True
+
+
+def test_planet_landing_without_combat_does_not_claim_damage(
+    ctx_factory, fake_conn, capsys
+):
+    ctx = ctx_factory(sector={"id": 42, "planets": [{"id": 77, "name": "Private"}]})
+    fake_conn.queue("planet.land", {
+        "status": "error", "error": {"message": "Permission denied.", "data": None},
+    })
+
+    client.land_flow(ctx)
+
+    assert "Landing failed: Permission denied." in capsys.readouterr().out
+    assert [call["command"] for call in fake_conn.calls] == ["planet.land"]
+
+
+def test_planet_attack_blocks_fedspace_and_terra(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory(sector={"id": 7, "planets": [{"id": 8, "name": "Safe target"}]})
+    client.combat_attack_planet_flow(ctx)
+    assert fake_conn.calls == []
+    assert "FedSpace" in capsys.readouterr().out
+
+    ctx.last_sector_desc = {"id": 17, "planets": [{"id": 1, "name": "Terra"}]}
+    client.combat_attack_planet_flow(ctx)
+    assert fake_conn.calls == []
+    assert "No attackable listed planets" in capsys.readouterr().out
+
+
+def test_planet_attack_uses_listed_target_and_displays_server_counts(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
+    fake_conn.queue("combat.attack_planet", {"status": "ok", "data": {
+        "planet_id": 80, "attacker_remaining_fighters": 12,
+        "defender_remaining_fighters": 0, "captured": True,
+    }})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 17}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "fighters": 12}}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "1" if "number" in _prompt else "y")
+
+    client.combat_attack_planet_flow(ctx)
+
+    out = capsys.readouterr().out
+    assert "Captured: True" in out
+    assert "Attacker fighters remaining: 12" in out
+    assert "Planet fighters remaining: 0" in out
+    assert fake_conn.calls[0] == {"command": "combat.attack_planet", "data": {"planet_id": 80}}
