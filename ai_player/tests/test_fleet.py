@@ -77,13 +77,15 @@ def test_orchestration_respects_concurrency_and_writes_aggregate(tmp_path, monke
         def __init__(self, args, **kwargs):
             self.pid = Child._next_pid
             Child._next_pid += 1
-            self.returncode = 0
+            self.returncode = None
             observed["started"].append(args[-1])
             observed["active"] += 1
             observed["maximum"] = max(observed["maximum"], observed["active"])
-            observed["active"] -= 1
 
         def poll(self):
+            if self.returncode is None:
+                self.returncode = 0
+                observed["active"] -= 1
             return self.returncode
 
     monkeypatch.setattr(fleet.subprocess, "Popen", Child)
