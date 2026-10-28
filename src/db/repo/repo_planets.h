@@ -22,9 +22,19 @@ int db_planets_get_ship_fighters(db_t *db, int ship_id, int *fighters);
 
 /* Q9: Citadel Defense */
 int db_planets_get_citadel_defenses(db_t *db, int planet_id, int *level, int *shields, int *reaction);
+/* Returns 0 for a successful query (including no active defenses), a
+ * negative database/argument error otherwise. */
+int db_planets_get_citadel_defenses_ex(db_t *db, int planet_id,
+                                      bool *has_active_defenses, int *level,
+                                      int *shields, int *reaction);
 
 /* Q10: Update Citadel Shields */
 int db_planets_update_citadel_shields(db_t *db, int planet_id, int new_shields);
+/* Compare-and-decrement shields. Returns ERR_DB_BUSY when expected_shields
+ * is stale or insufficient; *remaining is set only on success. */
+int db_planets_consume_citadel_shields(db_t *db, int planet_id,
+                                      int expected_shields, int amount,
+                                      int *remaining);
 
 /* Q11: Update Ship Fighters */
 int db_planets_update_ship_fighters(db_t *db, int ship_id, int loss);
@@ -117,6 +127,18 @@ int db_planets_get_commodity_id(db_t *db, const char *code, int *id);
 
 /* Q41: Add to Treasury (Buy) */
 int db_planets_add_treasury_buy(db_t *db, int planet_id, long long amount);
+
+/* Atomically transfer fighters between the player's active landed ship and
+ * an owned planet. Direction is "ship_to_planet" or "planet_to_ship". */
+int repo_planets_transfer_fighters(db_t *db, int player_id, int ship_id,
+                                  int planet_id, const char *direction,
+                                  int quantity, int *planet_after,
+                                  int *ship_after);
+
+/* Permanently destroy an owned planet. Historical engine/player event rows
+ * use scalar references and are retained; dependent planetary state follows
+ * the existing PostgreSQL foreign-key cascade rules. */
+int db_planets_destroy(db_t *db, int player_id, int planet_id);
 
 /* Q42: Insert Commodity Order */
 int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int commodity_id, int qty, int price, int64_t *order_id);

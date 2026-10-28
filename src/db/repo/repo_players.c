@@ -442,16 +442,33 @@ int repo_players_check_exists(db_t *db, int player_id, int *exists_out) {
 }
 
 int repo_players_record_port_knowledge(db_t *db, int player_id, int port_id) {
+    if (!db || player_id <= 0 || port_id <= 0) return -1;
     db_error_t err;
     db_bind_t params[] = { db_bind_i64(player_id), db_bind_i64(port_id) };
 
-    const char *q_upd = "UPDATE player_known_ports SET updated_at = CURRENT_TIMESTAMP WHERE player_id = {1} AND port_id = {2}";
-    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    /* Knowledge is recorded only while the player's active ship is in the
+     * port's actual sector. The caller's requested sector is not trusted. */
+    const char *q_upd =
+        "UPDATE player_known_ports SET updated_at = CURRENT_TIMESTAMP "
+        "WHERE player_id = {1} AND port_id = {2} AND EXISTS ("
+        "SELECT 1 FROM players p JOIN ships sh ON sh.ship_id = p.ship_id "
+        "JOIN ports po ON po.port_id = {2} "
+        "WHERE p.player_id = {1} AND p.sector_id = po.sector_id "
+        "AND sh.sector_id = po.sector_id)";
+    char sql_upd[512];
+    if (sql_build(db, q_upd, sql_upd, sizeof(sql_upd)) != 0) return -1;
     int64_t rows = 0;
     if (db_exec_rows_affected(db, sql_upd, params, 2, &rows, &err) && rows > 0) return 0;
 
-    const char *q_ins = "INSERT INTO player_known_ports (player_id, port_id) VALUES ({1}, {2})";
-    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    const char *q_ins =
+        "INSERT INTO player_known_ports (player_id, port_id) "
+        "SELECT {1}, {2} WHERE EXISTS ("
+        "SELECT 1 FROM players p JOIN ships sh ON sh.ship_id = p.ship_id "
+        "JOIN ports po ON po.port_id = {2} "
+        "WHERE p.player_id = {1} AND p.sector_id = po.sector_id "
+        "AND sh.sector_id = po.sector_id)";
+    char sql_ins[512];
+    if (sql_build(db, q_ins, sql_ins, sizeof(sql_ins)) != 0) return -1;
     if (!db_exec(db, sql_ins, params, 2, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) {
             db_exec(db, sql_upd, params, 2, &err);
@@ -462,16 +479,32 @@ int repo_players_record_port_knowledge(db_t *db, int player_id, int port_id) {
 }
 
 int repo_players_record_visit(db_t *db, int player_id, int sector_id) {
+    if (!db || player_id <= 0 || sector_id <= 0) return -1;
     db_error_t err;
     int64_t rows = 0;
     db_bind_t params[] = { db_bind_i64(player_id), db_bind_i64(sector_id) };
 
-    const char *q_upd = "UPDATE player_visited_sectors SET visit_count = visit_count + 1, last_visited_at = CURRENT_TIMESTAMP WHERE player_id = {1} AND sector_id = {2}";
-    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
+    /* A sector visit means the player's current state and active ship both
+     * attest to presence there; scans and arbitrary remote IDs add nothing. */
+    const char *q_upd =
+        "UPDATE player_visited_sectors SET visit_count = visit_count + 1, "
+        "last_visited_at = CURRENT_TIMESTAMP WHERE player_id = {1} "
+        "AND sector_id = {2} AND EXISTS ("
+        "SELECT 1 FROM players p JOIN ships sh ON sh.ship_id = p.ship_id "
+        "WHERE p.player_id = {1} AND p.sector_id = {2} "
+        "AND sh.sector_id = {2})";
+    char sql_upd[512];
+    if (sql_build(db, q_upd, sql_upd, sizeof(sql_upd)) != 0) return -1;
     if (db_exec_rows_affected(db, sql_upd, params, 2, &rows, &err) && rows > 0) return 0;
 
-    const char *q_ins = "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES ({1}, {2})";
-    char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    const char *q_ins =
+        "INSERT INTO player_visited_sectors (player_id, sector_id) "
+        "SELECT {1}, {2} WHERE EXISTS ("
+        "SELECT 1 FROM players p JOIN ships sh ON sh.ship_id = p.ship_id "
+        "WHERE p.player_id = {1} AND p.sector_id = {2} "
+        "AND sh.sector_id = {2})";
+    char sql_ins[512];
+    if (sql_build(db, q_ins, sql_ins, sizeof(sql_ins)) != 0) return -1;
     if (!db_exec(db, sql_ins, params, 2, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) {
             db_exec(db, sql_upd, params, 2, &err);
@@ -563,7 +596,8 @@ int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sec
     for (int i = 0; i < nodes; i++) adj.head[i] = -1;
     
     db_error_t err;
-    db_res_t *res_warps = repo_universe_get_all_warps(db, &err);
+    db_res_t *res_warps = repo_universe_get_player_known_warps(
+        db, player_id, current_sector_id, &err);
     int edge_idx = 0;
     if (res_warps) {
         while (db_res_step(res_warps, &err)) {

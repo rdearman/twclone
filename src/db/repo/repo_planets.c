@@ -129,6 +129,39 @@ int db_planets_get_citadel_defenses(db_t *db, int planet_id, int *level, int *sh
     return -1;
 }
 
+int db_planets_get_citadel_defenses_ex(db_t *db, int planet_id,
+                                      bool *has_active_defenses, int *level,
+                                      int *shields, int *reaction) {
+    if (!db || planet_id <= 0 || !has_active_defenses || !level || !shields
+        || !reaction)
+        return ERR_INVALID_ARG;
+    *has_active_defenses = false;
+    *level = *shields = *reaction = 0;
+    const char *query =
+        "SELECT COALESCE(level,0), COALESCE(planetaryShields,0), "
+        "COALESCE(militaryReactionLevel,0) FROM citadels WHERE planet_id={1};";
+    char sql[512];
+    if (sql_build(db, query, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(planet_id)}, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : 0;
+    }
+    *level = db_res_col_int(res, 0, &err);
+    *shields = db_res_col_int(res, 1, &err);
+    *reaction = db_res_col_int(res, 2, &err);
+    db_res_finalize(res);
+    if (err.code)
+        return err.code;
+    *has_active_defenses = *shields > 0 || *reaction > 0;
+    return 0;
+}
+
 int db_planets_update_citadel_shields(db_t *db, int planet_id, int new_shields) {
     db_error_t err;
     /* SQL_VERBATIM: Q10 */
@@ -138,12 +171,44 @@ int db_planets_update_citadel_shields(db_t *db, int planet_id, int new_shields) 
     return -1;
 }
 
+int db_planets_consume_citadel_shields(db_t *db, int planet_id,
+                                      int expected_shields, int amount,
+                                      int *remaining) {
+    if (!db || planet_id <= 0 || expected_shields < 0 || amount <= 0
+        || expected_shields < amount || !remaining)
+        return ERR_INVALID_ARG;
+    const char *query =
+        "UPDATE citadels SET planetaryShields=planetaryShields-{1} "
+        "WHERE planet_id={2} AND COALESCE(planetaryShields,0)={3} "
+        "AND COALESCE(planetaryShields,0)>={1};";
+    char sql[512];
+    if (sql_build(db, query, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_error_t err = {0};
+    int64_t rows = 0;
+    if (!db_exec_rows_affected(db, sql,
+                               (db_bind_t[]){db_bind_i64(amount),
+                                             db_bind_i64(planet_id),
+                                             db_bind_i64(expected_shields)},
+                               3, &rows, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (rows != 1)
+        return ERR_DB_BUSY;
+    *remaining = expected_shields - amount;
+    return 0;
+}
+
 int db_planets_update_ship_fighters(db_t *db, int ship_id, int loss) {
+    if (!db || ship_id <= 0 || loss < 0) return -1;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q11 */
-    const char *q11 = "UPDATE ships SET fighters = fighters - {1} WHERE ship_id = {2};";
-    char sql[512]; sql_build(db, q11, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(loss), db_bind_i64(ship_id) }, 2, &err)) return 0;
+    const char *q11 = "UPDATE ships SET fighters = COALESCE(fighters, 0) - {1} WHERE ship_id = {2} AND COALESCE(fighters, 0) >= {1};";
+    char sql[512];
+    if (sql_build(db, q11, sql, sizeof(sql)) != 0) return -1;
+    if (db_exec_rows_affected(db, sql,
+                              (db_bind_t[]){ db_bind_i64(loss), db_bind_i64(ship_id) },
+                              2, &rows, &err) && rows == 1) return 0;
     return -1;
 }
 
@@ -157,11 +222,16 @@ int db_planets_capture(db_t *db, int planet_id, int new_owner, const char *new_t
 }
 
 int db_planets_lose_fighters(db_t *db, int planet_id, int loss) {
+    if (!db || planet_id <= 0 || loss < 0) return -1;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q13 */
-    const char *q13 = "UPDATE planets SET fighters = fighters - {1} WHERE planet_id = {2};";
-    char sql[512]; sql_build(db, q13, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(loss), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    const char *q13 = "UPDATE planets SET fighters = COALESCE(fighters, 0) - {1} WHERE planet_id = {2} AND COALESCE(fighters, 0) >= {1};";
+    char sql[512];
+    if (sql_build(db, q13, sql, sizeof(sql)) != 0) return -1;
+    if (db_exec_rows_affected(db, sql,
+                              (db_bind_t[]){ db_bind_i64(loss), db_bind_i64(planet_id) },
+                              2, &rows, &err) && rows == 1) return 0;
     return -1;
 }
 
@@ -292,20 +362,27 @@ int db_planets_get_citadel_level(db_t *db, int planet_id, int *level) {
 }
 
 int db_planets_add_treasury(db_t *db, int planet_id, int amount) {
+    if (!db || planet_id <= 0 || amount <= 0) return -1;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q23 */
-    const char *q23 = "UPDATE citadels SET treasury = treasury + {1} WHERE planet_id = {2};";
-    char sql[512]; sql_build(db, q23, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    const char *q23 = "UPDATE citadels SET treasury = COALESCE(treasury, 0) + {1} WHERE planet_id = {2};";
+    char sql[512];
+    if (sql_build(db, q23, sql, sizeof(sql)) != 0) return -1;
+    if (db_exec_rows_affected(db, sql,
+                              (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) },
+                              2, &rows, &err) && rows == 1) return 0;
     return -1;
 }
 
 int db_planets_get_treasury(db_t *db, int planet_id, long long *balance) {
     db_res_t *res = NULL;
-    db_error_t err;
+    db_error_t err = {0};
     /* SQL_VERBATIM: Q24 */
-    const char *q24 = "SELECT treasury FROM citadels WHERE planet_id = {1};";
-    char sql[512]; sql_build(db, q24, sql, sizeof(sql));
+    const char *q24 = "SELECT COALESCE(treasury, 0) FROM citadels WHERE planet_id = {1};";
+    char sql[512];
+    if (!db || !balance || planet_id <= 0
+        || sql_build(db, q24, sql, sizeof(sql)) != 0) return -1;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *balance = db_res_col_i64(res, 0, &err);
         db_res_finalize(res);
@@ -317,10 +394,12 @@ int db_planets_get_treasury(db_t *db, int planet_id, long long *balance) {
 
 int db_planets_get_citadel_info(db_t *db, int planet_id, int *level, long long *treasury) {
     db_res_t *res = NULL;
-    db_error_t err;
+    db_error_t err = {0};
     /* SQL_VERBATIM: Q25 */
-    const char *q25 = "SELECT level, treasury FROM citadels WHERE planet_id = {1};";
-    char sql[512]; sql_build(db, q25, sql, sizeof(sql));
+    const char *q25 = "SELECT level, COALESCE(treasury, 0) FROM citadels WHERE planet_id = {1};";
+    char sql[512];
+    if (!db || !level || !treasury || planet_id <= 0
+        || sql_build(db, q25, sql, sizeof(sql)) != 0) return -1;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *level = db_res_col_i32(res, 0, &err);
         *treasury = db_res_col_i64(res, 1, &err);
@@ -332,11 +411,16 @@ int db_planets_get_citadel_info(db_t *db, int planet_id, int *level, long long *
 }
 
 int db_planets_deduct_treasury(db_t *db, int planet_id, int amount) {
+    if (!db || planet_id <= 0 || amount <= 0) return -1;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q26 */
-    const char *q26 = "UPDATE citadels SET treasury = treasury - {1} WHERE planet_id = {2};";
-    char sql[512]; sql_build(db, q26, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    const char *q26 = "UPDATE citadels SET treasury = COALESCE(treasury, 0) - {1} WHERE planet_id = {2} AND COALESCE(treasury, 0) >= {1};";
+    char sql[512];
+    if (sql_build(db, q26, sql, sizeof(sql)) != 0) return -1;
+    if (db_exec_rows_affected(db, sql,
+                              (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) },
+                              2, &rows, &err) && rows == 1) return 0;
     return -1;
 }
 
@@ -551,12 +635,242 @@ int db_planets_get_commodity_id(db_t *db, const char *code, int *id) {
 }
 
 int db_planets_add_treasury_buy(db_t *db, int planet_id, long long amount) {
+    if (!db || planet_id <= 0 || amount <= 0) return -1;
     db_error_t err;
+    int64_t rows = 0;
     /* SQL_VERBATIM: Q41 */
-    const char *q41 = "UPDATE citadels SET treasury = treasury + {1} WHERE planet_id = {2}";
-    char sql[512]; sql_build(db, q41, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    const char *q41 = "UPDATE citadels SET treasury = COALESCE(treasury, 0) + {1} WHERE planet_id = {2}";
+    char sql[512];
+    if (sql_build(db, q41, sql, sizeof(sql)) != 0) return -1;
+    if (db_exec_rows_affected(db, sql,
+                              (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(planet_id) },
+                              2, &rows, &err) && rows == 1) return 0;
     return -1;
+}
+
+int repo_planets_transfer_fighters(db_t *db, int player_id, int ship_id,
+                                  int planet_id, const char *direction,
+                                  int quantity, int *planet_after,
+                                  int *ship_after) {
+    if (!db || player_id <= 0 || ship_id <= 0 || planet_id <= 0
+        || quantity <= 0 || !direction || !planet_after || !ship_after
+        || (strcmp(direction, "ship_to_planet") != 0
+            && strcmp(direction, "planet_to_ship") != 0))
+        return ERR_INVALID_ARG;
+    *planet_after = 0;
+    *ship_after = 0;
+
+    db_error_t err;
+    db_error_clear(&err);
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    /* Lock the authoritative owner, planet and active ship rows together.
+     * Ship type and planet type are read for their existing fighter caps. */
+    const char *select_template =
+        "SELECT p.owner_id, p.owner_type, p.sector_id, COALESCE(p.fighters, 0), "
+        "COALESCE(pt.maxfighters, 0), pl.ship_id, pl.lastplanet, s.sector_id, "
+        "s.onplanet, COALESCE(s.fighters, 0), COALESCE(st.maxfighters, 0), "
+        "EXISTS (SELECT 1 FROM corp_members cm WHERE cm.corporation_id = p.owner_id AND cm.player_id = pl.player_id) "
+        "FROM players pl JOIN ships s ON s.ship_id = pl.ship_id "
+        "JOIN shiptypes st ON st.shiptypes_id = s.type_id "
+        "JOIN planets p ON p.planet_id = {3} "
+        "JOIN planettypes pt ON pt.planettypes_id = p.type "
+        "WHERE pl.player_id = {1} AND pl.ship_id = {2}";
+    char lock_clause[96], query_template[1024], sql[1024];
+    if (sql_for_update_of(db, "p, pl, s", lock_clause,
+                          sizeof(lock_clause)) != 0
+        || snprintf(query_template, sizeof(query_template), "%s%s;",
+                    select_template, lock_clause) >= (int) sizeof(query_template)
+        || sql_build(db, query_template, sql, sizeof(sql)) != 0) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_QUERY_FAILED;
+    }
+
+    db_res_t *res = NULL;
+    db_bind_t params[] = { db_bind_i32(player_id), db_bind_i32(ship_id),
+                           db_bind_i32(planet_id) };
+    if (!db_query(db, sql, params, 3, &res, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+
+    int owner_id = db_res_col_i32(res, 0, &err);
+    const char *owner_type_value = db_res_col_text(res, 1, &err);
+    char owner_type[24] = {0};
+    if (owner_type_value)
+        snprintf(owner_type, sizeof(owner_type), "%s", owner_type_value);
+    int planet_sector = db_res_col_i32(res, 2, &err);
+    int64_t p_fighters = db_res_col_i64(res, 3, &err);
+    int64_t p_capacity = db_res_col_i64(res, 4, &err);
+    int active_ship_id = db_res_col_i32(res, 5, &err);
+    int landed_planet_id = db_res_col_i32(res, 6, &err);
+    int ship_sector = db_res_col_i32(res, 7, &err);
+    bool onplanet = db_res_col_bool(res, 8, &err);
+    int64_t s_fighters = db_res_col_i64(res, 9, &err);
+    int64_t s_capacity = db_res_col_i64(res, 10, &err);
+    bool corp_member = db_res_col_bool(res, 11, &err);
+    db_res_finalize(res);
+    if (err.code != 0) {
+        db_tx_rollback(db, &err);
+        return err.code;
+    }
+
+    bool player_owned = strcmp(owner_type, "player") == 0
+        && owner_id == player_id;
+    bool corp_owned = (strcmp(owner_type, "corp") == 0
+                       || strcmp(owner_type, "corporation") == 0)
+        && corp_member;
+    if ((!player_owned && !corp_owned) || active_ship_id != ship_id
+        || landed_planet_id != planet_id || !onplanet
+        || ship_sector != planet_sector) {
+        db_tx_rollback(db, &err);
+        return ERR_PERMISSION_DENIED;
+    }
+
+    int64_t qty = quantity;
+    bool ship_to_planet = strcmp(direction, "ship_to_planet") == 0;
+    if ((ship_to_planet && (s_fighters < qty || p_capacity < 0
+                            || p_fighters > p_capacity - qty))
+        || (!ship_to_planet && (p_fighters < qty || s_capacity < 0
+                                || s_fighters > s_capacity - qty))) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_CONSTRAINT;
+    }
+
+    int64_t rows = 0;
+    const char *planet_update = ship_to_planet
+        ? "UPDATE planets SET fighters = COALESCE(fighters, 0) + {1} WHERE planet_id = {2} AND COALESCE(fighters, 0) + {1} <= (SELECT COALESCE(maxfighters, 0) FROM planettypes WHERE planettypes_id = planets.type);"
+        : "UPDATE planets SET fighters = COALESCE(fighters, 0) - {1} WHERE planet_id = {2} AND COALESCE(fighters, 0) >= {1};";
+    const char *ship_update = ship_to_planet
+        ? "UPDATE ships SET fighters = COALESCE(fighters, 0) - {1} WHERE ship_id = {2} AND COALESCE(fighters, 0) >= {1};"
+        : "UPDATE ships SET fighters = COALESCE(fighters, 0) + {1} WHERE ship_id = {2} AND COALESCE(fighters, 0) + {1} <= (SELECT COALESCE(maxfighters, 0) FROM shiptypes WHERE shiptypes_id = ships.type_id);";
+    char planet_sql[512], ship_sql[512];
+    if (sql_build(db, planet_update, planet_sql, sizeof(planet_sql)) != 0
+        || sql_build(db, ship_update, ship_sql, sizeof(ship_sql)) != 0
+        || !db_exec_rows_affected(db, planet_sql,
+                                  (db_bind_t[]){db_bind_i32(quantity), db_bind_i32(planet_id)},
+                                  2, &rows, &err)
+        || rows != 1) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_CONSTRAINT;
+    }
+    rows = 0;
+    if (!db_exec_rows_affected(db, ship_sql,
+                               (db_bind_t[]){db_bind_i32(quantity), db_bind_i32(ship_id)},
+                               2, &rows, &err)
+        || rows != 1) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_CONSTRAINT;
+    }
+
+    int64_t final_planet = p_fighters + (ship_to_planet ? qty : -qty);
+    int64_t final_ship = s_fighters + (ship_to_planet ? -qty : qty);
+    if (final_planet > INT_MAX || final_ship > INT_MAX
+        || !db_tx_commit(db, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_TX;
+    }
+    *planet_after = (int) final_planet;
+    *ship_after = (int) final_ship;
+    return 0;
+}
+
+int db_planets_destroy(db_t *db, int player_id, int planet_id) {
+    if (!db || player_id <= 0 || planet_id <= 0) return ERR_INVALID_ARG;
+    db_error_t err;
+    db_error_clear(&err);
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    char sql[768];
+    db_res_t *res = NULL;
+    /* Match player_land's player-before-planet lock order to avoid a cycle
+     * with a concurrent landing or launch on this planet. */
+    if (sql_build(db,
+          "SELECT player_id FROM players WHERE lastplanet={1} ORDER BY player_id FOR UPDATE;",
+          sql, sizeof(sql)) != 0
+        || !db_query(db, sql, (db_bind_t[]){db_bind_i32(planet_id)}, 1,
+                     &res, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    while (db_res_step(res, &err)) { /* acquire every landed player's lock */ }
+    db_res_finalize(res);
+    if (err.code != 0) {
+        db_tx_rollback(db, &err);
+        return err.code;
+    }
+
+    char lock_clause[64], query_template[768];
+    const char *planet_query =
+        "SELECT p.owner_id, p.owner_type, "
+        "EXISTS (SELECT 1 FROM corp_members cm WHERE cm.corporation_id=p.owner_id AND cm.player_id={1}) "
+        "FROM planets p WHERE p.planet_id={2}";
+    if (sql_for_update_of(db, "p", lock_clause, sizeof(lock_clause)) != 0
+        || snprintf(query_template, sizeof(query_template), "%s%s;",
+                    planet_query, lock_clause) >= (int) sizeof(query_template)
+        || sql_build(db, query_template, sql, sizeof(sql)) != 0
+        || !db_query(db, sql,
+             (db_bind_t[]){db_bind_i32(player_id), db_bind_i32(planet_id)},
+             2, &res, &err)) {
+        if (res) db_res_finalize(res);
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    int owner_id = db_res_col_i32(res, 0, &err);
+    const char *owner_type_value = db_res_col_text(res, 1, &err);
+    char owner_type[24] = {0};
+    if (owner_type_value)
+        snprintf(owner_type, sizeof(owner_type), "%s", owner_type_value);
+    bool corp_member = db_res_col_bool(res, 2, &err);
+    db_res_finalize(res);
+    if (err.code != 0) {
+        db_tx_rollback(db, &err);
+        return err.code;
+    }
+    bool player_owned = strcmp(owner_type, "player") == 0
+        && owner_id == player_id;
+    bool corp_owned = (strcmp(owner_type, "corp") == 0
+                       || strcmp(owner_type, "corporation") == 0)
+        && corp_member;
+    if (!player_owned && !corp_owned) {
+        db_tx_rollback(db, &err);
+        return ERR_PERMISSION_DENIED;
+    }
+
+    const char *steps[] = {
+        "UPDATE ships SET onplanet=FALSE WHERE ship_id IN (SELECT ship_id FROM players WHERE lastplanet={1});",
+        "UPDATE players SET lastplanet=NULL WHERE lastplanet={1};",
+        "DELETE FROM planet_goods WHERE planet_id={1};",
+        "DELETE FROM entity_stock WHERE entity_type='planet' AND entity_id={1};",
+        "DELETE FROM planets WHERE planet_id={1};"
+    };
+    for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); ++i) {
+        int64_t rows = 0;
+        if (sql_build(db, steps[i], sql, sizeof(sql)) != 0
+            || !db_exec_rows_affected(db, sql,
+                 (db_bind_t[]){db_bind_i32(planet_id)}, 1, &rows, &err)
+            || (i == 4 && rows != 1)) {
+            db_tx_rollback(db, &err);
+            return err.code ? err.code : ERR_DB_EXEC_FAILED;
+        }
+    }
+    if (!db_tx_commit(db, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_TX;
+    }
+    return 0;
 }
 
 int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int commodity_id, int qty, int price, int64_t *order_id) {

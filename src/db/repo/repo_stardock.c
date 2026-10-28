@@ -204,16 +204,73 @@ int repo_stardock_get_ship_limit_info(db_t *db, int32_t ship_id, const char *col
 
 int repo_stardock_update_ship_hardware(db_t *db, const char *col_name, int32_t quantity, int32_t ship_id)
 {
-    /* SQL_VERBATIM: Q6 */
-    char sql[512];
-    snprintf(sql, sizeof(sql), "UPDATE ships SET %s = %s + {1} WHERE ship_id = {2};", col_name, col_name);
-    char sql_converted[512];
-    sql_build(db, sql, sql_converted, sizeof(sql_converted));
-    db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(ship_id) }, 2, &err)) {
-        return 0;
+    if (!db || !col_name || ship_id <= 0 || quantity <= 0)
+        return ERR_INVALID_ARG;
+
+    /* Only allow the inventory columns exposed by the hardware command.
+     * Numeric items are bounded in the same statement as the increment so
+     * concurrent purchases cannot exceed the ship type's capacity. */
+    const char *column = NULL, *limit = NULL;
+    bool boolean_item = false;
+    struct hardware_column { const char *name, *limit; bool boolean_item; };
+    static const struct hardware_column allowed[] = {
+        {"fighters", "maxfighters", false},
+        {"shields", "maxshields", false},
+        {"holds", "maxholds", false},
+        {"genesis", "maxgenesis", false},
+        {"mines", "maxmines", false},
+        {"beacons", "maxbeacons", false},
+        {"cloaking_devices", "max_cloaks", false},
+        {"detonators", "max_detonators", false},
+        {"probes", "max_probes", false},
+        {"has_transwarp", NULL, true},
+        {"has_planet_scanner", NULL, true},
+        {"has_long_range_scanner", NULL, true}
+    };
+    for (size_t i = 0; i < sizeof allowed / sizeof allowed[0]; ++i)
+        if (strcmp(col_name, allowed[i].name) == 0) {
+            column = allowed[i].name;
+            limit = allowed[i].limit;
+            boolean_item = allowed[i].boolean_item;
+            break;
+        }
+    if (!column || (boolean_item && quantity != 1))
+        return ERR_INVALID_ARG;
+
+    char query[768];
+    int n;
+    if (boolean_item)
+        n = snprintf(query, sizeof query,
+                     "UPDATE ships SET %s=TRUE WHERE ship_id={1} AND %s=FALSE;",
+                     column, column);
+    else
+        n = snprintf(query, sizeof query,
+                     "UPDATE ships SET %s=COALESCE(%s,0)+{1} "
+                     "WHERE ship_id={2} "
+                     "AND COALESCE(%s,0)+{1} <= "
+                     "(SELECT COALESCE(%s,0) FROM shiptypes "
+                     "WHERE shiptypes_id=ships.type_id);",
+                     column, column, column, limit);
+    if (n < 0 || (size_t)n >= sizeof query)
+        return ERR_DB_QUERY_FAILED;
+    char sql[768];
+    if (sql_build(db, query, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_error_t err = {0};
+    int64_t rows = 0;
+    db_bind_t params[2];
+    size_t count;
+    if (boolean_item) {
+        params[0] = db_bind_i64(ship_id);
+        count = 1;
+    } else {
+        params[0] = db_bind_i64(quantity);
+        params[1] = db_bind_i64(ship_id);
+        count = 2;
     }
-    return err.code;
+    if (!db_exec_rows_affected(db, sql, params, count, &rows, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    return rows == 1 ? 0 : ERR_DB_BUSY;
 }
 
 int repo_stardock_check_shipyard_location(db_t *db, int32_t sector_id, int32_t player_id, int32_t *out_port_id)
@@ -294,15 +351,26 @@ int repo_stardock_get_shiptype_details(db_t *db, int32_t type_id, db_res_t **out
 
 int repo_stardock_upgrade_ship(db_t *db, int32_t new_type_id, const char *new_name, int64_t cost, int32_t ship_id)
 {
-    /* SQL_VERBATIM: Q14 */
-    const char *sql = "UPDATE ships SET type_id = {1}, name = {2}, credits = credits - {3} WHERE ship_id = {4};";
+    if (!db || new_type_id <= 0 || !new_name || !new_name[0]
+        || cost < 0 || ship_id <= 0)
+        return ERR_INVALID_ARG;
+    /* The debit and type change are one conditional write. Keep the defense
+     * here even though callers preflight balances: concurrent charges cannot
+     * make credits negative or swap a ship without paying. */
+    const char *sql = "UPDATE ships SET type_id = {1}, name = {2}, credits = credits - {3} WHERE ship_id = {4} AND credits >= {3};";
     char sql_converted[512];
-    sql_build(db, sql, sql_converted, sizeof(sql_converted));
-    db_error_t err;
-    if (db_exec(db, sql_converted, (db_bind_t[]){ db_bind_i64(new_type_id), db_bind_text(new_name), db_bind_i64(cost), db_bind_i64(ship_id) }, 4, &err)) {
-        return 0;
-    }
-    return err.code;
+    if (sql_build(db, sql, sql_converted, sizeof(sql_converted)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_error_t err = {0};
+    int64_t rows = 0;
+    if (!db_exec_rows_affected(db, sql_converted,
+                               (db_bind_t[]){db_bind_i64(new_type_id),
+                                             db_bind_text(new_name),
+                                             db_bind_i64(cost),
+                                             db_bind_i64(ship_id)},
+                               4, &rows, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    return rows == 1 ? 0 : ERR_DB_BUSY;
 }
 
 int repo_stardock_get_tavern_settings(db_t *db, db_res_t **out_res)

@@ -76,8 +76,22 @@ int db_combat_persist_ship_damage(db_t *db, int ship_id, int hull, int shields, 
 int db_combat_select_armid_mines_locked(db_t *db, int sector_id, json_t **out_array);
 int db_combat_select_limpets_locked(db_t *db, int sector_id, json_t **out_array);
 int db_combat_check_limpet_attached(db_t *db, int ship_id, int owner_id, bool *attached);
+/* quantity is the number consumed from the sector stack. */
 int db_combat_decrement_or_delete_asset(db_t *db, int asset_id, int quantity);
+/* Atomically apply one sector-entry asset hit and consume its assets. The
+ * expected ship snapshot provides compare-and-set semantics; ERR_DB_BUSY
+ * means the caller must reload and recompute the hit. */
+int db_combat_apply_entry_asset_hit(db_t *db, int ship_id, int sector_id,
+                                    int asset_id, int asset_type,
+                                    int expected_hull, int expected_shields,
+                                    int expected_fighters, int new_hull,
+                                    int new_shields, int new_fighters,
+                                    int quantity_consumed);
 int db_combat_attach_limpet(db_t *db, int ship_id, int owner_id, int64_t created_ts);
+/* Atomically attach one limpet owner to the ship and consume that owner's
+ * triggering sector stack. Returns 0 on attach, 1 if already attached. */
+int db_combat_attach_limpet_from_asset(db_t *db, int ship_id, int owner_id,
+                                       int asset_id, int64_t created_ts);
 int db_combat_get_planet_quasar_info(db_t *db, int sector_id, json_t **out_array);
 int db_combat_get_sector_hazards(db_t *db, int sector_id, json_t **out_array);
 int db_combat_get_planet_atmosphere_quasar(db_t *db, int planet_id, int *owner_id, char *owner_type_buf, int *base_str, int *reaction);

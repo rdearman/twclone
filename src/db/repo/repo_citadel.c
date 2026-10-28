@@ -5,6 +5,46 @@
 #include <stdio.h>
 #include <string.h>
 
+int repo_citadel_get_construction_state(db_t *db, int32_t planet_id,
+                                        int32_t *level, char *status,
+                                        size_t status_size,
+                                        int32_t *target_level,
+                                        int64_t *start_time,
+                                        int64_t *completion_time)
+{
+    if (!db || planet_id <= 0 || !level || !status || status_size == 0
+        || !target_level || !start_time || !completion_time)
+        return ERR_INVALID_ARG;
+    const char *query =
+        "SELECT COALESCE(level, 0), COALESCE(construction_status, 'idle'), "
+        "COALESCE(target_level, 0), COALESCE(construction_start_time, 0), "
+        "COALESCE(construction_end_time, 0) FROM citadels WHERE planet_id = {1};";
+    char sql[512];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i32(planet_id)}, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    const char *value = db_res_col_text(res, 1, &err);
+    if (!value || strlen(value) >= status_size) {
+        db_res_finalize(res);
+        return value ? ERR_INVALID_ARG : (err.code ? err.code : ERR_DB_QUERY_FAILED);
+    }
+    *level = db_res_col_i32(res, 0, &err);
+    memcpy(status, value, strlen(value) + 1);
+    *target_level = db_res_col_i32(res, 2, &err);
+    *start_time = db_res_col_i64(res, 3, &err);
+    *completion_time = db_res_col_i64(res, 4, &err);
+    db_res_finalize(res);
+    return err.code;
+}
+
 int repo_citadel_get_onplanet(db_t *db, int32_t ship_id, int32_t *planet_id_out)
 {
     /* SQL_VERBATIM: Q1 */

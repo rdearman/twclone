@@ -26,8 +26,11 @@ int db_combat_get_ship_stats(db_t *db, int ship_id, repo_combat_ship_t *out) {
     if (!db || !out) return -1;
     db_res_t *res = NULL;
     db_error_t err = {0};
-    char sql[256];
-    sql_build(db, "SELECT ship_id, hull, fighters, shields FROM ships WHERE ship_id = {1};", sql, sizeof(sql));
+    char sql_tmpl[256], sql[256];
+    snprintf(sql_tmpl, sizeof(sql_tmpl),
+             "SELECT ship_id, hull, fighters, shields FROM ships WHERE ship_id = {1}%s;",
+             sql_for_update(db));
+    if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0) return -1;
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) return -1;
     if (!db_res_step(res, &err)) { db_res_finalize(res); return 0; }
     out->id = (int)db_res_col_i32(res, 0, &err);
@@ -39,20 +42,27 @@ int db_combat_get_ship_stats(db_t *db, int ship_id, repo_combat_ship_t *out) {
 }
 
 int db_combat_update_ship_stats(db_t *db, int ship_id, int hull, int fighters, int shields) {
-    if (!db) return -1;
+    if (!db || ship_id <= 0 || hull < 0 || fighters < 0 || shields < 0) return -1;
     db_error_t err = {0};
     char sql[256];
-    sql_build(db, "UPDATE ships SET hull = {1}, fighters = {2}, shields = {3} WHERE ship_id = {4};", sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(hull), db_bind_i64(fighters), db_bind_i64(shields), db_bind_i64(ship_id) }, 4, &err)) return -1;
-    return 0;
+    int64_t rows = 0;
+    if (sql_build(db, "UPDATE ships SET hull = {1}, fighters = {2}, shields = {3} WHERE ship_id = {4};", sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+             (db_bind_t[]){ db_bind_i64(hull), db_bind_i64(fighters),
+                            db_bind_i64(shields), db_bind_i64(ship_id) },
+             4, &rows, &err)) return -1;
+    return rows == 1 ? 0 : -1;
 }
 
 int db_combat_get_hostile_fighters(db_t *db, int sector_id, int **out_ids, int **out_quantities, int **out_owners, int **out_corps, int **out_modes, int *out_count) {
     if (!db || !out_ids || !out_quantities || !out_owners || !out_corps || !out_modes || !out_count) return -1;
     db_res_t *res = NULL;
     db_error_t err = {0};
-    char sql[256];
-    sql_build(db, "SELECT sector_assets_id, quantity, owner_id, corporation_id, offensive_setting FROM sector_assets WHERE sector_id = {1} AND asset_type = 2 AND quantity > 0;", sql, sizeof(sql));
+    char sql_tmpl[384], sql[384];
+    snprintf(sql_tmpl, sizeof(sql_tmpl),
+             "SELECT sector_assets_id, quantity, owner_id, corporation_id, offensive_setting FROM sector_assets WHERE sector_id = {1} AND asset_type = 2 AND quantity > 0%s;",
+             sql_for_update(db));
+    if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0) return -1;
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) return -1;
     int cap = 16, count = 0;
     *out_ids = malloc(cap * sizeof(int)); *out_quantities = malloc(cap * sizeof(int));
@@ -78,12 +88,14 @@ int db_combat_get_hostile_fighters(db_t *db, int sector_id, int **out_ids, int *
 }
 
 int db_combat_delete_sector_asset(db_t *db, int asset_id) {
-    if (!db) return -1;
+    if (!db || asset_id <= 0) return -1;
     db_error_t err = {0};
+    int64_t rows = 0;
     char sql[256];
-    sql_build(db, "DELETE FROM sector_assets WHERE sector_assets_id = {1};", sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(asset_id) }, 1, &err)) return -1;
-    return 0;
+    if (sql_build(db, "DELETE FROM sector_assets WHERE sector_assets_id = {1};", sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+             (db_bind_t[]){ db_bind_i64(asset_id) }, 1, &rows, &err)) return -1;
+    return rows == 1 ? 0 : -1;
 }
 
 /* Flee */
@@ -205,19 +217,16 @@ int db_combat_sum_sector_fighters(db_t *db, int sector_id, int *total) {
 }
 
 int db_combat_consume_ship_fighters(db_t *db, int ship_id, int amount) {
-    if (!db) return -1;
-    db_res_t *res = NULL;
+    if (!db || ship_id <= 0 || amount <= 0) return -1;
     db_error_t err = {0};
-    char sql_check[256];
-    sql_build(db, "SELECT fighters FROM ships WHERE ship_id = {1};", sql_check, sizeof(sql_check));
-    if (!db_query(db, sql_check, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) return -1;
-    int current = 0; if (db_res_step(res, &err)) current = (int)db_res_col_i32(res, 0, &err);
-    db_res_finalize(res);
-    if (current < amount) return 2007;
-    char sql_upd[256];
-    sql_build(db, "UPDATE ships SET fighters = fighters - {1} WHERE ship_id = {2};", sql_upd, sizeof(sql_upd));
-    if (!db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(ship_id) }, 2, &err)) return -1;
-    return 0;
+    int64_t rows = 0;
+    char sql[256];
+    if (sql_build(db, "UPDATE ships SET fighters = COALESCE(fighters, 0) - {1} WHERE ship_id = {2} AND COALESCE(fighters, 0) >= {1};", sql, sizeof(sql)) != 0)
+        return -1;
+    if (!db_exec_rows_affected(db, sql,
+          (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(ship_id) },
+          2, &rows, &err)) return -1;
+    return rows == 1 ? 0 : 2007;
 }
 
 int db_combat_insert_sector_fighters(db_t *db, int sector_id, int owner_id, int corp_id, int mode, int amount) {
@@ -256,20 +265,19 @@ int db_combat_sum_sector_mines(db_t *db, int sector_id, int *total) {
 }
 
 int db_combat_consume_ship_mines(db_t *db, int ship_id, int asset_type, int amount) {
-    if (!db) return -1;
-    db_res_t *res = NULL;
+    if (!db || ship_id <= 0 || amount <= 0
+        || (asset_type != 1 && asset_type != 4)) return -1;
     db_error_t err = {0};
-    char sql_check[256];
-    (void)asset_type;
-    sql_build(db, "SELECT mines FROM ships WHERE ship_id = {1};", sql_check, sizeof(sql_check));
-    if (!db_query(db, sql_check, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) return -1;
-    int current = 0; if (db_res_step(res, &err)) current = (int)db_res_col_i32(res, 0, &err);
-    db_res_finalize(res);
-    if (current < amount) return 2007;
-    char sql_upd[256];
-    sql_build(db, "UPDATE ships SET mines = mines - {1} WHERE ship_id = {2};", sql_upd, sizeof(sql_upd));
-    if (!db_exec(db, sql_upd, (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(ship_id) }, 2, &err)) return -1;
-    return 0;
+    int64_t rows = 0;
+    const char *template = asset_type == 1
+        ? "UPDATE ships SET mines = COALESCE(mines, 0) - {1} WHERE ship_id = {2} AND COALESCE(mines, 0) >= {1};"
+        : "UPDATE ships SET limpets = COALESCE(limpets, 0) - {1} WHERE ship_id = {2} AND COALESCE(limpets, 0) >= {1};";
+    char sql[256];
+    if (sql_build(db, template, sql, sizeof(sql)) != 0) return -1;
+    if (!db_exec_rows_affected(db, sql,
+          (db_bind_t[]){ db_bind_i64(amount), db_bind_i64(ship_id) },
+          2, &rows, &err)) return -1;
+    return rows == 1 ? 0 : 2007;
 }
 
 int db_combat_insert_sector_mines(db_t *db, int sector_id, int owner_id, int corp_id, int asset_type, int mode, int amount) {
@@ -345,12 +353,15 @@ int db_combat_load_ship_full_unlocked(db_t *db, int ship_id, repo_combat_ship_fu
 }
 
 int db_combat_persist_ship_damage(db_t *db, int ship_id, int hull, int shields, int fighters_lost) {
-    if (!db) return -1;
+    if (!db || ship_id <= 0 || hull < 0 || shields < 0 || fighters_lost < 0) return -1;
     db_error_t err = {0};
     char sql[256];
-    sql_build(db, "UPDATE ships SET hull = {1}, shields = {2}, fighters = GREATEST(0, fighters - {3}) WHERE ship_id = {4}", sql, sizeof(sql));
     int64_t rows = 0;
-    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){ db_bind_i64(hull), db_bind_i64(shields), db_bind_i64(fighters_lost), db_bind_i64(ship_id) }, 4, &rows, &err)) return -1;
+    if (sql_build(db, "UPDATE ships SET hull = {1}, shields = {2}, fighters = GREATEST(0, COALESCE(fighters, 0) - {3}) WHERE ship_id = {4}", sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+             (db_bind_t[]){ db_bind_i64(hull), db_bind_i64(shields),
+                            db_bind_i64(fighters_lost), db_bind_i64(ship_id) },
+             4, &rows, &err)) return -1;
     return (rows == 1) ? 0 : -1;
 }
 
@@ -361,8 +372,8 @@ int db_combat_select_armid_mines_locked(db_t *db, int sector_id, json_t **out_ar
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql_tmpl[512], sql[512];
-    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT sector_assets_id, quantity, offensive_setting, owner_id, corporation_id, ttl FROM sector_assets WHERE sector_id = {1} AND asset_type = 1%s;", sql_for_update_skip_locked(db));
-    sql_build(db, sql_tmpl, sql, sizeof(sql));
+    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT sector_assets_id, quantity, offensive_setting, owner_id, corporation_id, ttl FROM sector_assets WHERE sector_id = {1} AND asset_type = 1%s;", sql_for_update(db));
+    if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0) return -1;
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) return -1;
     while(db_res_step(res, &err)) {
         json_t *obj = json_object();
@@ -384,8 +395,8 @@ int db_combat_select_limpets_locked(db_t *db, int sector_id, json_t **out_array)
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql_tmpl[512], sql[512];
-    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT sector_assets_id, quantity, owner_id, corporation_id, ttl FROM sector_assets WHERE sector_id = {1} AND asset_type = 4 AND quantity > 0%s;", sql_for_update_skip_locked(db));
-    sql_build(db, sql_tmpl, sql, sizeof(sql));
+    snprintf(sql_tmpl, sizeof(sql_tmpl), "SELECT sector_assets_id, quantity, owner_id, corporation_id, ttl FROM sector_assets WHERE sector_id = {1} AND asset_type = 4 AND quantity > 0%s;", sql_for_update(db));
+    if (sql_build(db, sql_tmpl, sql, sizeof(sql)) != 0) return -1;
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err)) return -1;
     while(db_res_step(res, &err)) {
         json_t *obj = json_object();
@@ -413,12 +424,106 @@ int db_combat_check_limpet_attached(db_t *db, int ship_id, int owner_id, bool *a
 }
 
 int db_combat_decrement_or_delete_asset(db_t *db, int asset_id, int quantity) {
-    if (!db) return -1;
+    if (!db || asset_id <= 0 || quantity <= 0) return -1;
     db_error_t err = {0};
+    int64_t rows = 0;
     char sql[256];
-    if (quantity > 1) sql_build(db, "UPDATE sector_assets SET quantity = quantity - 1 WHERE sector_assets_id = {1};", sql, sizeof(sql));
-    else sql_build(db, "DELETE FROM sector_assets WHERE sector_assets_id = {1};", sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(asset_id) }, 1, &err)) return -1;
+    /* The argument is the amount consumed. Exact depletion deletes the row;
+     * partial depletion is a bounded atomic decrement. */
+    if (sql_build(db, "DELETE FROM sector_assets WHERE sector_assets_id = {1} AND quantity = {2};", sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+             (db_bind_t[]){ db_bind_i64(asset_id), db_bind_i64(quantity) },
+             2, &rows, &err)) return -1;
+    if (rows == 1) return 0;
+    rows = 0;
+    if (sql_build(db, "UPDATE sector_assets SET quantity = quantity - {2} WHERE sector_assets_id = {1} AND quantity > {2};", sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+             (db_bind_t[]){ db_bind_i64(asset_id), db_bind_i64(quantity) },
+             2, &rows, &err)) return -1;
+    return rows == 1 ? 0 : -1;
+}
+
+int db_combat_apply_entry_asset_hit(db_t *db, int ship_id, int sector_id,
+                                    int asset_id, int asset_type,
+                                    int expected_hull, int expected_shields,
+                                    int expected_fighters, int new_hull,
+                                    int new_shields, int new_fighters,
+                                    int quantity_consumed) {
+    if (!db || ship_id <= 0 || sector_id <= 0 || asset_id <= 0
+        || (asset_type != 1 && asset_type != 2 && asset_type != 4)
+        || expected_hull < 0 || expected_shields < 0 || expected_fighters < 0
+        || new_hull < 0 || new_shields < 0 || new_fighters < 0
+        || quantity_consumed <= 0)
+        return ERR_INVALID_ARG;
+
+    db_error_t err = {0};
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    char lock_clause[96], query_template[512], sql[768];
+    const char *query =
+        "SELECT COALESCE(s.hull,0), COALESCE(s.shields,0), COALESCE(s.fighters,0), "
+        "sa.quantity, s.sector_id, sa.sector_id FROM ships s "
+        "JOIN sector_assets sa ON sa.sector_assets_id={3} "
+        "WHERE s.ship_id={1} AND s.sector_id={2} AND sa.sector_id={2} "
+        "AND sa.asset_type={4} AND sa.quantity >= {5}";
+    if (sql_for_update_of(db, "s, sa", lock_clause,
+                          sizeof(lock_clause)) != 0
+        || snprintf(query_template, sizeof(query_template), "%s%s;", query,
+                    lock_clause) >= (int) sizeof(query_template)
+        || sql_build(db, query_template, sql, sizeof(sql)) != 0) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_QUERY_FAILED;
+    }
+    db_res_t *res = NULL;
+    db_bind_t query_params[] = { db_bind_i32(ship_id), db_bind_i32(sector_id),
+        db_bind_i32(asset_id), db_bind_i32(asset_type),
+        db_bind_i32(quantity_consumed) };
+    if (!db_query(db, sql, query_params, 5, &res, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    int hull = db_res_col_i32(res, 0, &err);
+    int shields = db_res_col_i32(res, 1, &err);
+    int fighters = db_res_col_i32(res, 2, &err);
+    int asset_quantity = db_res_col_i32(res, 3, &err);
+    int ship_sector = db_res_col_i32(res, 4, &err);
+    int asset_sector = db_res_col_i32(res, 5, &err);
+    db_res_finalize(res);
+    if (err.code != 0) {
+        db_tx_rollback(db, &err);
+        return err.code;
+    }
+    if (hull != expected_hull || shields != expected_shields
+        || fighters != expected_fighters || asset_quantity < quantity_consumed
+        || ship_sector != sector_id || asset_sector != sector_id) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_BUSY;
+    }
+
+    int64_t rows = 0;
+    if (sql_build(db,
+          "UPDATE ships SET hull={1},shields={2},fighters={3} WHERE ship_id={4} AND sector_id={5};",
+          sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+             (db_bind_t[]){db_bind_i32(new_hull), db_bind_i32(new_shields),
+               db_bind_i32(new_fighters), db_bind_i32(ship_id),
+               db_bind_i32(sector_id)}, 5, &rows, &err)
+        || rows != 1
+        || db_combat_decrement_or_delete_asset(db, asset_id,
+                                               quantity_consumed) != 0) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_EXEC_FAILED;
+    }
+    if (!db_tx_commit(db, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_TX;
+    }
     return 0;
 }
 
@@ -433,6 +538,87 @@ int db_combat_attach_limpet(db_t *db, int ship_id, int owner_id, int64_t created
             return 0;
         }
         return err.code;
+    }
+    return 0;
+}
+
+int db_combat_attach_limpet_from_asset(db_t *db, int ship_id, int owner_id,
+                                       int asset_id, int64_t created_ts) {
+    if (!db || ship_id <= 0 || owner_id <= 0 || asset_id <= 0
+        || created_ts <= 0) return ERR_INVALID_ARG;
+    db_error_t err = {0};
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    char lock_clause[96], query_template[512], sql[768];
+    const char *query =
+        "SELECT sa.quantity FROM ships s JOIN sector_assets sa "
+        "ON sa.sector_assets_id={3} WHERE s.ship_id={1} AND s.sector_id=sa.sector_id "
+        "AND sa.owner_id={2} AND sa.asset_type=4 AND sa.quantity>0";
+    if (sql_for_update_of(db, "s, sa", lock_clause,
+                          sizeof(lock_clause)) != 0
+        || snprintf(query_template, sizeof(query_template), "%s%s;", query,
+                    lock_clause) >= (int) sizeof(query_template)
+        || sql_build(db, query_template, sql, sizeof(sql)) != 0) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_QUERY_FAILED;
+    }
+    db_res_t *res = NULL;
+    db_bind_t params[] = {db_bind_i32(ship_id), db_bind_i32(owner_id),
+                          db_bind_i32(asset_id)};
+    if (!db_query(db, sql, params, 3, &res, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    int stack_quantity = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    if (err.code != 0 || stack_quantity <= 0) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_CONSTRAINT;
+    }
+
+    if (sql_build(db,
+          "SELECT 1 FROM limpet_attached WHERE ship_id={1} AND owner_player_id={2};",
+          sql, sizeof(sql)) != 0
+        || !db_query(db, sql,
+             (db_bind_t[]){db_bind_i32(ship_id), db_bind_i32(owner_id)},
+             2, &res, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    bool already_attached = db_res_step(res, &err);
+    db_res_finalize(res);
+    if (err.code != 0) {
+        db_tx_rollback(db, &err);
+        return err.code;
+    }
+    if (already_attached) {
+        db_tx_rollback(db, &err);
+        return 1;
+    }
+
+    if (sql_build(db,
+          "INSERT INTO limpet_attached (ship_id,owner_player_id,created_ts) VALUES ({1},{2},{3});",
+          sql, sizeof(sql)) != 0
+        || !db_exec(db, sql,
+             (db_bind_t[]){db_bind_i32(ship_id), db_bind_i32(owner_id),
+                           db_bind_timestamp_text(created_ts)}, 3, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code == ERR_DB_CONSTRAINT ? 1 :
+               (err.code ? err.code : ERR_DB_EXEC_FAILED);
+    }
+    if (db_combat_decrement_or_delete_asset(db, asset_id, stack_quantity) != 0) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_EXEC_FAILED;
+    }
+    if (!db_tx_commit(db, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_TX;
     }
     return 0;
 }
@@ -682,10 +868,13 @@ int db_combat_get_stardock_locations(db_t *db, int **out_sectors, int *out_count
 int
 db_combat_remove_all_limpets_from_ship (db_t *db, int ship_id)
 {
+  if (!db || ship_id <= 0)
+    return -1;
   db_error_t err;
   const char *sql_tmpl = "DELETE FROM limpet_attached WHERE ship_id = {1};";
   char sql[256];
-  sql_build (db, sql_tmpl, sql, sizeof (sql));
+  if (sql_build (db, sql_tmpl, sql, sizeof (sql)) != 0)
+    return -1;
   if (!db_exec (db, sql, (db_bind_t[])
 		{
 		db_bind_i64 (ship_id)}, 1, &err))

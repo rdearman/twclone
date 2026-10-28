@@ -43,7 +43,8 @@ int repo_ships_handle_destruction(db_t *db,
     db_res_t *res = NULL;
     db_error_t err;
     char sql_converted[1024];
-    sql_build(db, sql, sql_converted, sizeof(sql_converted));
+    if (sql_build(db, sql, sql_converted, sizeof(sql_converted)) != 0)
+        return ERR_DB_QUERY_FAILED;
 
     if (!db_query(db, sql_converted, params, 11, &res, &err)) {
         return err.code;
@@ -61,7 +62,7 @@ int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out)
     /* SQL_VERBATIM: Q2 */
     const char *sql_template = "SELECT ship_id FROM players WHERE player_id = {1};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -80,7 +81,7 @@ int repo_ships_get_towing_id(db_t *db, int32_t ship_id, int32_t *towing_id_out)
     /* SQL_VERBATIM: Q3 */
     const char *sql_template = "SELECT towing_ship_id FROM ships WHERE ship_id = {1};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -99,7 +100,7 @@ int repo_ships_clear_towing_id(db_t *db, int32_t ship_id)
     /* SQL_VERBATIM: Q4 */
     const char *sql_template = "UPDATE ships SET towing_ship_id = 0 WHERE ship_id = {1};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_error_t err;
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &err)) {
@@ -113,7 +114,7 @@ int repo_ships_clear_is_being_towed_by(db_t *db, int32_t ship_id)
     /* SQL_VERBATIM: Q5 */
     const char *sql_template = "UPDATE ships SET is_being_towed_by = 0 WHERE ship_id = {1};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_error_t err;
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &err)) {
@@ -127,7 +128,7 @@ int repo_ships_get_is_being_towed_by(db_t *db, int32_t ship_id, int32_t *towed_b
     /* SQL_VERBATIM: Q6 */
     const char *sql_template = "SELECT is_being_towed_by FROM ships WHERE ship_id = {1};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -149,7 +150,7 @@ int repo_ships_get_towed_ship_info(db_t *db, int32_t tower_ship_id, int32_t *tow
                                "LEFT JOIN corp_members cm ON p.player_id = cm.player_id "
                                "WHERE s.is_being_towed_by = {1} LIMIT 1;";
     char sql[512];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -172,7 +173,7 @@ int repo_ships_set_towing_id(db_t *db, int32_t ship_id, int32_t target_ship_id)
     /* SQL_VERBATIM: Q7 */
     const char *sql_template = "UPDATE ships SET towing_ship_id = {1} WHERE ship_id = {2};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_error_t err;
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(target_ship_id), db_bind_i64(ship_id) }, 2, &err)) {
@@ -186,7 +187,7 @@ int repo_ships_set_is_being_towed_by(db_t *db, int32_t target_ship_id, int32_t p
     /* SQL_VERBATIM: Q8 */
     const char *sql_template = "UPDATE ships SET is_being_towed_by = {1} WHERE ship_id = {2};";
     char sql[256];
-    sql_build(db, sql_template, sql, sizeof sql);
+    if (sql_build(db, sql_template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
 
     db_error_t err;
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(player_ship_id), db_bind_i64(target_ship_id) }, 2, &err)) {
@@ -212,7 +213,8 @@ int repo_ships_get_cargo_and_holds(db_t *db,
         "SELECT ore, organics, equipment, colonists, slaves, weapons, drugs, holds FROM ships WHERE ship_id = {1};";
 
     char sql_final[512];
-    sql_build(db, sql, sql_final, sizeof(sql_final));
+    if (sql_build(db, sql, sql_final, sizeof(sql_final)) != 0)
+        return ERR_DB_QUERY_FAILED;
 
     db_res_t *res = NULL;
     db_error_t err;
@@ -237,6 +239,16 @@ int repo_ships_get_cargo_and_holds(db_t *db,
 
 int repo_ships_update_cargo_column(db_t *db, int32_t ship_id, const char *col_name, int32_t new_qty)
 {
+    if (!db || ship_id <= 0 || !col_name || new_qty < 0)
+        return ERR_INVALID_ARG;
+    static const char *const allowed_columns[] = {
+        "ore", "organics", "equipment", "colonists", "slaves",
+        "weapons", "drugs"
+    };
+    bool allowed = false;
+    for (size_t i = 0; i < sizeof allowed_columns / sizeof allowed_columns[0]; ++i)
+        if (strcmp(col_name, allowed_columns[i]) == 0) { allowed = true; break; }
+    if (!allowed) return ERR_INVALID_ARG;
     /* SQL_VERBATIM: Q10 */
     char sql_up[512];
     snprintf(sql_up,
@@ -245,15 +257,15 @@ int repo_ships_update_cargo_column(db_t *db, int32_t ship_id, const char *col_na
              col_name);
 
     char sql_up_converted[512];
-    sql_build(db, sql_up, sql_up_converted, sizeof(sql_up_converted));
+    if (sql_build(db, sql_up, sql_up_converted, sizeof(sql_up_converted)) != 0)
+        return ERR_DB_QUERY_FAILED;
 
-    db_error_t err;
-    if (!db_exec(db,
-                 sql_up_converted,
+    db_error_t err = {0};
+    if (!db_exec(db, sql_up_converted,
                  (db_bind_t[]){ db_bind_i64(new_qty), db_bind_i64(ship_id) },
-                 2,
-                 &err)) {
-        return err.code;
-    }
+                 2, &err))
+        return err.code ? err.code : ERR_DB_EXEC_FAILED;
+    /* Keep the historical success-on-executed-update behavior: MySQL's
+     * changed-row count is zero when the value already equals new_qty. */
     return 0;
 }
