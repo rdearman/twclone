@@ -126,6 +126,13 @@
       "expect": { "status": "error", "error_code": 1703 }
     },
     {
+      "name": "Remote trade.port_info alias is refused",
+      "user": "information_visibility_user",
+      "command": "trade.port_info",
+      "data": { "port_id": 2 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
       "name": "Remote port refusal does not create port knowledge",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -223,7 +230,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "DELETE FROM sectors WHERE sector_id IN (980001, 980002)"
+        "sql": "DELETE FROM player_visited_sectors WHERE sector_id IN (980001, 980002, 980003); DELETE FROM sector_warps WHERE from_sector IN (980001, 980002, 980003) OR to_sector IN (980001, 980002, 980003); DELETE FROM sectors WHERE sector_id IN (980001, 980002, 980003)"
       },
       "expect": { "status": "ok" }
     },
@@ -232,7 +239,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO sectors (sector_id, name) VALUES (980001, 'Fog Direction A'), (980002, 'Fog Direction B')"
+        "sql": "INSERT INTO sectors (sector_id, name) VALUES (980001, 'Fog Direction A'), (980002, 'Fog Direction B'), (980003, 'Fog Hidden Route Target')"
       },
       "expect": { "status": "ok" }
     },
@@ -374,6 +381,34 @@
       ]
     },
     {
+      "name": "Rig: Discover pathfind target but leave intermediate sector unknown",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES (@{information_visibility_user_player_id}, 980003) ON CONFLICT (player_id, sector_id) DO NOTHING; INSERT INTO sector_warps (from_sector, to_sector) VALUES (980001, 980002), (980002, 980003) ON CONFLICT DO NOTHING"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Pathfind does not use or disclose an undiscovered intermediate sector",
+      "user": "information_visibility_user",
+      "command": "move.pathfind",
+      "data": { "from_sector_id": 980001, "to_sector_id": 980003 },
+      "expect": { "status": "error", "error_code": 403 }
+    },
+    {
+      "name": "Blocked pathfind does not discover its intermediate sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id = 980002"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
       "name": "Rig: Restore player sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -406,7 +441,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "DELETE FROM sectors WHERE sector_id IN (980001, 980002)"
+        "sql": "DELETE FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id IN (980001, 980002, 980003); DELETE FROM sector_warps WHERE from_sector IN (980001, 980002, 980003) OR to_sector IN (980001, 980002, 980003); DELETE FROM sectors WHERE sector_id IN (980001, 980002, 980003)"
       },
       "expect": { "status": "ok" }
     }

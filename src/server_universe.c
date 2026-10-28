@@ -1265,7 +1265,10 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 	  return 0;
 	}
 
-      if ((res = repo_universe_get_all_warps (db, &err)) == NULL)
+      /* The repository returns only directed exits from the live or visited
+       * sectors. Keep the response graph scoped to player-known topology. */
+      if ((res = repo_universe_get_player_known_warps
+	   (db, ctx->player_id, ctx->sector_id, &err)) == NULL)
 	{
       free (to_v);
       free (next);
@@ -1277,7 +1280,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 	  free (queue);
 	  send_response_error (ctx,
 			       root,
-			       ERR_DB, "Pathfind init failed (edge read)");
+			       ERR_DB, "Pathfind init failed (known edge read)");
 	  return 0;
 	}
       int e = 0;
