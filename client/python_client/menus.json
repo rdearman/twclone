@@ -255,6 +255,13 @@
       "title": "--- Planet Surface ---",
       "options": [
         {
+          "key": "i",
+          "label": "(I) Planet Overview",
+          "action": {
+            "pycall": "planet_overview_flow"
+          }
+        },
+        {
           "key": "l",
           "label": "(L) Launch from Planet",
           "action": {
@@ -276,6 +283,27 @@
           }
         },
         {
+          "key": "w",
+          "label": "(W) Allocate Workforce",
+          "action": {
+            "pycall": "planet_workforce_flow"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Planet Stock Transfer",
+          "action": {
+            "pycall": "planet_stock_transfer_flow"
+          }
+        },
+        {
+          "key": "r",
+          "label": "(R) Rename Planet",
+          "action": {
+            "pycall": "planet_rename_flow"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {
@@ -287,6 +315,27 @@
     "CITADEL": {
       "title": "--- Citadel Menu ---",
       "options": [
+        {
+          "key": "b",
+          "label": "(B) Build / Upgrade Citadel",
+          "action": {
+            "pycall": "citadel_build_flow"
+          }
+        },
+        {
+          "key": "d",
+          "label": "(D) Deposit Credits to Treasury",
+          "action": {
+            "pycall": "planet_treasury_deposit_flow"
+          }
+        },
+        {
+          "key": "w",
+          "label": "(W) Withdraw Credits from Treasury",
+          "action": {
+            "pycall": "planet_treasury_withdraw_flow"
+          }
+        },
         {
           "key": "q",
           "label": "(Q) Back to Surface",

@@ -500,7 +500,8 @@ func _on_command_requested(command: String, data: Dictionary, label: String, mut
 	var pending_data: Dictionary = {} if command == "auth.change_password" else data.duplicate(true)
 	_pending_game_commands[request_id] = {"kind": kind, "command": command, "label": label, "data": pending_data, "mutating": mutating}
 	gameplay_view.set_command_busy(true)
-	gameplay_view.show_notification("%s · waiting for server confirmation." % label)
+	if not is_planet_read:
+		gameplay_view.show_notification("%s · waiting for server confirmation." % label)
 
 func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 	var result: Dictionary = Protocol.result_from_response(response)

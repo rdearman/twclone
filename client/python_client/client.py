@@ -3878,6 +3878,325 @@ def start_autopilot(ctx: Context):
 # ---------------------------
 # Planet & Computer flows
 # ---------------------------
+def _planet_id(ctx: Context) -> Optional[int]:
+    value = ctx.state.get("current_planet_id")
+    try:
+        planet_id = int(value)
+    except (TypeError, ValueError):
+        return None
+    return planet_id if planet_id > 0 else None
+
+
+def _planet_payload(response: dict) -> dict:
+    """Unwrap the supported planet.info envelopes without guessing fields."""
+    data = get_data(response) if isinstance(response, dict) else {}
+    if isinstance(data, list):
+        data = data[0] if data and isinstance(data[0], dict) else {}
+    if isinstance(data, dict) and isinstance(data.get("planet"), dict):
+        return data["planet"]
+    return data if isinstance(data, dict) else {}
+
+
+def _planet_error(response: Any) -> str:
+    error = response.get("error") if isinstance(response, dict) else None
+    if isinstance(error, dict):
+        return str(error.get("message") or error.get("code") or "The server refused the request.")
+    if error:
+        return str(error)
+    return "The server refused the request."
+
+
+def _planet_info(ctx: Context, planet_id: int) -> Optional[dict]:
+    response = ctx.conn.rpc("planet.info", {"planet_id": planet_id})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Could not load planet {planet_id}: {_planet_error(response)}")
+        return None
+    return _planet_payload(response)
+
+
+def _print_planet_overview(planet: dict) -> None:
+    """Present only server-confirmed values; do not estimate stock/population."""
+    print("\n--- Planet Overview ---")
+    fields = (
+        ("name", "Name"), ("class", "Class"), ("sector_id", "Sector"),
+        ("owner_type", "Owner type"), ("owner_id", "Owner ID"),
+        ("population", "Population"), ("colonists_unassigned", "Unassigned colonists"),
+        ("colonists_ore", "Ore workers"), ("colonists_org", "Organics workers"),
+        ("colonists_eq", "Equipment workers"), ("colonists_weapons", "Weapons workers"),
+        ("fighters", "Planet fighters"), ("citadel_level", "Citadel level"),
+    )
+    for key, label in fields:
+        if key in planet and planet[key] is not None:
+            print(f"{label}: {planet[key]}")
+    goods = planet.get("goods")
+    print("Commodities:")
+    if isinstance(goods, list) and goods:
+        for row in goods:
+            if isinstance(row, dict):
+                print("  {commodity}: {quantity} / {max_capacity}".format(
+                    commodity=row.get("commodity", "?"),
+                    quantity=row.get("quantity", "?"),
+                    max_capacity=row.get("max_capacity", "?"),
+                ))
+    else:
+        print("  No configured commodity storage was returned.")
+
+
+def _refresh_planet_overview(ctx: Context, planet_id: int) -> None:
+    planet = _planet_info(ctx, planet_id)
+    if planet is not None:
+        _print_planet_overview(planet)
+
+
+def _current_or_selected_planet_id(ctx: Context) -> Optional[int]:
+    current = _planet_id(ctx)
+    if current:
+        return current
+    planets = (ctx.last_sector_desc or {}).get("planets") or []
+    if not planets:
+        print("No planet is available in the current sector.")
+        return None
+    if len(planets) == 1:
+        candidate = planets[0]
+    else:
+        print("Planets in this sector:")
+        for index, planet in enumerate(planets, 1):
+            print(f"  {index}. {planet.get('name', 'Unnamed Planet')} (ID: {planet.get('id') or planet.get('planet_id')})")
+        try:
+            choice = int(input("Planet number: ").strip())
+        except ValueError:
+            print("Invalid planet selection.")
+            return None
+        if not 1 <= choice <= len(planets):
+            print("Invalid planet selection.")
+            return None
+        candidate = planets[choice - 1]
+    try:
+        selected = int(candidate.get("id") or candidate.get("planet_id"))
+    except (AttributeError, TypeError, ValueError):
+        print("The selected planet has no usable ID.")
+        return None
+    return selected if selected > 0 else None
+
+
+@register("planet_overview_flow")
+def planet_overview_flow(ctx: Context):
+    planet_id = _current_or_selected_planet_id(ctx)
+    if planet_id is None:
+        return
+    planet = _planet_info(ctx, planet_id)
+    if planet is not None:
+        _print_planet_overview(planet)
+
+
+def _read_nonnegative_target(label: str, current: int) -> Optional[int]:
+    raw = input(f"{label} workers [{current}]: ").strip()
+    if not raw:
+        return current
+    try:
+        value = int(raw)
+    except ValueError:
+        print(f"{label} worker target must be a whole number.")
+        return None
+    if value < 0:
+        print(f"{label} worker target cannot be negative.")
+        return None
+    return value
+
+
+@register("planet_workforce_flow")
+def planet_workforce_flow(ctx: Context):
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Land on a planet before assigning its workforce.")
+        return
+    planet = _planet_info(ctx, planet_id)
+    if planet is None:
+        return
+    jobs = (("ore", "Ore"), ("organics", "Organics"),
+            ("equipment", "Equipment"), ("weapons", "Weapons / fighter production"))
+    current_keys = {"ore": "colonists_ore", "organics": "colonists_org",
+                    "equipment": "colonists_eq", "weapons": "colonists_weapons"}
+    targets = {}
+    for job, label in jobs:
+        value = _read_nonnegative_target(label, int(planet.get(current_keys[job], 0) or 0))
+        if value is None:
+            return
+        targets[job] = value
+    population_value = planet.get("population")
+    population = int(population_value) if isinstance(population_value, (int, float)) else sum(
+        int(planet.get(key, 0) or 0)
+        for key in ("colonists_unassigned", "colonists_ore", "colonists_org", "colonists_eq", "colonists_weapons")
+    )
+    if sum(targets.values()) > population:
+        print(f"Assignments total {sum(targets.values())}, above the confirmed planet population of {population}.")
+        return
+    payload = {"planet_id": planet_id, **targets}
+    response = ctx.conn.rpc("planet.colonists.allocate", payload)
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Workforce allocation refused: {_planet_error(response)}")
+        return
+    data = get_data(response)
+    print("Workforce allocation accepted by the server.")
+    print("  Ore: {colonists_ore}; Organics: {colonists_org}; Equipment: {colonists_eq}; Weapons: {colonists_weapons}; Unassigned: {colonists_unassigned}".format(
+        **{key: data.get(key, targets.get(key.removeprefix("colonists_"), "not returned"))
+           for key in ("colonists_ore", "colonists_org", "colonists_eq", "colonists_weapons", "colonists_unassigned")}
+    ))
+    _refresh_planet_overview(ctx, planet_id)
+
+
+def _select_planet_commodity(planet: dict, include_credits: bool = False) -> Optional[str]:
+    goods = planet.get("goods")
+    options = [row for row in goods if isinstance(row, dict) and row.get("commodity")] if isinstance(goods, list) else []
+    if include_credits and int(planet.get("citadel_level", 0) or 0) > 0:
+        options.append({"commodity": "CREDITS", "quantity": "treasury"})
+    if not options:
+        print("The server reports no transferable planet commodities.")
+        return None
+    print("Planet stock:")
+    for index, row in enumerate(options, 1):
+        print(f"  {index}. {row['commodity']} · {row.get('quantity', '?')} available")
+    raw = input("Commodity number or code: ").strip().upper()
+    try:
+        index = int(raw)
+        if 1 <= index <= len(options):
+            return str(options[index - 1]["commodity"]).upper()
+    except ValueError:
+        pass
+    return raw if any(str(row["commodity"]).upper() == raw for row in options) else None
+
+
+def _positive_quantity(prompt: str) -> Optional[int]:
+    try:
+        quantity = int(input(prompt).strip())
+    except ValueError:
+        print("Quantity must be a whole number.")
+        return None
+    if quantity <= 0:
+        print("Quantity must be greater than zero.")
+        return None
+    return quantity
+
+
+def _planet_transfer_flow(ctx: Context, direction: str, treasury_only: bool = False):
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Land on the planet before transferring stock.")
+        return
+    planet = _planet_info(ctx, planet_id)
+    if planet is None:
+        return
+    if treasury_only:
+        if int(planet.get("citadel_level", 0) or 0) < 1:
+            print("A level 1 citadel is required to use the planet treasury.")
+            return
+        commodity = "CREDITS"
+    else:
+        commodity = _select_planet_commodity(planet, include_credits=True)
+        if commodity is None:
+            print("Choose one of the commodities returned by planet.info.")
+            return
+        if commodity == "CREDITS" and int(planet.get("citadel_level", 0) or 0) < 1:
+            print("A level 1 citadel is required to use the planet treasury.")
+            return
+    quantity = _positive_quantity(f"Credits to {direction}: " if commodity == "CREDITS" else f"{commodity} quantity to {direction}: ")
+    if quantity is None:
+        return
+    command = "planet.deposit" if direction == "deposit" else "planet.withdraw"
+    response = ctx.conn.rpc(command, {"planet_id": planet_id, "commodity": commodity, "quantity": quantity})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planet {commodity} {direction} refused: {_planet_error(response)}")
+        return
+    data = get_data(response)
+    print(f"{quantity} {commodity} {direction} accepted by the server.")
+    for key, label in (("planet_quantity", "Planet stock"), ("ship_quantity", "Ship cargo"),
+                       ("planet_treasury_balance", "Treasury balance"), ("player_credits", "Player credits")):
+        if key in data:
+            print(f"{label}: {data[key]}")
+    _refresh_planet_overview(ctx, planet_id)
+
+
+@register("planet_stock_transfer_flow")
+def planet_stock_transfer_flow(ctx: Context):
+    direction = input("(D)eposit to planet or (W)ithdraw to ship? ").strip().lower()
+    if direction in ("d", "deposit"):
+        _planet_transfer_flow(ctx, "deposit")
+    elif direction in ("w", "withdraw"):
+        _planet_transfer_flow(ctx, "withdraw")
+    else:
+        print("Choose deposit or withdraw.")
+
+
+@register("planet_treasury_deposit_flow")
+def planet_treasury_deposit_flow(ctx: Context):
+    _planet_transfer_flow(ctx, "deposit", treasury_only=True)
+
+
+@register("planet_treasury_withdraw_flow")
+def planet_treasury_withdraw_flow(ctx: Context):
+    _planet_transfer_flow(ctx, "withdraw", treasury_only=True)
+
+
+@register("citadel_build_flow")
+def citadel_build_flow(ctx: Context):
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Land on a planet before starting citadel construction.")
+        return
+    planet = _planet_info(ctx, planet_id)
+    if planet is None:
+        return
+    level = int(planet.get("citadel_level", planet.get("level", 0)) or 0)
+    if level >= 6:
+        print("Citadel is already at the maximum level (6).")
+        return
+    target = level + 1
+    print(f"Citadel level {level}; next target level {target}.")
+    print("Current confirmed stock and colonists:")
+    _print_planet_overview(planet)
+    print("Construction requirements are checked by the server for this planet class.")
+    print("The current planet.info response does not include the exact requirement table.")
+    answer = input("Start construction? [y/N]: ").strip().lower()
+    if answer not in ("y", "yes"):
+        print("Construction cancelled; no resources were spent.")
+        return
+    command = "citadel.build" if level == 0 else "citadel.upgrade"
+    response = ctx.conn.rpc(command, {"planet_id": planet_id})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Citadel construction refused: {_planet_error(response)}")
+        return
+    data = get_data(response)
+    print(f"Citadel construction started toward level {data.get('target_level', target)}.")
+    if data.get("days_to_complete") is not None:
+        print(f"Server-reported duration: {data['days_to_complete']} day(s).")
+    if data.get("completion_time") is not None:
+        print(f"Server-reported completion time: {data['completion_time']}.")
+    _refresh_planet_overview(ctx, planet_id)
+
+
+@register("planet_rename_flow")
+def planet_rename_flow(ctx: Context):
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Land on the planet before renaming it.")
+        return
+    new_name = input("New planet name (3–32 characters): ").strip()
+    if not 3 <= len(new_name) <= 32:
+        print("Planet names must be between 3 and 32 characters.")
+        return
+    response = ctx.conn.rpc("planet.rename", {"planet_id": planet_id, "new_name": new_name})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planet rename refused: {_planet_error(response)}")
+        return
+    print(f"Planet renamed to {new_name}.")
+    _refresh_planet_overview(ctx, planet_id)
+
+
 @register("land_flow")
 def land_flow(ctx: Context):
     # Check current sector data for planets
@@ -3929,6 +4248,7 @@ def land_flow(ctx: Context):
         ctx.state["last_rpc"] = r
         # Transition to SURFACE menu
         ctx.menu_stack.append("SURFACE")
+        planet_overview_flow(ctx)
     else:
         err = r.get("error", {}).get("message", "Unknown error")
         print(f"Landing failed: {err}")
@@ -3950,45 +4270,7 @@ def launch_flow(ctx: Context):
 
 @register("planet_info_flow")
 def planet_info_flow(ctx: Context):
-    """
-    Get info for a planet in the current sector.
-    - If no planets, print a message.
-    - If planets, prompt the user to select one.
-    - Call planet.info with the selected planet's ID.
-    """
-    planets = ctx.last_sector_desc.get("planets") or []
-
-    if not planets:
-        print("No planet in sector")
-        return
-
-    if len(planets) == 1:
-        selected_planet = planets[0]
-    else:
-        print("Planets in this sector:")
-        for i, planet in enumerate(planets):
-            print(f"  {i+1}: {planet.get('name', 'Unnamed Planet')} (ID: {planet.get('id')})")
-
-        try:
-            choice = int(input("Which planet? "))
-            if 1 <= choice <= len(planets):
-                selected_planet = planets[choice - 1]
-            else:
-                print("Invalid choice.")
-                return
-        except ValueError:
-            print("Invalid input.")
-            return
-
-    planet_id = selected_planet.get("id")
-    if planet_id is None:
-        print("Could not determine planet ID.")
-        return
-
-    resp = ctx.conn.rpc("planet.info", {"planet_id": planet_id})
-    ctx.state["last_rpc"] = resp
-    # Pretty print the response
-    print(json.dumps(resp, indent=2))
+    planet_overview_flow(ctx)
 
 @register("colonist_transfer_flow")
 def colonist_transfer_flow(ctx: Context):
@@ -4083,6 +4365,7 @@ def colonist_transfer_flow(ctx: Context):
         print(f"\n✓ {action.capitalize()} successful!")
         print(f"  Transferred: {data.get('quantity')} colonists")
         print(f"  Ship colonists now: {data.get('ship_colonists')}")
+        _refresh_planet_overview(ctx, int(planet_id))
     else:
         print(f"\n✗ Transfer failed: {resp_set.get('error', 'Unknown error')}")
 

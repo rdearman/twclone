@@ -35,8 +35,9 @@ var _labor_status: Label
 var _labor_ore: SpinBox
 var _labor_organics: SpinBox
 var _labor_equipment: SpinBox
+var _labor_weapons: SpinBox
 var _labor_save: Button
-var _labor_max := {"ore": 0, "organics": 0, "equipment": 0}
+var _labor_max := {"ore": 0, "organics": 0, "equipment": 0, "weapons": 0}
 var _dim: ColorRect
 
 func _ready() -> void:
@@ -213,16 +214,18 @@ func set_planet_info(data: Dictionary) -> void:
 	_sector_id = int(data.get("sector_id", _sector_id))
 	_citadel_level = int(data.get("citadel_level", data.get("level", -1)))
 	var lines: Array[String] = []
-	for key in ["name", "planet_name", "class", "type_name", "type_description", "owner", "owner_name", "owner_id", "sector_id", "citadel_level", "citadel"]:
+	for key in ["name", "planet_name", "class", "type_name", "type_description", "owner", "owner_name", "owner_id", "owner_type", "sector_id", "population", "fighters", "citadel_level", "citadel"]:
 		if data.has(key):
 			lines.append("%s: %s" % [key.replace("_", " ").capitalize(), str(data[key])])
-	_labor_max = {"ore": int(data.get("max_colonists_ore", 0)), "organics": int(data.get("max_colonists_organics", 0)), "equipment": int(data.get("max_colonists_equipment", 0))}
+	_labor_max = {"ore": int(data.get("max_colonists_ore", 0)), "organics": int(data.get("max_colonists_organics", 0)), "equipment": int(data.get("max_colonists_equipment", 0)), "weapons": int(data.get("population", 0))}
 	_labor_ore.max_value = int(_labor_max["ore"])
 	_labor_organics.max_value = int(_labor_max["organics"])
 	_labor_equipment.max_value = int(_labor_max["equipment"])
+	_labor_weapons.max_value = int(_labor_max["weapons"])
 	_labor_ore.value = int(data.get("colonists_ore", 0))
 	_labor_organics.value = int(data.get("colonists_org", 0))
 	_labor_equipment.value = int(data.get("colonists_eq", 0))
+	_labor_weapons.value = int(data.get("colonists_weapons", 0))
 	_update_labor_limits(data)
 	_update_labor_summary(data)
 	_update_goods(data.get("goods", []))
@@ -286,6 +289,7 @@ func set_busy(busy: bool) -> void:
 	_labor_ore.editable = not busy
 	_labor_organics.editable = not busy
 	_labor_equipment.editable = not busy
+	_labor_weapons.editable = not busy
 	_stock_commodity.disabled = busy
 	_rename_button.disabled = busy
 	_update_transfer_buttons()
@@ -370,6 +374,8 @@ func _build_management_controls(column: VBoxContainer) -> void:
 	labor_row.add_child(_labor_organics)
 	_labor_equipment = _labor_spinbox("Equipment workers")
 	labor_row.add_child(_labor_equipment)
+	_labor_weapons = _labor_spinbox("Weapons / fighter workers")
+	labor_row.add_child(_labor_weapons)
 	_labor_save = Button.new()
 	_labor_save.text = "ASSIGN WORKERS"
 	_labor_save.disabled = true
@@ -377,7 +383,7 @@ func _build_management_controls(column: VBoxContainer) -> void:
 	_labor_save.pressed.connect(_save_labor_assignments)
 	column.add_child(_labor_save)
 	var labor_hint := Label.new()
-	labor_hint.text = "Production runs on the server's planet growth tick (about every 10 minutes). Unassigned colonists remain available for later jobs or citadel construction."
+	labor_hint.text = "Production runs on the server's planet growth tick (about every 10 minutes). Weapons workers produce fighters only when the server's citadel, equipment and capacity requirements are met. Unassigned colonists remain available for later jobs or citadel construction."
 	labor_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	labor_hint.add_theme_color_override("font_color", Color(0.66, 0.74, 0.76))
 	column.add_child(labor_hint)
@@ -451,19 +457,20 @@ func _labor_row_layout(compact: bool) -> void:
 	if row:
 		row.vertical = compact
 		row.add_theme_constant_override("separation", 5 if compact else 8)
-	for spin in [_labor_ore, _labor_organics, _labor_equipment]:
+	for spin in [_labor_ore, _labor_organics, _labor_equipment, _labor_weapons]:
 		spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 func _update_labor_limits(data: Dictionary) -> void:
 	if not is_instance_valid(_labor_ore):
 		return
 	var unassigned := int(data.get("colonists_unassigned", data.get("planet_colonists", 0)))
-	var assigned := int(_labor_ore.value) + int(_labor_organics.value) + int(_labor_equipment.value)
+	var assigned := int(_labor_ore.value) + int(_labor_organics.value) + int(_labor_equipment.value) + int(_labor_weapons.value)
 	var available_population := maxi(0, unassigned + assigned)
 	for entry in [
 		{"field": "ore", "spin": _labor_ore},
 		{"field": "organics", "spin": _labor_organics},
 		{"field": "equipment", "spin": _labor_equipment},
+		{"field": "weapons", "spin": _labor_weapons},
 	]:
 		var class_limit := int(_labor_max[entry["field"]])
 		var population_limit := maxi(available_population, int(entry["spin"].value))
@@ -476,9 +483,10 @@ func _update_labor_summary(data: Dictionary) -> void:
 	var ore_rate := int(data.get("colonists_ore", 0))
 	var org_rate := int(data.get("colonists_org", 0)) * int(data.get("organics_production_per_worker", 0))
 	var equipment_rate := int(data.get("colonists_eq", 0)) * int(data.get("equipment_production_per_worker", 0))
-	_labor_status.text = "Unassigned: %s · Workers — ore %s, organics %s, equipment %s\nEstimated per growth tick: ore %s, organics %s, equipment %s" % [
+	_labor_status.text = "Unassigned: %s · Workers — ore %s, organics %s, equipment %s, weapons %s\nEstimated per growth tick: ore %s, organics %s, equipment %s. Fighter output also depends on citadel level, EQU stock and planet capacity." % [
 		_format_count(unassigned), _format_count(int(data.get("colonists_ore", 0))),
 		_format_count(int(data.get("colonists_org", 0))), _format_count(int(data.get("colonists_eq", 0))),
+		_format_count(int(data.get("colonists_weapons", 0))),
 		_format_count(ore_rate), _format_count(org_rate), _format_count(equipment_rate)
 	]
 	_labor_save.disabled = _busy or _planet_id <= 0
@@ -493,7 +501,8 @@ func _save_labor_assignments() -> void:
 		"planet_id": _planet_id,
 		"ore": int(_labor_ore.value),
 		"organics": int(_labor_organics.value),
-		"equipment": int(_labor_equipment.value)
+		"equipment": int(_labor_equipment.value),
+		"weapons": int(_labor_weapons.value)
 	}, "Assign planet workers", true)
 
 func _update_development_controls() -> void:
