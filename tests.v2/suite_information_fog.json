@@ -1,0 +1,414 @@
+{
+  "test_suite_name": "Information Visibility Boundaries",
+  "description": "Sector info, scans, and port details respect proximity and do not reveal port class remotely",
+  "tests": [
+    {
+      "name": "Setup: Information visibility user",
+      "setup": "macro_auth_user",
+      "username": "information_visibility_user",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Put the player in sector one",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{information_visibility_user_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Put the player's ship in sector one",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id});"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Prepare a remote port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET sector_id = 2 WHERE port_id = 2;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh information user location from the server",
+      "command": "auth.login",
+      "user": "information_visibility_user",
+      "data": { "username": "information_visibility_user", "passwd": "password" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.current_sector", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Current sector information is available",
+      "user": "information_visibility_user",
+      "command": "sector.info",
+      "expect": { "status": "ok", "type": "sector.info" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "exists" }
+      ]
+    },
+    {
+      "name": "Find a directly adjacent sector for the visibility boundary test",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT to_sector FROM sector_warps WHERE from_sector = (SELECT sector_id FROM players WHERE player_id = @{information_visibility_user_player_id}) ORDER BY to_sector LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "adjacent_sector_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Directly adjacent sector information is available",
+      "user": "information_visibility_user",
+      "command": "sector.info",
+      "data": { "sector_id": "@{adjacent_sector_id}" },
+      "expect": { "status": "ok", "type": "sector.info" }
+    },
+    {
+      "name": "Remote sector information is refused",
+      "user": "information_visibility_user",
+      "command": "sector.info",
+      "data": { "sector_id": 999999 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
+      "name": "Rig: Clear prior port knowledge before detailed scan",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM player_known_ports WHERE player_id = @{information_visibility_user_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Detailed scan omits port class",
+      "user": "information_visibility_user",
+      "command": "sector.scan",
+      "expect": { "status": "ok", "type": "sector.scan" },
+      "asserts": [
+        { "path": "data.ports.*[port_id=1].name", "op": "==", "value": "Tavern Central" },
+        { "path": "data.ports.*[port_id=1].type", "op": "==", "value": null }
+      ]
+    },
+    {
+      "name": "A scan does not record remote port knowledge",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM player_known_ports WHERE player_id = @{information_visibility_user_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Rig: Clear stale landed state before planet visibility tests",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET onplanet = FALSE WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remote port information is refused",
+      "user": "information_visibility_user",
+      "command": "port.info",
+      "data": { "port_id": 2 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
+      "name": "Remote port refusal does not create port knowledge",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM player_known_ports WHERE player_id = @{information_visibility_user_player_id} AND port_id = 2;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Rig: Mark only sectors one and two as visited",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES (@{information_visibility_user_player_id}, 1), (@{information_visibility_user_player_id}, 2) ON CONFLICT (player_id, sector_id) DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Pathfind can use a visited adjacent sector",
+      "user": "information_visibility_user",
+      "command": "move.pathfind",
+      "data": { "from_sector_id": 1, "to_sector_id": 2 },
+      "expect": { "status": "ok", "type": "move.pathfind" }
+    },
+    {
+      "name": "Pathfind does not reveal an unvisited sector",
+      "user": "information_visibility_user",
+      "command": "move.pathfind",
+      "data": { "from_sector_id": 1, "to_sector_id": 3 },
+      "expect": { "status": "error", "error_code": 403 }
+    },
+    {
+      "name": "Unowned planet details are hidden before landing",
+      "user": "information_visibility_user",
+      "command": "planet.info",
+      "data": { "planet_id": 700 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
+      "name": "Remote planet details are hidden",
+      "user": "information_visibility_user",
+      "command": "planet.info",
+      "data": { "planet_id": 8001 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
+      "name": "Rig: Land ship on the unowned planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET lastplanet = 700 WHERE player_id = @{information_visibility_user_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Mark the ship landed",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET onplanet = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed visible planet goods for info response",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES (700, 'ORE', 0, 1000, 0) ON CONFLICT (planet_id, commodity) DO NOTHING"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Planet details become available after landing",
+      "user": "information_visibility_user",
+      "command": "planet.info",
+      "data": { "planet_id": 700 },
+      "expect": { "status": "ok", "type": "planet.info" }
+    },
+    {
+      "name": "Port information is available while in its sector",
+      "user": "information_visibility_user",
+      "command": "port.info",
+      "data": { "port_id": 1 },
+      "expect": { "status": "ok", "type": "trade.port_info" },
+      "asserts": [
+        { "path": "data.port.sector", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Rig: Create isolated sectors for directional adjacency checks",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sectors WHERE sector_id IN (980001, 980002)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed isolated directional adjacency sectors",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sectors (sector_id, name) VALUES (980001, 'Fog Direction A'), (980002, 'Fog Direction B')"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Put player in directional adjacency origin sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 980001 WHERE player_id = @{information_visibility_user_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Put ship in directional adjacency origin sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 980001 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh directional adjacency origin from server state",
+      "command": "auth.login",
+      "user": "information_visibility_user",
+      "data": { "username": "information_visibility_user", "passwd": "password" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.current_sector", "op": "==", "value": 980001 }
+      ]
+    },
+    {
+      "name": "Rig: Configure outgoing-only warp A to B",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_warps WHERE from_sector IN (980001, 980002) AND to_sector IN (980001, 980002)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Add outgoing warp A to B",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (980001, 980002)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Outgoing-only warp makes target sector adjacent",
+      "user": "information_visibility_user",
+      "command": "sector.info",
+      "data": { "sector_id": 980002 },
+      "expect": { "status": "ok", "type": "sector.info" }
+    },
+    {
+      "name": "Rig: Reverse the warp to incoming-only B to A",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_warps WHERE from_sector = 980001 AND to_sector = 980002"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Add incoming-only warp B to A",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (980002, 980001)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Incoming-only warp does not make B adjacent from A",
+      "user": "information_visibility_user",
+      "command": "sector.info",
+      "data": { "sector_id": 980002 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
+      "name": "Incoming-only warp is also refused by move.describe_sector alias",
+      "user": "information_visibility_user",
+      "command": "move.describe_sector",
+      "data": { "sector_id": 980002 },
+      "expect": { "status": "error", "error_code": 1703 }
+    },
+    {
+      "name": "Refused incoming-only request does not persist sector knowledge",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id = 980002"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Rig: Make the warp bidirectional",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (980001, 980002)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Bidirectional warp makes target sector adjacent",
+      "user": "information_visibility_user",
+      "command": "sector.info",
+      "data": { "sector_id": 980002 },
+      "expect": { "status": "ok", "type": "sector.info" }
+    },
+    {
+      "name": "Allowed adjacency requests do not persist new sector knowledge",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id = 980002"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Previously discovered sector knowledge remains intact",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id = 2"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Rig: Restore player sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{information_visibility_user_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Restore ship sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh restored player sector",
+      "command": "auth.login",
+      "user": "information_visibility_user",
+      "data": { "username": "information_visibility_user", "passwd": "password" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.current_sector", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Rig: Remove isolated directional adjacency sectors",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sectors WHERE sector_id IN (980001, 980002)"
+      },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

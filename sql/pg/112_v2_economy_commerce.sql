@@ -115,6 +115,19 @@ CREATE INDEX IF NOT EXISTS idx_market_shocks_expiry
 CREATE INDEX IF NOT EXISTS idx_market_shocks_commodity
     ON market_shocks (commodity_code, expires_at);
 
+-- Global defaults used by the V2 daily planet-tax cron. Keep taxation
+-- disabled at zero until an operator explicitly configures a rate.
+CREATE TABLE IF NOT EXISTS planet_tax_global_config (
+    config_id smallint PRIMARY KEY CHECK (config_id = 1),
+    rate_bps integer NOT NULL DEFAULT 0 CHECK (rate_bps BETWEEN 0 AND 10000),
+    enabled boolean NOT NULL DEFAULT FALSE,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO planet_tax_global_config (config_id, rate_bps, enabled)
+VALUES (1, 0, FALSE)
+ON CONFLICT (config_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS planet_tax_policies (
     planet_id integer PRIMARY KEY REFERENCES planets (planet_id) ON DELETE CASCADE,
     rate_bps integer NOT NULL DEFAULT 0 CHECK (rate_bps BETWEEN 0 AND 10000),

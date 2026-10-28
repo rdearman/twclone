@@ -4,9 +4,15 @@ import argparse
 import subprocess
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.migrate_passwords_argon2id import encoded_hash, load_argon2
+
+_argon2 = load_argon2()
 
 def execute_sql(sql, dbname="twclone", user="postgres", password=None, host="localhost"):
-    print(f"EXEC: {sql.strip()[:100]}...")
+    print("EXEC: database fixture statement (values suppressed)")
     env = os.environ.copy()
     if password:
         env["PGPASSWORD"] = password
@@ -16,7 +22,7 @@ def execute_sql(sql, dbname="twclone", user="postgres", password=None, host="loc
     result = subprocess.run(cmd, env=env, capture_output=True, text=True)
     
     if result.returncode != 0:
-        print(f"ERROR executing SQL:\n{sql}\nError: {result.stderr}")
+        print(f"ERROR executing SQL (psql exit {result.returncode}); statement and output suppressed")
         sys.exit(1)
     return True
 
@@ -89,6 +95,7 @@ def main():
     if "users" in rig:
         print("Rigging Users...")
         for u in rig["users"]:
+            stored_password = encoded_hash(_argon2, u["password"].encode("utf-8"))
             credits = u.get("credits", 5000)
             sector = u.get("sector_id", 1)
             ptype = u.get("type", 2)
@@ -96,7 +103,7 @@ def main():
             
             sql = f"""
             INSERT INTO players (name, passwd, credits, sector_id, type, alignment, commission_id, loggedin, is_npc)
-            VALUES ('{u['username']}', '{u['password']}', {credits}, {sector}, {ptype}, {align}, 1, now(), false)
+            VALUES ('{u['username']}', '{stored_password}', {credits}, {sector}, {ptype}, {align}, 1, now(), false)
             ON CONFLICT (name) DO UPDATE SET 
                 credits = {credits}, 
                 sector_id = {sector}, 

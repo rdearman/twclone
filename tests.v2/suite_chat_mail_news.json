@@ -7,7 +7,7 @@
     {
       "name": "Rig: Ensure Admin Sysop",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET type = 1 WHERE player_id = 1;" },
+      "data": { "sql": "UPDATE players SET type = 1 WHERE name = 'admin';" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

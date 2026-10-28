@@ -16,11 +16,15 @@ MYSQL_INC = -I/usr/include/mysql # Common MySQL include path
 # added $(PG_INC) and $(MYSQL_INC) here
 AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) $(MYSQL_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
 
+if ENABLE_MYSQL
+AM_CFLAGS += -DHAVE_MYSQL
+endif
+
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
 
 
-server_LDADD   	= -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory
+server_LDADD   	= -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory -ldl
 AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = \
@@ -44,6 +48,7 @@ bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm -lreadline -lhistory $(ser
 # Server sources (now with DB abstraction)
 server_SOURCES = \
 	../src/common.c \
+	../src/password_hash.c \
 	../src/db/db_api.c \
 	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \

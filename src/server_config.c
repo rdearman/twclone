@@ -899,7 +899,7 @@ cmd_system_hello (client_ctx_t *ctx, json_t *root)
   json_object_set (payload, "capabilities", g_capabilities);
   json_object_set_new (payload, "limits", limits);
   json_object_set_new (payload, "server_version",
-		       json_string ("tw-server/3.0.0"));
+		       json_string ("tw-server/2.0.0"));
 
   send_response_ok_take (ctx, root, "system.welcome", &payload);
   return 0;

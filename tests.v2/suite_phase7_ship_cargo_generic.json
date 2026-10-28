@@ -16,7 +16,7 @@
           "fixture": true,
           "description": "Create test player with specific alignment",
           "sql_provider": "pg",
-          "sql": "INSERT INTO players (name, status, sector_id, alignment, experience, credits) VALUES ('testplayer_good', 'active', 1, 5000, 1000, 100000) ON CONFLICT (name) DO UPDATE SET status='active', sector_id=1, alignment=5000, credits=100000 RETURNING player_id;"
+          "sql": "INSERT INTO players (name, passwd, sector_id, alignment, experience, credits) VALUES ('testplayer_good', '$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE', 1, 5000, 1000, 100000) ON CONFLICT (name) DO UPDATE SET passwd=EXCLUDED.passwd, sector_id=1, alignment=5000, experience=1000, credits=100000 RETURNING player_id;"
         },
         {
           "fixture": true,

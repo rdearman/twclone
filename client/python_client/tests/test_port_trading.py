@@ -82,3 +82,24 @@ def test_sell_receipt_describes_net_total(ctx_factory, fake_conn, monkeypatch, c
                                                             "Commit this trade? [y/N]: ": "y"}[_prompt])
     client.dock_trade_flow(ctx, "sell")
     assert "Net credits received (after fees): 68" in capsys.readouterr().out
+
+
+def test_debug_interactive_buy_uses_trade_schema_idempotency_field(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    answers = iter(["qa-request-123", "7", "2", "ore"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    fake_conn.queue("trade.buy", {"status": "ok", "data": {"success": True}})
+
+    client.interactive_buy_handler(ctx)
+
+    assert fake_conn.calls == [{
+        "command": "trade.buy",
+        "data": {
+            "port_id": 7,
+            "sector_id": 9,
+            "items": [{"commodity": "ORE", "quantity": 2}],
+            "account": 0,
+            "idempotency_key": "qa-request-123",
+        },
+    }]
+    assert "success" in capsys.readouterr().out

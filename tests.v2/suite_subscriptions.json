@@ -21,56 +21,69 @@
       ]
     },
     {
-      "name": "Test subscribe.list command with no subscriptions",
+      "name": "Test subscribe.list includes the required system notice subscription",
       "user": "sub_user",
       "command": "subscribe.list",
-      "expect": { "status": "ok", "type": "subscribe.list" },
+      "expect": { "status": "ok", "type": "subscribe.list_v1" },
       "asserts": [
-        { "path": "data.topics", "op": "is_array" },
-        { "path": "data.topics", "op": "len_eq", "value": 0 }
+        { "path": "data", "op": "keys_eq", "value": ["topics"] },
+        { "path": "data.topics", "op": "is_string_array" },
+        { "path": "data.topics", "op": "contains", "value": "system.notice" }
       ]
     },
     {
       "name": "Add a subscription",
       "user": "sub_user",
       "command": "subscribe.add",
-      "data": { "topic": "player.attacked" },
-      "expect": { "status": "ok", "type": "subscribe.added" }
+      "data": { "topic": "combat.*" },
+      "expect": { "status": "ok", "type": "subscribe.ack_v1" },
+      "asserts": [
+        { "path": "data", "op": "keys_eq", "value": ["topic", "added"] },
+        { "path": "data.topic", "op": "==", "value": "combat.*" },
+        { "path": "data.added", "op": "==", "value": true }
+      ]
     },
     {
       "name": "Test subscribe.list command with one subscription",
       "user": "sub_user",
       "command": "subscribe.list",
-      "expect": { "status": "ok", "type": "subscribe.list" },
+      "expect": { "status": "ok", "type": "subscribe.list_v1" },
       "asserts": [
-        { "path": "data.topics", "op": "len_eq", "value": 1 },
-        { "path": "data.topics[0].topic", "op": "==", "value": "player.attacked" },
-        { "path": "data.topics[0].locked", "op": "==", "value": 0 },
-        { "path": "data.topics[0].enabled", "op": "==", "value": 1 }
+        { "path": "data", "op": "keys_eq", "value": ["topics"] },
+        { "path": "data.topics", "op": "is_string_array" },
+        { "path": "data.topics", "op": "contains", "value": "combat.*" }
       ]
     },
     {
       "name": "Remove a subscription",
       "user": "sub_user",
       "command": "subscribe.remove",
-      "data": { "topic": "player.attacked" },
-      "expect": { "status": "ok", "type": "subscribe.removed" }
+      "data": { "topic": "combat.*" },
+      "expect": { "status": "ok", "type": "subscribe.ack_v1" },
+      "asserts": [
+        { "path": "data", "op": "keys_eq", "value": ["topic", "removed"] },
+        { "path": "data.topic", "op": "==", "value": "combat.*" },
+        { "path": "data.removed", "op": "==", "value": true }
+      ]
     },
     {
       "name": "Test subscribe.list command after removing subscription",
       "user": "sub_user",
       "command": "subscribe.list",
-      "expect": { "status": "ok", "type": "subscribe.list" },
+      "expect": { "status": "ok", "type": "subscribe.list_v1" },
       "asserts": [
-        { "path": "data.topics", "op": "len_eq", "value": 0 }
+        { "path": "data", "op": "keys_eq", "value": ["topics"] },
+        { "path": "data.topics", "op": "is_string_array" },
+        { "path": "data.topics", "op": "contains", "value": "system.notice" },
+        { "path": "data.topics", "op": "contains", "value": "combat.*" }
       ]
     },
     {
-      "name": "Test subscribe.remove for non-existent topic",
+      "name": "Test subscribe.remove is idempotent for a missing topic",
       "user": "sub_user",
       "command": "subscribe.remove",
-      "data": { "topic": "non_existent_topic" },
-      "expect": { "status": "error", "error_code": 1900 }
+      "data": { "topic": "sector.*" },
+      "expect": { "status": "ok", "type": "subscribe.ack_v1" }
     }
   ]
 }

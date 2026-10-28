@@ -25,14 +25,31 @@ pip install -r requirements.txt  # if present; otherwise no extra deps are requi
 ## Run
 
 ```bash
-python3 client.py --host localhost --port 1234 --user <username> --passwd <password>
+python3 client.py --host localhost --port 1234
 ```
+
+The client prompts for the username and password without echoing the password.
+Avoid supplying a password with `--passwd`, since command-line arguments may
+be visible to local process inspection tools.
+
+To create a new account through the server's public registration command, run
+`python3 client.py --register --host localhost --port 1234`. The client asks
+for the captain name, password twice using hidden prompts, and an optional ship
+name. A successful registration establishes the new session and enters the
+game; it does not print or save the password or session token.
+
+To change your password after logging in, open **User Settings → Change
+password**. Enter the current password, the new password, and its confirmation
+at the hidden prompts. A successful change applies to the next login; the
+current authenticated session remains active. If the current password is
+rejected, the client reports that without printing the submitted values.
 
 Useful flags:
 
 * `--menus <path>` — load an alternate `menus.json`.
-* `--debug` — expose diagnostic/protocol tools (raw JSON, bulk execute,
-  testing menus) that are hidden during normal play.
+* `--debug` — expose diagnostic/protocol tools (bulk execute and testing
+  menus) that are hidden during normal play. Sensitive fields are redacted in
+  protocol diagnostics.
 
 Run `python3 client.py --help` for the full list of options.
 

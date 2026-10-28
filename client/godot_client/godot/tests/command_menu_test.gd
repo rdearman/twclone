@@ -244,10 +244,31 @@ func _run() -> void:
 	_check(menu._form_dialog.visible, "ship repair did not present its explicit action confirmation")
 	menu._submit_form()
 	_check(captured.size() == before_repair + 1 and captured.back()["command"] == "ship.repair" and captured.back()["data"].is_empty() and captured.back()["mutating"], "ship repair did not send the server-supported empty request")
+	var password_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("SETTINGS & NOTES", []):
+		if str(candidate.get("command", "")) == "auth.change_password":
+			password_action = candidate
+	_check(not password_action.is_empty(), "settings do not expose the server-supported password change")
+	menu._choose_action(password_action)
+	_check((menu._form_fields["old_password"] as LineEdit).secret and (menu._form_fields["new_password"] as LineEdit).secret and (menu._form_fields["confirm_password"] as LineEdit).secret, "password fields are not masked")
+	(menu._form_fields["old_password"] as LineEdit).text = "qa-old-ephemeral"
+	(menu._form_fields["new_password"] as LineEdit).text = "qa-new-ephemeral-a"
+	(menu._form_fields["confirm_password"] as LineEdit).text = "qa-new-ephemeral-b"
+	var before_password_change := captured.size()
+	menu._submit_form()
+	_check(captured.size() == before_password_change, "mismatched password confirmation reached the server")
+	(menu._form_fields["confirm_password"] as LineEdit).text = "qa-new-ephemeral-a"
+	menu._submit_form()
+	_check(captured.size() == before_password_change + 1, "matching password confirmation did not submit")
+	if captured.size() > before_password_change:
+		var password_request: Dictionary = captured.back()
+		_check(password_request["command"] == "auth.change_password" and password_request["mutating"], "password change used the wrong command or was not marked mutating")
+		_check(password_request["data"].keys().size() == 2 and password_request["data"].has("old_password") and password_request["data"].has("new_password"), "password confirmation leaked into or altered the published request fields")
+		_check(not password_request["data"].has("confirm_password") and (menu._form_fields["old_password"] as LineEdit).text.is_empty() and (menu._form_fields["new_password"] as LineEdit).text.is_empty(), "password values remained in the form after submission")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 80 passed")
+		print("Godot command menu tests: 87 passed")
 		quit(0)
 	else:
 		for failure in failures:

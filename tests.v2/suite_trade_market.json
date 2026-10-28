@@ -9,7 +9,7 @@
     {
       "name": "Trade Buy ORE (Insufficient Funds)",
       "command": "trade.buy",
-      "data": { "sector_id": 1, "port_id": 2, "items": [{"commodity": "ORE", "quantity": 99999}]},
+      "data": { "sector_id": 1, "port_id": 2, "account": 0, "idempotency_key": "trade-market-insufficient-funds", "items": [{"commodity": "ORE", "quantity": 99999}]},
       "idempotency_key": "*generate*",
       "user": "trader_player_1",
       "expect": { "status": "refused" }

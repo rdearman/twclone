@@ -11,6 +11,7 @@
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 #include "planet_fighter_production.h"
+#include "errors.h"
 
 /* ==================================================================== */
 /* CRON HELPERS (Migrated from server_cron.c)                           */
@@ -2644,6 +2645,53 @@ db_cron_shield_regen (db_t *db, int percent)
 }
 
 int
+db_planet_tax_global_config_get (db_t *db, int *rate_bps_out,
+                                int *enabled_out)
+{
+  if (!db || !rate_bps_out || !enabled_out)
+    return ERR_DB_MISUSE;
+
+  char sql[256];
+  db_res_t *res = NULL;
+  db_error_t err = { 0 };
+  if (sql_build (db,
+                 "SELECT rate_bps,enabled FROM planet_tax_global_config WHERE config_id=1;",
+                 sql, sizeof sql) != 0
+      || !db_query (db, sql, NULL, 0, &res, &err))
+    return err.code ? err.code : -1;
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      return err.code ? err.code : ERR_NOT_FOUND;
+    }
+  *rate_bps_out = db_res_col_i32 (res, 0, &err);
+  *enabled_out = db_res_col_bool (res, 1, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return err.code;
+}
+
+
+int
+db_planet_tax_global_config_set (db_t *db, int rate_bps, int enabled)
+{
+  if (!db || rate_bps < 0 || rate_bps > 10000
+      || (enabled != 0 && enabled != 1))
+    return ERR_DB_MISUSE;
+
+  char sql[256];
+  db_error_t err = { 0 };
+  if (sql_build (db,
+                 "UPDATE planet_tax_global_config SET rate_bps={1},enabled={2},updated_at=CURRENT_TIMESTAMP WHERE config_id=1;",
+                 sql, sizeof sql) != 0
+      || !db_exec (db, sql,
+                   (db_bind_t[]){db_bind_i64 (rate_bps),
+                     db_bind_bool (enabled != 0)}, 2, &err))
+    return err.code ? err.code : -1;
+  return 0;
+}
+
+
+int
 db_cron_planet_tax_tick (db_t *db, int64_t now_s)
 {
   if (!db || now_s <= 0)
@@ -2652,9 +2700,9 @@ db_cron_planet_tax_tick (db_t *db, int64_t now_s)
   const char *query =
     "WITH day AS (SELECT (to_timestamp({1}) AT TIME ZONE 'UTC')::date AS tax_date), "
     "src AS MATERIALIZED (SELECT p.planet_id, p.owner_type, p.owner_id, "
-    "CASE WHEN COALESCE(tp.enabled,FALSE) THEN COALESCE(tp.rate_bps,0) ELSE 0 END AS rate_bps "
-    "FROM planets p LEFT JOIN planet_tax_policies tp ON tp.planet_id=p.planet_id "
-    "CROSS JOIN day d WHERE p.owner_id>0 AND p.owner_type IN ('player','corp','corporation') "
+    "CASE WHEN g.enabled THEN g.rate_bps ELSE 0 END AS rate_bps "
+    "FROM planets p CROSS JOIN planet_tax_global_config g CROSS JOIN day d "
+    "WHERE g.config_id=1 AND p.owner_id>0 AND p.owner_type IN ('player','corp','corporation') "
     "AND NOT EXISTS (SELECT 1 FROM planet_tax_assessments ta WHERE ta.planet_id=p.planet_id AND ta.tax_date=d.tax_date)), "
     "activity AS (UPDATE planet_economic_activity a SET assessed_at=to_timestamp({1}) FROM src "
     "WHERE a.planet_id=src.planet_id AND a.assessed_at IS NULL AND a.occurred_at<=to_timestamp({1}) "

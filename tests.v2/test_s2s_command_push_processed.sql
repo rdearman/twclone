@@ -1,6 +1,5 @@
--- Run against a disposable PostgreSQL database after starting the server and
--- engine. The engine's startup smoke push uses this stable idempotency key;
--- the fixture must contain player 42 so notice.publish can complete.
+-- Run after test_s2s_command_push_processed_setup.sql and after starting the
+-- server/engine against the same disposable PostgreSQL database.
 DO $test$
 DECLARE
   v_type text;
@@ -10,22 +9,24 @@ BEGIN
   SELECT type, status, attempts
     INTO v_type, v_status, v_attempts
     FROM engine_commands
-   WHERE idem_key = 'player:42:hello:001';
+   WHERE idem_key = 'tests.v2:s2s-command-push-processed';
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'engine S2S command.push was not persisted';
+    RAISE EXCEPTION 'test-owned engine command fixture was not persisted';
   END IF;
-  IF v_type <> 'notice.publish' OR v_status <> 'done' OR v_attempts <> 0 THEN
-    RAISE EXCEPTION 'engine S2S command did not complete successfully: type=%, status=%, attempts=%',
+  IF v_type <> 'broadcast.create' OR v_status <> 'done' OR v_attempts <> 0 THEN
+    RAISE EXCEPTION 'test-owned command did not complete successfully: type=%, status=%, attempts=%',
       v_type, v_status, v_attempts;
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM system_notice
-     WHERE scope = 'player' AND player_id = 42 AND body = 'Hello captain!'
+     WHERE scope = 'global'
+       AND title = 'V2 test-owned S2S command fixture'
+       AND body = 'Command processed by the engine regression fixture'
   ) THEN
-    RAISE EXCEPTION 'processed S2S command did not publish its notice';
+    RAISE EXCEPTION 'processed command did not create its system notice';
   END IF;
 END
 $test$;
 
-\echo 'S2S command.push database integration passed: persisted and processed.'
+\echo 'S2S command processing integration passed: test-owned command completed.'

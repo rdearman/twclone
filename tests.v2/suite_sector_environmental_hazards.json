@@ -11,31 +11,39 @@
       "password": "password"
     },
     {
+      "name": "Choose sector without an active quasar cannon",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id > 1 AND NOT EXISTS (SELECT 1 FROM planets p JOIN citadels c ON c.planet_id = p.planet_id WHERE p.sector_id = s.sector_id AND c.level >= 3 AND c.qCannonSector > 0) ORDER BY s.sector_id LIMIT 1" },
+      "expect": { "status": "ok" },
+      "save": { "hazard_sector_id": "data.rows.0.0" }
+    },
+    {
       "name": "Clear test sector environmental hazards",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "DELETE FROM sector_hazards WHERE sector_id = 555" },
+      "data": { "sql": "DELETE FROM sector_hazards WHERE sector_id = @{hazard_sector_id}" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Clear pre-existing combat assets",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id = 555" },
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id = @{hazard_sector_id}" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Configure supported hazard types",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "INSERT INTO sector_hazards (sector_id, hazard_type, severity) VALUES (555, 'volcanic', 7), (555, 'nebula', 11), (555, 'radiation', 13) ON CONFLICT (sector_id, hazard_type) DO UPDATE SET severity = EXCLUDED.severity;" },
+      "data": { "sql": "INSERT INTO sector_hazards (sector_id, hazard_type, severity) VALUES (@{hazard_sector_id}, 'volcanic', 7), (@{hazard_sector_id}, 'nebula', 11), (@{hazard_sector_id}, 'radiation', 13) ON CONFLICT (sector_id, hazard_type) DO UPDATE SET severity = EXCLUDED.severity;" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Configure test warp and player position",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 555), (555, 1) ON CONFLICT DO NOTHING" },
+      "data": { "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, @{hazard_sector_id}), (@{hazard_sector_id}, 1) ON CONFLICT DO NOTHING" },
       "expect": { "status": "ok" }
     },
     {
@@ -63,10 +71,10 @@
       "name": "Warp into multi-hazard sector",
       "command": "move.warp",
       "user": "hazard_victim",
-      "data": { "to_sector_id": 555 },
+      "data": { "to_sector_id": "@{hazard_sector_id}" },
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 555 },
+        { "path": "data.sector_id", "op": "==", "value": "@{hazard_sector_id}" },
         { "path": "data.message", "op": "==", "value": "Environmental hazards damaged your ship." },
         { "path": "data.hazards.0.type", "op": "==", "value": "nebula" },
         { "path": "data.hazards.0.hazard_type", "op": "==", "value": "nebula" },
@@ -106,7 +114,7 @@
       "name": "Transwarp into multi-hazard sector",
       "command": "move.transwarp",
       "user": "hazard_victim",
-      "data": { "to_sector_id": 555 },
+      "data": { "to_sector_id": "@{hazard_sector_id}" },
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.message", "op": "==", "value": "Environmental hazards damaged your ship." },

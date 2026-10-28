@@ -25,6 +25,9 @@ var _login_password := ""
 var _connection_started := false
 var _authenticated_once := false
 var _pending_game_commands: Dictionary = {}
+var _pending_event_subscriptions: Dictionary = {}
+var _registration_payload: Dictionary = {}
+var _pending_registration_request_id := ""
 var _warp_refresh_pending := false
 var _command_refresh_pending := false
 var _pending_trade: Dictionary = {}
@@ -57,6 +60,7 @@ func _ready() -> void:
 	refresh_coordinator.refresh_failed.connect(_on_refresh_failed)
 	refresh_coordinator.refresh_finished.connect(_on_refresh_finished)
 	login_view.login_requested.connect(_on_login_requested)
+	login_view.registration_requested.connect(_on_registration_requested)
 	login_view.profiles_changed.connect(_on_profiles_changed)
 	gameplay_view.reconnect_requested.connect(_on_reconnect_requested)
 	gameplay_view.warp_requested.connect(_on_warp_requested)
@@ -109,6 +113,9 @@ func _on_login_requested(host: String, port: int, username: String, password: St
 
 func _on_transport_connected() -> void:
 	_connection_started = false
+	if not _registration_payload.is_empty():
+		_submit_registration()
+		return
 	_submit_login()
 
 func _submit_login() -> void:
@@ -120,9 +127,51 @@ func _submit_login() -> void:
 	login_view.set_status("Authenticating captain…", true)
 	transport.request("auth.login", payload)
 
+func _on_registration_requested(host: String, port: int, username: String, password: String, ship_name: String, ui_locale: String, ui_timezone: String) -> void:
+	if _connection_started or not _pending_registration_request_id.is_empty():
+		login_view.registration_result("A connection or registration request is already in progress.")
+		return
+	server_ip = host
+	server_port = port
+	auth_username = username
+	selected_server_profile = login_view.get_selected_profile_index()
+	_save_config()
+	_registration_payload = {"username": username, "passwd": password}
+	if not ship_name.is_empty():
+		_registration_payload["ship_name"] = ship_name
+	if not ui_locale.is_empty():
+		_registration_payload["ui_locale"] = ui_locale
+	if not ui_timezone.is_empty():
+		_registration_payload["ui_timezone"] = ui_timezone
+	login_view.registration_result("Connecting to create your account…", true)
+	if transport.is_transport_connected():
+		_submit_registration()
+		return
+	_connection_started = true
+	var result: Error = transport.connect_to_server(server_ip, server_port)
+	if result != OK:
+		_connection_started = false
+		_registration_payload.clear()
+		login_view.registration_result("Could not start the connection. Check the address and try again.")
+
+func _submit_registration() -> void:
+	if _registration_payload.is_empty():
+		return
+	var payload := _registration_payload.duplicate(true)
+	_registration_payload.clear()
+	var request_id: String = transport.request("auth.register", payload)
+	if request_id.is_empty():
+		login_view.registration_result("Registration was not sent. Check the connection and try again.")
+		return
+	_pending_registration_request_id = request_id
+	login_view.registration_result("Creating account securely…", true)
+
 func _on_transport_disconnected(reason: String) -> void:
 	_connection_started = false
+	_registration_payload.clear()
+	_pending_registration_request_id = ""
 	_pending_game_commands.clear()
+	_pending_event_subscriptions.clear()
 	_route_running = false
 	_planned_route.clear()
 	_route_destination = 0
@@ -149,6 +198,30 @@ func _on_transport_disconnected(reason: String) -> void:
 		log_network("DISCONNECTED", reason)
 
 func _on_transport_reply(request_id: String, response: Dictionary, command: String) -> void:
+	if request_id == _pending_registration_request_id:
+		_pending_registration_request_id = ""
+		var registration_result: Dictionary = Protocol.result_from_response(response)
+		if registration_result.get("kind") != "ok":
+			var error_value = response.get("error", {})
+			var error_code := int(error_value.get("code", 0)) if error_value is Dictionary else 0
+			if error_code == 1105:
+				login_view.registration_result("Registration refused · that captain name is already in use.")
+			else:
+				login_view.registration_result("Registration refused. Check the captain name and required fields.")
+			return
+		if not auth_session.handle_response(response):
+			login_view.registration_result("The server did not return a usable account session.")
+			return
+		_on_authenticated()
+		gameplay_view.show_notification("Welcome, captain · your account is ready.")
+		return
+	if _pending_event_subscriptions.has(request_id):
+		var topic: String = str(_pending_event_subscriptions[request_id])
+		_pending_event_subscriptions.erase(request_id)
+		var subscription_result: Dictionary = Protocol.result_from_response(response)
+		if subscription_result.get("kind") != "ok":
+			gameplay_view.show_notification("Live event feed unavailable · %s" % str(subscription_result.get("message", "subscription refused")))
+		return
 	if _pending_game_commands.has(request_id):
 		var operation: Dictionary = _pending_game_commands[request_id]
 		_pending_game_commands.erase(request_id)
@@ -407,7 +480,8 @@ func _on_command_requested(command: String, data: Dictionary, label: String, mut
 	if is_planet_read:
 		kind = "planet_info" if command == "planet.info" else "planet_colonists"
 		_planet_pending_count += 1
-	_pending_game_commands[request_id] = {"kind": kind, "command": command, "label": label, "data": data.duplicate(true), "mutating": mutating}
+	var pending_data: Dictionary = {} if command == "auth.change_password" else data.duplicate(true)
+	_pending_game_commands[request_id] = {"kind": kind, "command": command, "label": label, "data": pending_data, "mutating": mutating}
 	gameplay_view.set_command_busy(true)
 	gameplay_view.show_notification("%s · waiting for server confirmation." % label)
 
@@ -418,6 +492,10 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 		var data := _response_data_dictionary(result.get("data", {}))
 		var summary := _result_summary(data)
 		var command_name := str(operation.get("command", ""))
+		if command_name == "auth.change_password":
+			gameplay_view.set_command_busy(false)
+			gameplay_view.show_notification("Password changed. Sign in with the new password next time.")
+			return
 		if command_name == "player.computer.recommend_routes":
 			gameplay_view.set_command_busy(false)
 			gameplay_view.show_trade_routes(data)
@@ -493,6 +571,13 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.set_command_busy(false)
 	else:
 		gameplay_view.set_command_busy(false)
+		if str(operation.get("command", "")) == "auth.change_password":
+			var error_value = response.get("error", {})
+			if error_value is Dictionary and int(error_value.get("code", 0)) == 1101:
+				gameplay_view.show_notification("Password change refused · current password was not accepted.")
+			else:
+				gameplay_view.show_notification("Password change refused · no change was confirmed.")
+			return
 		if str(operation.get("command", "")) in ["trade.buy", "trade.sell"]:
 			_pending_trade.clear()
 		gameplay_view.show_notification("%s refused · %s" % [label, str(result.get("message", "The server did not accept the command."))])
@@ -722,9 +807,15 @@ func _on_reconnect_requested() -> void:
 	login_view.set_status("Reconnect to refresh the displayed state.")
 
 func _subscribe_to_player_events() -> void:
-	# The documented/handled `topic` field conflicts with the strict schema's
-	# required `event_type`; do not send requests that the server must reject.
-	gameplay_view.show_notification("Event feeds unavailable · server contract mismatch")
+	# The published V2 event contract defines `topic` for subscription commands.
+	# system.notice is locked and auto-enabled by the server after login.
+	for topic in ["sector.*"]:
+		var request_id: String = transport.request(
+			"subscribe.add", {"topic": topic}, auth_session.session_token)
+		if request_id.is_empty():
+			gameplay_view.show_notification("Live event feed unavailable · subscription could not be sent.")
+		else:
+			_pending_event_subscriptions[request_id] = topic
 
 func _present_server_event(event: Dictionary) -> void:
 	var message := EventPresenter.notification_for(event)

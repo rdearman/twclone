@@ -142,9 +142,12 @@ Below are the **client→server** commands with concrete **request** and **respo
 ```json
 {
   "id":"<uuid>", "command":"auth.register",
-  "data": { "user_name":"NewPilot", "password":"secret" }
+  "data": { "username":"NewPilot", "passwd":"secret" }
 }
 ```
+
+The public server request uses `username` and `passwd`; `password` is not an
+accepted field in the game protocol envelope.
 
 **Reply (success)**
 

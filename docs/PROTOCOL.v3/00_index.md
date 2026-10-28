@@ -30,6 +30,7 @@ The protocol defines the JSON-based message exchange between:
 *   **[27_NPC_and_Ferengi_AI.md](./27_NPC_and_Ferengi_AI.md)**: NPC interactions, AI behavior, and enforcement logic.
 *   **[28_Tavern_Noticeboard_and_Community_Systems.md](./28_Tavern_Noticeboard_and_Community_Systems.md)**: Bounties, Chat, News, and Community features.
 *   **[29_SysOp_Commands.md](./29_SysOp_Commands.md)**: SysOp v1 commands for live operations (Config, Players, Engine).
+*   **[30_Gateway_Command_Event_Bridge.md](./30_Gateway_Command_Event_Bridge.md)**: Server contract for gateway command forwarding, event delivery, and reconnect replay.
 *   **[90_Appendices.md](./90_Appendices.md)**: Additional reference material, architecture diagrams, and legacy notes.
 *   **[99_Reserved_Future_Extensions.md](./99_Reserved_Future_Extensions.md)**: Placeholders for future protocol expansions.
 

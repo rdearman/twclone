@@ -664,10 +664,10 @@ int db_ports_lookup_idemp(db_t *db, const char *key, int player_id, int sector_i
     db_res_t *res = NULL;
     db_error_t err;
     db_error_clear(&err);
-    /* SQL_VERBATIM: Q33 */
-    const char *q33 = "SELECT request_json, response_json FROM trade_idempotency WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
+    (void)sector_id; /* Idempotency keys are player-scoped, not sector-scoped. */
+    const char *q33 = "SELECT request_json, response_json FROM trade_idempotency WHERE key = {1} AND player_id = {2};";
     char sql[1024]; sql_build(db, q33, sql, sizeof(sql));
-    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i64(player_id), db_bind_i64(sector_id) }, 3, &res, &err) && db_res_step(res, &err)) {
+    if (db_query(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i64(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         const char *req = db_res_col_text(res, 0, &err);
         const char *resp = db_res_col_text(res, 1, &err);
         if (req_json) *req_json = req ? strdup(req) : NULL;
@@ -726,7 +726,6 @@ int db_ports_insert_idemp_sell(db_t *db, const char *key, int player_id, int sec
     db_error_t err;
     db_error_clear(&err);
     const char *now_ts = sql_now_expr(db);
-    /* SQL_VERBATIM: Q37 */
     const char *q37 = "INSERT INTO trade_idempotency (key, player_id, sector_id, request_json, response_json, created_at) VALUES ({1}, {2}, {3}, {4}, {5}, %s);";
     char sql_tmpl[1024], sql[1024]; snprintf(sql_tmpl, sizeof(sql_tmpl), q37, now_ts);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
@@ -800,7 +799,6 @@ int db_ports_insert_idemp_buy(db_t *db, const char *key, int player_id, int sect
     db_error_t err;
     db_error_clear(&err);
     const char *now_ts = sql_now_expr(db);
-    /* SQL_VERBATIM: Q44 */
     const char *q44 = "INSERT INTO trade_idempotency (key, player_id, sector_id, request_json, response_json, created_at) VALUES ({1},{2},{3},{4},{5},%s);";
     char sql_tmpl[1024], sql[1024]; snprintf(sql_tmpl, sizeof(sql_tmpl), q44, now_ts);
     sql_build(db, sql_tmpl, sql, sizeof(sql));
@@ -816,7 +814,6 @@ int db_ports_replay_idemp_buy(db_t *db, const char *key, int player_id, int sect
     db_res_t *res = NULL;
     db_error_t err;
     db_error_clear(&err);
-    /* SQL_VERBATIM: Q46 */
     const char *q46 = "SELECT response_json FROM trade_idempotency WHERE key = {1} AND player_id = {2} AND sector_id = {3};";
     char sql[1024]; sql_build(db, q46, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_text(key), db_bind_i64(player_id), db_bind_i64(sector_id) }, 3, &res, &err) && db_res_step(res, &err)) {
@@ -919,4 +916,3 @@ int db_ports_get_porttype(db_t *db, int port_id) {
     db_res_finalize(res);
     return porttype_id;
 }
-

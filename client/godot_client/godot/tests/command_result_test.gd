@@ -19,10 +19,22 @@ func _run() -> void:
 	)
 	_check(app.gameplay_view.notification_label.visible, "server refusal did not display a notification")
 	_check(app.gameplay_view.notification_label.text == "Ship repair refused · Insufficient credits", "server refusal was not shown with command context and server reason")
+	await app._finish_command_reply(
+		{"status": "ok", "data": {"success": true}},
+		{"label": "Change password", "command": "auth.change_password", "mutating": true}
+	)
+	_check(app.gameplay_view.notification_label.text.contains("Password changed"), "password change success was not acknowledged")
+	_check(not app.gameplay_view.notification_label.text.contains("qa-new-ephemeral"), "password change success notification exposed a credential")
+	await app._finish_command_reply(
+		{"status": "error", "error": {"code": 1101, "message": "Invalid old password"}},
+		{"label": "Change password", "command": "auth.change_password", "mutating": true}
+	)
+	_check(app.gameplay_view.notification_label.text.contains("current password was not accepted"), "wrong-current-password response was not explained")
+	_check(not app.gameplay_view.notification_label.text.contains("Invalid old password"), "password refusal echoed the server's raw credential-related message")
 	app.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command refusal tests: 2 passed")
+		print("Godot command/password tests: 6 passed")
 		quit(0)
 	else:
 		for failure in failures:

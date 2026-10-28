@@ -404,6 +404,30 @@ BEGIN
       AND c.illegal = TRUE  /* Only illegal commodities */
     ON CONFLICT DO NOTHING;
 
+    /* Black-market hardware is explicit per-port inventory.  Initialize only
+     * enabled items that the port type is configured to sell.  Conservative
+     * V2 defaults: 2 initial / 5 maximum, replenishing 1 every 24 hours. */
+    INSERT INTO port_hardware_stock
+        (port_id, hardware_items_id, stock_quantity, max_stock,
+         restock_quantity, restock_interval_seconds, next_restock_at)
+    SELECT DISTINCT
+        p.port_id,
+        hi.hardware_items_id,
+        2,
+        5,
+        1,
+        86400,
+        CURRENT_TIMESTAMP + INTERVAL '24 hours'
+    FROM new_ports np
+    JOIN ports p ON p.port_id = np.port_id
+    JOIN porttypes pt ON pt.porttype_id = p.porttype_id
+    JOIN porttype_items pti ON pti.porttype_id = pt.porttype_id
+    JOIN hardware_items hi ON hi.hardware_items_id = pti.hardware_items_id
+    WHERE pt.code = 'BLACKMARKET'
+      AND pti.can_buy = TRUE
+      AND hi.enabled = TRUE
+    ON CONFLICT (port_id, hardware_items_id) DO NOTHING;
+
     /* Phase 9 is loaded before BigBang creates ports.  Seed dynamic state
      * here as well so newly generated ports have a row from their first tick.
      * Use the actual entity stock rather than a disconnected fixed value. */
@@ -516,6 +540,58 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 3) Planets
 -- ---------------------------------------------------------------------------
+-- entity_stock is the authoritative runtime balance. BigBang applies migration
+-- 108 before it creates planets, so generation must initialize the stock rows
+-- after assigning any legacy starting balances. Existing authoritative stock
+-- wins; nonzero legacy balances are copied only into missing/zero stock rows,
+-- then cleared so repeated initialization cannot double-count them.
+CREATE OR REPLACE FUNCTION initialize_planet_commodity_stock (p_planet_id int)
+    RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate)
+    SELECT p.planet_id, cap.commodity, 0, cap.capacity, 0
+    FROM planets p
+    JOIN planettypes pt ON pt.planettypes_id = p.type
+    CROSS JOIN LATERAL (VALUES
+        ('ORE', pt.maxore), ('ORG', pt.maxorganics), ('EQU', pt.maxequipment)
+    ) AS cap(commodity, capacity)
+    WHERE p.planet_id = p_planet_id
+    ON CONFLICT (planet_id, commodity) DO NOTHING;
+
+    INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price)
+    SELECT 'planet', p.planet_id, cap.commodity, 0, 0
+    FROM planets p
+    CROSS JOIN (VALUES ('ORE'), ('ORG'), ('EQU')) AS cap(commodity)
+    WHERE p.planet_id = p_planet_id
+    ON CONFLICT (entity_type, entity_id, commodity_code) DO NOTHING;
+
+    UPDATE entity_stock es
+    SET quantity = CASE es.commodity_code
+        WHEN 'ORE' THEN p.ore_on_hand::integer
+        WHEN 'ORG' THEN p.organics_on_hand::integer
+        WHEN 'EQU' THEN p.equipment_on_hand::integer
+    END
+    FROM planets p
+    WHERE p.planet_id = p_planet_id
+      AND es.entity_type = 'planet'
+      AND es.entity_id = p.planet_id
+      AND es.quantity = 0
+      AND CASE es.commodity_code
+          WHEN 'ORE' THEN p.ore_on_hand
+          WHEN 'ORG' THEN p.organics_on_hand
+          WHEN 'EQU' THEN p.equipment_on_hand
+          ELSE 0
+      END <> 0;
+
+    UPDATE planets
+    SET ore_on_hand = 0, organics_on_hand = 0, equipment_on_hand = 0
+    WHERE planet_id = p_planet_id
+      AND (ore_on_hand <> 0 OR organics_on_hand <> 0 OR equipment_on_hand <> 0);
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION generate_planets (target_count int)
     RETURNS integer
     LANGUAGE plpgsql
@@ -579,6 +655,10 @@ BEGIN
     FROM
         generate_series(1, v_to_add) AS gs;
     GET DIAGNOSTICS v_added = ROW_COUNT;
+    -- Migration 108 precedes BigBang generation. Initialize every generated
+    -- planet from its current legacy balances (normally zero) after insertion.
+    PERFORM initialize_planet_commodity_stock(p.planet_id)
+    FROM planets p;
     PERFORM
         bigbang_unlock (v_lock_key);
     RETURN v_added;
@@ -882,6 +962,7 @@ BEGIN
         colonists_unassigned = (pt.maxColonist_ore / 2)::bigint
     FROM planettypes pt
     WHERE p.planet_id = 1 AND p.type = pt.planettypes_id;
+    PERFORM initialize_planet_commodity_stock(1);
 END;
 $$;
 
@@ -928,6 +1009,7 @@ BEGIN
         colonists_unassigned = (pt.maxColonist_ore / 2)::bigint
     FROM planettypes pt
     WHERE p.planet_id = 2 AND p.type = pt.planettypes_id;
+    PERFORM initialize_planet_commodity_stock(2);
     
     -- Deploy defensive fighters and mines at Ferengi sector
     IF v_ferringhi_corp_id IS NOT NULL THEN
@@ -990,6 +1072,7 @@ BEGIN
         colonists_unassigned = (pt.maxColonist_ore / 2)::bigint
     FROM planettypes pt
     WHERE p.planet_id = 3 AND p.type = pt.planettypes_id;
+    PERFORM initialize_planet_commodity_stock(3);
     
     -- Deploy defensive fighters and mines at Orion sector
     IF v_orion_corp_id IS NOT NULL THEN

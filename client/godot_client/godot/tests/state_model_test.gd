@@ -37,6 +37,7 @@ func _init() -> void:
 	_run("optional fields", _test_optional_fields)
 	_run("malformed fields", _test_malformed_fields)
 	_run("authenticated refresh", _test_authenticated_refresh)
+	_run("published subscription responses", _test_published_subscription_responses)
 	_run("scoped refresh", _test_scoped_refresh)
 	_run("unauthenticated refresh", _test_unauthenticated_refresh)
 	_run("refusal retention", _test_refusal_retention)
@@ -51,7 +52,7 @@ func _init() -> void:
 	_run("normal output safety", _test_normal_output_safety)
 	_run("debug redaction", _test_debug_redaction)
 	if failures.is_empty():
-		print("Godot state tests: 28 passed")
+		print("Godot state tests: 31 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -101,6 +102,21 @@ func _test_sector_normalization() -> void:
 	_check(sector["adjacent_sector_ids"] == [2, 7], "sector adjacency was not normalized")
 	_check(sector["ports"].size() == 1 and sector["planets"].size() == 1, "sector objects were not normalized")
 	_check(sector["counts"]["fighters"] == 0, "sector zero count was lost")
+
+func _test_published_subscription_responses() -> void:
+	var acknowledgement := Protocol.result_from_response({
+		"status": "ok",
+		"type": "subscribe.ack_v1",
+		"data": {"topic": "sector.*", "added": true},
+	})
+	_check(acknowledgement.get("kind") == "ok", "published subscribe.ack_v1 was not accepted")
+	_check(acknowledgement.get("data", {}).get("topic") == "sector.*" and acknowledgement.get("data", {}).get("added") == true, "published subscription acknowledgement data was lost")
+	var listing := Protocol.result_from_response({
+		"status": "ok",
+		"type": "subscribe.list_v1",
+		"data": {"topics": ["system.notice", "sector.*"]},
+	})
+	_check(listing.get("kind") == "ok" and listing.get("data", {}).get("topics") == ["system.notice", "sector.*"], "published subscribe.list_v1 was not accepted intact")
 
 func _test_json_numeric_normalization() -> void:
 	var player := ClientState.normalize_player({"player": {
@@ -343,8 +359,10 @@ func _test_scene_state_boundary() -> void:
 	_check(source.contains("command_name == \"auth.logout\"") and source.contains("transport.close(\"Logged out.\")"), "confirmed logout is not routed through the correlated command lifecycle")
 	_check(source.contains("client_state.clear_session_state()"), "logout does not clear prior captain state")
 	_check(source.contains("command == \"move.warp\"") and source.contains("_on_warp_requested(int(data.get(\"to_sector_id\", 0)))"), "typed warp does not share the guarded direct-movement path")
-	_check(not source.contains("transport.request(\"subscribe.add\""), "login still sends subscription requests with a known-invalid schema payload")
-	_check(source.contains("Event feeds unavailable · server contract mismatch"), "unsupported live feeds are not disclosed to the player")
+	_check(source.contains("transport.request(\n\t\t\t\"subscribe.add\""), "login does not request supported player event feeds")
+	_check(source.contains("{\"topic\": topic}"), "event subscription does not use the published V2 topic field")
+	_check(source.contains("for topic in [\"sector.*\"]"), "Godot redundantly adds the locked system.notice subscription")
+	_check(source.contains("_pending_event_subscriptions[request_id] = topic"), "subscription replies are not correlated with their requested topic")
 	_check(source.contains("gameplay_view.tavern_enter_requested.connect(_on_tavern_enter_requested)"), "StarDock tavern entry is not correlated through Main")
 	_check(source.contains("transport.request(\"tavern.lottery.status\", {}, auth_session.session_token)"), "tavern entry does not verify authoritative tavern presence")
 	_check(source.contains("gameplay_view.port_workflow.confirm_tavern_entered()"), "Tavern menu access is not opened after the server probe")
@@ -357,5 +375,5 @@ func _test_normal_output_safety() -> void:
 	_check(refusal["message"] == "Denied" and not refusal["message"].contains("{"), "normal result message was not human-readable")
 
 func _test_debug_redaction() -> void:
-	var diagnostic := Protocol.diagnostic_json({"data": {"passwd": "password-value-xyz", "auth": {"session": "session-value-xyz"}, "session_token": "session-token-value-xyz", "value": 0}})
-	_check(not diagnostic.contains("password-value-xyz") and not diagnostic.contains("session-value-xyz") and not diagnostic.contains("session-token-value-xyz") and diagnostic.contains("0"), "debug diagnostic redaction failed")
+	var diagnostic := Protocol.diagnostic_json({"data": {"passwd": "password-value-xyz", "old_password": "old-value-xyz", "new_password": "new-value-xyz", "confirm_password": "confirm-value-xyz", "auth": {"session": "session-value-xyz"}, "session_token": "session-token-value-xyz", "value": 0}})
+	_check(not diagnostic.contains("password-value-xyz") and not diagnostic.contains("old-value-xyz") and not diagnostic.contains("new-value-xyz") and not diagnostic.contains("confirm-value-xyz") and not diagnostic.contains("session-value-xyz") and not diagnostic.contains("session-token-value-xyz") and diagnostic.contains("0"), "debug diagnostic redaction failed for password-change request fields")

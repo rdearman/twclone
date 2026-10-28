@@ -4,6 +4,24 @@
 \ir ../sql/pg/112_v2_economy_commerce.sql
 \ir ../sql/pg/112_v2_economy_commerce.sql
 
+DO $global_tax_default$
+BEGIN
+  IF to_regclass('planet_tax_global_config') IS NULL THEN
+    RAISE EXCEPTION 'global planet tax configuration table is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM planet_tax_global_config
+                  WHERE config_id = 1 AND rate_bps = 0 AND enabled = FALSE) THEN
+    RAISE EXCEPTION 'global planet tax must default to disabled at zero bps';
+  END IF;
+END
+$global_tax_default$;
+
+-- Replaying migration 112 must not reset operator-configured global policy.
+UPDATE planet_tax_global_config
+   SET rate_bps = 250, enabled = TRUE
+ WHERE config_id = 1;
+\ir ../sql/pg/112_v2_economy_commerce.sql
+
 DO $test$
 BEGIN
   IF to_regclass('port_hardware_stock') IS NULL
@@ -14,8 +32,14 @@ BEGIN
      OR to_regclass('market_shocks') IS NULL
      OR to_regclass('planet_tax_policies') IS NULL
      OR to_regclass('planet_economic_activity') IS NULL
-     OR to_regclass('planet_tax_assessments') IS NULL THEN
+     OR to_regclass('planet_tax_assessments') IS NULL
+     OR to_regclass('planet_tax_global_config') IS NULL THEN
   RAISE EXCEPTION 'one or more v2 economy/commerce tables are missing';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM planet_tax_global_config
+                  WHERE config_id = 1 AND rate_bps = 250 AND enabled = TRUE) THEN
+    RAISE EXCEPTION 'migration replay overwrote global tax configuration';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_indexes
@@ -144,6 +168,19 @@ BEGIN
     EXCEPTION WHEN check_violation THEN NULL;
     END;
   END IF;
+
+  BEGIN
+    UPDATE planet_tax_global_config SET rate_bps = 10001 WHERE config_id = 1;
+    RAISE EXCEPTION 'out-of-range global tax rate unexpectedly succeeded';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  BEGIN
+    INSERT INTO planet_tax_global_config (config_id, rate_bps, enabled)
+    VALUES (2, 500, TRUE);
+    RAISE EXCEPTION 'second global tax configuration unexpectedly succeeded';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
 END
 $constraints$;
 ROLLBACK;

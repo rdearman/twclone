@@ -24,6 +24,21 @@ def test_subscriptions_list_flow_reads_topics_field(ctx_factory, fake_conn, caps
     assert fake_conn.calls == [{"command": "subscribe.list", "data": {}}]
 
 
+def test_subscriptions_list_flow_accepts_published_string_topics(ctx_factory, fake_conn, capsys):
+    ctx = ctx_factory()
+    fake_conn.queue("subscribe.list", {
+        "status": "ok",
+        "type": "subscribe.list_v1",
+        "data": {"topics": ["system.notice", "sector.*"]},
+    })
+
+    client.subscriptions_list_flow(ctx)
+
+    out = capsys.readouterr().out
+    assert "system.notice" in out
+    assert "sector.*" in out
+
+
 def test_subscriptions_add_flow_sends_topic_field(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory()
     fake_conn.queue("subscribe.catalog", {
@@ -32,7 +47,11 @@ def test_subscriptions_add_flow_sends_topic_field(ctx_factory, fake_conn, monkey
             {"pattern": "system.notice", "kind": "exact", "desc": "Server notices"},
         ]},
     })
-    fake_conn.queue("subscribe.add", {"status": "ok", "data": {"topic": "system.notice"}})
+    fake_conn.queue("subscribe.add", {
+        "status": "ok",
+        "type": "subscribe.ack_v1",
+        "data": {"topic": "system.notice", "added": True},
+    })
 
     monkeypatch.setattr("builtins.input", lambda *_: "1")
 
@@ -64,7 +83,11 @@ def test_subscriptions_add_flow_prompts_for_concrete_topic_on_wildcard(ctx_facto
 
 def test_subscriptions_remove_flow_sends_topic_field(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory()
-    fake_conn.queue("subscribe.remove", {"status": "ok", "data": {}})
+    fake_conn.queue("subscribe.remove", {
+        "status": "ok",
+        "type": "subscribe.ack_v1",
+        "data": {"topic": "chat.global", "removed": True},
+    })
     monkeypatch.setattr("builtins.input", lambda *_: "chat.global")
 
     client.subscriptions_remove_flow(ctx)

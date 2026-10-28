@@ -63,5 +63,8 @@ int db_cron_get_corp_planet_assets (db_t *db, int corp_id, long long *net_value)
 int db_cron_update_stock_price (db_t *db, int stock_id, long long new_price);
 int db_cron_shield_regen (db_t *db, int percent);
 int db_cron_planet_tax_tick (db_t *db, int64_t now_s);
+int db_planet_tax_global_config_get (db_t *db, int *rate_bps_out,
+                                    int *enabled_out);
+int db_planet_tax_global_config_set (db_t *db, int rate_bps, int enabled);
 
 #endif

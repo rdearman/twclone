@@ -19,6 +19,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "db/repo/repo_database.h"
+#include "db/repo/repo_communication.h"
 #include <jansson.h>
 #include <stdbool.h>
 
@@ -615,7 +616,7 @@ static const command_entry_t k_command_registry[] = {
     {"equity.exchange.list", cmd_equity, "List exchange stocks", schema_placeholder, 0, false, NULL},
     {"equity.exchange.order.create", cmd_equity, "Create order", schema_placeholder, 0, false, NULL},
     {"equity.exchange.order.cancel", cmd_equity, "Cancel order", schema_placeholder, 0, false, NULL},
-    {"equity.portfolio.list", cmd_equity, "List holdings", schema_placeholder, 0, false, NULL},
+  {"equity.portfolio.list", cmd_equity, "List holdings", schema_placeholder, 0, false, NULL},
     {"stock.buy", cmd_equity_buy, "Buy shares in a corporation (DEPRECATED: use equity.buy)", schema_placeholder, 0, true, "equity.buy"},
     {"stock.sell", cmd_equity_sell, "Sell shares in a corporation (DEPRECATED: use equity.sell)", schema_placeholder, 0, true, "equity.sell"},
     {"stock.dividend.set", cmd_equity_dividend_set, "Declare a dividend (DEPRECATED: use equity.dividend_set)", schema_placeholder, 0, true, "equity.dividend_set"},
@@ -935,28 +936,35 @@ server_unregister_client (client_ctx_t *ctx)
 }
 
 int
-server_deliver_to_player (int player_id, const char *event_type, json_t *data)
+server_deliver_to_player_topic (int player_id, const char *topic,
+                                const char *event_type, json_t *data)
 {
+  if (player_id <= 0 || !event_type || !data)
+    return -1;
+  char *event_id = gen_uuid_v4 ();
+  if (!event_id)
+    return -1;
   int delivered = 0;
   pthread_mutex_lock (&g_clients_mu);
-  for (client_node_t * n = g_clients; n; n = n->next)
+  for (client_node_t *n = g_clients; n; n = n->next)
     {
       client_ctx_t *c = n->ctx;
-
-      if (!c)
-	{
-	  continue;
-	}
-      if (c->player_id == player_id && c->fd >= 0)
-	{
-	  json_t *tmp = json_incref (data);
-
-	  send_response_ok_take (c, NULL, event_type, &tmp);
-	  delivered++;
-	}
+      if (c && c->player_id == player_id && c->fd >= 0)
+        {
+          send_player_event (c, event_id, event_type, data, topic);
+          delivered++;
+        }
     }
   pthread_mutex_unlock (&g_clients_mu);
-  return (delivered > 0) ? 0 : -1;
+  free (event_id);
+  return delivered > 0 ? 0 : -1;
+}
+
+int
+server_deliver_to_player (int player_id, const char *event_type, json_t *data)
+{
+  return server_deliver_to_player_topic (player_id, event_type, event_type,
+                                         data);
 }
 
 /* ------------------------ idempotency helpers  ------------------------ */

@@ -4,13 +4,14 @@ import socket
 import errno
 import json
 import logging
+import os
 import uuid
 import re
 import random # Add this import
 import select
 from datetime import datetime
 
-from bug_reporter import BugReporter
+from bug_reporter import BugReporter, redact_secrets
 from planner import Planner
 from state_manager import StateManager
 from llm_client import get_ollama_response, parse_llm_json
@@ -33,9 +34,17 @@ logger.addHandler(c_handler)
 # --- FIX: File Handler setup ---
 def setup_logging(config):
     """Configures file logging based on config."""
+    console_level = config.get("console_log_level", "INFO")
+    if isinstance(console_level, str):
+        console_level = logging._nameToLevel.get(console_level.upper(), logging.INFO)
+    c_handler.setLevel(console_level if isinstance(console_level, int) else logging.INFO)
     log_file = config.get("log_file", "ai_player.log")
     f_handler = logging.FileHandler(log_file, mode='w')
     f_handler.setLevel(logging.INFO)  # Keep file log cleaner at INFO level
+    try:
+        os.chmod(log_file, 0o600)
+    except OSError as exc:
+        logger.warning("Could not restrict permissions on AI log file: %s", exc)
     f_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     f_handler.setFormatter(f_formatter)
     logger.addHandler(f_handler)
@@ -182,7 +191,7 @@ class GameConnection:
                     responses.append(response_json)
                 except (json.JSONDecodeError, UnicodeDecodeError) as e:
                     logger.error("Failed to decode JSON response: %s", e)
-                    logger.debug("Invalid JSON string was: %s", response_str)
+                    logger.debug("Discarded malformed server frame (%d bytes).", len(response_str))
 
         if closed:
             self.disconnect()
@@ -262,6 +271,45 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     filtered_state["valid_comms"] = state_manager.get("valid_commodity_names")
 
     return filtered_state
+
+
+def _audit_state_snapshot(game_state):
+    """Small before-state record for live gameplay outcome verification."""
+    return {
+        "player_location_sector": game_state.get("player_location_sector"),
+        "player_info": game_state.get("player_info"),
+        "ship_info": game_state.get("ship_info"),
+    }
+
+
+def build_registration_command(config, idempotency_key):
+    """Build the existing public auth.register request for explicit opt-in."""
+    username = config.get("player_username")
+    data = {
+        "username": username,
+        "passwd": config.get("player_password"),
+        "ship_name": config.get("registration_ship_name", f"{username}'s ship"),
+        "ui_locale": config.get("ui_locale", "en_GB"),
+        "ui_timezone": config.get("ui_timezone", "Europe/London"),
+    }
+    return {
+        "id": f"c-{idempotency_key[:8]}",
+        "command": "auth.register",
+        "data": data,
+        "meta": {
+            "client_version": config.get("client_version"),
+            "idempotency_key": idempotency_key,
+        },
+    }
+
+
+def align_command_idempotency(command_name, data_payload, generated_key):
+    """Return the envelope key, keeping trade copies identical."""
+    if command_name in ("trade.buy", "trade.sell"):
+        key = str(data_payload.get("idempotency_key") or generated_key)
+        data_payload["idempotency_key"] = key
+        return key
+    return generated_key
 
 PROMPT_CONTRACT_BLOCK = """
 State: {game_state}
@@ -396,7 +444,7 @@ def _get_fallback_plan(game_state, state_manager, planner):
     # 0. Survey Logic: If we are at a port and haven't surveyed it, DO IT.
     if sector_data.get("has_port"):
         port_info = game_state.get("port_info_by_sector", {}).get(str(current_sector))
-        if not port_info or not port_info.get("commodities"):
+        if port_info is None:
             logger.info("Fallback: At an unsurveyed port. Setting goal to SURVEY.")
             return ["survey: port"]
 
@@ -457,7 +505,7 @@ def _get_fallback_plan(game_state, state_manager, planner):
         # Check if we have prices for all commodities at this port
         p_id_str = str(p_info.get("port_id"))
         prices = game_state.get("price_cache", {}).get(p_id_str, {}).get("buy", {})
-        if not prices: # Simplified: if no buy prices, it's unsurveyed
+        if p_info.get("commodities") and not prices: # Empty markets have nothing to survey
             unsurveyed_ports.append(int(s_id))
     
     if unsurveyed_ports:
@@ -726,13 +774,16 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
             return any(canon_commodity(l.get("commodity", "")).lower() == goal_target for l in response_data.get("lines", []))
 
         elif goal_type == "survey" and goal_target == "port":
-            # Check if survey is STRICTLY complete (all commodities quoted)
+            # Check whether each advertised commodity has been quoted
             # We mirror the planner's strict logic here to avoid premature popping.
             current_sector_id = str(game_state.get("player_location_sector"))
             port_info = game_state.get("port_info_by_sector", {}).get(current_sector_id)
             
-            if not port_info or not port_info.get("commodities"):
+            if port_info is None:
                 return False # Don't even have the list yet
+
+            if not port_info.get("commodities"):
+                return True # Successfully inspected empty market; no quotes are needed
             
             port_id_str = str(port_info.get("port_id"))
             price_cache = game_state.get("price_cache", {}).get(port_id_str, {})
@@ -741,11 +792,8 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
                 c_code = canon_commodity(c.get("commodity"))
                 if not c_code: continue
                 
-                has_buy = price_cache.get("buy", {}).get(c_code) is not None
-                has_sell = price_cache.get("sell", {}).get(c_code) is not None
-                
-                if not (has_buy or has_sell):
-                    return False # Found a commodity with no price data
+                if not price_cache.get("quoted_at", {}).get(c_code):
+                    return False # Found a commodity that has not been quoted
             
             return True # All commodities have at least one price
 
@@ -823,9 +871,16 @@ def main(config_path="config.json"):
     # --- Setup Logging from Config ---
     setup_logging(config)
 
-    delay = random.uniform(0, 180)
-    print(f"Staggering start: waiting {delay:.2f}s...")
-    time.sleep(delay)    
+    # Staggering is useful for a deliberately concurrent cohort, but a long
+    # random delay made a single local QA run look hung. Keep it opt-in.
+    try:
+        max_start_delay = max(0.0, float(config.get("startup_stagger_max_seconds", 0)))
+    except (TypeError, ValueError):
+        max_start_delay = 0.0
+    if max_start_delay:
+        delay = random.uniform(0, max_start_delay)
+        logger.info("Applying configured startup stagger of %.2f seconds.", delay)
+        time.sleep(delay)
     
     # --- Initialize Core Components ---
     # --- FIX: Use YOUR config keys ---
@@ -860,6 +915,7 @@ def main(config_path="config.json"):
     state_manager.set_default("valid_commodity_names", ["ORE", "ORG", "EQU", "DRG", "SLV", "WPN"])  # All tradable commodities
     # We must reset session_id on start, as it's not persistent
     state_manager.set("session_id", None) 
+    state_manager._registration_attempted = False
 
     last_heartbeat = time.time()
     schemas_bootstrapped = False
@@ -932,6 +988,35 @@ def main(config_path="config.json"):
             # --- Check if we are authenticated BEFORE planning ---
             game_state = state_manager.get_all()
             if not game_state.get("session_id"):
+                if not config.get("player_username") or not config.get("player_password"):
+                    logger.critical("player_username or player_password not found in config.json. Exiting.")
+                    shutdown_flag = True
+                    continue
+                if not planner._is_command_ready("auth.login", game_state.get("command_retry_info", {})):
+                    time.sleep(1)
+                    continue
+
+                # Account creation is disabled by default. When explicitly
+                # enabled, use the public auth.register command once, then
+                # fall back to login if the username already exists. A lost
+                # registration reply is reconciled by login, never blind retry.
+                if (config.get("register_if_missing")
+                        and not getattr(state_manager, "_registration_attempted", False)):
+                    retry_info = game_state.get("command_retry_info", {})
+                    if not planner._is_command_ready("auth.register", retry_info):
+                        time.sleep(1)
+                        continue
+                    registration_key = str(uuid.uuid4())
+                    registration = build_registration_command(config, registration_key)
+                    if game_conn.send_command(registration):
+                        state_manager._registration_attempted = True
+                        state_manager.add_pending_command(registration["id"], registration)
+                        state_manager.record_command_sent("auth.register")
+                        state_manager.record_ai_metric("commands_sent")
+                        logger.info("Attempting configured public auth.register for %s.", config.get("player_username"))
+                    time.sleep(1)
+                    continue
+
                 # Always send login if we have no session_id
                 idempotency_key = str(uuid.uuid4())
                 login_cmd = {
@@ -947,12 +1032,7 @@ def main(config_path="config.json"):
                     }
                 }
                 
-                if not config.get("player_username") or not config.get("player_password"):
-                    logger.critical("player_username or player_password not found in config.json. Exiting.")
-                    shutdown_flag = True
-                    continue
-
-                logger.info("No session detected. Sending login command: %s", login_cmd)
+                logger.info("No session detected. Sending auth.login for configured player %s.", config.get("player_username"))
                 if game_conn.send_command(login_cmd):
                     state_manager.add_pending_command(login_cmd["id"], login_cmd)
                     state_manager.record_ai_metric("commands_sent")
@@ -1092,7 +1172,7 @@ def main(config_path="config.json"):
                     }
                 }
                 logger.info(f"Bootstrap: Sending {bootstrap_cmd['command']}")
-                logger.info("Bootstrap command full: %s", full_command)
+                logger.info("Bootstrap command: %s", redact_secrets(full_command))
                 if game_conn.send_command(full_command):
                     state_manager.record_command_sent(bootstrap_cmd["command"])
                     state_manager.record_ai_metric("commands_sent")
@@ -1110,7 +1190,7 @@ def main(config_path="config.json"):
                 at_port = current_sector_data.get("has_port", False)
                 
                 port_info = game_state.get("port_info_by_sector", {}).get(current_sector_id)
-                survey_needed = at_port and (not port_info or not port_info.get("commodities"))
+                survey_needed = at_port and port_info is None
 
                 if config.get("qa_mode"):
                     # Workflow-based QA mode: Execute deterministic command sequences
@@ -1206,14 +1286,13 @@ def main(config_path="config.json"):
             
             if next_command_dict:
                 command_name = next_command_dict.get("command")
-                idempotency_key = str(uuid.uuid4())
-                
-                # IMPORTANT: trade.buy/trade.sell require idempotency_key INSIDE data (server handler reads data.idempotency_key)
-                # planner.py now adds this, but we ensure it here just in case logic was bypassed
+                # Trade handlers require the data and meta copies of the
+                # idempotency key to agree. The planner may already have put a
+                # key in the trade payload, so reuse it for the envelope.
                 data_payload = dict(next_command_dict.get("data", {}) or {})
-                if command_name in ("trade.buy", "trade.sell") and "idempotency_key" not in data_payload:
-                     # This should be redundant if planner is working, but safe
-                     data_payload["idempotency_key"] = idempotency_key
+                idempotency_key = align_command_idempotency(
+                    command_name, data_payload, str(uuid.uuid4())
+                )
 
                 
                 # Build the full command packet
@@ -1230,12 +1309,18 @@ def main(config_path="config.json"):
                     }
                 }
 
-                logger.info("Sending command: %s", full_command)
+                logger.info("Sending command: %s", redact_secrets(full_command))
                 
                 if game_conn.send_command(full_command):
                     state_manager.add_pending_command(full_command['id'], full_command)
                     state_manager.record_ai_metric("commands_sent")
                     state_manager.record_command_sent(command_name)
+
+                    if (config.get("live_gameplay_audit")
+                            and command_name in ("move.warp", "trade.buy", "trade.sell")):
+                        bug_reporter.log_command(
+                            full_command, state_before=_audit_state_snapshot(game_state)
+                        )
                     
                     # Track tested commands in QA mode
                     if config.get("qa_mode"):
@@ -1313,7 +1398,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         if not isinstance(response, dict):
             logger.warning("Ignoring non-object frame from server: %r", response)
             continue
-        logger.info("Server response: %s", json.dumps(response, separators=(',', ':')))
+        logger.info("Server response: %s", json.dumps(redact_secrets(response), separators=(',', ':')))
 
         # Unsolicited events have no reply_to. They are not command failures;
         # retain/deduplicate them and schedule authoritative refreshes instead.
@@ -1351,6 +1436,13 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         
         if config.get("qa_mode"):
             bug_reporter.log_response(response)
+        elif (config.get("live_gameplay_audit") and sent_command
+              and (command_name in ("move.warp", "trade.buy", "trade.sell")
+                   or command_name in ("player.my_info", "ship.info"))):
+            bug_reporter.log_response(
+                response, command=sent_command,
+                state_before=_audit_state_snapshot(game_state_before),
+            )
 
         # Diagnostic log for trade results
         if planner and command_name in ("trade.buy", "trade.sell"):
@@ -1365,6 +1457,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     state_manager.record_ai_metric("commands_succeeded")
                 # --- Feedback Loop: Record Success ---
                 state_manager.record_command_success(command_name)
+                if command_name == "auth.register":
+                    state_manager.record_ai_metric("accounts_registered")
                 
                 state_manager.set_last_action_result({
                     "status": "ok",
@@ -1802,9 +1896,100 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
                 if config.get("qa_mode"):
                     bug_reporter.triage_protocol_error(command_name, response, game_state_before, error_code, error_msg)
+                if command_name == "auth.register" and error_code == 1000:
+                    # Database outages are transient; permit one later public
+                    # registration attempt after the command backoff expires.
+                    state_manager._registration_attempted = False
 
         except Exception as e:
             logger.error("Critical error in process_responses: %s", e, exc_info=True)
+
+        # In live audit mode, verify every successful movement/trade against
+        # fresh public player and ship reads. Refusals are logged as refusals
+        # and are never escalated as gameplay defects.
+        if config.get("live_gameplay_audit") and sent_command:
+            if request_id in getattr(state_manager, "_live_audit_requests", {}):
+                action_id = state_manager._live_audit_requests.pop(request_id)
+                contexts = getattr(state_manager, "_live_audit_contexts", {})
+                context = contexts.get(action_id)
+                if context:
+                    if response.get("status") == "ok":
+                        context["received"].add(command_name)
+                    else:
+                        context["failed_readbacks"].append(command)
+                    if context["received"] == context["required"] or context["failed_readbacks"]:
+                        bug_reporter.log_gameplay_outcome(
+                            identity=config.get("player_username", "unknown"),
+                            seed=config.get("test_seed"),
+                            command=context["command"], response=context["response"],
+                            state_before=context["state_before"],
+                            state_after=state_manager.get_all(),
+                            events=state_manager.get("server_events", []),
+                            state_after_source=("readback unavailable" if context["failed_readbacks"]
+                                                else "player.my_info + ship.info readback"),
+                            verification_complete=not context["failed_readbacks"],
+                        )
+                        if context["failed_readbacks"]:
+                            logger.warning("Live gameplay readback incomplete for %s.", action_id)
+                        contexts.pop(action_id, None)
+
+            elif (command_name in ("move.warp", "trade.buy", "trade.sell")
+                  and response.get("status") == "ok"):
+                action_id = request_id or str(uuid.uuid4())
+                context = {
+                    "command": sent_command,
+                    "response": response,
+                    "state_before": _audit_state_snapshot(game_state_before),
+                    "required": {"player.my_info", "ship.info"},
+                    "received": set(),
+                    "failed_readbacks": [],
+                }
+                contexts = getattr(state_manager, "_live_audit_contexts", {})
+                contexts[action_id] = context
+                requests = getattr(state_manager, "_live_audit_requests", {})
+                for refresh_name in sorted(context["required"]):
+                    idempotency_key = str(uuid.uuid4())
+                    refresh = {
+                        "id": f"c-audit-{idempotency_key[:8]}",
+                        "command": refresh_name,
+                        "data": {},
+                        "meta": {
+                            "client_version": config.get("client_version"),
+                            "idempotency_key": idempotency_key,
+                            "session_token": state_manager.get("session_id"),
+                        },
+                    }
+                    if game_conn.send_command(refresh):
+                        state_manager.add_pending_command(refresh["id"], refresh)
+                        requests[refresh["id"]] = action_id
+                        state_manager.record_ai_metric("commands_sent")
+                        bug_reporter.log_command(
+                            refresh, state_before=_audit_state_snapshot(state_manager.get_all())
+                        )
+                    else:
+                        context["failed_readbacks"].append(refresh_name)
+                state_manager._live_audit_contexts = contexts
+                state_manager._live_audit_requests = requests
+                if context["failed_readbacks"]:
+                    bug_reporter.log_gameplay_outcome(
+                        identity=config.get("player_username", "unknown"),
+                        seed=config.get("test_seed"), command=context["command"],
+                        response=context["response"], state_before=context["state_before"],
+                        state_after=state_manager.get_all(),
+                        events=state_manager.get("server_events", []),
+                        state_after_source="readback unavailable",
+                        verification_complete=False,
+                    )
+                    contexts.pop(action_id, None)
+            elif command_name in ("move.warp", "trade.buy", "trade.sell"):
+                bug_reporter.log_gameplay_outcome(
+                    identity=config.get("player_username", "unknown"),
+                    seed=config.get("test_seed"), command=sent_command,
+                    response=response, state_before=game_state_before,
+                    state_after=state_manager.get_all(),
+                    events=state_manager.get("server_events", []),
+                    state_after_source="refusal response; no mutation expected",
+                )
 
 
 

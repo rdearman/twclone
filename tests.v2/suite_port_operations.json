@@ -11,6 +11,31 @@
       "password": "password"
     },
     {
+      "name": "Rig: Place player and ship at port 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{port_user_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Place ship at port 1",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_user_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh port user location",
+      "command": "auth.login",
+      "user": "port_user",
+      "data": { "username": "port_user", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "port.status - Get port status",
       "command": "port.status",
       "data": { "port_id": 1 },

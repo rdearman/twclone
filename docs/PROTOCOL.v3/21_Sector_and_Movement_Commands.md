@@ -3,8 +3,8 @@
 ## 1. Sector Information
 
 ### `sector.info` (Alias: `move.describe_sector`)
-Get detailed info about the current or specified sector.
-**Args**: `{ "sector_id": 1 }` (Optional)
+Get detailed info about the current sector or a directly adjacent sector.
+**Args**: `{ "sector_id": 1 }` (Optional; remote sectors are refused)
 **Response**: `sector.info`
 ```json
 {
@@ -22,6 +22,8 @@ Get detailed info about the current or specified sector.
 `move.scan`: Summary scan (counts).
 `sector.scan`: Detailed scan (objects, resources).
 `sector.scan.density`: Density scan of surrounding sectors.
+
+Detailed sector information and scans omit port class and trade-mode details.
 
 ### `sector.search`
 Search for objects/players.
@@ -54,8 +56,9 @@ Long-range jump (requires equipment).
 **Hazard Trigger**: Triggers all entry hazards (fighters, mines, limpets) at the destination sector.
 
 ### `move.pathfind`
-Calculate route.
-**Args**: `{ "from": 1, "to": 10, "avoid": [666] }`
+Calculate a route through the current sector and sectors the player has visited.
+Unvisited sectors are excluded so the response does not reveal hidden topology.
+**Args**: `{ "from_sector_id": 1, "to_sector_id": 10 }`
 **Response**: `{ "steps": [1, 2, 5, 10], "total_cost": 3 }`
 
 ## 3. Autopilot Route Controls

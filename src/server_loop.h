@@ -37,5 +37,7 @@ int server_dispatch_command (client_ctx_t * ctx, json_t * root);
    Does NOT steal 'data'. */
 int server_deliver_to_player (int player_id, const char *event_type,
 			      json_t * data);
+int server_deliver_to_player_topic (int player_id, const char *topic,
+                                    const char *event_type, json_t *data);
 void idemp_fingerprint_json (json_t * obj, char out[17]);
 #endif /* SERVER_LOOP_H */

@@ -1286,22 +1286,6 @@
           }
         },
         {
-          "key": "r",
-          "label": "(R) Register Player (register)",
-          "action": {
-            "rpc": {
-              "command": "auth.register",
-              "data": {
-                "username": "<prompt:str:Username>",
-                "passwd": "<prompt:str:Password>",
-                "ship_name": "<prompt:str:Ship Name (optional)>",
-                "ui_locale": "<prompt:str:UI Locale (e.g., en-US, optional)>",
-                "ui_timezone": "<prompt:str:UI Timezone (e.g., America/New_York, optional)>"
-              }
-            }
-          }
-        },
-        {
           "key": "e",
           "label": "(E) Refresh Player (refresh)",
           "action": {
@@ -1355,6 +1339,13 @@
           "label": "(V) View all settings",
           "action": {
             "pycall": "settings_view"
+          }
+        },
+        {
+          "key": "c",
+          "label": "(C) Change password",
+          "action": {
+            "pycall": "change_password_flow"
           }
         },
         {

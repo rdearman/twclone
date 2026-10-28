@@ -182,11 +182,14 @@ cd /home/twclone
 # Create the config (if not already present)
 cat > bin/bigbang.json << 'EOF'
 {
-  "db_connection": "postgresql://twclone_user:your_secure_password@localhost:5432/twclone_db",
-  "num_sectors": 500,
+  "admin": "host=localhost dbname=postgres user=twclone_user",
+  "db": "twclone_db",
+  "app": "host=localhost dbname=%DB% user=twclone_user",
+  "sql_dir": "sql/pg",
+  "sectors": 500,
   "density": 5,
-  "port_ratio": 0.15,
-  "planet_ratio": 0.1,
+  "port_ratio": 15,
+  "planet_ratio": 10,
   "port_size": 10,
   "tech_level": 5,
   "port_credits": 50000,
@@ -197,17 +200,17 @@ EOF
 ```
 
 **Key Parameters:**
-- `num_sectors`: Total game sectors (500 is standard)
+- `sectors`: Total game sectors (500 is standard)
 - `density`: Warp link density (5 = medium, 3 = sparse, 7 = dense)
-- `port_ratio`: Proportion of sectors with ports (0.15 = 15%)
-- `planet_ratio`: Proportion of sectors with planets (0.1 = 10%)
+- `port_ratio`: Percent of sectors with ports, integer from 0 to 100 (15 = 15%)
+- `planet_ratio`: Percent of sectors with planets (10 = 10%)
+- Optional `port_seed`: PostgreSQL random seed from -1.0 to 1.0 for repeatable
+  port-generation QA; omit it for ordinary new universes.
 
 ### 2. Adjust Connection String
 
-Edit `bin/bigbang.json` and replace:
-- `twclone_user` — your database user
-- `your_secure_password` — the password you set above
-- `localhost` — your database host (usually `localhost` for local installs)
+Edit the `admin` and `app` libpq connection strings for the database user and
+host. `%DB%` is replaced with the database named by `db`.
 
 ### 3. Run Big Bang
 

@@ -117,6 +117,7 @@ const COMMANDS := {
 	"SETTINGS & NOTES": [
 		{"label": "Reduced motion · OFF", "local_reduced_motion": true},
 		{"label": "Choose HUD status items", "local_hud_settings": true},
+		{"label": "Change password", "command": "auth.change_password", "fields": [["old_password", "password", "Current password", ""], ["new_password", "password", "New password", ""], ["confirm_password", "password", "Confirm new password", ""]], "mutating": true},
 		{"label": "View settings and preferences", "command": "player.get_settings"},
 		{"label": "View preferences", "command": "player.get_prefs"},
 		{"label": "Set 24-hour clock preference", "command": "player.set_prefs", "fields": [["value", "boolean", "Use 24-hour clock", "true"]], "preference_key": "ui.clock_24h", "preference_type": "bool", "mutating": true},
@@ -899,6 +900,7 @@ func _choose_action(action: Dictionary) -> void:
 			input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			input.text = str(field[3])
 			input.placeholder_text = str(field[2])
+			input.secret = str(field[1]) == "password"
 			if field.size() > 4:
 				input.max_length = int(field[4])
 			row.add_child(input)
@@ -917,12 +919,15 @@ func _confirm_logout() -> void:
 
 func _submit_form() -> void:
 	var data: Dictionary = get_meta("pending_data", {}).duplicate(true)
+	var password_values: Dictionary = {}
 	for key in _form_fields:
 		var control: Control = _form_fields[key]
 		if control is CheckBox:
 			data[key] = (control as CheckBox).button_pressed
 		elif control is LineEdit:
-			var text: String = (control as LineEdit).text.strip_edges()
+			var text: String = (control as LineEdit).text
+			if str(_field_type(key)) != "password":
+				text = text.strip_edges()
 			if text.is_empty():
 				_add_unavailable("Every visible field must be completed before sending.")
 				return
@@ -933,6 +938,17 @@ func _submit_form() -> void:
 				data[key] = int(text)
 			else:
 				data[key] = text
+				if str(_field_type(key)) == "password":
+					password_values[key] = text
+	if str(_form_action.get("command", "")) == "auth.change_password":
+		if password_values.get("new_password", "") != password_values.get("confirm_password", ""):
+			_add_unavailable("Password change cancelled: the new passwords do not match.")
+			return
+		data.erase("confirm_password")
+		for control in _form_fields.values():
+			if control is LineEdit:
+				(control as LineEdit).clear()
+		set_meta("pending_data", {})
 	if bool(_form_action.get("duplicate_mail_read_id", false)):
 		data["id"] = data.get("mail_id", 0)
 	if str(_form_action.get("command", "")) == "player.computer.recommend_routes":

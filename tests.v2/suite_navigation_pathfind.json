@@ -11,16 +11,25 @@
       "password": "password"
     },
     {
+      "name": "Rig: Mark current and adjacent destination as visited",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES (@{nav_path_user_player_id}, 1), (@{nav_path_user_player_id}, 2) ON CONFLICT (player_id, sector_id) DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "move.pathfind - Basic pathfind",
       "command": "move.pathfind",
-      "data": { "to": 2 },
+      "data": { "from_sector_id": 1, "to_sector_id": 2 },
       "user": "nav_path_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "move.pathfind - Same sector",
       "command": "move.pathfind",
-      "data": { "to": 1 },
+      "data": { "from_sector_id": 1, "to_sector_id": 1 },
       "user": "nav_path_user",
       "expect": { "status": "ok", "steps": [1] }
     }

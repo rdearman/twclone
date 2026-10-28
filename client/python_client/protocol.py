@@ -44,6 +44,23 @@ _CATEGORY_PREFIXES = (
     ("client.", "connection"),
 )
 
+_SENSITIVE_KEYS = {
+    "password", "passwd", "old_password", "new_password", "confirm_password",
+    "token", "session", "session_token", "secret", "authorization",
+}
+
+
+def _redact_sensitive(value: Any) -> Any:
+    """Return a log-safe copy of a protocol value, recursively masking secrets."""
+    if isinstance(value, dict):
+        return {
+            key: "<redacted>" if str(key).lower() in _SENSITIVE_KEYS else _redact_sensitive(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive(item) for item in value]
+    return value
+
 
 def classify_event_type(event_type: Optional[str]) -> str:
     """Map a raw server/client event `type` string to a stable category."""
@@ -144,7 +161,8 @@ class Conn:
 
         line = json.dumps(obj, separators=(",", ":")) + "\n"
         if self.debug:
-            print(f"[DBG] << {line!r}")
+            safe_line = json.dumps(_redact_sensitive(obj), separators=(",", ":")) + "\n"
+            print(f"[DBG] << {safe_line!r}")
         try:
             self.sock.sendall(line.encode("utf-8"))
         except OSError as exc:
@@ -161,12 +179,14 @@ class Conn:
         except OSError as exc:
             self._mark_disconnected("Connection lost while receiving data.")
             raise ConnectionError("Connection lost.") from exc
-        if self.debug:
-            print(f"[DBG] >> {line!r}")
         if not line:
             self._mark_disconnected("Server closed the connection.")
             raise ConnectionError("Server closed connection.")
-        return json.loads(line)
+        response = json.loads(line)
+        if self.debug:
+            safe_line = json.dumps(_redact_sensitive(response), separators=(",", ":")) + "\n"
+            print(f"[DBG] >> {safe_line!r}")
+        return response
 
     def _mark_disconnected(self, reason: str) -> None:
         """
@@ -209,9 +229,9 @@ class Conn:
             if t and not resp.get("reply_to"):
                 d = resp.get("data") or {}
 
-                if t == "system.notice":
+                if t in ("system.notice", "system.notice_v1"):
                     # de-dup on notice id
-                    nid = d.get("id")
+                    nid = d.get("notice_id", d.get("id"))
                     if nid is not None:
                         if nid in self._seen_notices:
                             continue  # drop duplicate
@@ -257,6 +277,10 @@ def extract_current_sector(resp: Dict[str, Any]) -> Optional[int]:
         return sess["current_sector"]
     # player.my_info nested style
     pl = d.get("player") or {}
+    if isinstance(pl.get("sector"), int):
+        return pl["sector"]
+    if isinstance(pl.get("sector_id"), int):
+        return pl["sector_id"]
     ship = d.get("ship") or {}
     if isinstance(ship.get("location"), dict) and isinstance(ship["location"].get("sector_id"), int):
         return ship["location"]["sector_id"]

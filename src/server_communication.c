@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <inttypes.h>
+#include <stdint.h>
+#include <ctype.h>
 
 /* local includes */
 #include "server_communication.h"
@@ -119,6 +122,49 @@ typedef struct sub_map
 } sub_map_t;
 static sub_map_t *g_submaps = NULL;
 
+struct live_notice_ctx
+{
+  json_t *data;
+};
+
+static int
+deliver_live_notice (int player_id, void *arg)
+{
+  struct live_notice_ctx *notice = (struct live_notice_ctx *) arg;
+  if (!notice || player_id <= 0)
+    return 0;
+
+  pthread_mutex_lock (&g_clients_mu);
+  for (client_node_t *node = g_clients; node; node = node->next)
+    {
+      client_ctx_t *ctx = node->ctx;
+      if (!ctx || ctx->player_id != player_id || ctx->fd < 0)
+        continue;
+
+      json_t *env = json_object ();
+      json_t *meta = json_object ();
+      if (!env || !meta)
+        {
+          if (env) json_decref (env);
+          if (meta) json_decref (meta);
+          continue;
+        }
+      json_object_set_new (env, "status", json_string ("ok"));
+      json_object_set_new (env, "type", json_string ("system.notice_v1"));
+      json_object_set (env, "data", notice->data);
+      json_object_set_new (meta, "topic", json_string ("system.notice"));
+      json_object_set_new (meta, "mandatory", json_true ());
+      json_object_set_new (meta, "persistent", json_true ());
+      json_object_set_new (env, "meta", meta);
+      attach_rate_limit_meta (env, ctx);
+      rl_tick (ctx);
+      send_all_json (ctx->fd, env);
+      json_decref (env);
+    }
+  pthread_mutex_unlock (&g_clients_mu);
+  return 0;
+}
+
 
 static void
 broadcast_system_notice (int notice_id,
@@ -128,6 +174,8 @@ broadcast_system_notice (int notice_id,
 			 time_t created_at, time_t expires_at)
 {
   json_t *data = json_object ();
+  if (!data)
+    return;
   json_object_set_new (data, "id", json_integer (notice_id));
   json_object_set_new (data, "title", json_string (title ? title : ""));
   json_object_set_new (data, "body", json_string (body ? body : ""));
@@ -135,37 +183,11 @@ broadcast_system_notice (int notice_id,
 		       json_string (severity ? severity : "info"));
   json_object_set_new (data, "created_at", json_integer ((int) created_at));
   json_object_set_new (data, "expires_at", json_integer ((int) expires_at));
-  if (!data)
-    {
-      return;
-    }
-  for (sub_map_t * m = g_submaps; m; m = m->next)
-    {
-      json_t *env = json_object ();
-
-
-      if (!env)
-	{
-	  continue;
-	}
-      json_object_set_new (env, "status", json_string ("ok"));
-      json_object_set_new (env, "type", json_string ("system.notice_v1"));
-      json_object_set (env, "data", data);	/* shared; incref below */
-      json_t *meta = json_object ();
-
-
-      if (meta)
-	{
-	  json_object_set_new (meta, "topic", json_string ("system.notice"));
-	  json_object_set_new (meta, "mandatory", json_true ());
-	  json_object_set_new (meta, "persistent", json_true ());
-	  json_object_set_new (env, "meta", meta);
-	}
-      attach_rate_limit_meta (env, m->ctx);
-      rl_tick (m->ctx);
-      send_all_json (m->ctx->fd, env);
-      json_decref (env);
-    }
+  struct live_notice_ctx notice = {.data = data};
+  db_t *db = game_db_get_handle ();
+  if (!db || db_for_each_subscriber (db, "system.notice",
+                                    deliver_live_notice, &notice) != 0)
+    LOGE ("could not enumerate system.notice subscribers for live delivery");
   json_decref (data);
 }
 
@@ -496,17 +518,10 @@ len_leq (const char *s, size_t m)
 }
 
 
-static int
-send_to_player (int player_id, const char *event_type, json_t *data)
-{
-  // delegate to server_loop’s registry-based delivery
-  return server_deliver_to_player (player_id, event_type, data);
-}
-
-
 struct bc_ctx
 {
   const char *event_type;
+  const char *topic;
   json_t *data;
   int deliveries;
 };
@@ -516,7 +531,8 @@ static int
 bc_cb (int player_id, void *arg)
 {
   struct bc_ctx *bc = (struct bc_ctx *) arg;
-  if (send_to_player (player_id, bc->event_type, bc->data) == 0)
+  if (server_deliver_to_player_topic (player_id, bc->topic,
+                                      bc->event_type, bc->data) == 0)
     {
       bc->deliveries++;
     }
@@ -538,7 +554,8 @@ server_broadcast_event (const char *type, json_t *data)
     {
       return -1;
     }
-  struct bc_ctx bc = {.event_type = type,.data = data,.deliveries = 0 };
+  struct bc_ctx bc = {.event_type = type,.topic = type,.data = data,
+                      .deliveries = 0 };
   int rc = db_for_each_subscriber (db, type, bc_cb, &bc);
 
 
@@ -726,7 +743,7 @@ comm_publish_sector_event (int sid, const char *name, json_t *data)
   snprintf (topic, sizeof (topic), "sector.%d", sid);
 
 
-  struct bc_ctx bc = {.event_type = name,.data = data,
+  struct bc_ctx bc = {.event_type = name,.topic = topic,.data = data,
     .deliveries = 0
   };
 
@@ -1598,7 +1615,6 @@ comm_clear_subscriptions (client_ctx_t *ctx)
     }
 }
 
-
 int
 cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 {
@@ -1712,9 +1728,10 @@ cmd_subscribe_add (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (resp, "topic", json_string (topic));
+  json_object_set_new (resp, "added", json_true ());
 
 
-  send_response_ok_take (ctx, root, "subscribe.added", &resp);
+  send_response_ok_take (ctx, root, "subscribe.ack_v1", &resp);
   return 0;
 }
 
@@ -1789,9 +1806,10 @@ cmd_subscribe_remove (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (resp, "topic", json_string (topic));
+  json_object_set_new (resp, "removed", json_true ());
 
 
-  send_response_ok_take (ctx, root, "subscribe.removed", &resp);
+  send_response_ok_take (ctx, root, "subscribe.ack_v1", &resp);
   return 0;
 }
 
@@ -1829,35 +1847,8 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
   while (db_res_step (res, &err))
     {
       const char *tmp_topic = db_res_col_text (res, 0, &err);
-      int locked = db_res_col_i32 (res, 1, &err);
-      int enabled = db_res_col_i32 (res, 2, &err);
-      const char *tmp_deliv = db_res_col_text (res, 3, &err);
-      const char *tmp_flt = db_res_col_is_null (res,
-						4) ? NULL :
-	db_res_col_text (res,
-			 4,
-			 &err);
-
-      json_t *row = json_object ();
-
-
-      json_object_set_new (row,
-			   "topic", json_string (tmp_topic ? tmp_topic : ""));
-      json_object_set_new (row, "locked", json_integer (locked));
-      json_object_set_new (row, "enabled", json_integer (enabled));
-      json_object_set_new (row, "delivery",
-			   json_string (tmp_deliv ? tmp_deliv : "push"));
-      if (tmp_flt)
-	{
-	  json_t *filter_obj = json_loads (tmp_flt, 0, NULL);
-
-
-	  if (filter_obj)
-	    {
-	      json_object_set_new (row, "filter", filter_obj);
-	    }
-	}
-      json_array_append_new (items, row);
+      json_array_append_new (items,
+                             json_string (tmp_topic ? tmp_topic : ""));
     }
   db_res_finalize (res);
 
@@ -1865,7 +1856,7 @@ cmd_subscribe_list (client_ctx_t *ctx, json_t *root)
 
 
   json_object_set_new (resp, "topics", items);
-  send_response_ok_take (ctx, root, "subscribe.list", &resp);
+  send_response_ok_take (ctx, root, "subscribe.list_v1", &resp);
   return 0;
 }
 

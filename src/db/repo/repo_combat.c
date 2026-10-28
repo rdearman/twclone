@@ -289,17 +289,26 @@ int db_combat_load_ship_full_locked(db_t *db, int ship_id, repo_combat_ship_full
     db_error_t err = {0};
     char lock_clause[128] = { 0 };
     char sql_tmpl[1024];
+    if (sql_for_update_of (db, "s, st, op", lock_clause,
+			   sizeof (lock_clause)) != 0)
+      return -1;
     if (skip_locked)
-      strncpy (lock_clause, sql_for_update_skip_locked (db),
-	       sizeof (lock_clause) - 1);
-    else
-      sql_for_update_of (db, "s, st, op", lock_clause, sizeof (lock_clause));
+      {
+	size_t clause_len = strlen (lock_clause);
+	int written = snprintf (lock_clause + clause_len,
+				sizeof (lock_clause) - clause_len,
+				" SKIP LOCKED");
+	if (written < 0
+	    || (size_t) written >= sizeof (lock_clause) - clause_len)
+	  return -1;
+      }
 
     snprintf (sql_tmpl, sizeof (sql_tmpl),
 	      "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1}%s",
 	      lock_clause);
     char sql[1024];
-    sql_build (db, sql_tmpl, sql, sizeof (sql));
+    if (sql_build (db, sql_tmpl, sql, sizeof (sql)) != 0)
+      return -1;
     if (!db_query (db, sql, (db_bind_t[])
 		   {
 		   db_bind_i64 (ship_id)}, 1, &res, &err))

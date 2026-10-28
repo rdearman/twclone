@@ -1178,16 +1178,21 @@ db_create_podded_status_entry (db_t *db, int pid)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err;
+  db_error_t err = { 0 };
   
   const char *sql_template =
     "INSERT INTO podded_status (player_id, status, podded_count_today, podded_last_reset) VALUES ({1}, 'active', 0, %s);";
 
+  const char *epoch_now = sql_epoch_now (db);
+  if (!epoch_now)
+    return ERR_DB_MISUSE;
+
   char sql_dialect[512];
-  sql_build(db, sql_template, sql_dialect, sizeof sql_dialect);
+  if (sql_build (db, sql_template, sql_dialect, sizeof sql_dialect) != 0)
+    return ERR_DB_QUERY_FAILED;
 
   char sql[512];
-  snprintf(sql, sizeof sql, sql_dialect, sql_now_expr(db));
+  snprintf (sql, sizeof sql, sql_dialect, epoch_now);
 
   if (!db_exec (db, sql, (db_bind_t[]){db_bind_i64 (pid)}, 1, &err))
     {
@@ -1314,22 +1319,23 @@ db_update_player_podded_status (db_t *db,
                                 const char *status,
                                 long long until)
 {
-  (void) until;
   if (!db)
     {
       return ERR_DB_CLOSED;
     }
-  db_error_t err;
+  db_error_t err = { 0 };
 
 
-  const char *sql_template = "UPDATE podded_status SET status = {1}, last_updated = CURRENT_TIMESTAMP WHERE player_id = {2};";
+  const char *sql_template = "UPDATE podded_status SET status = {1}, big_sleep_until = NULLIF({2}, 0) WHERE player_id = {3};";
   char sql[256];
-  sql_build(db, sql_template, sql, sizeof sql);
+  if (sql_build (db, sql_template, sql, sizeof sql) != 0)
+    return ERR_DB_QUERY_FAILED;
 
   if (!db_exec (db,
                 sql,
-                (db_bind_t[]){db_bind_text (status), db_bind_i64 (pid)},
-                2,
+                (db_bind_t[]){db_bind_text (status), db_bind_i64 (until),
+                  db_bind_i64 (pid)},
+                3,
                 &err))
     {
       return err.code;
@@ -3492,8 +3498,9 @@ db_planet_get_goods_json (db_t *db, int pid, json_t **out)
     "FROM planet_goods pg LEFT JOIN entity_stock es ON es.entity_type = 'planet' "
     "AND es.entity_id = pg.planet_id AND es.commodity_code = pg.commodity "
     "WHERE pg.planet_id = {1} ORDER BY pg.commodity;";
-  char sql[256];
-  sql_build(db, sql_template, sql, sizeof sql);
+  char sql[512];
+  if (sql_build (db, sql_template, sql, sizeof sql) != 0)
+    goto cleanup;
 
   if (db_query (db, sql,
                 (db_bind_t[]){db_bind_i64 (pid)}, 1, &res, &err))

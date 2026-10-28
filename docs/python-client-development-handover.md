@@ -709,6 +709,16 @@ tested against a running server this session — see §9):
 
 ## 8. Menu and debug policy
 
+> **Current menu policy (2026-09-27):** the earlier Slice 1 and Slice 5
+> notes below are historical. `move.autopilot.control` is registered and
+> exposed in normal play; the Python handler reports server-confirmed state
+> or a refusal. Exchange listing and portfolio use the canonical
+> `equity.exchange.list` and `equity.portfolio.list` commands in normal play.
+> CEO dividend declaration is available to CEOs in normal play. The
+> unsupported `game.get_clock` menu item has been removed. Automatic
+> reconnect remains unimplemented; a lost connection ends the session
+> cleanly.
+
 * **`show_if_ctx` mechanism** — each menu option in `menus.json` may carry
   a `show_if_ctx: ["flag1", "flag2", ...]` list; `client.py`'s
   `_option_visible_with_ctx(ctx, opt)` (paired with the existing
@@ -1174,3 +1184,18 @@ string) before relying on them.
 * **Tests/result:** full suite `112 passed`; scoped `git diff --check` clean.
 * **Remaining issues:** live-server smoke testing remains unavailable;
   interactive input remains line-oriented.
+
+### 2026-09-27 — V2 client readiness menu and autopilot pass
+* **Files changed:** `client/python_client/menus.json`,
+  `client/python_client/client.py`, `client/python_client/tests/test_menu_gating.py`,
+  `client/python_client/tests/test_corporation_equity.py`, and
+  `client/python_client/tests/test_autopilot_controls.py`.
+* **Behaviour delivered:** normal menus now expose registered autopilot
+  controls and canonical equity exchange/portfolio commands; the CEO dividend
+  action is available outside debug mode; the unsupported game clock action
+  was removed. Autopilot responses now update client state and explicitly
+  distinguish confirmed controls from server refusals.
+* **Tests:** see `docs/V2_CLIENT_READINESS.md` for the readiness audit and
+  final client test run.
+* **Remaining issues:** Python session reconnect and several server-owned
+  handler/protocol gaps remain dependencies; no server contract was changed.

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include "../../password_hash.h"
 
 int repo_cmds_get_port_name(db_t *db, int32_t port_id, char *name_out, size_t name_sz)
 {
@@ -32,7 +33,7 @@ int repo_cmds_get_port_name(db_t *db, int32_t port_id, char *name_out, size_t na
 int repo_cmds_get_login_info(db_t *db, const char *username, int32_t *player_id_out, char *pass_out, size_t pass_sz, bool *is_npc_out)
 {
     /* SQL_VERBATIM: Q2 */
-    const char *sql = "SELECT player_id, passwd, is_npc FROM players WHERE name = {1};";
+    const char *sql = "SELECT player_id, is_npc FROM players WHERE name = {1};";
     char sql_converted[256];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
@@ -41,12 +42,8 @@ int repo_cmds_get_login_info(db_t *db, const char *username, int32_t *player_id_
     if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_text(username) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (player_id_out) *player_id_out = db_res_col_i32(res, 0, &err);
-            const char *pw = db_res_col_text(res, 1, &err);
-            if (pw && pass_out) {
-                strncpy(pass_out, pw, pass_sz - 1);
-                pass_out[pass_sz - 1] = '\0';
-            }
-            if (is_npc_out) *is_npc_out = (bool)db_res_col_i32(res, 2, &err);
+            if (pass_out && pass_sz) pass_out[0] = '\0';
+            if (is_npc_out) *is_npc_out = (bool)db_res_col_i32(res, 1, &err);
             db_res_finalize(res);
             return 0;
         }
@@ -58,6 +55,9 @@ int repo_cmds_get_login_info(db_t *db, const char *username, int32_t *player_id_
 
 int repo_cmds_register_player(db_t *db, const char *user, const char *pass, const char *ship_name, int64_t *player_id_out)
 {
+    char password_hash[TW_PASSWORD_HASH_MAX];
+    if (!pass || tw_password_hash(pass, password_hash, sizeof password_hash) != 0)
+        return -1;
     /* SQL_VERBATIM: Q3 */
     const char *sql_reg = "SELECT register_player({1}, {2}, {3})";
     char sql_register[256];
@@ -67,14 +67,16 @@ int repo_cmds_register_player(db_t *db, const char *user, const char *pass, cons
     if (!db_exec_insert_id(db,
                            sql_register,
                            (db_bind_t[]){ db_bind_text(user),
-                                         db_bind_text(pass),
+                                         db_bind_text(password_hash),
                                          db_bind_text(ship_name) },
                            3,
                            NULL,
                            player_id_out,
                            &err)) {
+        memset(password_hash, 0, sizeof password_hash);
         return err.code;
     }
+    memset(password_hash, 0, sizeof password_hash);
     return 0;
 }
 

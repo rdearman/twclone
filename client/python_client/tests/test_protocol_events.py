@@ -74,6 +74,27 @@ def test_rpc_reply_reaches_caller_with_interleaved_events():
     assert resp["data"]["value"] == 42
 
 
+def test_system_notice_v1_is_classified_and_deduplicated_by_notice_id():
+    conn, peer = _make_conn_pair()
+
+    def server():
+        req = json.loads(peer.readline())
+        notice = {"type": "system.notice_v1", "data": {"id": 88, "title": "T", "body": "B"}}
+        _send_line(peer, notice)
+        _send_line(peer, notice)
+        _send_line(peer, {"reply_to": req["id"], "status": "ok", "data": {}})
+
+    t = threading.Thread(target=server, daemon=True)
+    t.start()
+    assert conn.rpc("player.my_info", {}).get("status") == "ok"
+    t.join(timeout=2)
+
+    events = conn.events.drain()
+    assert len(events) == 1
+    assert events[0]["category"] == "system"
+    assert events[0]["type"] == "system.notice_v1"
+
+
 def test_event_order_is_preserved():
     conn, peer = _make_conn_pair()
 

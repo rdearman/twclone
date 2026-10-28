@@ -24,6 +24,10 @@ jsonp_cleanup (json_t **p)
 #include "common.h"
 void iso8601_utc (char out[32]);	// if you use timestamps in envelopes
 const char *next_msg_id (void);	// if you auto-number messages
+char *gen_uuid_v4 (void); /* Caller frees the canonical UUID string. */
+void send_player_event (client_ctx_t *ctx, const char *event_id,
+                        const char *event_type, json_t *data,
+                        const char *topic);
 
 
 void send_response_ok_borrow (client_ctx_t * ctx,
@@ -68,7 +72,7 @@ void send_enveloped_refused (int fd, json_t * req, int code, const char *msg,
 
 /* Context-aware wrappers */
 void send_response_error (client_ctx_t * ctx,
-			  json_t * req, int code, const char *msg);
+                          json_t * req, int code, const char *msg);
 void send_response_refused (client_ctx_t * ctx,
 			    json_t * req,
 			    int code, const char *msg, json_t * data_opt);

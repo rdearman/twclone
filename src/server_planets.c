@@ -21,6 +21,7 @@
 #include "db/repo/repo_commodities.h"
 #include "db/repo/repo_ships.h"
 #include "db/repo/repo_citadel.h"
+#include "db/repo/repo_corporation.h"
 #include "game_db.h"
 #include "errors.h"
 #include "server_cmds.h"
@@ -149,11 +150,19 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   /* FedSpace enforcement: hard-punish aggression in sectors 1–10 */
   if (current_sector >= 1 && current_sector <= 10)
     {
-      if (fedspace_enforce_no_aggression_hard (ctx, ship_id, ctx->player_id,
-                                                "combat.attack_planet"))
+      int enforcement_rc =
+        fedspace_enforce_no_aggression_hard (ctx, ship_id, ctx->player_id,
+                                              "combat.attack_planet");
+      if (enforcement_rc == 1)
         {
           send_response_error (ctx, root, ERR_PERMISSION_DENIED,
                                "Captain Z intervenes: aggression in FedSpace is forbidden.");
+          return 0;
+        }
+      if (enforcement_rc < 0)
+        {
+          send_response_error (ctx, root, -enforcement_rc,
+                               "Captain Z enforcement failed; no changes were committed.");
           return 0;
         }
     }
@@ -474,7 +483,65 @@ cmd_planet_info (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
   json_t *data = json_object_get (root, "data");
-  int pid = (int) json_integer_value (json_object_get (data, "planet_id"));
+  json_t *planet_value = json_is_object (data)
+    ? json_object_get (data, "planet_id") : NULL;
+  if (ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Not authenticated");
+      return 0;
+    }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "Database connection failed");
+      return 0;
+    }
+  if (!json_is_integer (planet_value) || json_integer_value (planet_value) <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Missing or invalid planet_id");
+      return 0;
+    }
+  int pid = (int) json_integer_value (planet_value);
+
+  int planet_sector = 0;
+  int owner_id = 0;
+  char *owner_type = NULL;
+  if (db_planets_get_land_info (db, pid, &planet_sector, &owner_id,
+                                &owner_type) != 0)
+    {
+      free (owner_type);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Planet not found");
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  int landed_planet = 0;
+  bool landed = ship_id > 0
+    && repo_citadel_get_onplanet (db, ship_id, &landed_planet) == 0
+    && landed_planet == pid;
+  bool authorized = landed;
+  if (!authorized && owner_type && strcmp (owner_type, "player") == 0
+      && owner_id == ctx->player_id)
+    authorized = true;
+  if (!authorized && owner_type
+      && (strcmp (owner_type, "corp") == 0
+          || strcmp (owner_type, "corporation") == 0)
+      && owner_id > 0)
+    {
+      char role[64] = {0};
+      authorized = repo_corp_check_member_role (db, owner_id, ctx->player_id,
+                                                 role, sizeof role) == 0;
+    }
+  free (owner_type);
+  (void) planet_sector;
+  if (!authorized)
+    {
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Planet details require landing or ownership authorization");
+      return 0;
+    }
+
   json_t *info = NULL;
   if (db_planet_get_details_json (db, pid, &info) == 0)
     {

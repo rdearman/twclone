@@ -6,7 +6,10 @@ from pathlib import Path
 AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_PLAYER_DIR))
 
-from main import advance_completed_goals, is_goal_complete, process_responses  # noqa: E402
+from main import (advance_completed_goals, align_command_idempotency,
+                  build_registration_command, is_goal_complete,
+                  process_responses)  # noqa: E402
+from planner import Planner  # noqa: E402
 from state_manager import StateManager  # noqa: E402
 
 
@@ -76,6 +79,54 @@ def test_pending_command_timeout_removes_only_expired_request(tmp_path):
         ("old", {"command": "trade.buy"})
     ]
     assert manager.get_pending_command("new") == {"command": "sector.info"}
+
+
+def test_authentication_retries_respect_failure_backoff():
+    class Manager:
+        def get(self, key, default=None):
+            return default
+
+    class Policy:
+        epsilon = 0.1
+
+    planner = Planner(Manager(), None, Policy(), {})
+    assert not planner._is_command_ready(
+        "auth.login", {"auth.login": {"next_retry_time": time.time() + 60}}
+    )
+    assert planner._is_command_ready("auth.login", {})
+
+
+def test_explicit_registration_uses_public_auth_register_envelope():
+    command = build_registration_command({
+        "player_username": "ai_qa_bot_2",
+        "player_password": "private-test-credential",
+        "client_version": "ai-test",
+    }, "0123456789abcdef")
+
+    assert command["command"] == "auth.register"
+    assert command["id"] == "c-01234567"
+    assert command["data"]["username"] == "ai_qa_bot_2"
+    assert command["data"]["passwd"] == "private-test-credential"
+    assert command["meta"]["idempotency_key"] == "0123456789abcdef"
+
+
+def test_trade_command_reuses_payload_idempotency_key_in_envelope():
+    payload_key = "planner-generated-key"
+    data = {"port_id": 10, "idempotency_key": payload_key}
+
+    envelope_key = align_command_idempotency("trade.buy", data, "new-envelope-key")
+
+    assert envelope_key == payload_key
+    assert data["idempotency_key"] == envelope_key
+
+
+def test_trade_command_adds_matching_idempotency_key_when_missing():
+    data = {"port_id": 10}
+
+    envelope_key = align_command_idempotency("trade.sell", data, "generated-key")
+
+    assert envelope_key == "generated-key"
+    assert data["idempotency_key"] == envelope_key
 
 
 def test_atomic_state_save_keeps_previous_state_when_serialization_fails(tmp_path):

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../server_log.h"
+#include "../../password_hash.h"
 
 int repo_auth_get_player_type_flags(db_t *db, int player_id, int *type_out, int *flags_out) {
     db_res_t *res = NULL;
@@ -196,13 +197,20 @@ int repo_auth_upsert_system_sub(db_t *db, int player_id) {
 
 int repo_auth_register_player(db_t *db, const char *name, const char *pass, const char *ship_name, int spawn_sid, int64_t *player_id_out, db_error_t *err_out) {
     db_res_t *res = NULL;
+    char password_hash[TW_PASSWORD_HASH_MAX];
+    if (!pass || tw_password_hash(pass, password_hash, sizeof password_hash) != 0) {
+        if (err_out) err_out->code = -1;
+        return -1;
+    }
     /* SQL_VERBATIM: Q10 */
     const char *q10 = "SELECT register_player({1}, {2}, {3}, false, {4});";
     char sql[512]; sql_build(db, q10, sql, sizeof(sql));
 
-    if (!db_query(db, sql, (db_bind_t[]){db_bind_text(name), db_bind_text(pass), db_bind_text(ship_name), db_bind_i32(spawn_sid)}, 4, &res, err_out)) {
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_text(name), db_bind_text(password_hash), db_bind_text(ship_name), db_bind_i32(spawn_sid)}, 4, &res, err_out)) {
+        memset(password_hash, 0, sizeof password_hash);
         goto cleanup;
     }
+    memset(password_hash, 0, sizeof password_hash);
 
     if (!db_res_step(res, err_out)) {
         goto cleanup;
@@ -299,9 +307,12 @@ int repo_auth_verify_password(db_t *db, int player_id, const char *password, int
     *valid_out = 0;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         const char *db_pass = db_res_col_text(res, 0, &err);
-        if (db_pass && strcmp(db_pass, password) == 0) {
-            *valid_out = 1;
+        int verify_rc = db_pass ? tw_password_verify(db_pass, password) : 0;
+        if (verify_rc < 0) {
+            db_res_finalize(res);
+            return -1;
         }
+        *valid_out = verify_rc;
         db_res_finalize(res);
         return 0;
     }
@@ -310,10 +321,17 @@ int repo_auth_verify_password(db_t *db, int player_id, const char *password, int
 }
 
 int repo_auth_update_password(db_t *db, int player_id, const char *new_password) {
+    char password_hash[TW_PASSWORD_HASH_MAX];
+    if (!new_password || tw_password_hash(new_password, password_hash, sizeof password_hash) != 0)
+        return -1;
     db_error_t err;
     /* SQL_VERBATIM: Q16 */
     const char *q16 = "UPDATE players SET passwd = {1} WHERE player_id = {2};";
     char sql[512]; sql_build(db, q16, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(new_password), db_bind_i64(player_id) }, 2, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(password_hash), db_bind_i64(player_id) }, 2, &err)) {
+        memset(password_hash, 0, sizeof password_hash);
+        return err.code;
+    }
+    memset(password_hash, 0, sizeof password_hash);
     return 0;
 }

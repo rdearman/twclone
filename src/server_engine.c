@@ -362,72 +362,6 @@ engine_build_command_push (const char *cmd_type,
 }
 
 
-static int
-engine_demo_push (s2s_conn_t *c)
-{
-  /* build the command payload */
-  json_t *cmdpl = json_object ();
-  json_object_set_new (cmdpl, "cmd_type", json_string ("notice.publish"));
-  json_object_set_new (cmdpl, "idem_key", json_string ("player:42:hello:001"));	// keep identical to test idempotency
-  json_object_set_new (cmdpl, "correlation_id", json_string ("demo-001"));
-  json_object_set_new (cmdpl, "priority", json_integer (100));
-
-
-  json_t *payload = json_object ();
-
-
-  json_object_set_new (payload, "scope", json_string ("player"));
-  json_object_set_new (payload, "player_id", json_integer (42));
-  json_object_set_new (payload, "message", json_string ("Hello captain!"));
-  json_object_set_new (payload, "ttl_seconds", json_integer (3600));
-  json_object_set_new (cmdpl, "payload", payload);
-  json_t *env = s2s_make_env ("s2s.command.push", "engine", "server", cmdpl);
-
-
-  json_decref (cmdpl);
-  int rc = s2s_send_env (c, env, 3000);
-
-
-  json_decref (env);
-  LOGI ("command.push send rc=%d\n", rc);
-  // LOGE( "[engine] command.push send rc=%d\n", rc);
-  if (rc != 0)
-    {
-      return rc;
-    }
-  json_t *resp = NULL;
-
-
-  rc = s2s_recv_env (c, &resp, 3000);
-  LOGI ("command.push recv rc=%d\n", rc);
-  // LOGE( "[engine] command.push recv rc=%d\n", rc);
-  if (rc == 0 && resp)
-    {
-      const char *ty = s2s_env_type (resp);
-
-
-      if (ty && strcasecmp (ty, "s2s.ack") == 0)
-	{
-	  json_t *ackpl = s2s_env_payload (resp);
-	  json_t *dup = json_object_get (ackpl, "duplicate");
-
-
-	  LOGW ("ack duplicate=%s\n",
-		(dup && json_is_true (dup)) ? "true" : "false");
-	  // LOGE( "[engine] ack duplicate=%s\n",
-	  // (dup && json_is_true (dup)) ? "true" : "false");
-	}
-      else
-	{
-	  LOGE ("got non-ack (%s)\n", ty ? ty : "null");
-	  // LOGE( "[engine] got non-ack (%s)\n", ty ? ty : "null");
-	}
-      json_decref (resp);
-    }
-  return rc;
-}
-
-
 // Helper to calculate illegal alignment delta (from design brief)
 static int
 h_compute_illegal_alignment_delta (int player_alignment,
@@ -1004,9 +938,6 @@ engine_main_loop (int shutdown_fd)
 	}
       json_decref (msg);
     }
-  LOGI ("[engine] Running Smoke Test\n");
-  (void) engine_demo_push (conn);
-  LOGI ("[engine] Running Smoke Test\n");
   static time_t last_metrics = 0;
   static time_t last_engine_tick = 0;
   static time_t last_cmd_tick_ms = 0;

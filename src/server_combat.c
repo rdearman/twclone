@@ -71,9 +71,8 @@ iss_summon (int sector_id, int player_id)
  * Central enforcement gate for aggression in FedSpace (sectors 1–10).
  * If attacker is in FedSpace, immediately destroy attacker's ship and pod attacker.
  * 
- * Returns:
- *   1 if punishment was applied (FedSpace violation detected and handled)
- *   0 if no violation (not in FedSpace, or error)
+ * Returns 1 if punishment was applied, 0 if no violation, or a negative
+ * database error code if the complete punishment could not be committed.
  */
 int
 fedspace_enforce_no_aggression_hard (client_ctx_t *ctx, int attacker_ship_id,
@@ -89,7 +88,7 @@ fedspace_enforce_no_aggression_hard (client_ctx_t *ctx, int attacker_ship_id,
   /* CAPTAIN Z INTERVENTION: Attacker in FedSpace initiating aggression */
   db_t *db = game_db_get_handle ();
   if (!db)
-    return 0;
+    return -ERR_DB_CLOSED;
 
   LOGI ("CAPTAIN Z: FedSpace aggression detected! Player %d in sector %d (%s). "
         "Destroying ship %d and podding player.",
@@ -97,21 +96,42 @@ fedspace_enforce_no_aggression_hard (client_ctx_t *ctx, int attacker_ship_id,
 
   db_error_t err;
   db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    {
+      LOGE ("Captain Z: Could not begin enforcement transaction: %s",
+            err.message);
+      return -ERR_DB_TX;
+    }
 
   /* 1. Destroy attacker's ship using existing DB primitive */
   if (db_destroy_ship (db, attacker_player_id, attacker_ship_id) != 0)
     {
       LOGE ("Failed to destroy attacker ship %d", attacker_ship_id);
+      db_tx_rollback (db, NULL);
+      return -ERR_DB_EXEC_FAILED;
     }
 
   /* 2. Pod attacker using existing DB primitive */
   if (db_create_podded_status_entry (db, attacker_player_id) != 0)
     {
-      LOGD ("Podded entry already exists for player %d", attacker_player_id);
+      LOGE ("Failed to create podded status for player %d",
+            attacker_player_id);
+      db_tx_rollback (db, NULL);
+      return -ERR_DB_EXEC_FAILED;
     }
   if (db_update_player_podded_status (db, attacker_player_id, "active", 0) != 0)
     {
       LOGE ("Failed to update podded status for player %d", attacker_player_id);
+      db_tx_rollback (db, NULL);
+      return -ERR_DB_EXEC_FAILED;
+    }
+
+  if (!db_tx_commit (db, &err))
+    {
+      LOGE ("Captain Z: Could not commit enforcement transaction: %s",
+            err.message);
+      db_tx_rollback (db, NULL);
+      return -ERR_DB_TX;
     }
 
   /* 3. Emit event: Captain Z intervention message */
@@ -862,32 +882,104 @@ int
 handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
 {
   int target_id = 0;
-  json_get_int_flexible (data, "target_ship_id", &target_id);
+  if (!json_get_int_flexible (data, "target_ship_id", &target_id)
+      || target_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD,
+                           "Missing required field: target_ship_id");
+      return 0;
+    }
   int attacker_id = h_get_active_ship_id (db, ctx->player_id);
   if (attacker_id <= 0)
-    return 0;
+    {
+      send_response_error (ctx, root, ERR_NO_ACTIVE_SHIP,
+                           "No active ship found.");
+      return 0;
+    }
 
   /* FedSpace enforcement: hard-punish aggression in sectors 1–10 */
-  if (fedspace_enforce_no_aggression_hard (ctx, attacker_id, ctx->player_id,
-                                            "ship.attack"))
+  int enforcement_rc =
+    fedspace_enforce_no_aggression_hard (ctx, attacker_id, ctx->player_id,
+                                          "ship.attack");
+  if (enforcement_rc == 1)
     {
       send_response_error (ctx, root, ERR_PERMISSION_DENIED,
                            "Captain Z intervenes: aggression in FedSpace is forbidden.");
       return 0;
     }
+  if (enforcement_rc < 0)
+    {
+      send_response_error (ctx, root, -enforcement_rc,
+                           "Captain Z enforcement failed; no changes were committed.");
+      return 0;
+    }
 
   db_error_t err;
   db_error_clear (&err);
-  db_tx_begin (db, DB_TX_DEFAULT, &err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    {
+      LOGE ("combat.attack: Could not begin transaction: %s", err.message);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin combat transaction");
+      return 0;
+    }
+
   combat_ship_t att = { 0 }, def = { 0 };
-  load_ship_combat_stats_locked (db, attacker_id, &att, true);
-  load_ship_combat_stats_locked (db, target_id, &def, true);
+  int rc = load_ship_combat_stats_locked (db, attacker_id, &att, true);
+  if (rc != 0)
+    {
+      LOGE ("combat.attack: Failed to load attacker ship %d (rc=%d)",
+            attacker_id, rc);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Failed to load attacker combat state");
+      return 0;
+    }
+
+  rc = load_ship_combat_stats_locked (db, target_id, &def, true);
+  if (rc != 0)
+    {
+      LOGE ("combat.attack: Failed to load target ship %d (rc=%d)",
+            target_id, rc);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Failed to load target combat state");
+      return 0;
+    }
+
   int s_lost = 0, h_lost = 0;
   apply_combat_damage (&def, 10, &s_lost, &h_lost);
-  persist_ship_damage (db, &def, 0);
-  db_tx_commit (db, &err);
+  rc = persist_ship_damage (db, &def, 0);
+  if (rc != 0)
+    {
+      LOGE ("combat.attack: Failed to persist target ship %d damage (rc=%d)",
+            target_id, rc);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_EXEC_FAILED,
+                           "Failed to persist combat damage");
+      return 0;
+    }
+
   json_t *resp = json_object ();
-  json_object_set_new (resp, "success", json_true ());
+  if (!resp || json_object_set_new (resp, "success", json_true ()) != 0)
+    {
+      json_decref (resp);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_NOMEM,
+                           "Could not build combat response");
+      return 0;
+    }
+
+  if (!db_tx_commit (db, &err))
+    {
+      LOGE ("combat.attack: Could not commit transaction: %s", err.message);
+      db_tx_rollback (db, NULL);
+      json_decref (resp);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not commit combat transaction");
+      return 0;
+    }
+
   send_response_ok_take (ctx, root, "combat.attack.result", &resp);
   return 0;
 }
@@ -1012,7 +1104,12 @@ server_combat_apply_environmental_hazards (db_t *db, client_ctx_t *ctx,
       return 0;
     }
 
-  json_t *results = json_array ();
+  json_t *results = report && *report ? *report : json_array ();
+  if (!results)
+    {
+      json_decref (hazards);
+      return 0;
+    }
   int destroyed = 0;
   size_t index;
   json_t *hazard;

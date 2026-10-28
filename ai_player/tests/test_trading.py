@@ -156,3 +156,104 @@ def test_stale_quotes_are_not_used_for_purchases_or_routes():
         "port_info_by_sector": {"2": {"port_id": 202}},
         "price_cache": {"202": {"sell": {"ORE": 150}, "quoted_at": {"ORE": old}}},
     }) is None
+
+
+def test_empty_inspected_port_completes_survey_and_never_quotes_unadvertised_goods():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 1,
+        "sector_data": {"1": {"has_port": True}},
+        "port_info_by_sector": {"1": {"port_id": 101, "commodities": []}},
+        "price_cache": {},
+        "player_info": {"player": {"alignment": 0}},
+    }
+
+    assert planner._survey_complete(state) is True
+    # Repeated planner ticks against unchanged empty-port state must never
+    # produce another quote request (the live defect emitted 163 in 120s).
+    assert all(
+        planner._generate_required_field("commodity", "trade.quote", state) is None
+        for _ in range(163)
+    )
+
+
+def test_zero_price_quotes_complete_market_survey_without_repeat_requests():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 1,
+        "sector_data": {"1": {"has_port": True}},
+        "port_info_by_sector": {"1": {"port_id": 101, "commodities": [{"commodity": "ORE"}]}},
+        "price_cache": {"101": {
+            "buy": {"ORE": 0.0}, "sell": {"ORE": 0.0},
+            "quoted_at": {"ORE": time.time()},
+        }},
+        "player_info": {"player": {"alignment": 0}},
+    }
+
+    assert planner._survey_complete(state) is True
+    assert planner._generate_required_field("commodity", "trade.quote", state) is None
+
+
+def test_unavailable_quote_prices_are_not_requested_repeatedly():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 1,
+        "sector_data": {"1": {"has_port": True}},
+        "port_info_by_sector": {"1": {"port_id": 101, "commodities": [{"commodity": "ORE"}]}},
+        "price_cache": {"101": {
+            "buy": {"ORE": None}, "sell": {"ORE": None},
+            "quoted_at": {"ORE": time.time()},
+        }},
+        "player_info": {"player": {"alignment": 0}},
+    }
+
+    assert planner._survey_complete(state) is True
+    assert planner._generate_required_field("commodity", "trade.quote", state) is None
+
+
+def test_unprofitable_completed_market_resumes_navigation():
+    planner = make_planner()
+    planner.state_manager.get.side_effect = lambda key, default=None: default
+    planner.state_manager.set = MagicMock()
+    planner.bandit_policy = MagicMock(epsilon=0.0)
+    planner.bandit_policy.choose_action.return_value = "move.warp"
+    planner._build_payload = lambda command, _state: {"to_sector_id": 2} if command == "move.warp" else None
+    state = {
+        "player_location_sector": 1,
+        "sector_data": {"1": {"has_port": True, "adjacent": [2], "_last_refreshed": time.time()}},
+        "port_info_by_sector": {"1": {"port_id": 101, "commodities": [{"commodity": "ORE"}]}},
+        "price_cache": {"101": {
+            "buy": {"ORE": 100}, "sell": {"ORE": 0},
+            "quoted_at": {"ORE": time.time()},
+        }},
+        "ship_info": {"id": 1, "holds": 20, "cargo": []},
+        "player_info": {"player": {"ship_id": 1, "credits": "1000", "turns_remaining": 10}},
+        "command_retry_info": {},
+        "universe_map": {},
+        "recent_sectors": [1],
+    }
+
+    command = planner.get_next_command(state, current_goal="survey: port")
+
+    assert command == {"command": "move.warp", "data": {"to_sector_id": 2}}
+
+
+def test_empty_port_survey_resumes_navigation():
+    planner = make_planner()
+    planner.state_manager.get.side_effect = lambda key, default=None: default
+    planner.state_manager.set = MagicMock()
+    state = {
+        "player_location_sector": 1,
+        "sector_data": {"1": {"has_port": True, "adjacent": [2], "_last_refreshed": time.time()}},
+        "port_info_by_sector": {"1": {"port_id": 101, "commodities": []}},
+        "price_cache": {},
+        "ship_info": {"id": 1, "holds": 20, "cargo": []},
+        "player_info": {"player": {"ship_id": 1, "credits": "1000", "turns_remaining": 10}},
+        "command_retry_info": {},
+        "universe_map": {},
+        "recent_sectors": [1],
+    }
+
+    command = planner.get_next_command(state, current_goal="survey: port")
+
+    assert command == {"command": "move.warp", "data": {"to_sector_id": 2}}

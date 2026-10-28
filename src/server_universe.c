@@ -667,6 +667,14 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
 
   if (db_ports_at_sector_json (db, sector_id, &ports) == 0)
     {
+      /* Port class determines its fixed buy/sell behavior. Do not expose it
+       * through sector scans; clients learn trading details in port context. */
+      size_t index;
+      json_t *port;
+      json_array_foreach (ports, index, port)
+      {
+        json_object_del (port, "type");
+      }
       json_object_set_new (root, "ports", ports ? : json_array ());
     }
   json_t *planets = NULL;
@@ -682,6 +690,27 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
   attach_sector_asset_counts (db, sector_id, root);
   (void) holo;
   return root;
+}
+
+static int
+sector_is_current_or_adjacent (db_t *db, int current_sector, int target_sector)
+{
+  if (!db || current_sector <= 0 || target_sector <= 0)
+    {
+      return 0;
+    }
+  if (current_sector == target_sector)
+    {
+      return 1;
+    }
+
+  int adjacent = 0;
+  if (repo_universe_warp_exists (db, current_sector, target_sector, &adjacent)
+      == 0 && adjacent)
+    {
+      return 1;
+    }
+  return 0;
 }
 
 
@@ -880,6 +909,13 @@ cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_SCHEMA,
 			   "Invalid sector_id");
+      return 0;
+    }
+
+  if (!sector_is_current_or_adjacent (db, ctx->sector_id, sector_id))
+    {
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Sector information is limited to your current or adjacent sectors");
       return 0;
     }
 
@@ -1109,14 +1145,16 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   size_t N = (size_t) max_id + 1;
   unsigned char *avoid = calloc (N, 1);
   unsigned char *seen = calloc (N, 1);
+  unsigned char *known = calloc (N, 1);
   int *prev = malloc (N * sizeof (int));
   int *queue = malloc (N * sizeof (int));
 
 
-  if (!avoid || !seen || !prev || !queue)
+  if (!avoid || !seen || !known || !prev || !queue)
     {
       free (avoid);
       free (seen);
+      free (known);
       free (prev);
       free (queue);
       send_response_error (ctx, root, ERR_NOMEM, "Out of memory");
@@ -1125,6 +1163,43 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   for (size_t i = 0; i < N; ++i)
     {
       prev[i] = -1;
+    }
+
+  /* Pathfinding must not disclose routes through sectors the player has not
+   * discovered. The live sector is known even if an older account lacks a
+   * visit row. */
+  db_res_t *visited_res = repo_players_get_visited_sectors (db, ctx->player_id,
+                                                             &err);
+  if (!visited_res)
+    {
+      free (avoid);
+      free (seen);
+      free (known);
+      free (prev);
+      free (queue);
+      send_response_error (ctx, root, ERR_DB,
+                           "Failed to load discovered sectors");
+      return 0;
+    }
+  while (db_res_step (visited_res, &err))
+    {
+      int visited_sector = db_res_col_i32 (visited_res, 0, &err);
+      if (visited_sector > 0 && visited_sector <= max_id)
+        known[visited_sector] = 1;
+    }
+  db_res_finalize (visited_res);
+  if (ctx->sector_id > 0 && ctx->sector_id <= max_id)
+    known[ctx->sector_id] = 1;
+
+  if (!known[from] || !known[to])
+    {
+      free (avoid);
+      free (seen);
+      free (known);
+      free (prev);
+      free (queue);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Path not found");
+      return 0;
     }
 
   if (from == to)
@@ -1141,6 +1216,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       send_response_ok_take (ctx, root, "move.pathfind", &out);
       free (avoid);
       free (seen);
+      free (known);
       free (prev);
       free (queue);
       return 0;
@@ -1163,6 +1239,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (head);
       free (avoid);
       free (seen);
+      free (known);
       free (prev);
       free (queue);
       send_response_error (ctx,
@@ -1178,23 +1255,25 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 	{
 	  free (to_v);
 	  free (next);
-	  free (head);
-	  free (avoid);
-	  free (seen);
-	  free (prev);
-	  free (queue);
+          free (head);
+          free (avoid);
+          free (seen);
+          free (known);
+          free (prev);
+          free (queue);
 	  send_response_error (ctx, root, ERR_NOMEM, "Out of memory");
 	  return 0;
 	}
 
       if ((res = repo_universe_get_all_warps (db, &err)) == NULL)
 	{
-	  free (to_v);
-	  free (next);
-	  free (head);
-	  free (avoid);
-	  free (seen);
-	  free (prev);
+      free (to_v);
+      free (next);
+      free (head);
+      free (avoid);
+      free (seen);
+      free (known);
+      free (prev);
 	  free (queue);
 	  send_response_error (ctx,
 			       root,
@@ -1242,7 +1321,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 	  int v = to_v[ei];
 
 
-	  if (avoid[v] || seen[v])
+          if (avoid[v] || seen[v] || !known[v])
 	    {
 	      continue;
 	    }
@@ -1269,6 +1348,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
     {
       free (avoid);
       free (seen);
+      free (known);
       free (prev);
       free (queue);
       send_response_error (ctx, root, ERR_NOT_FOUND, "Path not found");
@@ -1295,6 +1375,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       free (stack);
       free (avoid);
       free (seen);
+      free (known);
       free (prev);
       free (queue);
       send_response_error (ctx,
@@ -1321,6 +1402,7 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   free (stack);
   free (avoid);
   free (seen);
+  free (known);
   free (prev);
   free (queue);
   return 0;
@@ -1380,6 +1462,13 @@ cmd_sector_info (client_ctx_t *ctx, int fd, json_t *root, int sid, int pid)
     {
       send_response_error (ctx, root, ERR_DB_CLOSED,
 			   "Database connection failed");
+      return;
+    }
+
+  if (!ctx || !sector_is_current_or_adjacent (db, ctx->sector_id, sid))
+    {
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Sector information is limited to your current or adjacent sectors");
       return;
     }
 

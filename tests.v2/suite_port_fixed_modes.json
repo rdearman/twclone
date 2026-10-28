@@ -1,0 +1,138 @@
+{
+  "name": "Canonical Port Fixed Trade Modes",
+  "version": "2.0.0",
+  "protocol_category": "18_Ports",
+  "description": "Class 1 SBB ORE mode remains fixed as stock changes and trade attempts run",
+  "tests": [
+    {
+      "name": "Setup: Port mode player",
+      "setup": "macro_auth_user",
+      "username": "port_mode_player",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Put class 1 port and player in sector two",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET type = 1, sector_id = 2 WHERE port_id = 2"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Configure SBB to sell ORE and stock it at zero",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM port_trade WHERE port_id = 2 AND commodity = 'ORE'"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed fixed SBB ORE sell mode",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) VALUES (2, 'ORE', 'sell', 5000)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set SBB ORE inventory to zero",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', 2, 'ORE', 0, 100, 0) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 0"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move player and ship into SBB sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 2 WHERE player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move player ship into SBB sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh port mode player's sector",
+      "command": "auth.login",
+      "user": "port_mode_player",
+      "data": { "username": "port_mode_player", "passwd": "password" },
+      "expect": { "status": "ok", "type": "auth.login" },
+      "asserts": [
+        { "path": "data.current_sector", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "SBB does not buy ORE from player when stock is zero",
+      "command": "trade.sell",
+      "user": "port_mode_player",
+      "data": {
+        "sector_id": 2,
+        "port_id": 2,
+        "account": 0,
+        "idempotency_key": "port-mode-zero-stock-*uuid*",
+        "items": [{ "commodity": "ORE", "quantity": 1 }]
+      },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Rig: Add ORE stock without changing SBB mode",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', 2, 'ORE', 100, 100, 0) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 100"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "SBB still does not buy ORE from player after stock changes",
+      "command": "trade.sell",
+      "user": "port_mode_player",
+      "data": {
+        "sector_id": 2,
+        "port_id": 2,
+        "account": 0,
+        "idempotency_key": "port-mode-positive-stock-*uuid*",
+        "items": [{ "commodity": "ORE", "quantity": 1 }]
+      },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "SBB still sells ORE from its inventory",
+      "command": "trade.buy",
+      "user": "port_mode_player",
+      "data": {
+        "sector_id": 2,
+        "port_id": 2,
+        "account": 0,
+        "idempotency_key": "port-mode-buy-ore-*uuid*",
+        "items": [{ "commodity": "ORE", "quantity": 1 }]
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Port transaction did not rewrite canonical SBB mode",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT mode FROM port_trade WHERE port_id = 2 AND commodity = 'ORE'"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "sell" }
+      ]
+    }
+  ]
+}

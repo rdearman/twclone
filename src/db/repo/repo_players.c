@@ -176,12 +176,32 @@ db_res_t* repo_players_get_title_info(db_t *db, int player_id, db_error_t *err) 
 }
 
 int repo_players_send_mail(db_t *db, int sender_id, int recipient_id, const char *subject, const char *message) {
-    db_error_t err;
-    /* Map sender_id 0 to System (1) to satisfy FK constraint */
-    int sid = (sender_id <= 0) ? 1 : sender_id;
+    db_error_t err = {0};
+    int sid = sender_id;
+    if (sid <= 0) {
+        /* Resolve the seeded System account by its stable name, not a sequence ID. */
+        const char *q_system = "SELECT player_id FROM players WHERE lower(name) = lower({1}) LIMIT 1;";
+        char system_sql[256];
+        if (sql_build(db, q_system, system_sql, sizeof(system_sql)) != 0)
+            return -1;
+
+        db_res_t *system_res = NULL;
+        if (!db_query(db, system_sql, (db_bind_t[]){ db_bind_text("System") }, 1,
+                      &system_res, &err))
+            return err.code ? err.code : -1;
+        if (!system_res || !db_res_step(system_res, &err)) {
+            if (system_res) db_res_finalize(system_res);
+            return err.code ? err.code : -1;
+        }
+        sid = db_res_col_i32(system_res, 0, &err);
+        db_res_finalize(system_res);
+        if (err.code || sid <= 0)
+            return err.code ? err.code : -1;
+    }
     /* SQL_VERBATIM: Q15 */
     const char *q15 = "INSERT INTO mail (sender_id, recipient_id, subject, body) VALUES ({1}, {2}, {3}, {4});";
-    char sql[1024]; sql_build(db, q15, sql, sizeof(sql));
+    char sql[1024];
+    if (sql_build(db, q15, sql, sizeof(sql)) != 0) return -1;
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(sid), db_bind_i64(recipient_id), db_bind_text(subject), db_bind_text(message) }, 4, &err)) return err.code;
     return 0;
 }
@@ -459,6 +479,17 @@ int repo_players_record_visit(db_t *db, int player_id, int sector_id) {
         return err.code;
     }
     return 0;
+}
+
+db_res_t *repo_players_get_visited_sectors(db_t *db, int player_id, db_error_t *err) {
+    if (!db || player_id <= 0 || !err) return NULL;
+    const char *q = "SELECT sector_id FROM player_visited_sectors WHERE player_id = {1}";
+    char sql[512];
+    sql_build(db, q, sql, sizeof(sql));
+    db_res_t *res = NULL;
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, err))
+        return NULL;
+    return res;
 }
 
 /* Adjacency list for BFS */

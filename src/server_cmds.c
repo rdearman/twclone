@@ -1,4 +1,5 @@
 #include "db/repo/repo_cmds.h"
+#include "db/repo/repo_auth.h"
 /* src/server_cmds.c */
 #include <string.h>
 #include <strings.h>
@@ -157,26 +158,6 @@ cmd_sys_cluster_seed_illegal_goods (client_ctx_t *ctx, json_t *root)
 }
 
 
-/* Constant-time string compare to reduce timing leakage (simple variant). */
-static int
-ct_str_eq (const char *a, const char *b)
-{
-  size_t la = a ? strlen (a) : 0;
-  size_t lb = b ? strlen (b) : 0;
-  size_t n = (la > lb) ? la : lb;
-  unsigned char diff = (unsigned char) (la ^ lb);
-  for (size_t i = 0; i < n; i++)
-    {
-      unsigned char ca = (i < la) ? (unsigned char) a[i] : 0;
-      unsigned char cb = (i < lb) ? (unsigned char) b[i] : 0;
-
-
-      diff |= (unsigned char) (ca ^ cb);
-    }
-  return diff == 0;
-}
-
-
 int
 play_login (const char *user, const char *pass, int *pid)
 {
@@ -195,17 +176,16 @@ play_login (const char *user, const char *pass, int *pid)
     }
 
   int32_t player_id = 0;
-  char db_pass[256];
   bool is_npc_flag = false;
 
   int rc =
-    repo_cmds_get_login_info (db, user, &player_id, db_pass, sizeof (db_pass),
+    repo_cmds_get_login_info (db, user, &player_id, NULL, 0,
 			      &is_npc_flag);
 
   if (rc == 0)
     {
       LOGD
-	("[play_login] Found user: %s (pid: %d, is_npc: %d). DB hashed pass: [REDACTED]",
+	("[play_login] Found user: %s (pid: %d, is_npc: %d)",
 	 user, (int) player_id, is_npc_flag);
 
       if (is_npc_flag)
@@ -215,15 +195,14 @@ play_login (const char *user, const char *pass, int *pid)
 	  return ERR_IS_NPC;	// Use ERR_IS_NPC from errors.h
 	}
 
-      // TODO: Before comparing, hash the provided 'pass' using the same algorithm as 'db_pass'
-      int cmp_result = ct_str_eq (db_pass, pass);
+      int valid = 0;
+      int verify_rc = repo_auth_verify_password (db, player_id, pass, &valid);
+      if (verify_rc != 0)
+	{
+	  return AUTH_ERR_DB;
+	}
 
-
-      LOGD
-	("[play_login] Comparing DB pass with provided pass (result: %d). Client pass: [REDACTED]",
-	 cmp_result);
-
-      if (cmp_result)
+      if (valid)
 	{
 	  *pid = (int) player_id;
 	  LOGD

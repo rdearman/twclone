@@ -144,13 +144,34 @@ int repo_engine_update_cron_task_schedule(db_t *db, const char *ts_expr1, const 
 
 int repo_engine_ensure_cron_task(db_t *db, const char *name, const char *schedule) {
     db_error_t err;
+    db_error_clear(&err);
+    db_res_t *res = NULL;
+    const char *exists_tmpl = "SELECT 1 FROM cron_tasks WHERE name = {1} LIMIT 1";
+    char exists_sql[256];
+    sql_build(db, exists_tmpl, exists_sql, sizeof(exists_sql));
+    if (!db_query(db, exists_sql, (db_bind_t[]){ db_bind_text(name) }, 1,
+                  &res, &err))
+        return err.code ? err.code : -1;
+    if (db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return 0;
+    }
+    db_res_finalize(res);
+    if (err.code != 0)
+        return err.code;
+
     const char *tmpl = "INSERT INTO cron_tasks (name, schedule, last_run_at, next_due_at, enabled, payload) "
-                       "VALUES ({1}, {2}, NULL, CURRENT_TIMESTAMP, TRUE, NULL) "
-                       "ON CONFLICT (name) DO NOTHING";
+                       "VALUES ({1}, {2}, NULL, CURRENT_TIMESTAMP, TRUE, NULL)";
     char sql[512];
     sql_build(db, tmpl, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_text(schedule) }, 2, &err))
+    if (!db_exec(db, sql,
+                 (db_bind_t[]){ db_bind_text(name), db_bind_text(schedule) },
+                 2, &err)) {
+        /* A concurrent startup may insert the same unique task after SELECT. */
+        if (err.code == ERR_DB_CONSTRAINT)
+            return 0;
         return err.code ? err.code : -1;
+    }
     return 0;
 }
 

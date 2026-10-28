@@ -1,0 +1,44 @@
+{
+  "test_suite_name": "Registration welcome mail uses the System account identity",
+  "description": "Requires a disposable seed with no player 1 and System at another ID.",
+  "tests": [
+    {
+      "name": "Bootstrap System sysop",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Precondition: System is not player 1 and player 1 is absent",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT player_id FROM players WHERE lower(name) = 'system' LIMIT 1) <> 1 AND NOT EXISTS (SELECT 1 FROM players WHERE player_id = 1) THEN 1 ELSE 0 END;"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ],
+      "stop_on_fail": true
+    },
+    {
+      "name": "Register a player against the non-default System ID seed",
+      "setup": "macro_auth_user",
+      "username": "welcome_mail_identity_test",
+      "password": "password"
+    },
+    {
+      "name": "Welcome mail is attributed to the System account",
+      "command": "mail.inbox",
+      "user": "welcome_mail_identity_test",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items.0.sender_name", "op": "==", "value": "System" },
+        {
+          "path": "data.items.0.sender_id",
+          "op": "==",
+          "value": { "sql_int": "SELECT player_id FROM players WHERE lower(name) = 'system' LIMIT 1;" }
+        }
+      ],
+      "stop_on_fail": true
+    }
+  ]
+}

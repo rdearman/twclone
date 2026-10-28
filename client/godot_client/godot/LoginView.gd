@@ -1,6 +1,7 @@
 extends Control
 
 signal login_requested(host: String, port: int, username: String, password: String)
+signal registration_requested(host: String, port: int, username: String, password: String, ship_name: String, ui_locale: String, ui_timezone: String)
 signal profiles_changed(profiles: Array, selected_index: int)
 
 const AssetCatalog = preload("res://AssetCatalog.gd")
@@ -9,8 +10,13 @@ var host_input: LineEdit
 var port_input: LineEdit
 var username_input: LineEdit
 var password_input: LineEdit
+var confirm_password_input: LineEdit
+var ship_name_input: LineEdit
+var ui_locale_input: LineEdit
+var ui_timezone_input: LineEdit
 var status_label: Label
 var connect_button: Button
+var mode_toggle_button: Button
 var profile_selector: OptionButton
 var profile_name_input: LineEdit
 var save_profile_button: Button
@@ -21,6 +27,8 @@ var _profiles: Array[Dictionary] = []
 var _selected_profile_index := -1
 var _editing_profile_index := -1
 var _loading_profile := false
+var _registration_mode := false
+var _registration_fields: VBoxContainer
 
 func _ready() -> void:
 	_build()
@@ -28,8 +36,10 @@ func _ready() -> void:
 func set_status(message: String, busy: bool = false) -> void:
 	status_label.text = message
 	connect_button.disabled = busy
-	connect_button.text = "CONNECTING…" if busy else "CONNECT"
-	for input in [host_input, port_input, username_input, password_input, profile_name_input]:
+	connect_button.text = "WORKING…" if busy else ("CREATE ACCOUNT" if _registration_mode else "CONNECT")
+	mode_toggle_button.disabled = busy
+	mode_toggle_button.text = "PLEASE WAIT" if busy else ("BACK TO LOGIN" if _registration_mode else "CREATE ACCOUNT")
+	for input in [host_input, port_input, username_input, password_input, confirm_password_input, ship_name_input, ui_locale_input, ui_timezone_input, profile_name_input]:
 		input.editable = not busy
 	profile_selector.disabled = busy
 	save_profile_button.disabled = busy
@@ -138,6 +148,20 @@ func _build() -> void:
 	form.add_child(_labeled_field("PORT", port_input))
 	form.add_child(_labeled_field("USERNAME", username_input))
 	form.add_child(_labeled_field("PASSWORD", password_input))
+	confirm_password_input = _field("Confirm password")
+	confirm_password_input.secret = true
+	ship_name_input = _field("Ship name (optional)")
+	ui_locale_input = _field("Locale, e.g. en-GB (optional)")
+	ui_timezone_input = _field("Timezone, e.g. Europe/London (optional)")
+	_registration_fields = VBoxContainer.new()
+	_registration_fields.name = "RegistrationFields"
+	_registration_fields.add_theme_constant_override("separation", 8)
+	_registration_fields.visible = false
+	_registration_fields.add_child(_labeled_field("CONFIRM", confirm_password_input))
+	_registration_fields.add_child(_labeled_field("SHIP NAME", ship_name_input))
+	_registration_fields.add_child(_labeled_field("LOCALE", ui_locale_input))
+	_registration_fields.add_child(_labeled_field("TIMEZONE", ui_timezone_input))
+	form.add_child(_registration_fields)
 	host_input.text_changed.connect(_on_connection_field_changed)
 	port_input.text_changed.connect(_on_connection_field_changed)
 	username_input.text_changed.connect(_on_connection_field_changed)
@@ -149,6 +173,10 @@ func _build() -> void:
 	connect_button.add_theme_stylebox_override("hover", _panel_style(Color(0.05, 0.27, 0.3, 1.0), Color(0.55, 0.94, 0.9, 1.0)))
 	connect_button.pressed.connect(_submit)
 	form.add_child(connect_button)
+	mode_toggle_button = _small_button("CREATE ACCOUNT")
+	mode_toggle_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_toggle_button.pressed.connect(_toggle_registration_mode)
+	form.add_child(mode_toggle_button)
 	form.add_child(_label("Passwords are never saved in server profiles.", 11, Color(0.55, 0.66, 0.7)))
 	status_label = _label("Enter your captain credentials to begin.", 13, Color(0.72, 0.78, 0.8))
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -293,7 +321,29 @@ func _submit() -> void:
 	if host_input.text.strip_edges().is_empty() or port_number < 1 or port_number > 65535 or username_input.text.strip_edges().is_empty() or password_input.text.is_empty():
 		set_status("Enter a server, valid port, captain name, and password.")
 		return
+	if _registration_mode:
+		if password_input.text != confirm_password_input.text:
+			set_status("Registration cancelled: the passwords do not match.")
+			return
+		registration_requested.emit(
+			host_input.text.strip_edges(), port_number, username_input.text.strip_edges(),
+			password_input.text, ship_name_input.text.strip_edges(),
+			ui_locale_input.text.strip_edges(), ui_timezone_input.text.strip_edges())
+		password_input.clear()
+		confirm_password_input.clear()
+		set_status("Creating your account…", true)
+		return
 	login_requested.emit(host_input.text.strip_edges(), port_number, username_input.text.strip_edges(), password_input.text)
+	password_input.clear()
+
+func registration_result(message: String, busy: bool = false) -> void:
+	set_status(message, busy)
+
+func _toggle_registration_mode() -> void:
+	_registration_mode = not _registration_mode
+	_registration_fields.visible = _registration_mode
+	confirm_password_input.clear()
+	set_status("Choose a captain name and enter a password twice." if _registration_mode else "Enter your captain credentials to begin.")
 
 func _label(text: String, size: int, color: Color) -> Label:
 	var label := Label.new()

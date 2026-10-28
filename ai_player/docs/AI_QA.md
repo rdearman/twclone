@@ -1,5 +1,56 @@
 # AI_QA Bot Codebase Summary
 
+## v2.0.0-rc2 live qualification (2026-10-26)
+
+This qualification used the existing QA game server at `127.0.0.1:12349` (game
+PID 3502719, engine PID 3502726) and the approved disposable database
+`twclone_angular_qa_20261026` on `127.0.0.1:55992`, role `rick`. The database
+identity was confirmed with a read-only connection before gameplay. No server
+or database was restarted, and gameplay state was changed only through public
+game commands.
+
+One ordinary QA account, `ai_rc2_qa_35193b2ad4`, was created using the authorized
+public `auth.register` flow. A read-only account check confirmed it was not an
+NPC, had a normal starter ship, and began with 5,000 credits. Its credential
+was kept in a mode-0600 temporary config and is intentionally omitted here.
+
+The AI authenticated through public `auth.login`, retrieved player and ship
+state, explored multiple sectors, inspected discovered ports, and requested
+commodity quotes. The retained redacted QA report contains 47 successful warp
+outcomes, each checked against fresh public `player.my_info` and `ship.info`
+readbacks. The last verified readback recorded sector 652, 5,000 credits, empty
+cargo, and 999,952 turns. Port quotes were inspected, but the existing trader
+strategy did not select a purchase; no buy or sell command was executed. Thus
+navigation and state readback were demonstrated, while purchase, sale, trade
+accounting, and a complete trading goal remain unqualified. No combat was run.
+
+The process restarted and authenticated again successfully once, but no
+controlled in-session disconnect/reconnect test was completed. During the
+qualification PostgreSQL logged a fast shutdown at 20:24:43 UTC. The existing
+game server remained listening but subsequent login attempts returned database
+connection errors. Work stopped without restarting either service. Concurrent
+players were not attempted.
+
+The first live run exposed a session token in a planner DEBUG message. That
+message was changed to redact secrets, console logging now defaults to INFO,
+and the regression suite includes a planner-log redaction check. The earlier
+temporary general log was removed; the retained QA JSONL log passed a scan for
+unredacted credentials and tokens. No gameplay defect was confirmed in the
+verified warp outcomes. The database outage and lack of a completed trade are
+qualification blockers, not reported gameplay defects.
+
+### Follow-up availability check
+
+On the follow-up, `pg_isready -h 127.0.0.1 -p 55992 -d
+twclone_angular_qa_20261026 -U rick` returned `no response` (exit status 2).
+The previously identified server and engine PIDs (3502719/3502726 and
+3540726/3540729) were absent. No service was started, stopped, or modified.
+Live trading, controlled reconnect, and autonomous trade-goal completion could
+not proceed because the QA database dependency was unavailable. The retained
+332-line QA JSONL log was mode 0600 and contained no unredacted password,
+session token, authorization, or secret fields. `pytest -q ai_player/tests`
+passed 49 tests (7 existing datetime deprecation warnings).
+
 This document provides a technical overview of the `ai_player` codebase, designed for experienced developers.
 
 ## 1. Main Entry Point and Control Flow
@@ -237,3 +288,59 @@ The AI_QA bot is an autonomous agent designed to interact with the TWClone game 
 7.  **Testing and Simulation:**
     *   **Unit Tests:** Expand unit test coverage for planner logic, state transitions, and payload builders.
     *   **Simulation Environment:** Develop a local simulation environment to rapidly test and iterate on AI strategies without connecting to the live server.
+# Autonomous QA notes
+
+`BugReporter.report_defect(...)` writes a machine-readable `defect.json` and a
+human-readable `summary.md` for a confirmed gameplay outcome mismatch. Reports
+include AI identity, seed, initial state, command/response/event evidence,
+expected and actual outcomes, reproduction steps, severity, and confidence.
+Callers must exclude normal gameplay refusals (including insufficient credits
+or turns) before reporting a defect. Reports remain local; no GitHub issue is
+created automatically.
+
+QA command and response logs and defect artifacts redact password, session,
+token, authorization, and secret fields. The main runner starts immediately by
+default. Set `startup_stagger_max_seconds` to a positive value only when
+deliberately starting a cohort of clients.
+
+## Local live-play qualification status
+
+The AI code has public-command login, state bootstrap, navigation, port
+surveying, trading, goal tracking, timeout recovery, reconnect handling, and
+saved metrics. Read-only checks confirmed PostgreSQL is listening on
+`127.0.0.1:55992` and accepts connections to `twclone_angular_qa_20261026` as
+role `rick`. The identity query returned that database, role, address, and
+port. The database is the existing Angular QA fixture; it contains 14 players
+and 2,680 sectors.
+
+Two C server processes are present in `/tmp/tw-angular-live-o0a8r3`. PID
+`3412626` (engine PID `3412633`) started at 18:31 and still listens on ports
+1234/4321. Its established PostgreSQL connection is stuck in `CLOSE-WAIT` to
+the old endpoint `127.0.0.1:55891`. PID `3502719` (engine PID `3502726`)
+started at 19:40 after PostgreSQL restarted and listens on 12349/43219. Its
+server and engine have established connections to PostgreSQL at 55992. Both
+were started with `/home/rick/Development/Active/twclone/bin/server` from that
+temporary QA working directory. The checked-in AI config still targets port
+1234; the qualification run used a private temporary config targeting 12349.
+No server was stopped or restarted; the newer server is already connected to
+the intended database, so no restart is needed for AI qualification.
+
+The only `ai_qa%` player is `ai_qa_bot` (player id 4), with NPC flag set,
+ship id 4, sector 1, 5,000 credits, and 999,999 turns. Its ship is a Used
+Scout Marauder with 10 holds and no cargo. The AI connected to the public
+server on port 12349 and sent `auth.login`; the server replied with error 1101,
+`Invalid login`. Server code rejects NPC accounts during login, so this
+account cannot be used as an ordinary player. This is an expected server
+refusal for its current account type, not a gameplay defect. No state or turn
+changes were made, and no account was created. A non-NPC QA account is required
+before navigation, trading, combat, reconnect, or multi-player qualification
+can proceed; account provisioning remains with the server/QA owner.
+
+The earlier `FATAL: password authentication failed for user "rick"` came
+from `psql` defaulting to port 5432 and the operating-system username; it did
+not identify the game server's database. The old server's endpoint mismatch
+is distinct from the current login blocker. The runner's `live_gameplay_audit`
+readbacks remain opt-in and expected refusals are not reported as defects.
+`register_if_missing` also remains opt-in and was disabled for this run. No
+GitHub issue was created. The latest AI regression run passed 48 tests; this
+is not live gameplay evidence.

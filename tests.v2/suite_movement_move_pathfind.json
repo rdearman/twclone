@@ -8,19 +8,16 @@
       "password": "password"
     },
     {
-      "name": "Positive: Pathfind 1 to 10",
+      "name": "Pathfind refuses an unvisited destination",
       "command": "move.pathfind",
-      "data": { "from": 1, "to": 10 },
+      "data": { "from_sector_id": 1, "to_sector_id": 10 },
       "user": "mover_pathfind",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.path.0", "op": "==", "value": 1 }
-      ]
+      "expect": { "status": "error", "error_code": 403 }
     },
     {
       "name": "Negative: Pathfind Missing Auth (Observed: ok)",
       "command": "move.pathfind",
-      "data": { "from": 1, "to": 10 },
+      "data": { "from_sector_id": 1, "to_sector_id": 10 },
       "expect": { "status": "error", "error_code": 401  }
     }
   ]

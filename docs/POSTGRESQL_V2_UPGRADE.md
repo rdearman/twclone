@@ -1,7 +1,9 @@
 # PostgreSQL v2 database upgrade
 
-This guide covers the PostgreSQL schema/data migrations through 114. Run it
-against a restorable backup or disposable clone before production. Stop game
+The PostgreSQL V2 release baseline ends with V2 migration 114 and then
+Argon2id enforcement migration 119. Do not apply V3 migrations 115 or 116 to a
+V2 installation. Run this procedure against a restorable backup or disposable
+clone before production. Stop game
 and engine writes for the migration window, especially while migrations 107,
 108 and 109 update stock, planet balances, and notices; 110 adds typed sector
 environmental hazards, 111 adds ship personalities, 112 adds economy and
@@ -37,6 +39,24 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/112_v2_economy_commerce.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/113_ferengi_trader_configuration.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/114_planet_fighter_production.sql
 ```
+
+Skip `sql/pg/115_v3_xp_tax_persistence.sql` and
+`sql/pg/116_player_event_journal.sql`. V2 taxation configuration is created by
+migration 112; these V3 migrations are not V2 prerequisites.
+
+For existing databases, convert legacy passwords while all application
+sessions are stopped, then enforce the hash-only constraint:
+
+```sh
+python3 tools/migrate_passwords_argon2id.py --dry-run
+python3 tools/migrate_passwords_argon2id.py
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/pg/119_password_hash_enforcement.sql
+```
+
+The converter refuses concurrent database sessions and commits all converted
+rows in one transaction. Back up and rehearse on a disposable restored copy
+first. Do not run these commands against a live database without the separate
+approved password migration operation.
 
 The sequence assumes the existing database has the v2 baseline tables and
 lookup data, including `ships`, `commodities`, `shiptypes`, `ports`,
@@ -77,27 +97,43 @@ safe to replay.
 
 These scripts can be replayed after success. Migrations 100–114 use
 `ON CONFLICT`, `IF NOT EXISTS`, or guarded updates for replay safety. The
-multi-statement PostgreSQL scripts are transaction-wrapped, so `ON_ERROR_STOP`
-causes a failed script to leave its transaction uncommitted. Migration 108
-adds legacy balances to `entity_stock`, then zeros their old locations in the
-same transaction; rerunning after success does not add them again.
+multi-statement PostgreSQL scripts are transaction-wrapped, so
+`ON_ERROR_STOP` causes a failed script to leave its transaction uncommitted.
+Migration 108 adds legacy balances to `entity_stock`, then zeros their old
+locations in the same transaction; rerunning after success does not add them
+again.
 
 ## Fresh installation
 
-For a fresh world, configure `bigbang.json`, build the project, and run
-`./bin/bigbang` from the repository root. Big Bang loads the SQL files in
-numeric filename order, then generates sectors, ports, planets, clusters, and
-warps. It applies migration 107 after cluster generation. The current SQL
-directory therefore applies 100–114 as part of this fresh-install path.
+For a fresh V2 world, build and run Big Bang from the repository using the
+canonical `sql/pg` directory. The default loader applies the complete V2
+schema and migrations through 114, then password enforcement 119. It excludes
+V3 migrations 115 and 116. The normal workflow is:
+
+```sh
+make clean
+make
+./bin/bigbang
+```
+
+`bigbang` uses `sql/pg` by default, sorts selected scripts by numeric prefix
+and filename, and applies migration 107 after cluster generation. Migration
+119 therefore runs after the already hashed fresh-install player seeds and
+before the server starts. Big Bang validates required and unclassified scripts
+before it creates or cleans a database. To explicitly enable V3 migrations
+for V3 development, use `bigbang --include-v3-migrations` or set
+`include_v3_migrations: true` in the local BigBang configuration.
+Before production access, provision and rotate the System and Federation
+Administrator credentials as described in
+[`V2_BOOTSTRAP_ACCOUNT_SECURITY.md`](V2_BOOTSTRAP_ACCOUNT_SECURITY.md).
 
 **Big Bang drops and recreates the `public` schema.** Run it only against a
 new, disposable database. Never use it to upgrade an existing game database.
 Check its output for successful SQL loading and universe validation before
 starting the server or engine.
 
-The repository's fresh-install command is Big Bang's sorted SQL loader plus
-world generation, rather than a separate schema-only command. Keep the
-release's SQL directory intact: the loader discovers every `.sql` file there.
+The canonical `sql/pg` directory is the only SQL source. Do not copy or package
+an alternate migration directory for a normal V2 fresh install.
 
 ## Isolated migration fixtures
 
@@ -119,11 +155,15 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_111_s
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_112_economy_commerce.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_113_ferengi_trader_configuration.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests.v2/test_pg_migration_114_planet_fighter_production.sql
+python3 tests.v2/test_bigbang_sql_selection.py
+python3 tests.v2/test_password_migration_unit.py
 ```
 
-The fixtures validate schema/data behavior and replay safety; they do not
-substitute for a full upgrade rehearsal against a disposable database restored
-from a representative backup.
+The SQL fixtures validate schema/data behavior and replay safety. The BigBang
+selection tests verify the default V2 migration set, explicit V3 opt-in,
+ordering, and fail-closed behavior for missing or unknown scripts. These checks
+do not substitute for a full upgrade rehearsal against a disposable database
+restored from a representative backup.
 
 After seeding, run the COL seed assertion against both an isolated fresh
 database (after 090 and 091) and an isolated upgrade database (after 091):
@@ -277,15 +317,30 @@ INSERT INTO config (key, value, type) VALUES
   ('turnsperday', '500', 'int'), ('startingcredits', '5000', 'int'),
   ('max_total_planets', '300', 'int')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type;
-DO $$
-DECLARE i integer;
-BEGIN
-  FOR i IN 1..32 LOOP
-    PERFORM register_player('qa_fill_' || i, 'qa', 'QA filler ' || i,
-                            FALSE, 1, 2);
-  END LOOP;
-END $$;
 SQL
+
+# Create non-login QA filler accounts through the existing Argon2id fixture
+# helper. The random secrets and encoded hashes remain in process and are not
+# printed or written to the shell history.
+DATABASE_URL="$QA_URL" python3 - <<'PY'
+import os
+import secrets
+
+import psycopg2
+
+from tools.argon2id_passwords import encoded_hash, load_argon2
+
+argon2 = load_argon2()
+with psycopg2.connect(os.environ["DATABASE_URL"]) as connection:
+    with connection.cursor() as cursor:
+        for index in range(1, 33):
+            secret = secrets.token_urlsafe(32).encode("utf-8")
+            password_hash = encoded_hash(argon2, secret)
+            cursor.execute(
+                "SELECT register_player(%s, %s, %s, FALSE, 1, 2)",
+                (f"qa_fill_{index}", password_hash, f"QA filler {index}"),
+            )
+PY
 ```
 
 Use an app config that points only at this test database and set a private

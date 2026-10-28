@@ -12,6 +12,7 @@
 #include <getopt.h>
 #include <jansson.h>
 #include <dirent.h>
+#include <sys/stat.h>
 
 #include "db/db_api.h"
 #include "server_log.h"
@@ -150,7 +151,8 @@ sync_config_to_db (PGconn *c, json_t *jcfg)
   {
     // Skip meta-config keys used only by bigbang
     if (strcmp (key, "admin") == 0 || strcmp (key, "db") == 0 ||
-	strcmp (key, "app") == 0 || strcmp (key, "sql_dir") == 0)
+    strcmp (key, "app") == 0 || strcmp (key, "sql_dir") == 0 ||
+    strcmp (key, "port_seed") == 0)
       {
 	continue;
       }
@@ -235,6 +237,117 @@ compare_sql_files (const void *a, const void *b)
   return strcmp (fa, fb);
 }
 
+typedef struct
+{
+  const char *name;
+  int required;
+} bigbang_sql_script_t;
+
+/* Selection metadata only: sql/pg is the sole source of SQL contents. */
+static const bigbang_sql_script_t k_bigbang_sql_scripts[] = {
+  {"000_tables.sql", 1}, {"005_namegen.sql", 1},
+  {"010_indexes.sql", 1}, {"020_views.sql", 1},
+  {"040_functions.sql", 1}, {"088_generate_tunnels.sql", 1},
+  {"090_seed_lookup.sql", 1}, {"091_seed_essential.sql", 1},
+  {"091_seed_fedspace_warps.sql", 1}, {"092_seed_gameplay.sql", 1},
+  {"094_gameplay_procs.sql", 1}, {"095_player_registration.sql", 1},
+  {"100_init_ship_cargo.sql", 1},
+  {"101_phase4_shiptypes_restrictions.sql", 1},
+  {"102_phase5_porttypes.sql", 1}, {"103_phase6_items_legality.sql", 1},
+  {"104_phase8_port_behaviour.sql", 1},
+  {"105_phase9_dynamic_pricing.sql", 1},
+  {"106_phase9_2_cluster_pressure.sql", 1},
+  {"107_seed_illegal_commodities.sql", 1},
+  {"108_planet_entity_stock.sql", 1},
+  {"109_v2_sector_notices_trade_offers.sql", 1},
+  {"110_sector_environmental_hazards.sql", 1},
+  {"111_ship_personalities.sql", 1},
+  {"112_v2_economy_commerce.sql", 1},
+  {"113_ferengi_trader_configuration.sql", 1},
+  {"114_planet_fighter_production.sql", 1},
+  {"119_password_hash_enforcement.sql", 1}
+};
+
+static int
+bigbang_sql_script_index (const char *name)
+{
+  for (size_t i = 0;
+       i < sizeof k_bigbang_sql_scripts / sizeof k_bigbang_sql_scripts[0];
+       ++i)
+    if (strcmp (name, k_bigbang_sql_scripts[i].name) == 0)
+      return (int) i;
+  return -1;
+}
+
+static int
+validate_sql_directory (const char *sql_dir)
+{
+  DIR *dir = opendir (sql_dir);
+  if (!dir)
+    {
+      fprintf (stderr, "ERROR: cannot open SQL directory '%s': %s\n",
+               sql_dir, strerror (errno));
+      return -1;
+    }
+  int seen[sizeof k_bigbang_sql_scripts / sizeof k_bigbang_sql_scripts[0]] = {0};
+  struct dirent *entry;
+  int rc = 0;
+  while ((entry = readdir (dir)) != NULL)
+    {
+      size_t len = strlen (entry->d_name);
+      if (len < 4 || strcmp (entry->d_name + len - 4, ".sql") != 0)
+        continue;
+      char path[2048];
+      struct stat st;
+      snprintf (path, sizeof path, "%s/%s", sql_dir, entry->d_name);
+      if (stat (path, &st) != 0 || !S_ISREG (st.st_mode))
+        continue;
+      int index = bigbang_sql_script_index (entry->d_name);
+      if (index < 0)
+        {
+          fprintf (stderr, "ERROR: unrecognized SQL script '%s'; explicitly classify this migration before running BigBang.\n",
+                   entry->d_name);
+          rc = -1;
+          break;
+        }
+      seen[index] = 1;
+    }
+  closedir (dir);
+  if (rc != 0)
+    return rc;
+  for (size_t i = 0;
+       i < sizeof k_bigbang_sql_scripts / sizeof k_bigbang_sql_scripts[0];
+       ++i)
+      if (k_bigbang_sql_scripts[i].required && !seen[i])
+      {
+        fprintf (stderr, "ERROR: required V2 SQL script is missing: %s\n",
+                 k_bigbang_sql_scripts[i].name);
+        return -1;
+      }
+    else if (k_bigbang_sql_scripts[i].required)
+      {
+        char path[2048];
+        snprintf (path, sizeof path, "%s/%s", sql_dir,
+                  k_bigbang_sql_scripts[i].name);
+        char *contents = slurp_file (path);
+        if (!contents)
+          {
+            fprintf (stderr, "ERROR: required SQL script is unreadable: %s\n",
+                     k_bigbang_sql_scripts[i].name);
+            return -1;
+          }
+        if (contents[0] == '\0')
+          {
+            fprintf (stderr, "ERROR: required SQL script is empty: %s\n",
+                     k_bigbang_sql_scripts[i].name);
+            free (contents);
+            return -1;
+          }
+        free (contents);
+      }
+  return 0;
+}
+
 
 /* Forward declaration */
 static int apply_file (PGconn * c, const char *path);
@@ -259,6 +372,8 @@ apply_file (PGconn *c, const char *path)
 static int
 load_sql_files_in_order (PGconn *app, const char *sql_dir)
 {
+  if (validate_sql_directory (sql_dir) != 0)
+    return -1;
   DIR *dir = opendir (sql_dir);
   if (!dir)
     {
@@ -274,15 +389,23 @@ load_sql_files_in_order (PGconn *app, const char *sql_dir)
 
   while ((entry = readdir (dir)) != NULL)
     {
-      if (entry->d_type != DT_REG)
+      size_t name_len = strlen (entry->d_name);
+      if (name_len < 4
+          || strcmp (entry->d_name + name_len - 4, ".sql") != 0)
 	{
 	  continue;
 	}
 
-      if (!strstr (entry->d_name, ".sql"))
-	{
-	  continue;
-	}
+      int script_index = bigbang_sql_script_index (entry->d_name);
+      if (script_index < 0)
+        continue;
+      char candidate_path[2048];
+      struct stat candidate_stat;
+      snprintf (candidate_path, sizeof candidate_path, "%s/%s", sql_dir,
+                entry->d_name);
+      if (stat (candidate_path, &candidate_stat) != 0
+          || !S_ISREG (candidate_stat.st_mode))
+        continue;
 
       /* This seed depends on cluster_sectors, created after SQL loading. */
       if (strcmp (entry->d_name, "107_seed_illegal_commodities.sql") == 0)
@@ -681,143 +804,118 @@ ensure_fedspace_exit (PGconn *c, int outer_min, int outer_max)
 }
 
 
-/* Validate and fix universe connectivity. If trapped sectors are found,
-   automatically add warps to escape them. This ensures no sector is unreachable. */
+/* Ensure every sector is reachable by following directed warps from FedSpace.
+   Tunnel generation deliberately creates separate chains; adding one directed
+   bridge at a time preserves their internal layout and makes the whole
+   generated universe accessible without assuming reciprocal warps. */
 static int
 validate_universe_connectivity (PGconn *c)
 {
-  PGresult *r = PQexec (c,
-			"SELECT s.sector_id "
-			"  FROM sectors s "
-			" WHERE s.sector_id > 10 "
-			"   AND NOT EXISTS ("
-			"     SELECT 1 FROM sector_warps "
-			"      WHERE from_sector = s.sector_id"
-			"   ) "
-			" ORDER BY s.sector_id");
-
-  if (!r || PQresultStatus (r) != PGRES_TUPLES_OK)
+  int max_warps = 6;
+  PGresult *cfg = PQexec (c,
+			  "SELECT value FROM config WHERE key = 'maxwarps_per_sector'");
+  if (cfg && PQresultStatus (cfg) == PGRES_TUPLES_OK && PQntuples (cfg) > 0)
+    max_warps = atoi (PQgetvalue (cfg, 0, 0));
+  if (cfg)
+    PQclear (cfg);
+  if (max_warps < 1)
     {
-      fprintf (stderr, "ERROR: Failed to query trapped sectors\n");
-      if (r)
-	{
-	  PQclear (r);
-	}
+      fprintf (stderr, "ERROR: maxwarps_per_sector must be positive\n");
       return -1;
     }
 
-  int trapped_count = PQntuples (r);
-  if (trapped_count > 0)
+  int bridges = 0;
+  for (;;)
     {
-      int fixed_count = 0;
-      
-      /* Get total sector count and max warps per sector */
-      PGresult *max_r = PQexec (c, "SELECT MAX(sector_id) FROM sectors");
-      int max_sector = 2500;
-      if (max_r && PQresultStatus (max_r) != PGRES_FATAL_ERROR)
+      PGresult *stats = PQexec (c,
+				"WITH RECURSIVE reachable(sector_id) AS ("
+				"  SELECT sector_id::bigint FROM sectors WHERE sector_id = 1 "
+				"  UNION "
+				"  SELECT sw.to_sector FROM sector_warps sw "
+				"  JOIN reachable r ON r.sector_id = sw.from_sector"
+				") "
+				"SELECT (SELECT count(*) FROM reachable), "
+				"       (SELECT count(*) FROM sectors)");
+      if (!stats || PQresultStatus (stats) != PGRES_TUPLES_OK
+	  || PQntuples (stats) != 1)
 	{
-	  max_sector = atoi (PQgetvalue (max_r, 0, 0));
-	  PQclear (max_r);
-	}
-      
-      PGresult *cfg_r = PQexec (c, "SELECT value FROM config WHERE key = 'maxwarps_per_sector'");
-      int max_warps = 6;
-      if (cfg_r && PQresultStatus (cfg_r) != PGRES_FATAL_ERROR && PQntuples (cfg_r) > 0)
-	{
-	  max_warps = atoi (PQgetvalue (cfg_r, 0, 0));
-	  PQclear (cfg_r);
-	}
-
-      /* Add warps to each trapped sector */
-      for (int i = 0; i < trapped_count; i++)
-	{
-	  int trapped_sector = atoi (PQgetvalue (r, i, 0));
-	  
-	  /* Try to add a warp to a random sector (retry up to 10 times) */
-	  int added = 0;
-	  for (int attempt = 0; attempt < 10 && !added; attempt++)
-	    {
-	      int target = 11 + (rand () % (max_sector - 10));
-	      if (target == trapped_sector)
-		continue;
-	      
-	      /* Check current warp count for both sectors */
-	      char count_sql[512];
-	      snprintf (count_sql, sizeof (count_sql),
-		       "SELECT "
-		       "  (SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d) as from_count, "
-		       "  (SELECT COUNT(*) FROM sector_warps WHERE from_sector = %d) as to_count;",
-		       trapped_sector, target);
-	      
-	      PGresult *count_r = PQexec (c, count_sql);
-	      int from_count = 0, to_count = 0;
-	      
-	      if (count_r && PQresultStatus (count_r) != PGRES_FATAL_ERROR && PQntuples (count_r) > 0)
-		{
-		  from_count = atoi (PQgetvalue (count_r, 0, 0));
-		  to_count = atoi (PQgetvalue (count_r, 0, 1));
-		  PQclear (count_r);
-		}
-	      
-	      /* Skip if either sector already has max warps */
-	      if (from_count >= max_warps || to_count >= max_warps)
-		continue;
-	      
-	      /* Build SQL to add the warp */
-	      char sql[256];
-	      snprintf (sql, sizeof (sql),
-		       "INSERT INTO sector_warps (from_sector, to_sector) "
-		       "SELECT %d, %d "
-		       "WHERE NOT EXISTS (SELECT 1 FROM sector_warps WHERE from_sector = %d AND to_sector = %d);",
-		       trapped_sector, target, trapped_sector, target);
-	      
-	      PGresult *insert_r = PQexec (c, sql);
-	      if (insert_r && PQresultStatus (insert_r) != PGRES_FATAL_ERROR)
-		{
-		  int affected = atoi (PQcmdTuples (insert_r));
-		  if (affected > 0)
-		    {
-		      added = 1;
-		      fixed_count++;
-		    }
-		  PQclear (insert_r);
-		}
-	    }
-	}
-      
-      fprintf (stderr, "BIGBANG: Fixed %d orphaned sectors\n", fixed_count);
-    }
-
-  PQclear (r);
-  
-  /* Verify fix worked */
-  PGresult *verify_r = PQexec (c,
-			       "SELECT COUNT(*) FROM sectors s "
-			       " WHERE s.sector_id > 10 "
-			       "   AND NOT EXISTS ("
-			       "     SELECT 1 FROM sector_warps "
-			       "      WHERE from_sector = s.sector_id"
-			       "   )");
-  
-  if (verify_r && PQresultStatus (verify_r) != PGRES_FATAL_ERROR)
-    {
-      int remaining_trapped = atoi (PQgetvalue (verify_r, 0, 0));
-      PQclear (verify_r);
-      
-      if (remaining_trapped == 0)
-	{
-	  printf ("BIGBANG: Universe connectivity validation: OK (all sectors have exits)\n");
-	  return 0;
-	}
-      else
-	{
-	  fprintf (stderr, "ERROR: After auto-fix, %d sectors still trapped\n", remaining_trapped);
+	  fprintf (stderr, "ERROR: Failed to calculate directed sector reachability: %s\n",
+		   PQerrorMessage (c));
+	  if (stats)
+	    PQclear (stats);
 	  return -1;
 	}
+
+      int reachable = atoi (PQgetvalue (stats, 0, 0));
+      int total = atoi (PQgetvalue (stats, 0, 1));
+      PQclear (stats);
+      if (total == 0 || reachable == 0)
+	{
+	  fprintf (stderr, "ERROR: FedSpace sector 1 is missing; no universe root exists\n");
+	  return -1;
+	}
+      if (reachable == total)
+	{
+	  printf ("BIGBANG: Universe connectivity validation: PASS "
+		  "(%d/%d sectors reachable from sector 1; %d directed bridges)\n",
+		  reachable, total, bridges);
+	  return 0;
+	}
+
+      char max_warps_text[16];
+      snprintf (max_warps_text, sizeof (max_warps_text), "%d", max_warps);
+      const char *params[1] = { max_warps_text };
+      PGresult *edge = PQexecParams (c,
+		"WITH RECURSIVE reachable(sector_id) AS ("
+		"  SELECT sector_id::bigint FROM sectors WHERE sector_id = 1 "
+		"  UNION "
+		"  SELECT sw.to_sector FROM sector_warps sw "
+		"  JOIN reachable r ON r.sector_id = sw.from_sector"
+		") "
+		"SELECT src.sector_id, dst.sector_id "
+		"FROM reachable src "
+		"CROSS JOIN LATERAL ("
+		"  SELECT s.sector_id FROM sectors s "
+		"  WHERE NOT EXISTS (SELECT 1 FROM reachable r WHERE r.sector_id=s.sector_id) "
+		"  ORDER BY s.sector_id LIMIT 1"
+		") dst "
+		"WHERE (SELECT count(*) FROM sector_warps sw "
+		"       WHERE sw.from_sector=src.sector_id) < $1::integer "
+		"ORDER BY (SELECT count(*) FROM sector_warps sw "
+		"          WHERE sw.from_sector=src.sector_id), src.sector_id "
+		"LIMIT 1",
+		1, NULL, params, NULL, NULL, 0);
+      if (!edge || PQresultStatus (edge) != PGRES_TUPLES_OK
+	  || PQntuples (edge) != 1)
+	{
+	  fprintf (stderr,
+		   "ERROR: Cannot bridge remaining unreachable sectors without exceeding max warps (%d)\n",
+		   max_warps);
+	  if (edge)
+	    PQclear (edge);
+	  return -1;
+	}
+
+      const char *insert_params[2] = {
+	PQgetvalue (edge, 0, 0), PQgetvalue (edge, 0, 1)
+      };
+      PGresult *inserted = PQexecParams (c,
+		"INSERT INTO sector_warps (from_sector, to_sector) "
+		"VALUES ($1::bigint, $2::bigint) ON CONFLICT DO NOTHING",
+		2, NULL, insert_params, NULL, NULL, 0);
+      PQclear (edge);
+      if (!inserted || PQresultStatus (inserted) != PGRES_COMMAND_OK
+	  || atoi (PQcmdTuples (inserted)) != 1)
+	{
+	  fprintf (stderr, "ERROR: Failed to add a directed connectivity bridge: %s\n",
+		   PQerrorMessage (c));
+	  if (inserted)
+	    PQclear (inserted);
+	  return -1;
+	}
+      PQclear (inserted);
+      bridges++;
     }
-  
-  printf ("BIGBANG: Universe connectivity validation: OK (all sectors have exits)\n");
-  return 0;
 }
 
 
@@ -832,6 +930,8 @@ usage (const char *argv0)
 	   "Configuration is primarily read from bigbang.json in the current directory.\n");
   fprintf (stderr,
 	   "Please edit bigbang.json to configure database and game options.\n");
+  fprintf (stderr,
+	   "Optional --port-seed VALUE sets PostgreSQL random() for reproducible port generation (-1.0 to 1.0).\n");
   exit (1);
 }
 
@@ -848,6 +948,8 @@ main (int argc, char **argv)
   int density = 4;
   int port_ratio = 40;
   double planet_ratio = 30.0;
+  double port_seed = 0.0;
+  int have_port_seed = 0;
   int port_size = 0;
   int tech_level = 0;
   int port_credits = 0;
@@ -863,6 +965,7 @@ main (int argc, char **argv)
     {"density", required_argument, 0, 'd'},
     {"port-ratio", required_argument, 0, 'r'},
     {"planet-ratio", required_argument, 0, 'R'},
+    {"port-seed", required_argument, 0, 1005},
     {0, 0, 0, 0}
   };
 
@@ -909,6 +1012,13 @@ main (int argc, char **argv)
       if ((j = json_object_get (jcfg, "port_ratio")) && json_is_integer (j))
 	{
 	  port_ratio = (int) json_integer_value (j);
+	}
+      if ((j = json_object_get (jcfg, "port_seed")) && json_is_number (j))
+	{
+	  port_seed = json_number_value (j);
+	  if (port_seed < -1.0 || port_seed > 1.0)
+	    usage (argv[0]);
+	  have_port_seed = 1;
 	}
       if ((j = json_object_get (jcfg, "planet_ratio")) && json_is_number (j))
 	{
@@ -968,6 +1078,17 @@ main (int argc, char **argv)
 	  free (sql_dir);
 	  sql_dir = strdup (optarg);
 	  break;
+	case 1005:
+	  {
+	    char *end = NULL;
+	    errno = 0;
+	    port_seed = strtod (optarg, &end);
+	    if (errno || end == optarg || *end != '\0'
+	        || port_seed < -1.0 || port_seed > 1.0)
+	      usage (argv[0]);
+	  }
+	  have_port_seed = 1;
+	  break;
 	case 's':
 	  sectors = atoi (optarg);
 	  break;
@@ -983,6 +1104,19 @@ main (int argc, char **argv)
 	default:
 	  usage (argv[0]);
 	}
+    }
+
+  /* Fail before creating or cleaning a database if the requested release
+   * selection is incomplete or contains an unclassified SQL script. */
+  if (validate_sql_directory (sql_dir) != 0)
+    {
+      if (jcfg)
+        json_decref (jcfg);
+      free (admin_cs);
+      free (db_name);
+      free (app_cs_tmpl);
+      free (sql_dir);
+      return 2;
     }
 
   srand (time (NULL));
@@ -1096,6 +1230,12 @@ main (int argc, char **argv)
 
   snprintf (buf, sizeof (buf), "SELECT generate_sectors(%d)", sectors);
   exec_sql (app, buf, "generate_sectors");
+
+  if (have_port_seed)
+    {
+      snprintf (buf, sizeof (buf), "SELECT setseed(%.17g)", port_seed);
+      exec_sql (app, buf, "set_port_seed");
+    }
 
   int max_ports = (sectors * port_ratio) / 100;
   (void) max_ports;
@@ -1309,13 +1449,7 @@ main (int argc, char **argv)
   create_random_warps (app, sectors, density);
   ensure_fedspace_exit (app, 11, sectors);
 
-  /* Major Space Lanes are a BFS over sector_warps from FedSpace to each
-     stardock, so they must be computed after the full warp graph exists
-     (tunnels, random warps and the FedSpace exit). Running generate_msl()
-     before this point left msl_sectors containing only sectors 1-10 (#486). */
-  exec_sql (app, "SELECT generate_msl()", "generate_msl");
-
-  /* Validate universe connectivity - ensure no orphan sectors */
+  /* Connect and validate the full directed graph before deriving route data. */
   if (validate_universe_connectivity (app) != 0)
     {
       fprintf (stderr, "FATAL: Universe validation failed. Aborting bigbang.\n");
@@ -1330,6 +1464,11 @@ main (int argc, char **argv)
       free (sql_dir);
       return 2;
     }
+
+  /* Major Space Lanes are a BFS over sector_warps from FedSpace to each
+     stardock. Compute them after generated tunnels and connectivity bridges
+     are present so route metadata reflects the playable universe. */
+  exec_sql (app, "SELECT generate_msl()", "generate_msl");
 
   PQfinish (app);
   if (jcfg)

@@ -15,13 +15,27 @@ sector. An empty data object reads the current state; use
 ### `trade.buy` / `trade.sell`
 Trade commodities.
 
+`port.info`, `port.describe`, `port.status`, and `trade.port_info` reveal a
+port's stock and trading details only when the player is in that port's
+sector. Supplying a remote sector or port ID does not grant port knowledge.
+
+For port classes 1–8, each commodity's buy/sell direction is fixed by its
+`port_trade` mode. Inventory and capacity can prevent an otherwise valid
+transaction, but changing stock does not change the port's direction. Stardock
+and black-market behavior follows their separately configured trade rows.
+
 **Args**:
 *   `port_id`: ID of the port.
 *   `items`: Array of objects containing:
     *   `commodity`: Canonical 3-character code (e.g., "ORE", "ORG", "EQU").
     *   `quantity`: Integer amount.
 *   `account`: 0 for Petty Cash (default), 1 for Bank.
-*   `idempotency_key`: Optional UUID.
+
+Trade buy/sell requests require a non-empty `data.idempotency_key`. This is
+the established V2 trade contract. The server also accepts matching copies in
+the envelope's `meta.idempotency_key` or at the request root; if multiple
+placements are present, all values must match. A retry with the same key and
+trade payload replays the original receipt without applying the trade again.
 
 **Response type**: `trade.buy_receipt_v1` / `trade.sell_receipt_v1`
 

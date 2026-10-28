@@ -72,6 +72,8 @@ def parse_args():
     p.add_argument("--port", type=int, default=PORT, help=f"Server port (default: {PORT})")
     p.add_argument("--user", help="Player name for login.")
     p.add_argument("--passwd", help="Password for login.")
+    p.add_argument("--register", action="store_true",
+                   help="Create a new account, then enter the game.")
     p.add_argument("--debug", action="store_true",
                    help="Enable wire-protocol debug output and expose diagnostic/testing menus")
     # Resolve menus.json path relative to script location
@@ -266,8 +268,12 @@ def cli_subscriptions_list(ctx):
     if not items:
         print("(no subscriptions)")
     for it in items:
-        t = it.get("topic")
-        locked = it.get("locked")
+        if isinstance(it, str):
+            t, locked = it, False
+        elif isinstance(it, dict):
+            t, locked = it.get("topic"), it.get("locked")
+        else:
+            continue
         print(f"- {t}{' [locked]' if locked else ''}")
     ctx.state["last_rpc"] = r
 
@@ -288,8 +294,15 @@ def subscriptions_list_flow(ctx: Context):
         if items:
             print("Current subscriptions:")
             for item in items:
-                locked_str = " (locked)" if item.get("locked") else ""
-                print(f"  - {item.get('topic')}{locked_str}")
+                if isinstance(item, str):
+                    topic, locked = item, False
+                elif isinstance(item, dict):
+                    topic, locked = item.get("topic"), item.get("locked")
+                else:
+                    continue
+                if topic:
+                    locked_str = " (locked)" if locked else ""
+                    print(f"  - {topic}{locked_str}")
         else:
             print("No active subscriptions.")
     else:
@@ -1003,6 +1016,79 @@ def settings_view(ctx: Context):
         model["notes"] = []
 
     print(present_settings(model))
+
+
+@register("change_password_flow")
+def change_password_flow(ctx: Context):
+    """Change the authenticated player's password without echoing secrets."""
+    old_password = getpass.getpass("Current password: ")
+    new_password = getpass.getpass("New password: ")
+    confirmation = getpass.getpass("Confirm new password: ")
+    if not old_password or not new_password:
+        print("Password change cancelled: password fields cannot be empty.")
+        return
+    if new_password != confirmation:
+        print("Password change cancelled: the new passwords do not match.")
+        return
+    response = ctx.conn.rpc("auth.change_password", {
+        "old_password": old_password,
+        "new_password": new_password,
+    })
+    ctx.state["last_rpc"] = response
+    if response.get("status") == "ok":
+        print("Password changed. Log out and sign in with the new password next time.")
+    elif (response.get("error") or {}).get("code") == 1101:
+        print("Password change refused: the current password was not accepted.")
+    else:
+        print("Password change refused. Check the server response and try again.")
+
+
+def authenticate(conn: Conn, username: str, password: str) -> dict:
+    """Authenticate and retain a session token on this connection."""
+    response = conn.rpc("auth.login", {"username": username, "passwd": password})
+    if response.get("status") == "ok":
+        token = (response.get("data") or {}).get("session_token")
+        if token:
+            conn.session_token = token
+    return response
+
+
+def registration_payload(username: str, password: str, ship_name: str = "",
+                         ui_locale: str = "", ui_timezone: str = "") -> dict:
+    """Build the public auth.register payload after minimal local validation."""
+    username = str(username or "").strip()
+    if not username:
+        raise ValueError("Captain name is required.")
+    if not password:
+        raise ValueError("Password is required.")
+    payload = {"username": username, "passwd": password}
+    for key, value in (("ship_name", ship_name), ("ui_locale", ui_locale),
+                       ("ui_timezone", ui_timezone)):
+        value = str(value or "").strip()
+        if value:
+            payload[key] = value
+    return payload
+
+
+def validate_registration_passwords(password: str, confirmation: str) -> None:
+    """Reject an empty or mistyped password before sending auth.register."""
+    if not password:
+        raise ValueError("Password is required.")
+    if password != confirmation:
+        raise ValueError("The passwords do not match.")
+
+
+def register_account(conn: Conn, username: str, password: str,
+                     ship_name: str = "", ui_locale: str = "",
+                     ui_timezone: str = "") -> dict:
+    """Create an account through the public protocol and retain its session."""
+    response = conn.rpc("auth.register", registration_payload(
+        username, password, ship_name, ui_locale, ui_timezone))
+    if response.get("status") == "ok":
+        token = (response.get("data") or {}).get("session_token")
+        if isinstance(token, str) and token:
+            conn.session_token = token
+    return response
 
 
 @register("prefs_toggle_24h")
@@ -4226,12 +4312,16 @@ def interactive_buy_handler(ctx: Context) -> None:
         "EQUIPMENT": "EQU"
     }
     commodity = code_map.get(commodity_input, commodity_input)
-    env = {"id": ctx.conn._next_id(), "command": "trade.buy",
-            "data": {"port_id": port_id, "commodity": commodity, "quantity": qty}}
-    if idem:
-        env["meta"] = {"idempotency_key": idem}
-    ctx.conn.send(env)
-    print(json.dumps(ctx.conn.recv(), ensure_ascii=False, indent=2))
+    payload = {
+        "port_id": port_id,
+        "sector_id": ctx.current_sector_id,
+        "items": [{"commodity": commodity, "quantity": qty}],
+        "account": 0,
+        "idempotency_key": idem or str(uuid.uuid4()),
+    }
+    response = ctx.conn.rpc("trade.buy", payload)
+    ctx.state["last_rpc"] = response
+    print(json.dumps(response, ensure_ascii=False, indent=2))
 
 @register("raw_json_handler")
 def raw_json_handler(ctx: Context) -> None:
@@ -4331,7 +4421,6 @@ def main():
             conn = Conn(s, debug=args.debug)
 
             user = args.user if args.user else input("Player Name: ")
-            passwd = args.passwd if args.passwd else getpass.getpass("Password: ")
 
             # optional hello
             capabilities = {}
@@ -4342,16 +4431,45 @@ def main():
             except Exception:
                 pass
 
-            login = conn.rpc("auth.login", {"username": user, "passwd": passwd})
+            if args.register:
+                if args.passwd:
+                    print("Registration passwords must be entered at the hidden prompt; do not pass --passwd.")
+                    return EXIT_LOGIN_FAILED
+                passwd = getpass.getpass("New password: ")
+                confirmation = getpass.getpass("Confirm new password: ")
+                try:
+                    validate_registration_passwords(passwd, confirmation)
+                except ValueError as exc:
+                    print(f"Registration cancelled: {exc}")
+                    return EXIT_LOGIN_FAILED
+                ship_name = input("Ship name (optional): ").strip()
+                try:
+                    login = register_account(conn, user, passwd, ship_name)
+                except ValueError as exc:
+                    print(f"Registration cancelled: {exc}")
+                    return EXIT_LOGIN_FAILED
+                finally:
+                    passwd = ""
+                    confirmation = ""
+                if login.get("status") != "ok":
+                    code = (login.get("error") or {}).get("code")
+                    if code == 1105:
+                        print("Registration refused: that captain name is already in use.")
+                    else:
+                        print("Registration refused. Check the captain name and try again.")
+                    return EXIT_LOGIN_FAILED
+                if not conn.session_token:
+                    print("Registration completed, but the server did not provide a login session.")
+                    return EXIT_LOGIN_FAILED
+                print("Account created. Connecting to your new captain.")
+            else:
+                passwd = args.passwd if args.passwd else getpass.getpass("Password: ")
+                login = authenticate(conn, user, passwd)
+                passwd = ""
 
             if login.get("status") in ("error","refused"):
                 print("Login failed.");
                 return EXIT_LOGIN_FAILED
-
-            # Save session token if returned
-            token = login.get("data", {}).get("session_token")
-            if token:
-                conn.session_token = token
 
             # If hello failed or didn't have caps, try explicit capabilities command
             if not capabilities:

@@ -7,6 +7,7 @@ from jsonschema import validate, ValidationError
 from bandit_policy import BanditPolicy, make_context_key # Import the unified context key function
 from typing import Optional, Any, Dict
 from helpers import canon_commodity, generate_idempotency_key
+from bug_reporter import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -752,6 +753,16 @@ class Planner:
                             payload["to_sector_id"] = target_sector
                             return {"command": "move.warp", "data": payload}
 
+            # A completed survey with no usable local trade is a reason to
+            # continue exploring, not to keep selecting local utility actions.
+            if (self._survey_complete(current_state)
+                    and not self._can_buy(current_state)
+                    and not self._can_sell(current_state)):
+                target = self._get_next_warp_target(current_state)
+                if target is not None and self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
+                    logger.info("Tactical Override: No viable trade at surveyed port; continuing exploration to sector %s.", target)
+                    return {"command": "move.warp", "data": {"to_sector_id": target}}
+
         # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
         # If we're at a port and have completed survey, always try to trade 1 unit.
         # This prevents the bandit picking non-gameplay cmds (e.g. bank.deposit) and stalling.
@@ -828,7 +839,8 @@ class Planner:
                     logger.info(f"Planner is executing goal: {current_goal} -> {command_name}")
                     final_payload = self._build_payload(command_name, goal_command_dict.get("data", {}))
                     if final_payload is not None:
-                        logger.debug(f"Final payload for {command_name}: {json.dumps(final_payload)}") # ADDED THIS LINE
+                        logger.debug("Final payload for %s: %s", command_name,
+                                     json.dumps(redact_secrets(final_payload)))
                         return {"command": command_name, "data": final_payload}
                     else:
                         logger.error(f"Goal command {command_name} failed schema validation! Clearing plan.")
@@ -1100,28 +1112,26 @@ class Planner:
         if not port_id:
             return False  # No port here; nothing to survey
 
-        port_id_str = str(port_id)
-        price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
-        
-        port_info = current_state.get("port_info_by_sector", {}).get(sector_id, {})
+        port_info = current_state.get("port_info_by_sector", {}).get(sector_id)
+        if port_info is None:
+            return False # We have not inspected this port yet
+
         commodities = port_info.get("commodities", [])
-        
+
         if not commodities:
-            return False # We haven't even seen the commodities list yet
+            return True # An inspected empty market has nothing left to survey
 
         for c in commodities:
             c_code = canon_commodity(c.get("commodity"))
             if not c_code: continue
             
-            # Check if we have EITHER a buy OR sell price (quotes usually give both)
-            # Use 'is not None' because 0.0 is a valid (though unlikely) float price.
-            has_buy = price_cache.get("buy", {}).get(c_code) is not None
-            has_sell = price_cache.get("sell", {}).get(c_code) is not None
-            
-            if not (has_buy and has_sell and self._quote_is_fresh(current_state, port_id, c_code)):
-                return False # Found a commodity with incomplete price data
+            # A fresh quote completes the survey even when this market reports
+            # zero or unavailable prices. Those values remain unusable for
+            # trade selection, but must not trigger the same quote forever.
+            if not self._quote_is_fresh(current_state, port_id, c_code):
+                return False # Found a commodity not quoted recently
 
-        return True # All commodities have both prices
+        return True # All advertised commodities have fresh quote results
 
     def _quote_is_fresh(self, current_state, port_id, commodity):
         """Whether a cached quote is recent enough to guide a mutation."""
@@ -1162,7 +1172,8 @@ class Planner:
         return can_buy_any
 
     def _build_payload(self, command_name: str, context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        logger.debug(f"[_build_payload] command_name: {command_name}, context: {context}")
+        logger.debug("[_build_payload] command_name: %s, context: %s",
+                     command_name, redact_secrets(context))
         """
         Dynamically builds and validates a payload for a given command using its JSON schema.
         'context' is current_state for fallback logic, or goal data for goal logic.
@@ -1258,7 +1269,8 @@ class Planner:
                             logger.error(f"Could not generate required field '{field}' for command '{command_name}'.")
                             return None
             
-            logger.debug(f"[_build_payload] final payload before validation: {payload}")
+            logger.debug("[_build_payload] final payload before validation: %s",
+                         redact_secrets(payload))
             
             # --- MANDATORY IDEMPOTENCY KEY ---
             if command_name in ("trade.buy", "trade.sell"):
@@ -1271,12 +1283,14 @@ class Planner:
                         payload["idempotency_key"] = generate_idempotency_key()
 
             logger.debug(f"Validating command: {command_name}")
-            logger.debug(f"Payload for validation: {json.dumps(payload)}")
+            logger.debug("Payload for validation: %s",
+                         json.dumps(redact_secrets(payload)))
 
             # Validate the final payload against the schema
             validate(instance=payload, schema=schema)
 
-            logger.debug(f"Successfully built and validated payload for {command_name}: {payload}")
+            logger.debug("Successfully built and validated payload for %s: %s",
+                         command_name, redact_secrets(payload))
             
             # --- FIX: Return the correct part of the payload ---
             if 'data' in payload:
@@ -1471,19 +1485,14 @@ class Planner:
                 
         if field_name == "commodity":
             if command_name == "trade.quote":
-                # Smart selection: pick a commodity we don't have a price for yet
+                # Smart selection: quote an advertised commodity not queried recently
                 current_sector = current_state.get("player_location_sector")
                 port_id = self._find_port_in_sector(current_state, current_sector)
                 if port_id:
-                    port_id_str = str(port_id)
-                    price_cache = current_state.get("price_cache", {}).get(port_id_str, {})
-                    buy_cache = price_cache.get("buy", {})
-                    sell_cache = price_cache.get("sell", {})
-                    
                     # Try to get actual port commodities, fallback to defaults
-                    port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector), {})
+                    port_info = current_state.get("port_info_by_sector", {}).get(str(current_sector))
                     player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
-                    if port_info and port_info.get("commodities"):
+                    if port_info is not None:
                          candidates = [canon_commodity(c.get("commodity")) for c in port_info.get("commodities", [])]
                          candidates = [c for c in candidates if c] # filter Nones
                          # Filter and prioritize based on alignment for profit
@@ -1506,12 +1515,17 @@ class Planner:
                              candidates = ["SLV", "WPN", "DRG"] + candidates
                     
                     for c in candidates:
-                        # Smart selection: quote if missing EITHER buy OR sell price
-                        # Use 'is None' to correctly handle float prices
-                        if (buy_cache.get(c) is None or sell_cache.get(c) is None
-                                or not self._quote_is_fresh(current_state, port_id, c)):
+                        # Quote each advertised commodity once per freshness
+                        # window, including markets whose prices are zero or
+                        # unavailable. The timestamp distinguishes those from
+                        # commodities we have not asked about yet.
+                        if not self._quote_is_fresh(current_state, port_id, c):
                             logger.info(f"Generated quote commodity candidate: {c}")
                             return c
+
+                    # A known market only permits quotes for commodities it
+                    # advertises. Never probe the static fallback list there.
+                    return None
                 
                 # Fallback: Random - prioritize illegal for players with alignment <= 75
                 player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)

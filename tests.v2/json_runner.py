@@ -310,6 +310,15 @@ class JsonSuiteRunner:
                     if actual != expected:
                         print(f"FAIL (Assert: {actual} != {expected})")
                         return False
+                elif op == "is_string_array":
+                    if not isinstance(actual, list) or any(
+                            not isinstance(item, str) for item in actual):
+                        print(f"FAIL (Assert: {actual} is not an array of strings)")
+                        return False
+                elif op == "keys_eq":
+                    if not isinstance(actual, dict) or set(actual) != set(expected):
+                        print(f"FAIL (Assert: {actual} keys do not equal {expected})")
+                        return False
                 elif op == "contains":
                     if isinstance(actual, list):
                         found = False

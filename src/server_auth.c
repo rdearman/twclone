@@ -4,6 +4,7 @@
 #include "db/repo/repo_session.h"
 #include "db/repo/repo_bank.h"
 #include "db/repo/repo_players.h"
+#include "db/repo/repo_communication.h"
 #include "repo_cmd.h"
 #include "common.h"
 /* src/server_auth.c */
@@ -306,6 +307,7 @@ cmd_auth_login (client_ctx_t *ctx, json_t *root)
 	}
 
       send_response_ok_take (ctx, root, "auth.session", &resp);
+      return 1;
     }
   else
     {
@@ -431,9 +433,20 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       db_prefs_set_one (db, pid, "ui.timezone", PT_STRING, ui_timezone);
     }
 
-  h_send_message_to_player (db, pid,
-			    1,
-			    "Welcome to TWClone!", get_welcome_message (pid));
+  int system_player_id = 0;
+  if (repo_comm_get_player_id_by_name (db, "System", &system_player_id) == 0
+      && system_player_id > 0)
+    {
+      if (h_send_message_to_player (db, pid, system_player_id,
+				    "Welcome to TWClone!",
+				    get_welcome_message (pid)) != 0)
+	LOGW ("could not send welcome mail to new player %d", pid);
+    }
+  else
+    {
+      LOGW ("System player not found; skipping welcome mail for player %d",
+	    pid);
+    }
 
   char tok[65];
 

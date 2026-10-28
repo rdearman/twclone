@@ -9,16 +9,43 @@
       "password": "password"
     },
     {
+      "name": "Rig: Place the scan ship in the sector with the known port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{scan_user_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Place the scan ship in sector one",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{scan_user_player_id});"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Refresh scan user location from the server",
+      "command": "auth.login",
+      "user": "scan_user",
+      "data": { "username": "scan_user", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test sector.scan command",
       "user": "scan_user",
       "command": "sector.scan",
       "expect": { "status": "ok", "type": "sector.scan" },
       "asserts": [
-        { "path": "data.sector_id", "op": "exists" },
+        { "path": "data.sector_id", "op": "==", "value": 1 },
         { "path": "data.name", "op": "exists" },
         { "path": "data.adjacent_sectors", "op": "exists" },
         { "path": "data.ships_present", "op": "exists" },
         { "path": "data.ports", "op": "exists" },
+        { "path": "data.ports.*[port_id=1].name", "op": "==", "value": "Tavern Central" },
+        { "path": "data.ports.*[port_id=1].type", "op": "==", "value": null },
         { "path": "data.celestial_objects", "op": "exists" },
         { "path": "data.counts", "op": "exists" },
         { "path": "data.server_tick", "op": "exists" }

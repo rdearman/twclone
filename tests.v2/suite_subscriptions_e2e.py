@@ -3,6 +3,7 @@ import time
 import sys
 import os
 import socket
+import subprocess
 from twclient import TWClient
 
 # Configuration
@@ -66,11 +67,27 @@ def test_subscriptions():
             })
             if admin.recv_next_non_notice().get("status") != "ok":
                 return False
+            admin.send_json({
+                "command": "sys.raw_sql_exec",
+                "data": {"sql": (
+                    f"UPDATE players SET sector_id = {notice_sector} "
+                    f"WHERE player_id IN ({obs_client.player_id}, {act_client.player_id})"
+                )}
+            })
+            if admin.recv_next_non_notice().get("status") != "ok":
+                return False
+            admin.send_json({
+                "command": "sys.raw_sql_exec",
+                "data": {"sql": (
+                    f"UPDATE ships SET sector_id = {notice_sector} "
+                    f"WHERE ship_id IN (SELECT ship_id FROM players "
+                    f"WHERE player_id IN ({obs_client.player_id}, {act_client.player_id}))"
+                )}
+            })
+            if admin.recv_next_non_notice().get("status") != "ok":
+                return False
         finally:
             admin.close()
-
-        if not pathfind_and_warp(obs_client, "Observer", notice_sector): return False
-        if not pathfind_and_warp(act_client, "Actor", notice_sector): return False
         # These overlapping filters must produce one copy of a scoped event.
         for data in (
                 {"topic": f"sector.{notice_sector}"},
@@ -154,3 +171,7 @@ if __name__ == "__main__":
     if not test_subscriptions():
         sys.exit(1)
     print("E2E Subscriptions Test Passed.")
+    notice_test = os.path.join(os.path.dirname(__file__), "system_notice_delivery_e2e.py")
+    result = subprocess.run([sys.executable, notice_test], env=os.environ.copy())
+    if result.returncode != 0:
+        sys.exit(result.returncode)

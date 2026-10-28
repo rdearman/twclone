@@ -36,7 +36,8 @@ int h_trigger_atmosphere_quasar (db_t * db, client_ctx_t * ctx,
 bool is_asset_hostile (int asset_player_id, int asset_corp_id,
 		       int ship_player_id, int ship_corp_id);
 
-/* FedSpace enforcement: hard-punish aggression in sectors 1–10 */
+/* FedSpace enforcement: 1 = committed punishment, 0 = no violation,
+ * negative ERR_* = persistence failure with transaction rolled back. */
 int fedspace_enforce_no_aggression_hard (client_ctx_t *ctx,
                                           int attacker_ship_id,
                                           int attacker_player_id,

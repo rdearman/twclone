@@ -56,6 +56,7 @@ typedef struct {
 
 int repo_players_record_port_knowledge(db_t *db, int player_id, int port_id);
 int repo_players_record_visit(db_t *db, int player_id, int sector_id);
+db_res_t *repo_players_get_visited_sectors(db_t *db, int player_id, db_error_t *err);
 int repo_players_get_recommended_routes(db_t *db, int player_id, int current_sector_id,
                                         int max_hops_between, int max_hops_from_player,
                                         int require_two_way,

@@ -10,6 +10,12 @@ import json
 import os
 import re
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.migrate_passwords_argon2id import encoded_hash, load_argon2
+
+_argon2 = load_argon2()
 
 
 class DBSetupHelper:
@@ -80,7 +86,7 @@ class DBSetupHelper:
         result = subprocess.run(cmd, env=env, capture_output=True, text=True)
         
         if result.returncode != 0:
-            print(f"ERROR executing SQL:\n{sql}\nError: {result.stderr}")
+            print(f"ERROR executing SQL (psql exit {result.returncode}); statement and output suppressed")
             raise Exception(f"SQL execution failed")
         
         return result.stdout
@@ -136,11 +142,12 @@ class DBSetupHelper:
         """Create a player with ships and deployed assets."""
         username = player_config["username"]
         password = player_config["password"]
+        stored_password = encoded_hash(_argon2, password.encode("utf-8"))
         credits = player_config.get("credits", 5000)
         
         sql = f"""
         INSERT INTO players (name, passwd, credits, type, sector_id, commission_id, loggedin)
-        VALUES ('{username}', '{password}', {credits}, 2, 1, 1, now())
+        VALUES ('{username}', '{stored_password}', {credits}, 2, 1, 1, now())
         ON CONFLICT (name) DO NOTHING;
         """
         self.execute(sql)

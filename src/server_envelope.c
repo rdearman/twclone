@@ -5,6 +5,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
 #include <time.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -450,6 +451,8 @@ make_base_envelope (json_t *req, const char *type)
 void
 send_all_json (int fd, json_t *obj)
 {
+  static pthread_mutex_t write_mu = PTHREAD_MUTEX_INITIALIZER;
+  pthread_mutex_lock (&write_mu);
   if (g_ctx_for_send)
     {
       g_ctx_for_send->responses_sent++;
@@ -480,6 +483,7 @@ send_all_json (int fd, json_t *obj)
         }
       free (s);
     }
+  pthread_mutex_unlock (&write_mu);
 }
 
 
@@ -703,7 +707,7 @@ send_response_ok (client_ctx_t *ctx, json_t *req, const char *type,
 
 void
 send_response_error (client_ctx_t *ctx, json_t *req, int code,
-		     const char *msg)
+                     const char *msg)
 {
   if (ctx && ctx == g_ctx_for_send && ctx->captured_envelopes_valid &&
       ctx->captured_envelopes)
@@ -747,7 +751,6 @@ send_response_error (client_ctx_t *ctx, json_t *req, int code,
       send_enveloped_error (ctx->fd, req, code, msg);
     }
 }
-
 
 void
 send_response_refused (client_ctx_t *ctx,
@@ -838,7 +841,7 @@ urand_bytes (void *buf, size_t n)
 
 
 /* UUID v4 (lowercase, canonical 36 chars). Caller must free(). */
-static char *
+char *
 gen_uuid_v4 (void)
 {
   unsigned char b[16];
@@ -871,6 +874,36 @@ gen_uuid_v4 (void)
     }
   s[p] = '\0';
   return s;
+}
+
+void
+send_player_event (client_ctx_t *ctx, const char *event_id,
+                   const char *event_type, json_t *data, const char *topic)
+{
+  if (!ctx || ctx->fd < 0 || !event_id || !event_type || !data)
+    return;
+  json_t *env = json_object ();
+  json_t *meta = make_default_meta ();
+  if (!env || !meta)
+    {
+      if (env) json_decref (env);
+      if (meta) json_decref (meta);
+      return;
+    }
+  char ts[32];
+  iso8601_utc (ts);
+  json_object_set_new (env, "id", json_string (event_id));
+  json_object_set_new (env, "ts", json_string (ts));
+  json_object_set_new (env, "status", json_string ("ok"));
+  json_object_set_new (env, "type", json_string (event_type));
+  json_object_set (env, "data", data);
+  json_object_set_new (env, "error", json_null ());
+  if (topic)
+    json_object_set_new (meta, "topic", json_string (topic));
+  json_object_set_new (env, "meta", meta);
+  sanitize_json_strings (env);
+  send_all_json (ctx->fd, env);
+  json_decref (env);
 }
 
 

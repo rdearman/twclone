@@ -22,7 +22,7 @@
 
 #include "schemas.h"
 #include "errors.h"
-#include "config.h"
+#include "autoconf.h"
 #include <stdatomic.h>
 #include <netinet/in.h>
 #include <string.h>

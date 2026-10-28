@@ -5,7 +5,7 @@ static func notification_for(event: Dictionary) -> String:
 	var data = event.get("data", {})
 	if event_type.is_empty() or not data is Dictionary:
 		return ""
-	if event_type == "system.notice":
+	if event_type in ["system.notice", "system.notice_v1"]:
 		var title := str(data.get("title", "Server notice")).strip_edges()
 		var body := str(data.get("body", "")).strip_edges()
 		return title + (" · " + body if not body.is_empty() else "")

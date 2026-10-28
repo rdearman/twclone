@@ -12,7 +12,8 @@ Launch from a planet.
 **Response**: `{ "status": "launched", "in_space": true }`
 
 ### `planet.info`
-Get information about a planet (visible from space or while landed).
+Get detailed information about a planet after landing or when authorized as its
+player/corporation owner. Remote and unowned unlanded planet details are refused.
 **Args**: `{ "planet_id": 123 }`
 **Response**:
 ```json

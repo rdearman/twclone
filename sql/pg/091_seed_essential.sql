@@ -4,7 +4,11 @@
 BEGIN;
 -- 0. Economy Curve (Essential for Ports)
 INSERT INTO economy_curve (economy_curve_id, curve_name, base_restock_rate, price_elasticity, target_stock, volatility_factor)
-    VALUES (1, 'Standard', 0.1, 1.0, 1000, 0.1)
+    /* At the initial stock bands, tech-level modifiers otherwise invert the
+     * public bid/ask spread. A 0.30 stock response keeps prices supply-driven
+     * while making at least one-unit cross-port routes profitable at default
+     * generation settings (tech level 3). */
+    VALUES (1, 'Standard', 0.1, 1.0, 1000, 0.3)
 ON CONFLICT (economy_curve_id)
     DO NOTHING;
 -- 1. Law Enforcement

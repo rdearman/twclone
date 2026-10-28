@@ -350,7 +350,10 @@ engine_consume_tick (db_t *db,
 
 
 	      /* Prioritisation second pass: skip priority types to avoid reprocessing. */
-	      if (!priority_only && cfg->priority_types_csv &&
+	      /* Skip priority events in the general pass only when the priority
+	       * pass actually ran. Otherwise low-backlog priority events would be
+	       * skipped without ever being selected. */
+	      if (prio_phase && !priority_only && cfg->priority_types_csv &&
 		  csv_contains (cfg->priority_types_csv, ev_type))
 		{
 		  free (ev_type);

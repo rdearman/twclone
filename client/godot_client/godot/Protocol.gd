@@ -94,7 +94,8 @@ static func redact(value):
 		var result := {}
 		for key in value:
 			var key_text := str(key)
-			if SECRET_KEYS.has(key_text.to_lower()):
+			var normalized_key := key_text.to_lower()
+			if SECRET_KEYS.has(normalized_key) or normalized_key.ends_with("_password") or normalized_key.ends_with("_passwd"):
 				result[key] = REDACTED
 			else:
 				result[key] = redact(value[key])

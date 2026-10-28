@@ -3,6 +3,99 @@
 #include <ctype.h>
 #include <jansson.h>
 #include <stdlib.h>
+
+static int json_equal_strict (json_t *a, json_t *b);
+
+/* V2 trade schemas require data.idempotency_key. Root and envelope metadata
+ * copies remain accepted as aliases when they agree with the canonical key. */
+static int
+trade_get_idempotency_key (json_t *root, json_t *data, const char **key_out)
+{
+  json_t *meta = json_object_get (root, "meta");
+  json_t *values[] = {
+    json_object_get (data, "idempotency_key"),
+    meta ? json_object_get (meta, "idempotency_key") : NULL,
+    json_object_get (root, "idempotency_key")
+  };
+  const char *key = NULL;
+  for (size_t i = 0; i < sizeof values / sizeof values[0]; ++i)
+    {
+      if (!values[i])
+        continue;
+      if (!json_is_string (values[i]))
+        return -1;
+      const char *candidate = json_string_value (values[i]);
+      if (!candidate || !*candidate || strlen (candidate) > 128)
+        return -1;
+      if (key && strcmp (key, candidate) != 0)
+        return -1;
+      key = candidate;
+    }
+  /* The v2 trade schema requires the key in data. Other placements are
+   * tolerated as aliases only when they agree with that canonical value. */
+  if (!json_is_string (values[0]))
+    return -1;
+  *key_out = key;
+  return key ? 0 : -1;
+}
+
+/* Key placement is envelope metadata, not part of the trade itself.  Store
+ * and compare a normalized payload so retries remain identical when a client
+ * moves the same key from the legacy data field to meta. */
+static json_t *
+trade_request_fingerprint (json_t *data, const char *direction)
+{
+  if (!json_is_object (data))
+    return NULL;
+  json_t *copy = json_deep_copy (data);
+  if (copy)
+    {
+      json_object_del (copy, "idempotency_key");
+      json_object_set_new (copy, "__twclone_trade_direction",
+                           json_string (direction));
+    }
+  return copy;
+}
+
+static int
+trade_fingerprint_matches (json_t *stored, json_t *incoming,
+                           const char *direction, json_t *stored_response)
+{
+  json_t *stored_normalized = stored ? json_deep_copy (stored) : NULL;
+  json_t *incoming_normalized = incoming ? json_deep_copy (incoming) : NULL;
+  json_t *stored_direction = stored_normalized
+    ? json_object_get (stored_normalized, "__twclone_trade_direction") : NULL;
+  int has_direction = json_is_string (stored_direction);
+  int direction_matches = has_direction
+    ? strcmp (json_string_value (stored_direction), direction) == 0 : 0;
+  if (stored_normalized)
+    {
+      json_object_del (stored_normalized, "idempotency_key");
+      json_object_del (stored_normalized, "__twclone_trade_direction");
+    }
+  if (incoming_normalized)
+    {
+      json_object_del (incoming_normalized, "idempotency_key");
+      json_object_del (incoming_normalized, "__twclone_trade_direction");
+    }
+  int same = stored_normalized && incoming_normalized
+    && json_equal_strict (stored_normalized, incoming_normalized);
+  if (same && has_direction)
+    same = direction_matches;
+  else if (same)
+    {
+      /* Rows written before direction was part of the fingerprint remain
+       * replayable in their original direction. Receipt shape identifies
+       * their operation without changing old persisted request records. */
+      const char *receipt_field = strcmp (direction, "buy") == 0
+        ? "total_cost" : "total_item_value";
+      same = stored_response && json_is_object (stored_response)
+        && json_object_get (stored_response, receipt_field) != NULL;
+    }
+  if (stored_normalized) json_decref (stored_normalized);
+  if (incoming_normalized) json_decref (incoming_normalized);
+  return same;
+}
 #include <time.h>		// For snprintf
 #include <stdio.h>		// For snprintf
 #include <string.h>		// For strcasecmp, strdup etc.
@@ -1879,6 +1972,19 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Port stock and trade modes are only observable while physically in the
+   * port's sector. Use the resolved port location, never the caller's sector
+   * argument, as the authority for this check. */
+  int port_sector_id = (int) json_integer_value (json_object_get (port, "sector"));
+  if (port_sector_id <= 0 || port_sector_id != ctx->sector_id)
+    {
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Port information is available only in its sector");
+      ok = -1;
+      goto cleanup;
+    }
+  sector_id = port_sector_id;
+
   /* Record player knowledge and visit */
   repo_players_record_port_knowledge (db, ctx->player_id, port_id_val);
   if (sector_id > 0)
@@ -2288,11 +2394,19 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
       int ship_id = h_get_active_ship_id (db, ctx->player_id);
       if (ship_id > 0)
         {
-          if (fedspace_enforce_no_aggression_hard (ctx, ship_id, ctx->player_id,
-                                                    "port.rob"))
+          int enforcement_rc =
+            fedspace_enforce_no_aggression_hard (ctx, ship_id, ctx->player_id,
+                                                  "port.rob");
+          if (enforcement_rc == 1)
             {
               send_response_error (ctx, root, ERR_PERMISSION_DENIED,
                                    "Captain Z intervenes: aggression in FedSpace is forbidden.");
+              return 0;
+            }
+          if (enforcement_rc < 0)
+            {
+              send_response_error (ctx, root, -enforcement_rc,
+                                   "Captain Z enforcement failed; no changes were committed.");
               return 0;
             }
         }
@@ -2844,26 +2958,24 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 				   "Not authenticated", NULL);
       return 0;
     }
-  /* consume turn (may open a transaction) */
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-
-
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "trade.sell", root,
-					    NULL);
-    }
-  /* decloak */
-  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
-
-
-  h_decloak_ship (db, player_ship_id);
   data = json_object_get (root, "data");
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, 400, "Missing data object.");
       return 0;
     }
+  if (trade_get_idempotency_key (root, data, &key) != 0)
+    {
+      send_response_error (ctx, root, 400, "idempotency_key required or invalid.");
+      return 0;
+    }
+  char actual_key[UUID_STR_LEN];
+  if (strcmp (key, "*generate*") == 0)
+    {
+      h_generate_hex_uuid (actual_key, sizeof (actual_key));
+      key = actual_key;
+    }
+  data = json_object_get (root, "data");
   int account_type = db_get_player_pref_int (db, ctx->player_id,
 					     "trade.default_account",
 					     0);	// Default to petty cash (0)
@@ -2921,23 +3033,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   n = json_array_size (jitems);
-  json_t *jkey = json_object_get (data, "idempotency_key");
-
-
-  key = json_is_string (jkey) ? json_string_value (jkey) : NULL;
-  if (!key || !*key)
-    {
-      send_response_error (ctx, root, 400, "idempotency_key required.");
-      return 0;
-    }
-  char actual_key[UUID_STR_LEN];
-
-
-  if (strcmp (key, "*generate*") == 0)
-    {
-      h_generate_hex_uuid (actual_key, sizeof (actual_key));
-      key = actual_key;
-    }
   /* idempotency fast-path */
   {
     char *req_s_stored = NULL;
@@ -2949,10 +3044,12 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	json_error_t jerr;
 	json_t *stored_req =
 	  req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
-	json_t *incoming_req = json_incref (data);
-	int same = (stored_req
-		    && json_equal_strict (stored_req, incoming_req));
-	json_decref (incoming_req);
+	json_t *stored_receipt = resp_s_stored
+	  ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+	int same = trade_fingerprint_matches (stored_req, data, "sell",
+	                                      stored_receipt);
+	if (stored_receipt)
+	  json_decref (stored_receipt);
 	if (req_s_stored)
 	  free (req_s_stored);
 
@@ -2982,8 +3079,25 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	  free (resp_s_stored);
 	if (stored_req)
 	  json_decref (stored_req);
+	/* A key identifies one canonical transaction. Reject changed parameters
+	 * before charging a turn or running any gameplay side effects. */
+	send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
+	rc = 0;
+	goto cleanup;
       }
   }
+  /* Replays return above without consuming another turn. A new valid
+   * transaction retains the existing one-turn cost before gameplay work. */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "trade.sell", root,
+						    NULL);
+    }
+  /* decloak */
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  h_decloak_ship (db, player_ship_id);
+
   /* resolve port from sector */
   if (requested_port_id > 0)
     {
@@ -3462,7 +3576,10 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     }
   /* idempotency insert */
   {
-    req_s = json_dumps (data, JSON_COMPACT | JSON_SORT_KEYS);
+    json_t *fingerprint = trade_request_fingerprint (data, "sell");
+    req_s = fingerprint ? json_dumps (fingerprint, JSON_COMPACT | JSON_SORT_KEYS) : NULL;
+    if (fingerprint)
+      json_decref (fingerprint);
     resp_s = json_dumps (receipt, JSON_COMPACT | JSON_SORT_KEYS);
 
     if (db_ports_insert_idemp_sell
@@ -3553,7 +3670,12 @@ idempotency_race:
 	json_error_t jerr;
 	json_t *stored_req =
 	  req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
-	int same = (stored_req && json_equal_strict (stored_req, data));
+	json_t *stored_receipt = resp_s_stored
+	  ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+	int same = trade_fingerprint_matches (stored_req, data, "sell",
+	                                      stored_receipt);
+	if (stored_receipt)
+	  json_decref (stored_receipt);
 	if (req_s_stored)
 	  free (req_s_stored);
 
@@ -3664,13 +3786,22 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  /* consume turn (may open a transaction) */
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-
-
-  if (tc != TURN_CONSUME_SUCCESS)
+  data = json_object_get (root, "data");
+  if (!json_is_object (data))
     {
-      return handle_turn_consumption_error (ctx, tc, "trade.buy", root, NULL);
+      send_response_error (ctx, root, 400, "Missing data object.");
+      return 0;
+    }
+  if (trade_get_idempotency_key (root, data, &key) != 0)
+    {
+      send_response_error (ctx, root, 400, "idempotency_key required or invalid.");
+      return 0;
+    }
+  char actual_key[UUID_STR_LEN];
+  if (strcmp (key, "*generate*") == 0)
+    {
+      h_generate_hex_uuid (actual_key, sizeof (actual_key));
+      key = actual_key;
     }
 
   /* input */
@@ -3704,17 +3835,6 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       account_type = requested_account_type;
     }
 
-  /* idempotency key */
-  {
-    json_t *jid = json_object_get (root, "idempotency_key");
-
-
-    if (json_is_string (jid))
-      {
-	key = json_string_value (jid);
-      }
-  }
-
   /* sector + port resolution */
   sector_id = ctx->sector_id;
 
@@ -3746,7 +3866,12 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	  json_error_t jerr;
 	  json_t *stored_req =
 	    req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
-	  int same = (stored_req && json_equal_strict (stored_req, data));
+	  json_t *stored_receipt = resp_s_stored
+	    ? json_loads (resp_s_stored, 0, &jerr) : NULL;
+	  int same = trade_fingerprint_matches (stored_req, data, "buy",
+	                                        stored_receipt);
+	  if (stored_receipt)
+	    json_decref (stored_receipt);
 	  if (req_s_stored)
 	    free (req_s_stored);
 
@@ -3776,7 +3901,20 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	    free (resp_s_stored);
 	  if (stored_req)
 	    json_decref (stored_req);
+	  /* Reusing a key for a different transaction is rejected before turns or
+	   * any other gameplay state can change. */
+	  send_response_error (ctx, root, 500, "Could not resolve idempotency race.");
+	  rc = 0;
+	  goto cleanup;
 	}
+    }
+
+  /* First execution pays the normal turn cost. Matching replays returned
+   * above and therefore never reach this point. */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      return handle_turn_consumption_error (ctx, tc, "trade.buy", root, NULL);
     }
 
   /* resolve port_id (if requested_port_id provided) */
@@ -4174,7 +4312,10 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
   /* 4) Store idempotency record (request/response JSON) */
   if (key && *key)
     {
-      req_s = json_dumps (data, JSON_SORT_KEYS);
+      json_t *fingerprint = trade_request_fingerprint (data, "buy");
+      req_s = fingerprint ? json_dumps (fingerprint, JSON_SORT_KEYS) : NULL;
+      if (fingerprint)
+        json_decref (fingerprint);
       resp_s = json_dumps (receipt, JSON_SORT_KEYS);
 
       if (!req_s || !resp_s)
@@ -4196,7 +4337,12 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	      json_error_t jerr;
 	      json_t *stored_req =
 		req_s_stored ? json_loads (req_s_stored, 0, &jerr) : NULL;
-	      int same = (stored_req && json_equal_strict (stored_req, data));
+	      json_t *stored_receipt = resp_s_stored
+		? json_loads (resp_s_stored, 0, &jerr) : NULL;
+	      int same = trade_fingerprint_matches (stored_req, data, "buy",
+	                                            stored_receipt);
+	      if (stored_receipt)
+		json_decref (stored_receipt);
 	      if (req_s_stored)
 		free (req_s_stored);
 	      if (stored_req)
