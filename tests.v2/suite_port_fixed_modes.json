@@ -65,6 +65,24 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Give player ORE so an incorrectly enabled sell would execute",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 1 FROM players WHERE player_id = @{port_mode_player_player_id} ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = 1"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Cloak ship and clear port knowledge for rejection checks",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET cloaked = CURRENT_TIMESTAMP WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}); DELETE FROM player_known_ports WHERE player_id = @{port_mode_player_player_id} AND port_id = 2"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Refresh port mode player's sector",
       "command": "auth.login",
       "user": "port_mode_player",
@@ -73,6 +91,24 @@
       "asserts": [
         { "path": "data.current_sector", "op": "==", "value": 2 }
       ]
+    },
+    {
+      "name": "Capture state before zero-stock rejected sell",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits, t.turns_remaining, COALESCE((SELECT c.quantity FROM ship_cargo c WHERE c.ship_id = p.ship_id AND c.commodity_code = 'ORE'), 0), COALESCE((SELECT s.quantity FROM entity_stock s WHERE s.entity_type = 'port' AND s.entity_id = 2 AND s.commodity_code = 'ORE'), 0), (SELECT count(*) FROM trade_log l WHERE l.player_id = p.player_id AND l.port_id = 2 AND l.commodity = 'ORE' AND l.action = 'sell'), CASE WHEN EXISTS (SELECT 1 FROM ships sh WHERE sh.ship_id = p.ship_id AND sh.cloaked IS NOT NULL) THEN 1 ELSE 0 END, (SELECT count(*) FROM player_known_ports k WHERE k.player_id = p.player_id AND k.port_id = 2) FROM players p JOIN turns t USING (player_id) WHERE p.player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" },
+      "save": {
+        "zero_sell_credits": "data.rows.0.0",
+        "zero_sell_turns": "data.rows.0.1",
+        "zero_sell_cargo": "data.rows.0.2",
+        "zero_sell_stock": "data.rows.0.3",
+        "zero_sell_logs": "data.rows.0.4",
+        "zero_sell_cloaked": "data.rows.0.5",
+        "zero_sell_knowledge": "data.rows.0.6"
+      }
     },
     {
       "name": "SBB does not buy ORE from player when stock is zero",
@@ -88,6 +124,24 @@
       "expect": { "status": "error" }
     },
     {
+      "name": "Rejected zero-stock sell leaves all player and port state unchanged",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits, t.turns_remaining, COALESCE((SELECT c.quantity FROM ship_cargo c WHERE c.ship_id = p.ship_id AND c.commodity_code = 'ORE'), 0), COALESCE((SELECT s.quantity FROM entity_stock s WHERE s.entity_type = 'port' AND s.entity_id = 2 AND s.commodity_code = 'ORE'), 0), (SELECT count(*) FROM trade_log l WHERE l.player_id = p.player_id AND l.port_id = 2 AND l.commodity = 'ORE' AND l.action = 'sell'), CASE WHEN EXISTS (SELECT 1 FROM ships sh WHERE sh.ship_id = p.ship_id AND sh.cloaked IS NOT NULL) THEN 1 ELSE 0 END, (SELECT count(*) FROM player_known_ports k WHERE k.player_id = p.player_id AND k.port_id = 2) FROM players p JOIN turns t USING (player_id) WHERE p.player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "@{zero_sell_credits}" },
+        { "path": "data.rows.0.1", "op": "==", "value": "@{zero_sell_turns}" },
+        { "path": "data.rows.0.2", "op": "==", "value": "@{zero_sell_cargo}" },
+        { "path": "data.rows.0.3", "op": "==", "value": "@{zero_sell_stock}" },
+        { "path": "data.rows.0.4", "op": "==", "value": "@{zero_sell_logs}" },
+        { "path": "data.rows.0.5", "op": "==", "value": "@{zero_sell_cloaked}" },
+        { "path": "data.rows.0.6", "op": "==", "value": "@{zero_sell_knowledge}" }
+      ]
+    },
+    {
       "name": "Rig: Add ORE stock without changing SBB mode",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -95,6 +149,33 @@
         "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', 2, 'ORE', 100, 100, 0) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 100"
       },
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Preserve cloak and clear knowledge before positive-stock rejection",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET cloaked = CURRENT_TIMESTAMP WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}); DELETE FROM player_known_ports WHERE player_id = @{port_mode_player_player_id} AND port_id = 2"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Capture state before positive-stock wrong-direction sell",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits, t.turns_remaining, COALESCE((SELECT c.quantity FROM ship_cargo c WHERE c.ship_id = p.ship_id AND c.commodity_code = 'ORE'), 0), COALESCE((SELECT s.quantity FROM entity_stock s WHERE s.entity_type = 'port' AND s.entity_id = 2 AND s.commodity_code = 'ORE'), 0), (SELECT count(*) FROM trade_log l WHERE l.player_id = p.player_id AND l.port_id = 2 AND l.commodity = 'ORE' AND l.action = 'sell'), CASE WHEN EXISTS (SELECT 1 FROM ships sh WHERE sh.ship_id = p.ship_id AND sh.cloaked IS NOT NULL) THEN 1 ELSE 0 END, (SELECT count(*) FROM player_known_ports k WHERE k.player_id = p.player_id AND k.port_id = 2) FROM players p JOIN turns t USING (player_id) WHERE p.player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" },
+      "save": {
+        "positive_sell_credits": "data.rows.0.0",
+        "positive_sell_turns": "data.rows.0.1",
+        "positive_sell_cargo": "data.rows.0.2",
+        "positive_sell_stock": "data.rows.0.3",
+        "positive_sell_logs": "data.rows.0.4",
+        "positive_sell_cloaked": "data.rows.0.5",
+        "positive_sell_knowledge": "data.rows.0.6"
+      }
     },
     {
       "name": "SBB still does not buy ORE from player after stock changes",
@@ -110,6 +191,34 @@
       "expect": { "status": "error" }
     },
     {
+      "name": "Rejected wrong-direction sell leaves state unchanged when stock exists",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits, t.turns_remaining, COALESCE((SELECT c.quantity FROM ship_cargo c WHERE c.ship_id = p.ship_id AND c.commodity_code = 'ORE'), 0), COALESCE((SELECT s.quantity FROM entity_stock s WHERE s.entity_type = 'port' AND s.entity_id = 2 AND s.commodity_code = 'ORE'), 0), (SELECT count(*) FROM trade_log l WHERE l.player_id = p.player_id AND l.port_id = 2 AND l.commodity = 'ORE' AND l.action = 'sell'), CASE WHEN EXISTS (SELECT 1 FROM ships sh WHERE sh.ship_id = p.ship_id AND sh.cloaked IS NOT NULL) THEN 1 ELSE 0 END, (SELECT count(*) FROM player_known_ports k WHERE k.player_id = p.player_id AND k.port_id = 2) FROM players p JOIN turns t USING (player_id) WHERE p.player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "@{positive_sell_credits}" },
+        { "path": "data.rows.0.1", "op": "==", "value": "@{positive_sell_turns}" },
+        { "path": "data.rows.0.2", "op": "==", "value": "@{positive_sell_cargo}" },
+        { "path": "data.rows.0.3", "op": "==", "value": "@{positive_sell_stock}" },
+        { "path": "data.rows.0.4", "op": "==", "value": "@{positive_sell_logs}" },
+        { "path": "data.rows.0.5", "op": "==", "value": "@{positive_sell_cloaked}" },
+        { "path": "data.rows.0.6", "op": "==", "value": "@{positive_sell_knowledge}" }
+      ]
+    },
+    {
+      "name": "Capture turns before valid port purchase",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" },
+      "save": { "buy_turns_before": "data.rows.0.0" }
+    },
+    {
       "name": "SBB still sells ORE from its inventory",
       "command": "trade.buy",
       "user": "port_mode_player",
@@ -121,6 +230,22 @@
         "items": [{ "commodity": "ORE", "quantity": 1 }]
       },
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Valid port purchase consumes exactly one turn",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id = @{port_mode_player_player_id}"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": { "sql_int": "SELECT @{buy_turns_before} - 1" }
+        }
+      ]
     },
     {
       "name": "Port transaction did not rewrite canonical SBB mode",

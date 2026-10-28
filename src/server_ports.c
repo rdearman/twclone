@@ -3086,18 +3086,6 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	goto cleanup;
       }
   }
-  /* Replays return above without consuming another turn. A new valid
-   * transaction retains the existing one-turn cost before gameplay work. */
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "trade.sell", root,
-						    NULL);
-    }
-  /* decloak */
-  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
-  h_decloak_ship (db, player_ship_id);
-
   /* resolve port from sector */
   if (requested_port_id > 0)
     {
@@ -3124,12 +3112,8 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
 	}
     }
 
-  /* Record player knowledge */
-  repo_players_record_port_knowledge (db, ctx->player_id, port_id);
-
-  player_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
   ctx->ship_id = player_ship_id;
-  h_decloak_ship (db, player_ship_id);
   /* pre-load credits & cargo (outside tx is fine; final checks are atomic) */
   long long current_credits = 0;
 
@@ -3381,6 +3365,19 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       }
     we_started_tx = 1;
   }
+
+  /* A rejected trade must not consume turns, decloak the ship, or persist
+   * port knowledge. Apply these effects only after validation, inside the
+   * same transaction as the trade so later failures roll them back. */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      handle_turn_consumption_error (ctx, tc, "trade.sell", root, NULL);
+      goto fail_tx;
+    }
+  h_decloak_ship (db, player_ship_id);
+  (void) repo_players_record_port_knowledge (db, ctx->player_id, port_id);
+
   receipt = json_object ();
   lines = json_array ();
   if (!receipt || !lines)
@@ -3909,14 +3906,6 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	}
     }
 
-  /* First execution pays the normal turn cost. Matching replays returned
-   * above and therefore never reach this point. */
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "trade.buy", root, NULL);
-    }
-
   /* resolve port_id (if requested_port_id provided) */
   if (requested_port_id > 0)
     {
@@ -3938,9 +3927,6 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	  goto cleanup;
 	}
     }
-
-  /* Record player knowledge */
-  repo_players_record_port_knowledge (db, ctx->player_id, port_id);
 
   /* Parse trade lines */
   rc = parse_trade_lines (jitems, &trade_lines, &n);
@@ -4183,6 +4169,17 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       goto cleanup;
     }
   we_started_tx = 1;
+
+  /* Matching replays return before this transaction. Charge a turn and
+   * record the successful port interaction atomically with a new purchase,
+   * after all request, mode, stock, capacity, and credit checks have passed. */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      handle_turn_consumption_error (ctx, tc, "trade.buy", root, NULL);
+      goto fail_tx;
+    }
+  (void) repo_players_record_port_knowledge (db, ctx->player_id, port_id);
 
   /* 1) Post each line: update port inventory + ship cargo + trade log */
   for (size_t i = 0; i < n; i++)
