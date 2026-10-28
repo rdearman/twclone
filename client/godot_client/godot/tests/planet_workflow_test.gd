@@ -37,15 +37,23 @@ func _run() -> void:
 	_check(captured.size() == 3 and captured[2]["command"] == "planet.colonists.allocate", "workforce save did not use the existing allocation command")
 	if captured.size() > 2:
 		_check(captured[2]["data"].get("weapons") == 11, "weapons worker target was omitted from allocation payload")
+	workflow._fighter_quantity.value = 3
+	workflow._confirm_fighter_transfer("ship_to_planet")
+	var fighter_dialog: ConfirmationDialog = workflow.get_child(workflow.get_child_count() - 1)
+	fighter_dialog.confirmed.emit()
+	await process_frame
+	_check(captured.size() == 4 and captured[3]["command"] == "planet.fighters.transfer", "fighter transfer did not use the documented server command")
+	if captured.size() > 3:
+		_check(captured[3]["data"] == {"planet_id": 77, "direction": "ship_to_planet", "quantity": 3} and captured[3]["mutating"], "fighter transfer payload did not match the public V3 contract")
 	workflow._quantity.value = 4
 	workflow._confirm_transfer("pickup")
 	var transfer_dialog: ConfirmationDialog = workflow.get_child(workflow.get_child_count() - 1)
 	transfer_dialog.confirmed.emit()
-	_check(captured.size() == 4 and captured[3]["command"] == "planet.colonists.set", "colonist transfer did not submit after confirmation")
-	if captured.size() > 3:
-		_check(captured[3]["data"] == {"planet_id": 77, "action": "pickup", "quantity": 4} and captured[3]["mutating"], "colonist transfer payload did not match the implemented handler")
+	_check(captured.size() == 5 and captured[4]["command"] == "planet.colonists.set", "colonist transfer did not submit after confirmation")
+	if captured.size() > 4:
+		_check(captured[4]["data"] == {"planet_id": 77, "action": "pickup", "quantity": 4} and captured[4]["mutating"], "colonist transfer payload did not match the implemented handler")
 	workflow._launch_now()
-	_check(captured.size() == 5 and captured[4]["command"] == "planet.launch" and captured[4]["mutating"], "planet launch action did not use server-confirmed command flow")
+	_check(captured.size() == 6 and captured[5]["command"] == "planet.launch" and captured[5]["mutating"], "planet launch action did not use server-confirmed command flow")
 	workflow.queue_free()
 	await process_frame
 	if failures.is_empty():

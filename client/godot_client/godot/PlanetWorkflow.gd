@@ -37,6 +37,9 @@ var _labor_organics: SpinBox
 var _labor_equipment: SpinBox
 var _labor_weapons: SpinBox
 var _labor_save: Button
+var _fighter_quantity: SpinBox
+var _fighter_to_planet: Button
+var _fighter_to_ship: Button
 var _labor_max := {"ore": 0, "organics": 0, "equipment": 0, "weapons": 0}
 var _dim: ColorRect
 
@@ -177,6 +180,9 @@ func _update_responsive_layout() -> void:
 	_transfer_row.vertical = compact
 	_transfer_row.add_theme_constant_override("separation", 6 if compact else 10)
 	_quantity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fighter_quantity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fighter_to_planet.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fighter_to_ship.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pickup.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_dropoff.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stock_commodity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -291,6 +297,9 @@ func set_busy(busy: bool) -> void:
 	_labor_equipment.editable = not busy
 	_labor_weapons.editable = not busy
 	_stock_commodity.disabled = busy
+	_fighter_quantity.editable = not busy
+	_fighter_to_planet.disabled = busy or _planet_id <= 0
+	_fighter_to_ship.disabled = busy or _planet_id <= 0
 	_rename_button.disabled = busy
 	_update_transfer_buttons()
 	_update_development_controls()
@@ -387,6 +396,37 @@ func _build_management_controls(column: VBoxContainer) -> void:
 	labor_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	labor_hint.add_theme_color_override("font_color", Color(0.66, 0.74, 0.76))
 	column.add_child(labor_hint)
+	var fighter_title := Label.new()
+	fighter_title.text = "PLANET FIGHTER TRANSFER"
+	fighter_title.add_theme_color_override("font_color", Color(0.48, 0.86, 0.84))
+	column.add_child(fighter_title)
+	var fighter_row := BoxContainer.new()
+	fighter_row.add_theme_constant_override("separation", 8)
+	column.add_child(fighter_row)
+	_fighter_quantity = SpinBox.new()
+	_fighter_quantity.min_value = 1
+	_fighter_quantity.max_value = 1000000
+	_fighter_quantity.step = 1
+	_fighter_quantity.value = 1
+	_fighter_quantity.prefix = "Fighters: "
+	_fighter_quantity.focus_mode = Control.FOCUS_ALL
+	_fighter_quantity.get_line_edit().select_all_on_focus = true
+	fighter_row.add_child(_fighter_quantity)
+	_fighter_to_planet = Button.new()
+	_fighter_to_planet.text = "SHIP → PLANET"
+	_apply_button_style(_fighter_to_planet, false)
+	_fighter_to_planet.pressed.connect(_confirm_fighter_transfer.bind("ship_to_planet"))
+	fighter_row.add_child(_fighter_to_planet)
+	_fighter_to_ship = Button.new()
+	_fighter_to_ship.text = "PLANET → SHIP"
+	_apply_button_style(_fighter_to_ship, false)
+	_fighter_to_ship.pressed.connect(_confirm_fighter_transfer.bind("planet_to_ship"))
+	fighter_row.add_child(_fighter_to_ship)
+	var fighter_hint := Label.new()
+	fighter_hint.text = "The server verifies planet ownership, landing, available fighters and ship capacity."
+	fighter_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	fighter_hint.add_theme_color_override("font_color", Color(0.66, 0.74, 0.76))
+	column.add_child(fighter_hint)
 	var stock_row := BoxContainer.new()
 	stock_row.add_theme_constant_override("separation", 10)
 	column.add_child(stock_row)
@@ -561,6 +601,27 @@ func _send_stock_transfer(command: String) -> void:
 		"commodity": commodity,
 		"quantity": int(_stock_quantity.value),
 	}, "Deposit %s" % commodity if command == "planet.deposit" else "Withdraw %s" % commodity, true)
+
+func _confirm_fighter_transfer(direction: String) -> void:
+	if _busy or _planet_id <= 0 or int(_fighter_quantity.value) < 1:
+		return
+	var quantity := int(_fighter_quantity.value)
+	var direction_label := "ship to planet" if direction == "ship_to_planet" else "planet to ship"
+	var dialog := ConfirmationDialog.new()
+	dialog.title = "Transfer fighters"
+	dialog.dialog_text = "Transfer %d fighters (%s)? The server checks your ownership, landing, stock and ship capacity." % [quantity, direction_label]
+	dialog.ok_button_text = "CONFIRM TRANSFER"
+	add_child(dialog)
+	dialog.confirmed.connect(func() -> void:
+		command_requested.emit("planet.fighters.transfer", {
+			"planet_id": _planet_id,
+			"direction": direction,
+			"quantity": quantity,
+		}, "Planet fighter transfer", true)
+		dialog.queue_free()
+	)
+	dialog.canceled.connect(dialog.queue_free)
+	DialogLayout.popup(dialog, Vector2i(560, 230))
 
 func _open_rename_dialog() -> void:
 	if _busy or _planet_id <= 0:

@@ -30,6 +30,7 @@ def test_planet_menus_expose_existing_management_commands(menus):
     assert surface["i"] == {"pycall": "planet_overview_flow"}
     assert surface["w"] == {"pycall": "planet_workforce_flow"}
     assert surface["s"] == {"pycall": "planet_stock_transfer_flow"}
+    assert surface["f"] == {"pycall": "planet_fighter_transfer_flow"}
     assert surface["r"] == {"pycall": "planet_rename_flow"}
     assert citadel["b"] == {"pycall": "citadel_build_flow"}
     assert citadel["d"] == {"pycall": "planet_treasury_deposit_flow"}
@@ -156,6 +157,53 @@ def test_treasury_withdraw_uses_credit_contract_and_reports_balance(
     out = capsys.readouterr().out
     assert "Treasury balance: 900" in out
     assert "Player credits: 1200" in out
+
+
+def test_planet_fighter_transfer_uses_documented_direction_and_authoritative_result(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory()
+    ctx.state["current_planet_id"] = 77
+    fake_conn.queue("planet.info", _planet(fighters=12))
+    fake_conn.queue("planet.fighters.transfer", {
+        "status": "ok", "type": "planet.fighters.transferred_v1",
+        "data": {"planet_id": 77, "direction": "ship_to_planet", "quantity": 5,
+                 "planet_fighters": 17, "ship_fighters": 3},
+    })
+    fake_conn.queue("planet.info", _planet(fighters=17))
+    answers = iter(["s", "5", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.planet_fighter_transfer_flow(ctx)
+
+    assert fake_conn.calls[1] == {
+        "command": "planet.fighters.transfer",
+        "data": {"planet_id": 77, "direction": "ship_to_planet", "quantity": 5},
+    }
+    output = capsys.readouterr().out
+    assert "Planet fighters: 17" in output
+    assert "Ship fighters: 3" in output
+    assert fake_conn.calls[-1]["command"] == "planet.info"
+
+
+def test_planet_fighter_transfer_refusal_does_not_retry_or_refresh(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory()
+    ctx.state["current_planet_id"] = 77
+    fake_conn.queue("planet.info", _planet(fighters=12))
+    fake_conn.queue("planet.fighters.transfer", {
+        "status": "error", "error": {"message": "You do not control this planet."},
+    })
+    answers = iter(["p", "20", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.planet_fighter_transfer_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == [
+        "planet.info", "planet.fighters.transfer",
+    ]
+    assert "You do not control this planet." in capsys.readouterr().out
 
 
 def test_citadel_build_uses_existing_command_and_reports_server_timing(

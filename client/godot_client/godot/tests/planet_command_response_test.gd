@@ -68,6 +68,13 @@ func _run() -> void:
 	_check(fake_transport.calls.is_empty(), "failed stock transfer triggered a refresh or mutation retry")
 
 	await app._finish_command_reply(
+		{"status": "refused", "error": {"message": "Insufficient ship fighter capacity."}},
+		{"label": "Planet fighter transfer", "command": "planet.fighters.transfer", "mutating": true},
+	)
+	_check(app.gameplay_view.notification_label.text.contains("Insufficient ship fighter capacity"), "fighter transfer capacity refusal was not shown")
+	_check(fake_transport.calls.is_empty(), "rejected fighter transfer triggered a refresh or second mutation")
+
+	await app._finish_command_reply(
 		{"status": "ok", "type": "citadel.upgrade_started", "data": {"target_level": 2, "days_to_complete": 4}},
 		{"label": "Upgrade citadel", "command": "citadel.upgrade", "mutating": true},
 	)

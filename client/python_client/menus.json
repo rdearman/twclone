@@ -311,6 +311,13 @@
           }
         },
         {
+          "key": "f",
+          "label": "(F) Transfer Fighters",
+          "action": {
+            "pycall": "planet_fighter_transfer_flow"
+          }
+        },
+        {
           "key": "r",
           "label": "(R) Rename Planet",
           "action": {

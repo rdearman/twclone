@@ -4308,6 +4308,48 @@ def planet_stock_transfer_flow(ctx: Context):
         print("Choose deposit or withdraw.")
 
 
+@register("planet_fighter_transfer_flow")
+def planet_fighter_transfer_flow(ctx: Context):
+    """Transfer fighters between the landed active ship and its planet."""
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Land your active ship on the planet before transferring fighters.")
+        return
+    planet = _planet_info(ctx, planet_id)
+    if planet is None:
+        return
+    print(f"Confirmed planet fighters: {planet.get('fighters', 'not returned')}")
+    direction = input("Transfer (S)hip fighters to planet or (P)lanet fighters to ship? ").strip().lower()
+    if direction in ("s", "ship", "ship_to_planet"):
+        direction = "ship_to_planet"
+    elif direction in ("p", "planet", "planet_to_ship"):
+        direction = "planet_to_ship"
+    else:
+        print("Choose ship-to-planet or planet-to-ship.")
+        return
+    quantity = _positive_quantity("Fighter quantity: ")
+    if quantity is None:
+        return
+    if not _trade_confirmation(
+        f"Transfer {quantity} fighters ({direction.replace('_', ' ')})?", default_no=True
+    ):
+        print("Fighter transfer cancelled; no command was sent.")
+        return
+    response = ctx.conn.rpc("planet.fighters.transfer", {
+        "planet_id": planet_id, "direction": direction, "quantity": quantity,
+    })
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planet fighter transfer refused: {_planet_error(response)}")
+        return
+    data = get_data(response)
+    print("Fighter transfer accepted by the server.")
+    for key, label in (("planet_fighters", "Planet fighters"), ("ship_fighters", "Ship fighters")):
+        if key in data:
+            print(f"{label}: {data[key]}")
+    _refresh_planet_overview(ctx, planet_id)
+
+
 @register("planet_treasury_deposit_flow")
 def planet_treasury_deposit_flow(ctx: Context):
     _planet_transfer_flow(ctx, "deposit", treasury_only=True)
