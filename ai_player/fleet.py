@@ -187,6 +187,19 @@ def _player_summary(player: dict[str, Any], exit_code: int | None) -> dict[str, 
     return summary
 
 
+def _aggregate_metrics(records: list[dict[str, Any]]) -> dict[str, int | float]:
+    """Sum numeric player metrics, excluding missing states and booleans."""
+    totals: dict[str, int | float] = {}
+    for record in records:
+        metrics = record.get("metrics")
+        if not record.get("state_available") or not isinstance(metrics, dict):
+            continue
+        for name, value in metrics.items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                totals[name] = totals.get(name, 0) + value
+    return totals
+
+
 def run_cohort(
     players: list[dict[str, Any]], *, run_root: Path, duration_seconds: float,
     max_concurrent: int, python: str = sys.executable,
@@ -256,6 +269,7 @@ def run_cohort(
         "max_concurrent": max_concurrent,
         "duration_seconds": duration_seconds,
         "interrupted": interrupted,
+        "aggregate_metrics": _aggregate_metrics(records),
         "players": records,
     }
     report_path = run_root / "summary.json"

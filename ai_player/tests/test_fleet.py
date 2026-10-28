@@ -60,6 +60,22 @@ def test_count_is_bounded_to_population_target(tmp_path):
         fleet.load_player_configs(tmp_path, 51)
 
 
+def test_aggregate_metrics_sum_only_available_players_and_numeric_values():
+    records = [
+        {"state_available": True, "metrics": {
+            "commands_succeeded": 6, "trade_profit_credits": 125, "bad": True,
+        }},
+        {"state_available": True, "metrics": {
+            "commands_succeeded": 4, "trade_profit_credits": -10,
+        }},
+        {"state_available": False, "metrics": {"commands_succeeded": 900}},
+    ]
+
+    assert fleet._aggregate_metrics(records) == {
+        "commands_succeeded": 10, "trade_profit_credits": 115,
+    }
+
+
 def test_orchestration_respects_concurrency_and_writes_aggregate(tmp_path, monkeypatch):
     players = []
     for index in range(4):

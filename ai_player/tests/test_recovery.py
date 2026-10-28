@@ -69,6 +69,11 @@ class UnusedBugReporter:
         raise AssertionError("unexpected state inconsistency")
 
 
+class QuietBandit:
+    def give_feedback(self, *_args):
+        pass
+
+
 def test_pending_command_timeout_removes_only_expired_request(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.add_pending_command("old", {"command": "trade.buy"})
@@ -127,6 +132,23 @@ def test_trade_command_adds_matching_idempotency_key_when_missing():
 
     assert envelope_key == "generated-key"
     assert data["idempotency_key"] == envelope_key
+
+
+def test_successful_strategy_goal_increments_completion_metric(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("strategy_plan", ["planet: info"])
+    manager.add_pending_command("planet-info", {
+        "command": "planet.info", "data": {"planet_id": 321}
+    })
+
+    process_responses(
+        [{"reply_to": "planet-info", "status": "ok", "type": "planet.info",
+          "data": {"planet_id": 321}}],
+        None, manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+
+    assert manager.get("strategy_plan") == []
+    assert manager.get("ai_metrics")["goals_completed"] == 1
 
 
 def test_atomic_state_save_keeps_previous_state_when_serialization_fails(tmp_path):

@@ -1985,6 +1985,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     current_goal = strategy_plan[0]
                     if is_goal_complete(current_goal, game_state_after, response_data, response_type):
                         logger.info(f"Strategic goal '{current_goal}' is complete. Removing from plan.")
+                        state_manager.record_ai_metric("goals_completed")
                         strategy_plan.pop(0)
                         state_manager.set("strategy_plan", strategy_plan)
 

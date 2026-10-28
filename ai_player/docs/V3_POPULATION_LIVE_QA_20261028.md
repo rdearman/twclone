@@ -39,10 +39,13 @@ The trade loop did not recur as repeated network quote requests. One expected ma
 - Preserve cargo origin metadata across reconnect and skip same-origin sale destinations.
 - Make observed planet IDs part of `planet.land` and `planet.info` requests; defer when sector data does not expose an ID.
 - Complete `planet: land` only on a successful `planet.land` response, and `planet: info` only after `planet.info`.
+- Do not randomly attempt planet landings during ordinary exploit planning. A `planet.info` action is eligible only after the ship is reported landed; explicit model-selected `planet: land` goals remain available.
+- Redirect explicit sell goals toward the nearest known port according to cached route length instead of the first port in map insertion order.
+- Count completed strategic goals and aggregate numeric per-player metrics in the cohort summary, excluding players whose state file is unavailable.
 
 The schema-cache and persistent registration retry changes were added after this live run and are covered by offline regressions; neither has yet been re-qualified against the server.
 
-`pytest -q ai_player/tests`: **85 passed**. `py_compile` and `git diff --check` passed. The suite includes the 163-tick empty-port quote regression, trading direction/origin checks, independent cohort configuration, secret redaction, and the new planet-goal completion checks. A later regression verifies that timeout counters can be attributed to public command names without recording request data.
+`pytest -q ai_player/tests`: **91 passed**. `py_compile` and `git diff --check` passed. The suite includes the 163-tick empty-port quote regression, trading direction/origin checks, independent cohort configuration, secret redaction, planet goal/landing safety, nearest known-port selection, goal-completion metrics, and cohort metric aggregation. Timeout counters can be attributed to public command names without recording request data.
 
 The 19 timeouts in the resumed cohort predate per-command timeout metrics, so the historical evidence does not identify which command types timed out. Future runs now retain aggregate and per-command timeout counts in the player's AI metrics. The live QA server and its PostgreSQL service were unavailable during the follow-up; these metrics have not yet been collected in a resumed live run.
 
