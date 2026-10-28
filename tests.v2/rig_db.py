@@ -11,13 +11,23 @@ from tools.migrate_passwords_argon2id import encoded_hash, load_argon2
 
 _argon2 = load_argon2()
 
-def execute_sql(sql, dbname="twclone", user="postgres", password=None, host="localhost"):
+
+def validate_qa_target(dbname, host):
+    """Refuse fixtures against the shared game database or a remote host."""
+    if not dbname or not dbname.startswith(("twclone_qa_", "twclone_v3qa_")):
+        raise ValueError("database name must start with twclone_qa_ or twclone_v3qa_")
+    if host not in ("localhost", "127.0.0.1", "::1"):
+        raise ValueError("QA database host must be loopback")
+
+
+def execute_sql(sql, dbname, user, host, port, password=None):
     print("EXEC: database fixture statement (values suppressed)")
     env = os.environ.copy()
     if password:
         env["PGPASSWORD"] = password
     
-    cmd = ["psql", "-h", host, "-U", user, "-d", dbname, "-c", sql]
+    cmd = ["psql", "-h", host, "-p", str(port), "-U", user, "-d", dbname,
+           "-v", "ON_ERROR_STOP=1", "-c", sql]
     
     result = subprocess.run(cmd, env=env, capture_output=True, text=True)
     
@@ -26,13 +36,14 @@ def execute_sql(sql, dbname="twclone", user="postgres", password=None, host="loc
         sys.exit(1)
     return True
 
-def get_player_id(username, dbname="twclone", user="postgres", password=None, host="localhost"):
+def get_player_id(username, dbname, user, host, port, password=None):
     env = os.environ.copy()
     if password:
         env["PGPASSWORD"] = password
         
     sql = f"SELECT player_id FROM players WHERE name = '{username}'"
-    cmd = ["psql", "-h", host, "-U", user, "-d", dbname, "-t", "-A", "-c", sql]
+    cmd = ["psql", "-h", host, "-p", str(port), "-U", user, "-d", dbname,
+           "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql]
     
     result = subprocess.run(cmd, env=env, capture_output=True, text=True)
     
@@ -44,9 +55,22 @@ def main():
     parser = argparse.ArgumentParser(description="Rig the database for regression tests")
     parser.add_argument("--config", required=True, help="Path to test_rig.json")
     parser.add_argument("--reset", action="store_true", help="Reset test data before rigging")
+    parser.add_argument("--host", default=os.environ.get("QA_PGHOST", "127.0.0.1"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("QA_PGPORT", "5432")))
+    parser.add_argument("--dbname", default=os.environ.get("QA_PGDATABASE"),
+                        help="Disposable database (required; must use a twclone_qa_ or twclone_v3qa_ name)")
+    parser.add_argument("--user", default=os.environ.get("QA_PGUSER", "postgres"))
     args = parser.parse_args()
 
-    db_config = {"dbname": "twclone", "user": "postgres", "host": "localhost", "password": "B1lb0 Bagg1ns!"}
+    if not args.dbname:
+        parser.error("--dbname or QA_PGDATABASE is required; refusing the former implicit twclone target")
+    try:
+        validate_qa_target(args.dbname, args.host)
+    except ValueError as error:
+        parser.error(str(error))
+
+    db_config = {"dbname": args.dbname, "user": args.user, "host": args.host,
+                 "port": args.port, "password": os.environ.get("PGPASSWORD")}
 
     with open(args.config) as f:
         rig = json.load(f)
@@ -136,8 +160,10 @@ def main():
                 sql = f"INSERT INTO corporations (corporation_id, name, owner_id) VALUES ({c['corporation_id']}, '{c['name']}', {owner_id}) ON CONFLICT (corporation_id) DO NOTHING;"
                 execute_sql(sql, **db_config)
                 
-                # Add owner to corp_members
-                sql = f"INSERT INTO corp_members (corporation_id, player_id, role) VALUES ({c['corporation_id']}, {owner_id}, 'Leader') ON CONFLICT (corporation_id, player_id) DO UPDATE SET role = 'Leader';"
+                # Corporation insertion creates the owner membership through
+                # its existing database trigger. Update that row instead of
+                # trying to insert a second Leader through the one-leader guard.
+                sql = f"UPDATE corp_members SET role = 'Leader' WHERE corporation_id = {c['corporation_id']} AND player_id = {owner_id};"
                 execute_sql(sql, **db_config)
                 
                 # Seed bank account for corporation

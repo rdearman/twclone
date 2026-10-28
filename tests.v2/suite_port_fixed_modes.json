@@ -74,11 +74,20 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Cloak ship and clear port knowledge for rejection checks",
+      "name": "Rig: Cloak ship for rejection checks",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET cloaked = CURRENT_TIMESTAMP WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}); DELETE FROM player_known_ports WHERE player_id = @{port_mode_player_player_id} AND port_id = 2"
+        "sql": "UPDATE ships SET cloaked = CURRENT_TIMESTAMP WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear port knowledge for rejection checks",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM player_known_ports WHERE player_id = @{port_mode_player_player_id} AND port_id = 2"
       },
       "expect": { "status": "ok" }
     },
@@ -151,11 +160,20 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Preserve cloak and clear knowledge before positive-stock rejection",
+      "name": "Rig: Preserve cloak before positive-stock rejection",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET cloaked = CURRENT_TIMESTAMP WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}); DELETE FROM player_known_ports WHERE player_id = @{port_mode_player_player_id} AND port_id = 2"
+        "sql": "UPDATE ships SET cloaked = CURRENT_TIMESTAMP WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id})"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear port knowledge before positive-stock rejection",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM player_known_ports WHERE player_id = @{port_mode_player_player_id} AND port_id = 2"
       },
       "expect": { "status": "ok" }
     },

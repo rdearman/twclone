@@ -35,12 +35,15 @@ SUITES = [
 
 def run_all():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default=HOST)
-    parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--host", default=os.environ.get("TWCLONE_TEST_HOST", HOST))
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("TWCLONE_TEST_PORT", PORT)))
     parser.add_argument("--suite", help="Run specific suite file")
+    parser.add_argument("--capture-responses", help="Append redacted RPC responses as JSONL")
     args = parser.parse_args()
 
-    runner = JsonSuiteRunner(args.host, args.port)
+    runner = JsonSuiteRunner(args.host, args.port,
+                             capture_responses=args.capture_responses)
     
     suites_to_run = SUITES
     if args.suite:

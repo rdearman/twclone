@@ -226,11 +226,29 @@
       ]
     },
     {
-      "name": "Rig: Create isolated sectors for directional adjacency checks",
+      "name": "Rig: Clear prior visits for isolated sector fixture",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "DELETE FROM player_visited_sectors WHERE sector_id IN (980001, 980002, 980003); DELETE FROM sector_warps WHERE from_sector IN (980001, 980002, 980003) OR to_sector IN (980001, 980002, 980003); DELETE FROM sectors WHERE sector_id IN (980001, 980002, 980003)"
+        "sql": "DELETE FROM player_visited_sectors WHERE sector_id IN (980001, 980002, 980003)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear prior warps for isolated sector fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_warps WHERE from_sector IN (980001, 980002, 980003) OR to_sector IN (980001, 980002, 980003)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Remove prior isolated sectors",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sectors WHERE sector_id IN (980001, 980002, 980003)"
       },
       "expect": { "status": "ok" }
     },
@@ -381,11 +399,20 @@
       ]
     },
     {
-      "name": "Rig: Discover pathfind target but leave intermediate sector unknown",
+      "name": "Rig: Mark pathfind target discovered",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES (@{information_visibility_user_player_id}, 980003) ON CONFLICT (player_id, sector_id) DO NOTHING; INSERT INTO sector_warps (from_sector, to_sector) VALUES (980001, 980002), (980002, 980003) ON CONFLICT DO NOTHING"
+        "sql": "INSERT INTO player_visited_sectors (player_id, sector_id) VALUES (@{information_visibility_user_player_id}, 980003) ON CONFLICT (player_id, sector_id) DO NOTHING"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Add route through undiscovered intermediate sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (980001, 980002), (980002, 980003) ON CONFLICT DO NOTHING"
       },
       "expect": { "status": "ok" }
     },
@@ -437,11 +464,29 @@
       ]
     },
     {
-      "name": "Rig: Remove isolated directional adjacency sectors",
+      "name": "Rig: Remove isolated sector knowledge",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "DELETE FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id IN (980001, 980002, 980003); DELETE FROM sector_warps WHERE from_sector IN (980001, 980002, 980003) OR to_sector IN (980001, 980002, 980003); DELETE FROM sectors WHERE sector_id IN (980001, 980002, 980003)"
+        "sql": "DELETE FROM player_visited_sectors WHERE player_id = @{information_visibility_user_player_id} AND sector_id IN (980001, 980002, 980003)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Remove isolated sector warps",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_warps WHERE from_sector IN (980001, 980002, 980003) OR to_sector IN (980001, 980002, 980003)"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Remove isolated sectors",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sectors WHERE sector_id IN (980001, 980002, 980003)"
       },
       "expect": { "status": "ok" }
     }

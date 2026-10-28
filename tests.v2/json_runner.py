@@ -5,6 +5,7 @@ import os
 import time
 import sys
 import uuid
+import argparse
 from typing import Any, Dict, List, Optional, Tuple
 
 # Import TWClient - assuming it's available in the same directory or PYTHONPATH
@@ -12,7 +13,8 @@ from twclient import TWClient
 
 class JsonSuiteRunner:
     def __init__(self, host: str, port: int, timeout: int = 25, macros_path: str = "tests.v2/macros.json",
-                 use_tls: bool = False, tls_skip_verify: bool = False):
+                 use_tls: bool = False, tls_skip_verify: bool = False,
+                 capture_responses: Optional[str] = None):
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -24,6 +26,33 @@ class JsonSuiteRunner:
         self._admin_client: Optional[TWClient] = None
         self.run_id = f"_{int(time.time())}"
         self.username_map = {}
+        self.capture_responses = capture_responses
+        self.active_suite = None
+
+    @staticmethod
+    def _redact_response(value):
+        if isinstance(value, dict):
+            return {
+                key: "<redacted>" if key.lower() in ("session_token", "access_token")
+                else JsonSuiteRunner._redact_response(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [JsonSuiteRunner._redact_response(item) for item in value]
+        return value
+
+    def _capture_response(self, test_name, command, response):
+        if not self.capture_responses:
+            return
+        record = {
+            "suite": self.active_suite,
+            "test": test_name,
+            "command": command,
+            "response": self._redact_response(response),
+        }
+        with open(self.capture_responses, "a", encoding="utf-8") as output:
+            output.write(json.dumps(record, separators=(",", ":"), ensure_ascii=False))
+            output.write("\n")
 
     def _load_macros(self, path: str) -> Dict[str, List[Dict[str, Any]]]:
         if not os.path.exists(path):
@@ -144,6 +173,7 @@ class JsonSuiteRunner:
 
     def run_suite(self, suite_path: str) -> bool:
         print(f"Running Suite: {suite_path}")
+        self.active_suite = suite_path
         if not os.path.exists(suite_path):
             print(f"Error: Suite file {suite_path} not found.")
             return False
@@ -228,6 +258,8 @@ class JsonSuiteRunner:
         if not resp:
             print("FAIL (No response)")
             return False
+
+        self._capture_response(name, cmd_json.get("command"), resp)
 
         # register_if_missing logic
         if cmd_json.get("command") == "auth.register" and test.get("register_if_missing"):
@@ -371,10 +403,28 @@ class JsonSuiteRunner:
                 return None
         return curr
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Run one JSON RPC integration suite")
+    parser.add_argument("suite", help="Suite JSON file")
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("TWCLONE_TEST_HOST", "localhost"),
+        help="Game server host (default: TWCLONE_TEST_HOST or localhost)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("TWCLONE_TEST_PORT", "1234")),
+        help="Game server port (default: TWCLONE_TEST_PORT or 1234)",
+    )
+    parser.add_argument("--timeout", type=int, default=25)
+    parser.add_argument("--capture-responses", help="Append redacted RPC responses as JSONL")
+    args = parser.parse_args(argv)
+
+    runner = JsonSuiteRunner(args.host, args.port, timeout=args.timeout,
+                             capture_responses=args.capture_responses)
+    return 0 if runner.run_suite(args.suite) else 1
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: json_runner.py <suite.json>")
-        sys.exit(1)
-    runner = JsonSuiteRunner("localhost", 1234)
-    success = runner.run_suite(sys.argv[1])
-    sys.exit(0 if success else 1)
+    sys.exit(main())
