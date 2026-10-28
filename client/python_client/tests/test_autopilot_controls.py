@@ -129,3 +129,48 @@ def test_autopilot_status_renders_documented_path_and_next_alias(capsys):
     assert "running (express)" in output
     assert "current sector 10" in output and "destination 12" in output
     assert "next 11" in output and "path 10 → 11 → 12" in output
+
+
+def test_saved_autopilot_route_uses_server_path_and_executes_only_after_confirmation(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 41, "name": "Origin"})
+    fake_conn.queue("move.autopilot.start", {
+        "status": "ok", "type": "move.autopilot.route_v1",
+        "data": {"path": [41, 42, 43], "hops": 2},
+    })
+    started = []
+    answers = iter(["43", "y", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    monkeypatch.setattr(client, "start_autopilot", lambda current: started.append(current))
+
+    client.saved_autopilot_route_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "move.autopilot.start", "data": {"to_sector_id": 43}}]
+    assert ctx.state["ap_route"] == [42, 43]
+    assert started == [ctx]
+    assert "41 → 42 → 43" in capsys.readouterr().out
+
+
+def test_declining_saved_route_execution_stops_server_route_without_warp(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 41, "name": "Origin"})
+    fake_conn.queue("move.autopilot.start", {
+        "status": "ok", "type": "move.autopilot.route_v1", "data": {"path": [41, 42]},
+    })
+    fake_conn.queue("move.autopilot.stop", {
+        "status": "ok", "type": "move.autopilot.stopped_v1", "data": {"state": "stopped"},
+    })
+    answers = iter(["42", "y", "n"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.saved_autopilot_route_flow(ctx)
+
+    assert fake_conn.calls == [
+        {"command": "move.autopilot.start", "data": {"to_sector_id": 42}},
+        {"command": "move.autopilot.stop", "data": {}},
+    ]
+    assert "move.warp" not in [call["command"] for call in fake_conn.calls]
+    assert ctx.state["ap_route"] == []
+    assert "Autopilot stopped" in capsys.readouterr().out

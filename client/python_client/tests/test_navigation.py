@@ -191,6 +191,32 @@ def test_transwarp_refusal_does_not_refresh_or_replace_cached_sector(
     assert "Transwarp drive not installed" in capsys.readouterr().out
 
 
+def test_current_sector_info_and_detailed_scan_use_only_empty_current_sector_requests(
+    ctx_factory, fake_conn, capsys
+):
+    ctx = ctx_factory(sector={"id": 41, "name": "Known"})
+    fake_conn.queue("sector.info", {"status": "ok", "type": "sector.info", "data": {"sector_id": 41}})
+    fake_conn.queue("sector.scan", {"status": "ok", "type": "sector.scan", "data": {"sector_id": 41, "ports": []}})
+
+    client.sector_info_flow(ctx)
+    client.detailed_sector_scan_flow(ctx)
+
+    assert fake_conn.calls == [
+        {"command": "sector.info", "data": {}},
+        {"command": "sector.scan", "data": {}},
+    ]
+    assert '"sector_id": 41' in capsys.readouterr().out
+
+
+def test_density_scan_does_not_guess_an_unregistered_fallback(ctx_factory, fake_conn):
+    ctx = ctx_factory(sector={"id": 41})
+    fake_conn.queue("sector.scan.density", {"status": "error", "error": {"message": "Unavailable"}})
+
+    client.sector_density_scan_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "sector.scan.density", "data": {"sector_id": 41}}]
+
+
 def test_submenus_have_functioning_back_action(menus):
     for menu_id, menu in menus.items():
         if menu_id == "MAIN":

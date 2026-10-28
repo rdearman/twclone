@@ -284,6 +284,56 @@ def cli_autopilot_stop(ctx):
     suffix = f" at sector {current}" if current is not None else ""
     print(f"Autopilot stopped{suffix}; no movement was made by this command.")
     return True
+
+
+@register("saved_autopilot_route_flow")
+def saved_autopilot_route_flow(ctx: Context):
+    """Create a server-persisted route, then offer to execute confirmed hops."""
+    current_sector = ctx.current_sector_id
+    if current_sector is None:
+        print("Cannot save a route until the current sector is confirmed.")
+        return
+    try:
+        destination = int(input("Server-saved route destination: ").strip())
+    except ValueError:
+        print("Invalid sector ID.")
+        return
+    if destination <= 0:
+        print("Sector ID must be greater than zero.")
+        return
+    if destination == current_sector:
+        print("You are already at that destination.")
+        return
+    if not _trade_confirmation("Create and save this route?", default_no=True):
+        print("Route creation cancelled; no route was changed.")
+        return
+    response = ctx.conn.rpc("move.autopilot.start", {"to_sector_id": destination})
+    ctx.state["autopilot_status_response"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = (response.get("error") or {}) if isinstance(response, dict) else {}
+        print(f"[Error] Could not save route: {error.get('message', 'The server refused the route.')}")
+        return
+    data = get_data(response)
+    path = data.get("path") if isinstance(data, dict) else None
+    if (not isinstance(path, list) or not path
+            or any(not isinstance(item, int) or item <= 0 for item in path)
+            or path[0] != current_sector or path[-1] != destination):
+        print("The server saved the request but returned no usable route; stopping that saved route now.")
+        cli_autopilot_stop(ctx)
+        return
+    route = list(path[1:]) if path[0] == current_sector else list(path)
+    if not route:
+        print("The server confirms you are already at the destination.")
+        return
+    ctx.state["ap_route"] = route
+    ctx.state["ap_route_plotted"] = True
+    print("Server-saved route: " + " → ".join(map(str, path)))
+    if not _trade_confirmation("Execute these server-confirmed warps now?", default_no=True):
+        if cli_autopilot_stop(ctx):
+            ctx.state["ap_route"] = []
+            ctx.state["ap_route_plotted"] = False
+        return
+    start_autopilot(ctx)
 # --- END AUTO-ADDED AUTOPILOT ---
 
 
@@ -883,17 +933,12 @@ def compute_flags(ctx: Context) -> dict:
 @register("sector_density_scan_flow")
 def sector_density_scan_flow(ctx: Context):
     """
-    Density-only scan that is resilient:
-    - Sends sector_id (if known)
-    - Tries sector.scan.density; falls back to move.scan.density
+    Density-only scan through the published density endpoint.
     - Prints table for [sid, density, ...] or single dict shape
     """
     sector_id = ctx.current_sector_id
     payload = {"sector_id": sector_id} if sector_id is not None else {}
-    try:
-        resp = ctx.conn.rpc("sector.scan.density", payload)
-    except Exception:
-        resp = ctx.conn.rpc("move.scan.density", payload)
+    resp = ctx.conn.rpc("sector.scan.density", payload)
     ctx.state["last_rpc"] = resp
 
     print("\n=== Density Scan ===")
@@ -919,6 +964,38 @@ def sector_density_scan_flow(ctx: Context):
             print(f"{sid:>6}   {dens:>7}")
     else:
         print("(unexpected response shape)")
+
+
+@register("sector_info_flow")
+def sector_info_flow(ctx: Context):
+    """Refresh the server-confirmed current sector without probing remote sectors."""
+    response = ctx.conn.rpc("sector.info", {})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = (response.get("error") or {}) if isinstance(response, dict) else {}
+        print(f"[Error] Sector information refused: {error.get('message', 'The server did not return current-sector information.')}")
+        return
+    data = get_data(response)
+    if isinstance(data, dict):
+        _pp(data)
+    else:
+        print("[Error] The server returned an unrecognized sector.info response.")
+
+
+@register("detailed_sector_scan_flow")
+def detailed_sector_scan_flow(ctx: Context):
+    """Display the current sector's detailed scan as returned under fog rules."""
+    response = ctx.conn.rpc("sector.scan", {})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = (response.get("error") or {}) if isinstance(response, dict) else {}
+        print(f"[Error] Detailed scan refused: {error.get('message', 'The server did not return scan information.')}")
+        return
+    data = get_data(response)
+    if isinstance(data, dict):
+        _pp(data)
+    else:
+        print("[Error] The server returned an unrecognized sector.scan response.")
 
 
 @register("pathfind_flow")
@@ -4129,6 +4206,58 @@ def _positive_quantity(prompt: str) -> Optional[int]:
     return quantity
 
 
+@register("combat_attack_flow")
+def combat_attack_flow(ctx: Context):
+    """Attack only a server-listed ship, with a FedSpace client-side guard."""
+    sector_id = ctx.current_sector_id
+    if sector_id is None:
+        print("Refresh current-sector information before selecting an attack target.")
+        return
+    if 1 <= sector_id <= 10:
+        print("Attack cancelled: Captain Z protects FedSpace sectors 1–10.")
+        return
+    my_ship_id = get_my_ship_id(ctx.conn, ctx)
+    targets = []
+    for row in (ctx.last_sector_desc or {}).get("ships") or []:
+        if not isinstance(row, dict):
+            continue
+        target_id = row.get("id", row.get("ship_id"))
+        if not isinstance(target_id, int) or target_id <= 0 or target_id == my_ship_id:
+            continue
+        targets.append(row)
+    if not targets:
+        print("No other server-listed ship is available as a target in this sector.")
+        return
+    print("Ships listed in the current sector:")
+    for row in targets:
+        target_id = row.get("id", row.get("ship_id"))
+        name = row.get("name") or row.get("ship_name") or "Unnamed ship"
+        print(f"  {target_id}: {name}")
+    try:
+        target_id = int(input("Target ship ID: ").strip())
+    except ValueError:
+        print("Attack cancelled: enter one of the listed ship IDs.")
+        return
+    if not any(row.get("id", row.get("ship_id")) == target_id for row in targets):
+        print("Attack cancelled: that ship is not listed in the current sector.")
+        return
+    if not _trade_confirmation(f"Attack ship {target_id}?", default_no=True):
+        print("Attack cancelled; no command was sent.")
+        return
+    response = ctx.conn.rpc("combat.attack", {"target_ship_id": target_id})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = (response.get("error") or {}) if isinstance(response, dict) else {}
+        print(f"[Error] Attack refused: {error.get('message', 'The server did not accept the attack.')}")
+        return
+    print("--- Server Combat Report ---")
+    _pp(get_data(response))
+    _hud_rpc(ctx, "ship.status", {})
+    sector_response = ctx.conn.rpc("sector.info", {})
+    if isinstance(sector_response, dict) and sector_response.get("status") == "ok":
+        ctx.last_sector_desc = normalize_sector(get_data(sector_response))
+
+
 def _planet_transfer_flow(ctx: Context, direction: str, treasury_only: bool = False):
     planet_id = _planet_id(ctx)
     if planet_id is None:
@@ -5006,15 +5135,12 @@ def _ctx_capabilities_get(ctx, path, default=None):
 @register("sector_density_scan_flow")
 def sector_density_scan_flow(ctx: Context):
     """
-    Density-only scan: calls sector.scan.density (fallback to move.scan.density).
+    Density-only scan: calls the published sector.scan.density endpoint.
     Supports both dict payload and flat [sector_id, density, ...] arrays.
     """
     sector_id = ctx.current_sector_id
     payload = {"sector_id": sector_id} if sector_id is not None else {}
-    try:
-        resp = ctx.conn.rpc("sector.scan.density", payload)
-    except Exception:
-        resp = ctx.conn.rpc("move.scan.density", payload)
+    resp = ctx.conn.rpc("sector.scan.density", payload)
     ctx.state["last_rpc"] = resp
 
     print("\n=== Density Scan ===")

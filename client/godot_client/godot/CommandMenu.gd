@@ -16,6 +16,8 @@ const COMMANDS := {
 	"COMPUTER": [
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
+		{"label": "Current sector information", "command": "sector.info", "fixed": {}},
+		{"label": "Detailed current-sector scan", "command": "sector.scan", "fixed": {}},
 		{"label": "Ship towing status", "command": "ship.tow.status", "fixed": {}},
 		{"label": "Release current tow beam", "command": "ship.tow", "fixed": {}, "mutating": true, "tooltip": "Releases the active tow relationship if your ship is towing another vessel."},
 		{"label": "Repair ship at shipyard", "command": "ship.repair", "mutating": true, "requires_shipyard_dock": true, "tooltip": "Repair restores hull to 100; the server checks the final cost and your credits."},
@@ -115,7 +117,7 @@ const COMMANDS := {
 		{"label": "Avoid a sector", "command": "nav.avoid.add", "fields": [["sector_id", FIELD_INT, "Sector ID", ""]], "mutating": true},
 		{"label": "Remove sector from avoid list", "command": "nav.avoid.remove", "fields": [["sector_id", FIELD_INT, "Sector ID", ""]], "mutating": true},
 		{"label": "Autopilot status", "command": "move.autopilot.status"},
-		{"label": "Plot route to sector", "command": "move.autopilot.start", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true},
+		{"label": "Plot route to sector", "command": "move.autopilot.start", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true, "mutating": true, "tooltip": "Saves this server route and replaces any existing saved route; no movement begins until you engage Autonav."},
 		{"label": "Autopilot · stop at next sector", "command": "move.autopilot.control", "fixed": {"action": "stop_at_next"}, "mutating": true},
 		{"label": "Autopilot · continue route", "command": "move.autopilot.control", "fixed": {"action": "continue"}, "mutating": true},
 		{"label": "Autopilot · express mode", "command": "move.autopilot.control", "fixed": {"action": "express"}, "mutating": true, "tooltip": "Express keeps each hop server-validated; it does not skip per-hop checks."},
@@ -643,8 +645,12 @@ func _render_actions() -> void:
 		if selected_ship_id > 0 and selected_ship_id == active_ship_id:
 			_add_unavailable("Your active ship is represented in the HUD; target actions are only available for other vessels.")
 		else:
+			var attack_action := {"label": "Attack this ship", "command": "combat.attack", "context_id": "target_ship_id", "mutating": true}
+			var current_sector_id := int(_snapshot.get("hud", {}).get("sector_id", 0))
+			if current_sector_id >= 1 and current_sector_id <= 10:
+				attack_action["unavailable_reason"] = "Attacks are disabled in protected FedSpace sectors 1–10."
 			actions = [
-				{"label": "Attack this ship", "command": "combat.attack", "context_id": "target_ship_id", "mutating": true},
+				attack_action,
 				{"label": "Claim this ship · server verifies eligibility", "command": "ship.claim", "context_id": "ship_id", "mutating": true},
 				{"label": "Tow this ship · requires owned, unpiloted vessel", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true},
 			]

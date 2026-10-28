@@ -208,6 +208,13 @@
             "pycall": "pathfind_flow"
           }
         },
+        {
+          "key": "r",
+          "label": "(R) Server-saved autopilot route",
+          "action": {
+            "pycall": "saved_autopilot_route_flow"
+          }
+        },
         
         {
           "key": "a",
@@ -387,12 +394,27 @@
             "pycall": "scan_sector"
           }
 	    },
-	  {
+        {
           "key": "r",
           "label": "(R) Rename Ship",
           "action": {
             "pycall": "rename_ship_flow"
           }
+        },
+	    {
+          "key": "i",
+          "label": "(I) Current Sector Information",
+          "action": { "pycall": "sector_info_flow" }
+        },
+	    {
+          "key": "v",
+          "label": "(V) Detailed Sector Scan",
+          "action": { "pycall": "detailed_sector_scan_flow" }
+        },
+	    {
+          "key": "m",
+          "label": "(M) Combat Status",
+          "action": { "rpc": { "command": "combat.status", "data": {} }, "post": "print_last_rpc" }
         },
 	  {
 	      "key": "d",
@@ -1728,6 +1750,11 @@
     "DEPLOYMENT_MAIN": {
       "title": "--- Operations & Deployment Menu ---",
       "options": [
+        {
+          "key": "a",
+          "label": "(A) Attack Listed Ship",
+          "action": { "pycall": "combat_attack_flow" }
+        },
         {
           "key": "f",
           "label": "(F) Deploy Fighters",

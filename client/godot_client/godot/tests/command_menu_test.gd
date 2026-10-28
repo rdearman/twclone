@@ -132,7 +132,7 @@ func _run() -> void:
 	menu._submit_form()
 	_check(captured.size() == 14 and captured[13]["command"] == "move.autopilot.start", "route planner did not use the implemented compatible command")
 	if captured.size() > 13:
-		_check(captured[13]["data"] == {"to_sector_id": 42} and not captured[13]["mutating"], "route planner sent an unsupported or mutating payload")
+		_check(captured[13]["data"] == {"to_sector_id": 42} and captured[13]["mutating"], "route planner did not mark the saved-route update as mutating")
 	var autopilot_status_action: Dictionary = {}
 	for candidate in navigation_actions:
 		if str(candidate.get("command", "")) == "move.autopilot.status":
