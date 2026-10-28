@@ -103,6 +103,47 @@ def test_planet_info_goal_completes_after_public_info_response():
     assert not is_goal_complete("planet: info", {}, {"planet_id": 321}, "planet.land")
 
 
+def test_planet_info_goal_waits_until_ship_is_landed():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 12,
+        "sector_data": {
+            "12": {"has_planet": True, "celestial_objects": [{"planet_id": 321}]}
+        },
+        "ship_info": {"onplanet": 0},
+    }
+
+    assert planner._achieve_goal(state, "planet: info") is None
+
+
+def test_autonomous_exploit_does_not_randomly_attempt_planet_landings():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 12,
+        "sector_data": {"12": {"has_planet": True}},
+        "ship_info": {"onplanet": 0, "cargo": [], "holds": 10},
+        "player_info": {"player": {"credits": "5000"}},
+    }
+
+    for _ in range(25):
+        actions = planner._build_action_catalogue_by_stage(state, "exploit")
+        assert "planet.land" not in actions
+        assert "planet.info" not in actions
+
+
+def test_autonomous_planet_info_is_available_after_landing():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 12,
+        "sector_data": {"12": {"has_planet": True}},
+        "ship_info": {"onplanet": 321, "cargo": [], "holds": 10},
+        "player_info": {"player": {"credits": "5000"}},
+    }
+
+    actions = planner._build_action_catalogue_by_stage(state, "exploit")
+    assert "planet.info" in actions
+
+
 def test_navigation_ignores_current_sector_and_blacklisted_warps():
     planner = make_planner()
     planner.state_manager.get.return_value = [20]
@@ -110,6 +151,17 @@ def test_navigation_ignores_current_sector_and_blacklisted_warps():
     state["sector_data"]["10"]["adjacent"] = [10, 20, 30]
 
     assert planner._get_next_warp_target(state) == 30
+
+
+def test_nearest_known_sector_uses_shortest_known_route_not_cache_order():
+    planner = make_planner()
+    planner.state_manager.find_path.side_effect = lambda _origin, target: {
+        20: [10, 11, 12, 20],
+        30: [10, 30],
+    }[int(target)]
+    state = {"player_location_sector": 10}
+
+    assert planner._nearest_known_sector(state, ["20", "30"]) == 30
 
 
 def test_automatic_exploit_actions_never_start_combat():

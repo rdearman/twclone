@@ -339,15 +339,21 @@ class Planner:
 
                 if not self._at_port(current_state):
                     logger.warning(f"Goal 'sell' active but not at a port. Searching for nearest known port.")
-                    # Find any known port from state
-                    known_ports = current_state.get("port_info_by_sector", {}).keys()
+                    known_ports = set(current_state.get("port_info_by_sector", {}).keys())
+                    known_ports.update(
+                        str(port.get("sector_id"))
+                        for port in current_state.get("known_ports", {}).values()
+                        if isinstance(port, dict) and port.get("sector_id") is not None
+                    )
                     if known_ports:
-                        # Simple logic: pick the first one. TODO: Nearest.
-                        target_sector = list(known_ports)[0]
+                        target_sector = self._nearest_known_sector(current_state, known_ports)
+                    else:
+                        target_sector = None
+                    if target_sector is not None:
                         logger.info(f"Redirecting to known port at sector {target_sector} to sell.")
                         return self._achieve_goal(current_state, f"goto: {target_sector}")
                     else:
-                        logger.warning(f"Goal 'sell' failed: no port detected and no known ports in memory.")
+                        logger.warning("Goal 'sell' failed: no reachable known port is available.")
                         return None 
 
                 port_id = self._find_port_in_sector(current_state, current_sector)
@@ -588,22 +594,19 @@ class Planner:
                      return None
 
             elif goal_type == "planet" and goal_target == "info":
-                 # Check for planet
-                sector_id = str(current_state.get("player_location_sector"))
-                sector_data = current_state.get("sector_data", {}).get(sector_id, {})
-                
-                if sector_data.get("has_planet"):
-                     planet_id = self._generate_required_field(
-                         "planet_id", "planet.info", current_state
-                     )
-                     if planet_id is not None:
-                         logger.info("Inspecting observed planet %s", planet_id)
-                         return {"command": "planet.info", "data": {"planet_id": planet_id}}
-                     logger.info("Deferring planet inspection: no public planet ID was observed.")
-                     return None
-                else:
-                     logger.warning("Goal 'planet: info' failed: No planet in sector.")
-                     return None
+                ship_info = current_state.get("ship_info") or {}
+                if not ship_info.get("onplanet"):
+                    logger.info("Deferring planet.info: the ship is not landed; remote or unauthorized details are unavailable.")
+                    return None
+
+                planet_id = self._generate_required_field(
+                    "planet_id", "planet.info", current_state
+                )
+                if planet_id is not None:
+                    logger.info("Inspecting landed planet %s", planet_id)
+                    return {"command": "planet.info", "data": {"planet_id": planet_id}}
+                logger.info("Deferring planet inspection: no public planet ID was observed.")
+                return None
 
         except Exception as e:
             logger.error(f"Error in _achieve_goal for '{goal_str}': {e}", exc_info=True)
@@ -1022,14 +1025,12 @@ class Planner:
                 if self._can_buy(current_state):
                     actions.append("trade.buy")
 
-            # New: Add planet actions if a planet is present
-            sector_id = str(current_state.get("player_location_sector"))
-            sector_data = current_state.get("sector_data", {}).get(sector_id, {})
-            if sector_data.get("has_planet"):
+            # Planet detail reads require landing or ownership authorization.
+            # Do not generate random planet.land commands: landing can trigger
+            # existing planetary defenses and must follow an explicit strategy.
+            ship_info = current_state.get("ship_info") or {}
+            if ship_info.get("onplanet"):
                 actions.append("planet.info")
-                # a 10% chance to try landing on a planet
-                if random.random() < 0.1:
-                    actions.append("planet.land")
 
             actions.append("move.warp")
             player_credits_str = current_state.get("player_info", {}).get("player", {}).get("credits", "0")
