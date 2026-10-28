@@ -41,6 +41,10 @@ int repo_universe_sector_has_port(db_t *db, int sector_id, int *has_port_out);
 int repo_universe_get_max_sector_id(db_t *db, int *max_id_out);
 int repo_universe_get_warp_count(db_t *db, int *count_out);
 db_res_t* repo_universe_get_all_warps(db_t *db, db_error_t *err);
+/* Return directed exits whose source sector is current or visited by player. */
+db_res_t* repo_universe_get_player_known_warps(db_t *db, int player_id,
+                                                int current_sector_id,
+                                                db_error_t *err);
 db_res_t* repo_universe_get_asset_counts(db_t *db, int sector_id, db_error_t *err);
 int repo_universe_set_beacon(db_t *db, int sector_id, const char *text);
 int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out);

@@ -286,6 +286,38 @@ db_res_t* repo_universe_get_all_warps(db_t *db, db_error_t *err) {
     return res;
 }
 
+/*
+ * Player navigation must not use the complete universe graph: that allows
+ * path helpers to derive routes through sectors the player has not visited.
+ * Exits from a visited sector are known, including an exit into a new sector;
+ * do not reveal that new sector's exits until the player visits it. The live
+ * sector is included for older accounts that predate visit tracking. Keep
+ * edges directed; one-way warp rules remain authoritative.
+ */
+db_res_t* repo_universe_get_player_known_warps(db_t *db, int player_id,
+                                                int current_sector_id,
+                                                db_error_t *err) {
+    if (!db || player_id <= 0 || current_sector_id <= 0 || !err) return NULL;
+    const char *q =
+        "SELECT sw.from_sector, sw.to_sector "
+        "FROM sector_warps sw "
+        "WHERE (sw.from_sector = {2} AND EXISTS ("
+        "    SELECT 1 FROM players p JOIN ships sh ON sh.ship_id = p.ship_id "
+        "    WHERE p.player_id = {1} AND p.sector_id = {2} "
+        "    AND sh.sector_id = {2})) OR EXISTS ("
+        "    SELECT 1 FROM player_visited_sectors pv "
+        "    WHERE pv.player_id = {1} AND pv.sector_id = sw.from_sector);";
+    char sql[1024];
+    if (sql_build(db, q, sql, sizeof(sql)) != 0) return NULL;
+    db_res_t *res = NULL;
+    if (!db_query(db, sql,
+                  (db_bind_t[]){ db_bind_i64(player_id),
+                                 db_bind_i64(current_sector_id) },
+                  2, &res, err))
+        return NULL;
+    return res;
+}
+
 db_res_t* repo_universe_get_asset_counts(db_t *db, int sector_id, db_error_t *err) {
     /* SQL_VERBATIM: Q22 */
     const char *q22 = "SELECT asset_type, SUM(quantity) FROM sector_assets WHERE sector_id = {1} GROUP BY asset_type;";
