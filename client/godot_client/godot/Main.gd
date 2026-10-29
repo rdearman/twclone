@@ -838,13 +838,13 @@ func _finish_route_warp(response: Dictionary, operation: Dictionary) -> void:
 		gameplay_view.show_notification("Autonav stopped · warp refused · %s" % str(result.get("message", "server refusal")))
 		_refresh_after_warp_attempt()
 		return
-	var confirmed_sector = result.get("data", {}).get("current_sector", null)
-	if confirmed_sector != null and int(confirmed_sector) != int(operation.get("destination", 0)):
+	var confirmed_sector := Protocol.confirmed_move_sector(result.get("data", {}))
+	if confirmed_sector <= 0 or confirmed_sector != int(operation.get("destination", 0)):
 		_route_running = false
 		_planned_route.clear()
 		_route_stop_requested = false
 		gameplay_view.clear_planned_route()
-		gameplay_view.show_notification("Autonav stopped · server confirmed an unexpected sector.")
+		gameplay_view.show_notification("Autonav stopped · server did not confirm the requested sector. Refreshing your location.")
 		_refresh_after_warp_attempt()
 		return
 	_route_completed_hops += 1

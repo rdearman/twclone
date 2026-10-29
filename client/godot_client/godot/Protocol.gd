@@ -49,6 +49,17 @@ static func result_from_response(frame: Dictionary) -> Dictionary:
 		"response": frame,
 	}
 
+## Accept both the documented move.result field and the server's legacy
+## destination aliases. Zero means the response did not confirm a sector.
+static func confirmed_move_sector(data: Variant) -> int:
+	if not data is Dictionary:
+		return 0
+	for key in ["current_sector", "to_sector_id", "sector_id"]:
+		var value: Variant = data.get(key)
+		if (typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT) and float(value) == float(int(value)) and int(value) > 0:
+			return int(value)
+	return 0
+
 static func timeout_result(command: String) -> Dictionary:
 	return {"kind": "timeout", "message": "Request timed out: %s." % command, "data": {}}
 
