@@ -89,6 +89,26 @@
       ]
     },
     {
+      "name": "Reaper does not complete an upgrade before its deadline",
+      "command": "sys.cron.citadel_reap_once",
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Verify upgrade remains pending before deadline",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT level, construction_status, construction_end_time > EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint FROM citadels WHERE planet_id=7777;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 },
+        { "path": "data.rows.0.1", "op": "==", "value": "upgrading" },
+        { "path": "data.rows.0.2", "op": "==", "value": "t" }
+      ]
+    },
+    {
       "name": "Rig: Simulate Time Travel (expire timer)",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -108,12 +128,13 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT level, construction_status FROM citadels WHERE planet_id = 7777;"
+        "sql": "SELECT level, construction_status, militaryReactionLevel FROM citadels WHERE planet_id = 7777;"
       },
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 1 },
-        { "path": "data.rows.0.1", "op": "==", "value": "idle" }
+        { "path": "data.rows.0.1", "op": "==", "value": "idle" },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 }
       ]
     },
     {
