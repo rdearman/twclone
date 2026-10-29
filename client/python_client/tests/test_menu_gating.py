@@ -23,6 +23,9 @@ KNOWN_ABSENT_COMMANDS = {
 # Registered RPC names whose current server handlers explicitly return
 # ERR_NOT_IMPLEMENTED. Keep them out of ordinary player-facing menu paths.
 KNOWN_SERVER_STUBS = {
+    "insurance.policies.list",
+    "insurance.policies.buy",
+    "insurance.claim.file",
     "ship.sell",
     "ship.transfer",
     "ship.transfer_cargo",
