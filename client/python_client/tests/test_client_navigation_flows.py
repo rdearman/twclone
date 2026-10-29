@@ -45,6 +45,69 @@ def test_autopilot_stops_on_first_refused_warp_and_keeps_remaining_route(
     assert "Autopilot stopped" in out
 
 
+def test_route_plot_without_cached_sector_requests_current_sector(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory()
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 41}})
+    fake_conn.queue("move.pathfind", {"status": "ok", "data": {"steps": [41, 42]}})
+    monkeypatch.setattr("builtins.input", lambda *_: "42")
+
+    client.add_route_flow(ctx)
+
+    assert fake_conn.calls == [
+        {"command": "move.describe_sector", "data": {}},
+        {"command": "move.pathfind", "data": {"from_sector_id": 41, "to_sector_id": 42}},
+    ]
+    assert ctx.state["ap_route"] == [42]
+
+
+def test_route_plot_does_not_use_a_refused_sector_response(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory()
+    fake_conn.queue("move.describe_sector", {"status": "refused", "data": {"sector_id": 1}})
+    monkeypatch.setattr("builtins.input", lambda *_: "42")
+
+    client.add_route_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "move.describe_sector", "data": {}}]
+    assert not ctx.state.get("ap_route")
+
+
+def test_extending_route_paths_from_existing_route_endpoint(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory(sector={"id": 10})
+    ctx.state["ap_route"] = [20, 30]
+    fake_conn.queue("move.pathfind", {"status": "ok", "data": {"steps": [30, 40]}})
+    monkeypatch.setattr("builtins.input", lambda *_: "40")
+
+    client.add_route_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "move.pathfind", "data": {"from_sector_id": 30, "to_sector_id": 40}}]
+    assert ctx.state["ap_route"] == [20, 30, 40]
+
+
+def test_extending_route_rejects_disconnected_server_path(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory(sector={"id": 10})
+    ctx.state["ap_route"] = [20, 30]
+    fake_conn.queue("move.pathfind", {"status": "ok", "data": {"steps": [10, 40]}})
+    monkeypatch.setattr("builtins.input", lambda *_: "40")
+
+    client.add_route_flow(ctx)
+
+    assert ctx.state["ap_route"] == [20, 30]
+    assert "invalid route" in capsys.readouterr().out
+
+
+def test_route_plot_rejects_disconnected_edge_response(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory(sector={"id": 10})
+    fake_conn.queue("move.pathfind", {"status": "ok", "data": {"path": [
+        {"from": 10, "to": 20}, {"from": 99, "to": 40},
+    ]}})
+    monkeypatch.setattr("builtins.input", lambda *_: "40")
+
+    client.add_route_flow(ctx)
+
+    assert not ctx.state.get("ap_route")
+    assert "invalid route" in capsys.readouterr().out
+
+
 def test_trade_route_display_includes_server_search_metadata(ctx_factory, capsys):
     ctx = ctx_factory()
     ctx.state["last_rpc"] = {

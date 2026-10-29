@@ -3968,52 +3968,72 @@ def add_route_flow(ctx: Context):
         target = int(input("Add sector to route (target sector ID): ").strip())
     except (ValueError, TypeError):
         print("Invalid sector ID."); return
+    if target <= 0:
+        print("Invalid sector ID."); return
 
     if not cur:
         # Fallback: fetch current sector from server if we don't have it cached
         try:
-            info = ctx.conn.rpc("move.describe_sector", {"sector_id": 1})
-            data = (info or {}).get("data") or {}
-            cur = data.get("sector_id") or data.get("id")
+            info = ctx.conn.rpc("move.describe_sector", {})
+            if isinstance(info, dict) and info.get("status") == "ok":
+                data = get_data(info)
+                if isinstance(data, dict):
+                    cur = data.get("sector_id") or data.get("id")
+        except (ConnectionError, OSError):
+            raise
         except Exception:
             pass
-    if not cur:
+    if type(cur) is not int or cur <= 0:
         print("Cannot determine current sector. Please re-display sector (D) first."); return
 
+    route = ctx.state.get("ap_route") or []
+    if not isinstance(route, list) or any(type(hop) is not int or hop <= 0 for hop in route):
+        print("The existing route is invalid. Clear it before plotting another sector."); return
+    origin = route[-1] if route else cur
+
     # Ask server for a path
-    req = {"from_sector_id": cur, "to_sector_id": target}
+    req = {"from_sector_id": origin, "to_sector_id": target}
     resp = ctx.conn.rpc("move.pathfind", req)
-    status = (resp or {}).get("status")
-    if status in ("error", "refused"):
-        err = (resp.get("error") or {})
+    status = resp.get("status") if isinstance(resp, dict) else None
+    if status != "ok":
+        err = (resp.get("error") or {}) if isinstance(resp, dict) else {}
+        if not isinstance(err, dict):
+            err = {}
         print(f"Pathfind failed {err.get('code')}: {err.get('message') or 'error'}")
         return
-    data = (resp or {}).get("data") or {}
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        print("The server returned an invalid route; the existing route was not changed.")
+        return
 
     # Try to normalize a path from a few likely shapes
     path = data.get("path") or data.get("sectors") or data.get("steps") or []
+    if not isinstance(path, list):
+        print("The server returned an invalid route; the existing route was not changed.")
+        return
     # Some servers return an array of {from,to} edges; flatten if needed
     if path and isinstance(path[0], dict):
         # e.g., [{"from":1,"to":2},{"from":2,"to":5}] -> [1,2,5]
         seq = [path[0].get("from")]
         for e in path:
-            t = e.get("to")
-            if t is not None:
-                seq.append(t)
+            if not isinstance(e, dict) or e.get("from") != seq[-1] or "to" not in e:
+                print("The server returned an invalid route; the existing route was not changed.")
+                return
+            seq.append(e["to"])
         path = seq
 
     if not path or len(path) < 1:
         print("No route found to target sector.")
         return
+    if (any(type(sector_id) is not int or sector_id <= 0 for sector_id in path)
+            or path[0] != origin or path[-1] != target):
+        print("The server returned an invalid route; the existing route was not changed.")
+        return
 
     # Append path to current autopilot route, skipping the current sector if it's the first element
-    route = ctx.state.setdefault("ap_route", [])
-    start_idx = 0
-    if path and path[0] == cur:
-        start_idx = 1
-
-    for sector_id in path[start_idx:]:
-        route.append(sector_id)
+    route = list(route)
+    route.extend(path[1:])
+    ctx.state["ap_route"] = route
 
     ctx.state["ap_route_plotted"] = bool(route)
     print("Route:", " -> ".join(map(str, route)))
