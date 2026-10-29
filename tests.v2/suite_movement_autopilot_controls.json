@@ -8,10 +8,53 @@
       "password": "password"
     },
     {
+      "name": "Rig: Isolate a two-hop route",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_warps WHERE from_sector IN (678,679) OR to_sector IN (678,679);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Connect the two-hop route",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector,to_sector) VALUES (1,679),(679,678);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position player at route start",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=1 WHERE name='mover_autopilot';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position ship at route start",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE name='mover_autopilot');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reconnect from fixture route start",
+      "command": "auth.login",
+      "user": "mover_autopilot",
+      "data": { "username": "mover_autopilot", "passwd": "password" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Start a persisted route",
       "command": "move.autopilot.start",
       "user": "mover_autopilot",
-      "data": { "to_sector_id": 10 },
+      "data": { "to_sector_id": 678 },
       "save": { "@next_hop": "data.path.1" },
       "asserts": [
         { "path": "data.path.0", "op": "==", "value": 1 },
