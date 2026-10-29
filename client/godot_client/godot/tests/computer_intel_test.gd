@@ -18,9 +18,11 @@ func _run() -> void:
 	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 22}}
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
+	await process_frame
 	for entry in [
 		{"label": "Current sector information", "command": "sector.info"},
 		{"label": "Detailed current-sector scan", "command": "sector.scan"},
+		{"label": "Outstanding fines", "command": "fine.list"},
 	]:
 		var button := _action_button(menu, entry["label"])
 		_check(button != null, "%s was not exposed in the computer" % entry["label"])
@@ -28,6 +30,14 @@ func _run() -> void:
 			button.pressed.emit()
 		var latest: Dictionary = captured.back() if not captured.is_empty() else {}
 		_check(latest.get("command") == entry["command"] and latest.get("data", {}).is_empty() and not latest.get("mutating", true), "%s did not use a read-only current-state request" % entry["label"])
+	var pay_fine_button := _action_button(menu, "Pay a fine")
+	_check(pay_fine_button != null and not pay_fine_button.disabled, "fine payment was not exposed to the authenticated player")
+	if pay_fine_button != null:
+		pay_fine_button.pressed.emit()
+		(menu._form_fields["fine_id"] as LineEdit).text = "12"
+		menu._submit_form()
+		var fine_payment: Dictionary = captured.back() if not captured.is_empty() else {}
+		_check(fine_payment.get("command") == "fine.pay" and fine_payment.get("data") == {"fine_id": 12} and fine_payment.get("mutating", false), "fine payment did not use the published integer fine_id request")
 	menu._active_category = "OPERATIONS"
 	menu._render_actions()
 	await process_frame
@@ -54,11 +64,11 @@ func _run() -> void:
 	await process_frame
 	attack = _action_button(menu, "Attack this ship")
 	_check(attack != null and attack.disabled and attack.tooltip_text.contains("FedSpace"), "attack was not blocked in protected FedSpace")
-	_check(captured.size() == 3, "inspection, scan or combat status unexpectedly sent an extra command")
+	_check(captured.size() == 5, "computer reads, fine payment or combat status sent an unexpected command")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot computer/intel tests: 9 checks passed")
+		print("Godot computer/intel tests: 13 checks passed")
 		quit(0)
 	else:
 		for failure in failures:

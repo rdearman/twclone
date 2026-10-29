@@ -1414,6 +1414,99 @@ def avoid_list_flow(ctx: Context):
     print(present_avoid_list(avoid))
 
 
+def _fine_id_from_record(fine: dict) -> Optional[int]:
+    value = fine.get("id", fine.get("fine_id"))
+    if type(value) is int and value > 0:
+        return value
+    if isinstance(value, str) and value.isdigit() and int(value) > 0:
+        return int(value)
+    return None
+
+
+@register("fine_list_flow")
+def fine_list_flow(ctx: Context):
+    """Show server-authoritative fines without deriving balances or status."""
+    response = _hud_rpc(ctx, "fine.list", {})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Could not list outstanding fines.")
+        _pp(response)
+        return
+    data = get_data(response)
+    fines = data.get("fines") if isinstance(data, dict) else None
+    if not isinstance(fines, list):
+        print("The server returned an invalid fine list.")
+        return
+    if not fines:
+        print("No outstanding fines.")
+        return
+    print("Outstanding fines:")
+    for fine in fines:
+        if not isinstance(fine, dict):
+            continue
+        fine_id = _fine_id_from_record(fine)
+        if fine_id is None:
+            continue
+        amount = fine.get("amount", "unreported")
+        reason = fine.get("reason", "Reason not reported")
+        status = fine.get("status", "unreported")
+        print(f"  ID {fine_id} · {amount} CR · {reason} · {status}")
+
+
+@register("fine_pay_flow")
+def fine_pay_flow(ctx: Context):
+    """Pay one outstanding listed fine; the server validates ownership and funds."""
+    response = _hud_rpc(ctx, "fine.list", {})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Could not load fines before payment.")
+        _pp(response)
+        return
+    data = get_data(response)
+    fines = data.get("fines") if isinstance(data, dict) else None
+    if not isinstance(fines, list):
+        print("The server returned an invalid fine list.")
+        return
+    unpaid: dict[int, dict] = {}
+    for fine in fines:
+        if not isinstance(fine, dict) or str(fine.get("status", "")).lower() == "paid":
+            continue
+        fine_id = _fine_id_from_record(fine)
+        if fine_id is not None:
+            unpaid[fine_id] = fine
+    if not unpaid:
+        print("No outstanding fines to pay.")
+        return
+    print("Outstanding fines:")
+    for fine_id, fine in unpaid.items():
+        print(f"  ID {fine_id} · {fine.get('amount', 'unreported')} CR · {fine.get('reason', 'Reason not reported')}")
+    try:
+        fine_id = int(input("Fine ID to pay (Enter to cancel): ").strip())
+    except ValueError:
+        print("Fine payment cancelled or invalid ID.")
+        return
+    if fine_id not in unpaid:
+        print("That fine is not in the server's current outstanding fine list.")
+        return
+    if input(f"Pay the full listed fine {fine_id}? [y/N]: ").strip().lower() != "y":
+        print("Fine payment cancelled.")
+        return
+    payment = ctx.conn.rpc("fine.pay", {"fine_id": fine_id})
+    ctx.state["last_rpc"] = payment
+    if payment.get("status") != "ok":
+        print("Fine payment refused or failed:")
+        _pp(payment)
+        return
+    result = get_data(payment)
+    amount_paid = result.get("amount_paid", "unreported") if isinstance(result, dict) else "unreported"
+    print(f"Fine {fine_id} paid: {amount_paid} CR (confirmed by server).")
+    refreshed = _hud_rpc(ctx, "player.my_info", {})
+    if refreshed.get("status") == "ok":
+        ctx.player_info = get_data(refreshed)
+    else:
+        print("Warning: fine payment succeeded, but player credits could not be refreshed.")
+
+
 # get_data / extract_current_sector / normalize_sector now live in protocol.py.
 
 

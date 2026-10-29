@@ -10,6 +10,14 @@ def test_computer_menu_exposes_authoritative_sector_and_combat_reads(menus):
     assert options["e"]["action"] == {"pycall": "ferengi_traders_flow"}
 
 
+def test_computer_menu_exposes_fine_workflows(menus):
+    options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
+    assert options["a"]["action"] == {"pycall": "fine_list_flow"}
+    assert options["y"]["action"] == {"pycall": "fine_pay_flow"}
+    assert "fine_list_flow" in client.HANDLERS
+    assert "fine_pay_flow" in client.HANDLERS
+
+
 def test_attack_in_fedspace_is_blocked_before_rpc(ctx_factory, fake_conn, capsys):
     ctx = ctx_factory(sector={"id": 10, "ships": [{"id": 20, "name": "Target"}]})
     ctx.player_info = {"player": {"ship_id": 10}}
