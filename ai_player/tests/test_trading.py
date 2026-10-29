@@ -89,6 +89,7 @@ def test_sell_planner_never_targets_the_port_that_sold_the_cargo():
 
     assert planner._get_best_commodity_to_sell(state) is None
     assert planner._achieve_goal(state, "sell: ORE") is None
+    assert planner._generate_required_field("items", "trade.sell", state) is None
 
 
 def test_explicit_trade_goals_do_not_repeat_a_fresh_unavailable_quote():

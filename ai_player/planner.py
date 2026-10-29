@@ -774,9 +774,7 @@ class Planner:
                 if cargo_route:
                     target_sector, commodity = cargo_route
                     logger.info("Tactical Override: Routing %s to buyer in sector %s.", commodity, target_sector)
-                    route_command = self._achieve_goal(current_state, f"goto: {target_sector}")
-                    if route_command:
-                        return route_command
+                    return self._achieve_goal(current_state, f"goto: {target_sector}")
 
             # A completed survey with no usable local trade is a reason to
             # continue exploring, not to keep selecting local utility actions.
@@ -794,9 +792,7 @@ class Planner:
             cargo_route = self._find_port_for_cargo(current_state)
             if cargo_route:
                 target_sector, _commodity = cargo_route
-                route_command = self._achieve_goal(current_state, f"goto: {target_sector}")
-                if route_command:
-                    return route_command
+                return self._achieve_goal(current_state, f"goto: {target_sector}")
 
         # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
         # If we're at a port and have completed survey, always try to trade 1 unit.
@@ -1659,21 +1655,8 @@ class Planner:
             if command_name == "trade.sell":
                 commodity_to_sell = canon_commodity(self._get_best_commodity_to_sell(current_state))
                 if not commodity_to_sell:
-                    logger.warning("No best commodity found to sell. Trying fallback.")
-                    # Fallback: sell first item in cargo
-                    cargo_list = (current_state.get("ship_info") or {}).get("cargo", [])
-                    if cargo_list:
-                        commodity_to_sell = canon_commodity(cargo_list[0].get("commodity"))
-                        if not commodity_to_sell:
-                            logger.warning("Cannot canonicalize first cargo item. Cannot generate sell command.")
-                            return None
-                        current_port_id = self._find_port_in_sector(current_state, current_state.get("player_location_sector"))
-                        if not self._quote_is_fresh(current_state, current_port_id, commodity_to_sell):
-                            logger.info("No fresh sell quote for fallback cargo; waiting for a quote.")
-                            return None
-                    else:
-                        logger.warning("No cargo to sell. Cannot generate sell command.")
-                        return None
+                    logger.info("No eligible cargo sale at the current port.")
+                    return None
 
                 cargo_list = (current_state.get("ship_info") or {}).get("cargo", [])
                 total_quantity = 0
