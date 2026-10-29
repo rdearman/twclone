@@ -173,27 +173,63 @@ int repo_citadel_deduct_resources(db_t *db, int64_t colonists, int64_t ore, int6
 
 int repo_citadel_start_construction(db_t *db, int32_t planet_id, int32_t current_level, int32_t player_id, int32_t target_level, int64_t start_time, int64_t end_time)
 {
-    db_error_t err;
+    if (!db || planet_id <= 0 || current_level < 0 || current_level > 6
+        || player_id <= 0 || target_level <= current_level || target_level > 6
+        || start_time <= 0 || end_time <= start_time)
+        return ERR_INVALID_ARG;
+
+    db_error_t err = {0};
     int64_t rows = 0;
 
-    /* 1. Try Update first */
-    const char *q_upd = "UPDATE citadels SET construction_status='upgrading', target_level={1}, construction_start_time={2}, construction_end_time={3} WHERE planet_id = {4};";
-    char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
-    db_bind_t upd_params[] = { db_bind_i32(target_level), db_bind_i64(start_time), db_bind_i64(end_time), db_bind_i32(planet_id) };
-    if (db_exec_rows_affected(db, sql_upd, upd_params, 4, &rows, &err) && rows > 0) return 0;
+    /* Compare-and-set the current level and idle state. A concurrent start
+     * that waited on this row will recheck the predicate after the winner
+     * commits and must not replace its target or completion time. */
+    const char *q_upd =
+        "UPDATE citadels SET construction_status='upgrading', target_level={1}, "
+        "construction_start_time={2}, construction_end_time={3} "
+        "WHERE planet_id={4} AND level={5} "
+        "AND COALESCE(construction_status, 'idle')='idle';";
+    char sql_upd[512];
+    if (sql_build(db, q_upd, sql_upd, sizeof(sql_upd)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_bind_t upd_params[] = { db_bind_i32(target_level), db_bind_i64(start_time),
+                               db_bind_i64(end_time), db_bind_i32(planet_id),
+                               db_bind_i32(current_level) };
+    if (!db_exec_rows_affected(db, sql_upd, upd_params, 5, &rows, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (rows == 1)
+        return 0;
 
-    /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO citadels (planet_id, level, owner_id, construction_status, target_level, construction_start_time, construction_end_time) VALUES ({1}, {2}, {3}, 'upgrading', {4}, {5}, {6});";
-    char sql_ins[1024]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
+    /* Distinguish a pre-existing busy/stale citadel from the initial build
+     * where no row exists yet. */
+    const char *q_exists = "SELECT 1 FROM citadels WHERE planet_id={1};";
+    char sql_exists[256];
+    if (sql_build(db, q_exists, sql_exists, sizeof(sql_exists)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    if (!db_query(db, sql_exists, (db_bind_t[]){db_bind_i32(planet_id)}, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    bool exists = db_res_step(res, &err);
+    db_res_finalize(res);
+    if (err.code != 0)
+        return err.code;
+    if (exists)
+        return ERR_DB_BUSY;
+
+    /* Initial construction only: a racing insert loses the primary-key race
+     * and returns an error to the caller, which rolls back resource debits. */
+    const char *q_ins =
+        "INSERT INTO citadels (planet_id, level, owner_id, construction_status, "
+        "target_level, construction_start_time, construction_end_time) "
+        "VALUES ({1}, {2}, {3}, 'upgrading', {4}, {5}, {6});";
+    char sql_ins[1024];
+    if (sql_build(db, q_ins, sql_ins, sizeof(sql_ins)) != 0)
+        return ERR_DB_QUERY_FAILED;
     db_bind_t ins_params[] = { db_bind_i32(planet_id), db_bind_i32(current_level), db_bind_i32(player_id), db_bind_i32(target_level), db_bind_i64(start_time), db_bind_i64(end_time) };
 
-    if (!db_exec(db, sql_ins, ins_params, 6, &err)) {
-        /* 3. If Insert failed due to constraint (concurrent write), retry Update once */
-        if (err.code == ERR_DB_CONSTRAINT) {
-            if (db_exec(db, sql_upd, upd_params, 4, &err)) return 0;
-        }
-        return err.code;
-    }
+    if (!db_exec(db, sql_ins, ins_params, 6, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
     return 0;
 }
 

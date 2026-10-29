@@ -22,12 +22,12 @@
 #define JSONOID 114
 #define TIMESTAMPTZOID 1184
 
-// GOAL C: Temporary serialization of DB calls with a mutex
-static pthread_mutex_t g_pg_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 typedef struct db_pg_impl_s {
   PGconn *conn;
   bool in_tx;
+  /* libpq connections must not be used concurrently, but independent
+   * connections must be able to make progress while one waits on a DB lock. */
+  pthread_mutex_t mutex;
 } db_pg_impl_t;
 
 typedef struct db_pg_res_impl_s {
@@ -145,10 +145,11 @@ static void pg_close_impl(db_t *db) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     if (impl) {
         if (impl->conn) {
-            pthread_mutex_lock(&g_pg_mutex);
+            pthread_mutex_lock(&impl->mutex);
             PQfinish(impl->conn);
-            pthread_mutex_unlock(&g_pg_mutex);
+            pthread_mutex_unlock(&impl->mutex);
         }
+        pthread_mutex_destroy(&impl->mutex);
         free(impl);
     }
 }
@@ -156,27 +157,27 @@ static void pg_close_impl(db_t *db) {
 static bool pg_tx_begin_impl(db_t *db, db_tx_flags_t flags, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
     (void)flags;
-    pthread_mutex_lock(&g_pg_mutex);
+    pthread_mutex_lock(&impl->mutex);
     PGresult *res = PQexec(impl->conn, "BEGIN");
-    pthread_mutex_unlock(&g_pg_mutex);
+    pthread_mutex_unlock(&impl->mutex);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     PQclear(res); impl->in_tx = true; return true;
 }
 
 static bool pg_tx_commit_impl(db_t *db, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
-    pthread_mutex_lock(&g_pg_mutex);
+    pthread_mutex_lock(&impl->mutex);
     PGresult *res = PQexec(impl->conn, "COMMIT");
-    pthread_mutex_unlock(&g_pg_mutex);
+    pthread_mutex_unlock(&impl->mutex);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     PQclear(res); impl->in_tx = false; return true;
 }
 
 static bool pg_tx_rollback_impl(db_t *db, db_error_t *err) {
     db_pg_impl_t *impl = (db_pg_impl_t*)db->impl;
-    pthread_mutex_lock(&g_pg_mutex);
+    pthread_mutex_lock(&impl->mutex);
     PGresult *res = PQexec(impl->conn, "ROLLBACK");
-    pthread_mutex_unlock(&g_pg_mutex);
+    pthread_mutex_unlock(&impl->mutex);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) { pg_map_error(impl->conn, res, err); PQclear(res); return false; }
     PQclear(res); impl->in_tx = false; return true;
 }
@@ -204,9 +205,9 @@ static bool pg_exec_internal(db_t *db, const char *sql, const db_bind_t *params,
             default: types[i] = 0; break; // Let PG infer
         }
     }
-    pthread_mutex_lock(&g_pg_mutex);
+    pthread_mutex_lock(&impl->mutex);
     PGresult *res = PQexecParams(impl->conn, sql, n_params, types, (const char* const*)values, NULL, NULL, 0);
-    pthread_mutex_unlock(&g_pg_mutex);
+    pthread_mutex_unlock(&impl->mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
@@ -280,9 +281,9 @@ static bool pg_exec_insert_id_impl(db_t *db, const char *sql, const db_bind_t *p
             default: types[i] = 0; break;
         }
     }
-    pthread_mutex_lock(&g_pg_mutex);
+    pthread_mutex_lock(&impl->mutex);
     PGresult *res = PQexecParams(impl->conn, sql_with_returning, n_params, types, (const char* const*)values, NULL, NULL, 0);
-    pthread_mutex_unlock(&g_pg_mutex);
+    pthread_mutex_unlock(&impl->mutex);
     
     if (free_sql) free(sql_with_returning);
 
@@ -318,9 +319,9 @@ static bool pg_query_impl(db_t *db, const char *sql, const db_bind_t *params, si
             default: types[i] = 0; break;
         }
     }
-    pthread_mutex_lock(&g_pg_mutex);
+    pthread_mutex_lock(&impl->mutex);
     PGresult *pg_res = PQexecParams(impl->conn, sql, n_params, types, (const char* const*)values, NULL, NULL, 0);
-    pthread_mutex_unlock(&g_pg_mutex);
+    pthread_mutex_unlock(&impl->mutex);
     for (size_t i = 0; i < n_params; i++)
       free(values[i]);
     free(values);
@@ -432,10 +433,10 @@ pg_ship_repair_atomic(db_t *db,
       }
       return false;
   }
-  pthread_mutex_lock(&g_pg_mutex);
+  pthread_mutex_lock(&impl->mutex);
   if (PQstatus(conn) != CONNECTION_OK)
     {
-      pthread_mutex_unlock(&g_pg_mutex);
+      pthread_mutex_unlock(&impl->mutex);
       if (err) {
         pg_map_error(conn, NULL, err);
       }
@@ -466,7 +467,7 @@ pg_ship_repair_atomic(db_t *db,
   const char *params[3] = { p1, p2, p3 };
 
   PGresult *res = PQexecParams(conn, sql, 3, NULL, params, NULL, NULL, 0);
-  pthread_mutex_unlock(&g_pg_mutex);
+  pthread_mutex_unlock(&impl->mutex);
   if (!res || (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1))
     {
       pg_map_error(conn, res, err);
@@ -532,6 +533,7 @@ static void pg_close_child_impl(db_t *db) {
             // closed FD, fail (EBADF), and just clean up the memory.
             PQfinish(impl->conn);
         }
+        pthread_mutex_destroy(&impl->mutex);
         free(impl);
     }
 }
@@ -553,16 +555,12 @@ static const db_vt_t pg_vt = {
 };
 
 void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *err) {
-    pthread_mutex_lock(&g_pg_mutex);
     PGconn *conn = PQconnectdb(cfg->pg_conninfo);
-    pthread_mutex_unlock(&g_pg_mutex);
     if (PQstatus(conn) != CONNECTION_OK) { pg_map_error(conn, NULL, err); if (conn) PQfinish(conn); return NULL; }
 
     /* Suppress NOTICE messages (e.g. "relation already exists, skipping") */
-    pthread_mutex_lock(&g_pg_mutex);
     PGresult *res_quiet = PQexec(conn, "SET client_min_messages TO WARNING");
     if (res_quiet) PQclear(res_quiet);
-    pthread_mutex_unlock(&g_pg_mutex);
 
     db_pg_impl_t *impl = calloc(1, sizeof(db_pg_impl_t));
     if (!impl) {
@@ -571,8 +569,16 @@ void* db_pg_open_internal(db_t *parent_db, const db_config_t *cfg, db_error_t *e
         PQfinish(conn);
         return NULL;
     }
+    if (pthread_mutex_init(&impl->mutex, NULL) != 0) {
+        if (err) {
+            err->code = ERR_DB_INTERNAL;
+            snprintf(err->message, sizeof(err->message), "PostgreSQL mutex initialization failed");
+        }
+        PQfinish(conn);
+        free(impl);
+        return NULL;
+    }
     impl->conn = conn;
     parent_db->vt = &pg_vt;
     return impl;
 }
-

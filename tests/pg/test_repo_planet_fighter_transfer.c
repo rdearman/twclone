@@ -370,8 +370,9 @@ int main(void)
   pthread_barrier_destroy(&hit_barrier);
   int hit_successes = (hit_workers[0].rc == 0) + (hit_workers[1].rc == 0);
   if (hit_successes != 1
-      || !check_fighters(db, planet_id, ship_id, 10, 15, &err))
-    { status = fail("concurrent entry damage and asset consumption commit once", &err); goto done; }
+      || !check_fighters(db, planet_id, ship_id, 50, 15, &err))
+    { fprintf(stderr, "entry-hit race returned %d and %d\n", hit_workers[0].rc, hit_workers[1].rc);
+      status = fail("concurrent entry damage and asset consumption commit once", &err); goto done; }
   int hull_after = 0, shields_after = 0;
   if (!query_i32(db, "SELECT hull FROM ships WHERE ship_id={1};",
       (db_bind_t[]){db_bind_i32(ship_id)}, 1, &hull_after, &err)

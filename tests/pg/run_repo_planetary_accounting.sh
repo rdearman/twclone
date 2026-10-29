@@ -17,6 +17,7 @@ ${CC:-cc} -std=c11 -D_GNU_SOURCE -DTW_DB_INTERNAL \
   "$ROOT/tests/pg/test_repo_planetary_accounting.c" \
   "$ROOT/src/db/db_api.c" "$ROOT/src/db/sql_driver.c" \
   "$ROOT/src/db/pg/db_pg.c" "$ROOT/src/db/repo/repo_planets.c" \
+  "$ROOT/src/db/repo/repo_citadel.c" \
   -Wl,--gc-sections -lpthread $(pkg-config --libs libpq jansson) \
   -o "$TMPDIR_TEST/test_repo_planetary_accounting"
 

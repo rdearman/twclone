@@ -1,6 +1,7 @@
 #define TW_DB_INTERNAL 1
 #include "db/db_api.h"
 #include "db/db_int.h"
+#include "db/repo/repo_citadel.h"
 #include "db/repo/repo_planets.h"
 #include "db/sql_driver.h"
 #include "errors.h"
@@ -8,6 +9,122 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+
+typedef struct
+{
+  db_config_t config;
+  pthread_barrier_t *barrier;
+  int planet_id;
+  int target_level;
+  int rc;
+} citadel_start_worker_t;
+
+static void *
+start_citadel_upgrade_worker (void *arg)
+{
+  citadel_start_worker_t *worker = arg;
+  db_error_t err = {0};
+  db_t *db = db_open (&worker->config, &err);
+  bool tx_started = db && db_tx_begin (db, DB_TX_DEFAULT, &err);
+  (void) pthread_barrier_wait (worker->barrier);
+  if (!tx_started)
+    {
+      worker->rc = err.code ? err.code : ERR_DB_TX;
+      if (db) db_close (db);
+      return NULL;
+    }
+  worker->rc = repo_citadel_deduct_resources (db, 1, 1, 1, 1,
+                                                worker->planet_id);
+  if (worker->rc == 0)
+    worker->rc = repo_citadel_start_construction (
+        db, worker->planet_id, 1, 1, worker->target_level,
+        100 + worker->target_level, 100000 + worker->target_level);
+
+  if (worker->rc == 0)
+    {
+      if (!db_tx_commit (db, &err))
+        {
+          worker->rc = err.code ? err.code : ERR_DB_TX;
+          (void) db_tx_rollback (db, NULL);
+        }
+    }
+  else
+    (void) db_tx_rollback (db, NULL);
+  db_close (db);
+  return NULL;
+}
+
+static int
+race_citadel_upgrades (const db_config_t *config, int planet_id,
+                       int *winning_target, db_error_t *err)
+{
+  db_t *setup = db_open (config, err);
+  if (!setup)
+    return 0;
+  char sql[512];
+  if (sql_build (setup,
+        "UPDATE planets SET colonists_unassigned=10 WHERE planet_id={1};",
+        sql, sizeof sql) != 0
+      || !db_exec (setup, sql, (db_bind_t[]){db_bind_i32 (planet_id)}, 1, err))
+    { db_close (setup); return 0; }
+
+  const char *commodities[] = {"ORE", "ORG", "EQU"};
+  for (size_t i = 0; i < sizeof commodities / sizeof commodities[0]; i++)
+    {
+      const char *seed =
+        "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity) "
+        "VALUES ('planet',{1},{2},5) ON CONFLICT (entity_type,entity_id,commodity_code) "
+        "DO UPDATE SET quantity=EXCLUDED.quantity;";
+      if (sql_build (setup, seed, sql, sizeof sql) != 0
+          || !db_exec (setup, sql,
+               (db_bind_t[]){db_bind_i32 (planet_id),
+                             db_bind_text (commodities[i])}, 2, err))
+        { db_close (setup); return 0; }
+    }
+  db_close (setup);
+
+  pthread_barrier_t barrier;
+  if (pthread_barrier_init (&barrier, NULL, 2) != 0)
+    return 0;
+  citadel_start_worker_t workers[2] = {
+    {*config, &barrier, planet_id, 2, -1},
+    {*config, &barrier, planet_id, 3, -1}
+  };
+  pthread_t threads[2];
+  int created = 0;
+  for (; created < 2; created++)
+    if (pthread_create (&threads[created], NULL,
+                        start_citadel_upgrade_worker, &workers[created]) != 0)
+      break;
+  if (created != 2)
+    {
+      /* Do not strand a worker at the barrier if thread creation fails. */
+      if (created == 1)
+        {
+          (void) pthread_barrier_wait (&barrier);
+          (void) pthread_join (threads[0], NULL);
+        }
+      pthread_barrier_destroy (&barrier);
+      return 0;
+    }
+  (void) pthread_join (threads[0], NULL);
+  (void) pthread_join (threads[1], NULL);
+  pthread_barrier_destroy (&barrier);
+
+  if ((workers[0].rc == 0) == (workers[1].rc == 0))
+    {
+      fprintf (stderr, "citadel race returned %d and %d\n",
+               workers[0].rc, workers[1].rc);
+      return 0;
+    }
+  *winning_target = workers[0].rc == 0 ? workers[0].target_level
+                                       : workers[1].target_level;
+  if (workers[0].rc != ERR_DB_BUSY && workers[1].rc != ERR_DB_BUSY)
+    fprintf (stderr, "citadel race returned %d and %d (expected busy loser)\n",
+             workers[0].rc, workers[1].rc);
+  return workers[0].rc == ERR_DB_BUSY || workers[1].rc == ERR_DB_BUSY;
+}
 
 void *db_mysql_open_internal(db_t *db, const db_config_t *cfg, db_error_t *err)
 {
@@ -97,6 +214,10 @@ static void cleanup_fixture(db_t *db, int planet_id, int ship_id)
     (void) db_exec(db, sql, (db_bind_t[]){db_bind_i64(ship_id)}, 1, &err);
   if (planet_id > 0)
     {
+      memset(&err, 0, sizeof err);
+      if (sql_build(db, "DELETE FROM entity_stock WHERE entity_type='planet' AND entity_id={1};",
+                    sql, sizeof sql) == 0)
+        (void) db_exec(db, sql, (db_bind_t[]){db_bind_i64(planet_id)}, 1, &err);
       memset(&err, 0, sizeof err);
       if (sql_build(db, "DELETE FROM planets WHERE planet_id={1};",
                     sql, sizeof sql) == 0)
@@ -218,7 +339,40 @@ int main(void)
       || value != 0)
     { status = fail("treasury and fighter persistence after reconnect", &err); goto done; }
 
-  puts("PASS: atomic treasury/fighter bounds, transaction rollback and reconnect persistence");
+  int winning_target = 0;
+  if (!race_citadel_upgrades (&config, planet_id, &winning_target, &err))
+    { status = fail("one concurrent citadel start wins and loser rolls back", &err); goto done; }
+
+  int32_t level = 0, target_level = 0;
+  int64_t started = 0, completes = 0;
+  char construction_status[32] = {0};
+  if (repo_citadel_get_construction_state (db, planet_id, &level,
+        construction_status, sizeof construction_status, &target_level,
+        &started, &completes) != 0
+      || level != 1 || target_level != winning_target
+      || strcmp (construction_status, "upgrading") != 0
+      || started != 100 + winning_target
+      || completes != 100000 + winning_target
+      || repo_citadel_start_construction (db, planet_id, 1, 1,
+            winning_target == 2 ? 3 : 2, 200, 200000) != ERR_DB_BUSY)
+    { status = fail("citadel upgrade compare-and-set preserves winner timer", &err); goto done; }
+
+  const char *stock_codes[] = {"ORE", "ORG", "EQU"};
+  for (size_t i = 0; i < sizeof stock_codes / sizeof stock_codes[0]; i++)
+    if (!query_i64 (db,
+          "SELECT quantity FROM entity_stock WHERE entity_type='planet' "
+          "AND entity_id={1} AND commodity_code={2};",
+          (db_bind_t[]){db_bind_i32 (planet_id), db_bind_text (stock_codes[i])},
+          2, &value, &err) || value != 4)
+      { status = fail("losing upgrade transaction restores its resource debit", &err); goto done; }
+  if (!query_i64 (db,
+        "SELECT colonists_unassigned FROM planets WHERE planet_id={1};",
+        (db_bind_t[]){db_bind_i32 (planet_id)}, 1, &value, &err)
+      || value != 9)
+    { status = fail("losing upgrade transaction restores its colonist debit", &err); goto done; }
+
+  puts("PASS: treasury/fighter bounds, reconnect persistence, and concurrent "
+       "citadel upgrade compare-and-set with loser rollback");
   status = 0;
 
 done:
