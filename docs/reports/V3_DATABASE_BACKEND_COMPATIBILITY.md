@@ -60,7 +60,10 @@ implemented backend.
 `tests/pg/run_disposable_repository_suite.sh` creates a unique disposable
 database, applies the ordered PostgreSQL SQL files, runs the database
 replay check for numbered migrations 100–119, runs the database conformance
-and repository integration tests, then drops only the database it created.
+and repository integration tests, runs isolated migration regressions, then
+drops only the database it created. The player-event migration fixture runs
+after 116 and before 119 because it inserts a transaction-local placeholder
+password that the later hash-only constraint correctly rejects.
 Supply the normal libpq connection variables for an authorized QA PostgreSQL
 role; the script never targets the configured game database.
 
