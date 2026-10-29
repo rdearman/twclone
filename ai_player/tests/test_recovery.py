@@ -86,6 +86,35 @@ def test_pending_command_timeout_removes_only_expired_request(tmp_path):
     assert manager.get_pending_command("new") == {"command": "sector.info"}
 
 
+def test_reconnect_preserves_known_lot_and_does_not_invent_cost_for_extra_cargo(tmp_path):
+    path = tmp_path / "state.json"
+    manager = StateManager(str(path), {})
+    manager.set("cargo_metadata", [{
+        "commodity": "ORE", "quantity": 3, "purchase_price": 100, "origin_port_id": 7,
+    }])
+
+    manager.update_player_info({"ship": {"id": 1, "cargo": [{"commodity": "ORE", "quantity": 5}]}})
+
+    expected = [
+        {"commodity": "ORE", "quantity": 3, "purchase_price": 100, "origin_port_id": 7},
+        {"commodity": "ORE", "quantity": 2},
+    ]
+    assert manager.get("ship_info")["cargo"] == expected
+    assert StateManager(str(path), {}).get("cargo_metadata") == expected
+
+
+def test_reconnect_does_not_assign_a_lot_after_unexplained_cargo_loss(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("cargo_metadata", [
+        {"commodity": "ORE", "quantity": 3, "purchase_price": 100, "origin_port_id": 7},
+        {"commodity": "ORE", "quantity": 2, "purchase_price": 120, "origin_port_id": 8},
+    ])
+
+    manager.update_player_info({"ship": {"id": 1, "cargo": [{"commodity": "ORE", "quantity": 2}]}})
+
+    assert manager.get("ship_info")["cargo"] == [{"commodity": "ORE", "quantity": 2}]
+
+
 def test_authentication_retries_respect_failure_backoff():
     class Manager:
         def get(self, key, default=None):

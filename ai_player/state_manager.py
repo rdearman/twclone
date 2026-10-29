@@ -581,20 +581,27 @@ class StateManager:
                         s_qty = s_item.get("quantity", 0)
                         
                         if c in local_cargo_meta and s_qty > 0:
-                            # We have local metadata for this commodity. 
-                            # If quantities match perfectly, just use local item.
-                            # If not, we still use local metadata but might need to adjust (TODO: smarter splitting)
+                            # Preserve only metadata supported by the observed
+                            # lots. An uncertain buy can add an unknown lot;
+                            # an unexplained reduction cannot identify which
+                            # lots were removed.
                             l_items = local_cargo_meta[c]
                             l_qty_total = sum(i.get("quantity", 0) for i in l_items)
                             
                             if l_qty_total == s_qty:
                                 merged_cargo.extend(l_items)
+                            elif l_qty_total < s_qty:
+                                merged_cargo.extend(l_items)
+                                unknown_item = dict(s_item)
+                                unknown_item["quantity"] = s_qty - l_qty_total
+                                unknown_item.pop("purchase_price", None)
+                                unknown_item.pop("origin_port_id", None)
+                                merged_cargo.append(unknown_item)
                             else:
-                                # Quantity mismatch. Trust server quantity but keep metadata if possible.
-                                # For now, take the first local batch and adjust its quantity.
-                                base_item = dict(l_items[0])
-                                base_item["quantity"] = s_qty
-                                merged_cargo.append(base_item)
+                                unknown_item = dict(s_item)
+                                unknown_item.pop("purchase_price", None)
+                                unknown_item.pop("origin_port_id", None)
+                                merged_cargo.append(unknown_item)
                         else:
                             # No local metadata, use server item as-is
                             merged_cargo.append(s_item)
