@@ -8,6 +8,7 @@ AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from planner import Planner  # noqa: E402
+from main import _get_fallback_plan  # noqa: E402
 
 
 def make_planner():
@@ -87,6 +88,17 @@ def test_sell_planner_never_targets_the_port_that_sold_the_cargo():
     state["price_cache"]["101"]["sell"]["ORE"] = 200
 
     assert planner._get_best_commodity_to_sell(state) is None
+    assert planner._achieve_goal(state, "sell: ORE") is None
+
+
+def test_explicit_trade_goals_do_not_repeat_a_fresh_unavailable_quote():
+    planner = make_planner()
+    state = market_state()
+    state["price_cache"]["101"]["buy"]["ORE"] = None
+    state["ship_info"]["cargo"] = [{"commodity": "ORE", "quantity": 5}]
+
+    assert planner._achieve_goal(state, "buy: ORE") is None
+    assert planner._achieve_goal(state, "sell: ORE") is None
 
 
 def test_buy_decision_skips_commodity_without_known_buyer():
@@ -106,6 +118,77 @@ def test_buy_decision_skips_known_unprofitable_route():
 
     assert planner._get_cheapest_commodity_to_buy(state) is None
     assert planner._can_buy(state) is False
+
+
+def test_buy_does_not_treat_its_own_or_a_blacklisted_port_as_a_buyer():
+    planner = make_planner()
+    state = market_state(remote_sell_price=150)
+    state["price_cache"]["101"]["sell"]["ORE"] = 200
+    state["port_trade_blacklist"] = [202]
+
+    assert planner._get_cheapest_commodity_to_buy(state) is None
+
+
+def test_cargo_destination_excludes_origin_and_blacklisted_recommendations():
+    planner = make_planner()
+    state = {
+        "player_location_sector": 1,
+        "ship_info": {"cargo": [{"commodity": "ORE", "quantity": 5,
+                                 "purchase_price": 100, "origin_port_id": 202}]},
+        "port_info_by_sector": {"2": {"port_id": 202}, "3": {"port_id": 303}},
+        "price_cache": {
+            "202": {"sell": {"ORE": 200}, "quoted_at": {"ORE": time.time()}},
+            "303": {"sell": {"ORE": 180}, "quoted_at": {"ORE": time.time()}},
+        },
+        "port_trade_blacklist": [303],
+        "market_recommendations": [{
+            "commodity": "ORE", "a_to_b": True, "sector_b_id": 3,
+            "port_b_id": 303, "estimated_profit_a_to_b": 80,
+        }],
+    }
+
+    assert planner._find_port_for_cargo(state) is None
+
+
+def test_cargo_route_uses_adjacent_hops_through_intermediate_sectors():
+    planner = make_planner()
+    planner._check_invariants = lambda _state: None
+    planner.state_manager.get.return_value = []
+    planner.state_manager.find_path.side_effect = lambda start, _target: {
+        1: [1, 2, 3], 2: [2, 3],
+    }[start]
+    state = {
+        "player_location_sector": 1,
+        "sector_data": {"1": {"has_port": True, "adjacent": [2], "_last_refreshed": time.time()},
+                        "2": {"has_port": False, "adjacent": [3], "_last_refreshed": time.time()}},
+        "player_info": {"player": {"ship_id": 1, "turns_remaining": 10}},
+        "ship_info": {"id": 1, "cargo": [{"commodity": "ORE", "quantity": 5,
+                                 "purchase_price": 100, "origin_port_id": 101}]},
+        "port_info_by_sector": {"1": {"port_id": 101, "commodities": []},
+                                "3": {"port_id": 303}},
+        "price_cache": {"303": {"sell": {"ORE": 150}, "quoted_at": {"ORE": time.time()}}},
+        "command_retry_info": {},
+    }
+
+    assert planner.get_next_command(state, current_goal="sell: ORE") == {
+        "command": "move.warp", "data": {"to_sector_id": 2},
+    }
+    state["player_location_sector"] = 2
+    assert planner.get_next_command(state, current_goal="sell: ORE") == {
+        "command": "move.warp", "data": {"to_sector_id": 3},
+    }
+
+
+def test_fallback_does_not_plan_sale_at_cargo_origin():
+    planner = make_planner()
+    planner.state_manager.get.return_value = []
+    state = market_state()
+    state["ship_info"]["cargo"] = [{"commodity": "ORE", "quantity": 5,
+                                    "purchase_price": 100, "origin_port_id": 101}]
+    state["price_cache"]["101"]["sell"]["ORE"] = 200
+    state["sector_data"]["1"]["adjacent"] = [2]
+
+    assert _get_fallback_plan(state, planner.state_manager, planner) == ["goto: 2"]
 
 
 def test_cargo_route_chooses_nearest_profitable_buyer():

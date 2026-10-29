@@ -586,34 +586,15 @@ def _get_fallback_plan(game_state, state_manager, planner):
     
     # 1. Sell Logic: If we have cargo, find where to sell it
     if sellable_items:
-        # Check if current port buys it PROFITABLY
         if sector_data.get("has_port"):
-            port_id = str(planner._find_port_in_sector(game_state, current_sector))
-            port_sell_prices = game_state.get("price_cache", {}).get(port_id, {}).get("sell", {})
-            
-            for item in sellable_items:
-                commodity = canon_commodity(item.get("commodity"))
-                purchase_price = item.get("purchase_price")
-                sell_price = port_sell_prices.get(commodity)
-                
-                if sell_price is not None and purchase_price is not None and sell_price > purchase_price:
-                    logger.info(f"Fallback: Profitable sell opportunity for {commodity} at current port ({sell_price} > {purchase_price}).")
-                    return [f"sell: {commodity}"]
-        
-        # Find nearest port that DOES buy it profitably
-        for item in sellable_items:
-            commodity = canon_commodity(item.get("commodity"))
-            purchase_price = item.get("purchase_price")
-            if purchase_price is None: continue
+            commodity = planner._get_best_commodity_to_sell(game_state)
+            if commodity:
+                return [f"sell: {commodity}"]
 
-            for s_id, p_info in game_state.get("port_info_by_sector", {}).items():
-                p_id_str = str(p_info.get("port_id"))
-                sell_price = game_state.get("price_cache", {}).get(p_id_str, {}).get("sell", {}).get(commodity)
-                
-                if sell_price is not None and sell_price > purchase_price:
-                    target_sector = int(s_id)
-                    logger.info(f"Fallback: Found profitable sell for {commodity} in sector {target_sector} ({sell_price} > {purchase_price}). Going there.")
-                    return [f"goto: {target_sector}", f"sell: {commodity}"]
+        cargo_route = planner._find_port_for_cargo(game_state)
+        if cargo_route:
+            target_sector, commodity = cargo_route
+            return [f"goto: {target_sector}", f"sell: {commodity}"]
 
     # 2. Buy Logic: If we have space and credits, and are at a port, buy something PROFITABLE
     if sector_data.get("has_port"):

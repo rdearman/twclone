@@ -404,14 +404,23 @@ class Planner:
                 port_id_str = str(port_id)
                 sell_price = current_state.get("price_cache", {}).get(port_id_str, {}).get("sell", {}).get(commodity_to_sell)
 
-                if sell_price is None or not self._quote_is_fresh(current_state, port_id, commodity_to_sell):
+                if not self._quote_is_fresh(current_state, port_id, commodity_to_sell):
                     logger.info(f"Sell price for {commodity_to_sell} missing. Requesting trade.quote first.")
                     return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_to_sell, "quantity": 1}}
+
+                if sell_price is None or sell_price <= 0:
+                    return None
 
                 cargo = current_state.get("ship_info", {}).get("cargo", {})
                 # Cargo is a list of dicts: [{"commodity": "ORE", "quantity": 10, "purchase_price": 50}]
                 # Need to iterate to find quantity
                 quantity = sum(item.get("quantity", 0) for item in cargo if canon_commodity(item.get("commodity")) == commodity_to_sell)
+                if any(canon_commodity(item.get("commodity")) == commodity_to_sell
+                       and item.get("quantity", 0) > 0
+                       and item.get("origin_port_id") is not None
+                       and str(item["origin_port_id"]) == str(port_id) for item in cargo):
+                    logger.info("Sell goal skipped: cargo was purchased at this port.")
+                    return None
                 
                 if not quantity:
                     logger.warning(f"Goal 'sell' failed: no '{commodity_to_sell}' in cargo.")
@@ -476,10 +485,13 @@ class Planner:
                 port_id_str = str(port_id)
                 buy_price = current_state.get("price_cache", {}).get(port_id_str, {}).get("buy", {}).get(commodity_to_buy)
                 
-                if buy_price is None or not self._quote_is_fresh(current_state, port_id, commodity_to_buy):
+                if not self._quote_is_fresh(current_state, port_id, commodity_to_buy):
                     # If price is missing, issue a trade.quote first
                     logger.info(f"Buy price for {commodity_to_buy} missing. Requesting trade.quote first.")
                     return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": commodity_to_buy, "quantity": 1}}
+
+                if buy_price is None or buy_price <= 0:
+                    return None
 
                 expected_profit = self._calculate_potential_profit(commodity_to_buy, buy_price, current_state)
                 if expected_profit <= 0:
@@ -761,12 +773,10 @@ class Planner:
                 cargo_route = self._find_port_for_cargo(current_state)
                 if cargo_route:
                     target_sector, commodity = cargo_route
-                    if self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
-                        logger.info(f"Tactical Override: Have {commodity} but this port doesn't buy it. Going to sector {target_sector}.")
-                        payload = self._build_payload("move.warp", current_state)
-                        if payload:
-                            payload["to_sector_id"] = target_sector
-                            return {"command": "move.warp", "data": payload}
+                    logger.info("Tactical Override: Routing %s to buyer in sector %s.", commodity, target_sector)
+                    route_command = self._achieve_goal(current_state, f"goto: {target_sector}")
+                    if route_command:
+                        return route_command
 
             # A completed survey with no usable local trade is a reason to
             # continue exploring, not to keep selecting local utility actions.
@@ -777,6 +787,16 @@ class Planner:
                 if target is not None and self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
                     logger.info("Tactical Override: No viable trade at surveyed port; continuing exploration to sector %s.", target)
                     return {"command": "move.warp", "data": {"to_sector_id": target}}
+
+        # Continue the same cargo route through intermediate sectors. The
+        # destination may require several individual public warp commands.
+        else:
+            cargo_route = self._find_port_for_cargo(current_state)
+            if cargo_route:
+                target_sector, _commodity = cargo_route
+                route_command = self._achieve_goal(current_state, f"goto: {target_sector}")
+                if route_command:
+                    return route_command
 
         # --- 1.5. Stress-safe micro-trade loop (forces progress) ---
         # If we're at a port and have completed survey, always try to trade 1 unit.
@@ -797,12 +817,10 @@ class Planner:
                     item = next((i for i in cargo if int(i.get("quantity", 0)) > 0), None)
                     if item:
                         comm_code = canon_commodity(item["commodity"])
-                        if comm_code and (
-                            pc.get("sell", {}).get(comm_code) is None
-                            or not self._quote_is_fresh(current_state, port_id, comm_code)
-                        ):
+                        if comm_code and not self._quote_is_fresh(current_state, port_id, comm_code):
                             return {"command": "trade.quote", "data": {"port_id": port_id, "commodity": comm_code, "quantity": 1}}
-                        if comm_code and self._is_command_ready("trade.sell", current_state.get("command_retry_info", {})):
+                        if (comm_code and self._get_best_commodity_to_sell(current_state) == comm_code
+                                and self._is_command_ready("trade.sell", current_state.get("command_retry_info", {}))):
                             payload = self._build_payload("trade.sell", {"port_id": port_id, "items": [{"commodity": comm_code, "quantity": 1}]})
                             if payload is not None: return {"command": "trade.sell", "data": payload}
                 if free > 0 and comms:
@@ -1926,8 +1944,10 @@ class Planner:
             comm = canon_commodity(item.get("commodity"))
             qty = item.get("quantity", 0)
             if comm and qty > 0:
-                existing = my_cargo.get(comm, {"quantity": 0, "cost": 0.0, "cost_known": True})
+                existing = my_cargo.get(comm, {"quantity": 0, "cost": 0.0, "cost_known": True, "origins": set()})
                 existing["quantity"] += qty
+                if item.get("origin_port_id") is not None:
+                    existing["origins"].add(str(item["origin_port_id"]))
                 unit_cost = item.get("purchase_price")
                 if unit_cost is None:
                     existing["cost_known"] = False
@@ -1945,6 +1965,7 @@ class Planner:
         # resolve them, but are conservatively budgeted as several hops.
         candidates = []
         unknown_route_hops = max(1, int(self.config.get("unknown_route_hop_cost", 6)))
+        blacklisted_ports = {str(p) for p in current_state.get("port_trade_blacklist", [])}
 
         # Server recommendations include pathing estimates and current price
         # spreads. They supplement locally surveyed quotes, but a route is only
@@ -1974,6 +1995,8 @@ class Planner:
                     continue
                 if sector_id == int(current_sector):
                     continue
+                if target_port_id in blacklisted_ports or target_port_id in cargo["origins"]:
+                    continue
                 target_sell = price_cache.get(target_port_id, {}).get("sell", {}).get(commodity)
                 if (target_sell is None or target_sell <= unit_cost or estimated_profit <= 0
                         or not self._quote_is_fresh(current_state, target_port_id, commodity)):
@@ -1990,10 +2013,12 @@ class Planner:
 
         for port_id_str, prices_dict in price_cache.items():
             sell_prices = prices_dict.get("sell", {})
-            if str(port_id_str) in {str(p) for p in current_state.get("port_trade_blacklist", [])}:
+            if str(port_id_str) in blacklisted_ports:
                 continue
 
             for commodity, cargo in my_cargo.items():
+                if str(port_id_str) in cargo["origins"]:
+                    continue
                 sell_price = sell_prices.get(commodity)
                 if (sell_price is not None and sell_price > 0
                         and self._quote_is_fresh(current_state, port_id_str, commodity)):
@@ -2049,6 +2074,9 @@ class Planner:
 
         for sector_id_str, port_data in all_port_info.items():
             port_id = str(port_data.get("port_id"))
+            if (str(sector_id_str) == str(current_state.get("player_location_sector"))
+                    or port_id in {str(p) for p in current_state.get("port_trade_blacklist", [])}):
+                continue
             if port_id not in price_cache:
                 continue
 
