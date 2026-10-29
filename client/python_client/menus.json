@@ -403,7 +403,7 @@
 	    },
         {
           "key": "r",
-          "label": "(R) Rename Ship",
+          "label": "(R) Rename Ship · unavailable",
           "action": {
             "pycall": "rename_ship_flow"
           }

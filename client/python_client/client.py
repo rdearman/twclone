@@ -5507,57 +5507,12 @@ def genesis_torpedo_flow(ctx: Context):
 
 @register("rename_ship_flow")
 def rename_ship_flow(ctx: Context):
-    """
-    Rename/re-register *your current ship* without asking for a ship id.
-    - Resolves current ship_id from player.my_info
-    - Shows current name, prompts for new name (default = keep)
-    - Confirms, then calls ship.rename
-    """
-    # Resolve current ship id
-    ship_id = get_my_ship_id(ctx.conn, ctx)
-    if not isinstance(ship_id, int):
-        print("Could not determine your current ship id.")
-        return
-
-    # Try to fetch current ship name for a nice prompt
-    current_name = None
-    try:
-        info = _hud_rpc(ctx, "ship.info", {})
-        data = (info or {}).get("data") or {}
-        # common shapes: { data: { name: ... } } or { data: { ship: { name: ... } } }
-        current_name = data.get("name") \
-                       or (data.get("ship") or {}).get("name")
-    except Exception:
-        pass
-
-    # Prompt for new name (default keeps current)
-    if not current_name:
-        current_name = "(unnamed)"
-    new_name = input(f'New ship name (current: "{current_name}") [Enter to cancel]: ').strip()
-    if not new_name:
-        print("Rename cancelled.")
-        return
-
-    # Confirm
-    confirm = input(f'Rename current ship (id={ship_id}) to "{new_name}"? (y/N): ').strip().lower()
-    if confirm != "y":
-        print("Cancelled.")
-        return
-
-    # Do it
-    resp = ctx.conn.rpc("ship.rename", {"ship_id": ship_id, "new_name": new_name})
-    print(json.dumps(resp, ensure_ascii=False, indent=2))
-
-    # Optional: refresh sector view if the server shows ship names there
-    try:
-        sid = ctx.current_sector_id
-        if isinstance(sid, int):
-            desc = ctx.conn.rpc("move.describe_sector", {"sector_id": sid})
-            ctx.last_sector_desc = normalize_sector((desc or {}).get("data") or {})
-    except Exception:
-        pass
-
-    
+    """Explain why the published rename commands cannot currently be used."""
+    print(
+        "Ship renaming is unavailable: the published ship.rename and "
+        "ship.reregister schemas accept 'name', but both handlers require "
+        "'ship_id' and 'new_name'. No rename request was sent."
+    )
 
 
 # ---------------------------

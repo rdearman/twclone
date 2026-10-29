@@ -24,6 +24,16 @@ def test_computer_menu_exposes_trade_history(menus):
     assert "trade_history_flow" in client.HANDLERS
 
 
+def test_ship_rename_is_marked_unavailable_until_public_schema_matches_handler(
+    menus, ctx_factory, fake_conn, capsys
+):
+    options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
+    assert "unavailable" in options["r"]["label"].lower()
+    client.rename_ship_flow(ctx_factory())
+    assert fake_conn.calls == []
+    assert "No rename request was sent" in capsys.readouterr().out
+
+
 def test_computer_menu_exposes_supported_police_controls(menus):
     options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
     assert options["x"]["action"] == {"pycall": "police_status_flow"}
