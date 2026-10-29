@@ -72,7 +72,10 @@ pod-status integration tests also passed. The StarDock atomic integration test
 currently fails because its repository update expects `ships.credits`, while
 the schema stores credits on `players`; the server call does not pass the
 player ID to that repository operation. This requires a coordinated repository
-and server interface correction before that test can pass.
+and server interface correction before that test can pass. The PostgreSQL
+Captain Z failure/commit integration harness also passed, confirming failed
+enforcement rolls back ship and pod state and successful enforcement commits
+both before notification.
 
 Native PostgreSQL timestamp and JSON values currently pass through the common
 text accessor. A normalized cross-backend representation still needs explicit
