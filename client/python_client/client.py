@@ -4625,6 +4625,125 @@ def combat_attack_planet_flow(ctx: Context):
     _hud_rpc(ctx, "ship.status", {})
     call_handler("redisplay_sector", ctx)
 
+
+def _ferengi_list_data(response: dict) -> Optional[dict]:
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        return None
+    data = get_data(response)
+    if not isinstance(data, dict):
+        return None
+    traders = data.get("traders", [])
+    offers = data.get("offers", [])
+    if not isinstance(traders, list) or not isinstance(offers, list):
+        return None
+    if any(not isinstance(trader, dict) for trader in traders):
+        return None
+    if any(not isinstance(offer, dict) or type(offer.get("deal_id")) is not int
+           or offer["deal_id"] <= 0 for offer in offers):
+        return None
+    return data
+
+
+def _print_ferengi_traders(data: dict) -> None:
+    sector_id = data.get("sector_id", "unavailable")
+    traders = data.get("traders", [])
+    offers = data.get("offers", [])
+    print(f"Ferengi traders in Sector {sector_id}:")
+    if traders:
+        for trader in traders:
+            if not isinstance(trader, dict):
+                continue
+            print("  {name} · {code} · trader {trader_id} · reputation {reputation}".format(
+                name=trader.get("display_name", "Unnamed trader"),
+                code=trader.get("trader_code", "unknown"),
+                trader_id=trader.get("trader_id", "unknown"),
+                reputation=trader.get("reputation", "unknown"),
+            ))
+    else:
+        print("  No active Ferengi traders are present in this sector.")
+    print("Open offers:")
+    if not offers:
+        print("  No open offers.")
+        return
+    for index, offer in enumerate(offers, 1):
+        if not isinstance(offer, dict):
+            continue
+        side = {"trader_sells": "you buy", "trader_buys": "you sell"}.get(
+            offer.get("side"), "direction unavailable")
+        print("  {index}. Deal {deal_id}: {name} · {side} {quantity} {commodity} at {price} CR each · trader sector {sector} · expires {expires}".format(
+            index=index,
+            deal_id=offer.get("deal_id", "unknown"),
+            name=offer.get("display_name", "Ferengi trader"),
+            side=side,
+            quantity=offer.get("quantity", "?"),
+            commodity=offer.get("commodity", "unknown"),
+            price=offer.get("unit_price", "?"),
+            sector=offer.get("trader_sector_id", "unknown"),
+            expires=offer.get("expires_at", "unknown"),
+        ))
+
+
+@register("ferengi_traders_flow")
+def ferengi_traders_flow(ctx: Context):
+    """List current-sector Ferengi and durable open offers, with explicit deal actions."""
+    response = ctx.conn.rpc("ferengi.traders", {})
+    ctx.state["last_rpc"] = response
+    data = _ferengi_list_data(response)
+    if data is None:
+        error = response.get("error", {}) if isinstance(response, dict) else {}
+        message = error.get("message", "The server returned an invalid trader listing.") if isinstance(error, dict) else "The server returned an invalid trader listing."
+        print(f"[Error] Ferengi trader list unavailable: {message}")
+        return
+    _print_ferengi_traders(data)
+    offers = data.get("offers", [])
+    if not offers:
+        return
+    choice = input("Deal number to act on, or Enter to return: ").strip()
+    if not choice:
+        return
+    try:
+        index = int(choice) - 1
+    except ValueError:
+        print("Invalid offer selection; no deal action was sent.")
+        return
+    if index < 0 or index >= len(offers):
+        print("Choose an offer number from the list; no deal action was sent.")
+        return
+    action = input("Accept or reject this offer? [a/r, Enter cancels]: ").strip().lower()
+    if action not in ("a", "r"):
+        print("Deal action cancelled.")
+        return
+    command = "ferengi.deal.accept" if action == "a" else "ferengi.deal.reject"
+    deal_id = int(offers[index]["deal_id"])
+    result = ctx.conn.rpc(command, {"deal_id": deal_id})
+    ctx.state["last_rpc"] = result
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        error = result.get("error", {}) if isinstance(result, dict) else {}
+        message = error.get("message", "The server refused the deal.") if isinstance(error, dict) else "The server refused the deal."
+        print(f"[Error] Deal {deal_id} {('acceptance' if action == 'a' else 'rejection')} refused: {message}")
+        return
+    receipt = get_data(result)
+    if isinstance(receipt, dict):
+        print("Deal {status}: {quantity} {commodity} at {price} CR each · reputation {reputation}.".format(
+            status=receipt.get("status", "updated"),
+            quantity=receipt.get("quantity", "?"),
+            commodity=receipt.get("commodity", "unknown"),
+            price=receipt.get("unit_price", "?"),
+            reputation=receipt.get("reputation", "unknown"),
+        ))
+    if action == "a":
+        player_response = _hud_rpc(ctx, "player.my_info", {})
+        if isinstance(player_response, dict) and player_response.get("status") == "ok":
+            ctx.player_info = get_data(player_response)
+            _update_corp_context(ctx)
+        _hud_rpc(ctx, "ship.status", {})
+    refreshed = ctx.conn.rpc("ferengi.traders", {})
+    refreshed_data = _ferengi_list_data(refreshed)
+    if refreshed_data is None:
+        print("Deal response was confirmed; trader list refresh failed and may be stale.")
+    else:
+        _print_ferengi_traders(refreshed_data)
+
 @register("launch_flow")
 def launch_flow(ctx: Context):
     r = ctx.conn.rpc("planet.launch", {})

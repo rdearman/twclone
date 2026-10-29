@@ -7,7 +7,7 @@ def test_computer_menu_exposes_authoritative_sector_and_combat_reads(menus):
     assert options["i"]["action"] == {"pycall": "sector_info_flow"}
     assert options["v"]["action"] == {"pycall": "detailed_sector_scan_flow"}
     assert options["m"]["action"]["rpc"] == {"command": "combat.status", "data": {}}
-    assert "e" not in options
+    assert options["e"]["action"] == {"pycall": "ferengi_traders_flow"}
 
 
 def test_attack_in_fedspace_is_blocked_before_rpc(ctx_factory, fake_conn, capsys):

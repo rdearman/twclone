@@ -450,6 +450,13 @@
           }
         },
         {
+          "key": "e",
+          "label": "(E) Ferengi Traders and Offers",
+          "action": {
+            "pycall": "ferengi_traders_flow"
+          }
+        },
+        {
           "key": "k",
           "label": "(K) Ranks",
           "action": {

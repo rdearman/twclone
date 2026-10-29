@@ -3,6 +3,7 @@ extends PanelContainer
 const TwProtocol = preload("res://Protocol.gd")
 const DialogLayout = preload("res://DialogLayout.gd")
 const PlanetCombatPresenter = preload("res://PlanetCombatPresenter.gd")
+const FerengiPresenter = preload("res://FerengiPresenter.gd")
 
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
 signal reduced_motion_toggle_requested
@@ -29,6 +30,9 @@ const COMMANDS := {
 		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
 		{"label": "Hardware catalogue", "command": "hardware.list", "requires_supported_dock": true, "tooltip": "Dock at a supported hardware port first."},
 		{"label": "Buy ship hardware", "command": "hardware.buy", "requires_supported_dock": true, "fields": [["item_code", FIELD_TEXT, "Hardware item code (from catalogue)", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true, "tooltip": "Dock first; the server catalogue supplies valid hardware codes."},
+		{"label": "Ferengi traders and open offers", "command": "ferengi.traders", "fixed": {}},
+		{"label": "Accept Ferengi offer", "command": "ferengi.deal.accept", "fields": [["deal_id", FIELD_INT, "Deal ID from trader listing", ""]], "mutating": true},
+		{"label": "Reject Ferengi offer", "command": "ferengi.deal.reject", "fields": [["deal_id", FIELD_INT, "Deal ID from trader listing", ""]], "mutating": true},
 		{"label": "Trade routes", "command": "player.computer.recommend_routes", "tooltip": "Use known port profiles and current estimated price spreads. Prices can change before you arrive.", "fields": [["max_hops_between", FIELD_INT, "Maximum hops between ports", "10"], ["require_two_way", "boolean", "Only show pairs with trade in both directions", "false"], ["limit", FIELD_INT, "Result limit", "10"]]},
 	],
 	"COMMUNICATIONS": [
@@ -337,6 +341,8 @@ func show_result(label: String, payload: Dictionary) -> void:
 		DialogLayout.popup(_result_dialog, Vector2i(560, 380))
 
 func format_result(label: String, payload: Dictionary) -> String:
+	if label.to_lower().contains("ferengi trader"):
+		return FerengiPresenter.traders(payload.get("data", payload) if payload.get("data", payload) is Dictionary else {})
 	if label.to_lower().contains("density"):
 		return _format_density_result(payload)
 	if label.to_lower().contains("scan"):

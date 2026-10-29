@@ -7,6 +7,7 @@ const ClientState = preload("res://ClientState.gd")
 const AuthoritativeRefresh = preload("res://AuthoritativeRefresh.gd")
 const EventPresenter = preload("res://EventPresenter.gd")
 const PlanetCombatPresenter = preload("res://PlanetCombatPresenter.gd")
+const FerengiPresenter = preload("res://FerengiPresenter.gd")
 const CONFIG_PATH := "user://client_config.cfg"
 
 @onready var gameplay_view = $GameplayView
@@ -539,6 +540,16 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.show_notification(PlanetCombatPresenter.attack_result(data))
 			gameplay_view.show_command_result("Planet attack", data)
 			_refresh_after_command(["player", "ship", "sector"])
+			return
+		if command_name == "ferengi.traders":
+			gameplay_view.show_information("FERENGI TRADERS", FerengiPresenter.traders(data))
+			gameplay_view.set_command_busy(false)
+			return
+		if command_name in ["ferengi.deal.accept", "ferengi.deal.reject"]:
+			var deal_message := FerengiPresenter.deal_result(data)
+			gameplay_view.show_notification(deal_message)
+			gameplay_view.show_information("FERENGI DEAL", deal_message)
+			_refresh_after_command(["player", "ship"])
 			return
 		if command_name == "move.autopilot.start":
 			var path: Array = _route_from_response(data)

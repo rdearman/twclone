@@ -313,14 +313,25 @@ func _run() -> void:
 	await process_frame
 	attack_planet_button = _action_button(menu, "Attack this planet")
 	_check(attack_planet_button != null and attack_planet_button.disabled and attack_planet_button.tooltip_text.contains("Terra"), "planet attack remained enabled against protected Terra")
+	menu._active_category = "COMPUTER"
+	menu._choose_action({"label": "Ferengi traders and open offers", "command": "ferengi.traders", "fixed": {}})
+	_check(captured.size() == before_corporation_actions + 3 and captured.back()["command"] == "ferengi.traders" and captured.back()["data"].is_empty(), "Ferengi trader listing did not use the published current-sector read command")
+	menu._choose_action({"label": "Accept Ferengi offer", "command": "ferengi.deal.accept", "fields": [["deal_id", "integer", "Deal ID", ""]], "mutating": true})
+	(menu._form_fields["deal_id"] as LineEdit).text = "91"
+	menu._submit_form()
+	_check(captured.size() == before_corporation_actions + 4 and captured.back()["command"] == "ferengi.deal.accept" and captured.back()["data"] == {"deal_id": 91} and captured.back()["mutating"], "Ferengi acceptance did not send the entered deal ID")
+	menu._choose_action({"label": "Reject Ferengi offer", "command": "ferengi.deal.reject", "fields": [["deal_id", "integer", "Deal ID", ""]], "mutating": true})
+	(menu._form_fields["deal_id"] as LineEdit).text = "92"
+	menu._submit_form()
+	_check(captured.size() == before_corporation_actions + 5 and captured.back()["command"] == "ferengi.deal.reject" and captured.back()["data"] == {"deal_id": 92} and captured.back()["mutating"], "Ferengi rejection did not send the entered deal ID")
 	menu._choose_action({"label": "Create corporation", "command": "corp.create", "mutating": true, "fields": [["name", "text", "Corporation name", ""]]})
 	(menu._form_fields["name"] as LineEdit).text = "Nova"
 	menu._submit_form()
-	_check(captured.size() == before_corporation_actions + 3 and captured.back()["data"] == {"name": "Nova"}, "corporation create included fields outside the published request schema")
+	_check(captured.size() == before_corporation_actions + 6 and captured.back()["data"] == {"name": "Nova"}, "corporation create included fields outside the published request schema")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 94 passed")
+		print("Godot command menu tests: 97 passed")
 		quit(0)
 	else:
 		for failure in failures:
