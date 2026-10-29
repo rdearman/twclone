@@ -5541,6 +5541,28 @@ def jettison_cargo_flow(ctx: Context):
         print("Invalid quantity.")
         return
 
+    available = None
+    for item in commodities:
+        if not isinstance(item, dict):
+            continue
+        cargo_name = str(item.get("commodity", "")).strip().upper()
+        cargo_code = code_map.get(cargo_name, cargo_name)
+        cargo_quantity = item.get("quantity")
+        if cargo_code == commodity and isinstance(cargo_quantity, int) and not isinstance(cargo_quantity, bool):
+            available = cargo_quantity
+            break
+    if available is None:
+        print(f"The latest ship status does not report {commodity} cargo; no jettison was sent.")
+        return
+    if quantity_to_jettison > available:
+        print(f"You have only {available} units of {commodity}; no jettison was sent.")
+        return
+    if not _trade_confirmation(
+        f"Permanently discard {quantity_to_jettison} units of {commodity} and spend 1 turn?"
+    ):
+        print("Jettison cancelled; no cargo or turn was spent.")
+        return
+
     payload = {
         "commodity": commodity,
         "quantity": quantity_to_jettison
@@ -5550,12 +5572,16 @@ def jettison_cargo_flow(ctx: Context):
     ctx.state["last_rpc"] = resp
     if resp.get("status") == "ok":
         print(f"Successfully jettisoned {quantity_to_jettison} units of {commodity}.")
-        # Refresh player info to update cargo display
+        # Refresh both player and ship views so displayed credits and cargo
+        # come from the authoritative post-mutation state.
         my_info_resp = _hud_rpc(ctx, "player.my_info", {})
         if my_info_resp.get("status") == "ok":
             ctx.player_info = get_data(my_info_resp)
         else:
             print("[Warning] Could not refresh player info after jettison.")
+        ship_resp = _hud_rpc(ctx, "ship.status", {})
+        if ship_resp.get("status") != "ok":
+            print("[Warning] Could not refresh ship cargo after jettison.")
     else:
         print(f"[Error] Failed to jettison cargo: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)

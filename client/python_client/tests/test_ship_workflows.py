@@ -69,3 +69,64 @@ def test_hardware_catalogue_refusal_is_presented_without_mutation(
 
     assert [call["command"] for call in fake_conn.calls] == ["hardware.list"]
     assert "Dock at a supported hardware port" in capsys.readouterr().out
+
+
+def test_jettison_requires_confirmation_and_refreshes_authoritative_cargo(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory()
+    fake_conn.queue("ship.info", {"status": "ok", "data": {"ship": {
+        "cargo": [{"commodity": "ore", "quantity": 5}],
+    }}})
+    fake_conn.queue("ship.jettison", {"status": "ok", "data": {"remaining_cargo": [
+        {"commodity": "ore", "quantity": 2},
+    ]}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"credits": 100}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {
+        "holds": 20, "cargo": [{"commodity": "ore", "qty": 2}],
+    }}})
+    answers = iter(["ORE", "3", "y"])
+    prompts = []
+    monkeypatch.setattr("builtins.input", lambda prompt: (prompts.append(prompt), next(answers))[1])
+
+    client.jettison_cargo_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == [
+        "ship.info", "ship.jettison", "player.my_info", "ship.status",
+    ]
+    assert fake_conn.calls[1]["data"] == {"commodity": "ORE", "quantity": 3}
+    assert any("spend 1 turn" in prompt for prompt in prompts)
+    assert "Successfully jettisoned" in capsys.readouterr().out
+    assert ctx.hud.cargo_used == 2
+
+
+def test_jettison_decline_does_not_send_turn_consuming_command(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory()
+    fake_conn.queue("ship.info", {"status": "ok", "data": {"ship": {
+        "cargo": [{"commodity": "ore", "quantity": 5}],
+    }}})
+    answers = iter(["ORE", "2", "n"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.jettison_cargo_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["ship.info"]
+    assert "Jettison cancelled" in capsys.readouterr().out
+
+
+def test_jettison_over_reported_cargo_is_rejected_before_turn_spending(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory()
+    fake_conn.queue("ship.info", {"status": "ok", "data": {"ship": {
+        "cargo": [{"commodity": "ore", "quantity": 2}],
+    }}})
+    answers = iter(["ORE", "3"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.jettison_cargo_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["ship.info"]
+    assert "no jettison was sent" in capsys.readouterr().out

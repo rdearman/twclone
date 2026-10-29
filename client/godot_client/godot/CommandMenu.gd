@@ -68,7 +68,7 @@ const COMMANDS := {
 		{"label": "List deployed fighters · recall", "command": "deploy.fighters.list", "context_sector": true},
 		{"label": "List deployed mines · recall", "command": "deploy.mines.list", "context_sector": true},
 		{"label": "Sweep mines", "command": "combat.sweep_mines", "mutating": true},
-		{"label": "Jettison cargo", "command": "trade.jettison", "fields": [["commodity", FIELD_TEXT, "Commodity (ore, organics, equipment, colonists, etc.)", "ore"], ["quantity", FIELD_INT, "Quantity to jettison", "1"]], "mutating": true},
+		{"label": "Jettison cargo", "command": "trade.jettison", "fields": [["commodity", FIELD_TEXT, "Commodity (ore, organics, equipment, colonists, etc.)", "ore"], ["quantity", FIELD_INT, "Quantity to jettison", "1"]], "form_notice": "Permanently destroys this cargo and consumes one turn. The server will validate the amount.", "mutating": true},
 		{"label": "Deploy marker beacon", "command": "sector.set_beacon", "fields": [["text", FIELD_TEXT, "Beacon text (up to 80 characters)", "", 80]], "context_sector": true, "mutating": true},
 		{"label": "Create planet with Genesis Torpedo", "command": "planet.genesis_create", "fields": [["name", FIELD_TEXT, "New planet name", ""]], "context_sector": true, "fixed": {"owner_entity_type": "player"}, "mutating": true, "idempotency": true},
 	],
@@ -998,6 +998,13 @@ func _choose_action(action: Dictionary) -> void:
 	for child in _form_content.get_children():
 		child.queue_free()
 	_form_content.add_theme_constant_override("separation", 8)
+	var form_notice := str(action.get("form_notice", ""))
+	if not form_notice.is_empty():
+		var notice_label := Label.new()
+		notice_label.text = form_notice
+		notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		notice_label.add_theme_color_override("font_color", Color(1.0, 0.72, 0.52))
+		_form_content.add_child(notice_label)
 	for field in fields:
 		var row := VBoxContainer.new()
 		var label := Label.new()

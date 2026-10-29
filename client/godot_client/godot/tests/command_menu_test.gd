@@ -114,7 +114,12 @@ func _run() -> void:
 	menu._choose_action({"local_help": true})
 	_check(captured.size() == 12, "opening the field guide emitted a server command")
 	_check(menu._result_text.text.contains("Actions are discrete requests") and menu._result_text.text.contains("screen position of a marker is decorative"), "field guide omitted the authoritative command and decorative-coordinate rules")
-	menu._choose_action({"label": "Jettison cargo", "command": "trade.jettison", "mutating": true, "fields": [["commodity", "text", "Commodity", "ore"], ["quantity", "integer", "Quantity", "1"]]})
+	menu._choose_action({"label": "Jettison cargo", "command": "trade.jettison", "mutating": true, "form_notice": "Permanently destroys cargo and consumes one turn.", "fields": [["commodity", "text", "Commodity", "ore"], ["quantity", "integer", "Quantity", "1"]]})
+	var jettison_notice_shown := false
+	for form_child in menu._form_content.get_children():
+		if form_child is Label and (form_child as Label).text.contains("consumes one turn"):
+			jettison_notice_shown = true
+	_check(jettison_notice_shown, "jettison form did not explain cargo loss and turn cost")
 	menu._form_fields["commodity"].text = "ore"
 	menu._form_fields["quantity"].text = "3"
 	menu._submit_form()
