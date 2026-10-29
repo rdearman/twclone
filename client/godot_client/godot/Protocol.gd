@@ -60,6 +60,27 @@ static func confirmed_move_sector(data: Variant) -> int:
 			return int(value)
 	return 0
 
+static func move_hazard_report(frame: Dictionary) -> String:
+	var data: Variant = frame.get("data", {})
+	if not data is Dictionary or not data.has("hazards"):
+		var error: Variant = frame.get("error", {})
+		data = error.get("data", {}) if error is Dictionary else {}
+	var hazards: Variant = data.get("hazards", []) if data is Dictionary else []
+	if not hazards is Array:
+		return ""
+	var lines: Array[String] = []
+	for hazard in hazards:
+		if not hazard is Dictionary:
+			continue
+		var parts: Array[String] = [str(hazard.get("hazard_type", hazard.get("type", "hazard")))]
+		for field in [["damage", "damage"], ["shields_lost", "shields lost"], ["fighters_lost", "fighters lost"], ["hull_lost", "hull lost"]]:
+			if hazard.has(field[0]):
+				parts.append("%s: %s" % [field[1], str(hazard[field[0]])])
+		if hazard.has("message") and not str(hazard["message"]).is_empty():
+			parts.append(str(hazard["message"]))
+		lines.append("Sector hazard · " + " · ".join(parts))
+	return "\n".join(lines)
+
 static func timeout_result(command: String) -> Dictionary:
 	return {"kind": "timeout", "message": "Request timed out: %s." % command, "data": {}}
 

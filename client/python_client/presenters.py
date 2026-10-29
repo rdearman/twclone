@@ -48,6 +48,32 @@ def present_move_result(resp: Dict[str, Any]) -> Tuple[bool, str]:
     return False, " — ".join(parts)
 
 
+def present_move_hazards(resp: Dict[str, Any]) -> List[str]:
+    """Describe only damage fields actually supplied by the movement response."""
+    if not isinstance(resp, dict):
+        return []
+    data = resp.get("data")
+    if not isinstance(data, dict) or "hazards" not in data:
+        error = resp.get("error")
+        data = error.get("data", {}) if isinstance(error, dict) else {}
+    hazards = data.get("hazards", []) if isinstance(data, dict) else []
+    if not isinstance(hazards, list):
+        return []
+    lines = []
+    for hazard in hazards:
+        if not isinstance(hazard, dict):
+            continue
+        parts = [str(hazard.get("hazard_type", hazard.get("type", "hazard")))]
+        for key, label in (("damage", "damage"), ("shields_lost", "shields lost"),
+                           ("fighters_lost", "fighters lost"), ("hull_lost", "hull lost")):
+            if key in hazard:
+                parts.append(f"{label}: {hazard[key]}")
+        if hazard.get("message"):
+            parts.append(str(hazard["message"]))
+        lines.append("Sector hazard · " + " · ".join(parts))
+    return lines
+
+
 def present_subscription_result(resp: Dict[str, Any], action: str,
                                  topic: Optional[str] = None) -> str:
     """

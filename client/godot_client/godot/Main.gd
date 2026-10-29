@@ -466,6 +466,9 @@ func _on_tavern_enter_requested() -> void:
 
 func _finish_warp_reply(response: Dictionary, destination: int) -> void:
 	var result: Dictionary = Protocol.result_from_response(response)
+	var hazards := Protocol.move_hazard_report(response)
+	if not hazards.is_empty():
+		gameplay_view.show_information("Sector hazards", hazards)
 	if result.get("kind") == "ok":
 		gameplay_view.show_notification("Warp confirmed · Sector %d." % destination)
 		await gameplay_view.play_warp_transition()
@@ -617,7 +620,9 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			_refresh_after_command()
 			return
 		gameplay_view.show_notification("%s complete.%s" % [label, " · " + summary if not summary.is_empty() else ""])
-		if str(operation.get("command", "")) == "port.info" and data.has("port"):
+		if command_name == "move.transwarp" and not Protocol.move_hazard_report(response).is_empty():
+			gameplay_view.show_information("Sector hazards", Protocol.move_hazard_report(response))
+		elif str(operation.get("command", "")) == "port.info" and data.has("port"):
 			gameplay_view.enter_port_workflow(data)
 		elif str(operation.get("command", "")) == "shipyard.list":
 			gameplay_view.show_shipyard(data)
@@ -636,6 +641,13 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.set_command_busy(false)
 	else:
 		gameplay_view.set_command_busy(false)
+		if str(operation.get("command", "")) == "move.transwarp" and result.get("kind") == "error":
+			var transwarp_hazards := Protocol.move_hazard_report(response)
+			if not transwarp_hazards.is_empty():
+				gameplay_view.show_information("Sector hazards", transwarp_hazards)
+			gameplay_view.show_notification("Transwarp returned an error · refreshing confirmed player, ship and sector state.")
+			_refresh_after_command(["player", "ship", "sector"])
+			return
 		if str(operation.get("command", "")) == "planet.land":
 			var landing_report := PlanetCombatPresenter.landing_refusal(response)
 			if bool(landing_report.get("has_combat", false)):
@@ -830,6 +842,9 @@ func _send_next_route_hop() -> void:
 
 func _finish_route_warp(response: Dictionary, operation: Dictionary) -> void:
 	var result := Protocol.result_from_response(response)
+	var hazards := Protocol.move_hazard_report(response)
+	if not hazards.is_empty():
+		gameplay_view.show_information("Sector hazards", hazards)
 	if result.get("kind") != "ok":
 		_route_running = false
 		_planned_route.clear()

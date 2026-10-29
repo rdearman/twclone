@@ -169,9 +169,28 @@ def test_transwarp_flow_uses_server_command_then_refreshes_authoritative_sector(
         "command": "move.transwarp", "data": {"to_sector_id": 77},
     }
     assert fake_conn.calls[1] == {
-        "command": "move.describe_sector", "data": {"sector_id": 77},
+        "command": "move.describe_sector", "data": {},
     }
     assert ctx.last_sector_desc["id"] == 77
+
+
+def test_transwarp_error_reconciles_after_possible_committed_move(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory(sector={"id": 4, "name": "Old Sector"})
+    fake_conn.queue("move.transwarp", {
+        "status": "error", "error": {"message": "Entry hazard resolution failed"},
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "data": {"sector_id": 77, "name": "New Sector"},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "77")
+
+    client.transwarp_flow(ctx)
+
+    assert ctx.last_sector_desc["id"] == 77
+    assert [call["command"] for call in fake_conn.calls] == [
+        "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
+    ]
+    assert "Current sector refreshed after the movement error: 77" in capsys.readouterr().out
 
 
 def test_transwarp_refusal_does_not_refresh_or_replace_cached_sector(

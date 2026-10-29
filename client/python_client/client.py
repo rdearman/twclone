@@ -24,12 +24,13 @@ import socket
 import sys
 import shutil
 import textwrap
+from dataclasses import replace
 from typing import Any, Dict, Callable, List, Optional
 
 from protocol import Conn, get_data, extract_current_sector, normalize_sector
 from state import Context
 from presenters import (
-    present_move_result, present_subscription_result,
+    present_move_result, present_move_hazards, present_subscription_result,
     present_settings, present_bookmarks, present_avoid_list, present_money,
 )
 from settings_model import (
@@ -1130,21 +1131,58 @@ def transwarp_flow(ctx: Context):
         return
     response = ctx.conn.rpc("move.transwarp", {"to_sector_id": target})
     ok, message = present_move_result(response)
+    for hazard in present_move_hazards(response):
+        print(hazard)
     if not ok:
         print(message)
+        if isinstance(response, dict) and response.get("status") == "error":
+            _reconcile_after_move_error(ctx)
         return
-    new_sector = ctx.conn.rpc("move.describe_sector", {"sector_id": target})
-    if isinstance(new_sector, dict) and new_sector.get("status") == "ok":
-        ctx.last_sector_desc = normalize_sector(get_data(new_sector))
-        ctx.hud = hud_module.merge_hud(ctx.hud, hud_module.extract_sector_fields(ctx.last_sector_desc))
-    else:
-        # The move itself is confirmed; mark the old sector context stale
-        # instead of pretending the destination details were retrieved.
-        ctx.last_sector_desc = {}
-        print("Transwarp succeeded, but destination details could not be refreshed.")
+    actual_sector = _refresh_current_sector_after_move(ctx)
     _hud_rpc(ctx, "player.my_info", {})
+    if actual_sector != target:
+        print("Transwarp was accepted, but the requested destination could not be confirmed; navigation stopped.")
+        return
     print(f"Transwarped to sector {target}.")
     call_handler("redisplay_sector", ctx)
+
+
+def _refresh_current_sector_after_move(ctx: Context) -> Optional[int]:
+    """Replace the old sector only with a successful current-sector read."""
+    ctx.last_sector_desc = {}
+    ctx.state.pop("sector_id", None)
+    ctx.hud = replace(ctx.hud, sector_id=None, sector_name=None)
+    response = ctx.conn.rpc("move.describe_sector", {})
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        return None
+    data = get_data(response)
+    if not isinstance(data, dict):
+        return None
+    try:
+        sector = normalize_sector(data)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    sector_id = sector.get("id")
+    if type(sector_id) is not int or sector_id <= 0:
+        return None
+    ctx.last_sector_desc = sector
+    ctx.hud = hud_module.merge_hud(ctx.hud, hud_module.extract_sector_fields(sector))
+    return sector_id
+
+
+def _reconcile_after_move_error(ctx: Context) -> None:
+    """A server error can follow a committed move or sector-entry damage."""
+    sector_id = _refresh_current_sector_after_move(ctx)
+    player = _hud_rpc(ctx, "player.my_info", {})
+    if isinstance(player, dict) and player.get("status") == "ok":
+        data = get_data(player)
+        if isinstance(data, dict) and isinstance(data.get("player"), dict):
+            ctx.player_info = data
+    _hud_rpc(ctx, "ship.status", {})
+    if sector_id is None:
+        print("Current sector could not be refreshed after the movement error; navigation state is unavailable.")
+    else:
+        print(f"Current sector refreshed after the movement error: {sector_id}.")
 
 
 def _perform_warp(ctx: Context, target: int) -> bool:
@@ -1152,25 +1190,27 @@ def _perform_warp(ctx: Context, target: int) -> bool:
     Single, authoritative move.warp caller used by every movement flow.
 
     The server response is treated as authoritative: the cached sector is
-    only replaced, and the destination only described, when status == "ok".
-    On refusal/error the cached sector is left untouched and the requested
-    destination is not shown (see presenters.present_move_result).
+    refreshed from the current-sector read after a successful move. On a
+    server error, refresh before assuming the move had no side effects.
     """
     resp = ctx.conn.rpc("move.warp", {"to_sector_id": target})
     ok, message = present_move_result(resp)
+    for hazard in present_move_hazards(resp):
+        print(hazard)
     if ok:
-        new = ctx.conn.rpc("move.describe_sector", {"sector_id": target})
-        ctx.last_sector_desc = normalize_sector(get_data(new))
-        ctx.hud = hud_module.merge_hud(
-            ctx.hud, hud_module.extract_sector_fields(ctx.last_sector_desc)
-        )
+        actual_sector = _refresh_current_sector_after_move(ctx)
         # move.warp itself does not return turns/credits, so do one
         # deliberate follow-up refresh here rather than before every render.
         _hud_rpc(ctx, "player.my_info", {})
+        if actual_sector != target:
+            print("Move was accepted, but the requested destination could not be confirmed; navigation stopped.")
+            return False
         print(f"Moved to sector {target}.")
         call_handler("redisplay_sector", ctx)
     else:
         print(message)
+        if isinstance(resp, dict) and resp.get("status") == "error":
+            _reconcile_after_move_error(ctx)
     return ok
 
 
