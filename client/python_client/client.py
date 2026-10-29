@@ -4031,7 +4031,7 @@ def enter_ship_menu(ctx: Context):
         target, nm, tp, ship_id = current_target(target_idx)
         print("\n--- Enter Ship Menu ---")
         print(f" Target: #{target_idx+1} \"{nm}\" [{tp}] (ship_id={ship_id})")
-        print(" (I) Inspect Ship")
+        print(" (I) Show visible sector data")
         print(" (C) Claim")
         #print(" (R) Rename / Re-register")
         if ctx.state.get("debug"):
@@ -4055,16 +4055,20 @@ def enter_ship_menu(ctx: Context):
                 print("Invalid selection.")
             continue
 
-        # Confirm current target before any action
+        if cmd == "i":
+            # move.describe_sector already supplied this limited public view.
+            # The current ship.inspect handler accepts sector_id, not ship_id,
+            # and returns a sector list; sending this target's ship_id would
+            # misleadingly appear to inspect this individual vessel.
+            print("Visible sector report (fields supplied by the server):")
+            print(json.dumps(target, ensure_ascii=False, indent=2, sort_keys=True))
+            continue
+
+        # Confirm current target before any mutating action.
         confirm = input(f'Operate on #{target_idx+1} "{nm}" [{tp}] (ship_id={ship_id})? (y/N): ').strip().lower()
         if confirm != "y":
             print("Cancelled.")
             continue
-
-        elif cmd == "i":
-            resp = ctx.conn.rpc("ship.inspect", {"ship_id": ship_id})
-            ctx.state["last_rpc"] = resp
-            print_inspect_response_pretty(ctx)
 
         elif cmd == "c":
             # Claim an unpiloted ship in this sector

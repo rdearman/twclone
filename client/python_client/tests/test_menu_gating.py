@@ -192,3 +192,26 @@ def test_enter_ship_set_primary_available_with_debug(ctx_factory, fake_conn, mon
     out = capsys.readouterr().out
     assert "Set Primary" in out
     assert "ship.set_primary" in [c["command"] for c in fake_conn.calls]
+
+
+def test_enter_ship_shows_visible_snapshot_without_misusing_inspect_rpc(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    target = {
+        "id": 99,
+        "name": "Derelict",
+        "ship_type": "Scout",
+        "owner": "derelict",
+    }
+    ctx = ctx_factory(sector={"id": 1, "ships": [target]})
+    ctx.player_info = {"player": {"ship_id": 10, "username": "test"}}
+    inputs = iter(["", "i", "q"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(inputs))
+
+    client.enter_ship_menu(ctx)
+
+    output = capsys.readouterr().out
+    assert "Show visible sector data" in output
+    assert '"ship_type": "Scout"' in output
+    assert "Visible sector report" in output
+    assert fake_conn.calls == []
