@@ -173,21 +173,33 @@ def test_offline_warp_cycle_tracks_planned_vs_completed_hops(tmp_path):
 def test_trade_receipt_updates_realized_performance_metrics(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.state["price_cache"] = {"202": {"sell": {"ORE": 150}}}
-    manager.state["ship_info"] = {
-        "cargo": [{"commodity": "ORE", "quantity": 2, "purchase_price": 100}]
-    }
+    manager.state["player_info"] = {"player": {"credits": "1000.00"}}
+    manager.state["ship_info"] = {"id": 1, "cargo": []}
+    manager.add_pending_command("buy-1", {
+        "command": "trade.buy", "data": {"port_id": 101}
+    })
+    process_responses(
+        [{"reply_to": "buy-1", "status": "ok", "type": "trade.buy_receipt_v1",
+          "data": {"lines": [{"commodity": "ORE", "quantity": 2,
+                               "unit_price": 100, "value": "200.00"}],
+                   "fees": "2.00", "credits_remaining": "798.00"}}],
+        None, manager, QuietReporter(), QuietBandit(), {}, None,
+    )
+
     manager.add_pending_command("sell-1", {
         "command": "trade.sell", "data": {"port_id": 202}
     })
 
     process_responses(
         [{"reply_to": "sell-1", "status": "ok", "type": "trade.sell_receipt_v1",
-          "data": {"lines": [{"commodity": "ORE", "quantity": 2}],
-                   "credits_remaining": 300}}],
+          "data": {"lines": [{"commodity": "ORE", "quantity": 2,
+                               "unit_price": 120, "value": "240.00"}],
+                   "fees": "2.40", "credits_remaining": "1035.60"}}],
         None, manager, QuietReporter(), QuietBandit(), {}, None,
     )
 
     metrics = manager.get("ai_metrics")
-    assert metrics["trade_profit_credits"] == 100
+    assert metrics["trade_profit_credits"] == 35.6
     assert metrics["trade_sales"] == 1
     assert manager.get("ship_info")["cargo"] == []
+    assert manager.get("player_info")["player"]["credits"] == "1035.60"
