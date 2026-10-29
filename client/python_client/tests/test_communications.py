@@ -9,6 +9,7 @@ def test_comms_menu_has_clear_landing_entries(menus):
     assert options["m"]["action"]["submenu"] == "MAIL"
     assert options["e"]["action"]["pycall"] == "comms_events_view"
     assert options["n"]["action"]["pycall"] == "comms_notices_view"
+    assert options["a"]["action"]["pycall"] == "comms_notice_ack_flow"
 
 
 def test_chat_empty_and_malformed_history_are_safe(ctx_factory, fake_conn, capsys):
@@ -61,3 +62,52 @@ def test_notices_malformed_row_is_skipped_and_unread_is_consistent(ctx_factory, 
     assert "Alert [new]" in out
     assert "Unreadable notice (skipped)" in out
     assert '"title"' not in out
+
+
+def test_notice_ack_only_submits_a_listed_unread_id_and_confirms_server_result(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("notice.list", {"status": "ok", "data": {"items": [
+        {"id": 71, "title": "New", "seen_at": None},
+        {"id": 72, "title": "Already read", "seen_at": "2026-10-29T10:00:00Z"},
+    ]}})
+    fake_conn.queue("notice.ack", {"status": "ok", "data": {"id": 71, "seen_at": 1761732000}})
+    answers = iter(["71", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.comms_notice_ack_flow(ctx_factory())
+
+    assert fake_conn.calls == [
+        {"command": "notice.list", "data": {}},
+        {"command": "notice.ack", "data": {"notice_id": 71}},
+    ]
+    output = capsys.readouterr().out
+    assert "ID 71: New" in output
+    assert "ID 72" not in output
+    assert "Notice 71 acknowledged (confirmed by server)." in output
+
+
+def test_notice_ack_rejects_unlisted_id_without_mutation(ctx_factory, fake_conn, monkeypatch, capsys):
+    fake_conn.queue("notice.list", {"status": "ok", "data": {"items": [
+        {"id": 71, "title": "New", "seen_at": None},
+    ]}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "999")
+
+    client.comms_notice_ack_flow(ctx_factory())
+
+    assert fake_conn.calls == [{"command": "notice.list", "data": {}}]
+    assert "not an unread notice" in capsys.readouterr().out
+
+
+def test_notice_ack_displays_server_refusal(ctx_factory, fake_conn, monkeypatch, capsys):
+    fake_conn.queue("notice.list", {"status": "ok", "data": {"items": [
+        {"id": 71, "title": "New", "seen_at": None},
+    ]}})
+    fake_conn.queue("notice.ack", {"status": "error", "error": {"message": "not found"}})
+    answers = iter(["71", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.comms_notice_ack_flow(ctx_factory())
+
+    assert fake_conn.calls[-1] == {"command": "notice.ack", "data": {"notice_id": 71}}
+    assert "Notice acknowledgement refused: not found" in capsys.readouterr().out

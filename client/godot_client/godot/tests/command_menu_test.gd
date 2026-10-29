@@ -246,6 +246,17 @@ func _run() -> void:
 	var notice_text := menu.format_result("Notices", {"items": [{"title": "Beacon alert", "body": "Traffic ahead", "scope": "sector", "seen_at": null}]})
 	_check(notice_text.contains("[NEW] Beacon alert · sector") and notice_text.contains("Traffic ahead"), "notice list was not rendered with read state and message")
 	_check(menu.format_result("Notices", {"items": []}) == "No current notices.", "empty notice response was not explained clearly")
+	var notice_ack_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
+		if str(candidate.get("command", "")) == "notice.ack":
+			notice_ack_action = candidate
+	_check(notice_ack_action.get("mutating", false) and not notice_ack_action.has("fixed"), "notice acknowledgement did not require a specific server-listed notice ID")
+	var notice_ack_count := captured.size()
+	menu._choose_action(notice_ack_action)
+	if not notice_ack_action.is_empty():
+		menu._form_fields["notice_id"].text = "72"
+		menu._submit_form()
+	_check(captured.size() == notice_ack_count + 1 and captured.back()["command"] == "notice.ack" and captured.back()["data"] == {"notice_id": 72} and captured.back()["mutating"], "notice acknowledgement did not send the selected notice ID as a mutation")
 	var repair_action: Dictionary = {}
 	for candidate in CommandMenu.COMMANDS.get("COMPUTER", []):
 		if str(candidate.get("command", "")) == "ship.repair":

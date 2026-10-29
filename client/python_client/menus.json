@@ -1651,6 +1651,13 @@
           }
         },
         {
+          "key": "a",
+          "label": "(A) Acknowledge notice",
+          "action": {
+            "pycall": "comms_notice_ack_flow"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {

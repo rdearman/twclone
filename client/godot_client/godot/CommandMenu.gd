@@ -45,6 +45,7 @@ const COMMANDS := {
 		{"label": "Broadcast message", "command": "chat.broadcast", "fields": [["message", FIELD_TEXT, "Message", ""]], "mutating": true},
 		{"label": "Private message · unavailable", "unavailable_reason": "The chat.send schema rejects the recipient fields required by its handler."},
 		{"label": "Notices", "command": "notice.list"},
+		{"label": "Acknowledge notice", "command": "notice.ack", "fields": [["notice_id", FIELD_INT, "Unread notice ID", ""]], "mutating": true},
 		{"label": "Mail inbox", "command": "mail.inbox", "fixed": {"limit": 20}},
 		{"label": "Online players", "command": "player.list_online"},
 	],

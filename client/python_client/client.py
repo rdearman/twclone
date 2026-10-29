@@ -683,8 +683,52 @@ def comms_notices_view(ctx: Context):
         if not isinstance(it, dict):
             print("  [info] Unreadable notice (skipped)")
             continue
-        seen = "" if it.get("seen_at") else " [new]"
+        seen = "" if it.get("seen_at") is not None else " [new]"
         print(f"  [{it.get('severity','info')}] {it.get('title','')}{seen}\n    {it.get('body','')}")
+
+
+@register("comms_notice_ack_flow")
+def comms_notice_ack_flow(ctx: Context):
+    """Acknowledge one unread notice using its server-issued ID."""
+    response = _hud_rpc(ctx, "notice.list", {})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        _pp(response)
+        return
+    data = response.get("data")
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        print("The server returned an invalid notice list.")
+        return
+    unread = [row for row in items if isinstance(row, dict)
+              and isinstance(row.get("id"), int) and not isinstance(row.get("id"), bool)
+              and row.get("id") > 0 and row.get("seen_at") is None]
+    print("\n--- Unread Notices ---")
+    for row in unread:
+        print(f"  ID {row['id']}: {row.get('title', '')}")
+    if not unread:
+        print("There are no unread notices to acknowledge.")
+        return
+    try:
+        notice_id = int(input("Notice ID to acknowledge (Enter to cancel): ").strip())
+    except (ValueError, EOFError):
+        return
+    if notice_id not in {row["id"] for row in unread}:
+        print("That ID is not an unread notice in the current server listing.")
+        return
+    if input(f"Acknowledge notice {notice_id}? [y/N]: ").strip().lower() != "y":
+        print("Acknowledgement cancelled.")
+        return
+    result = _hud_rpc(ctx, "notice.ack", {"notice_id": notice_id})
+    ctx.state["last_rpc"] = result
+    if result.get("status") != "ok":
+        print(f"Notice acknowledgement refused: {(result.get('error') or {}).get('message') or 'server refusal'}")
+        return
+    confirmed = result.get("data") if isinstance(result.get("data"), dict) else {}
+    if confirmed.get("id") != notice_id:
+        print("The server response did not confirm the selected notice ID.")
+        return
+    print(f"Notice {notice_id} acknowledged (confirmed by server).")
 
 
 # --- BEGIN AUTO-ADDED HUD_HOOK ---
