@@ -76,7 +76,10 @@ player ID to that repository operation. This requires a coordinated repository
 and server interface correction before that test can pass. The PostgreSQL
 Captain Z failure/commit integration harness also passed, confirming failed
 enforcement rolls back ship and pod state and successful enforcement commits
-both before notification.
+both before notification. The information-boundary repository integration test
+also passed, proving remote visit/port-knowledge writes have no effect and
+visited outgoing warp topology becomes visible only after player and ship
+presence agree.
 
 Native PostgreSQL timestamp and JSON values currently pass through the common
 text accessor. A normalized cross-backend representation still needs explicit

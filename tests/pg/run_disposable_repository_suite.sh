@@ -38,6 +38,7 @@ for suite in \
   run_repo_planetary_accounting.sh \
   run_repo_planet_fighter_transfer.sh \
   run_repo_podded_status.sh \
+  run_repo_information_boundary.sh \
   run_server_combat_fedspace_atomic.sh \
   run_repo_stardock_atomic.sh; do
   echo "Run $suite"
