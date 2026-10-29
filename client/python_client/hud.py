@@ -114,8 +114,9 @@ def extract_ship_fields(resp: Dict[str, Any]) -> Dict[str, Any]:
         out["fighters"] = ship["fighters"]
     if isinstance(ship.get("shields"), int):
         out["shields"] = ship["shields"]
-    if isinstance(ship.get("hull"), int):
-        out["hull"] = ship["hull"]
+    hull = ship.get("hull")
+    if type(hull) is int and 0 <= hull <= 100:
+        out["hull"] = hull
     if isinstance(ship.get("holds"), int):
         out["cargo_total"] = ship["holds"]
     cargo = ship.get("cargo")

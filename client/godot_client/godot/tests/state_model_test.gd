@@ -52,7 +52,7 @@ func _init() -> void:
 	_run("normal output safety", _test_normal_output_safety)
 	_run("debug redaction", _test_debug_redaction)
 	if failures.is_empty():
-		print("Godot state tests: 32 passed")
+		print("Godot state tests: 33 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -89,6 +89,8 @@ func _test_ship_normalization() -> void:
 	_check(ship["id"] == 12 and ship["holds"] == 40, "ship identity/capacity was not normalized")
 	_check(ship["fighters"] == 250 and ship["shields"] == 80, "ship defence was not normalized")
 	_check(ship["hull"] == 73, "authoritative ship hull was not normalized")
+	var invalid_hull := ClientState.normalize_ship({"ship": {"hull": 101}})
+	_check(not invalid_hull.has("hull"), "out-of-range hull was exposed as authoritative state")
 	_check(ship["cargo_used"] == 18 and ship["cargo"].size() == 2, "ship cargo was not normalized")
 
 func _test_sector_normalization() -> void:

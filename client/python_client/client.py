@@ -3549,7 +3549,7 @@ def render_ship_card(ship: dict) -> str:
     if fighters is None:
         fighters = ship.get("fighters") or 0
     hull = ship.get("hull")
-    hull_text = _fmt_int(hull) if isinstance(hull, int) else "—"
+    hull_text = _fmt_int(hull) if type(hull) is int and 0 <= hull <= 100 else "—"
 
     # Holds and Cargo handling
     holds_val = ship.get("holds")

@@ -215,7 +215,8 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 	_copy_int(source, result, "holds")
 	_copy_int(source, result, "fighters")
 	_copy_int(source, result, "shields")
-	_copy_int(source, result, "hull")
+	if source.has("hull") and _is_integral_number(source["hull"]) and source["hull"] >= 0 and source["hull"] <= 100:
+		result["hull"] = int(source["hull"])
 	_copy_int(source, result, "onplanet")
 	_copy_int(source, result, "ported")
 	if source.has("cargo") and source["cargo"] is Array:

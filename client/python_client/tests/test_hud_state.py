@@ -133,6 +133,12 @@ def test_malformed_credits_leaves_credits_unknown_not_a_traceback():
     assert fields["turns_remaining"] == 5
 
 
+def test_invalid_hull_values_remain_unavailable():
+    for hull in (True, -1, 101, "73"):
+        fields = extract_ship_fields({"status": "ok", "data": {"ship": {"hull": hull}}})
+        assert "hull" not in fields
+
+
 def test_connection_label_online_stale_offline():
     assert connection_label(connected=False, last_refresh_ts=None) == "OFFLINE"
     assert connection_label(connected=True, last_refresh_ts=None) == "ONLINE"

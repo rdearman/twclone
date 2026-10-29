@@ -10,6 +10,12 @@ def test_ship_card_displays_authoritative_hull_and_marks_older_server_field_miss
     assert "Hull:   —/100" in older
 
 
+def test_ship_card_does_not_render_invalid_hull_as_authoritative():
+    for hull in (True, -1, 101):
+        rendered = client.render_ship_card({"hull": hull})
+        assert "Hull:   —/100" in rendered
+
+
 def test_hardware_purchase_selects_catalogue_item_and_refreshes_ship(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
