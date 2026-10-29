@@ -406,6 +406,10 @@ func _run() -> void:
 	(menu._form_fields["topic"] as LineEdit).text = "sector.42"
 	menu._submit_form()
 	_check(captured.back().get("command") == "subscribe.remove" and captured.back().get("data") == {"topic": "sector.42"}, "subscription removal did not send the canonical topic field")
+	var unsupported_ship_commands := ["ship.sell", "ship.transfer", "ship.transfer_cargo", "ship.upgrade", "shipyard.sell"]
+	for actions in CommandMenu.COMMANDS.values():
+		for action in actions:
+			_check(not unsupported_ship_commands.has(str(action.get("command", ""))), "command menu exposed an unimplemented ship command")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():

@@ -20,6 +20,16 @@ KNOWN_ABSENT_COMMANDS = {
     "map.render",
 }
 
+# Registered RPC names whose current server handlers explicitly return
+# ERR_NOT_IMPLEMENTED. Keep them out of ordinary player-facing menu paths.
+KNOWN_SERVER_STUBS = {
+    "ship.sell",
+    "ship.transfer",
+    "ship.transfer_cargo",
+    "ship.upgrade",
+    "shipyard.sell",
+}
+
 
 def _iter_options(menu: dict):
     if "sections" in menu:
@@ -143,6 +153,13 @@ def test_no_normal_mode_rpc_action_uses_known_absent_command(ctx_factory, menus)
 
     absent_in_use = reachable_commands & KNOWN_ABSENT_COMMANDS
     assert absent_in_use == set(), f"Normal-mode menus reference absent commands: {absent_in_use}"
+
+
+def test_normal_mode_does_not_expose_server_stub_ship_commands(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    reachable_commands = _collect_rpc_commands(menus, "MAIN", ctx)
+    stub_commands = reachable_commands & KNOWN_SERVER_STUBS
+    assert stub_commands == set(), f"Player menus expose server stubs: {stub_commands}"
 
 
 def test_enter_ship_set_primary_hidden_and_disabled_without_debug(ctx_factory, fake_conn, monkeypatch, capsys):
