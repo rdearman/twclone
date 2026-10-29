@@ -1658,6 +1658,13 @@
           }
         },
         {
+          "key": "b",
+          "label": "(B) Active bounties",
+          "action": {
+            "pycall": "comms_bounty_board"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {

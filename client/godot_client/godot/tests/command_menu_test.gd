@@ -246,6 +246,14 @@ func _run() -> void:
 	var notice_text := menu.format_result("Notices", {"items": [{"title": "Beacon alert", "body": "Traffic ahead", "scope": "sector", "seen_at": null}]})
 	_check(notice_text.contains("[NEW] Beacon alert · sector") and notice_text.contains("Traffic ahead"), "notice list was not rendered with read state and message")
 	_check(menu.format_result("Notices", {"items": []}) == "No current notices.", "empty notice response was not explained clearly")
+	var bounty_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
+		if str(candidate.get("command", "")) == "bounty.list":
+			bounty_action = candidate
+	_check(not bounty_action.is_empty() and bounty_action.get("fixed", {}) == {}, "read-only bounty board was not exposed through communications")
+	var bounty_text := menu.format_result("Active bounties", {"bounties": [{"bounty_id": 19, "target_id": 7, "target_name": "Ranger", "reward": 2500}]})
+	_check(bounty_text.contains("#19 · Ranger · 2500 CR"), "authoritative bounty row was not presented")
+	_check(menu.format_result("Active bounties", {"bounties": []}) == "There are no active bounties.", "empty bounty response was not explained")
 	var notice_ack_action: Dictionary = {}
 	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
 		if str(candidate.get("command", "")) == "notice.ack":

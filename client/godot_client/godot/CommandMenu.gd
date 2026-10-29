@@ -44,6 +44,7 @@ const COMMANDS := {
 		{"label": "Chat history", "command": "chat.history", "fixed": {"limit": 20}},
 		{"label": "Broadcast message", "command": "chat.broadcast", "fields": [["message", FIELD_TEXT, "Message", ""]], "mutating": true},
 		{"label": "Private message · unavailable", "unavailable_reason": "The chat.send schema rejects the recipient fields required by its handler."},
+		{"label": "Active bounties", "command": "bounty.list", "fixed": {}},
 		{"label": "Notices", "command": "notice.list"},
 		{"label": "Acknowledge notice", "command": "notice.ack", "fields": [["notice_id", FIELD_INT, "Unread notice ID", ""]], "mutating": true},
 		{"label": "Mail inbox", "command": "mail.inbox", "fixed": {"limit": 20}},
@@ -348,6 +349,8 @@ func show_result(label: String, payload: Dictionary) -> void:
 func format_result(label: String, payload: Dictionary) -> String:
 	if label.to_lower().contains("ferengi trader"):
 		return FerengiPresenter.traders(payload.get("data", payload) if payload.get("data", payload) is Dictionary else {})
+	if label.to_lower().contains("bount"):
+		return _format_bounty_result(payload)
 	if label.to_lower().contains("density"):
 		return _format_density_result(payload)
 	if label.to_lower().contains("scan"):
@@ -357,6 +360,32 @@ func format_result(label: String, payload: Dictionary) -> String:
 	if label.to_lower().contains("notice"):
 		return _format_notice_result(payload)
 	return _format_result(payload)
+
+func _format_bounty_result(payload: Dictionary) -> String:
+	var data: Variant = payload.get("data", payload)
+	if not (data is Dictionary):
+		return "The server returned an unreadable bounty list."
+	var bounties: Variant = data.get("bounties", [])
+	if not (bounties is Array):
+		return "The server returned an unreadable bounty list."
+	if bounties.is_empty():
+		return "There are no active bounties."
+	var lines: Array[String] = []
+	for bounty in bounties:
+		if not (bounty is Dictionary):
+			continue
+		var bounty_id: Variant = bounty.get("bounty_id")
+		var target_id: Variant = bounty.get("target_id")
+		var reward: Variant = bounty.get("reward")
+		if not (bounty_id is int and target_id is int and reward is int):
+			continue
+		var target_name := str(bounty.get("target_name", "")).strip_edges()
+		if target_name.is_empty():
+			target_name = "Player %s" % target_id
+		lines.append("#%s · %s · %s CR" % [bounty_id, target_name, str(reward)])
+	if lines.is_empty():
+		return "No readable bounty entries were returned."
+	return "\n".join(lines).substr(0, 5000)
 
 func _format_news_result(payload: Dictionary) -> String:
 	var data: Variant = payload.get("data", payload)

@@ -731,6 +731,38 @@ def comms_notice_ack_flow(ctx: Context):
     print(f"Notice {notice_id} acknowledged (confirmed by server).")
 
 
+@register("comms_bounty_board")
+def comms_bounty_board(ctx: Context):
+    """Display the public active bounty list without local interpretation."""
+    response = _hud_rpc(ctx, "bounty.list", {})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        _pp(response)
+        return
+    data = response.get("data")
+    bounties = data.get("bounties") if isinstance(data, dict) else None
+    if not isinstance(bounties, list):
+        print("The server returned an invalid bounty list.")
+        return
+    print("\n--- Active Bounties ---")
+    readable = 0
+    for row in bounties:
+        if not isinstance(row, dict):
+            continue
+        bounty_id = row.get("bounty_id")
+        target_id = row.get("target_id")
+        reward = row.get("reward")
+        if not all(isinstance(value, int) and not isinstance(value, bool)
+                   for value in (bounty_id, target_id, reward)):
+            continue
+        print(f"  #{bounty_id}: {row.get('target_name') or f'Player {target_id}'} — {reward:,} CR")
+        readable += 1
+    if not bounties:
+        print("There are no active bounties.")
+    elif not readable:
+        print("No readable bounty entries were returned.")
+
+
 # --- BEGIN AUTO-ADDED HUD_HOOK ---
 def _hud_after_action(ctx):
     try:

@@ -10,6 +10,7 @@ def test_comms_menu_has_clear_landing_entries(menus):
     assert options["e"]["action"]["pycall"] == "comms_events_view"
     assert options["n"]["action"]["pycall"] == "comms_notices_view"
     assert options["a"]["action"]["pycall"] == "comms_notice_ack_flow"
+    assert options["b"]["action"]["pycall"] == "comms_bounty_board"
 
 
 def test_chat_empty_and_malformed_history_are_safe(ctx_factory, fake_conn, capsys):
@@ -111,3 +112,19 @@ def test_notice_ack_displays_server_refusal(ctx_factory, fake_conn, monkeypatch,
 
     assert fake_conn.calls[-1] == {"command": "notice.ack", "data": {"notice_id": 71}}
     assert "Notice acknowledgement refused: not found" in capsys.readouterr().out
+
+
+def test_bounty_board_displays_authoritative_rows_and_empty_state(ctx_factory, fake_conn, capsys):
+    fake_conn.queue("bounty.list", {"status": "ok", "data": {"bounties": [
+        {"bounty_id": 19, "target_id": 7, "target_name": "Ranger", "reward": 2500},
+        None,
+        {"bounty_id": "bad", "target_id": 8, "reward": 4},
+    ]}})
+    client.comms_bounty_board(ctx_factory())
+    output = capsys.readouterr().out
+    assert "#19: Ranger — 2,500 CR" in output
+    assert "Player 8" not in output
+
+    fake_conn.queue("bounty.list", {"status": "ok", "data": {"bounties": []}})
+    client.comms_bounty_board(ctx_factory())
+    assert "There are no active bounties." in capsys.readouterr().out
