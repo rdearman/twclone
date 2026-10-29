@@ -3784,7 +3784,7 @@ def help_main(ctx: Context):
         print("F: Scan adjacent sectors   D: Sector density scan")
         print("R: Rename ship          H: Hardware catalogue")
         print("J: Jettison cargo       T: Genesis torpedo")
-        print("K: Player rankings      ?: This help")
+        print("K: Player rankings · unavailable   ?: This help")
         print("Q: Return to the main menu")
         return
 
@@ -3794,7 +3794,11 @@ def help_main(ctx: Context):
     print("L: Land on a planet   S: Sector services   F: Operations")
     print("C: Ship's computer   G: Comms and events   N: News")
     print("O: Corporation   U: User settings   H: Help")
-    print("Q: Quit and disconnect")
+
+@register("rankings_unavailable_flow")
+def rankings_unavailable_flow(ctx: Context):
+    """Explain that the registered rankings endpoint has no authoritative data yet."""
+    print("Player rankings are unavailable: the server currently returns an empty ranking list.")
 
 # ---------------------------
 # Beacon flow

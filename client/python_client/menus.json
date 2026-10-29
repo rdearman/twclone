@@ -458,13 +458,9 @@
         },
         {
           "key": "k",
-          "label": "(K) Ranks",
+          "label": "(K) Ranks · unavailable",
           "action": {
-            "rpc": {
-              "command": "player.rankings",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "rankings_unavailable_flow"
           }
         },
         {
