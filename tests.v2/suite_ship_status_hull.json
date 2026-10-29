@@ -1,0 +1,30 @@
+{
+  "name": "Ship Status Hull Regression",
+  "description": "An ordinary player receives the active ship's authoritative hull.",
+  "tests": [
+    {
+      "name": "Setup: authenticated player",
+      "setup": "macro_auth_user",
+      "username": "status_player",
+      "password": "password"
+    },
+    {
+      "name": "Rig: damaged active ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull = 73 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'status_player');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ship status reports current hull",
+      "command": "ship.status",
+      "user": "status_player",
+      "expect": { "status": "ok", "type": "ship.status" },
+      "asserts": [
+        { "path": "data.ship.hull", "op": "==", "value": 73 }
+      ]
+    }
+  ]
+}

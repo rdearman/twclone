@@ -28,6 +28,9 @@
 #include "game_db.h"
 #include "server_config.h"
 #include "repo_cmd.h"
+#include "repo_combat.h"
+#include "db/repo/repo_stardock.h"
+#include "db/repo/repo_porttypes.h"
 #include "errors.h"
 #include "config.h"
 #include "common.h"
@@ -185,37 +188,42 @@ cmd_ship_repair (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  bool at_shipyard = false;
-  int rc = db_port_is_shipyard (db, ctx->sector_id, &at_shipyard);
-
-
-  if (rc != 0)
+  int port_id = 0, port_type_id = 0;
+  int rc = repo_stardock_get_port_by_sector (db, ctx->sector_id,
+                                             &port_id, &port_type_id);
+  if (rc != 0 && rc != 1)
     {
       send_response_error (ctx, root, ERR_DB, "DB error checking location.");
       return 0;
     }
-  if (!at_shipyard)
+  if (rc == 1)
     {
       send_response_refused_steal (ctx, root, ERR_NOT_AT_SHIPYARD,
 				   "Must be at Stardock or Class 0 port.",
 				   NULL);
       return 0;
     }
-
-  int current_hull = 0;
-
-
-  rc = db_ship_get_hull (db, ship_id, &current_hull);
-  if (rc == ERR_SHIP_NOT_FOUND)
+  porttype_t port_type = { 0 };
+  if (!repo_porttypes_get_by_id (db, port_type_id, &port_type))
     {
-      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "Ship not found.");
+      send_response_error (ctx, root, ERR_DB, "DB error checking port type.");
       return 0;
     }
-  if (rc != 0)
+  if (!port_type.is_stardock && strcmp (port_type.code, "CLASS0") != 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NOT_AT_SHIPYARD,
+                                   "Must be at Stardock or Class 0 port.",
+                                   NULL);
+      return 0;
+    }
+
+  repo_combat_ship_full_t ship_state = { 0 };
+  if (db_combat_load_ship_full_unlocked (db, ship_id, &ship_state) != 0)
     {
       send_response_error (ctx, root, ERR_DB, "DB error reading hull.");
       return 0;
     }
+  int current_hull = ship_state.hull;
 
   if (current_hull >= 100)
     {
@@ -585,13 +593,46 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "No ship info");
       return 0;
     }
-  // Build payload (clone or pack fields as needed)
+
+  /* Hull is authoritative ship state used by public maintenance decisions.
+   * Use the repository read and fail closed if it cannot load the ship; never
+   * report a default value for a damaged ship. */
+  int ship_id = (int) json_integer_value (json_object_get (ship, "id"));
+  repo_combat_ship_full_t ship_state = { 0 };
+  if (ship_id <= 0
+      || db_combat_load_ship_full_unlocked (db, ship_id, &ship_state) != 0)
+    {
+      json_decref (player_info);
+      send_response_error (ctx, root, ERR_DB, "Database error reading ship hull.");
+      return 0;
+    }
+
+  /* Do not mutate the player-info object: it is also used by other response
+   * paths. Build this command's ship snapshot with the additional field. */
+  json_t *ship_status = json_deep_copy (ship);
+  if (!ship_status || json_object_set_new (ship_status, "hull",
+                                           json_integer (ship_state.hull)) != 0)
+    {
+      json_decref (ship_status);
+      json_decref (player_info);
+      send_response_error (ctx, root, ERR_DB, "Could not build ship status.");
+      return 0;
+    }
   json_t *payload = json_object ();
-
-
-  json_object_set_new (payload, "ship", json_incref (ship));
-
-
+  if (!payload)
+    {
+      json_decref (ship_status);
+      json_decref (player_info);
+      send_response_error (ctx, root, ERR_DB, "Could not build ship status.");
+      return 0;
+    }
+  if (json_object_set_new (payload, "ship", ship_status) != 0)
+    {
+      json_decref (payload);
+      json_decref (player_info);
+      send_response_error (ctx, root, ERR_DB, "Could not build ship status.");
+      return 0;
+    }
   send_response_ok_take (ctx, root, "ship.status", &payload);
   json_decref (player_info);
   return 0;

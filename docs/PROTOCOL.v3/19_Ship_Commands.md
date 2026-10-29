@@ -19,6 +19,7 @@ Get detailed status of the player's current ship, including cargo.
     "id": 5,
     "name": "Merchant Vessel",
     "type_id": 2,
+    "hull": 100,
     "holds": 10,
     "fighters": 1,
     "shields": 1,
@@ -37,6 +38,11 @@ Get detailed status of the player's current ship, including cargo.
   }
 }
 ```
+
+`ship.hull` is the authoritative current hull of the authenticated player's
+active ship. It is an integer from `0` through `100`; `100` is fully repaired
+and `0` is destroyed. A failed hull read fails `ship.status` rather than
+substituting a default value.
 
 **Cargo Field**:
 - Returns an array of objects with `commodity` (string) and `quantity` (integer)

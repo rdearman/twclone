@@ -4,25 +4,66 @@
   "tests": [
     {
       "name": "Setup: Auth Captain",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "captain_crunch",
       "password": "password"
     },
     {
+      "name": "Rig: Mark test port as Stardock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET sector_id = (SELECT sector_id FROM players WHERE name = 'captain_crunch'), type = 9, porttype_id = (SELECT porttype_id FROM porttypes WHERE code = 'STARDOCK') WHERE port_id = 9;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Dock Captain at Stardock",
-      "command": "port.dock",
+      "command": "dock.status",
       "user": "captain_crunch",
-      "data": { "port_id": 9 },
+      "data": { "action": "dock" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Damaged active ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull = 73 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'captain_crunch');"
+      },
       "expect": { "status": "ok" }
     },
     {
       "name": "Repair: Execute Repair",
       "command": "ship.repair",
       "user": "captain_crunch",
-      "data": { "ship_id": 1011 },
-      "expect": {
-        "status": "ok"
-      }
+      "data": {},
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.cost", "op": "==", "value": 270 },
+        { "path": "data.hull", "op": "==", "value": 100 }
+      ]
+    },
+    {
+      "name": "Verify repaired hull through ship.status repository read",
+      "command": "ship.status",
+      "user": "captain_crunch",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.hull", "op": "==", "value": 100 }
+      ]
+    },
+    {
+      "name": "A fully repaired ship is not charged again",
+      "command": "ship.repair",
+      "user": "captain_crunch",
+      "data": {},
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.repaired", "op": "==", "value": false },
+        { "path": "data.cost", "op": "==", "value": 0 },
+        { "path": "data.hull", "op": "==", "value": 100 }
+      ]
     }
   ]
 }
