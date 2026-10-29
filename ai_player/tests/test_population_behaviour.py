@@ -183,3 +183,24 @@ def test_authoritative_ship_refresh_preserves_cargo_origin_across_reauthenticati
         "commodity": "ORE", "quantity": 4,
         "purchase_price": 120, "origin_port_id": 9,
     }]
+
+
+def test_trade_cost_basis_and_realized_profit_include_receipt_fees(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), config={})
+    manager.set("ship_info", {"id": 39, "cargo": []})
+    manager.update_player_info({"player": {"credits": "1000.00"}})
+    manager.update_cargo_after_buy(
+        [{"commodity": "ORE", "quantity": 2, "unit_price": 100, "value": "200.00"}],
+        port_id=9, credits_remaining="797.00", fees="2.00",
+    )
+
+    assert manager.get("ship_info")["cargo"][0]["purchase_price"] == 101.0
+
+    profit = manager.update_cargo_after_sell(
+        [{"commodity": "ORE", "quantity": 2, "unit_price": 120, "value": "240.00"}],
+        port_id=10, credits_remaining="1034.40", fees="2.40",
+    )
+
+    assert profit == 35.6
+    assert manager.get("ship_info")["cargo"] == []
+    assert manager.get("player_info")["player"]["credits"] == "1034.40"

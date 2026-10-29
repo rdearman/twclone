@@ -4,6 +4,7 @@ import tempfile
 import time
 import logging
 import hashlib
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from helpers import canon_commodity
 
 
@@ -383,8 +384,8 @@ class StateManager:
             logger.info(f"Updated credits to {credits}.")
             self.save_state()
 
-    def update_cargo_after_buy(self, items_bought, port_id, credits_remaining=None):
-        """Updates cargo list after a successful buy, including purchase price."""
+    def update_cargo_after_buy(self, items_bought, port_id, credits_remaining=None, fees=None):
+        """Update cargo using receipt prices with the paid buy fee in its cost basis."""
         if credits_remaining is not None:
             self.set_credits(credits_remaining)
 
@@ -397,16 +398,43 @@ class StateManager:
         # We don't need to look up price cache for unit_price if it is in items_bought
         # But we might want to normalize keys if we did.
         
+        def money(value):
+            try:
+                return Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+
+        fee_total = money(fees) or Decimal("0")
+        gross_values = []
         for item in items_bought:
+            quantity = item.get("units") or item.get("quantity")
+            unit_price = money(item.get("price_per_unit") or item.get("unit_price"))
+            gross = money(item.get("value"))
+            if gross is None and quantity and unit_price is not None:
+                gross = unit_price * int(quantity)
+            gross_values.append(max(Decimal("0"), gross or Decimal("0")))
+        gross_total = sum(gross_values, Decimal("0"))
+
+        for item_index, item in enumerate(items_bought):
             commodity = canon_commodity(item.get("commodity"))
             # Note: trade.buy_receipt_v1 uses "units" not "quantity"!
             quantity = item.get("units") or item.get("quantity")
             # Note: trade.buy_receipt_v1 uses "price_per_unit" not "unit_price"!
-            purchase_price = item.get("price_per_unit") or item.get("unit_price")
+            purchase_price = money(item.get("price_per_unit") or item.get("unit_price"))
 
             if not all([commodity, quantity, purchase_price is not None]):
                 logger.warning(f"Could not log purchase for {item}, missing data (commodity, quantity, or unit_price).")
                 continue
+
+            if purchase_price is not None and quantity:
+                if gross_total > 0:
+                    fee_share = fee_total * gross_values[item_index] / gross_total
+                else:
+                    fee_share = Decimal("0")
+                purchase_price = float(
+                    (purchase_price + fee_share / Decimal(int(quantity)))
+                    .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                )
 
             # Check if we already have a batch of this commodity at the same price and origin
             found = False
@@ -439,8 +467,8 @@ class StateManager:
         logger.info(f"Cargo updated after buy: {self.state['ship_info']['cargo']}")
         self.save_state()
 
-    def update_cargo_after_sell(self, items_sold, port_id, credits_remaining=None):
-        """Updates cargo list after a successful sell and returns total profit."""
+    def update_cargo_after_sell(self, items_sold, port_id, credits_remaining=None, fees=None):
+        """Update cargo and return net realized profit after receipt sell fees."""
         if credits_remaining is not None:
             self.set_credits(credits_remaining)
 
@@ -450,10 +478,33 @@ class StateManager:
         total_profit = 0
         port_sell_prices = self.state.get("price_cache", {}).get(str(port_id), {}).get("sell", {})
 
-        for item_sold in items_sold:
+        def money(value):
+            try:
+                return Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                return None
+
+        fee_total = money(fees) or Decimal("0")
+        gross_values = []
+        for item in items_sold:
+            quantity = item.get("quantity") or item.get("units")
+            gross = money(item.get("value"))
+            unit_price = money(item.get("unit_price") or item.get("price_per_unit"))
+            if gross is None and quantity and unit_price is not None:
+                gross = unit_price * int(quantity)
+            if gross is None and quantity:
+                unit_price = money(port_sell_prices.get(canon_commodity(item.get("commodity"))))
+                if unit_price is not None:
+                    gross = unit_price * int(quantity)
+            gross_values.append(max(Decimal("0"), gross or Decimal("0")))
+        gross_total = sum(gross_values, Decimal("0"))
+
+        for item_index, item_sold in enumerate(items_sold):
             commodity_sold = canon_commodity(item_sold.get("commodity"))
             quantity_sold = item_sold.get("quantity")
-            sell_price = port_sell_prices.get(commodity_sold)
+            sell_price = money(item_sold.get("unit_price") or item_sold.get("price_per_unit"))
+            if sell_price is None:
+                sell_price = money(port_sell_prices.get(commodity_sold))
 
             if not all([commodity_sold, quantity_sold, sell_price is not None]):
                 continue
@@ -478,8 +529,14 @@ class StateManager:
                     qty_from_this_batch = min(quantity_to_remove, cargo_item.get("quantity", 0))
                     
                     # Log profit based on batch purchase price
-                    profit = (sell_price - purchase_price) * qty_from_this_batch
-                    total_profit += profit
+                    gross_proceeds = money(item_sold.get("value"))
+                    if gross_proceeds is None:
+                        gross_proceeds = sell_price * int(quantity_sold)
+                    fee_share = (fee_total * gross_values[item_index] / gross_total
+                                 if gross_total > 0 else Decimal("0"))
+                    net_unit_proceeds = (gross_proceeds - fee_share) / Decimal(int(quantity_sold))
+                    profit = (net_unit_proceeds - money(purchase_price)) * int(qty_from_this_batch)
+                    total_profit += float(profit)
 
                     # Decrement the quantity of the batch
                     cargo_item['quantity'] -= qty_from_this_batch

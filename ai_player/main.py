@@ -1751,7 +1751,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     credits_remaining = response_data.get("credits_remaining")
                     profit = 0
                     if port_id:
-                        profit = state_manager.update_cargo_after_sell(sold_items, port_id, credits_remaining=credits_remaining)
+                        profit = state_manager.update_cargo_after_sell(
+                            sold_items, port_id, credits_remaining=credits_remaining,
+                            fees=response_data.get("fees"),
+                        )
                         reward = profit / 1000.0 # Normalize profit for the reward
                         state_manager.record_ai_metric("trade_profit_credits", profit)
                     state_manager.record_ai_metric("trade_sales")
@@ -1774,7 +1777,10 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     port_id = sent_command.get("data", {}).get("port_id") if sent_command else None
                     credits_remaining = response_data.get("credits_remaining")
                     if port_id:
-                        state_manager.update_cargo_after_buy(bought_items, port_id, credits_remaining=credits_remaining)
+                        state_manager.update_cargo_after_buy(
+                            bought_items, port_id, credits_remaining=credits_remaining,
+                            fees=response_data.get("fees"),
+                        )
                     state_manager.set("trade_successful", True)
                     logger.info("Ship cargo state updated after successful trade.buy.")
                 
