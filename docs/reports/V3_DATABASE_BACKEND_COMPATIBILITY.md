@@ -55,28 +55,35 @@ implemented backend.
 - MySQL release qualification: rerun schema install, migration replay, server
   startup and representative gameplay after all repository changes are merged.
 
-## Conformance test starter
+## PostgreSQL integration qualification
 
-`tests/pg/run_db_pg_conformance.sh` builds and runs an isolated PostgreSQL
-driver test. It checks typed large-integer/text reads, SQL NULL handling,
-reused and sparse numbered parameters, native timestamp/JSON text reads,
-generated IDs, affected-row counts, transaction commit/rollback, a
-two-connection row-lock timeout, and persistence after reconnect. It requires
-`PGDATABASE` to match `twclone_rc2_*` or `twclone_qa_*`; the test creates and
-drops a PID-named QA table inside that isolated database so it can verify data
-persistence after reconnect.
+`tests/pg/run_disposable_repository_suite.sh` creates a unique disposable
+database, applies the ordered PostgreSQL SQL files, runs the database
+conformance and repository integration tests, then drops only the database it
+created. Supply the normal libpq connection variables for an authorized QA
+PostgreSQL role; the script never targets the configured game database.
+
+On PostgreSQL 16.15, the driver conformance test passed typed large-integer and
+text reads, SQL NULL handling, reused and sparse numbered parameters, native
+timestamp/JSON text reads, generated IDs, affected-row counts, transaction
+commit/rollback, a two-connection row-lock timeout, and persistence after
+reconnect. The planetary accounting, fighter transfer/combat asset, and
+pod-status integration tests also passed. The StarDock atomic integration test
+currently fails because its repository update expects `ships.credits`, while
+the schema stores credits on `players`; the server call does not pass the
+player ID to that repository operation. This requires a coordinated repository
+and server interface correction before that test can pass.
 
 Native PostgreSQL timestamp and JSON values currently pass through the common
 text accessor. A normalized cross-backend representation still needs explicit
 agreement.
 
-The PostgreSQL harness compiled and linked in this workspace, but its runtime
-was blocked because no isolated `PGDATABASE` was supplied. This is not live
-database validation. The existing MySQL driver test in `tests/mysql/run.sh`
-currently covers basic bindings, typed reads, generated IDs and commit/rollback;
-the two backend tests still need to be reconciled and expanded to cover the
-full issue #494 matrix, including native timestamp/JSON handling and lock
-behavior on each supported MySQL/MariaDB version.
+The PostgreSQL results above use an isolated database and do not qualify the
+full issue #494 acceptance matrix. Authentication/player state and MySQL
+integration remain to be run. The MySQL driver test in `tests/mysql/run.sh`
+currently covers basic bindings, typed reads, generated IDs and
+commit/rollback; it still needs native timestamp/JSON handling and lock
+behavior checks on each supported MySQL/MariaDB version.
 
 ## Scope note
 
