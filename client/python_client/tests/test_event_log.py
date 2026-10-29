@@ -68,6 +68,14 @@ def test_sector_notice_unknown_subtype_remains_safe_and_located():
     assert "not shown" not in text
 
 
+def test_tavern_round_event_renders_server_message_as_social_event():
+    ev = {"category": "chat", "type": "tavern.round.bought", "data": {
+        "message": "A round has been bought for everyone!", "sector_id": 17,
+    }}
+    text = render_event_text(ev)
+    assert "A round has been bought for everyone!" in text
+
+
 def test_unknown_event_is_safe_compact_in_normal_mode():
     ev = {"category": "unknown", "type": "future.thing", "data": {"secret": "raw-value-should-not-leak"}}
     text = render_event_text(ev, debug=False)

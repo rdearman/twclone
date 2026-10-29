@@ -6,6 +6,7 @@ func _initialize() -> void:
 	var failures: Array[String] = []
 	_check(EventPresenter.notification_for({"type": "system.notice", "category": "system", "data": {"title": "Maintenance", "body": "Ten minutes."}}) == "Maintenance · Ten minutes.", "system notice was not presented clearly")
 	_check(EventPresenter.notification_for({"type": "system.notice_v1", "category": "system", "data": {"title": "Maintenance", "body": "Ten minutes."}}) == "Maintenance · Ten minutes.", "server system.notice_v1 event was not presented")
+	_check(EventPresenter.notification_for({"type": "tavern.round.bought", "category": "chat", "data": {"message": "A round has been bought for everyone!", "sector_id": 17}}) == "Comms · A round has been bought for everyone!", "tavern broadcast message was not presented")
 	_check(EventPresenter.notification_for({"type": "combat.ship_damage", "category": "combat", "data": {"target_ship_id": 8, "damage": 4}}) == "Combat · Ship Damage", "combat event exposed IDs or was not summarized")
 	var sector_notice := EventPresenter.notification_for({"type": "sector.notice", "category": "navigation", "data": {"subtype": "fighters_deployed", "sector_id": 42, "details": {"count": 12, "offense": 50}}})
 	_check(sector_notice.contains("fighters deployed in sector 42 (12)"), "sector notice was reduced to an unhelpful generic event label")

@@ -24,6 +24,10 @@ import pytest
 from protocol import Conn, EventQueue, classify_event_type
 
 
+def test_tavern_events_are_classified_for_social_presentation():
+    assert classify_event_type("tavern.round.bought") == "chat"
+
+
 def _make_conn_pair(debug=False):
     """A real socketpair with one end wrapped in Conn, the other a raw peer
     the test drives directly (writes JSON lines, reads JSON lines)."""

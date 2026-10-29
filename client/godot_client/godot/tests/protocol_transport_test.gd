@@ -136,4 +136,5 @@ func _test_structured_results() -> void:
 func _test_event_classification() -> void:
 	_check(Protocol.classify_event_type("system.notice") == "system", "system event category incorrect")
 	_check(Protocol.classify_event_type("chat.message") == "chat", "chat event category incorrect")
+	_check(Protocol.classify_event_type("tavern.round.bought") == "chat", "tavern events were not classified for social presentation")
 	_check(Protocol.classify_event_type("unknown.broadcast") == "unknown", "unknown event category incorrect")

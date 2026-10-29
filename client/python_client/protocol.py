@@ -33,6 +33,7 @@ _CATEGORY_PREFIXES = (
     ("chat.", "chat"),
     ("comm.", "chat"),
     ("mail.", "chat"),
+    ("tavern.", "chat"),
     ("move.", "nav"),
     ("nav.", "nav"),
     ("sector.", "nav"),

@@ -106,6 +106,7 @@ static func classify_event_type(event_type: String) -> String:
 		"chat.": "chat",
 		"comm.": "chat",
 		"mail.": "chat",
+		"tavern.": "chat",
 		"move.": "navigation",
 		"nav.": "navigation",
 		"sector.": "navigation",
