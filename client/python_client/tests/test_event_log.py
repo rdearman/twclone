@@ -44,6 +44,30 @@ def test_system_notice_renders_title_and_body():
     assert "5 minutes" in text
 
 
+def test_sector_notice_renders_known_player_actions_and_details():
+    ev = {
+        "category": "nav",
+        "type": "sector.notice",
+        "data": {
+            "subtype": "fighters_deployed",
+            "sector_id": 42,
+            "details": {"count": 12, "offense": 50},
+        },
+    }
+    text = render_event_text(ev)
+    assert "fighters deployed in sector 42 (12)" in text
+    assert "{'subtype'" not in text
+
+
+def test_sector_notice_unknown_subtype_remains_safe_and_located():
+    ev = {"category": "nav", "type": "sector.notice", "data": {
+        "subtype": "future_change", "sector_id": 9, "details": {"secret": "not shown"},
+    }}
+    text = render_event_text(ev)
+    assert "Sector notice in sector 9" in text
+    assert "not shown" not in text
+
+
 def test_unknown_event_is_safe_compact_in_normal_mode():
     ev = {"category": "unknown", "type": "future.thing", "data": {"secret": "raw-value-should-not-leak"}}
     text = render_event_text(ev, debug=False)

@@ -52,6 +52,30 @@ def render_event_text(ev: Dict[str, Any], debug: bool = False) -> str:
             return f"[{label}] {sender}: {text}"
         return f"[{label}] {text or etype}"
     if category == "nav":
+        if etype == "sector.notice":
+            subtype = data.get("subtype")
+            labels = {
+                "docked": "Ship docked at a port",
+                "beacon_set": "Sector beacon set",
+                "beacon_destroyed": "Sector beacon destroyed",
+                "fighters_deployed": "Sector fighters deployed",
+                "mine_swept": "Sector mines swept",
+            }
+            summary = labels.get(subtype, "Sector notice")
+            sector_id = data.get("sector_id")
+            if isinstance(sector_id, int) and not isinstance(sector_id, bool) and sector_id > 0:
+                summary += f" in sector {sector_id}"
+            details = data.get("details")
+            if isinstance(details, dict):
+                if subtype == "docked" and isinstance(details.get("port_id"), int):
+                    summary += f" (port {details['port_id']})"
+                elif subtype == "beacon_set" and isinstance(details.get("beacon"), str):
+                    summary += f": {details['beacon']}"
+                elif subtype == "fighters_deployed" and isinstance(details.get("count"), int):
+                    summary += f" ({details['count']})"
+                elif subtype == "mine_swept" and isinstance(details.get("mines_removed"), int):
+                    summary += f" ({details['mines_removed']} removed)"
+            return f"[{label}] {summary}"
         return f"[{label}] {data.get('message') or etype}"
     if category == "combat":
         return f"[{label}] {data.get('message') or etype}"
