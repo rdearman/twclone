@@ -21,6 +21,7 @@ Field provenance (confirmed from server handlers, not draft docs):
                                 to derive locally because the server enforces the
                                 holds >= used invariant via a DB CHECK constraint.
   * fighters / shields       <- ship.status (data.ship.fighters / data.ship.shields)
+  * hull                     <- ship.status (data.ship.hull; server-authoritative)
   * unread_mail              <- mail.inbox (count of data.items lacking "read_at" in
                                 the fetched page only — an approximation bounded by
                                 pagination, NOT a verified total; mail.inbox does not
@@ -72,6 +73,7 @@ class HudState:
     cargo_total: Optional[int] = None
     fighters: Optional[int] = None
     shields: Optional[int] = None
+    hull: Optional[int] = None
     unread_mail: Optional[int] = None
     unread_notices: Optional[int] = None
     unread_news: Optional[int] = None
@@ -99,7 +101,7 @@ def extract_player_fields(resp: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def extract_ship_fields(resp: Dict[str, Any]) -> Dict[str, Any]:
-    """ship.status -> {ship_id, ship_name, fighters, shields, cargo_used, cargo_total}."""
+    """Extract ship identity, condition, defenses, and holds from ship.status."""
     if not _is_ok(resp):
         return {}
     ship = (resp.get("data") or {}).get("ship") or {}
@@ -112,6 +114,8 @@ def extract_ship_fields(resp: Dict[str, Any]) -> Dict[str, Any]:
         out["fighters"] = ship["fighters"]
     if isinstance(ship.get("shields"), int):
         out["shields"] = ship["shields"]
+    if isinstance(ship.get("hull"), int):
+        out["hull"] = ship["hull"]
     if isinstance(ship.get("holds"), int):
         out["cargo_total"] = ship["holds"]
     cargo = ship.get("cargo")
@@ -270,6 +274,7 @@ def render_hud_lines(hud: HudState, connected: bool, activity: Optional[int], wi
     ]
     parts_line2 = [
         f"Holds: {cargo_text}",
+        f"Hull: {_fmt(hud.hull)}",
         f"Fighters: {_fmt(hud.fighters)}",
         f"Shields: {_fmt(hud.shields)}",
         f"Link: {link}",

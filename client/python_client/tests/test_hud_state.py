@@ -19,7 +19,7 @@ MY_INFO_RESP = {"status": "ok", "data": {"player": {"turns_remaining": 317, "cre
 SHIP_RESP = {
     "status": "ok",
     "data": {"ship": {
-        "id": 7, "name": "Wayfarer", "fighters": 250, "shields": 80,
+        "id": 7, "name": "Wayfarer", "fighters": 250, "shields": 80, "hull": 73,
         "holds": 40, "cargo": [{"commodity": "ORE", "qty": 10}, {"commodity": "EQUIPMENT", "qty": 8}],
     }},
 }
@@ -54,6 +54,7 @@ def test_login_hydration_populates_every_available_field():
     assert hud.ship_name == "Wayfarer"
     assert hud.fighters == 250
     assert hud.shields == 80
+    assert hud.hull == 73
     assert hud.cargo_total == 40
     assert hud.cargo_used == 18
     assert hud.sector_id == 42
@@ -72,6 +73,7 @@ def test_unknown_fields_remain_unknown_not_zero():
     assert hud.credits is None
     assert hud.fighters is None
     assert hud.shields is None
+    assert hud.hull is None
     assert hud.cargo_used is None
     assert hud.cargo_total is None
     assert hud.unread_mail is None
@@ -112,6 +114,7 @@ def test_successful_response_updates_relevant_fields_via_apply_response():
 
     new_hud2 = apply_response(new_hud, "ship.status", SHIP_RESP)
     assert new_hud2.fighters == 250
+    assert new_hud2.hull == 73
     assert new_hud2.cargo_used == 18
     # Fields not touched by ship.status are preserved from the prior merge.
     assert new_hud2.turns_remaining == 317

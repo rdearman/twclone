@@ -12,7 +12,7 @@ import time
 FULL_HUD = HudState(
     sector_id=42, sector_name="Rigel", ship_id=7, ship_name="Wayfarer",
     turns_remaining=317, credits=12450, cargo_used=18, cargo_total=40,
-    fighters=250, shields=80, last_refresh_ts=time.time(),
+    fighters=250, shields=80, hull=73, last_refresh_ts=time.time(),
 )
 
 
@@ -26,6 +26,7 @@ def test_wide_terminal_renders_compact_two_lines():
     assert "Holds: 18/40" in lines[1]
     assert "Fighters: 250" in lines[1]
     assert "Shields: 80" in lines[1]
+    assert "Hull: 73" in lines[1]
     assert "Link: ONLINE" in lines[1]
     assert "Activity: 3" in lines[1]
 
@@ -51,6 +52,7 @@ def test_unavailable_fields_render_as_em_dash_not_zero_or_blank():
     assert f"Holds: {UNAVAILABLE}" in joined
     assert f"Fighters: {UNAVAILABLE}" in joined
     assert f"Shields: {UNAVAILABLE}" in joined
+    assert f"Hull: {UNAVAILABLE}" in joined
     assert f"Activity: {UNAVAILABLE}" in joined
     # Unavailable must never silently read as "0".
     assert "Turns: 0" not in joined

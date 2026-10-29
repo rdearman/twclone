@@ -3548,6 +3548,8 @@ def render_ship_card(ship: dict) -> str:
     fighters = defence.get("fighters") if isinstance(defence, dict) else None
     if fighters is None:
         fighters = ship.get("fighters") or 0
+    hull = ship.get("hull")
+    hull_text = _fmt_int(hull) if isinstance(hull, int) else "—"
 
     # Holds and Cargo handling
     holds_val = ship.get("holds")
@@ -3577,6 +3579,7 @@ def render_ship_card(ship: dict) -> str:
     lines.append(f"│   Sector: {sector_id}    Owner: {owner}")
     lines.append(f"│   Flags: {flags}")
     lines.append(f"│   Defence: Shields {_fmt_int(shields)}, Fighters {_fmt_int(fighters)}")
+    lines.append(f"│   Hull:   {hull_text}/100")
     lines.append(f"│   Holds:   {holds_line}")
     lines.append(f"│   Cargo:   {cargo_str}")
     lines.append("└────────────────────────────────────────────")

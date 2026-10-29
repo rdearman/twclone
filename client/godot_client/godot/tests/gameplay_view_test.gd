@@ -19,10 +19,11 @@ func _run() -> void:
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": false,
-		"hud": {"sector_id": 17},
+		"hud": {"sector_id": 17, "hull": 73},
 		"freshness": {"sector": "fresh", "overall": "fresh"},
 		"sector": {"id": 17, "adjacent_sector_ids": [18], "ports": [], "planets": [], "ships": []},
 	})
+	_check(view.hull_label.text == "HULL  73", "authoritative ship hull was not visible in the persistent HUD")
 	view.show_command_result("Sector density scan", {"sectors": [21, 21.0, 213, 100.0, 808, 0, 1793, null]})
 	_check(not view.command_menu._result_dialog.visible, "read-only result opened a modal dialog")
 	_check(view.information_text.text.contains("Sector 21 · Density: 21") and view.information_text.text.contains("Sector 1793 · Density: unavailable"), "density result was not rendered in the Information panel")

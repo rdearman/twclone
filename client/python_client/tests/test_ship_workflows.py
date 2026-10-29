@@ -2,6 +2,14 @@
 import client
 
 
+def test_ship_card_displays_authoritative_hull_and_marks_older_server_field_missing():
+    current = client.render_ship_card({"id": 12, "name": "Wayfarer", "hull": 73})
+    older = client.render_ship_card({"id": 12, "name": "Wayfarer"})
+
+    assert "Hull:   73/100" in current
+    assert "Hull:   —/100" in older
+
+
 def test_hardware_purchase_selects_catalogue_item_and_refreshes_ship(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):

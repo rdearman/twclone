@@ -28,6 +28,7 @@ var credits_label: Label
 var turns_label: Label
 var cargo_label: Label
 var shields_label: Label
+var hull_label: Label
 var fighters_label: Label
 var freshness_label: Label
 var contents_list: VBoxContainer
@@ -70,7 +71,7 @@ var _rows: Dictionary = {}
 var _hovered_key := ""
 var _planet_mode := false
 var _reduced_motion := false
-var _hud_visible := {"cargo": true, "shields": true, "fighters": true}
+var _hud_visible := {"cargo": true, "shields": true, "hull": true, "fighters": true}
 var _hud_settings_dialog: ConfirmationDialog
 var _hud_setting_checks: Dictionary = {}
 var _route_panel: PanelContainer
@@ -183,8 +184,8 @@ func _open_hud_settings() -> void:
 		_hud_settings_dialog.ok_button_text = "SAVE"
 		var content := VBoxContainer.new()
 		content.add_theme_constant_override("separation", 8)
-		var labels := {"cargo": "Cargo and hold warning", "shields": "Shields and low-shield warning", "fighters": "Fighter count"}
-		for key in ["cargo", "shields", "fighters"]:
+		var labels := {"cargo": "Cargo and hold warning", "shields": "Shields and low-shield warning", "hull": "Current ship hull", "fighters": "Fighter count"}
+		for key in ["cargo", "shields", "hull", "fighters"]:
 			var check := CheckBox.new()
 			check.text = str(labels[key])
 			check.button_pressed = bool(_hud_visible[key])
@@ -213,6 +214,8 @@ func _apply_hud_visibility() -> void:
 		cargo_label.visible = bool(_hud_visible.get("cargo", true))
 	if is_instance_valid(shields_label):
 		shields_label.visible = bool(_hud_visible.get("shields", true))
+	if is_instance_valid(hull_label):
+		hull_label.visible = bool(_hud_visible.get("hull", true))
 	if is_instance_valid(fighters_label):
 		fighters_label.visible = bool(_hud_visible.get("fighters", true))
 
@@ -414,6 +417,8 @@ func _build() -> void:
 	bottom_row.add_child(cargo_label)
 	shields_label = _label("SHIELDS  —", 13, Color(0.76, 0.88, 0.86))
 	bottom_row.add_child(shields_label)
+	hull_label = _label("HULL  —", 13, Color(0.76, 0.88, 0.86))
+	bottom_row.add_child(hull_label)
 	fighters_label = _label("FIGHTERS  —", 13, Color(0.91, 0.77, 0.57))
 	bottom_row.add_child(fighters_label)
 	freshness_label = _label("LINK UNKNOWN · STATE WAITING", 9, Color(0.51, 0.59, 0.62))
@@ -531,6 +536,7 @@ func _render_snapshot(snapshot: Dictionary) -> void:
 	turns_label.text = "%s TURNS" % _display(hud.get("turns_remaining"))
 	cargo_label.text = "CARGO  %s/%s" % [_display(hud.get("cargo_used")), _display(hud.get("cargo_total"))]
 	shields_label.text = "SHIELDS  %s" % _display(hud.get("shields"))
+	hull_label.text = "HULL  %s" % _display(hud.get("hull"))
 	fighters_label.text = "FIGHTERS  %s" % _display(hud.get("fighters"))
 	var cargo_used = hud.get("cargo_used", null)
 	var cargo_total = hud.get("cargo_total", null)

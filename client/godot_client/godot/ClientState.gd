@@ -171,6 +171,7 @@ func hud_snapshot() -> Dictionary:
 		"cargo_total": ship.get("holds", null),
 		"fighters": ship.get("fighters", null),
 		"shields": ship.get("shields", null),
+		"hull": ship.get("hull", null),
 	}
 
 func overall_availability() -> String:
@@ -214,6 +215,7 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 	_copy_int(source, result, "holds")
 	_copy_int(source, result, "fighters")
 	_copy_int(source, result, "shields")
+	_copy_int(source, result, "hull")
 	_copy_int(source, result, "onplanet")
 	_copy_int(source, result, "ported")
 	if source.has("cargo") and source["cargo"] is Array:
