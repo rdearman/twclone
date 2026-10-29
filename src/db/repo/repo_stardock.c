@@ -354,23 +354,61 @@ int repo_stardock_upgrade_ship(db_t *db, int32_t new_type_id, const char *new_na
     if (!db || new_type_id <= 0 || !new_name || !new_name[0]
         || cost < 0 || ship_id <= 0)
         return ERR_INVALID_ARG;
-    /* The debit and type change are one conditional write. Keep the defense
-     * here even though callers preflight balances: concurrent charges cannot
-     * make credits negative or swap a ship without paying. */
-    const char *sql = "UPDATE ships SET type_id = {1}, name = {2}, credits = credits - {3} WHERE ship_id = {4} AND credits >= {3};";
-    char sql_converted[512];
-    if (sql_build(db, sql, sql_converted, sizeof(sql_converted)) != 0)
-        return ERR_DB_QUERY_FAILED;
+    /* Credits belong to the player. Resolve the player through the ship link,
+     * require exactly one owner, and conditionally debit before changing the
+     * ship. The nested transaction makes the two writes atomic even when a
+     * later ship update (for example its type FK) fails. */
     db_error_t err = {0};
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    const char *debit_sql = "UPDATE players SET credits = credits - {1} "
+                            "WHERE ship_id = {2} AND credits >= {1} "
+                            "AND (SELECT COUNT(*) FROM players p2 WHERE p2.ship_id = {2}) = 1;";
+    char sql_converted[512];
+    if (sql_build(db, debit_sql, sql_converted, sizeof(sql_converted)) != 0) {
+        (void)db_tx_rollback(db, &err);
+        return ERR_DB_QUERY_FAILED;
+    }
     int64_t rows = 0;
+    if (!db_exec_rows_affected(db, sql_converted,
+                               (db_bind_t[]){db_bind_i64(cost),
+                                             db_bind_i64(ship_id)},
+                               2, &rows, &err)) {
+        int rc = err.code ? err.code : ERR_DB_QUERY_FAILED;
+        (void)db_tx_rollback(db, &err);
+        return rc;
+    }
+    if (rows != 1) {
+        (void)db_tx_rollback(db, &err);
+        return ERR_DB_BUSY;
+    }
+
+    const char *ship_sql = "UPDATE ships SET type_id = {1}, name = {2} WHERE ship_id = {3};";
+    if (sql_build(db, ship_sql, sql_converted, sizeof(sql_converted)) != 0) {
+        (void)db_tx_rollback(db, &err);
+        return ERR_DB_QUERY_FAILED;
+    }
+    rows = 0;
     if (!db_exec_rows_affected(db, sql_converted,
                                (db_bind_t[]){db_bind_i64(new_type_id),
                                              db_bind_text(new_name),
-                                             db_bind_i64(cost),
                                              db_bind_i64(ship_id)},
-                               4, &rows, &err))
-        return err.code ? err.code : ERR_DB_QUERY_FAILED;
-    return rows == 1 ? 0 : ERR_DB_BUSY;
+                               3, &rows, &err)) {
+        int rc = err.code ? err.code : ERR_DB_QUERY_FAILED;
+        (void)db_tx_rollback(db, &err);
+        return rc;
+    }
+    if (rows != 1) {
+        (void)db_tx_rollback(db, &err);
+        return ERR_DB_BUSY;
+    }
+    if (!db_tx_commit(db, &err)) {
+        int rc = err.code ? err.code : ERR_DB_TX;
+        (void)db_tx_rollback(db, &err);
+        return rc;
+    }
+    return 0;
 }
 
 int repo_stardock_get_tavern_settings(db_t *db, db_res_t **out_res)

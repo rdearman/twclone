@@ -31,6 +31,19 @@ static int query_pair(db_t *db, const char *query, const db_bind_t *params,
   return err->code == 0;
 }
 
+static int query_i64(db_t *db, const char *query, const db_bind_t *params,
+                     size_t n_params, int64_t *value, db_error_t *err)
+{
+  char sql[512]; db_res_t *res = NULL;
+  if (sql_build(db, query, sql, sizeof sql) != 0
+      || !db_query(db, sql, params, n_params, &res, err)
+      || !db_res_step(res, err))
+    { if (res) db_res_finalize(res); return 0; }
+  *value = db_res_col_i64(res, 0, err);
+  db_res_finalize(res);
+  return err->code == 0;
+}
+
 static void *buy_one_fighter(void *arg)
 {
   worker_t *w = arg; db_error_t err = {0};
@@ -58,17 +71,26 @@ int main(void)
   db_config_t config = {0}; config.backend = DB_BACKEND_POSTGRES; config.pg_conninfo = ""; config.connect_timeout_ms = 5000;
   db_error_t err = {0}; db_t *db = db_open(&config, &err);
   if (!db) return fail("connect to isolated PostgreSQL", &err);
-  int type_id = 0, max_fighters = 0, ship_id = 0, sector_id = 0;
+  int type_id = 0, max_fighters = 0, ship_id = 0, sector_id = 0, player_id = 0;
   if (!query_pair(db, "SELECT shiptypes_id,maxfighters FROM shiptypes WHERE enabled=TRUE AND maxfighters>1 ORDER BY maxfighters LIMIT 1;",
                   NULL, 0, &type_id, &max_fighters, &err))
     { db_close(db); return fail("find a seed ship type with fighter capacity", &err); }
   char sql[768]; db_res_t *res = NULL;
-  const char *insert = "INSERT INTO ships(name,type_id,sector_id,fighters,credits) SELECT 'qa_stardock_atomic_' || {1}::text,{2},sector_id,{3},10 FROM sectors ORDER BY sector_id LIMIT 1 RETURNING ship_id,sector_id;";
+  const char *insert = "INSERT INTO ships(name,type_id,sector_id,fighters) SELECT 'qa_stardock_atomic_' || {1}::text,{2},sector_id,{3} FROM sectors ORDER BY sector_id LIMIT 1 RETURNING ship_id,sector_id;";
   if (sql_build(db, insert, sql, sizeof sql) != 0
       || !db_query(db, sql, (db_bind_t[]){db_bind_i64(max_fighters),db_bind_i64(type_id),db_bind_i64(max_fighters-1)}, 3, &res, &err)
       || !db_res_step(res, &err))
     { if (res) db_res_finalize(res); db_close(db); return fail("create ship fixture", &err); }
   ship_id = db_res_col_i32(res, 0, &err); sector_id = db_res_col_i32(res, 1, &err); db_res_finalize(res);
+
+  const char *player_insert = "INSERT INTO players(name,passwd,ship_id,credits,commission_id) "
+                              "SELECT 'qa_stardock_atomic_player_' || {1}::text,passwd,{2},10,commission_id "
+                              "FROM players ORDER BY player_id LIMIT 1 RETURNING player_id;";
+  if (sql_build(db, player_insert, sql, sizeof sql) != 0
+      || !db_query(db, sql, (db_bind_t[]){db_bind_i64(ship_id),db_bind_i64(ship_id)}, 2, &res, &err)
+      || !db_res_step(res, &err))
+    { if (res) db_res_finalize(res); goto cleanup; }
+  player_id = db_res_col_i32(res, 0, &err); db_res_finalize(res);
 
   pthread_barrier_t barrier;
   int barrier_live = 0, threads_started = 0;
@@ -96,20 +118,28 @@ int main(void)
   if (repo_stardock_update_ship_hardware(db,"has_transwarp",1,ship_id) != 0
       || repo_stardock_update_ship_hardware(db,"has_transwarp",1,ship_id) != ERR_DB_BUSY
       || repo_stardock_update_ship_hardware(db,"name",1,ship_id) != ERR_INVALID_ARG
+      || repo_stardock_upgrade_ship(db,2147483647,"qa_rollback",3,ship_id) == 0
       || repo_stardock_upgrade_ship(db,type_id,"qa_upgrade",11,ship_id) != ERR_DB_BUSY
       || repo_stardock_upgrade_ship(db,type_id,"qa_upgrade",10,ship_id) != 0)
     { fprintf(stderr,"FAIL: boolean hardware, identifier validation or conditional ship upgrade\n"); goto cleanup; }
-  int actual = 0, ignored = 0;
-  if (!query_pair(db,"SELECT fighters,credits FROM ships WHERE ship_id={1};",(db_bind_t[]){db_bind_i64(ship_id)},1,&actual,&ignored,&err)
-      || actual != max_fighters || ignored != 0)
-    { fail("capacity and ship upgrade accounting", &err); goto cleanup; }
-  puts("PASS: atomic capacity enforcement, concurrent fighter purchases, boolean hardware and bounded upgrade debit");
+  int actual = 0, actual_type = 0;
+  int64_t player_credits = -1;
+  if (!query_pair(db,"SELECT fighters,type_id FROM ships WHERE ship_id={1};",(db_bind_t[]){db_bind_i64(ship_id)},1,&actual,&actual_type,&err)
+      || actual != max_fighters || actual_type != type_id
+      || !query_i64(db,"SELECT credits FROM players WHERE player_id={1};",(db_bind_t[]){db_bind_i64(player_id)},1,&player_credits,&err)
+      || player_credits != 0)
+    { fail("capacity and player-owned credit accounting", &err); goto cleanup; }
+  puts("PASS: capacity enforcement, concurrent purchases, player-credit debit and rollback on failed ship update");
+  if (sql_build(db,"DELETE FROM players WHERE player_id={1};",sql,sizeof sql)==0)
+    (void)db_exec(db,sql,(db_bind_t[]){db_bind_i64(player_id)},1,&err);
   if (sql_build(db,"DELETE FROM ships WHERE ship_id={1};",sql,sizeof sql)==0)
     (void)db_exec(db,sql,(db_bind_t[]){db_bind_i64(ship_id)},1,&err);
   db_close(db); return 0;
 cleanup:
   if (threads_started) pthread_join(threads[0],NULL);
   if (barrier_live) pthread_barrier_destroy(&barrier);
+  if (player_id > 0 && sql_build(db,"DELETE FROM players WHERE player_id={1};",sql,sizeof sql)==0)
+    (void)db_exec(db,sql,(db_bind_t[]){db_bind_i64(player_id)},1,&err);
   if (ship_id > 0 && sql_build(db,"DELETE FROM ships WHERE ship_id={1};",sql,sizeof sql)==0)
     (void)db_exec(db,sql,(db_bind_t[]){db_bind_i64(ship_id)},1,&err);
   (void)sector_id; db_close(db); return 1;
