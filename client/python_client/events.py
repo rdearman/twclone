@@ -78,6 +78,19 @@ def render_event_text(ev: Dict[str, Any], debug: bool = False) -> str:
             return f"[{label}] {summary}"
         return f"[{label}] {data.get('message') or etype}"
     if category == "combat":
+        if etype == "combat.hit":
+            weapon = data.get("weapon")
+            summary = f"{weapon} hit" if isinstance(weapon, str) and weapon.strip() else "Ship hit"
+            damage = data.get("damage")
+            hp_after = data.get("defender_hp_after")
+            sector_id = data.get("sector_id")
+            if isinstance(damage, int) and not isinstance(damage, bool):
+                summary += f" · {damage} damage"
+            if isinstance(hp_after, int) and not isinstance(hp_after, bool):
+                summary += f" · target HP {hp_after}"
+            if isinstance(sector_id, int) and not isinstance(sector_id, bool) and sector_id > 0:
+                summary += f" · sector {sector_id}"
+            return f"[{label}] {summary}"
         return f"[{label}] {data.get('message') or etype}"
     if category == "trade":
         return f"[{label}] {data.get('message') or etype}"

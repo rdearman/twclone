@@ -68,6 +68,18 @@ def test_sector_notice_unknown_subtype_remains_safe_and_located():
     assert "not shown" not in text
 
 
+def test_combat_hit_renders_authoritative_damage_and_remaining_hp():
+    ev = {"category": "combat", "type": "combat.hit", "data": {
+        "v": 1, "attacker_id": 12, "defender_id": 99, "weapon": "laser_mk2",
+        "damage": 42, "defender_hp_after": 58, "sector_id": 278,
+    }}
+
+    text = render_event_text(ev)
+
+    assert text == "[Combat] laser_mk2 hit · 42 damage · target HP 58 · sector 278"
+    assert "attacker_id" not in text and "defender_id" not in text
+
+
 def test_tavern_round_event_renders_server_message_as_social_event():
     ev = {"category": "chat", "type": "tavern.round.bought", "data": {
         "message": "A round has been bought for everyone!", "sector_id": 17,

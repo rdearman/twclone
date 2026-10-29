@@ -14,6 +14,8 @@ static func notification_for(event: Dictionary) -> String:
 	var category := str(event.get("category", "unknown"))
 	if category not in ["combat", "navigation", "trade", "chat"]:
 		return ""
+	if category == "combat" and event_type == "combat.hit":
+		return _combat_hit(data)
 	if category == "chat":
 		var sender := str(data.get("sender_name", data.get("from", data.get("username", "")))).strip_edges()
 		var message := str(data.get("message", data.get("body", data.get("subject", "")))).strip_edges()
@@ -23,6 +25,20 @@ static func notification_for(event: Dictionary) -> String:
 	var readable_type := event_type.replace(".", " · ").replace("_", " ").capitalize()
 	var summary := str(data.get("body", data.get("message", data.get("title", "")))).strip_edges()
 	return readable_type + (" · " + summary if not summary.is_empty() else "")
+
+static func _combat_hit(data: Dictionary) -> String:
+	var weapon := str(data.get("weapon", "")).strip_edges()
+	var summary := "%s hit" % weapon if not weapon.is_empty() else "Ship hit"
+	var damage: Variant = data.get("damage", null)
+	var hp_after: Variant = data.get("defender_hp_after", null)
+	var sector_id: Variant = data.get("sector_id", null)
+	if damage is int:
+		summary += " · %d damage" % damage
+	if hp_after is int:
+		summary += " · target HP %d" % hp_after
+	if sector_id is int and sector_id > 0:
+		summary += " · sector %d" % sector_id
+	return "Combat · " + summary
 
 static func _sector_notice(data: Dictionary) -> String:
 	var subtype := str(data.get("subtype", ""))
