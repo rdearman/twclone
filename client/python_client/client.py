@@ -1686,6 +1686,93 @@ def trade_history_flow(ctx: Context):
         cursor = next_cursor
 
 
+def _trade_offer_action_result(ctx: Context, command: str, offer_id: int) -> None:
+    response = _hud_rpc(ctx, command, {"offer_id": offer_id})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Trade offer action refused by the server:")
+        _pp(response)
+        return
+    data = get_data(response)
+    data = data if isinstance(data, dict) else {}
+    print(f"Trade offer {data.get('offer_id', offer_id)}: {data.get('status', 'updated by server')}.")
+
+
+@register("trade_offer_create_flow")
+def trade_offer_create_flow(ctx: Context):
+    """Create a public-protocol player offer; the server validates assets."""
+    try:
+        recipient_id = int(input("Recipient player ID: ").strip())
+        commodity = input("Three-character commodity code: ").strip().upper()
+        quantity = int(input("Quantity: ").strip())
+        price = int(input("Price per unit in credits (0 or more): ").strip())
+    except (ValueError, EOFError):
+        print("Invalid trade offer input; no request was sent.")
+        return
+    mode = input("Offer mode [buy/sell]: ").strip().lower()
+    if (recipient_id <= 0 or quantity <= 0 or price < 0
+            or not re.fullmatch(r"[A-Z0-9]{3}", commodity)
+            or mode not in {"buy", "sell"}):
+        print("Invalid recipient, commodity, quantity, price or mode; no request was sent.")
+        return
+    total = quantity * price
+    print("Trade offers do not reserve cargo or credits. The server rechecks both accounts when accepted.")
+    if input(f"Create {mode} offer: {quantity} {commodity} at {price} CR each ({total} CR total) to player {recipient_id}? [y/N]: ").strip().lower() != "y":
+        print("Trade offer cancelled.")
+        return
+    data = {
+        "to_player_id": recipient_id,
+        "commodity": commodity,
+        "quantity": quantity,
+        "price": price,
+        "mode": mode,
+        "idempotency_key": str(uuid.uuid4()),
+    }
+    response = _hud_rpc(ctx, "trade.offer", data)
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Trade offer creation refused by the server:")
+        _pp(response)
+        return
+    result = get_data(response)
+    result = result if isinstance(result, dict) else {}
+    print(f"Trade offer {result.get('offer_id', 'created')} created; status {result.get('status', 'unreported')}.")
+
+
+def _trade_offer_id_prompt() -> Optional[int]:
+    try:
+        offer_id = int(input("Trade offer ID (Enter to cancel): ").strip())
+    except (ValueError, EOFError):
+        return None
+    return offer_id if offer_id > 0 else None
+
+
+@register("trade_offer_accept_flow")
+def trade_offer_accept_flow(ctx: Context):
+    """Accept an offer by its server-issued ID after explicit confirmation."""
+    offer_id = _trade_offer_id_prompt()
+    if offer_id is None:
+        print("Invalid offer ID; no request was sent.")
+        return
+    if input(f"Accept trade offer {offer_id}? The server will recheck cargo, holds and credits. [y/N]: ").strip().lower() != "y":
+        print("Trade acceptance cancelled.")
+        return
+    _trade_offer_action_result(ctx, "trade.accept", offer_id)
+
+
+@register("trade_offer_cancel_flow")
+def trade_offer_cancel_flow(ctx: Context):
+    """Cancel an offer by its server-issued ID after explicit confirmation."""
+    offer_id = _trade_offer_id_prompt()
+    if offer_id is None:
+        print("Invalid offer ID; no request was sent.")
+        return
+    if input(f"Cancel trade offer {offer_id}? [y/N]: ").strip().lower() != "y":
+        print("Trade cancellation cancelled.")
+        return
+    _trade_offer_action_result(ctx, "trade.cancel", offer_id)
+
+
 # get_data / extract_current_sector / normalize_sector now live in protocol.py.
 
 

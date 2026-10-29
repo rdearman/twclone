@@ -11,6 +11,14 @@ def test_comms_menu_has_clear_landing_entries(menus):
     assert options["n"]["action"]["pycall"] == "comms_notices_view"
     assert options["a"]["action"]["pycall"] == "comms_notice_ack_flow"
     assert options["b"]["action"]["pycall"] == "comms_bounty_board"
+    assert options["t"]["action"]["submenu"] == "PLAYER_TRADES"
+
+
+def test_player_trade_menu_exposes_documented_operations(menus):
+    options = {item["key"]: item for item in menus["PLAYER_TRADES"]["options"]}
+    assert options["c"]["action"]["pycall"] == "trade_offer_create_flow"
+    assert options["a"]["action"]["pycall"] == "trade_offer_accept_flow"
+    assert options["x"]["action"]["pycall"] == "trade_offer_cancel_flow"
 
 
 def test_chat_empty_and_malformed_history_are_safe(ctx_factory, fake_conn, capsys):

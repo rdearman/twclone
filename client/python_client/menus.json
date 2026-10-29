@@ -1680,12 +1680,26 @@
           }
         },
         {
+          "key": "t",
+          "label": "(T) Player trade offers",
+          "action": { "submenu": "PLAYER_TRADES" }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {
             "back": true
           }
         }
+      ]
+    },
+    "PLAYER_TRADES": {
+      "title": "--- Player Trade Offers ---",
+      "options": [
+        {"key": "c", "label": "(C) Create offer", "action": {"pycall": "trade_offer_create_flow"}},
+        {"key": "a", "label": "(A) Accept offer by ID", "action": {"pycall": "trade_offer_accept_flow"}},
+        {"key": "x", "label": "(X) Cancel offer by ID", "action": {"pycall": "trade_offer_cancel_flow"}},
+        {"key": "q", "label": "(Q) Back", "action": {"back": true}}
       ]
     },
     "CHAT": {

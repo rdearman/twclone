@@ -269,6 +269,25 @@ func _run() -> void:
 	_check(police_status_text.contains("Suspicion: 2") and police_status_text.contains("Banned: false"), "police status did not show authoritative incident values")
 	var police_outcome := menu.format_result("Offer a bribe", {"data": {"message": "Bribe accepted.", "suspicion_after": 0, "wanted_level_after": 0}})
 	_check(police_outcome.contains("Bribe accepted.") and police_outcome.contains("Wanted level: 0"), "police outcome did not show the server result")
+	var trade_sell_action: Dictionary = {}
+	var trade_accept_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
+		if str(candidate.get("label", "")) == "Create sell offer":
+			trade_sell_action = candidate
+		if str(candidate.get("command", "")) == "trade.accept":
+			trade_accept_action = candidate
+	_check(trade_sell_action.get("command", "") == "trade.offer" and trade_sell_action.get("fixed", {}).get("mode", "") == "sell" and trade_sell_action.get("idempotency", false), "sell offer does not use the documented request and retry key")
+	menu._choose_action(trade_sell_action)
+	menu._form_fields["to_player_id"].text = "8"
+	menu._form_fields["commodity"].text = "ORE"
+	menu._form_fields["quantity"].text = "2"
+	menu._form_fields["price"].text = "0"
+	var offer_count := captured.size()
+	menu._submit_form()
+	_check(captured.size() == offer_count + 1 and captured.back()["command"] == "trade.offer", "player sell offer did not submit")
+	if captured.size() > offer_count:
+		_check(captured.back()["data"].get("mode") == "sell" and captured.back()["data"].get("price") == 0 and str(captured.back()["data"].get("idempotency_key", "")).length() > 0, "sell offer fields or idempotency key were not sent canonically")
+	_check(trade_accept_action.get("mutating", false) and trade_accept_action.get("fields", [])[0][0] == "offer_id", "offer acceptance did not require a server-issued offer ID")
 	var notice_ack_action: Dictionary = {}
 	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
 		if str(candidate.get("command", "")) == "notice.ack":

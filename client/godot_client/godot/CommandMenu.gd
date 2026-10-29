@@ -13,6 +13,7 @@ signal shortcut_binding_prompt(message: String)
 const LOCAL_PREFERENCES_PATH := "user://client_ui_preferences.cfg"
 
 const FIELD_INT := "integer"
+const FIELD_NONNEGATIVE_INT := "nonnegative_integer"
 const FIELD_TEXT := "text"
 const COMMANDS := {
 	"COMPUTER": [
@@ -44,6 +45,10 @@ const COMMANDS := {
 	],
 	"COMMUNICATIONS": [
 		{"label": "Recent server events", "local_activity": true},
+		{"label": "Create sell offer", "command": "trade.offer", "fixed": {"mode": "sell"}, "fields": [["to_player_id", FIELD_INT, "Recipient player ID", ""], ["commodity", FIELD_TEXT, "Three-character commodity code", "ORE"], ["quantity", FIELD_INT, "Quantity", "1"], ["price", FIELD_NONNEGATIVE_INT, "Price per unit (0 or more)", "0"]], "mutating": true, "idempotency": true, "tooltip": "Offers do not reserve cargo or credits; acceptance rechecks both players."},
+		{"label": "Create buy offer", "command": "trade.offer", "fixed": {"mode": "buy"}, "fields": [["to_player_id", FIELD_INT, "Recipient player ID", ""], ["commodity", FIELD_TEXT, "Three-character commodity code", "ORE"], ["quantity", FIELD_INT, "Quantity", "1"], ["price", FIELD_NONNEGATIVE_INT, "Price per unit (0 or more)", "0"]], "mutating": true, "idempotency": true, "tooltip": "Offers do not reserve cargo or credits; acceptance rechecks both players."},
+		{"label": "Accept player offer by ID", "command": "trade.accept", "fields": [["offer_id", FIELD_INT, "Offer ID supplied by its sender", ""]], "mutating": true},
+		{"label": "Cancel player offer by ID", "command": "trade.cancel", "fields": [["offer_id", FIELD_INT, "Your offer ID", ""]], "mutating": true},
 		{"label": "Chat history", "command": "chat.history", "fixed": {"limit": 20}},
 		{"label": "Broadcast message", "command": "chat.broadcast", "fields": [["message", FIELD_TEXT, "Message", ""]], "mutating": true},
 		{"label": "Private message · unavailable", "unavailable_reason": "The chat.send schema rejects the recipient fields required by its handler."},
@@ -1040,9 +1045,10 @@ func _submit_form() -> void:
 			if text.is_empty():
 				_add_unavailable("Every visible field must be completed before sending.")
 				return
-			if str(_field_type(key)) == FIELD_INT:
-				if not text.is_valid_int() or int(text) <= 0:
-					_add_unavailable("Enter a positive whole number for %s." % key)
+			if str(_field_type(key)) in [FIELD_INT, FIELD_NONNEGATIVE_INT]:
+				var minimum := 0 if str(_field_type(key)) == FIELD_NONNEGATIVE_INT else 1
+				if not text.is_valid_int() or int(text) < minimum:
+					_add_unavailable("Enter a whole number of at least %d for %s." % [minimum, key])
 					return
 				data[key] = int(text)
 			else:
