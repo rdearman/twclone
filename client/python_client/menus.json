@@ -516,6 +516,21 @@
           }
         },
         {
+          "key": "x",
+          "label": "(X) Police status",
+          "action": { "pycall": "police_status_flow" }
+        },
+        {
+          "key": "w",
+          "label": "(W) Offer a bribe",
+          "action": { "pycall": "police_bribe_flow" }
+        },
+        {
+          "key": "u",
+          "label": "(U) Surrender to authorities",
+          "action": { "pycall": "police_surrender_flow" }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {

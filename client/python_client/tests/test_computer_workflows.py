@@ -24,6 +24,76 @@ def test_computer_menu_exposes_trade_history(menus):
     assert "trade_history_flow" in client.HANDLERS
 
 
+def test_computer_menu_exposes_supported_police_controls(menus):
+    options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
+    assert options["x"]["action"] == {"pycall": "police_status_flow"}
+    assert options["w"]["action"] == {"pycall": "police_bribe_flow"}
+    assert options["u"]["action"] == {"pycall": "police_surrender_flow"}
+    assert all(name in client.HANDLERS for name in (
+        "police_status_flow", "police_bribe_flow", "police_surrender_flow"
+    ))
+
+
+def test_police_status_displays_server_report_without_calculating_state(
+    ctx_factory, fake_conn, capsys
+):
+    fake_conn.queue("police.status", {"status": "ok", "data": {
+        "cluster_id": 4, "suspicion": 2, "wanted_level": 1, "banned": False,
+    }})
+    client.police_status_flow(ctx_factory())
+    assert fake_conn.calls == [{"command": "police.status", "data": {}}]
+    assert "Suspicion: 2" in capsys.readouterr().out
+
+
+def test_police_bribe_requires_positive_amount_and_explicit_confirmation(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    answers = iter(["0", "250", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    fake_conn.queue("police.bribe", {"status": "ok", "data": {
+        "message": "Bribe accepted.", "suspicion_after": 0, "wanted_level_after": 0,
+    }})
+    client.police_bribe_flow(ctx_factory())
+    assert "positive" in capsys.readouterr().out
+    assert fake_conn.calls == []
+
+    client.police_bribe_flow(ctx_factory())
+    assert fake_conn.calls == [{"command": "police.bribe", "data": {"amount": 250}}]
+    assert "Bribe accepted." in capsys.readouterr().out
+
+
+def test_police_surrender_requires_confirmation_and_shows_refusal(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    answers = iter(["n", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    fake_conn.queue("police.surrender", {"status": "error", "error": {
+        "message": "You have nothing to surrender for",
+    }})
+    client.police_surrender_flow(ctx_factory())
+    assert fake_conn.calls == []
+    assert "cancelled" in capsys.readouterr().out
+
+    client.police_surrender_flow(ctx_factory())
+    assert fake_conn.calls == [{"command": "police.surrender", "data": {}}]
+    assert "nothing to surrender" in capsys.readouterr().out
+
+
+def test_police_surrender_displays_only_server_confirmed_outcome(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("police.surrender", {"status": "ok", "data": {
+        "message": "You have surrendered to the Federation.",
+        "suspicion_after": 0, "wanted_level_after": 0,
+    }})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
+    client.police_surrender_flow(ctx_factory())
+    assert fake_conn.calls == [{"command": "police.surrender", "data": {}}]
+    output = capsys.readouterr().out
+    assert "surrendered to the Federation" in output
+    assert "wanted level: 0" in output
+
+
 def test_attack_in_fedspace_is_blocked_before_rpc(ctx_factory, fake_conn, capsys):
     ctx = ctx_factory(sector={"id": 10, "ships": [{"id": 20, "name": "Target"}]})
     ctx.player_info = {"player": {"ship_id": 10}}

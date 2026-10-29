@@ -254,6 +254,21 @@ func _run() -> void:
 	var bounty_text := menu.format_result("Active bounties", {"bounties": [{"bounty_id": 19, "target_id": 7, "target_name": "Ranger", "reward": 2500}]})
 	_check(bounty_text.contains("#19 · Ranger · 2500 CR"), "authoritative bounty row was not presented")
 	_check(menu.format_result("Active bounties", {"bounties": []}) == "There are no active bounties.", "empty bounty response was not explained")
+	var police_status_action: Dictionary = {}
+	var police_bribe_action: Dictionary = {}
+	var police_surrender_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("COMPUTER", []):
+		match str(candidate.get("command", "")):
+			"police.status": police_status_action = candidate
+			"police.bribe": police_bribe_action = candidate
+			"police.surrender": police_surrender_action = candidate
+	_check(not police_status_action.is_empty() and police_status_action.get("fixed", {}) == {}, "current police status was not exposed as a read-only current-context query")
+	_check(police_bribe_action.get("mutating", false) and police_bribe_action.get("fields", [])[0][0] == "amount", "bribe control did not require the player's amount and mark the command as mutating")
+	_check(police_surrender_action.get("mutating", false) and police_surrender_action.get("fixed", {}) == {}, "surrender control was not marked for confirmation")
+	var police_status_text := menu.format_result("Police status", {"cluster_id": 4, "suspicion": 2, "wanted_level": 1, "banned": false})
+	_check(police_status_text.contains("Suspicion: 2") and police_status_text.contains("Banned: false"), "police status did not show authoritative incident values")
+	var police_outcome := menu.format_result("Offer a bribe", {"data": {"message": "Bribe accepted.", "suspicion_after": 0, "wanted_level_after": 0}})
+	_check(police_outcome.contains("Bribe accepted.") and police_outcome.contains("Wanted level: 0"), "police outcome did not show the server result")
 	var notice_ack_action: Dictionary = {}
 	for candidate in CommandMenu.COMMANDS.get("COMMUNICATIONS", []):
 		if str(candidate.get("command", "")) == "notice.ack":

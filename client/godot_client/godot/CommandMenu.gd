@@ -30,6 +30,9 @@ const COMMANDS := {
 		{"label": "Trade history", "command": "trade.history", "fixed": {"limit": 20}},
 		{"label": "Outstanding fines", "command": "fine.list", "fixed": {}},
 		{"label": "Pay a fine", "command": "fine.pay", "fields": [["fine_id", FIELD_INT, "Fine ID from outstanding fines", ""]], "mutating": true, "tooltip": "The server verifies fine ownership and the available credit balance."},
+		{"label": "Police status", "command": "police.status", "fixed": {}},
+		{"label": "Offer a bribe", "command": "police.bribe", "fields": [["amount", FIELD_INT, "Bribe amount in credits", ""]], "mutating": true, "tooltip": "The server decides whether the offer is accepted and applies any consequences."},
+		{"label": "Surrender to authorities", "command": "police.surrender", "fixed": {}, "mutating": true},
 		{"label": "Player rankings · unavailable", "unavailable_reason": "The current server handler returns an empty rankings list rather than authoritative player ranks, even when players exist."},
 		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
 		{"label": "Hardware catalogue", "command": "hardware.list", "requires_supported_dock": true, "tooltip": "Dock at a supported hardware port first."},
@@ -351,6 +354,8 @@ func format_result(label: String, payload: Dictionary) -> String:
 		return FerengiPresenter.traders(payload.get("data", payload) if payload.get("data", payload) is Dictionary else {})
 	if label.to_lower().contains("bount"):
 		return _format_bounty_result(payload)
+	if label.to_lower().contains("police") or label.to_lower().contains("surrender") or label.to_lower().contains("bribe"):
+		return _format_police_result(payload)
 	if label.to_lower().contains("density"):
 		return _format_density_result(payload)
 	if label.to_lower().contains("scan"):
@@ -360,6 +365,27 @@ func format_result(label: String, payload: Dictionary) -> String:
 	if label.to_lower().contains("notice"):
 		return _format_notice_result(payload)
 	return _format_result(payload)
+
+func _format_police_result(payload: Dictionary) -> String:
+	if str(payload.get("status", "")) != "ok" and payload.has("error"):
+		return _format_result(payload)
+	var data: Variant = payload.get("data", payload)
+	if not (data is Dictionary):
+		return "The server returned an unreadable police response."
+	if data.has("message"):
+		var lines: Array[String] = [str(data.get("message", ""))]
+		if data.has("suspicion_after"):
+			lines.append("Suspicion: %s" % str(data.get("suspicion_after")))
+		if data.has("wanted_level_after"):
+			lines.append("Wanted level: %s" % str(data.get("wanted_level_after")))
+		return "\n".join(lines)
+	var jurisdiction := "none" if data.get("cluster_id") == null else str(data.get("cluster_id"))
+	return "Police status\nJurisdiction cluster: %s\nSuspicion: %s\nWanted level: %s\nBanned: %s" % [
+		jurisdiction,
+		str(data.get("suspicion", "unreported")),
+		str(data.get("wanted_level", "unreported")),
+		str(data.get("banned", "unreported")),
+	]
 
 func _format_bounty_result(payload: Dictionary) -> String:
 	var data: Variant = payload.get("data", payload)

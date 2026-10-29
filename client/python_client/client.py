@@ -763,6 +763,64 @@ def comms_bounty_board(ctx: Context):
         print("No readable bounty entries were returned.")
 
 
+@register("police_status_flow")
+def police_status_flow(ctx: Context):
+    """Show the current player's authoritative local law-enforcement state."""
+    response = _hud_rpc(ctx, "police.status", {})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        _pp(response)
+        return
+    data = response.get("data") if isinstance(response.get("data"), dict) else {}
+    print("\n--- Police Status ---")
+    print(f"Jurisdiction cluster: {data.get('cluster_id') or 'none'}")
+    print(f"Suspicion: {data.get('suspicion', 'unreported')}")
+    print(f"Wanted level: {data.get('wanted_level', 'unreported')}")
+    print(f"Banned: {'yes' if data.get('banned') is True else 'no' if data.get('banned') is False else 'unreported'}")
+
+
+@register("police_bribe_flow")
+def police_bribe_flow(ctx: Context):
+    """Submit a player-chosen bribe; all consequences remain server-owned."""
+    try:
+        amount = int(input("Bribe amount in credits (positive integer): ").strip())
+    except (ValueError, EOFError):
+        print("Invalid bribe amount; no command sent.")
+        return
+    if amount <= 0:
+        print("Bribe amount must be positive; no command sent.")
+        return
+    if input(f"Offer {amount} CR to local police? [y/N]: ").strip().lower() != "y":
+        print("Bribe cancelled.")
+        return
+    response = _hud_rpc(ctx, "police.bribe", {"amount": amount})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        _pp(response)
+        return
+    data = response.get("data") if isinstance(response.get("data"), dict) else {}
+    print(data.get("message") or "Bribe outcome confirmed by the server.")
+    if "suspicion_after" in data:
+        print(f"Suspicion: {data['suspicion_after']}; wanted level: {data.get('wanted_level_after', 'unreported')}")
+
+
+@register("police_surrender_flow")
+def police_surrender_flow(ctx: Context):
+    """Ask before surrendering and display only the server-confirmed outcome."""
+    if input("Surrender to the local authorities? [y/N]: ").strip().lower() != "y":
+        print("Surrender cancelled.")
+        return
+    response = _hud_rpc(ctx, "police.surrender", {})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        _pp(response)
+        return
+    data = response.get("data") if isinstance(response.get("data"), dict) else {}
+    print(data.get("message") or "Surrender outcome confirmed by the server.")
+    if "suspicion_after" in data:
+        print(f"Suspicion: {data['suspicion_after']}; wanted level: {data.get('wanted_level_after', 'unreported')}")
+
+
 # --- BEGIN AUTO-ADDED HUD_HOOK ---
 def _hud_after_action(ctx):
     try:
