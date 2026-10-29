@@ -3030,42 +3030,20 @@ def stock_dividend_set_flow(ctx: Context):
 
 @register("insurance_buy_flow")
 def insurance_buy_flow(ctx: Context):
-    policy_id = input("Enter policy ID to buy: ").strip()
-    if not policy_id:
-        print("Cancelled.")
-        return
-
-    resp = ctx.conn.rpc("insurance.policies.buy", {"policy_id": policy_id})
-    ctx.state["last_rpc"] = resp
-
-    if resp.get("status") == "ok":
-        print(f"Successfully purchased insurance policy {policy_id}.")
-        _pp(resp)
-    else:
-        print(f"[Error] Failed to buy insurance policy: {resp.get('error', {}).get('message', 'Unknown error')}")
-        _pp(resp)
+    insurance_unavailable_flow(ctx)
 
 @register("insurance_claim_flow")
 def insurance_claim_flow(ctx: Context):
-    active_policy_id = input("Enter active policy ID to file a claim against: ").strip()
-    if not active_policy_id:
-        print("Cancelled.")
-        return
+    insurance_unavailable_flow(ctx)
 
-    details = input("Enter claim details: ").strip()
-    if not details:
-        print("Claim details cannot be empty. Cancelled.")
-        return
 
-    resp = ctx.conn.rpc("insurance.claim.file", {"active_policy_id": active_policy_id, "details": details})
-    ctx.state["last_rpc"] = resp
-
-    if resp.get("status") == "ok":
-        print(f"Successfully filed claim for policy {active_policy_id}.")
-        _pp(resp)
-    else:
-        print(f"[Error] Failed to file insurance claim: {resp.get('error', {}).get('message', 'Unknown error')}")
-        _pp(resp)
+@register("insurance_unavailable_flow")
+def insurance_unavailable_flow(ctx: Context):
+    print(
+        "Insurance is unavailable: the current server handlers return "
+        "placeholder responses and do not persist policies or claims. "
+        "No request was sent."
+    )
 
 @register("tavern_graffiti_post_flow")
 def tavern_graffiti_post_flow(ctx: Context):

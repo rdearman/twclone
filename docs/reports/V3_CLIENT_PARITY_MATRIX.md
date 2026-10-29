@@ -28,6 +28,7 @@ status estimates are historical and must not be treated as current verification.
 | Combat, deployed assets and damage events | Available | Available | `tests/test_planet_workflows.py`, `tests/test_protocol_events.py`; `tests/planet_combat_presenter_test.gd`, `tests/event_presenter_test.gd` | Clients present server outcomes and event fields without calculating damage. Release acceptance requires persisted live combat evidence. |
 | Planet landing, colony, production, transfers and citadel | Available | Available | `tests/test_planet_workflows.py`; `tests/planet_workflow_test.gd`, `tests/planet_command_response_test.gd` | Workforce, commodity/treasury transfers, fighter transfers, citadel and launch flows are wired. Server/database production and ownership rules require integration verification. |
 | Corporation membership and treasury | Available | Available | `tests/test_corporation_equity.py`, `tests/test_menu_gating.py`; `tests/command_menu_test.gd` | Server authorization and atomic settlement remain server/database acceptance items. Corporate elections/stock markets are excluded expansions under #491. |
+| Insurance policy listing, purchase and claims | Explicitly unavailable | Explicitly unavailable | Python `INSURANCE_MAIN`; Godot `CommandMenu.gd` | Server handlers return success-shaped placeholders without persisting policies or claims. Python now matches Godot and sends no request for these actions. Insurance is not a V3 parity blocker under #491. |
 | Chat, mail, subscriptions and notices | Available | Available | `tests/test_communications.py`, `tests/test_subscriptions.py`, `tests/test_event_log.py`; `tests/event_presenter_test.gd` | Client presentation/requests are covered. Notice persistence, recipient fan-out and live event delivery remain server-side integration evidence (#80). |
 | Current-sector Ferengi offers | Available | Available | `tests/test_ferengi_workflows.py`; `tests/ferengi_presenter_test.gd` | There is no paginated directory of all known NPCs/last-seen locations; the requested directory contract remains open in #83. |
 | Rankings / historical attack reports | Explicitly unavailable where server data is absent | Explicitly unavailable where server data is absent | `tests/test_menu_gating.py`; `tests/computer_intel_test.gd` | Rankings currently return an empty array (#415); historical reports need server history/API support (#425). Clients do not fabricate either. |
@@ -36,7 +37,7 @@ status estimates are historical and must not be treated as current verification.
 
 At the snapshot that produced this report:
 
-- Python client suite: **254 passed**.
+- Python client suite: **255 passed**.
 - Godot headless suite: **20/20 scripts passed**; command-menu script: **249
   checks passed**.
 - Shared asset catalogue validation: **13 assets, 0 warnings**.

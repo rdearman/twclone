@@ -955,27 +955,23 @@
       "options": [
         {
           "key": "l",
-          "label": "(L) List Policies",
+          "label": "(L) List Policies · unavailable",
           "action": {
-            "rpc": {
-              "command": "insurance.policies.list",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "insurance_unavailable_flow"
           }
         },
         {
           "key": "b",
-          "label": "(B) Buy Policy",
+          "label": "(B) Buy Policy · unavailable",
           "action": {
-            "pycall": "insurance_buy_flow"
+            "pycall": "insurance_unavailable_flow"
           }
         },
         {
           "key": "c",
-          "label": "(C) File Claim",
+          "label": "(C) File Claim · unavailable",
           "action": {
-            "pycall": "insurance_claim_flow"
+            "pycall": "insurance_unavailable_flow"
           }
         },
         {

@@ -215,3 +215,19 @@ def test_enter_ship_shows_visible_snapshot_without_misusing_inspect_rpc(
     assert '"ship_type": "Scout"' in output
     assert "Visible sector report" in output
     assert fake_conn.calls == []
+
+
+def test_insurance_placeholder_actions_are_explicit_and_never_claim_success(
+    ctx_factory, fake_conn, capsys
+):
+    ctx = ctx_factory()
+    ctx.push("INSURANCE_MAIN")
+
+    for choice in ("l", "b", "c"):
+        client.handle_choice(ctx, choice)
+
+    output = capsys.readouterr().out
+    assert output.count("Insurance is unavailable") == 3
+    assert "do not persist policies or claims" in output
+    assert "No request was sent" in output
+    assert fake_conn.calls == []
