@@ -118,6 +118,72 @@ def test_controls_menu_stop_now_calls_only_server_stop(ctx_factory, fake_conn, m
     assert fake_conn.calls == [{"command": "move.autopilot.stop", "data": {}}]
 
 
+def test_active_route_prompt_exposes_information_and_status_without_guessing_commands(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 41, "name": "Origin"})
+    ctx.state["ap_route"] = [42, 43]
+    fake_conn.queue("move.warp", {"status": "ok", "data": {"to_sector_id": 42}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 42, "name": "Middle"}})
+    fake_conn.queue("sector.info", {"status": "ok", "data": {"sector_id": 42, "name": "Middle"}})
+    fake_conn.queue("move.autopilot.status", {"status": "ok", "data": {"state": "running", "next_sector_id": 43}})
+    fake_conn.queue("move.warp", {"status": "ok", "data": {"to_sector_id": 43}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 43, "name": "Destination"}})
+    answers = iter(["i", "r", "s", "d", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    monkeypatch.setattr(client, "call_handler", lambda *_: True)
+
+    client.start_autopilot(ctx)
+
+    commands = [call["command"] for call in fake_conn.calls]
+    assert commands.count("sector.info") == 1
+    assert commands.count("move.autopilot.status") == 1
+    assert "move.warp" in commands and ctx.state["ap_route"] == []
+    assert "Choose Y, N, E, I, R, S, D or P." not in capsys.readouterr().out
+
+
+def test_active_route_stop_and_stop_after_next_use_documented_server_controls(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 1})
+    ctx.state["ap_route"] = [2, 3, 4]
+    fake_conn.queue("move.warp", {"status": "ok", "data": {"to_sector_id": 2}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 2}})
+    fake_conn.queue("move.autopilot.control", {"status": "ok", "data": {"action": "stop_at_next", "state": "running"}})
+    fake_conn.queue("move.warp", {"status": "ok", "data": {"to_sector_id": 3}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 3}})
+    monkeypatch.setattr("builtins.input", lambda *_: "p")
+
+    client.start_autopilot(ctx)
+
+    assert [call["command"] for call in fake_conn.calls].count("move.warp") == 2
+    assert {"command": "move.autopilot.control", "data": {"action": "stop_at_next"}} in fake_conn.calls
+    assert ctx.state["ap_route"] == [4]
+    assert "stopped after the next confirmed sector" in capsys.readouterr().out
+
+
+def test_saved_route_execute_prompt_accepts_express_mode(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory(sector={"id": 41, "name": "Origin"})
+    fake_conn.queue("move.autopilot.start", {
+        "status": "ok", "type": "move.autopilot.route_v1", "data": {"path": [41, 42]},
+    })
+    fake_conn.queue("move.autopilot.control", {
+        "status": "ok", "data": {"action": "express", "state": "running"},
+    })
+    started = []
+    answers = iter(["42", "y", "e"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    monkeypatch.setattr(client, "start_autopilot", lambda current: started.append(current))
+
+    client.saved_autopilot_route_flow(ctx)
+
+    assert started == [ctx]
+    assert fake_conn.calls == [
+        {"command": "move.autopilot.start", "data": {"to_sector_id": 42}},
+        {"command": "move.autopilot.control", "data": {"action": "express"}},
+    ]
+
+
 def test_autopilot_status_renders_documented_path_and_next_alias(capsys):
     client.print_autopilot_status({
         "state": "running", "mode": "express", "current_sector_id": 10,

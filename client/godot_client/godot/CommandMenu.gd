@@ -16,6 +16,7 @@ const FIELD_INT := "integer"
 const FIELD_TEXT := "text"
 const COMMANDS := {
 	"COMPUTER": [
+		{"label": "Help · controls and command flow", "local_help": true},
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
 		{"label": "Current sector information", "command": "sector.info", "fixed": {}},

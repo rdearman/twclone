@@ -870,9 +870,17 @@ func _add_object_actions(kind: String, object: Dictionary) -> void:
 			_add_context_button("PLANET INFORMATION", false, _dispatch_context_action.bind({"label": "Planet information", "command": "planet.info", "context_id": "planet_id"}, object))
 			_add_context_button("LAND ON PLANET", true, _dispatch_context_action.bind({"label": "Land on planet", "command": "planet.land", "context_id": "planet_id", "mutating": true}, object))
 		"ship":
-			_add_context_button("ATTACK THIS SHIP", true, _dispatch_context_action.bind({"label": "Attack this ship", "command": "combat.attack", "context_id": "target_ship_id", "mutating": true}, object))
-			_add_context_button("CLAIM THIS SHIP", false, _dispatch_context_action.bind({"label": "Claim ship", "command": "ship.claim", "context_id": "ship_id", "mutating": true}, object))
-			_add_context_button("TOW THIS SHIP", false, _dispatch_context_action.bind({"label": "Tow ship", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true}, object))
+			var ship_data: Dictionary = object.get("data", {})
+			var target_ship_id := int(ship_data.get("target_ship_id", ship_data.get("ship_id", ship_data.get("id", 0))))
+			var active_ship_id := int(_snapshot.get("hud", {}).get("ship_id", 0))
+			if target_ship_id > 0 and target_ship_id != active_ship_id:
+				_add_context_button("ATTACK THIS SHIP", true, _dispatch_context_action.bind({"label": "Attack this ship", "command": "combat.attack", "context_id": "target_ship_id", "mutating": true}, object))
+				_add_context_button("CLAIM THIS SHIP", false, _dispatch_context_action.bind({"label": "Claim ship", "command": "ship.claim", "context_id": "ship_id", "mutating": true}, object))
+				_add_context_button("TOW THIS SHIP", false, _dispatch_context_action.bind({"label": "Tow ship", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true}, object))
+			elif target_ship_id <= 0:
+				_add_context_unavailable("SHIP ACTIONS · ID UNAVAILABLE", "This ship has no server identifier; attack, claim and tow are unavailable.")
+			else:
+				_add_context_unavailable("ACTIVE SHIP · no target actions", "Your active ship is shown in the HUD and cannot be attacked, claimed or towed as a sector target.")
 			_add_context_unavailable("INSPECT SHIP DETAILS · unavailable", "ship.inspect requires a ship ID in its schema, but the handler ignores it and returns sector-wide ships.")
 			_add_context_unavailable("PRIVATE MESSAGE OWNER · unavailable", "The chat.send schema rejects the recipient fields required by its handler.")
 

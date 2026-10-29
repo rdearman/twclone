@@ -200,6 +200,11 @@ func _run() -> void:
 	menu._selection.clear()
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
+	var computer_help_button := _action_button(menu, "Help · controls and command flow")
+	_check(computer_help_button != null, "Computer menu omitted the direct Help shortcut")
+	if computer_help_button != null:
+		computer_help_button.pressed.emit()
+		_check(menu._result_text.text.contains("COMMANDS AND SHORTCUTS"), "Computer Help shortcut did not open the field guide")
 	var rename_button := _action_button(menu, "Rename ship · unavailable")
 	_check(rename_button != null and rename_button.disabled and rename_button.tooltip_text.contains("ship_id and new_name"), "unsupported ship rename was not explained as disabled")
 	menu._active_category = "COMMUNICATIONS"
@@ -331,7 +336,7 @@ func _run() -> void:
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 97 passed")
+		print("Godot command menu tests: 99 passed")
 		quit(0)
 	else:
 		for failure in failures:

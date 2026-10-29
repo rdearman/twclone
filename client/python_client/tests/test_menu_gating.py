@@ -107,6 +107,20 @@ def test_debug_mode_exposes_retained_diagnostic_actions(ctx_factory, menus):
     assert "p" in exchange_keys
 
 
+def test_dock_buy_sell_and_star_dock_bank_use_distinct_hotkeys(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    ctx.state.update({"is_stardock": True, "is_shipyard_port": True})
+
+    options = _visible_options(menus["DOCK"], ctx)
+    by_key = {option["key"]: option for option in options}
+
+    assert len(by_key) == len(options)
+    assert by_key["b"]["label"].startswith("(B) Buy")
+    assert by_key["s"]["label"].startswith("(S) Sell")
+    assert by_key["k"]["label"].startswith("(K) Bank")
+    assert by_key["y"]["label"].startswith("(Y) Shipyard")
+
+
 def test_no_normal_mode_rpc_action_uses_known_absent_command(ctx_factory, menus):
     ctx = ctx_factory(debug=False)
 

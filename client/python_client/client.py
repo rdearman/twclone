@@ -329,10 +329,16 @@ def saved_autopilot_route_flow(ctx: Context):
     ctx.state["ap_route"] = route
     ctx.state["ap_route_plotted"] = True
     print("Server-saved route: " + " → ".join(map(str, path)))
-    if not _trade_confirmation("Execute these server-confirmed warps now?", default_no=True):
+    choice = input("Execute the server-confirmed route? [Y] standard · [E] express · [N] cancel: ").strip().lower()
+    while choice not in ("y", "e", "n", "q", ""):
+        print("Choose Y, E or N.")
+        choice = input("Execute the server-confirmed route? [Y] standard · [E] express · [N] cancel: ").strip().lower()
+    if choice not in ("y", "e"):
         if cli_autopilot_stop(ctx):
             ctx.state["ap_route"] = []
             ctx.state["ap_route_plotted"] = False
+        return
+    if choice == "e" and not _autopilot_set_mode(ctx, "express"):
         return
     start_autopilot(ctx)
 # --- END AUTO-ADDED AUTOPILOT ---
@@ -4098,8 +4104,73 @@ def start_autopilot(ctx: Context):
             ctx.state["ap_route_plotted"] = True
             print("Autopilot stopped; remaining route: " + " -> ".join(map(str, route[index:])))
             return
+        remaining = route[index + 1:]
+        ctx.state["ap_route"] = list(remaining)
+        ctx.state["ap_route_plotted"] = bool(remaining)
+        if not remaining:
+            continue
+        action = _autopilot_boundary_prompt(ctx, remaining)
+        if action == "stop":
+            print("Autopilot stopped at the last confirmed sector; remaining route: " + " -> ".join(map(str, remaining)))
+            return
+        if action == "stop_after_next":
+            next_target = remaining[0]
+            if not _perform_warp(ctx, next_target):
+                ctx.state["ap_route"] = list(remaining)
+                ctx.state["ap_route_plotted"] = True
+                return
+            remaining = remaining[1:]
+            ctx.state["ap_route"] = list(remaining)
+            ctx.state["ap_route_plotted"] = bool(remaining)
+            print("Autopilot stopped after the next confirmed sector; remaining route: " + " -> ".join(map(str, remaining)))
+            return
     ctx.state["ap_route"] = []
     ctx.state["ap_route_plotted"] = False
+
+
+def _autopilot_set_mode(ctx: Context, action: str) -> bool:
+    response = ctx.conn.rpc("move.autopilot.control", {"action": action})
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        error = response.get("error") if isinstance(response, dict) else {}
+        error = error if isinstance(error, dict) else {}
+        print(f"[Error] Autopilot {action} refused: {error.get('message', 'Unknown error')}")
+        return False
+    data = get_data(response)
+    if isinstance(data, dict):
+        ctx.state["autopilot_status"] = data
+    print(f"Autopilot {action} confirmed.")
+    return True
+
+
+def _autopilot_boundary_prompt(ctx: Context, remaining: List[int]) -> str:
+    """Offer route controls only between server-confirmed warps."""
+    while True:
+        print("\nRoute controls: [Y] continue · [N] stop · [E] express · [I] sector info · [R] route · [S] status · [D] display · [P] stop after next warp")
+        choice = input("Autopilot > ").strip().lower()
+        if choice in ("y", ""):
+            return "continue"
+        if choice in ("n", "q"):
+            cli_autopilot_stop(ctx)
+            return "stop"
+        if choice == "e":
+            if _autopilot_set_mode(ctx, "express"):
+                return "continue"
+            return "stop"
+        if choice == "i":
+            response = _hud_rpc(ctx, "sector.info", {})
+            print(json.dumps(response, ensure_ascii=False, indent=2))
+        elif choice == "r":
+            print("Remaining route: " + " → ".join(map(str, remaining)))
+        elif choice == "s":
+            cli_autopilot_status(ctx)
+        elif choice == "d":
+            call_handler("redisplay_sector", ctx)
+        elif choice == "p":
+            if _autopilot_set_mode(ctx, "stop_at_next"):
+                return "stop_after_next"
+            return "stop"
+        else:
+            print("Choose Y, N, E, I, R, S, D or P.")
 
 # ---------------------------
 # Planet & Computer flows

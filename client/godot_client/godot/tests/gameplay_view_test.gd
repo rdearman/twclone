@@ -86,9 +86,31 @@ func _run() -> void:
 	var inspect_button := _context_button(view, "INSPECT SHIP DETAILS · unavailable")
 	var private_message_button := _context_button(view, "PRIVATE MESSAGE OWNER · unavailable")
 	var attack_button := _context_button(view, "ATTACK THIS SHIP")
+	var tow_button := _context_button(view, "TOW THIS SHIP")
 	_check(inspect_button != null and inspect_button.disabled and inspect_button.tooltip_text.contains("ignores it"), "unsupported ship inspection was not visibly disabled with its reason")
 	_check(private_message_button != null and private_message_button.disabled, "unsupported ship messaging was not visibly disabled")
 	_check(attack_button != null and not attack_button.disabled, "confirmed selected-ship action was incorrectly disabled")
+	_check(tow_button != null and not tow_button.disabled, "implemented tow action was not available for a ship with a confirmed ID")
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 18, "ship_id": 75},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 18, "adjacent_sector_ids": [], "ports": [], "planets": [], "ships": [{"ship_id": 75, "name": "My Active Ship"}]},
+	})
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("ship", {"data": {"ship_id": 75}})
+	_check(_context_button(view, "TOW THIS SHIP") == null, "active ship was exposed as a tow target")
+	_check(_context_button(view, "ACTIVE SHIP · no target actions") != null, "active ship target actions were not explained")
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("ship", {"data": {"name": "Unidentified vessel"}})
+	_check(_context_button(view, "TOW THIS SHIP") == null, "ship without an ID exposed a tow action")
+	var missing_ship_id := _context_button(view, "SHIP ACTIONS · ID UNAVAILABLE")
+	_check(missing_ship_id != null and missing_ship_id.disabled, "missing ship ID did not explain why target actions are unavailable")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": true,
@@ -113,7 +135,7 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot gameplay view tests: 16 passed")
+		print("Godot gameplay view tests: 21 passed")
 		quit(0)
 	else:
 		for failure in failures:
