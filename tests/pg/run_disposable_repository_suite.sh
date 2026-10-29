@@ -28,6 +28,11 @@ for migration in "$ROOT"/sql/pg/[0-9][0-9][0-9]_*.sql; do
   psql -X -w -v ON_ERROR_STOP=1 -f "$migration"
 done
 
+for migration in "$ROOT"/sql/pg/1[0-9][0-9]_*.sql; do
+  echo "Replay ${migration#"$ROOT"/}"
+  psql -X -w -v ON_ERROR_STOP=1 -f "$migration"
+done
+
 for suite in \
   run_db_pg_conformance.sh \
   run_repo_planetary_accounting.sh \
