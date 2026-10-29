@@ -4,6 +4,7 @@ const CommandMenu = preload("res://CommandMenu.gd")
 
 var failures: Array[String] = []
 var captured: Array = []
+var checks := 0
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -403,7 +404,7 @@ func _run() -> void:
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 103 passed")
+		print("Godot command menu tests: %d checks passed" % checks)
 		quit(0)
 	else:
 		for failure in failures:
@@ -411,6 +412,7 @@ func _run() -> void:
 		quit(1)
 
 func _check(condition: bool, message: String) -> void:
+	checks += 1
 	if not condition:
 		failures.append(message)
 

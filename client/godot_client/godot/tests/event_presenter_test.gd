@@ -2,8 +2,10 @@ extends SceneTree
 
 const EventPresenter = preload("res://EventPresenter.gd")
 
+var failures: Array[String] = []
+var checks := 0
+
 func _initialize() -> void:
-	var failures: Array[String] = []
 	_check(EventPresenter.notification_for({"type": "system.notice", "category": "system", "data": {"title": "Maintenance", "body": "Ten minutes."}}) == "Maintenance · Ten minutes.", "system notice was not presented clearly")
 	_check(EventPresenter.notification_for({"type": "system.notice_v1", "category": "system", "data": {"title": "Maintenance", "body": "Ten minutes."}}) == "Maintenance · Ten minutes.", "server system.notice_v1 event was not presented")
 	_check(EventPresenter.notification_for({"type": "tavern.round.bought", "category": "chat", "data": {"message": "A round has been bought for everyone!", "sector_id": 17}}) == "Comms · A round has been bought for everyone!", "tavern broadcast message was not presented")
@@ -15,7 +17,7 @@ func _initialize() -> void:
 	_check(EventPresenter.notification_for({"type": "vendor.private", "category": "unknown", "data": {"body": "hidden"}}).is_empty(), "unknown event was surfaced to gameplay")
 	_check(EventPresenter.notification_for({"type": "system.notice", "data": []}).is_empty(), "malformed event data was surfaced")
 	if failures.is_empty():
-		print("Godot event presenter tests: 5 passed")
+		print("Godot event presenter tests: %d checks passed" % checks)
 		quit(0)
 	else:
 		for failure in failures:
@@ -23,7 +25,6 @@ func _initialize() -> void:
 		quit(1)
 
 func _check(condition: bool, message: String) -> void:
+	checks += 1
 	if not condition:
 		failures.append(message)
-
-var failures: Array[String] = []

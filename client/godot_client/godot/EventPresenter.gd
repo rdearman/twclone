@@ -14,6 +14,12 @@ static func notification_for(event: Dictionary) -> String:
 	var category := str(event.get("category", "unknown"))
 	if category not in ["combat", "navigation", "trade", "chat"]:
 		return ""
+	if category == "chat":
+		var sender := str(data.get("sender_name", data.get("from", data.get("username", "")))).strip_edges()
+		var message := str(data.get("message", data.get("body", data.get("subject", "")))).strip_edges()
+		if not sender.is_empty():
+			return "Comms · " + sender + (": " + message if not message.is_empty() else "")
+		return "Comms · " + message if not message.is_empty() else "Comms · " + event_type.replace(".", " · ").replace("_", " ").capitalize()
 	var readable_type := event_type.replace(".", " · ").replace("_", " ").capitalize()
 	var summary := str(data.get("body", data.get("message", data.get("title", "")))).strip_edges()
 	return readable_type + (" · " + summary if not summary.is_empty() else "")
