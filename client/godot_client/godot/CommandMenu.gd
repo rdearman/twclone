@@ -27,6 +27,7 @@ const COMMANDS := {
 		{"label": "Rename ship · unavailable", "unavailable_reason": "The ship.rename schema accepts name, but its handler requires ship_id and new_name."},
 		{"label": "Scan adjacent sectors", "command": "move.scan"},
 		{"label": "Sector density scan", "command": "sector.scan.density", "fixed": {}},
+		{"label": "Trade history", "command": "trade.history", "fixed": {"limit": 20}},
 		{"label": "Outstanding fines", "command": "fine.list", "fixed": {}},
 		{"label": "Pay a fine", "command": "fine.pay", "fields": [["fine_id", FIELD_INT, "Fine ID from outstanding fines", ""]], "mutating": true, "tooltip": "The server verifies fine ownership and the available credit balance."},
 		{"label": "Player rankings · unavailable", "unavailable_reason": "The current server handler returns an empty rankings list rather than authoritative player ranks, even when players exist."},

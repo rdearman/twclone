@@ -509,6 +509,13 @@
           }
         },
         {
+          "key": "z",
+          "label": "(Z) Trade history",
+          "action": {
+            "pycall": "trade_history_flow"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Main Menu",
           "action": {

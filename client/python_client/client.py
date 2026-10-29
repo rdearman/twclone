@@ -1507,6 +1507,51 @@ def fine_pay_flow(ctx: Context):
         print("Warning: fine payment succeeded, but player credits could not be refreshed.")
 
 
+@register("trade_history_flow")
+def trade_history_flow(ctx: Context):
+    """Read server trade records, following only its opaque pagination cursor."""
+    cursor = None
+    seen_cursors = set()
+    while True:
+        request = {"limit": 20}
+        if cursor is not None:
+            request["cursor"] = cursor
+        response = ctx.conn.rpc("trade.history", request)
+        ctx.state["last_rpc"] = response
+        if not isinstance(response, dict) or response.get("status") != "ok":
+            print("Could not retrieve trade history:")
+            _pp(response)
+            return
+        data = get_data(response)
+        rows = data.get("history") if isinstance(data, dict) else None
+        if not isinstance(rows, list):
+            print("The server returned an invalid trade history response.")
+            return
+        if not rows:
+            print("No trade history on this page." if cursor else "No trade history is available.")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            print("  {action} {units} {commodity} · {price} CR/unit · port {port} · time {timestamp}".format(
+                action=row.get("action", "unreported"),
+                units=row.get("units", "unreported"),
+                commodity=row.get("commodity", "unreported"),
+                price=row.get("price_per_unit", "unreported"),
+                port=row.get("port_id", "unreported"),
+                timestamp=row.get("timestamp", "unreported"),
+            ))
+        next_cursor = data.get("next_cursor") if isinstance(data, dict) else None
+        if not isinstance(next_cursor, str) or not next_cursor:
+            return
+        if next_cursor in seen_cursors or next_cursor == cursor:
+            print("Trade history stopped because the server repeated its page cursor.")
+            return
+        seen_cursors.add(next_cursor)
+        if input("More trade history? [y/N]: ").strip().lower() != "y":
+            return
+        cursor = next_cursor
+
+
 # get_data / extract_current_sector / normalize_sector now live in protocol.py.
 
 

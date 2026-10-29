@@ -22,6 +22,7 @@ func _run() -> void:
 	for entry in [
 		{"label": "Current sector information", "command": "sector.info"},
 		{"label": "Detailed current-sector scan", "command": "sector.scan"},
+		{"label": "Trade history", "command": "trade.history", "data": {"limit": 20}},
 		{"label": "Outstanding fines", "command": "fine.list"},
 	]:
 		var button := _action_button(menu, entry["label"])
@@ -29,7 +30,7 @@ func _run() -> void:
 		if button != null:
 			button.pressed.emit()
 		var latest: Dictionary = captured.back() if not captured.is_empty() else {}
-		_check(latest.get("command") == entry["command"] and latest.get("data", {}).is_empty() and not latest.get("mutating", true), "%s did not use a read-only current-state request" % entry["label"])
+		_check(latest.get("command") == entry["command"] and latest.get("data", {}) == entry.get("data", {}) and not latest.get("mutating", true), "%s did not use a read-only current-state request" % entry["label"])
 	var pay_fine_button := _action_button(menu, "Pay a fine")
 	_check(pay_fine_button != null and not pay_fine_button.disabled, "fine payment was not exposed to the authenticated player")
 	if pay_fine_button != null:
@@ -64,11 +65,11 @@ func _run() -> void:
 	await process_frame
 	attack = _action_button(menu, "Attack this ship")
 	_check(attack != null and attack.disabled and attack.tooltip_text.contains("FedSpace"), "attack was not blocked in protected FedSpace")
-	_check(captured.size() == 5, "computer reads, fine payment or combat status sent an unexpected command")
+	_check(captured.size() == 6, "computer reads, fine payment or combat status sent an unexpected command")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot computer/intel tests: 13 checks passed")
+		print("Godot computer/intel tests: 15 checks passed")
 		quit(0)
 	else:
 		for failure in failures:

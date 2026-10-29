@@ -18,6 +18,12 @@ def test_computer_menu_exposes_fine_workflows(menus):
     assert "fine_pay_flow" in client.HANDLERS
 
 
+def test_computer_menu_exposes_trade_history(menus):
+    options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
+    assert options["z"]["action"] == {"pycall": "trade_history_flow"}
+    assert "trade_history_flow" in client.HANDLERS
+
+
 def test_attack_in_fedspace_is_blocked_before_rpc(ctx_factory, fake_conn, capsys):
     ctx = ctx_factory(sector={"id": 10, "ships": [{"id": 20, "name": "Target"}]})
     ctx.player_info = {"player": {"ship_id": 10}}
