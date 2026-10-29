@@ -7,7 +7,7 @@ AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from main import (advance_completed_goals, align_command_idempotency,
-                  build_registration_command, is_goal_complete,
+                  build_registration_command, is_goal_complete, _pause_for_turn_refresh,
                   process_responses)  # noqa: E402
 from planner import Planner  # noqa: E402
 from state_manager import StateManager  # noqa: E402
@@ -113,6 +113,24 @@ def test_reconnect_does_not_assign_a_lot_after_unexplained_cargo_loss(tmp_path):
     manager.update_player_info({"ship": {"id": 1, "cargo": [{"commodity": "ORE", "quantity": 2}]}})
 
     assert manager.get("ship_info")["cargo"] == [{"commodity": "ORE", "quantity": 2}]
+
+
+def test_exhausted_turn_pause_forces_authoritative_refresh_even_after_restart(tmp_path, monkeypatch):
+    path = tmp_path / "state.json"
+    manager = StateManager(str(path), {})
+    manager.set("player_info", {"player": {"ship_id": 1, "turns_remaining": 0}})
+    sleeps = []
+    monkeypatch.setattr("main.time.sleep", sleeps.append)
+
+    _pause_for_turn_refresh(manager, seconds=60)
+
+    assert sleeps == [60]
+    restarted = StateManager(str(path), {})
+    planner = Planner.__new__(Planner)
+    planner.state_manager = restarted
+    assert planner.ensure_minimum_world_state(restarted.get_all()) == {
+        "command": "player.my_info", "data": {},
+    }
 
 
 def test_authentication_retries_respect_failure_backoff():

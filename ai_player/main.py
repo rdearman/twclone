@@ -561,6 +561,14 @@ QA_WORKFLOWS = {
 # Workflow order for round-robin rotation
 QA_WORKFLOW_ORDER = ["planet", "combat", "corp", "stock", "mail", "banking", "bounty", "trade"]
 
+def _pause_for_turn_refresh(state_manager, seconds=3600):
+    """Refresh the authoritative turn balance after an exhausted-turn pause."""
+    # Persist the need for a fresh read before sleeping, so a shutdown during
+    # the pause does not resume with an indefinitely stale zero-turn balance.
+    state_manager.set("player_info", None)
+    time.sleep(seconds)
+
+
 def _get_fallback_plan(game_state, state_manager, planner):
     """
     Provides a simple fallback plan when the LLM fails to respond.
@@ -1412,7 +1420,7 @@ def main(config_path="config.json"):
             # --- FIX: Cooldown if out of turns ---
             if (game_state.get("player_info") or {}).get("player", {}).get("turns_remaining", 1) <= 0:
                 logger.info("Out of turns. Cooling down for 1 hour.")
-                time.sleep(3600)
+                _pause_for_turn_refresh(state_manager)
                 continue
 
             strategy_plan = game_state.get("strategy_plan", [])
