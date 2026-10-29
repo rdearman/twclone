@@ -18,8 +18,8 @@ func _run() -> void:
 	await process_frame
 	_check(view.get_node("WorkflowDim").offset_left == PortWorkflow.COMMAND_RAIL_CLEARANCE, "port/Tavern overlay covers the persistent command rail")
 	_check(view.get_node("WorkflowMargin").offset_left > PortWorkflow.COMMAND_RAIL_CLEARANCE, "port/Tavern content does not begin beyond the command rail")
-	view.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int) -> void:
-		captured = {"direction": direction, "port_id": port_id, "sector_id": sector_id, "commodity": commodity, "quantity": quantity}
+	view.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int, account: int) -> void:
+		captured = {"direction": direction, "port_id": port_id, "sector_id": sector_id, "commodity": commodity, "quantity": quantity, "account": account}
 	)
 	view.tavern_entered.connect(func() -> void: tavern_enters += 1)
 	view.tavern_exited.connect(func() -> void: tavern_exits += 1)
@@ -35,6 +35,12 @@ func _run() -> void:
 	view._submit_trade()
 	_check(captured.get("direction") == "buy" and captured.get("port_id") == 7 and captured.get("sector_id") == 17, "trade selection lost authoritative context")
 	_check(captured.get("commodity") == "ORE" and captured.get("quantity") == 3, "trade quantity selection was not preserved")
+	_check(captured.get("account") == 0, "trade did not default to petty cash")
+	view._choose_trade("sell", "ORE", {"quantity": 8, "max_quantity": 30})
+	view._trade_account.select(1)
+	view._quantity.value = 1
+	view._submit_trade()
+	_check(captured.get("account") == 1, "bank account selection was not passed to trade workflow")
 	_check(not view._tavern_button.visible, "a non-StarDock port incorrectly exposed Tavern access")
 	view.show_port({"port": {"id": 8, "name": "Old port payload", "commodities": []}}, 17)
 	_check(not view._tavern_button.visible, "a port without an authoritative type incorrectly exposed Tavern access")
@@ -60,7 +66,7 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot port workflow tests: 17 passed")
+		print("Godot port workflow tests: 19 passed")
 		quit(0)
 	else:
 		for failure in failures:

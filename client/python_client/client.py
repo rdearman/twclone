@@ -4277,6 +4277,16 @@ def dock_trade_flow(ctx: Context, direction: str):
     if quantity <= 0:
         print("Quantity must be positive.")
         return
+    account_choice = input("Trade account [P]etty cash / [B]ank (default P): ").strip().lower()
+    if account_choice in ("", "p", "petty", "petty cash", "0"):
+        account = 0
+        account_name = "petty cash"
+    elif account_choice in ("b", "bank", "1"):
+        account = 1
+        account_name = "bank"
+    else:
+        print("Cancelled: choose petty cash or bank.")
+        return
     if direction == "buy" and isinstance(row.get("available"), int) and quantity > row["available"]:
         print(f"Maximum available here is {row['available']}.")
         return
@@ -4305,6 +4315,7 @@ def dock_trade_flow(ctx: Context, direction: str):
     total = q.get(total_key)
     print(f"Authoritative quote: {quantity} x {row['commodity']} = {present_money(total)}"
           f" (unit {present_money(q.get('buy_price' if direction == 'buy' else 'sell_price'))}).")
+    print(f"Trade account: {account_name}.")
     if ctx.hud.credits is not None and direction == "buy" and total is not None:
         try:
             projected = ctx.hud.credits - parse_credits(total)
@@ -4317,7 +4328,7 @@ def dock_trade_flow(ctx: Context, direction: str):
         return
     payload = {"port_id": port_id, "sector_id": ctx.current_sector_id,
                "items": [{"commodity": row["commodity"], "quantity": quantity}],
-               "account": 0, "idempotency_key": str(uuid.uuid4())}
+               "account": account, "idempotency_key": str(uuid.uuid4())}
     resp = ctx.conn.rpc(f"trade.{direction}", payload)
     ctx.state["last_rpc"] = resp
     if resp.get("status") != "ok":

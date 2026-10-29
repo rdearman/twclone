@@ -729,11 +729,11 @@ func _response_data_dictionary(value: Variant) -> Dictionary:
 		return {"items": value}
 	return {}
 
-func _on_trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int) -> void:
+func _on_trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int, account: int) -> void:
 	if not auth_session.is_authenticated() or not _pending_trade.is_empty() or _pending_game_commands.size() > 0 or _command_refresh_pending:
 		gameplay_view.show_notification("Another server command is pending. Wait for it to finish before trading.")
 		return
-	_pending_trade = {"direction": direction, "port_id": port_id, "sector_id": sector_id, "commodity": commodity, "quantity": quantity}
+	_pending_trade = {"direction": direction, "port_id": port_id, "sector_id": sector_id, "commodity": commodity, "quantity": quantity, "account": account}
 	gameplay_view.set_command_busy(true)
 	var request_id: String = transport.request("trade.quote", {"port_id": port_id, "commodity": commodity, "quantity": quantity}, auth_session.session_token)
 	if request_id.is_empty():
@@ -912,7 +912,7 @@ func _on_trade_confirmation(accepted: bool) -> void:
 		"port_id": int(trade_data["port_id"]),
 		"sector_id": int(trade_data["sector_id"]),
 		"items": [{"commodity": str(trade_data["commodity"]), "quantity": int(trade_data["quantity"])}],
-		"account": 0,
+		"account": int(trade_data.get("account", 0)),
 		"idempotency_key": "godot-%d-%d" % [Time.get_ticks_usec(), randi()],
 	}
 	var request_id: String = transport.request(command, payload, auth_session.session_token)

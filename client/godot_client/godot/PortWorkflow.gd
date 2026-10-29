@@ -4,7 +4,7 @@ const COMMAND_RAIL_CLEARANCE := 292.0
 const DialogLayout = preload("res://DialogLayout.gd")
 const AssetCatalog = preload("res://AssetCatalog.gd")
 
-signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
+signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int, account: int)
 signal back_requested
 signal tavern_enter_requested
 signal tavern_entered
@@ -14,6 +14,7 @@ var _port: Dictionary = {}
 var _sector_id := 0
 var _trade_dialog: ConfirmationDialog
 var _quantity: SpinBox
+var _trade_account: OptionButton
 var _port_title: Label
 var _port_artwork: TextureRect
 var _commodity_list: VBoxContainer
@@ -154,6 +155,15 @@ func _ready() -> void:
 	_quantity.max_value = 1000000
 	_quantity.step = 1
 	quantity_box.add_child(_quantity)
+	var account_label := Label.new()
+	account_label.text = "Pay from / credit to"
+	quantity_box.add_child(account_label)
+	_trade_account = OptionButton.new()
+	_trade_account.add_item("Petty cash", 0)
+	_trade_account.add_item("Bank", 1)
+	_trade_account.selected = 0
+	_trade_account.tooltip_text = "Choose which player account funds a purchase or receives sale proceeds."
+	quantity_box.add_child(_trade_account)
 	quantity_box.add_theme_constant_override("separation", 10)
 	DialogLayout.attach(_trade_dialog, quantity_box)
 	_trade_dialog.ok_button_text = "REQUEST QUOTE"
@@ -362,6 +372,7 @@ func _choose_trade(direction: String, commodity: String, item: Dictionary) -> vo
 	_pending_commodity = commodity
 	_trade_dialog.title = "%s %s" % [direction.capitalize(), commodity]
 	_quantity.value = 1
+	_trade_account.select(0)
 	var stock = item.get("quantity", item.get("available", item.get("stock", null)))
 	var capacity = item.get("max_quantity", null)
 	if direction == "buy" and stock != null and int(stock) > 0:
@@ -376,7 +387,7 @@ func _submit_trade() -> void:
 	var port_id = _port.get("id", _port.get("port_id", null))
 	if port_id == null or _sector_id <= 0 or _quantity.value < 1:
 		return
-	trade_requested.emit(_pending_direction, int(port_id), _sector_id, _pending_commodity, int(_quantity.value))
+	trade_requested.emit(_pending_direction, int(port_id), _sector_id, _pending_commodity, int(_quantity.value), _trade_account.get_selected_id())
 
 func _panel_style(fill: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
