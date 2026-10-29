@@ -1817,6 +1817,13 @@ class Planner:
             return None
 
         port_sell_prices = current_state.get("price_cache", {}).get(port_id, {}).get("sell", {})
+        # A sale request aggregates all lots of a commodity. If any lot was
+        # bought here, selecting another lot would still sell the origin lot.
+        origin_commodities = {
+            canon_commodity(item.get("commodity")) for item in cargo_list
+            if item.get("quantity", 0) > 0 and item.get("origin_port_id") is not None
+            and str(item["origin_port_id"]) == port_id
+        }
 
         best_commodity = None
         highest_profit_margin = -999999 # Allow for negative profit (loss)
@@ -1843,7 +1850,7 @@ class Planner:
             # A successful buy is authoritative evidence that this port sells
             # the commodity. Standard port trade modes do not also buy it;
             # a positive quote alone is not proof that a sale is eligible.
-            if origin_port_id is not None and str(origin_port_id) == str(port_id):
+            if commodity in origin_commodities:
                 logger.debug("Skipping %s sale at its observed origin port %s.", commodity, port_id)
                 continue
 

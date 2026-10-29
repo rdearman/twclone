@@ -102,6 +102,20 @@ def test_explicit_trade_goals_do_not_repeat_a_fresh_unavailable_quote():
     assert planner._achieve_goal(state, "sell: ORE") is None
 
 
+def test_unknown_lot_does_not_bypass_origin_guard_for_aggregate_sale():
+    planner = make_planner()
+    state = market_state()
+    state["ship_info"]["cargo"] = [
+        {"commodity": "ORE", "quantity": 3, "purchase_price": 100, "origin_port_id": 101},
+        {"commodity": "ORE", "quantity": 2},
+    ]
+    state["price_cache"]["101"]["sell"]["ORE"] = 200
+
+    assert planner._get_best_commodity_to_sell(state) is None
+    assert planner._generate_required_field("items", "trade.sell", state) is None
+    assert planner._achieve_goal(state, "sell: ORE") is None
+
+
 def test_buy_decision_skips_commodity_without_known_buyer():
     planner = make_planner()
     state = market_state()
