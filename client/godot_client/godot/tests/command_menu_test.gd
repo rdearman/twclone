@@ -216,9 +216,9 @@ func _run() -> void:
 	var send_mail_button := _action_button(menu, "Send mail · unavailable")
 	var delete_mail_button := _action_button(menu, "Delete mail · unavailable")
 	_check(send_mail_button != null and send_mail_button.disabled and delete_mail_button != null and delete_mail_button.disabled, "mail contract gaps were not shown as disabled actions")
-	var add_subscription_button := _action_button(menu, "Add subscription · unavailable")
-	var remove_subscription_button := _action_button(menu, "Remove subscription · unavailable")
-	_check(add_subscription_button != null and add_subscription_button.disabled and remove_subscription_button != null and remove_subscription_button.disabled, "subscription schema/handler mismatch was not shown as disabled actions")
+	var add_subscription_button := _action_button(menu, "Add subscription")
+	var remove_subscription_button := _action_button(menu, "Remove subscription")
+	_check(add_subscription_button != null and not add_subscription_button.disabled and remove_subscription_button != null and not remove_subscription_button.disabled, "documented subscription actions were disabled")
 	menu._active_category = "NEWS & RECORDS"
 	menu._render_actions()
 	var insurance_buy_button := _action_button(menu, "Buy insurance · server stub")
@@ -333,10 +333,24 @@ func _run() -> void:
 	(menu._form_fields["name"] as LineEdit).text = "Nova"
 	menu._submit_form()
 	_check(captured.size() == before_corporation_actions + 6 and captured.back()["data"] == {"name": "Nova"}, "corporation create included fields outside the published request schema")
+	menu._active_category = "MAIL & SUBSCRIPTIONS"
+	menu._render_actions()
+	var add_subscription_button_again := _action_button(menu, "Add subscription")
+	var remove_subscription_button_again := _action_button(menu, "Remove subscription")
+	_check(add_subscription_button_again != null and not add_subscription_button_again.disabled, "documented subscription add remained unavailable")
+	_check(remove_subscription_button_again != null and not remove_subscription_button_again.disabled, "documented subscription removal remained unavailable")
+	menu._choose_action({"label": "Add subscription", "command": "subscribe.add", "fields": [["topic", "text", "Topic pattern", ""]], "mutating": true})
+	(menu._form_fields["topic"] as LineEdit).text = "sector.*"
+	menu._submit_form()
+	_check(captured.back().get("command") == "subscribe.add" and captured.back().get("data") == {"topic": "sector.*"}, "subscription add did not send the canonical topic field")
+	menu._choose_action({"label": "Remove subscription", "command": "subscribe.remove", "fields": [["topic", "text", "Topic", ""]], "mutating": true})
+	(menu._form_fields["topic"] as LineEdit).text = "sector.42"
+	menu._submit_form()
+	_check(captured.back().get("command") == "subscribe.remove" and captured.back().get("data") == {"topic": "sector.42"}, "subscription removal did not send the canonical topic field")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot command menu tests: 99 passed")
+		print("Godot command menu tests: 103 passed")
 		quit(0)
 	else:
 		for failure in failures:

@@ -147,8 +147,8 @@ const COMMANDS := {
 		{"label": "Send mail · unavailable", "unavailable_reason": "The mail.send schema requires to_player_name, but the handler reads to or to_id."},
 		{"label": "Delete mail · unavailable", "unavailable_reason": "The mail.delete schema requires mail_id, but the handler reads an ids array."},
 		{"label": "Subscription catalogue", "command": "subscribe.catalog"},
-		{"label": "Add subscription · unavailable", "unavailable_reason": "Protocol docs and handler require topic, but the strict schema requires event_type and rejects topic."},
-		{"label": "Remove subscription · unavailable", "unavailable_reason": "Protocol docs and handler require topic, but the strict schema requires event_type and rejects topic."},
+		{"label": "Add subscription", "command": "subscribe.add", "fields": [["topic", FIELD_TEXT, "Topic pattern (see subscription catalogue)", ""]], "mutating": true},
+		{"label": "Remove subscription", "command": "subscribe.remove", "fields": [["topic", FIELD_TEXT, "Topic to remove (see subscription list)", ""]], "mutating": true},
 	],
 	"SESSION": [
 		{"label": "Log out to login screen", "local_logout": true},
