@@ -574,7 +574,7 @@ def _get_fallback_plan(game_state, state_manager, planner):
     Provides a simple fallback plan when the LLM fails to respond.
     Prioritizes surveying, then selling cargo, then buying if empty, then exploration.
     """
-    logger.info("Generating fallback plan (LLM unavailable)")
+    logger.info("Generating local strategy plan")
 
     current_sector = game_state.get("player_location_sector")
     sector_data = game_state.get("sector_data", {}).get(str(current_sector), {})
@@ -900,7 +900,15 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
 
 
 def select_strategy_plan(game_state, config, state_manager, planner):
-    """Ask Ollama for the existing high-level plan, retaining the established fallback."""
+    """Select a local plan or optionally ask Ollama for high-level strategy."""
+    mode = config.get("strategy_mode", "ollama")
+    if mode not in ("deterministic", "ollama"):
+        raise ValueError(f"Unknown strategy_mode: {mode!r}")
+    if mode == "deterministic":
+        plan = _get_fallback_plan(game_state, state_manager, planner)
+        state_manager.set("strategy_plan_source", "deterministic")
+        state_manager.set("strategy_inference_status", {"status": "disabled", "reason": None})
+        return plan
     diagnostics = {}
     try:
         profile = planner._behavior_profile(game_state)
@@ -1533,7 +1541,7 @@ def main(config_path="config.json"):
                         state_manager.set("strategy_plan_source", "controller")
                     else:
                         if game_state.get("player_info") and game_state.get("ship_info"): # Only ask if we are 'in-game'
-                            logger.info("Strategy plan is empty. Requesting a new one from LLM.")
+                            logger.info("Strategy plan is empty. Selecting a new plan.")
                             new_plan = select_strategy_plan(game_state, config, state_manager, planner)
                             state_manager.set("strategy_plan", new_plan)
                             strategy_plan = new_plan

@@ -8,7 +8,7 @@ import time
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-DEFAULT_OLLAMA_URL = "http://192.168.25.20:11434"
+DEFAULT_OLLAMA_URL = "http://192.168.25.5:11434"
 OLLAMA_API_PATH = "/api/generate"
 DEFAULT_MODEL = "qwen3:8b"
 REQUEST_TIMEOUT = 300  # 5 minutes - account for Ollama queueing with concurrent bots

@@ -45,5 +45,11 @@ config. The details and defaults are in `V3_AI_SIMULATION.md`. These settings
 reuse the normal planner and Ollama strategy layer; no separate population
 controller is started.
 
+Set `"strategy_mode": "deterministic"` in each player config to use the local
+trade and navigation planner without issuing strategy inference requests. Set
+it to `"ollama"` to enable optional LLM strategy with the existing local
+fallback; configs without the setting retain the Ollama behavior. This setting
+does not establish server availability or validate a live acceptance run.
+
 `spawn.py` remains a legacy provisioning utility. It performs direct database
 equipment changes after public registration and is not used by this runner.

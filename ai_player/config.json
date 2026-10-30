@@ -1,8 +1,9 @@
 {
       "game_host": "127.0.0.1",
       "game_port": 1234,
-    "ollama_url": "http://192.168.25.20:11434",
+    "ollama_url": "http://192.168.25.5:11434",
     "ollama_model": "qwen3:8b",
+    "strategy_mode": "deterministic",
     "log_file": "ai_player.log",
     "state_file": "state.json",
     "player_username": "ai_qa_bot",

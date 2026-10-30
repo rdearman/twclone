@@ -1,6 +1,7 @@
 import json
 import sys
 from pathlib import Path
+import pytest
 
 
 AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
@@ -15,6 +16,26 @@ class PlannerStub:
     current_stage = "explore"
 
 
+def test_deterministic_strategy_bypasses_inference_and_uses_local_plan(monkeypatch, tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    planner = PlannerStub()
+    monkeypatch.setattr(main, "get_strategy_from_llm", lambda *args, **kwargs: pytest.fail("inference called"))
+    monkeypatch.setattr(main, "_get_fallback_plan", lambda state, state_manager, selected_planner: ["goto: 42"])
+
+    plan = main.select_strategy_plan(_game_state(), {"strategy_mode": "deterministic"}, manager, planner)
+
+    assert plan == ["goto: 42"]
+    assert manager.get("strategy_plan_source") == "deterministic"
+    assert manager.get("strategy_inference_status") == {"status": "disabled", "reason": None}
+
+
+def test_invalid_strategy_mode_does_not_call_inference(monkeypatch, tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    monkeypatch.setattr(main, "get_strategy_from_llm", lambda *args, **kwargs: pytest.fail("inference called"))
+    with pytest.raises(ValueError, match="Unknown strategy_mode"):
+        main.select_strategy_plan(_game_state(), {"strategy_mode": "determministic"}, manager, PlannerStub())
+
+
 def _game_state():
     return {
         "player_location_sector": 20,
@@ -25,6 +46,8 @@ def _game_state():
 
 
 def test_configured_ollama_url_points_to_generate_api_and_model_default_is_realistic():
+    assert ollama_generate_url() == "http://192.168.25.5:11434/api/generate"
+    assert json.loads((AI_PLAYER_DIR / "config.json").read_text())["ollama_url"] == "http://192.168.25.5:11434"
     assert ollama_generate_url("http://192.168.25.20:11434") == (
         "http://192.168.25.20:11434/api/generate"
     )
