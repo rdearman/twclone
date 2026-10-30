@@ -99,7 +99,9 @@ send the selected `ship_id` and render `data.ship`; treat a refusal as an
 unavailable target and do not infer undisclosed ship fields.
 
 ### `ship.rename`
-Change the name of your ship.
+Rename the active ship owned by the caller with `{ "name": "New name" }`.
+On success, `ship.renamed` returns `ship_id` and `name`. The
+`ship.reregister` command currently uses the same request and behavior.
 
 ### `ship.repair`
 Repair ship damage at a port.

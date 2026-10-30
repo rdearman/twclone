@@ -372,7 +372,8 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
 
   json_t *data = json_object_get (root, "data");
   json_t *requested = json_is_object (data) ? json_object_get (data, "ship_id") : NULL;
-  if (!json_is_integer (requested) || json_integer_value (requested) <= 0 || ctx->sector_id <= 0)
+  if (!json_is_object (data) || json_object_size (data) != 1 ||
+      !json_is_integer (requested) || json_integer_value (requested) <= 0 || ctx->sector_id <= 0)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG, "Valid ship_id and current sector required");
       return 0;
@@ -437,25 +438,35 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
 				   REF_NOT_IN_SECTOR, "Bad request", NULL);
       return 0;
     }
-  json_t *j_ship = json_object_get (data, "ship_id");
-  json_t *j_name = json_object_get (data, "new_name");
+  json_t *j_name = json_object_get (data, "name");
 
 
-  if (!json_is_integer (j_ship) || !json_is_string (j_name))
+  if (json_object_size (data) != 1 || !json_is_string (j_name) || json_string_length (j_name) == 0)
     {
       send_response_refused_steal (ctx,
 				   root,
 				   REF_NOT_IN_SECTOR,
-				   "Missing ship_id/new_name", NULL);
+				   "Missing ship name", NULL);
       return 0;
     }
-  int ship_id = (int) json_integer_value (j_ship);
   const char *new_name = json_string_value (j_name);
+  size_t name_bytes = json_string_length (j_name);
+  size_t name_chars = 0;
+  for (size_t i = 0; i < name_bytes; i++)
+    if (((unsigned char) new_name[i] & 0xc0) != 0x80)
+      name_chars++;
+  if (memchr (new_name, '\0', name_bytes) || name_chars > 100)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Ship name must be 1 to 100 characters");
+      return 0;
+    }
   db_t *db = game_db_get_handle ();
-  int rc = db_ship_rename_if_owner (db, ctx->player_id, ship_id, new_name);
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  int64_t rows = 0;
+  int rc = ship_id > 0 ? repo_ships_rename_active (db, ctx->player_id, ship_id, new_name, &rows) : 0;
 
 
-  if (rc == -1)
+  if (rc == 0 && rows != 1)
     {
       send_response_refused_steal (ctx,
 				   root,
@@ -465,7 +476,7 @@ cmd_ship_rename (client_ctx_t *ctx, json_t *root)
     }
   if (rc != 0)
     {
-      send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
+      send_response_error (ctx, root, ERR_DB, "Database error");
       return 0;
     }
   json_t *payload = json_object ();

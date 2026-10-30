@@ -19,6 +19,9 @@ int repo_ships_handle_destruction(db_t *db,
 
 int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out);
 
+int repo_ships_rename_active(db_t *db, int32_t player_id, int32_t ship_id,
+                             const char *name, int64_t *rows_out);
+
 int repo_ships_get_towing_id(db_t *db, int32_t ship_id, int32_t *towing_id_out);
 
 int repo_ships_clear_towing_id(db_t *db, int32_t ship_id);

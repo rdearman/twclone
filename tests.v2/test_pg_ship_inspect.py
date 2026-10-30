@@ -38,7 +38,7 @@ def check_ship_inspection(conn, host, port, account, password):
             return client.recv_next_non_notice()
 
         for data in ({}, {'ship_id': 0}, {'ship_id': -1}, {'ship_id': '1'},
-                     {'ship_id': 1, 'sector_id': sector}):
+                     {'ship_id': own_ship, 'sector_id': sector}):
             client.send_json({'command': 'ship.inspect', 'data': data})
             response = client.recv_next_non_notice()
             if status_ok(response):

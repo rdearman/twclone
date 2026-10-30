@@ -57,6 +57,37 @@ int repo_ships_handle_destruction(db_t *db,
     return 0;
 }
 
+int repo_ships_rename_active(db_t *db, int32_t player_id, int32_t ship_id,
+                             const char *name, int64_t *rows_out)
+{
+    if (!db || !name || !rows_out) return ERR_DB_MISUSE;
+    const char *template = "UPDATE ships SET name = {1} WHERE ship_id = {2} "
+        "AND EXISTS (SELECT 1 FROM players WHERE player_id = {3} AND ship_id = {2}) "
+        "AND EXISTS (SELECT 1 FROM ship_ownership WHERE ship_id = {2} "
+        "AND player_id = {3} AND is_primary = {4});";
+    char sql[512];
+    if (sql_build(db, template, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
+    db_error_t err = {0};
+    if (!db_exec_rows_affected(db, sql, (db_bind_t[]){db_bind_text(name),
+            db_bind_i64(ship_id), db_bind_i64(player_id), db_bind_bool(true)},
+            4, rows_out, &err)) return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    /* MySQL may report zero changed rows when the requested name is already
+     * set. Only accept that case if the active ownership still matches. */
+    if (*rows_out == 0) {
+        const char *check = "SELECT 1 FROM ships s JOIN players p ON p.ship_id = s.ship_id "
+            "JOIN ship_ownership o ON o.ship_id = s.ship_id AND o.player_id = p.player_id "
+            "WHERE s.ship_id = {1} AND p.player_id = {2} AND o.is_primary = {3} AND s.name = {4};";
+        if (sql_build(db, check, sql, sizeof sql) != 0) return ERR_DB_QUERY_FAILED;
+        db_res_t *res = NULL;
+        if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(ship_id), db_bind_i64(player_id),
+                db_bind_bool(true), db_bind_text(name)}, 4, &res, &err))
+            return err.code ? err.code : ERR_DB_QUERY_FAILED;
+        if (db_res_step(res, &err)) *rows_out = 1;
+        db_res_finalize(res);
+    }
+    return 0;
+}
+
 int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out)
 {
     /* SQL_VERBATIM: Q2 */
