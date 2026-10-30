@@ -8,9 +8,10 @@ sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
-                  process_responses, quarantine_timed_out_trades)  # noqa: E402
+                  _audit_state_snapshot, process_responses, quarantine_timed_out_trades)  # noqa: E402
 from planner import Planner  # noqa: E402
 from state_manager import StateManager  # noqa: E402
+from bug_reporter import BugReporter  # noqa: E402
 
 
 class FakeStateManager:
@@ -231,6 +232,58 @@ def test_persisted_goto_goal_completes_with_string_or_numeric_sector_id():
     assert is_goal_complete("goto: 42", {}, {"to_sector_id": "42"}, "move.result")
 
 
+def test_login_after_restart_discards_cached_player_and_ship_state(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("player_info", {"player": {"player_id": 34, "turns_remaining": 999}})
+    manager.set("ship_info", {"id": 60, "cargo": []})
+    manager.set("player_location_sector", 1945)
+    manager.add_pending_command("login", {"command": "auth.login"})
+
+    process_responses(
+        [{"reply_to": "login", "status": "ok", "type": "auth.session",
+          "data": {"session_token": "private-session"}}],
+        FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+
+    assert manager.get("session_id") == "private-session"
+    assert manager.get("player_info") is None
+    assert manager.get("ship_info") is None
+    assert manager.get("player_location_sector") is None
+
+
+def test_live_trade_audit_uses_dispatch_time_snapshot_for_outcome(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    before = {
+        "player_location_sector": 812,
+        "player_info": {"player": {"credits": "5000.00", "turns_remaining": 20}},
+        "ship_info": {"id": 60, "holds": 10, "cargo": []},
+    }
+    manager.set("player_location_sector", 812)
+    manager.set("player_info", before["player_info"])
+    manager.set("ship_info", before["ship_info"])
+    manager.add_pending_command("buy", {
+        "command": "trade.buy",
+        "data": {"port_id": 321, "items": [{"commodity": "ORG", "quantity": 1}]},
+    })
+    manager._live_audit_command_before = {"buy": _audit_state_snapshot(before)}
+    connection = FakeConnection()
+
+    process_responses(
+        [{"reply_to": "buy", "status": "ok", "type": "trade.buy_receipt_v1",
+          "data": {"port_id": 321, "lines": [{"commodity": "ORG", "quantity": 1,
+                                                  "unit_price": 151, "value": "151.00"}],
+                   "fees": "0.00", "credits_remaining": "4849.00"}}],
+        connection, manager, BugReporter(str(tmp_path / "reports")), QuietBandit(),
+        {"live_gameplay_audit": True}, None,
+    )
+
+    context = manager._live_audit_contexts["buy"]
+    assert context["state_before"]["player_info"]["player"]["credits"] == "5000.00"
+    assert context["state_before"]["ship_info"]["cargo"] == []
+    assert context["before_verified"] is True
+    assert manager._live_audit_command_before == {}
+
+
 def test_persisted_survey_goal_completes_from_fresh_cached_quotes():
     state = {
         "player_location_sector": 42,
@@ -319,7 +372,7 @@ def test_refused_pathfind_discards_unreachable_navigation_goal():
     assert state.state["strategy_plan"] == ["sell: ORE"]
 
 
-def test_uncertain_trade_survives_disconnect_and_late_unmatched_reply(tmp_path):
+def test_uncertain_trade_survives_disconnect_and_mismatched_late_reply(tmp_path):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
     marker = {"request_id": "buy-1", "command": "trade.buy", "idempotency_key": "key-1"}
@@ -327,12 +380,26 @@ def test_uncertain_trade_survives_disconnect_and_late_unmatched_reply(tmp_path):
     manager.add_pending_command("buy-1", {"command": "trade.buy", "data": {"port_id": 1}})
     manager.clear_connection_state()
     restored = StateManager(str(path), {})
-    process_responses([{"reply_to": "buy-1", "status": "ok", "type": "trade.buy_receipt_v1",
-                        "data": {"lines": [{"commodity": "ORE", "quantity": 1}],
-                                 "credits_remaining": "900"}}],
+    process_responses([{"reply_to": "buy-1", "status": "ok", "type": "player.my_info",
+                        "data": {"player": {"credits": "900"}}}],
                       FakeConnection(), restored, UnusedBugReporter(), QuietBandit(), {}, None)
     assert restored.get("uncertain_trade") == marker
     assert restored.get("pending_commands") == {}
+
+
+def test_valid_late_trade_receipt_reconciles_without_replay(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    marker = {"request_id": "buy-1", "command": "trade.buy", "idempotency_key": "key-1"}
+    manager.set("uncertain_trade", marker)
+    manager.set("ship_info", {"cargo": []})
+    manager.set("player_info", {"player": {"credits": "1000"}})
+    process_responses([{"reply_to": "buy-1", "status": "ok", "type": "trade.buy_receipt_v1",
+                        "data": {"port_id": 1,
+                                 "lines": [{"commodity": "ORE", "quantity": 1, "unit_price": 100, "value": "100"}],
+                                 "credits_remaining": "900"}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_trade") is None
+    assert manager.get("ship_info")["cargo"][0]["commodity"] == "ORE"
 
 
 def test_correlated_trade_receipt_resolves_uncertain_marker(tmp_path):
@@ -349,7 +416,7 @@ def test_correlated_trade_receipt_resolves_uncertain_marker(tmp_path):
     assert manager.get("player_info")["player"]["credits"] == "900"
 
 
-def test_interrupted_warp_stays_quarantined_after_restart_and_late_reply(tmp_path):
+def test_interrupted_warp_reconciles_after_restart_and_late_reply(tmp_path):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
     marker = {"request_id": "warp-1", "command": "move.warp", "to_sector_id": 2}
@@ -360,8 +427,8 @@ def test_interrupted_warp_stays_quarantined_after_restart_and_late_reply(tmp_pat
     process_responses([{"reply_to": "warp-1", "status": "ok", "type": "move.result",
                         "data": {"to_sector_id": 2}}],
                       FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
-    assert manager.get("uncertain_warp") == marker
-    assert manager.get("player_location_sector") is None
+    assert manager.get("uncertain_warp") is None
+    assert manager.get("player_location_sector") == 2
 
 
 def test_warp_quarantine_requires_matching_correlated_destination(tmp_path):

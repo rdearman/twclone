@@ -3,6 +3,7 @@ import time
 import socket
 import errno
 import json
+import copy
 import logging
 import os
 import uuid
@@ -390,7 +391,54 @@ def _get_filtered_game_state_for_llm(game_state, state_manager):
     # Navigation hints (just IDs, no details)
     sector_data = game_state.get("sector_data", {}).get(str(current_sector_id), {})
     adj = sector_data.get("adjacent") or sector_data.get("adjacent_sectors") or []
-    filtered_state["adjacent_sectors"] = [s["to_sector"] if isinstance(s, dict) else s for s in adj]
+    adjacent_ids = []
+    for item in adj:
+        value = item.get("to_sector", item.get("to_sector_id")) if isinstance(item, dict) else item
+        try:
+            adjacent_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    filtered_state["adjacent_sectors"] = adjacent_ids
+
+    # Only expose map knowledge already held by this player. Without these
+    # distinctions the model can repeatedly route between familiar sectors
+    # while believing each destination is unexplored.
+    known_sector_ids = set()
+    for sector_id in game_state.get("sector_data", {}):
+        try:
+            known_sector_ids.add(int(sector_id))
+        except (TypeError, ValueError):
+            continue
+    try:
+        if current_sector_id is not None:
+            known_sector_ids.add(int(current_sector_id))
+    except (TypeError, ValueError):
+        pass
+    known_port_sectors = set()
+    for sector_id, port in all_port_info.items():
+        if isinstance(port, dict) and port:
+            try:
+                known_port_sectors.add(int(sector_id))
+            except (TypeError, ValueError):
+                continue
+    for sector_id, details in (game_state.get("sector_data") or {}).items():
+        if isinstance(details, dict) and details.get("has_port"):
+            try:
+                known_port_sectors.add(int(sector_id))
+            except (TypeError, ValueError):
+                continue
+    filtered_state["known_sector_ids"] = sorted(known_sector_ids)
+    filtered_state["known_port_sector_ids"] = sorted(known_port_sectors)
+    filtered_state["all_known_sectors"] = sorted(known_sector_ids)
+    warp_blacklist = {
+        str(sector) for sector in state_manager.get("warp_blacklist", [])
+    }
+    filtered_state["valid_goto_sectors"] = [
+        sector_id for sector_id in adjacent_ids if str(sector_id) not in warp_blacklist
+    ]
+    filtered_state["unexplored_adjacent_sector_ids"] = [
+        sector_id for sector_id in adjacent_ids if sector_id not in known_sector_ids
+    ]
     
     # Global Market Intelligence (Top 3 profitable routes only)
     market_intel = game_state.get("market_intelligence", {})
@@ -407,8 +455,10 @@ def _audit_state_snapshot(game_state):
     """Small before-state record for live gameplay outcome verification."""
     return {
         "player_location_sector": game_state.get("player_location_sector"),
-        "player_info": game_state.get("player_info"),
-        "ship_info": game_state.get("ship_info"),
+        # StateManager merges player/ship responses in place. Deep-copy them
+        # so a later authoritative readback cannot rewrite the before snapshot.
+        "player_info": copy.deepcopy(game_state.get("player_info")),
+        "ship_info": copy.deepcopy(game_state.get("ship_info")),
     }
 
 
@@ -793,8 +843,11 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
         # Context for validation
         valid_gotos = set(filtered_game_state.get("valid_goto_sectors", []))
         all_known = set(filtered_game_state.get("all_known_sectors", []))
+        known_sector_ids = set(filtered_game_state.get("known_sector_ids", []))
+        known_port_sector_ids = set(filtered_game_state.get("known_port_sector_ids", []))
         valid_comms = set(c.upper() for c in filtered_game_state.get("valid_commodity_names", []))
         can_trade = filtered_game_state.get("can_trade_at_current_location", False)
+        has_cargo = bool((filtered_game_state.get("ship") or {}).get("cargo"))
         
         goal_pattern = re.compile(r'^(goto|buy|sell|scan|planet|combat)\s*:\s*(.+)$', re.IGNORECASE)
 
@@ -817,8 +870,16 @@ def get_strategy_from_llm(game_state, model, stage, state_manager,
             if verb == "goto":
                 try:
                     sid = int(arg)
-                    # Relaxed validation: Allow any integer target.
-                    # The Planner will handle pathfinding or rejection if truly unreachable.
+                    # During exploration, do not let an Ollama plan loop back
+                    # through already-known non-port sectors. Known ports and
+                    # cargo destinations remain valid strategic targets.
+                    if (stage == "explore" and not has_cargo
+                            and sid in known_sector_ids
+                            and sid not in known_port_sector_ids):
+                        logger.warning(
+                            "Skipping exploration destination %s already known to this player.", sid
+                        )
+                        continue
                     validated_plan.append(f"goto: {sid}")
                 except ValueError:
                     logger.warning(f"Skipping invalid goto format: {goal}")
@@ -946,6 +1007,7 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     state_manager.set("strategy_inference_status", diagnostics)
     return plan
 
+
 def quarantine_timed_out_trades(state_manager, expired_commands):
     """Persist an ambiguous trade outcome until an operator resolves it."""
     for request_id, command in expired_commands:
@@ -1043,6 +1105,58 @@ def advance_completed_goals(strategy_plan, game_state):
     while remaining and is_goal_complete(remaining[0], game_state, {}, "state.snapshot"):
         remaining.pop(0)
     return remaining
+
+
+def discard_stale_exploration_goals(strategy_plan, game_state):
+    """Drop persisted non-port revisits when no cargo needs delivery.
+
+    Strategy plans survive controller restarts, so fresh-plan validation alone
+    cannot prevent an old exploration loop from resuming after reconnect.
+    """
+    if not isinstance(strategy_plan, list):
+        return []
+    cargo = (game_state.get("ship_info") or {}).get("cargo", [])
+    has_cargo = False
+    if isinstance(cargo, list):
+        for item in cargo:
+            if not isinstance(item, dict):
+                continue
+            try:
+                has_cargo = float(item.get("quantity", 0) or 0) > 0
+            except (TypeError, ValueError):
+                has_cargo = False
+            if has_cargo:
+                break
+    if has_cargo:
+        return strategy_plan
+
+    known_sectors = set()
+    for sector_id in (game_state.get("sector_data") or {}):
+        try:
+            known_sectors.add(int(sector_id))
+        except (TypeError, ValueError):
+            continue
+    known_ports = set()
+    for sector_id, port in (game_state.get("port_info_by_sector") or {}).items():
+        if isinstance(port, dict) and port:
+            try:
+                known_ports.add(int(sector_id))
+            except (TypeError, ValueError):
+                continue
+    for sector_id, details in (game_state.get("sector_data") or {}).items():
+        if isinstance(details, dict) and details.get("has_port"):
+            try:
+                known_ports.add(int(sector_id))
+            except (TypeError, ValueError):
+                continue
+
+    kept = []
+    for goal in strategy_plan:
+        match = re.match(r"^goto\s*:\s*(\d+)\s*$", str(goal), re.IGNORECASE)
+        if match and int(match.group(1)) in known_sectors - known_ports:
+            continue
+        kept.append(goal)
+    return kept
 
 
 AI_SCHEMA_BOOTSTRAP_COMMANDS = frozenset({
@@ -1454,6 +1568,11 @@ def main(config_path="config.json"):
                 continue
 
             strategy_plan = game_state.get("strategy_plan", [])
+            valid_plan = discard_stale_exploration_goals(strategy_plan, game_state)
+            if valid_plan != strategy_plan:
+                logger.warning("Dropping persisted exploration goals for already-known non-port sectors.")
+                strategy_plan = valid_plan
+                state_manager.set("strategy_plan", strategy_plan)
             current_goal = None
 
             # 5. Check if we need a new strategy
@@ -1480,12 +1599,6 @@ def main(config_path="config.json"):
                 }
                 logger.info(f"Bootstrap: Sending {bootstrap_cmd['command']}")
                 logger.info("Bootstrap command: %s", redact_secrets(full_command))
-                if command_name in ("trade.buy", "trade.sell"):
-                    state_manager.set("uncertain_trade", {
-                        "request_id": full_command["id"], "command": command_name,
-                        "idempotency_key": idempotency_key,
-                    })
-
                 if game_conn.send_command(full_command):
                     state_manager.record_command_sent(bootstrap_cmd["command"])
                     state_manager.record_ai_metric("commands_sent")
@@ -1618,7 +1731,18 @@ def main(config_path="config.json"):
                 }
 
                 logger.info("Sending command: %s", redact_secrets(full_command))
-                
+                if command_name in ("trade.buy", "trade.sell"):
+                    state_manager.set("uncertain_trade", {
+                        "request_id": full_command["id"], "command": command_name,
+                        "idempotency_key": idempotency_key,
+                    })
+                elif command_name == "move.warp":
+                    state_manager.set("uncertain_warp", {
+                        "request_id": full_command["id"], "command": command_name,
+                        "idempotency_key": idempotency_key,
+                        "to_sector_id": data_payload.get("to_sector_id"),
+                    })
+
                 if game_conn.send_command(full_command):
                     state_manager.add_pending_command(full_command['id'], full_command)
                     state_manager.record_ai_metric("commands_sent")
@@ -1626,8 +1750,14 @@ def main(config_path="config.json"):
 
                     if (config.get("live_gameplay_audit")
                             and command_name in ("move.warp", "trade.buy", "trade.sell")):
+                        state_before = _audit_state_snapshot(game_state)
+                        audit_before_states = getattr(
+                            state_manager, "_live_audit_command_before", {}
+                        )
+                        audit_before_states[full_command["id"]] = state_before
+                        state_manager._live_audit_command_before = audit_before_states
                         bug_reporter.log_command(
-                            full_command, state_before=_audit_state_snapshot(game_state)
+                            full_command, state_before=state_before
                         )
                     
                     # Track tested commands in QA mode
@@ -1725,12 +1855,50 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
         if request_id:
             sent_command = state_manager.get_pending_command(request_id)
 
+            # A disconnect or timeout removes the pending request, but a
+            # server may still return the original idempotent result. Rebuild
+            # only the exact uncertain mutation when its response type is
+            # structurally valid; unrelated late replies remain ignored.
+            if sent_command is None:
+                late_data = response.get("data") or {}
+                uncertain_trade = state_manager.get("uncertain_trade") or {}
+                expected_trade_type = {
+                    "trade.buy": "trade.buy_receipt_v1",
+                    "trade.sell": "trade.sell_receipt_v1",
+                }.get(uncertain_trade.get("command")) if isinstance(uncertain_trade, dict) else None
+                uncertain_warp = state_manager.get("uncertain_warp") or {}
+                if (isinstance(uncertain_trade, dict)
+                        and uncertain_trade.get("request_id") == request_id
+                        and response.get("status") == "ok"
+                        and response.get("type") == expected_trade_type
+                        and isinstance(late_data, dict)
+                        and late_data.get("lines")
+                        and late_data.get("credits_remaining") is not None):
+                    sent_command = {
+                        "command": uncertain_trade["command"],
+                        "data": {"port_id": late_data.get("port_id")},
+                    }
+                elif (isinstance(uncertain_warp, dict)
+                      and uncertain_warp.get("request_id") == request_id
+                      and response.get("status") == "ok"
+                      and response.get("type") == "move.result"
+                      and isinstance(late_data, dict)
+                      and str(late_data.get("to_sector_id")) == str(uncertain_warp.get("to_sector_id"))):
+                    sent_command = {
+                        "command": "move.warp",
+                        "data": {"to_sector_id": late_data.get("to_sector_id")},
+                    }
+
             # Ignore replies to expired or previous-session requests. Schema
             # bootstrap requests are separately correlated in their own map.
             schema_request_ids = set((state_manager.get("pending_schema_requests", {}) or {}).values())
             if sent_command is None and request_id not in schema_request_ids:
                 logger.warning("Ignoring late or uncorrelated reply %s (%s).", request_id, response.get("type"))
                 continue
+
+        audit_before_states = getattr(state_manager, "_live_audit_command_before", {})
+        command_state_before = audit_before_states.pop(request_id, None) if request_id else None
+        state_manager._live_audit_command_before = audit_before_states
 
         command_name = "unknown"
         if sent_command:
@@ -1749,7 +1917,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                    or command_name in ("player.my_info", "ship.info"))):
             bug_reporter.log_response(
                 response, command=sent_command,
-                state_before=_audit_state_snapshot(game_state_before),
+                state_before=(command_state_before
+                              or _audit_state_snapshot(game_state_before)),
             )
 
         # Diagnostic log for trade results
@@ -1867,6 +2036,13 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     state_manager.set("session_id", session_token)
                     if config.get("register_if_missing"):
                         state_manager.set("registration_attempted", True)
+
+                    # A saved player snapshot may be older than the server
+                    # state after an interrupted action. Re-fetch the public
+                    # player record before allowing a restored plan to act.
+                    state_manager.set("player_info", None)
+                    state_manager.set("player_location_sector", None)
+                    state_manager.set("current_path", [])
                     
                     # Clear cached ship_info to force resync from server.
                     # This prevents stale cargo from persisting if items were deleted from the DB.
@@ -2247,7 +2423,6 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
         except Exception as e:
             logger.error("Critical error in process_responses: %s", e, exc_info=True)
-
         else:
             uncertain = state_manager.get("uncertain_trade") or {}
             expected_receipt = {"trade.buy": "trade.buy_receipt_v1",
@@ -2257,7 +2432,6 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                           and response_data.get("lines") and response_data.get("credits_remaining") is not None)
                          or response.get("status") == "refused")):
                 state_manager.set("uncertain_trade", None)
-
             warp = state_manager.get("uncertain_warp") or {}
             if (command_name == "move.warp" and isinstance(warp, dict) and warp.get("request_id") == request_id
                     and ((response.get("status") == "ok" and response_type == "move.result"
@@ -2289,7 +2463,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                             events=state_manager.get("server_events", []),
                             state_after_source=("readback unavailable" if context["failed_readbacks"]
                                                 else "player.my_info + ship.info readback"),
-                            verification_complete=not context["failed_readbacks"],
+                            verification_complete=(not context["failed_readbacks"]
+                                                   and context.get("before_verified", False)),
                         )
                         if context["failed_readbacks"]:
                             logger.warning("Live gameplay readback incomplete for %s.", action_id)
@@ -2301,7 +2476,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 context = {
                     "command": sent_command,
                     "response": response,
-                    "state_before": _audit_state_snapshot(game_state_before),
+                    "state_before": (command_state_before
+                                     or _audit_state_snapshot(game_state_before)),
+                    "before_verified": command_state_before is not None,
                     "required": {"player.my_info", "ship.info"},
                     "received": set(),
                     "failed_readbacks": [],
