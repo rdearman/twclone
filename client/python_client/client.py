@@ -3976,6 +3976,59 @@ def print_inspect_response_pretty(ctx):
 
 
 
+@register("transfer_cargo_flow")
+def transfer_cargo_flow(ctx: Context):
+    """Transfer cargo from the active ship to an owned ship in this sector."""
+    ships = (ctx.last_sector_desc or {}).get("ships") or []
+    active_id = get_my_ship_id(ctx.conn, ctx)
+    targets = []
+    for ship in ships:
+        if not isinstance(ship, dict):
+            continue
+        ship_id = ship.get("id", ship.get("ship_id"))
+        if type(ship_id) is int and ship_id > 0 and ship_id != active_id:
+            targets.append((ship_id, ship.get("name") or ship.get("ship_name") or "Unnamed"))
+    if not targets:
+        print("No eligible target ships are visible in this sector.")
+        return
+    for index, (ship_id, name) in enumerate(targets, 1):
+        print(f" {index}) {name} (ship {ship_id})")
+    try:
+        selected = int(input("Target ship number (Enter to cancel): ").strip())
+        commodity_id = int(input("Commodity ID: ").strip())
+        quantity = int(input("Quantity: ").strip())
+    except ValueError:
+        print("Cargo transfer cancelled or invalid number.")
+        return
+    if not (1 <= selected <= len(targets)) or commodity_id <= 0 or quantity <= 0:
+        print("Cargo transfer requires a listed target and positive commodity and quantity values.")
+        return
+    target_id = targets[selected - 1][0]
+    if input(f"Transfer {quantity} of commodity {commodity_id} to ship {target_id}? [y/N]: ").strip().lower() != "y":
+        print("Cargo transfer cancelled.")
+        return
+    response = ctx.conn.rpc("ship.transfer_cargo", {
+        "commodity_id": commodity_id, "quantity": quantity, "target_ship_id": target_id,
+    })
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Cargo transfer refused or failed:")
+        _pp(response)
+        return
+    print("Cargo transfer confirmed by server.")
+    refreshed = _hud_rpc(ctx, "ship.status", {})
+    if refreshed.get("status") != "ok":
+        print("Warning: transfer succeeded, but active ship status could not be refreshed.")
+    sector = ctx.conn.rpc("move.describe_sector", {})
+    if sector.get("status") == "ok":
+        try:
+            ctx.last_sector_desc = normalize_sector(get_data(sector))
+        except (TypeError, ValueError, AttributeError):
+            print("Warning: transfer succeeded, but the sector could not be refreshed.")
+    else:
+        print("Warning: transfer succeeded, but the sector could not be refreshed.")
+
+
 @register("enter_ship_menu")
 def enter_ship_menu(ctx: Context):
     d = ctx.last_sector_desc or {}

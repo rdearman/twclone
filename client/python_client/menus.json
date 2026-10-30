@@ -443,6 +443,13 @@
           }
         },
         {
+          "key": "g",
+          "label": "(G) Transfer Cargo",
+          "action": {
+            "pycall": "transfer_cargo_flow"
+          }
+        },
+        {
           "key": "t",
           "label": "(T) Genesis Torpedo",
           "action": {

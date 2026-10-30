@@ -38,6 +38,7 @@ const COMMANDS := {
 		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
 		{"label": "Hardware catalogue", "command": "hardware.list", "requires_supported_dock": true, "tooltip": "Dock at a supported hardware port first."},
 		{"label": "Buy ship hardware", "command": "hardware.buy", "requires_supported_dock": true, "fields": [["item_code", FIELD_TEXT, "Hardware item code (from catalogue)", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true, "tooltip": "Dock first; the server catalogue supplies valid hardware codes."},
+		{"label": "Upgrade ship equipment", "command": "ship.upgrade", "fields": [["upgrade_type", FIELD_TEXT, "Upgrade type", ""]], "mutating": true},
 		{"label": "Ferengi traders and open offers", "command": "ferengi.traders", "fixed": {}},
 		{"label": "Accept Ferengi offer", "command": "ferengi.deal.accept", "fields": [["deal_id", FIELD_INT, "Deal ID from trader listing", ""]], "mutating": true},
 		{"label": "Reject Ferengi offer", "command": "ferengi.deal.reject", "fields": [["deal_id", FIELD_INT, "Deal ID from trader listing", ""]], "mutating": true},
@@ -730,8 +731,9 @@ func _render_actions() -> void:
 			var current_sector_id := int(_snapshot.get("hud", {}).get("sector_id", 0))
 			if current_sector_id >= 1 and current_sector_id <= 10:
 				attack_action["unavailable_reason"] = "Attacks are disabled in protected FedSpace sectors 1–10."
-			actions = [
+				actions = [
 				{"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"},
+				{"label": "Transfer cargo to this ship", "command": "ship.transfer_cargo", "context_id": "target_ship_id", "fields": [["commodity_id", FIELD_INT, "Commodity ID", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true},
 				attack_action,
 				{"label": "Claim this ship · server verifies eligibility", "command": "ship.claim", "context_id": "ship_id", "mutating": true},
 				{"label": "Tow this ship · requires owned, unpiloted vessel", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true},

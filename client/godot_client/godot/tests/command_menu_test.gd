@@ -422,7 +422,7 @@ func _run() -> void:
 	(menu._form_fields["topic"] as LineEdit).text = "sector.42"
 	menu._submit_form()
 	_check(captured.back().get("command") == "subscribe.remove" and captured.back().get("data") == {"topic": "sector.42"}, "subscription removal did not send the canonical topic field")
-	var unsupported_ship_commands := ["ship.sell", "ship.transfer", "ship.transfer_cargo", "ship.upgrade", "shipyard.sell"]
+	var unsupported_ship_commands := ["ship.sell", "ship.transfer", "shipyard.sell"]
 	for actions in CommandMenu.COMMANDS.values():
 		for action in actions:
 			_check(not unsupported_ship_commands.has(str(action.get("command", ""))), "command menu exposed an unimplemented ship command")
@@ -434,6 +434,13 @@ func _run() -> void:
 	var before_inspect := captured.size()
 	menu._choose_action({"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"})
 	_check(captured.size() == before_inspect + 1 and captured.back()["command"] == "ship.inspect" and captured.back()["data"] == {"ship_id": 61}, "ship inspection did not bind the selected ship ID")
+	var transfer_button := _action_button(menu, "Transfer cargo to this ship")
+	_check(transfer_button != null and not transfer_button.disabled, "cargo transfer stayed unavailable for a selected ship")
+	menu._choose_action({"label": "Transfer cargo to this ship", "command": "ship.transfer_cargo", "context_id": "target_ship_id", "fields": [["commodity_id", "integer", "Commodity ID", ""], ["quantity", "integer", "Quantity", "1"]], "mutating": true})
+	(menu._form_fields["commodity_id"] as LineEdit).text = "2"
+	(menu._form_fields["quantity"] as LineEdit).text = "3"
+	menu._submit_form()
+	_check(captured.back()["command"] == "ship.transfer_cargo" and captured.back()["data"] == {"commodity_id": 2, "quantity": 3, "target_ship_id": 61}, "cargo transfer did not bind target ship and canonical fields")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():

@@ -2,6 +2,50 @@
 import client
 
 
+def test_transfer_cargo_selects_visible_target_and_refreshes_state(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 7, "ships": [
+        {"id": 12, "name": "Active"}, {"id": 88, "name": "Hauler"},
+    ]})
+    ctx.player_info = {"player": {"ship_id": 12}}
+    fake_conn.queue("ship.transfer_cargo", {"status": "ok", "data": {
+        "source_ship_id": 12, "target_ship_id": 88, "commodity_id": 2,
+        "quantity": 3,
+    }})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 12}}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {
+        "sector_id": 7, "ships": [{"id": 12}, {"id": 88}], "ports": [], "planets": [],
+    }})
+    answers = iter(["1", "2", "3", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.transfer_cargo_flow(ctx)
+
+    assert fake_conn.calls == [
+        {"command": "ship.transfer_cargo", "data": {"commodity_id": 2, "quantity": 3, "target_ship_id": 88}},
+        {"command": "ship.status", "data": {}},
+        {"command": "move.describe_sector", "data": {}},
+    ]
+    assert ctx.last_sector_desc["id"] == 7
+    assert "confirmed by server" in capsys.readouterr().out
+
+
+def test_transfer_cargo_refusal_does_not_refresh_or_claim_success(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 7, "ships": [{"id": 12}, {"id": 88}]})
+    ctx.player_info = {"player": {"ship_id": 12}}
+    fake_conn.queue("ship.transfer_cargo", {"status": "error", "error": {"message": "Hold too small"}})
+    answers = iter(["1", "2", "3", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.transfer_cargo_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["ship.transfer_cargo"]
+    assert "Hold too small" in capsys.readouterr().out
+
+
 def test_shipyard_upgrade_refreshes_independently_and_preserves_refused_sector(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
