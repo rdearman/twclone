@@ -107,6 +107,7 @@ def test_player_summary_reports_only_public_acceptance_state(tmp_path):
         "trade": {"request_id": "private", "command": "trade.sell"}
     }
     assert "session_token" not in json.dumps(summary)
+    assert summary["status"] == "exited"
 
 
 def test_orchestration_respects_concurrency_and_writes_aggregate(tmp_path, monkeypatch):

@@ -178,6 +178,7 @@ def _player_summary(player: dict[str, Any], exit_code: int | None) -> dict[str, 
         "runtime_dir": player["player_dir"],
         "metrics": {},
         "state_available": False,
+        "status": "exited" if exit_code is not None else "stopped_without_exit_code",
     }
     state_file = Path(player["player_dir"]) / "state.json"
     try:
@@ -280,6 +281,7 @@ def run_cohort(
         owned_processes = [entry[1] for entry in active]
         stop_processes(owned_processes)
         for player, process, log in active:
+            was_running_at_stop = process.poll() is None
             code = process.poll()
             if code is None:
                 try:
@@ -287,7 +289,10 @@ def run_cohort(
                 except subprocess.TimeoutExpired:
                     code = None
             log.close()
-            records.append(_player_summary(player, code))
+            summary = _player_summary(player, code)
+            if was_running_at_stop:
+                summary["status"] = "stopped_at_duration_or_interrupt"
+            records.append(summary)
 
     # A bounded run may leave configs that were never started. Include them so
     # the cohort report records the requested population and its actual status.
