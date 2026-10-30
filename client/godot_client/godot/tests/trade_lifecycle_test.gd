@@ -17,6 +17,7 @@ class FakeView extends Node:
 	var quotes: Array[Dictionary] = []
 	var messages: Array[String] = []
 	var port_workflow = FakePort.new()
+	var command_menu = FakeMenu.new()
 	var ports: Array[Dictionary] = []
 	var quote_dismissed := false
 	func set_command_busy(_busy: bool) -> void: pass
@@ -31,6 +32,10 @@ class FakeView extends Node:
 class FakePort extends RefCounted:
 	var closed := false
 	func close_for_location_change() -> void: closed = true
+
+class FakeMenu extends RefCounted:
+	var tavern_access := true
+	func set_tavern_access(enabled: bool) -> void: tavern_access = enabled
 
 class FakeRefresh extends RefCounted:
 	var calls := 0
@@ -101,8 +106,9 @@ func _run() -> void:
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
 	main._pending_game_commands.clear()
 	main._finish_trade_quote({"status": "ok", "data": {"port_id": 7, "commodity": "ORE", "quantity": 1, "buy_price": 3, "total_buy_price": 3}})
+	view.port_workflow.closed = false
 	main._on_transport_disconnected("test")
-	assert(main._pending_trade.is_empty() and view.quote_dismissed)
+	assert(main._pending_trade.is_empty() and view.quote_dismissed and view.port_workflow.closed and not view.command_menu.tavern_access)
 	main._on_trade_confirmation(true)
 	assert(transport.calls.size() == 10)
 	main.login_view.free()

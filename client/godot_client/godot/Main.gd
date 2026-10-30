@@ -178,6 +178,8 @@ func _on_transport_disconnected(reason: String) -> void:
 	_pending_event_subscriptions.clear()
 	_pending_trade.clear()
 	gameplay_view.dismiss_trade_quote()
+	gameplay_view.port_workflow.close_for_location_change()
+	gameplay_view.command_menu.set_tavern_access(false)
 	_route_running = false
 	_planned_route.clear()
 	_route_destination = 0
