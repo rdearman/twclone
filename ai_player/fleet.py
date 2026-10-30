@@ -81,6 +81,10 @@ def prepare_runtime_configs(
         runtime["log_file"] = str(player_dir / "ai_player.log")
         runtime["state_file"] = str(player_dir / "state.json")
         runtime["bug_report_path"] = str(player_dir / "bug_reports")
+        # Cohort qualification must remain reproducible when optional Ollama
+        # infrastructure is unavailable. Individual configs can opt into LLM
+        # planning explicitly after deterministic qualification.
+        runtime.setdefault("strategy_mode", "deterministic")
         # Keep each bot's planner stagger independent while the cohort manager
         # controls the actual concurrency bound.
         runtime_config_path = player_dir / "config.json"
@@ -190,7 +194,33 @@ def _player_summary(player: dict[str, Any], exit_code: int | None) -> dict[str, 
         }
     summary["current_sector"] = state.get("player_location_sector")
     summary["strategy_plan_source"] = state.get("strategy_plan_source")
+    summary["strategy_mode"] = state.get("strategy_mode", "deterministic")
+    summary["credits"] = _public_credits(state.get("player_info"))
+    summary["cargo"] = _public_cargo(state.get("ship_info"))
+    summary["strategy_plan_pending"] = list(state.get("strategy_plan") or [])
+    summary["uncertain_mutations"] = {
+        key: value for key, value in (
+            ("trade", state.get("uncertain_trade")),
+            ("warp", state.get("uncertain_warp")),
+        ) if value
+    }
     return summary
+
+
+def _public_credits(player_info: Any) -> str | None:
+    player = player_info.get("player") if isinstance(player_info, dict) else None
+    credits = player.get("credits") if isinstance(player, dict) else None
+    return str(credits) if credits is not None else None
+
+
+def _public_cargo(ship_info: Any) -> list[dict[str, Any]]:
+    cargo = ship_info.get("cargo") if isinstance(ship_info, dict) else None
+    if not isinstance(cargo, list):
+        return []
+    return [
+        {key: item[key] for key in ("commodity", "quantity") if key in item}
+        for item in cargo if isinstance(item, dict)
+    ]
 
 
 def _aggregate_metrics(records: list[dict[str, Any]]) -> dict[str, int | float]:

@@ -47,6 +47,7 @@ def test_runtime_configs_isolate_state_logs_and_qa_reports(tmp_path):
 
     for key in ("state_file", "log_file", "bug_report_path"):
         assert runtime[0][key] != runtime[1][key]
+    assert [item["strategy_mode"] for item in runtime] == ["deterministic", "deterministic"]
     assert runtime[0]["player_username"] != runtime[1]["player_username"]
     assert all(os.stat(item["config_path"]).st_mode & 0o777 == 0o600 for item in prepared)
 
@@ -86,6 +87,26 @@ def test_aggregate_metrics_sum_only_available_players_and_numeric_values():
     assert fleet._aggregate_metrics(records) == {
         "commands_succeeded": 10, "trade_profit_credits": 115,
     }
+
+
+def test_player_summary_reports_only_public_acceptance_state(tmp_path):
+    player_dir = tmp_path / "player"
+    player_dir.mkdir()
+    (player_dir / "state.json").write_text(json.dumps({
+        "player_location_sector": 42,
+        "player_info": {"player": {"credits": "1013.00", "session_token": "secret"}},
+        "ship_info": {"cargo": [{"commodity": "ORE", "quantity": 1, "purchase_price": 100}]},
+        "strategy_plan": ["sell: ORE"],
+        "uncertain_trade": {"request_id": "private", "command": "trade.sell"},
+        "ai_metrics": {"trade_profit_credits": 13},
+    }))
+    summary = fleet._player_summary({"identity": "qa_one", "player_dir": str(player_dir)}, 0)
+    assert summary["credits"] == "1013.00"
+    assert summary["cargo"] == [{"commodity": "ORE", "quantity": 1}]
+    assert summary["uncertain_mutations"] == {
+        "trade": {"request_id": "private", "command": "trade.sell"}
+    }
+    assert "session_token" not in json.dumps(summary)
 
 
 def test_orchestration_respects_concurrency_and_writes_aggregate(tmp_path, monkeypatch):
