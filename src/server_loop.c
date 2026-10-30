@@ -558,9 +558,6 @@ static const command_entry_t k_command_registry[] = {
    schema_planet_harvest, 0, false, NULL},
   {"planet.info", cmd_planet_info, "Planet information", schema_planet_info,
    0, false, NULL},
-  {"planet.fighters.transfer", cmd_planet_fighters_transfer,
-   "Transfer fighters between a landed ship and its planet",
-   schema_planet_fighters_transfer, 0, false, NULL},
   {"planet.land", cmd_planet_land, "Land on a planet", schema_planet_land, 0, false, NULL},
   {"planet.colonists.get", cmd_planet_colonists_get, "Get colonist info for planet",
    schema_placeholder, 0, false, NULL},
@@ -765,10 +762,6 @@ static const command_entry_t k_command_registry[] = {
     {"stock.exchange.orders.create", cmd_equity, "Create a stock order (DEPRECATED: use equity.exchange.order.create)", schema_placeholder, 0, true, "equity.exchange.order.create"},
     {"stock.ipo.register", cmd_equity_ipo_register, "Register corporation for IPO (DEPRECATED: use equity.ipo_register)", schema_placeholder, 0, true, "equity.ipo_register"},
     {"stock.portfolio.list", cmd_equity, "List stock portfolio (DEPRECATED: use equity.portfolio.list)", schema_placeholder, 0, true, "equity.portfolio.list"},
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
-    {"events.resume", cmd_events_resume, "Resume the player's event stream",
-     schema_events_resume, 0, false, NULL},
-#endif
     {"subscribe.add", cmd_subscribe_add, "Add a subscription",
    schema_subscribe_add, 0, false, NULL},
   {"subscribe.catalog", cmd_subscribe_catalog, "Subscription catalog",
