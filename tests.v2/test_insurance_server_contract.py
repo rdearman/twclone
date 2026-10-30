@@ -12,6 +12,8 @@ def test_insurance_handlers_delegate_money_and_claim_state_to_database():
     assert "insurance_settle_claim" in source
     assert "Policy purchased" not in source
     assert "json_integer (12345)" not in source
+    assert "insurance_subject_owned" in source
+    assert "insurance_claim_owned" in source
 
 
 def test_insurance_sql_fixture_covers_success_refusal_and_idempotency():
@@ -21,4 +23,3 @@ def test_insurance_sql_fixture_covers_success_refusal_and_idempotency():
     assert "premium accounting mismatch" in fixture
     assert "insufficient premium was not atomic" in fixture
     assert "claim idempotency failed" in fixture
-
