@@ -56,8 +56,69 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
 int
 cmd_player_rankings (client_ctx_t *ctx, json_t *root)
 {
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Authentication required");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int limit = 10;
+  if (data && json_is_object (data))
+    {
+      json_t *limit_value = json_object_get (data, "limit");
+      if (json_is_integer (limit_value))
+        limit = (int) json_integer_value (limit_value);
+    }
+  if (limit < 1 || limit > 100)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "limit must be between 1 and 100");
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  db_res_t *res = NULL;
+  db_error_t err;
+  char sql[256];
+  sql_build (db,
+             "SELECT player_id, name, experience, alignment FROM players "
+             "ORDER BY experience DESC, player_id ASC LIMIT {1};",
+             sql, sizeof (sql));
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i64 (limit) }, 1, &res,
+                 &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Unable to load rankings");
+      return 0;
+    }
+
   json_t *payload = json_object ();
-  json_object_set_new (payload, "rankings", json_array ());
+  json_t *rankings = json_array ();
+  if (!payload || !rankings)
+    {
+      if (res) db_res_finalize (res);
+      json_decref (payload);
+      json_decref (rankings);
+      send_response_error (ctx, root, ERR_DB, "Unable to allocate rankings");
+      return 0;
+    }
+  while (db_res_step (res, &err))
+    {
+      json_t *entry = json_object ();
+      const char *name = db_res_col_text (res, 1, &err);
+      json_object_set_new (entry, "player_id",
+                           json_integer (db_res_col_i32 (res, 0, &err)));
+      json_object_set_new (entry, "name",
+                           json_string (name ? name : ""));
+      json_object_set_new (entry, "experience",
+                           json_integer (db_res_col_i64 (res, 2, &err)));
+      json_object_set_new (entry, "alignment",
+                           json_integer (db_res_col_i32 (res, 3, &err)));
+      json_array_append_new (rankings, entry);
+    }
+  db_res_finalize (res);
+  json_object_set_new (payload, "rankings", rankings);
   send_response_ok_take (ctx, root, "player.rankings.response", &payload);
   return 0;
 }
