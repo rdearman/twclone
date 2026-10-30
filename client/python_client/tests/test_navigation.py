@@ -258,3 +258,10 @@ def test_tow_menu_remains_reachable_for_confirmed_tow_without_sector_targets(
     client.compute_flags(ctx)
     opts = {o["key"]: o for o in _visible_options(menus["DEPLOYMENT_MAIN"], ctx)}
     assert opts["w"]["action"] == {"pycall": "tow_flow"}
+
+
+def test_tow_menu_reachable_after_reconnect_without_cached_tow_or_targets(ctx_factory, menus):
+    ctx = ctx_factory(sector={"id": 1, "ships": []})
+    client.compute_flags(ctx)
+    opts = {o["key"]: o for o in _visible_options(menus["DEPLOYMENT_MAIN"], ctx)}
+    assert opts["w"]["action"] == {"pycall": "tow_flow"}

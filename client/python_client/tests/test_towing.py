@@ -114,3 +114,26 @@ def test_tow_status_reconciles_existing_tow_after_reconnect(
 def test_has_tow_target_requires_real_non_player_ship_id():
     assert client.has_tow_target([{"id": 10}, {"name": "unknown"}], my_ship_id=10) is False
     assert client.has_tow_target([{"ship_id": 20}], my_ship_id=10) is True
+
+
+def test_selecting_current_tow_does_not_toggle_it_off(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {"towing_ship_id": 20}})
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["ship.tow.status"]
+    assert ctx.state["towing_ship_id"] == 20
+    assert "Enter R to release" in capsys.readouterr().out
+
+
+def test_unknown_tow_status_does_not_risk_toggling_selected_ship(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "error", "error": {"message": "Unavailable"}})
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["ship.tow.status"]
+    assert "until the server confirms" in capsys.readouterr().out

@@ -1855,10 +1855,7 @@
           "label": "(W) Tow SpaceCraft",
           "action": {
             "pycall": "tow_flow"
-          },
-          "show_if": [
-            "has_tow_target"
-          ]
+          }
         },
         {
           "key": "e",

@@ -4142,6 +4142,9 @@ def tow_flow(ctx: Context):
         payload = {}
         action = "release the tow beam"
     else:
+        if not towing_status_reported:
+            print("Cannot engage a tow until the server confirms the current tow status. Try again.")
+            return
         try:
             target_id = int(choice)
         except ValueError:
@@ -4151,6 +4154,9 @@ def tow_flow(ctx: Context):
                          if (ship.get("id") if isinstance(ship.get("id"), int) else ship.get("ship_id")) == target_id), None)
         if selected is None:
             print("That ship is not listed in the current sector.")
+            return
+        if towing_id == target_id:
+            print("That ship is already being towed. Enter R to release the tow beam.")
             return
         payload = {"target_ship_id": target_id}
         action = f"tow ship {target_id}"
