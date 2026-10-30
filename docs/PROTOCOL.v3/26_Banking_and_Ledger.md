@@ -44,5 +44,8 @@ Manage recurring payments (e.g., salaries).
 `insurance.policies.list`, `insurance.policies.buy`, and
 `insurance.claim.file` remain registered for compatibility, but their V3
 handlers are placeholders. Completing them requires transactional repository
-support for policy ownership, premium/fund accounting, and claim settlement;
+support for: listing policies by holder; creating a policy while debiting the
+premium and crediting its fund; and filing a claim with policy lock, active/
+expiry validation, duplicate-event protection, payout debit and claim status
+update in one transaction. Claims also need an authoritative event lookup;
 clients must treat their current success payloads as provisional.
