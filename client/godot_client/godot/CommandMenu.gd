@@ -90,20 +90,20 @@ const COMMANDS := {
 		{"label": "Subscriptions", "command": "subscribe.list"},
 	],
 	"CORPORATION": [
-		{"label": "Corporation status", "command": "corp.status"},
+		{"label": "Corporation status", "command": "corp.status", "requires_corporation": true},
 		{"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true},
 		{"label": "Corporation directory", "command": "corp.list"},
-		{"label": "Treasury balance", "command": "corp.balance"},
-		{"label": "Treasury statement", "command": "corp.statement"},
+		{"label": "Treasury balance", "command": "corp.balance", "requires_corporation": true},
+		{"label": "Treasury statement", "command": "corp.statement", "requires_corporation": true},
 		{"label": "Create corporation", "command": "corp.create", "fields": [["name", FIELD_TEXT, "Corporation name", ""]], "mutating": true},
 		{"label": "Join corporation", "command": "corp.join", "fields": [["corp_id", FIELD_INT, "Corporation ID", ""]], "mutating": true},
-		{"label": "Invite player", "command": "corp.invite", "fields": [["target_player_id", FIELD_INT, "Player ID", ""]], "mutating": true},
-		{"label": "Kick member", "command": "corp.kick", "fields": [["target_player_id", FIELD_INT, "Player ID", ""]], "mutating": true},
-		{"label": "Deposit to treasury", "command": "corp.deposit", "fields": [["amount", FIELD_INT, "Credits", ""]], "mutating": true},
-		{"label": "Withdraw from treasury", "command": "corp.withdraw", "fields": [["amount", FIELD_INT, "Credits", ""]], "mutating": true},
-		{"label": "Transfer CEO role", "command": "corp.transfer_ceo", "fields": [["target_player_id", FIELD_INT, "New CEO player ID", ""]], "mutating": true},
-		{"label": "Leave corporation", "command": "corp.leave", "mutating": true},
-		{"label": "Dissolve corporation", "command": "corp.dissolve", "mutating": true},
+		{"label": "Invite player", "command": "corp.invite", "fields": [["target_player_id", FIELD_INT, "Player ID", ""]], "mutating": true, "requires_corporation": true},
+		{"label": "Kick member", "command": "corp.kick", "fields": [["target_player_id", FIELD_INT, "Player ID", ""]], "mutating": true, "requires_corporation": true},
+		{"label": "Deposit to treasury", "command": "corp.deposit", "fields": [["amount", FIELD_INT, "Credits", ""]], "mutating": true, "requires_corporation": true},
+		{"label": "Withdraw from treasury", "command": "corp.withdraw", "fields": [["amount", FIELD_INT, "Credits", ""]], "mutating": true, "requires_corporation": true},
+		{"label": "Transfer CEO role", "command": "corp.transfer_ceo", "fields": [["target_player_id", FIELD_INT, "New CEO player ID", ""]], "mutating": true, "requires_corporation": true},
+		{"label": "Leave corporation", "command": "corp.leave", "mutating": true, "requires_corporation": true},
+		{"label": "Dissolve corporation", "command": "corp.dissolve", "mutating": true, "requires_corporation": true},
 	],
 	"MARKET": [
 		{"label": "Exchange listings", "command": "equity.exchange.list"},
@@ -764,8 +764,9 @@ func _render_actions() -> void:
 		var unavailable_reason := str(action.get("unavailable_reason", ""))
 		var missing_shipyard_context := bool(action.get("requires_shipyard_dock", false)) and not _is_docked_at_shipyard()
 		var missing_supported_dock := bool(action.get("requires_supported_dock", false)) and not _is_docked_at_supported_hardware()
-		button.disabled = not unavailable_reason.is_empty() or _busy or not connected or context_stale or missing_shipyard_context or missing_supported_dock
-		button.tooltip_text = unavailable_reason if not unavailable_reason.is_empty() else ("Dock at a supported hardware port in this sector first." if missing_supported_dock else ("Dock at a supported shipyard port in this sector first." if missing_shipyard_context else (str(action.get("tooltip", "")) if action.has("tooltip") else ("Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else ""))))))
+		var missing_corporation := bool(action.get("requires_corporation", false)) and int(_snapshot.get("player", {}).get("corp_id", 0)) <= 0
+		button.disabled = not unavailable_reason.is_empty() or _busy or not connected or context_stale or missing_shipyard_context or missing_supported_dock or missing_corporation
+		button.tooltip_text = unavailable_reason if not unavailable_reason.is_empty() else ("Join or create a corporation first." if missing_corporation else ("Dock at a supported hardware port in this sector first." if missing_supported_dock else ("Dock at a supported shipyard port in this sector first." if missing_shipyard_context else (str(action.get("tooltip", "")) if action.has("tooltip") else ("Unavailable while disconnected." if not connected else ("Refresh the sector before using this selected object." if context_stale else ("A command is already waiting for the server." if _busy else ""))))))
 		button.pressed.connect(_choose_action.bind(action))
 		var action_row := HBoxContainer.new()
 		action_row.add_theme_constant_override("separation", 4)

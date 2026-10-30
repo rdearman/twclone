@@ -379,6 +379,15 @@ func _run() -> void:
 	_check(captured.size() == before_corporation_actions + 1 and captured.back()["command"] == "corp.roster", "corporation roster action did not emit")
 	if captured.size() > before_corporation_actions:
 		_check(captured.back()["data"] == {"corp_id": 10}, "corporation roster did not use confirmed player corp_id")
+	menu._active_category = "CORPORATION"
+	menu._snapshot["player"] = {}
+	menu._render_actions()
+	var treasury_button := _action_button(menu, "Treasury balance")
+	_check(treasury_button != null and treasury_button.disabled and treasury_button.tooltip_text.contains("corporation"), "corporation treasury action was enabled without membership")
+	menu._snapshot["player"] = {"corp_id": 10}
+	menu._render_actions()
+	treasury_button = _action_button(menu, "Treasury balance")
+	_check(treasury_button != null and not treasury_button.disabled, "corporation treasury action stayed disabled for a member")
 	menu._active_category = "PLANET"
 	menu._selection = {"kind": "planet", "name": "Nereid", "data": {"planet_id": 19}}
 	menu._snapshot["hud"]["sector_id"] = 17
