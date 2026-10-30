@@ -370,44 +370,43 @@ cmd_ship_inspect (client_ctx_t *ctx, json_t *root)
     }
 
 
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
-  json_t *jdata = json_object_get (root, "data");
-
-
-  if (json_is_object (jdata))
+  json_t *data = json_object_get (root, "data");
+  json_t *requested = json_is_object (data) ? json_object_get (data, "ship_id") : NULL;
+  if (!json_is_integer (requested) || json_integer_value (requested) <= 0 || ctx->sector_id <= 0)
     {
-      json_t *jsec = json_object_get (jdata, "sector_id");
-
-
-      if (json_is_integer (jsec))
-	{
-	  int s = (int) json_integer_value (jsec);
-
-
-	  if (s > 0)
-	    {
-	      sector_id = s;
-	    }
-	}
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Valid ship_id and current sector required");
+      return 0;
     }
+
   json_t *ships = NULL;
-  int rc =
-    db_ships_inspectable_at_sector_json (db, ctx->player_id, sector_id,
-					 &ships);
-
-
+  int rc = db_ships_inspectable_at_sector_json (db, ctx->player_id,
+                                                ctx->sector_id, &ships);
   if (rc != 0 || !ships)
     {
-      send_response_error (ctx, root, ERR_PLANET_NOT_FOUND, "Database error");
+      send_response_error (ctx, root, ERR_DB, "Database error");
+      return 0;
+    }
+
+  size_t i;
+  json_t *ship, *selected = NULL;
+  json_array_foreach (ships, i, ship)
+    {
+      json_t *id = json_object_get (ship, "ship_id");
+      if (json_is_integer (id) && json_integer_value (id) == json_integer_value (requested))
+        {
+          selected = ship;
+          break;
+        }
+    }
+  if (!selected)
+    {
+      json_decref (ships);
+      send_response_error (ctx, root, ERR_SHIP_NOT_FOUND, "Ship not found or not visible");
       return 0;
     }
   json_t *payload = json_object ();
-
-
-  json_object_set_new (payload, "sector", json_integer (sector_id));
-  json_object_set_new (payload, "ships", ships);
-
-
+  json_object_set (payload, "ship", selected);
+  json_decref (ships);
   send_response_ok_take (ctx, root, "ship.inspect", &payload);
   return 0;
 }

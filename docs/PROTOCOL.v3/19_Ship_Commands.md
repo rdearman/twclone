@@ -89,7 +89,14 @@ or their corporation, and not currently piloted or towed.
 ## 2. Other Ship Commands
 
 ### `ship.inspect`
-Inspect another player's ship in the same sector.
+Inspect a visible ship in the player's current sector. Supply a positive
+integer `ship_id`. The `ship.inspect` response contains `ship`, an object
+with `ship_id` and `name`; it does not expose cargo or other private ship
+state. A cloaked ship is inspectable only by its primary owner. Remote,
+cloaked foreign, and nonexistent ships return the same not-found error.
+Clients that previously consumed the sector-wide `ships` list must instead
+send the selected `ship_id` and render `data.ship`; treat a refusal as an
+unavailable target and do not infer undisclosed ship fields.
 
 ### `ship.rename`
 Change the name of your ship.
