@@ -3938,9 +3938,15 @@ schema_chat_send (void)
 {
   json_t *props = json_object ();
 
-  json_t *channel_prop = json_object ();
-  json_object_set_new (channel_prop, "type", json_string ("string"));
-  json_object_set_new (props, "channel", channel_prop);
+  json_t *to_player_prop = json_object ();
+  json_object_set_new (to_player_prop, "type", json_string ("string"));
+  json_object_set_new (to_player_prop, "minLength", json_integer (1));
+  json_object_set_new (props, "to_player", to_player_prop);
+
+  json_t *to_id_prop = json_object ();
+  json_object_set_new (to_id_prop, "type", json_string ("integer"));
+  json_object_set_new (to_id_prop, "minimum", json_integer (1));
+  json_object_set_new (props, "to_id", to_id_prop);
 
   json_t *message_prop = json_object ();
   json_object_set_new (message_prop, "type", json_string ("string"));
@@ -3957,7 +3963,6 @@ schema_chat_send (void)
   json_object_set_new (root, "properties", props);
 
   json_t *required = json_array ();
-  json_array_append_new (required, json_string ("channel"));
   json_array_append_new (required, json_string ("message"));
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
