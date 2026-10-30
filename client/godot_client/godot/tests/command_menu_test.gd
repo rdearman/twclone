@@ -224,9 +224,20 @@ func _run() -> void:
 	_check(private_chat_button != null and private_chat_button.disabled, "unsupported private messaging was not visibly disabled")
 	menu._active_category = "MAIL & SUBSCRIPTIONS"
 	menu._render_actions()
-	var send_mail_button := _action_button(menu, "Send mail · unavailable")
-	var delete_mail_button := _action_button(menu, "Delete mail · unavailable")
-	_check(send_mail_button != null and send_mail_button.disabled and delete_mail_button != null and delete_mail_button.disabled, "mail contract gaps were not shown as disabled actions")
+	var send_mail_button := _action_button(menu, "Send mail")
+	var delete_mail_button := _action_button(menu, "Delete mail")
+	_check(send_mail_button != null and not send_mail_button.disabled and delete_mail_button != null and not delete_mail_button.disabled, "supported mail actions stayed unavailable")
+	var before_mail := captured.size()
+	menu._choose_action({"label": "Send mail", "command": "mail.send", "fields": [["to", "text", "Recipient name", ""], ["subject", "text", "Subject", ""], ["body", "text", "Message body", ""]], "mutating": true})
+	(menu._form_fields["to"] as LineEdit).text = "Captain"
+	(menu._form_fields["subject"] as LineEdit).text = "Hello"
+	(menu._form_fields["body"] as LineEdit).text = "Meet at the dock"
+	menu._submit_form()
+	_check(captured.size() == before_mail + 1 and captured.back()["command"] == "mail.send" and captured.back()["data"] == {"to": "Captain", "subject": "Hello", "body": "Meet at the dock"}, "mail send did not use the supported recipient contract")
+	menu._choose_action({"label": "Delete mail", "command": "mail.delete", "fields": [["mail_id", "int", "Mail ID", ""]], "mutating": true})
+	(menu._form_fields["mail_id"] as LineEdit).text = "42"
+	menu._submit_form()
+	_check(captured.size() == before_mail + 2 and captured.back()["command"] == "mail.delete" and captured.back()["data"] == {"mail_id": 42}, "mail delete did not use the supported mail_id contract")
 	var add_subscription_button := _action_button(menu, "Add subscription")
 	var remove_subscription_button := _action_button(menu, "Remove subscription")
 	_check(add_subscription_button != null and not add_subscription_button.disabled and remove_subscription_button != null and not remove_subscription_button.disabled, "documented subscription actions were disabled")

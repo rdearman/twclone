@@ -157,8 +157,8 @@ const COMMANDS := {
 	"MAIL & SUBSCRIPTIONS": [
 		{"label": "Mail inbox", "command": "mail.inbox", "fixed": {}},
 		{"label": "Read mail by ID", "command": "mail.read", "fields": [["mail_id", FIELD_INT, "Mail ID", ""]], "mutating": true, "duplicate_mail_read_id": true},
-		{"label": "Send mail · unavailable", "unavailable_reason": "The mail.send schema requires to_player_name, but the handler reads to or to_id."},
-		{"label": "Delete mail · unavailable", "unavailable_reason": "The mail.delete schema requires mail_id, but the handler reads an ids array."},
+		{"label": "Send mail", "command": "mail.send", "fields": [["to", FIELD_TEXT, "Recipient name", ""], ["subject", FIELD_TEXT, "Subject", ""], ["body", FIELD_TEXT, "Message body", ""]], "mutating": true},
+		{"label": "Delete mail", "command": "mail.delete", "fields": [["mail_id", FIELD_INT, "Mail ID", ""]], "mutating": true},
 		{"label": "Subscription catalogue", "command": "subscribe.catalog"},
 		{"label": "Add subscription", "command": "subscribe.add", "fields": [["topic", FIELD_TEXT, "Topic pattern (see subscription catalogue)", ""]], "mutating": true},
 		{"label": "Remove subscription", "command": "subscribe.remove", "fields": [["topic", FIELD_TEXT, "Topic to remove (see subscription list)", ""]], "mutating": true},
@@ -743,8 +743,6 @@ func _render_actions() -> void:
 		actions = COMMANDS.get(_active_category, [])
 		if _active_category == "COMMUNICATIONS":
 			_add_unavailable("Private chat is temporarily unavailable because the server's chat.send schema does not accept the recipient field its handler requires.")
-		elif _active_category == "MAIL & SUBSCRIPTIONS":
-			_add_unavailable("Mail sending/deletion are unavailable until their protocol schemas match the implemented handlers.")
 	if actions.is_empty():
 		_add_unavailable("No commands are available in this category.")
 		return
