@@ -82,7 +82,7 @@ BEGIN
   IF p_amount > 0 THEN
     INSERT INTO bank_transactions
       (account_id, tx_type, direction, amount, currency, tx_group_id, description, ts)
-    VALUES (v_account, 'INTEREST', 'CREDIT', p_amount, 'CRD',
+    VALUES (v_account, 'ADJUSTMENT', 'CREDIT', p_amount, 'CRD',
             'insurance-claim-' || p_claim_id, 'insurance claim payout', v_ts)
     RETURNING bank_transactions_id INTO v_tx_id;
   END IF;
