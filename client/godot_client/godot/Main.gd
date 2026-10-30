@@ -357,7 +357,8 @@ func _on_request_timed_out(request_id: String, command: String) -> void:
 		if timed_out.get("kind") == "port_refresh":
 			_pending_trade.clear()
 			gameplay_view.set_command_busy(false)
-			gameplay_view.show_notification("Trade completed, but the port inventory refresh timed out.")
+			gameplay_view.port_workflow.close_for_location_change()
+			gameplay_view.show_notification("Port inventory refresh timed out; reopen the port to obtain current data.")
 			return
 		if str(timed_out.get("command", "")) in ["trade.buy", "trade.sell"]:
 			_pending_trade["refresh_port_after"] = true
@@ -404,7 +405,8 @@ func _on_request_failed(request_id: String, command: String, result: Dictionary)
 		gameplay_view.set_command_busy(false)
 		if failed_operation.get("kind") == "port_refresh":
 			_pending_trade.clear()
-			gameplay_view.show_notification("Trade completed, but the port inventory could not be refreshed.")
+			gameplay_view.port_workflow.close_for_location_change()
+			gameplay_view.show_notification("Port inventory could not be refreshed; reopen the port to obtain current data.")
 			return
 		if failed_operation.get("kind") == "trade_quote":
 			_pending_trade.clear()
@@ -895,8 +897,16 @@ func _finish_trade_quote(response: Dictionary) -> void:
 		gameplay_view.show_notification("Trade quote refused · %s" % str(result.get("message", "Quote unavailable.")))
 		return
 	var trade_data: Dictionary = _pending_trade.duplicate(true)
+	var quote: Variant = result.get("data")
+	var unit_key := "buy_price" if trade_data.get("direction") == "buy" else "sell_price"
+	var total_key := "total_buy_price" if trade_data.get("direction") == "buy" else "total_sell_price"
+	if not quote is Dictionary or int(quote.get("port_id", 0)) != int(trade_data.get("port_id", 0)) or str(quote.get("commodity", "")).to_upper() != str(trade_data.get("commodity", "")).to_upper() or int(quote.get("quantity", 0)) != int(trade_data.get("quantity", 0)) or not (typeof(quote.get(unit_key)) in [TYPE_INT, TYPE_FLOAT]) or not (typeof(quote.get(total_key)) in [TYPE_INT, TYPE_FLOAT]) or float(quote.get(unit_key)) < 0 or float(quote.get(total_key)) < 0:
+		_pending_trade.clear()
+		gameplay_view.set_command_busy(false)
+		gameplay_view.show_notification("Trade quote was incomplete or did not match the request. No trade was made.")
+		return
 	gameplay_view.set_command_busy(false)
-	gameplay_view.confirm_trade_quote(str(trade_data["direction"]), str(trade_data["commodity"]), int(trade_data["quantity"]), int(trade_data["account"]), result.get("data", {}))
+	gameplay_view.confirm_trade_quote(str(trade_data["direction"]), str(trade_data["commodity"]), int(trade_data["quantity"]), int(trade_data["account"]), quote)
 
 func _on_trade_confirmation(accepted: bool) -> void:
 	if _pending_trade.is_empty():
@@ -932,7 +942,8 @@ func _request_port_refresh() -> void:
 	if request_id.is_empty():
 		_pending_trade.clear()
 		gameplay_view.set_command_busy(false)
-		gameplay_view.show_notification("Trade completed; the port inventory could not be refreshed.")
+		gameplay_view.port_workflow.close_for_location_change()
+		gameplay_view.show_notification("Port inventory could not be refreshed; reopen the port to obtain current data.")
 		return
 	_pending_game_commands[request_id] = {"kind": "port_refresh", "label": "Port refresh"}
 	_pending_trade.clear()
