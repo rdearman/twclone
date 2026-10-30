@@ -53,7 +53,7 @@ int repo_bank_player_balance_add(db_t *db, int player_id, long long delta, long 
 
     if (!db_tx_commit(db, &err)) return -err.code;
 
-    return 0;
+    return fetched_account_id;
 }
 
 int repo_bank_check_account_active(db_t *db, int player_id, int *exists_out) {

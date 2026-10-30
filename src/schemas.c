@@ -1089,7 +1089,6 @@ schema_trade_buy (void)
   json_array_append_new (required, json_string ("port_id"));
   json_array_append_new (required, json_string ("items"));
   json_array_append_new (required, json_string ("idempotency_key"));
-  json_array_append_new (required, json_string ("account"));
   json_array_append_new (required, json_string ("sector_id"));
   json_object_set_new (root, "required", required);
 
@@ -2228,7 +2227,6 @@ schema_trade_sell (void)
   json_array_append_new (required, json_string ("port_id"));
   json_array_append_new (required, json_string ("items"));
   json_array_append_new (required, json_string ("idempotency_key"));
-  json_array_append_new (required, json_string ("account"));
   json_object_set_new (root, "required", required);
 
 

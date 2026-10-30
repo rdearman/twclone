@@ -2977,7 +2977,7 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
     }
   data = json_object_get (root, "data");
   int account_type = db_get_player_pref_int (db, ctx->player_id,
-					     "trade.default_account",
+					     "trade.prefer_bank",
 					     0);	// Default to petty cash (0)
   json_t *jaccount = json_object_get (data, "account");
 
@@ -3810,7 +3810,7 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
     }
 
   int account_type = db_get_player_pref_int (db, ctx->player_id,
-					     "trade.default_account",
+					     "trade.prefer_bank",
 					     0);
 
   json_t *jaccount = json_object_get (data, "account");

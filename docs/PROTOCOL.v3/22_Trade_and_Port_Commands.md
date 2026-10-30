@@ -29,7 +29,9 @@ and black-market behavior follows their separately configured trade rows.
 *   `items`: Array of objects containing:
     *   `commodity`: Canonical 3-character code (e.g., "ORE", "ORG", "EQU").
     *   `quantity`: Integer amount.
-*   `account`: 0 for Petty Cash (default), 1 for Bank.
+*   `account`: Optional; 0 for petty cash, 1 for bank. If omitted, the
+    saved `player.set_trade_account_preference` is used, or petty cash if no
+    preference has been saved. An explicit account overrides the preference.
 
 Trade buy/sell requests require a non-empty `data.idempotency_key`. This is
 the established V2 trade contract. The server also accepts matching copies in

@@ -125,6 +125,56 @@ def run_trade(client, command: str, payload: dict) -> dict:
     return client.recv_next_non_notice()
 
 
+def assert_trade_account_preferences(conn, host, port, account, password, source, destination):
+    """Check settlement balances for defaults, saved preferences and overrides."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT player_id FROM players WHERE name=%s", (account,))
+        player_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance) "
+            "VALUES ('player', %s, 'CRD', 1000000) "
+            "ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance=1000000",
+            (player_id,),
+        )
+        cur.execute("UPDATE players SET credits=1000000 WHERE player_id=%s", (player_id,))
+        cur.execute("DELETE FROM player_prefs WHERE player_prefs_id=%s AND key='trade.prefer_bank'", (player_id,))
+    conn.commit()
+
+    def balances():
+        with conn.cursor() as cur:
+            cur.execute("SELECT credits FROM players WHERE player_id=%s", (player_id,))
+            cash = cur.fetchone()[0]
+            cur.execute("SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=%s AND currency='CRD'", (player_id,))
+            bank = cur.fetchone()[0]
+        return cash, bank
+
+    # Each buy supplies the cargo for the corresponding sell.
+    for preference, override, expected_account in ((None, None, 0), (1, None, 1),
+                                                    (0, None, 0), (1, 0, 0), (0, 1, 1)):
+        for command, location in (("trade.buy", source), ("trade.sell", destination)):
+            set_position(conn, account, location["sector_id"])
+            client = login_client(host, port, account, password)
+            try:
+                if preference is not None:
+                    response = run_trade(client, "player.set_trade_account_preference", {"preference": preference})
+                    if not status_ok(response):
+                        raise AssertionError(f"setting trade preference failed: {response!r}")
+                payload = {"sector_id": location["sector_id"], "port_id": location["port_id"],
+                           "idempotency_key": "account-" + secrets.token_hex(12),
+                           "items": [{"commodity": "ORE", "quantity": 1}]}
+                if override is not None:
+                    payload["account"] = override
+                before = balances()
+                response = run_trade(client, command, payload)
+                if not status_ok(response):
+                    raise AssertionError(f"{command} preference settlement failed: {response!r}")
+                after = balances()
+                if after[expected_account] == before[expected_account] or after[1 - expected_account] != before[1 - expected_account]:
+                    raise AssertionError(f"{command} preference={preference} override={override}: balances {before} -> {after}")
+            finally:
+                client.close()
+
+
 def assert_first_and_replay(conn, host: str, port: int, account: str,
                             password: str, command: str, sector: int,
                             port_id: int, commodity: str, key: str,
@@ -290,6 +340,7 @@ def main() -> None:
 
             routes = profitable_routes(market_rows(conn))
             _, _, _, source, destination = routes["ORE"]["best"]
+            assert_trade_account_preferences(conn, "127.0.0.1", client_port, account, password, source, destination)
             set_position(conn, account, source["sector_id"])
             assert_first_and_replay(
                 conn, "127.0.0.1", client_port, account, password, "trade.buy",
