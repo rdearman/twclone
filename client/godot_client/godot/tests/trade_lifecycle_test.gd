@@ -5,6 +5,7 @@ const Main = preload("res://Main.gd")
 class FakeAuth extends RefCounted:
 	var session_token := "test-session"
 	func is_authenticated() -> bool: return true
+	func invalidate(_reason: String) -> void: pass
 
 class FakeTransport extends RefCounted:
 	var calls: Array[Dictionary] = []
@@ -17,7 +18,10 @@ class FakeView extends Node:
 	var messages: Array[String] = []
 	var port_workflow = FakePort.new()
 	var ports: Array[Dictionary] = []
+	var quote_dismissed := false
 	func set_command_busy(_busy: bool) -> void: pass
+	func dismiss_trade_quote() -> void: quote_dismissed = true
+	func clear_planned_route() -> void: pass
 	func show_notification(message: String) -> void: messages.append(message)
 	func show_command_result(_label: String, _data: Dictionary) -> void: pass
 	func enter_port_workflow(data: Dictionary) -> void: ports.append(data)
@@ -33,6 +37,11 @@ class FakeRefresh extends RefCounted:
 	func refresh(_force := false, _domains: Array = []) -> bool:
 		calls += 1
 		return true
+	func handle_disconnect() -> void: pass
+
+class FakeLogin extends Control:
+	func set_overlay_mode(_enabled: bool) -> void: pass
+	func set_status(_message: String) -> void: pass
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -45,6 +54,7 @@ func _run() -> void:
 	main.auth_session = FakeAuth.new()
 	main.transport = transport
 	main.refresh_coordinator = FakeRefresh.new()
+	main.login_view = FakeLogin.new()
 	main._on_trade_requested("buy", 7, 17, "ORE", 3, 1)
 	assert(transport.calls.size() == 1 and transport.calls[0].command == "trade.quote")
 	assert(transport.calls[0].data == {"port_id": 7, "commodity": "ORE", "quantity": 3})
@@ -88,7 +98,15 @@ func _run() -> void:
 	main._pending_game_commands.clear()
 	await main._finish_command_reply({"status": "refused", "error": {"message": "Stock exhausted"}}, operation)
 	assert(main._pending_trade.is_empty() and view.messages.back().contains("Stock exhausted") and main.refresh_coordinator.calls == 1)
+	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
+	main._pending_game_commands.clear()
+	main._finish_trade_quote({"status": "ok", "data": {"port_id": 7, "commodity": "ORE", "quantity": 1, "buy_price": 3, "total_buy_price": 3}})
+	main._on_transport_disconnected("test")
+	assert(main._pending_trade.is_empty() and view.quote_dismissed)
+	main._on_trade_confirmation(true)
+	assert(transport.calls.size() == 10)
+	main.login_view.free()
 	view.free()
 	main.free()
-	print("Godot trade lifecycle tests: 13 passed")
+	print("Godot trade lifecycle tests: 15 passed")
 	quit(0)

@@ -22,7 +22,8 @@ func _run() -> void:
 	_check(trades == [{"direction": "buy", "port_id": 7, "sector_id": 17, "commodity": "ORE", "quantity": 3, "account": 0}, {"direction": "sell", "port_id": 7, "sector_id": 17, "commodity": "ORG", "quantity": 2, "account": 1}], "port trade signal lost its account or trade context")
 	view.confirm_trade_quote("buy", "ORE", 3, 1, {"total_buy_price": 120, "buy_price": 40})
 	_check(view.trade_quote_dialog.dialog_text.contains("120") and view.trade_quote_dialog.dialog_text.contains("Bank") and view.trade_quote_dialog.dialog_text.contains("Fees are not included"), "trade confirmation did not disclose the selected account and quote limitations")
-	view.trade_quote_dialog.hide()
+	view.dismiss_trade_quote()
+	_check(not view.trade_quote_dialog.visible, "disconnect did not dismiss the pending trade quote")
 	_check(commands is PanelContainer, "general commands are not a docked panel")
 	_check(commands.get_parent() == view.gameplay_body and view.gameplay_body.get_child(0) == commands, "command panel is not persistently placed on the left")
 	_check(is_equal_approx(view.toast_panel.anchor_left, 0.5) and is_equal_approx(view.toast_panel.anchor_right, 0.5), "notification ribbon is not centered at the bottom")
@@ -146,7 +147,7 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot gameplay view tests: 21 passed")
+		print("Godot gameplay view tests: 22 passed")
 		quit(0)
 	else:
 		for failure in failures:

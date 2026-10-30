@@ -1114,6 +1114,9 @@ func confirm_trade_quote(direction: String, commodity: String, quantity: int, ac
 	trade_quote_dialog.cancel_button_text = "CANCEL"
 	DialogLayout.popup(trade_quote_dialog, Vector2i(520, 280))
 
+func dismiss_trade_quote() -> void:
+	trade_quote_dialog.hide()
+
 func show_trade_routes(data: Dictionary) -> void:
 	if not is_instance_valid(trade_routes_dialog):
 		trade_routes_dialog = AcceptDialog.new()

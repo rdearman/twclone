@@ -176,6 +176,8 @@ func _on_transport_disconnected(reason: String) -> void:
 	_pending_registration_request_id = ""
 	_pending_game_commands.clear()
 	_pending_event_subscriptions.clear()
+	_pending_trade.clear()
+	gameplay_view.dismiss_trade_quote()
 	_route_running = false
 	_planned_route.clear()
 	_route_destination = 0
