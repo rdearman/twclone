@@ -4072,6 +4072,8 @@ def enter_ship_menu(ctx: Context):
             print(json.dumps(resp, ensure_ascii=False, indent=2))
 
             if resp.get("status") == "ok":
+                # Tow state belongs to the previous active ship, not the session.
+                ctx.state.pop("towing_ship_id", None)
                 player = _hud_rpc(ctx, "player.my_info", {})
                 if player.get("status") == "ok" and isinstance(player.get("data"), dict):
                     ctx.player_info = get_data(player)
@@ -5462,6 +5464,7 @@ def shipyard_upgrade_flow(ctx: Context):
     ctx.state["last_rpc"] = upgrade_resp
 
     if upgrade_resp.get("status") == "ok":
+        ctx.state.pop("towing_ship_id", None)
         print(f"Successfully upgraded to {new_ship_name}!")
         _pp(upgrade_resp)
         # The receipt contains the amount spent, not the resulting balances or ship.

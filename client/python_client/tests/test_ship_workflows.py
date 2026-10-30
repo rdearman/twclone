@@ -7,6 +7,7 @@ def test_shipyard_upgrade_refreshes_independently_and_preserves_refused_sector(
 ):
     old_sector = {"id": 7, "port": {"id": 3}}
     ctx = ctx_factory(sector=old_sector)
+    ctx.state["towing_ship_id"] = 88
     fake_conn.queue("shipyard.list", {"status": "ok", "data": {"available": [
         {"type_id": 2, "name": "Scout", "net_cost": 500, "eligible": True, "reasons": []},
     ]}})
@@ -26,6 +27,7 @@ def test_shipyard_upgrade_refreshes_independently_and_preserves_refused_sector(
     ]
     assert fake_conn.calls[1]["data"] == {"new_type_id": 2, "new_ship_name": "Scout One"}
     assert ctx.last_sector_desc == old_sector
+    assert "towing_ship_id" not in ctx.state
     output = capsys.readouterr().out
     assert "displayed credits may be stale" in output
     assert "displayed sector may be stale" in output
@@ -206,6 +208,7 @@ def test_claim_selected_ship_refreshes_independently_and_preserves_failed_sector
     sector = {"id": 7, "ships": [{"id": 20, "name": "Drifter", "owner": "derelict"}]}
     ctx = ctx_factory(sector=sector)
     ctx.player_info = {"player": {"ship_id": 10}}
+    ctx.state["towing_ship_id"] = 88
     fake_conn.queue("ship.claim", {"status": "ok", "data": {"ship": {"id": 20}}})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"ship_id": 20}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"hull": 73}}})
@@ -219,6 +222,7 @@ def test_claim_selected_ship_refreshes_independently_and_preserves_failed_sector
     assert [call["command"] for call in fake_conn.calls[1:]] == ["player.my_info", "ship.status", "move.describe_sector"]
     assert client.get_my_ship_id(fake_conn, ctx) == 20
     assert ctx.last_sector_desc == sector
+    assert "towing_ship_id" not in ctx.state
     assert "displayed sector may be stale" in capsys.readouterr().out
 
 
