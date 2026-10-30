@@ -174,7 +174,7 @@ broadcast_system_notice (int notice_id,
 			 time_t created_at, time_t expires_at)
 {
   json_t *data = json_object ();
-  if (!data || !json_is_object (data))
+  if (!data)
     return;
   json_object_set_new (data, "id", json_integer (notice_id));
   json_object_set_new (data, "title", json_string (title ? title : ""));
@@ -984,7 +984,7 @@ cmd_chat_send (client_ctx_t *ctx, json_t *root)
     return 0;
 
   json_t *data = json_object_get (root, "data");
-  if (!data)
+  if (!data || !json_is_object (data))
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing data");
       return 0;
