@@ -521,11 +521,20 @@ def cli_chat_send(ctx):
             print("Cancelled.")
             return
         r = ctx.conn.rpc("chat.send", {"to_player": to_player, "message": msg})
-    else:
+    elif scope == "global":
         r = ctx.conn.rpc("chat.broadcast", {"message": msg})
+    else:
+        print("Unknown scope; choose global or player.")
+        return
     ctx.state["last_rpc"] = r
     if r.get("status") == "ok":
         print("Message sent.")
+        history = ctx.conn.rpc("chat.history", {"limit": 20})
+        if history.get("status") == "ok" and isinstance(history.get("data"), dict):
+            messages = history["data"].get("messages", [])
+            ctx.state["chat_messages"] = [m for m in messages if isinstance(m, dict)]
+        else:
+            print("Warning: message sent, but chat history could not be refreshed.")
     else:
         err = (r.get("error") or {}).get("message") or r.get("status")
         print(f"Failed to send message: {err}")

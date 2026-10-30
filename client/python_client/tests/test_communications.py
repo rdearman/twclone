@@ -29,6 +29,52 @@ def test_chat_empty_and_malformed_history_are_safe(ctx_factory, fake_conn, capsy
     assert "{" not in out
 
 
+def test_private_chat_validates_recipient_and_refreshes_history(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("chat.send", {"status": "ok", "data": {"chat_id": 91}})
+    fake_conn.queue("chat.history", {"status": "ok", "data": {
+        "messages": [{"sender_name": "Me", "recipient_name": "Nova", "message": "Hello"}],
+    }})
+    answers = iter(["Hello", "player", "Nova"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    ctx = ctx_factory()
+
+    client.cli_chat_send(ctx)
+
+    assert fake_conn.calls == [
+        {"command": "chat.send", "data": {"to_player": "Nova", "message": "Hello"}},
+        {"command": "chat.history", "data": {"limit": 20}},
+    ]
+    assert ctx.state["chat_messages"][0]["recipient_name"] == "Nova"
+    assert "Message sent." in capsys.readouterr().out
+
+
+def test_private_chat_refusal_does_not_refresh_history(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("chat.send", {"status": "error", "error": {"message": "Recipient not found"}})
+    answers = iter(["Hello", "player", "Missing"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.cli_chat_send(ctx_factory())
+
+    assert fake_conn.calls == [{
+        "command": "chat.send", "data": {"to_player": "Missing", "message": "Hello"},
+    }]
+    assert "Recipient not found" in capsys.readouterr().out
+
+
+def test_chat_rejects_unknown_scope_before_rpc(ctx_factory, fake_conn, monkeypatch, capsys):
+    answers = iter(["Hello", "orbit"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    client.cli_chat_send(ctx_factory())
+
+    assert fake_conn.calls == []
+    assert "Unknown scope" in capsys.readouterr().out
+
+
 def test_mail_inbox_uses_display_index_and_unread_marker(ctx_factory, fake_conn, monkeypatch, capsys):
     fake_conn.queue("mail.inbox", {"status": "ok", "data": {"items": [
         {"id": 44, "sender_name": "Nova", "subject": "Hello", "sent_at": "now"},
