@@ -16,7 +16,7 @@ def test_shipyard_upgrade_refreshes_independently_and_preserves_refused_sector(
     fake_conn.queue("player.my_info", {"status": "refused", "error": {"message": "Unavailable"}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"hull": 100}}})
     fake_conn.queue("move.describe_sector", {"status": "refused", "error": {"message": "Unavailable"}})
-    answers = iter(["1", "Scout One"])
+    answers = iter(["1", "Scout One", "y"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
 
     client.shipyard_upgrade_flow(ctx)
@@ -39,7 +39,7 @@ def test_shipyard_upgrade_refusal_does_not_claim_success_or_change_state(
         {"type_id": 2, "name": "Scout", "net_cost": 500, "eligible": True, "reasons": []},
     ]}})
     fake_conn.queue("shipyard.upgrade", {"status": "refused", "error": {"message": "Insufficient credits"}})
-    answers = iter(["1", "Scout One"])
+    answers = iter(["1", "Scout One", "y"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
 
     client.shipyard_upgrade_flow(ctx)
@@ -49,6 +49,25 @@ def test_shipyard_upgrade_refusal_does_not_claim_success_or_change_state(
     output = capsys.readouterr().out
     assert "Insufficient credits" in output
     assert "Successfully upgraded" not in output
+
+
+def test_shipyard_upgrade_requires_confirmation_and_explains_tax(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory()
+    fake_conn.queue("shipyard.list", {"status": "ok", "data": {"available": [
+        {"type_id": 2, "name": "Scout", "net_cost": 500, "eligible": True, "reasons": []},
+    ]}})
+    answers = iter(["1", "Scout One", ""])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.shipyard_upgrade_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["shipyard.list"]
+    output = capsys.readouterr().out
+    assert "Net before tax: 500" in output
+    assert "excludes tax" in output
+    assert "no exchange was sent" in output
 
 
 def test_ship_card_displays_authoritative_hull_and_marks_older_server_field_missing():

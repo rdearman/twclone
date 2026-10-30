@@ -5400,7 +5400,7 @@ def shipyard_upgrade_flow(ctx: Context):
     for i, ship in enumerate(available_ships):
         eligible_status = "Eligible" if ship.get("eligible") else "Ineligible"
         reasons = f" ({', '.join(ship.get('reasons'))})" if ship.get("reasons") else ""
-        print(f"  {i+1}: {ship.get('name')} (Type ID: {ship.get('type_id')}) - Net Cost: {ship.get('net_cost')} cr - {eligible_status}{reasons}")
+        print(f"  {i+1}: {ship.get('name')} (Type ID: {ship.get('type_id')}) - Net before tax: {ship.get('net_cost')} cr - {eligible_status}{reasons}")
 
     try:
         choice = int(input("Enter number of ship to upgrade to: ").strip())
@@ -5420,6 +5420,11 @@ def shipyard_upgrade_flow(ctx: Context):
     new_ship_name = input(f"Enter new name for your {selected_ship.get('name')}: ").strip()
     if not new_ship_name:
         print("New ship name cannot be empty. Cancelled.")
+        return
+
+    print("The listed net cost excludes tax. The server recalculates the final charge when you exchange hulls.")
+    if input(f"Exchange your current hull for {selected_ship.get('name')} named {new_ship_name}? [y/N]: ").strip().lower() != "y":
+        print("Ship upgrade cancelled; no exchange was sent.")
         return
 
     payload = {
