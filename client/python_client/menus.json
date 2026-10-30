@@ -676,6 +676,13 @@
           }
         },
         {
+          "key": "u",
+          "label": "(U) Upgrade Ship Equipment",
+          "action": {
+            "pycall": "ship_upgrade_flow"
+          }
+        },
+        {
           "key": "q",
           "label": "(Q) Back to Ship's Computer",
           "action": {

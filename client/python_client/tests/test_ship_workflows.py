@@ -46,6 +46,34 @@ def test_transfer_cargo_refusal_does_not_refresh_or_claim_success(
     assert "Hold too small" in capsys.readouterr().out
 
 
+def test_ship_upgrade_confirms_contract_and_refreshes_ship(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("ship.upgrade", {"status": "ok", "data": {"upgrade_type": "shields"}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"shields": 12}}})
+    answers = iter(["shields", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.ship_upgrade_flow(ctx_factory())
+
+    assert fake_conn.calls == [
+        {"command": "ship.upgrade", "data": {"upgrade_type": "shields"}},
+        {"command": "ship.status", "data": {}},
+    ]
+    assert "confirmed by server" in capsys.readouterr().out
+
+
+def test_ship_upgrade_refusal_does_not_refresh(ctx_factory, fake_conn, monkeypatch, capsys):
+    fake_conn.queue("ship.upgrade", {"status": "error", "error": {"message": "Not docked"}})
+    answers = iter(["shields", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.ship_upgrade_flow(ctx_factory())
+
+    assert fake_conn.calls == [{"command": "ship.upgrade", "data": {"upgrade_type": "shields"}}]
+    assert "Not docked" in capsys.readouterr().out
+
+
 def test_shipyard_upgrade_refreshes_independently_and_preserves_refused_sector(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):

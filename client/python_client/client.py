@@ -4029,6 +4029,28 @@ def transfer_cargo_flow(ctx: Context):
         print("Warning: transfer succeeded, but the sector could not be refreshed.")
 
 
+@register("ship_upgrade_flow")
+def ship_upgrade_flow(ctx: Context):
+    """Request an equipment upgrade and reconcile the active ship."""
+    upgrade_type = input("Upgrade type (Enter to cancel): ").strip()
+    if not upgrade_type:
+        print("Ship upgrade cancelled.")
+        return
+    if input(f"Apply ship upgrade '{upgrade_type}'? [y/N]: ").strip().lower() != "y":
+        print("Ship upgrade cancelled.")
+        return
+    response = ctx.conn.rpc("ship.upgrade", {"upgrade_type": upgrade_type})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Ship upgrade refused or failed:")
+        _pp(response)
+        return
+    print("Ship upgrade confirmed by server.")
+    refreshed = _hud_rpc(ctx, "ship.status", {})
+    if refreshed.get("status") != "ok":
+        print("Warning: upgrade succeeded, but ship status could not be refreshed.")
+
+
 @register("enter_ship_menu")
 def enter_ship_menu(ctx: Context):
     d = ctx.last_sector_desc or {}

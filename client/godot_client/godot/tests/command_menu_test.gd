@@ -441,6 +441,14 @@ func _run() -> void:
 	(menu._form_fields["quantity"] as LineEdit).text = "3"
 	menu._submit_form()
 	_check(captured.back()["command"] == "ship.transfer_cargo" and captured.back()["data"] == {"commodity_id": 2, "quantity": 3, "target_ship_id": 61}, "cargo transfer did not bind target ship and canonical fields")
+	menu._active_category = "COMPUTER"
+	menu._render_actions()
+	var upgrade_button := _action_button(menu, "Upgrade ship equipment")
+	_check(upgrade_button != null and not upgrade_button.disabled, "ship equipment upgrade stayed unavailable")
+	menu._choose_action({"label": "Upgrade ship equipment", "command": "ship.upgrade", "fields": [["upgrade_type", "text", "Upgrade type", ""]], "mutating": true})
+	(menu._form_fields["upgrade_type"] as LineEdit).text = "shields"
+	menu._submit_form()
+	_check(captured.back()["command"] == "ship.upgrade" and captured.back()["data"] == {"upgrade_type": "shields"}, "ship upgrade did not use the canonical upgrade_type field")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
