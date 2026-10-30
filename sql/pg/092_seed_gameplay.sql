@@ -164,7 +164,11 @@ BEGIN
         FROM
             bank_accounts
         WHERE
-            bank_accounts_id = NEW.account_id;
+            bank_accounts_id = NEW.account_id
+        FOR UPDATE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'BANK_ACCOUNT_NOT_FOUND';
+        END IF;
         IF (current_bal - NEW.amount) < 0 THEN
             RAISE EXCEPTION 'BANK_INSUFFICIENT_FUNDS';
         END IF;
@@ -575,4 +579,3 @@ INSERT INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VA
   ('daily_corp_tax', 'daily@05:00Z', NULL, now(), TRUE, NULL),
   ('citadel_construction_reap', 'every:1m', NULL, now(), TRUE, NULL)
 ON CONFLICT (name) DO NOTHING;
-
