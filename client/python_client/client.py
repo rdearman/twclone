@@ -3791,8 +3791,8 @@ def help_main(ctx: Context):
     print("C: Ship's computer   G: Comms and events   N: News")
     print("O: Corporation   U: User settings   H: Help")
 
-@register("rankings_unavailable_flow")
-def rankings_unavailable_flow(ctx: Context):
+@register("rankings_flow")
+def rankings_flow(ctx: Context):
     """Display the server-authoritative player rankings."""
     response = ctx.conn.rpc("player.rankings", {"limit": 10})
     ctx.state["last_rpc"] = response
