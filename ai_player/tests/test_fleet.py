@@ -33,6 +33,23 @@ def test_player_configs_require_independent_identity_and_credentials(tmp_path):
         fleet.load_player_configs(tmp_path, 3)
 
 
+def test_acceptance_manifest_is_credential_free_and_deterministic_by_default(tmp_path):
+    _write_config(tmp_path, "one", "qa_one", "secret-one")
+    _write_config(tmp_path, "two", "qa_two", "secret-two")
+    players = fleet.load_player_configs(tmp_path, 2)
+
+    manifest = fleet.acceptance_manifest(players)
+
+    assert manifest == {
+        "requested_players": 2,
+        "identities": ["qa_one", "qa_two"],
+        "strategy_modes": ["deterministic", "deterministic"],
+        "deterministic": True,
+        "credentials_unique": True,
+    }
+    assert "secret-one" not in json.dumps(manifest)
+
+
 def test_runtime_configs_isolate_state_logs_and_qa_reports(tmp_path):
     source = tmp_path / "source"
     source.mkdir()

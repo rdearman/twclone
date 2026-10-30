@@ -66,6 +66,19 @@ def load_player_configs(config_dir: Path, count: int) -> list[tuple[Path, dict[s
     return players
 
 
+def acceptance_manifest(players: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
+    """Return a credential-free preflight manifest for an acceptance cohort."""
+    identities = [config["player_username"] for _, config in players]
+    modes = [config.get("strategy_mode", "deterministic") for _, config in players]
+    return {
+        "requested_players": len(players),
+        "identities": identities,
+        "strategy_modes": modes,
+        "deterministic": all(mode == "deterministic" for mode in modes),
+        "credentials_unique": len({config["player_password"] for _, config in players}) == len(players),
+    }
+
+
 def prepare_runtime_configs(
     players: list[tuple[Path, dict[str, Any]]], run_root: Path
 ) -> list[dict[str, Any]]:
@@ -331,6 +344,8 @@ def main() -> int:
     parser.add_argument("--max-concurrent", type=int, default=DEFAULT_MAX_CONCURRENT)
     parser.add_argument("--duration-seconds", type=float, default=DEFAULT_DURATION_SECONDS)
     parser.add_argument("--python", default=sys.executable)
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Validate configs and print a credential-free acceptance manifest")
     args = parser.parse_args()
 
     try:
@@ -342,9 +357,14 @@ def main() -> int:
             if args.count is not None and args.count != len(prepared):
                 raise FleetConfigError("--count must match the saved cohort size when resuming")
         else:
-            if not args.config_dir or not args.run_root or args.count is None:
-                raise FleetConfigError("new runs require --config-dir, --count and --run-root")
+            if not args.config_dir or args.count is None:
+                raise FleetConfigError("new runs require --config-dir and --count")
             source_players = load_player_configs(args.config_dir, args.count)
+            if args.dry_run:
+                print(json.dumps(acceptance_manifest(source_players), indent=2))
+                return 0
+            if not args.run_root:
+                raise FleetConfigError("new runs require --run-root unless --dry-run is used")
             run_id = f"fleet-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
             run_root = args.run_root.resolve() / run_id
             run_root.mkdir(parents=True, exist_ok=False)

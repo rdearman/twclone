@@ -20,6 +20,17 @@ python3 ai_player/fleet.py \
   --run-root /tmp/twclone-ai-qa
 ```
 
+Before starting anything, validate a five-player set without creating runtime
+directories or contacting the game server:
+
+```sh
+python3 ai_player/fleet.py --config-dir /secure/qa-player-configs \
+  --count 5 --dry-run
+```
+
+The manifest lists only identities, strategy modes, and uniqueness checks. A
+successful preflight is configuration evidence, not live acceptance evidence.
+
 The selected configs are copied into a new private run directory. Each player
 gets its own `config.json`, state file, log, QA report directory and process
 group. The runner caps a cohort at 50 players and defaults to five concurrent
