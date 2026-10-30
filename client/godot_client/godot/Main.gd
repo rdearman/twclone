@@ -418,6 +418,9 @@ func _on_request_failed(request_id: String, command: String, result: Dictionary)
 			return
 		if str(failed_operation.get("command", "")) in ["trade.buy", "trade.sell"]:
 			_pending_trade.clear()
+			if result.get("kind") == "disconnected":
+				gameplay_view.show_notification("Trade outcome is uncertain after disconnect. Reconnect to refresh your balances and cargo before trading again.")
+				return
 		gameplay_view.show_notification("%s failed · %s" % [str(failed_operation.get("label", command)), str(result.get("message", "request failed"))])
 
 func _on_refresh_failed(snapshot: Dictionary) -> void:

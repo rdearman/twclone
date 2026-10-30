@@ -43,6 +43,7 @@ class FakeRefresh extends RefCounted:
 		calls += 1
 		return true
 	func handle_disconnect() -> void: pass
+	func accepts_request(_request_id: String) -> bool: return false
 
 class FakeLogin extends Control:
 	func set_overlay_mode(_enabled: bool) -> void: pass
@@ -113,8 +114,14 @@ func _run() -> void:
 	assert(main._pending_trade.is_empty() and view.quote_dismissed and view.port_workflow.closed and not view.command_menu.tavern_access)
 	main._on_trade_confirmation(true)
 	assert(transport.calls.size() == 10)
+	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
+	main._pending_game_commands.clear()
+	main._finish_trade_quote({"status": "ok", "data": {"port_id": 7, "commodity": "ORE", "quantity": 1, "buy_price": 3, "total_buy_price": 3}})
+	main._on_trade_confirmation(true)
+	main._on_request_failed("request-12", "trade.buy", {"kind": "disconnected", "message": "Connection lost"})
+	assert(main._pending_trade.is_empty() and view.messages.back().contains("outcome is uncertain"))
 	main.login_view.free()
 	view.free()
 	main.free()
-	print("Godot trade lifecycle tests: 17 passed")
+	print("Godot trade lifecycle tests: 18 passed")
 	quit(0)
