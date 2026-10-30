@@ -1037,9 +1037,65 @@ rollback:
 int
 cmd_ship_list (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED, "Not implemented: ship.list");
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Authentication required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  if (data && !json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+                           "data must be an object");
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  db_res_t *res = NULL;
+  db_error_t err;
+  const char *sql_template =
+    "SELECT s.ship_id, s.name, s.type_id, s.sector_id, s.holds, "
+    "s.fighters, s.shields, (p.ship_id = s.ship_id) AS active "
+    "FROM ships s JOIN ship_ownership o ON o.ship_id = s.ship_id "
+    "LEFT JOIN players p ON p.player_id = o.player_id "
+    "WHERE o.player_id = {1} AND o.is_primary = {2} "
+    "ORDER BY s.ship_id ASC;";
+  char sql[1024];
+  if (sql_build (db, sql_template, sql, sizeof sql) != 0
+      || !db_query (db, sql,
+                    (db_bind_t[]){db_bind_i64 (ctx->player_id),
+                                  db_bind_bool (true)}, 2, &res, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Unable to list ships");
+      return 0;
+    }
+  json_t *payload = json_object ();
+  json_t *ships = json_array ();
+  while (db_res_step (res, &err))
+    {
+      json_t *ship = json_object ();
+      const char *name = db_res_col_text (res, 1, &err);
+      json_object_set_new (ship, "ship_id",
+                           json_integer (db_res_col_i32 (res, 0, &err)));
+      json_object_set_new (ship, "name", json_string (name ? name : ""));
+      json_object_set_new (ship, "type_id",
+                           json_integer (db_res_col_i32 (res, 2, &err)));
+      json_object_set_new (ship, "sector_id",
+                           json_integer (db_res_col_i32 (res, 3, &err)));
+      json_object_set_new (ship, "holds",
+                           json_integer (db_res_col_i32 (res, 4, &err)));
+      json_object_set_new (ship, "fighters",
+                           json_integer (db_res_col_i32 (res, 5, &err)));
+      json_object_set_new (ship, "shields",
+                           json_integer (db_res_col_i32 (res, 6, &err)));
+      json_object_set_new (ship, "active",
+                           json_boolean (db_res_col_int (res, 7, &err)));
+      json_array_append_new (ships, ship);
+    }
+  db_res_finalize (res);
+  json_object_set_new (payload, "ships", ships);
+  send_response_ok_take (ctx, root, "ship.list.response", &payload);
   return 0;
 }
 

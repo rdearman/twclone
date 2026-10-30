@@ -27,7 +27,7 @@
     { "name": "ship.info - Negative (No Auth)", "command": "ship.info", "data": { "ship_id": 9001 }, "expect": { "status": "error", "error_code": 401 } },
     { "name": "ship.jettison - Positive", "command": "ship.jettison", "data": { "commodity": "ORE", "quantity": 1 }, "user": "trader_player_1", "expect": { "status": "ok" } },
     { "name": "ship.jettison - Negative (No Auth)", "command": "ship.jettison", "data": { "commodity": "ORE", "quantity": 1 }, "expect": { "status": "error", "error_code": 401 } },
-    { "name": "ship.list - Positive", "command": "ship.list", "user": "trader_player_1", "expect": { "status": "error", "error_code": 502 } },
+    { "name": "ship.list - Positive", "command": "ship.list", "user": "trader_player_1", "expect": { "status": "ok" } },
     { "name": "ship.list - Negative (No Auth)", "command": "ship.list", "expect": { "status": "error", "error_code": 401 } },
     { "name": "ship.sell - Positive", "command": "ship.sell", "data": { "ship_id": 9001 }, "user": "trader_player_1", "expect": { "status": "error", "error_code": 502 } },
     { "name": "ship.sell - Negative (No Auth)", "command": "ship.sell", "data": { "ship_id": 9001 }, "expect": { "status": "error", "error_code": 401 } },

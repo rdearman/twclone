@@ -50,7 +50,14 @@ substituting a default value.
 - Possible commodities: `ORE`, `EQU`, `ORG`, `COL`, `SLV`, `DRG`, `WPN`
 - Empty cargo holds are not included in the array
 
-## 2. Towing status
+## 2. Ship list
+
+`ship.list` takes an empty object and returns `ship.list.response` with a
+`ships` array containing the caller's primary-owned ships. Entries include
+`ship_id`, `name`, `type_id`, `sector_id`, `holds`, `fighters`, `shields`, and
+an `active` flag derived from the authoritative player record.
+
+## 3. Towing status
 
 ### `ship.tow.status`
 Returns the towing links for the authenticated player's active ship without
