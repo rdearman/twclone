@@ -34,6 +34,34 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "chat.send - Send private message by id",
+      "command": "chat.send",
+      "user": "chat_test_user1",
+      "data": { "to_id": "@{chat_user2_player_id}", "message": "Hello by id!" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "chat.send - Reject multiple recipients",
+      "command": "chat.send",
+      "user": "chat_test_user1",
+      "data": { "to_player": "chat_test_user2", "to_id": "@{chat_user2_player_id}", "message": "Ambiguous" },
+      "expect": { "status": "error", "error_code": 400 }
+    },
+    {
+      "name": "chat.send - Reject missing recipient",
+      "command": "chat.send",
+      "user": "chat_test_user1",
+      "data": { "message": "No recipient" },
+      "expect": { "status": "error", "error_code": 400 }
+    },
+    {
+      "name": "chat.send - Reject unknown field",
+      "command": "chat.send",
+      "user": "chat_test_user1",
+      "data": { "to_player": "chat_test_user2", "message": "Unknown field", "channel": "private" },
+      "expect": { "status": "error" }
+    },
+    {
       "name": "chat.broadcast - Send broadcast message",
       "command": "chat.broadcast",
       "user": "chat_test_user1",

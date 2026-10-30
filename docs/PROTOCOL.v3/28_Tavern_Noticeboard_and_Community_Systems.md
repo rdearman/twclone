@@ -22,10 +22,15 @@ whether expired entries are included. Pass `next_cursor` from the response as
 results. `created_at`, `expires_at`, and `seen_at` are returned as timestamp
 strings. Requests without pagination fields still return the first page.
 
-## 3. Community RPCs (Proposed)
+## 3. Community RPCs
 
 *   **`notes.*`**: Personal notes (see [20_Player_Commands.md](./20_Player_Commands.md)).
-*   **Chat**: (Future expansion for global/sector chat).
+*   **`chat.send`**: Sends a private message. The request is
+    `{ "message": "...", "to_player": "name" }` or
+    `{ "message": "...", "to_id": 123 }`; exactly one recipient field is
+    required. Unknown fields and an empty message are rejected. The server
+    returns an error when the recipient does not exist or is the caller.
+    `channel` is not part of the V3 private-message contract.
 
 ## 4. Mail and acknowledgements
 
