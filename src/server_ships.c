@@ -145,10 +145,97 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: " "ship.transfer_cargo");
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  int commodity_id = 0, quantity = 0, target_ship_id = 0;
+  if (!json_is_object (data)
+      || !json_get_int_flexible (data, "commodity_id", &commodity_id)
+      || !json_get_int_flexible (data, "quantity", &quantity)
+      || !json_get_int_flexible (data, "target_ship_id", &target_ship_id)
+      || commodity_id <= 0 || quantity <= 0 || target_ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "commodity_id, quantity and target_ship_id must be positive integers");
+      return 0;
+    }
+  int source_ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (source_ship_id <= 0 || target_ship_id == source_ship_id)
+    {
+      send_response_refused_steal (ctx, root, REF_TARGET_SHIP_INVALID,
+                                   "Target ship is invalid.", NULL);
+      return 0;
+    }
+  int source_sector = db_get_ship_sector_id (db, source_ship_id);
+  int target_sector = db_get_ship_sector_id (db, target_ship_id);
+  if (source_sector <= 0 || target_sector != source_sector)
+    {
+      send_response_refused_steal (ctx, root, REF_TARGET_SHIP_INVALID,
+                                   "Target ship is not in your sector.", NULL);
+      return 0;
+    }
+  int owner_id = 0, owner_corp = 0;
+  if (db_get_ship_owner_id (db, target_ship_id, &owner_id, &owner_corp) != 0
+      || owner_id != ctx->player_id)
+    {
+      send_response_refused_steal (ctx, root, REF_SHIP_NOT_OWNED_OR_PILOTED,
+                                   "You do not own the target ship.", NULL);
+      return 0;
+    }
+  char commodity[16] = {0};
+  db_res_t *commodity_res = NULL;
+  db_error_t err = {0};
+  const char *lookup = "SELECT code FROM commodities WHERE commodities_id = {1};";
+  char lookup_sql[256];
+  if (sql_build (db, lookup, lookup_sql, sizeof lookup_sql) != 0
+      || !db_query (db, lookup_sql, (db_bind_t[]){db_bind_i64 (commodity_id)}, 1,
+                    &commodity_res, &err)
+      || !db_res_step (commodity_res, &err))
+    {
+      if (commodity_res) db_res_finalize (commodity_res);
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Unknown commodity_id");
+      return 0;
+    }
+  const char *code = db_res_col_text (commodity_res, 0, &err);
+  if (!code || strlen (code) >= sizeof commodity)
+    {
+      db_res_finalize (commodity_res);
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid commodity");
+      return 0;
+    }
+  strlcpy (commodity, code, sizeof commodity);
+  db_res_finalize (commodity_res);
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB, "Could not start cargo transfer");
+      return 0;
+    }
+  int64_t source_after = 0, target_after = 0;
+  int rc = repo_cargo_add (db, source_ship_id, commodity, -(int64_t) quantity,
+                           &source_after);
+  if (rc == 0)
+    rc = repo_cargo_add (db, target_ship_id, commodity, quantity, &target_after);
+  if (rc != 0 || !db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      if (rc == ERR_HOLD_FULL)
+        send_response_refused_steal (ctx, root, ERR_HOLD_FULL,
+                                     "Target ship does not have enough cargo capacity.", NULL);
+      else if (rc == ERR_DB_MISUSE)
+        send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                     "Source ship does not have enough cargo.", NULL);
+      else
+        send_response_error (ctx, root, ERR_DB, "Cargo transfer failed");
+      return 0;
+    }
+  json_t *response = json_object ();
+  json_object_set_new (response, "source_ship_id", json_integer (source_ship_id));
+  json_object_set_new (response, "target_ship_id", json_integer (target_ship_id));
+  json_object_set_new (response, "commodity_id", json_integer (commodity_id));
+  json_object_set_new (response, "commodity_code", json_string (commodity));
+  json_object_set_new (response, "quantity", json_integer (quantity));
+  json_object_set_new (response, "source_remaining", json_integer (source_after));
+  json_object_set_new (response, "target_quantity", json_integer (target_after));
+  send_response_ok_take (ctx, root, "ship.cargo_transferred_v1", &response);
   return 0;
 }
 

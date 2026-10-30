@@ -110,9 +110,14 @@ Repair ship damage at a port.
 Upgrade ship equipment or capabilities.
 
 ### `ship.transfer_cargo`
-Currently refuses with `ERR_NOT_IMPLEMENTED` without changing ship state.
-Planetary stock transfers use the separate planetary commands; ship-to-ship
-transfer is not implemented by this command.
+Transfer cargo between two ships owned by the caller. The ships must be in
+the same sector. Request fields are `{ "commodity_id": 1, "quantity": 2,
+"target_ship_id": 37 }`; the source is the caller's active ship. The server
+resolves `commodity_id` through the commodity catalogue, checks source cargo
+and target holds, and applies both changes atomically. Success returns
+`ship.cargo_transferred_v1` with source/target IDs and resulting quantities.
+Planetary stock transfers use the separate planetary commands. Idempotency
+keys are not supported for this command.
 
 ### `ship.jettison`
 Dump cargo into space.

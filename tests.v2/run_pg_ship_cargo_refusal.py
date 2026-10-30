@@ -1,4 +1,4 @@
-"""Run unsupported cargo transfer regression against a disposable BigBang PostgreSQL world.
+"""Run ship cargo transfer regression against a disposable BigBang PostgreSQL world.
 
 Set CARGO_REFUSAL_QA_DATABASE (a new twclone_cargo_refusal_qa_* name),
 CARGO_REFUSAL_QA_ADMIN_DSN, and CARGO_REFUSAL_QA_APP_TEMPLATE (containing %DB%).
@@ -18,7 +18,7 @@ import time
 import psycopg2
 from psycopg2 import sql
 from test_pg_bigbang_economy_profit import free_port
-from test_pg_ship_cargo_refusal import check_cargo_refusal
+from test_pg_ship_cargo_transfer import check_cargo_transfer
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -104,7 +104,7 @@ def main() -> None:
                 raise AssertionError("disposable inspection player registration failed")
             registration.close()
 
-            check_cargo_refusal(conn, "127.0.0.1", client_port, account, password)
+            check_cargo_transfer(conn, "127.0.0.1", client_port, account, password)
 
     finally:
         if server is not None and server.poll() is None:
