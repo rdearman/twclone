@@ -904,13 +904,22 @@ func _finish_trade_quote(response: Dictionary) -> void:
 	var quote: Variant = result.get("data")
 	var unit_key := "buy_price" if trade_data.get("direction") == "buy" else "sell_price"
 	var total_key := "total_buy_price" if trade_data.get("direction") == "buy" else "total_sell_price"
-	if not quote is Dictionary or int(quote.get("port_id", 0)) != int(trade_data.get("port_id", 0)) or str(quote.get("commodity", "")).to_upper() != str(trade_data.get("commodity", "")).to_upper() or int(quote.get("quantity", 0)) != int(trade_data.get("quantity", 0)) or not (typeof(quote.get(unit_key)) in [TYPE_INT, TYPE_FLOAT]) or not (typeof(quote.get(total_key)) in [TYPE_INT, TYPE_FLOAT]) or float(quote.get(unit_key)) < 0 or float(quote.get(total_key)) < 0:
+	if not _valid_trade_quote(quote, trade_data, unit_key, total_key):
 		_pending_trade.clear()
 		gameplay_view.set_command_busy(false)
 		gameplay_view.show_notification("Trade quote was incomplete or did not match the request. No trade was made.")
 		return
 	gameplay_view.set_command_busy(false)
 	gameplay_view.confirm_trade_quote(str(trade_data["direction"]), str(trade_data["commodity"]), int(trade_data["quantity"]), int(trade_data["account"]), quote)
+
+func _valid_trade_quote(quote: Variant, trade_data: Dictionary, unit_key: String, total_key: String) -> bool:
+	if not quote is Dictionary:
+		return false
+	for key in ["port_id", "quantity", unit_key, total_key]:
+		var value: Variant = quote.get(key)
+		if not (typeof(value) in [TYPE_INT, TYPE_FLOAT]) or not is_finite(float(value)) or float(value) < 0:
+			return false
+	return float(quote["port_id"]) == float(trade_data.get("port_id", 0)) and float(quote["quantity"]) == float(trade_data.get("quantity", 0)) and quote.get("commodity") is String and quote["commodity"].to_upper() == str(trade_data.get("commodity", "")).to_upper()
 
 func _on_trade_confirmation(accepted: bool) -> void:
 	if _pending_trade.is_empty():
