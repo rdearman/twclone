@@ -1,5 +1,46 @@
 """Regression coverage for the user-facing planetary management flows."""
 import client
+from uuid import UUID
+
+
+def test_genesis_preserves_sector_when_refresh_is_refused(ctx_factory, fake_conn, monkeypatch, capsys):
+    sector = {"id": 17, "name": "Known sector"}
+    ctx = ctx_factory(sector=sector)
+    fake_conn.queue("planet.genesis_create", {"status": "ok", "data": {"planet_id": 77, "name": "Terra"}})
+    fake_conn.queue("ship.status", {"status": "refused", "error": {"message": "Unavailable"}})
+    fake_conn.queue("move.describe_sector", {"status": "refused", "error": {"message": "Unavailable"}})
+    answers = iter(["Terra", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.genesis_torpedo_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == [
+        "planet.genesis_create", "ship.status", "move.describe_sector",
+    ]
+    payload = fake_conn.calls[0]["data"]
+    assert {k: payload[k] for k in ("sector_id", "name", "owner_entity_type")} == {
+        "sector_id": 17, "name": "Terra", "owner_entity_type": "player",
+    }
+    assert UUID(payload["idempotency_key"]).version == 4
+    assert ctx.last_sector_desc == sector
+    output = capsys.readouterr().out
+    assert "displayed equipment may be stale" in output
+    assert "displayed sector may be stale" in output
+
+
+def test_genesis_refusal_preserves_sector_without_claiming_success(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory(sector={"id": 17})
+    fake_conn.queue("planet.genesis_create", {"status": "refused", "error": {"message": "No torpedoes"}})
+    answers = iter(["Terra", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.genesis_torpedo_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["planet.genesis_create"]
+    assert ctx.last_sector_desc == {"id": 17}
+    output = capsys.readouterr().out
+    assert "No torpedoes" in output
+    assert "successful" not in output
 
 
 def _planet(**overrides):

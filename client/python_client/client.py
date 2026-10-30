@@ -5609,7 +5609,8 @@ def genesis_torpedo_flow(ctx: Context):
     payload = {
         "sector_id": sector_id,
         "name": planet_name,
-        "owner_entity_type": "player" 
+        "owner_entity_type": "player",
+        "idempotency_key": str(uuid.uuid4()),
     }
 
     print("Firing Genesis Torpedo...")
@@ -5619,9 +5620,15 @@ def genesis_torpedo_flow(ctx: Context):
     if resp.get("status") == "ok":
         print(f"Genesis Torpedo successful! Planet '{planet_name}' created.")
         _pp(resp)
-        # Refresh sector info to show the new planet
+        # Genesis consumes ship equipment and changes the sector.
+        ship_resp = _hud_rpc(ctx, "ship.status", {})
+        if ship_resp.get("status") != "ok":
+            print("[Warning] Could not refresh ship status; displayed equipment may be stale.")
         new_sector = ctx.conn.rpc("move.describe_sector", {"sector_id": sector_id})
-        ctx.last_sector_desc = normalize_sector(get_data(new_sector))
+        if new_sector.get("status") == "ok" and isinstance(new_sector.get("data"), dict):
+            ctx.last_sector_desc = normalize_sector(get_data(new_sector))
+        else:
+            print("[Warning] Could not refresh the sector; displayed sector may be stale.")
     else:
         print(f"[Error] Genesis failed: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)
