@@ -90,6 +90,16 @@ def test_read_timeout_does_not_quarantine_gameplay(tmp_path):
     assert manager.get("uncertain_trade") is None
 
 
+def test_timed_out_warp_is_quarantined_for_late_reconciliation(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    quarantine_timed_out_trades(manager, [
+        ("warp-1", {"command": "move.warp", "data": {"to_sector_id": 42}}),
+    ])
+    assert manager.get("uncertain_warp") == {
+        "request_id": "warp-1", "command": "move.warp", "to_sector_id": 42,
+    }
+
+
 def test_pending_command_timeout_removes_only_expired_request(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.add_pending_command("old", {"command": "trade.buy"})
@@ -415,6 +425,39 @@ def test_valid_late_trade_receipt_reconciles_without_replay(tmp_path):
                       FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
     assert manager.get("uncertain_trade") is None
     assert manager.get("ship_info")["cargo"][0]["commodity"] == "ORE"
+
+
+def test_reordered_and_duplicate_trade_replies_do_not_replay_mutation(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("uncertain_trade", {
+        "request_id": "buy-1", "command": "trade.buy", "idempotency_key": "key-1",
+    })
+    manager.set("ship_info", {"cargo": []})
+    manager.set("player_info", {"player": {"credits": "1000"}})
+    manager.add_pending_command("other-1", {"command": "sector.info"})
+
+    receipt = {
+        "reply_to": "buy-1", "status": "ok", "type": "trade.buy_receipt_v1",
+        "data": {
+            "port_id": 1,
+            "lines": [{"commodity": "ORE", "quantity": 1, "unit_price": 100, "value": "100"}],
+            "credits_remaining": "900",
+        },
+    }
+    process_responses(
+        [{"reply_to": "other-1", "status": "ok", "type": "sector.info", "data": {}}, receipt],
+        FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+    assert manager.get("uncertain_trade") is None
+    expected_cargo = [{"commodity": "ORE", "quantity": 1, "purchase_price": 100.0, "origin_port_id": 1}]
+    assert manager.get("ship_info")["cargo"] == expected_cargo
+
+    # A duplicated late frame has no pending request or uncertainty marker and
+    # must be discarded instead of applying the receipt a second time.
+    process_responses(
+        [receipt], FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+    assert manager.get("ship_info")["cargo"] == expected_cargo
 
 
 def test_malformed_late_trade_receipt_keeps_uncertainty_marker(tmp_path):

@@ -1009,13 +1009,23 @@ def select_strategy_plan(game_state, config, state_manager, planner):
 
 
 def quarantine_timed_out_trades(state_manager, expired_commands):
-    """Persist an ambiguous trade outcome until an operator resolves it."""
+    """Persist ambiguous mutation outcomes until they can be reconciled."""
     for request_id, command in expired_commands:
         if command.get("command") in ("trade.buy", "trade.sell"):
             if (state_manager.get("uncertain_trade") or {}).get("request_id") == request_id:
                 return
             state_manager.set("uncertain_trade", {
                 "request_id": request_id, "command": command["command"],
+            })
+            return
+        if command.get("command") == "move.warp":
+            if (state_manager.get("uncertain_warp") or {}).get("request_id") == request_id:
+                return
+            data = command.get("data") or {}
+            state_manager.set("uncertain_warp", {
+                "request_id": request_id,
+                "command": "move.warp",
+                "to_sector_id": data.get("to_sector_id"),
             })
             return
 
