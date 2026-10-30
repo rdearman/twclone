@@ -731,12 +731,12 @@ func _render_actions() -> void:
 			if current_sector_id >= 1 and current_sector_id <= 10:
 				attack_action["unavailable_reason"] = "Attacks are disabled in protected FedSpace sectors 1–10."
 			actions = [
+				{"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"},
 				attack_action,
 				{"label": "Claim this ship · server verifies eligibility", "command": "ship.claim", "context_id": "ship_id", "mutating": true},
 				{"label": "Tow this ship · requires owned, unpiloted vessel", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true},
 			]
 		_add_unavailable("Private messages need a server handler/schema fix: chat.send currently has no compatible recipient field.")
-		_add_unavailable("Inspection details are unavailable: the current ship.inspect handler ignores the selected ship ID and returns a sector list.")
 	elif _active_category == "PINNED":
 		actions = _pinned_actions
 	else:

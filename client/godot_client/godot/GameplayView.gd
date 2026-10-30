@@ -887,7 +887,10 @@ func _add_object_actions(kind: String, object: Dictionary) -> void:
 				_add_context_unavailable("SHIP ACTIONS · ID UNAVAILABLE", "This ship has no server identifier; attack, claim and tow are unavailable.")
 			else:
 				_add_context_unavailable("ACTIVE SHIP · no target actions", "Your active ship is shown in the HUD and cannot be attacked, claimed or towed as a sector target.")
-			_add_context_unavailable("INSPECT SHIP DETAILS · unavailable", "ship.inspect requires a ship ID in its schema, but the handler ignores it and returns sector-wide ships.")
+			if target_ship_id > 0:
+				_add_context_button("INSPECT SHIP DETAILS", false, _dispatch_context_action.bind({"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"}, object))
+			else:
+				_add_context_unavailable("INSPECT SHIP DETAILS · ID UNAVAILABLE", "The selected ship has no server identifier, so inspection is unavailable.")
 			_add_context_unavailable("PRIVATE MESSAGE OWNER · unavailable", "The chat.send schema rejects the recipient fields required by its handler.")
 
 func _add_context_button(label: String, primary: bool, callback: Callable) -> Button:

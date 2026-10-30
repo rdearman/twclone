@@ -410,6 +410,14 @@ func _run() -> void:
 	for actions in CommandMenu.COMMANDS.values():
 		for action in actions:
 			_check(not unsupported_ship_commands.has(str(action.get("command", ""))), "command menu exposed an unimplemented ship command")
+	menu._selection = {"kind": "ship", "name": "Unidentified vessel", "data": {"ship_id": 61}}
+	menu._active_category = "SHIP"
+	menu._render_actions()
+	var inspect_action_button := _action_button(menu, "Inspect ship details")
+	_check(inspect_action_button != null and not inspect_action_button.disabled, "selected ship inspection stayed unavailable despite the server contract")
+	var before_inspect := captured.size()
+	menu._choose_action({"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"})
+	_check(captured.size() == before_inspect + 1 and captured.back()["command"] == "ship.inspect" and captured.back()["data"] == {"ship_id": 61}, "ship inspection did not bind the selected ship ID")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():
