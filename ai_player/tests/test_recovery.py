@@ -347,3 +347,36 @@ def test_correlated_trade_receipt_resolves_uncertain_marker(tmp_path):
                       FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
     assert manager.get("uncertain_trade") is None
     assert manager.get("player_info")["player"]["credits"] == "900"
+
+
+def test_interrupted_warp_stays_quarantined_after_restart_and_late_reply(tmp_path):
+    path = tmp_path / "state.json"
+    manager = StateManager(str(path), {})
+    marker = {"request_id": "warp-1", "command": "move.warp", "to_sector_id": 2}
+    manager.set("uncertain_warp", marker)
+    manager.add_pending_command("warp-1", {"command": "move.warp", "data": {"to_sector_id": 2}})
+    manager.clear_connection_state()
+    manager = StateManager(str(path), {})
+    process_responses([{"reply_to": "warp-1", "status": "ok", "type": "move.result",
+                        "data": {"to_sector_id": 2}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_warp") == marker
+    assert manager.get("player_location_sector") is None
+
+
+def test_warp_quarantine_requires_matching_correlated_destination(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    marker = {"request_id": "warp-1", "command": "move.warp", "to_sector_id": 2}
+    manager.set("uncertain_warp", marker)
+    manager.add_pending_command("warp-1", {"command": "move.warp", "data": {"to_sector_id": 2}})
+    process_responses([{"reply_to": "warp-1", "status": "ok", "type": "move.result",
+                        "data": {"to_sector_id": 3}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_warp") == marker
+
+    manager.add_pending_command("warp-1", {"command": "move.warp", "data": {"to_sector_id": 2}})
+    process_responses([{"reply_to": "warp-1", "status": "ok", "type": "move.result",
+                        "data": {"to_sector_id": 2}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_warp") is None
+    assert manager.get("player_location_sector") == 2

@@ -39,5 +39,8 @@ using authoritative transaction evidence. The controller persists an
 `uncertain_trade` marker before sending a trade and pauses gameplay if no
 recognized receipt or refusal resolves it, including after restart. Once the operator has established the outcome, preserve the
 evidence and remove that marker from the private player state before resuming.
+The same rule applies to `uncertain_warp` for a movement request. Other
+mutations are not covered by these markers and require operator review after an
+interruption.
 Keep transcripts and expected/observed values for reproducible defects, and
 classify incomplete evidence separately from a confirmed failure.

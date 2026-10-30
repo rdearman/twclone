@@ -1375,6 +1375,11 @@ def main(config_path="config.json"):
                 time.sleep(10)
                 continue
 
+            if game_state.get("uncertain_warp"):
+                logger.error("Warp outcome is uncertain; gameplay is paused pending operator reconciliation.")
+                time.sleep(10)
+                continue
+
             # Reconcile a server-persisted autopilot route after each login.
             if ("move.autopilot.status" in game_state.get("server_commands", [])
                     and not game_state.get("autopilot_status_checked", False)):
@@ -2247,11 +2252,19 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
             uncertain = state_manager.get("uncertain_trade") or {}
             expected_receipt = {"trade.buy": "trade.buy_receipt_v1",
                                 "trade.sell": "trade.sell_receipt_v1"}.get(command_name)
-            if (expected_receipt and uncertain.get("request_id") == request_id
+            if (expected_receipt and isinstance(uncertain, dict) and uncertain.get("request_id") == request_id
                     and ((response.get("status") == "ok" and response_type == expected_receipt
                           and response_data.get("lines") and response_data.get("credits_remaining") is not None)
                          or response.get("status") == "refused")):
                 state_manager.set("uncertain_trade", None)
+
+            warp = state_manager.get("uncertain_warp") or {}
+            if (command_name == "move.warp" and isinstance(warp, dict) and warp.get("request_id") == request_id
+                    and ((response.get("status") == "ok" and response_type == "move.result"
+                          and response_data.get("to_sector_id") is not None
+                          and str(response_data["to_sector_id"]) == str(warp.get("to_sector_id")))
+                         or response.get("status") == "refused")):
+                state_manager.set("uncertain_warp", None)
 
         # In live audit mode, verify every successful movement/trade against
         # fresh public player and ship reads. Refusals are logged as refusals
