@@ -31,6 +31,17 @@ python3 ai_player/fleet.py --config-dir /secure/qa-player-configs \
 The manifest lists only identities, strategy modes, and uniqueness checks. A
 successful preflight is configuration evidence, not live acceptance evidence.
 
+The offline five-player protocol fixture is run with:
+
+```sh
+PYTHONPATH=ai_player python3 -m pytest -q ai_player/tests/test_offline_acceptance.py
+```
+
+It uses five isolated state files and in-memory protocol peers, exercises buy,
+warp and sell receipts, and includes one refused movement plus one interrupted
+trade reconciliation. Its results are deterministic fixture evidence and do
+not qualify live multi-player acceptance.
+
 The selected configs are copied into a new private run directory. Each player
 gets its own `config.json`, state file, log, QA report directory and process
 group. The runner caps a cohort at 50 players and defaults to five concurrent
