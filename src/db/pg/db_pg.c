@@ -444,11 +444,15 @@ pg_ship_repair_atomic(db_t *db,
     }
 
   const char *sql =
-    "WITH player AS ( "
+    "WITH target_ship AS ( "
+    "  SELECT ship_id FROM ships WHERE ship_id = $3 FOR UPDATE "
+    "), player AS ( "
     "  UPDATE players "
     "     SET credits = credits - $1 "
     "   WHERE player_id = $2 "
+    "     AND ship_id = $3 "
     "     AND credits >= $1 "
+    "     AND EXISTS (SELECT 1 FROM target_ship) "
     "   RETURNING credits "
     "), ship AS ( "
     "  UPDATE ships "
