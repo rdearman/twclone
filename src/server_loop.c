@@ -138,14 +138,99 @@ monotonic_millis (void)
 }
 
 /* --------------------------------------------------------------------------
-   Stubs for later work.
+   Insurance commands.  Monetary and claim state changes are delegated to
+   PostgreSQL routines so the server never performs a partial settlement.
    -------------------------------------------------------------------------- */
+
+static int
+insurance_result (db_res_t *res, int *code_out, char **message_out,
+                  int64_t *id_out)
+{
+  db_error_t err = {0};
+  if (!res || !db_res_step (res, &err))
+    return ERR_DB_QUERY_FAILED;
+  if (code_out) *code_out = db_res_col_i32 (res, 0, &err);
+  if (message_out)
+    {
+      const char *message = db_res_col_text (res, 1, &err);
+      *message_out = message ? strdup (message) : strdup ("");
+    }
+  if (id_out) *id_out = db_res_col_i64 (res, 2, &err);
+  return 0;
+}
+
+static int
+insurance_subject_owned (db_t *db, const char *subject_type, int64_t subject_id,
+                         int64_t player_id)
+{
+  const char *query = NULL;
+  if (strcmp (subject_type, "ship") == 0 || strcmp (subject_type, "cargo") == 0)
+    query = "SELECT 1 FROM ship_ownership WHERE ship_id = {1} AND player_id = {2} AND is_primary = {3} LIMIT 1;";
+  else if (strcmp (subject_type, "planet") == 0)
+    query = "SELECT 1 FROM planets WHERE planet_id = {1} AND owner_id = {2} LIMIT 1;";
+  else
+    return 0;
+  char sql[512]; sql_build (db, query, sql, sizeof sql);
+  db_res_t *res = NULL; db_error_t err = {0};
+  db_bind_t binds[3] = {db_bind_i64 (subject_id), db_bind_i64 (player_id), db_bind_bool (true)};
+  int count = strcmp (subject_type, "planet") == 0 ? 2 : 3;
+  if (!db_query (db, sql, binds, count, &res, &err)) return -1;
+  int owned = db_res_step (res, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return owned;
+}
+
+static int
+insurance_claim_owned (db_t *db, int64_t claim_id, int64_t player_id)
+{
+  const char *query = "SELECT 1 FROM insurance_claims c JOIN insurance_policies p ON p.insurance_policies_id = c.policy_id WHERE c.insurance_claims_id = {1} AND p.holder_type = {2} AND p.holder_id = {3} LIMIT 1;";
+  char sql[512]; sql_build (db, query, sql, sizeof sql);
+  db_res_t *res = NULL; db_error_t err = {0};
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (claim_id), db_bind_text ("player"), db_bind_i64 (player_id)}, 3, &res, &err)) return -1;
+  int owned = db_res_step (res, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return owned;
+}
 
 int
 cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
 {
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Authentication required");
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  char sql[512];
+  sql_build (db, "SELECT insurance_policies_id, subject_type, subject_id, premium, payout, start_ts, expiry_ts, active FROM insurance_policies WHERE holder_type = {1} AND holder_id = {2} ORDER BY insurance_policies_id DESC;", sql, sizeof sql);
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_text ("player"), db_bind_i64 (ctx->player_id)}, 2, &res, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Unable to list insurance policies");
+      return 0;
+    }
   json_t *payload = json_object ();
-  json_object_set_new (payload, "policies", json_array ());
+  json_t *policies = json_array ();
+  while (db_res_step (res, &err))
+    {
+      json_t *policy = json_object ();
+      const char *subject = db_res_col_text (res, 1, &err);
+      const char *start = db_res_col_text (res, 5, &err);
+      const char *expiry = db_res_col_text (res, 6, &err);
+      json_object_set_new (policy, "policy_id", json_integer (db_res_col_i64 (res, 0, &err)));
+      json_object_set_new (policy, "subject_type", json_string (subject ? subject : ""));
+      json_object_set_new (policy, "subject_id", json_integer (db_res_col_i64 (res, 2, &err)));
+      json_object_set_new (policy, "premium", json_integer (db_res_col_i64 (res, 3, &err)));
+      json_object_set_new (policy, "payout", json_integer (db_res_col_i64 (res, 4, &err)));
+      json_object_set_new (policy, "start_ts", json_string (start ? start : ""));
+      if (expiry) json_object_set_new (policy, "expiry_ts", json_string (expiry));
+      json_object_set_new (policy, "active", json_boolean (db_res_col_int (res, 7, &err)));
+      json_array_append_new (policies, policy);
+    }
+  db_res_finalize (res);
+  json_object_set_new (payload, "policies", policies);
   send_response_ok_take (ctx, root, "insurance.policies.list.response",
 			 &payload);
   return 0;
@@ -154,20 +239,72 @@ cmd_insurance_policies_list (client_ctx_t *ctx, json_t *root)
 int
 cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
 {
-  json_t *payload = json_object ();
-  json_object_set_new (payload, "status", json_string ("Policy purchased"));
-  send_response_ok_take (ctx, root, "insurance.policies.buy.response",
-			 &payload);
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  const char *subject_type = json_string_value (json_object_get (data, "subject_type"));
+  int64_t subject_id = json_integer_value (json_object_get (data, "subject_id"));
+  int64_t premium = json_integer_value (json_object_get (data, "premium"));
+  int64_t payout = json_integer_value (json_object_get (data, "payout"));
+  int64_t fund_id = json_integer_value (json_object_get (data, "fund_id"));
+  int duration = (int) json_integer_value (json_object_get (data, "duration"));
+  if (!subject_type || subject_id <= 0 || premium < 0 || payout < 0 || fund_id <= 0 || duration <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "subject, premium, payout, fund_id and duration are required");
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  int owned = insurance_subject_owned (db, subject_type, subject_id, ctx->player_id);
+  if (owned < 0)
+    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Unable to validate insured subject"); return 0; }
+  if (!owned)
+    { send_response_error (ctx, root, ERR_PERMISSION_DENIED, "Insured subject is not owned by the player"); return 0; }
+  char start_ts[32], expiry_ts[32], sql[1024];
+  time_t now = time (NULL);
+  snprintf (start_ts, sizeof start_ts, "%lld", (long long) now);
+  snprintf (expiry_ts, sizeof expiry_ts, "%lld", (long long) now + duration);
+  sql_build (db, "SELECT * FROM insurance_buy_policy({1},{2},{3},{4},{5},{6},{7},{8},{9});", sql, sizeof sql);
+  db_res_t *res = NULL; db_error_t err = {0};
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_text ("player"), db_bind_i64 (ctx->player_id), db_bind_text (subject_type), db_bind_i64 (subject_id), db_bind_i64 (premium), db_bind_i64 (payout), db_bind_i64 (fund_id), db_bind_text (start_ts), db_bind_text (expiry_ts)}, 9, &res, &err))
+    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Insurance purchase failed"); return 0; }
+  int code = ERR_DB_QUERY_FAILED; int64_t policy_id = 0; char *message = NULL;
+  insurance_result (res, &code, &message, &policy_id); db_res_finalize (res);
+  if (code != 0) { send_response_error (ctx, root, code, message ? message : "Insurance purchase refused"); free (message); return 0; }
+  free (message);
+  json_t *payload = json_pack ("{s:I,s:s}", "policy_id", (json_int_t) policy_id, "status", "purchased");
+  send_response_ok_take (ctx, root, "insurance.policies.buy.response", &payload);
   return 0;
 }
 
 int
 cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
 {
-  json_t *payload = json_object ();
-  json_object_set_new (payload, "claim_id", json_integer (12345));
-  send_response_ok_take (ctx, root, "insurance.claim.file.response",
-			 &payload);
+  if (!ctx || ctx->player_id <= 0)
+    { send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required"); return 0; }
+  json_t *data = json_object_get (root, "data");
+  int64_t claim_id = json_integer_value (json_object_get (data, "claim_id"));
+  int64_t amount = json_integer_value (json_object_get (data, "amount"));
+  const char *event_id = json_string_value (json_object_get (data, "event_id"));
+  if (claim_id <= 0 || amount < 0 || !event_id || !*event_id)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "claim_id, event_id and amount are required"); return 0; }
+  db_t *db = game_db_get_handle (); char sql[512];
+  int owned = insurance_claim_owned (db, claim_id, ctx->player_id);
+  if (owned < 0) { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Unable to validate claim ownership"); return 0; }
+  if (!owned) { send_response_error (ctx, root, ERR_PERMISSION_DENIED, "Claim is not owned by the player"); return 0; }
+  sql_build (db, "SELECT * FROM insurance_settle_claim({1},{2},{3});", sql, sizeof sql);
+  db_res_t *res = NULL; db_error_t err = {0};
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (claim_id), db_bind_text (event_id), db_bind_i64 (amount)}, 3, &res, &err))
+    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Insurance claim failed"); return 0; }
+  int code = ERR_DB_QUERY_FAILED; int64_t settled_id = 0; char *message = NULL;
+  insurance_result (res, &code, &message, &settled_id); db_res_finalize (res);
+  if (code != 0) { send_response_error (ctx, root, code, message ? message : "Insurance claim refused"); free (message); return 0; }
+  free (message);
+  json_t *payload = json_pack ("{s:I,s:s}", "claim_id", (json_int_t) settled_id, "status", "settled");
+  send_response_ok_take (ctx, root, "insurance.claim.file.response", &payload);
   return 0;
 }
 
@@ -421,6 +558,9 @@ static const command_entry_t k_command_registry[] = {
    schema_planet_harvest, 0, false, NULL},
   {"planet.info", cmd_planet_info, "Planet information", schema_planet_info,
    0, false, NULL},
+  {"planet.fighters.transfer", cmd_planet_fighters_transfer,
+   "Transfer fighters between a landed ship and its planet",
+   schema_planet_fighters_transfer, 0, false, NULL},
   {"planet.land", cmd_planet_land, "Land on a planet", schema_planet_land, 0, false, NULL},
   {"planet.colonists.get", cmd_planet_colonists_get, "Get colonist info for planet",
    schema_placeholder, 0, false, NULL},
@@ -625,6 +765,10 @@ static const command_entry_t k_command_registry[] = {
     {"stock.exchange.orders.create", cmd_equity, "Create a stock order (DEPRECATED: use equity.exchange.order.create)", schema_placeholder, 0, true, "equity.exchange.order.create"},
     {"stock.ipo.register", cmd_equity_ipo_register, "Register corporation for IPO (DEPRECATED: use equity.ipo_register)", schema_placeholder, 0, true, "equity.ipo_register"},
     {"stock.portfolio.list", cmd_equity, "List stock portfolio (DEPRECATED: use equity.portfolio.list)", schema_placeholder, 0, true, "equity.portfolio.list"},
+#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
+    {"events.resume", cmd_events_resume, "Resume the player's event stream",
+     schema_events_resume, 0, false, NULL},
+#endif
     {"subscribe.add", cmd_subscribe_add, "Add a subscription",
    schema_subscribe_add, 0, false, NULL},
   {"subscribe.catalog", cmd_subscribe_catalog, "Subscription catalog",

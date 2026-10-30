@@ -4383,6 +4383,11 @@ schema_insurance_policies_buy (void)
   json_object_set_new (premium_prop, "type", json_string ("integer"));
   json_object_set_new (data_properties, "premium", premium_prop);
 
+  json_t *payout_prop = json_object (); json_object_set_new (payout_prop, "type", json_string ("integer"));
+  json_object_set_new (data_properties, "payout", payout_prop);
+  json_t *fund_prop = json_object (); json_object_set_new (fund_prop, "type", json_string ("integer"));
+  json_object_set_new (data_properties, "fund_id", fund_prop);
+
 
   json_t *data_schema = json_object ();
 
@@ -4404,6 +4409,8 @@ schema_insurance_policies_buy (void)
   json_array_append_new (required, json_string ("subject_id"));
   json_array_append_new (required, json_string ("duration"));
   json_array_append_new (required, json_string ("premium"));
+  json_array_append_new (required, json_string ("payout"));
+  json_array_append_new (required, json_string ("fund_id"));
   json_object_set_new (data_schema, "required", required);
 
 
@@ -4421,6 +4428,13 @@ schema_insurance_claim_file (void)
   json_t *policy_id_prop = json_object ();
   json_object_set_new (policy_id_prop, "type", json_string ("integer"));
   json_object_set_new (data_properties, "policy_id", policy_id_prop);
+
+  json_t *claim_id_prop = json_object (); json_object_set_new (claim_id_prop, "type", json_string ("integer"));
+  json_object_set_new (data_properties, "claim_id", claim_id_prop);
+  json_t *event_id_prop = json_object (); json_object_set_new (event_id_prop, "type", json_string ("string"));
+  json_object_set_new (data_properties, "event_id", event_id_prop);
+  json_t *amount_prop = json_object (); json_object_set_new (amount_prop, "type", json_string ("integer"));
+  json_object_set_new (data_properties, "amount", amount_prop);
 
 
   json_t *incident_desc_prop = json_object ();
@@ -4446,8 +4460,9 @@ schema_insurance_claim_file (void)
   json_t *required = json_array ();
 
 
-  json_array_append_new (required, json_string ("policy_id"));
-  json_array_append_new (required, json_string ("incident_description"));
+  json_array_append_new (required, json_string ("claim_id"));
+  json_array_append_new (required, json_string ("event_id"));
+  json_array_append_new (required, json_string ("amount"));
   json_object_set_new (data_schema, "required", required);
 
 
