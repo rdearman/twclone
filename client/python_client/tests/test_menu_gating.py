@@ -134,6 +134,16 @@ def test_dock_buy_sell_and_star_dock_bank_use_distinct_hotkeys(ctx_factory, menu
     assert by_key["y"]["label"].startswith("(Y) Shipyard")
 
 
+def test_bank_transfer_uses_authoritative_player_id_contract(menus):
+    options = {item["key"]: item for item in menus["BANK"]["options"]}
+    transfer = options["t"]["action"]["rpc"]
+    assert transfer["command"] == "bank.transfer"
+    assert transfer["data"] == {
+        "to_player_id": "<prompt:int:Recipient player ID>",
+        "amount": "<prompt:int:Amount>",
+    }
+
+
 def test_rankings_uses_authoritative_server_endpoint(
     ctx_factory, fake_conn, capsys
 ):

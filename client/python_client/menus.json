@@ -727,9 +727,8 @@
             "rpc": {
               "command": "bank.transfer",
               "data": {
-                "to_player_name": "<prompt:str:To whom (player name)>",
-                "amount": "<prompt:int:Amount>",
-                "memo": "<prompt:str:Memo (optional)>"
+                "to_player_id": "<prompt:int:Recipient player ID>",
+                "amount": "<prompt:int:Amount>"
               }
             },
             "post": "print_last_rpc"
