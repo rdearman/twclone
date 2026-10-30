@@ -145,9 +145,6 @@ handle_ship_destruction (db_t *db, ship_kill_context_t *ctx)
 int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
-  db_t *db_handle = game_db_get_handle ();
-  h_decloak_ship (db_handle,
-		  h_get_active_ship_id (db_handle, ctx->player_id));
   send_response_error (ctx,
 		       root,
 		       ERR_NOT_IMPLEMENTED,

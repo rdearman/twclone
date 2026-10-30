@@ -110,7 +110,9 @@ Repair ship damage at a port.
 Upgrade ship equipment or capabilities.
 
 ### `ship.transfer_cargo`
-Transfer cargo between ships or to/from planets.
+Currently refuses with `ERR_NOT_IMPLEMENTED` without changing ship state.
+Planetary stock transfers use the separate planetary commands; ship-to-ship
+transfer is not implemented by this command.
 
 ### `ship.jettison`
 Dump cargo into space.
