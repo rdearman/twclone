@@ -2831,6 +2831,11 @@ def corp_deposit_flow(ctx: Context):
     if resp.get("status") == "ok":
         print(f"Successfully deposited {format_credits(amount)} to corporation treasury.")
         _pp(resp)
+        refreshed = ctx.conn.rpc("corp.balance", {})
+        if refreshed.get("status") == "ok":
+            ctx.state["corp_balance"] = get_data(refreshed)
+        else:
+            print("Warning: deposit succeeded, but treasury balance could not be refreshed.")
     else:
         print(f"[Error] Failed to deposit to treasury: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)
@@ -2863,6 +2868,11 @@ def corp_withdraw_flow(ctx: Context):
     if resp.get("status") == "ok":
         print(f"Successfully withdrew {format_credits(amount)} from corporation treasury.")
         _pp(resp)
+        refreshed = ctx.conn.rpc("corp.balance", {})
+        if refreshed.get("status") == "ok":
+            ctx.state["corp_balance"] = get_data(refreshed)
+        else:
+            print("Warning: withdrawal succeeded, but treasury balance could not be refreshed.")
     else:
         print(f"[Error] Failed to withdraw from treasury: {resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(resp)
@@ -3724,6 +3734,11 @@ def scan_sector(ctx: "Context"):
     ctx.state["last_rpc"] = resp
 
     # Pretty print the scan
+    if not isinstance(resp, dict) or resp.get("status") != "ok":
+        error = (resp.get("error") or {}) if isinstance(resp, dict) else {}
+        print(f"Scan refused: {error.get('message', 'The server did not return scan information.')}")
+        return
+
     try:
         print(_render_scan_card(resp))
     except Exception:

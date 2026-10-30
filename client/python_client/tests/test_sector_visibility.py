@@ -96,3 +96,14 @@ def test_trade_flow_cannot_quote_using_refused_stale_port_data(ctx_factory, fake
 
     assert [call["command"] for call in fake_conn.calls] == ["port.info"]
     assert "available only in its sector" in capsys.readouterr().out
+
+
+def test_refused_scan_does_not_merge_untrusted_payload(ctx_factory, fake_conn, capsys):
+    ctx = ctx_factory(sector={"id": 12, "name": "Known"})
+    fake_conn.queue("move.scan", {"status": "error", "error": {"message": "Remote sector"},
+                                   "data": {"sector_id": 999, "name": "Leaked"}})
+
+    client.scan_sector(ctx)
+
+    assert ctx.last_sector_desc == {"id": 12, "name": "Known"}
+    assert "Remote sector" in capsys.readouterr().out
