@@ -224,6 +224,28 @@ def test_successful_strategy_goal_increments_completion_metric(tmp_path):
     assert manager.get("ai_metrics")["goals_completed"] == 1
 
 
+def test_rejected_planet_landing_preserves_turn_and_landing_state(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("strategy_plan", ["planet: land", "survey: port"])
+    manager.set("player_info", {"player": {"turns_remaining": 10}})
+    manager.set("player_location_sector", 12)
+    manager.set("ship_info", {"id": 7, "onplanet": 0, "cargo": []})
+    manager.add_pending_command("land-1", {
+        "command": "planet.land", "data": {"planet_id": 321},
+    })
+
+    process_responses(
+        [{"reply_to": "land-1", "status": "error", "type": "error",
+          "error": {"code": 1404, "message": "planet unavailable"}}],
+        FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None,
+    )
+
+    assert manager.get("player_info")["player"]["turns_remaining"] == 10
+    assert manager.get("player_location_sector") == 12
+    assert manager.get("ship_info")["onplanet"] == 0
+    assert manager.get("strategy_plan") == ["planet: land", "survey: port"]
+
+
 def test_atomic_state_save_keeps_previous_state_when_serialization_fails(tmp_path):
     path = tmp_path / "state.json"
     manager = StateManager(str(path), {})
