@@ -946,6 +946,17 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     state_manager.set("strategy_inference_status", diagnostics)
     return plan
 
+def quarantine_timed_out_trades(state_manager, expired_commands):
+    """Persist an ambiguous trade outcome until an operator resolves it."""
+    for request_id, command in expired_commands:
+        if command.get("command") in ("trade.buy", "trade.sell"):
+            if (state_manager.get("uncertain_trade") or {}).get("request_id") == request_id:
+                return
+            state_manager.set("uncertain_trade", {
+                "request_id": request_id, "command": command["command"],
+            })
+            return
+
 def is_goal_complete(goal_str, game_state, response_data, response_type):
     """
     Checks if the last server response or current state fulfills the goal.
@@ -1206,6 +1217,7 @@ def main(config_path="config.json"):
                 response_timeout = 30.0
             expired_commands = state_manager.expire_pending_commands(response_timeout)
             if expired_commands:
+                quarantine_timed_out_trades(state_manager, expired_commands)
                 expired_names = [
                     str(command.get("command") or "unknown")
                     for _, command in expired_commands
@@ -1358,6 +1370,11 @@ def main(config_path="config.json"):
                 time.sleep(2) 
                 continue
 
+            if game_state.get("uncertain_trade"):
+                logger.error("Trade outcome is uncertain; gameplay is paused pending operator reconciliation.")
+                time.sleep(10)
+                continue
+
             # Reconcile a server-persisted autopilot route after each login.
             if ("move.autopilot.status" in game_state.get("server_commands", [])
                     and not game_state.get("autopilot_status_checked", False)):
@@ -1458,6 +1475,12 @@ def main(config_path="config.json"):
                 }
                 logger.info(f"Bootstrap: Sending {bootstrap_cmd['command']}")
                 logger.info("Bootstrap command: %s", redact_secrets(full_command))
+                if command_name in ("trade.buy", "trade.sell"):
+                    state_manager.set("uncertain_trade", {
+                        "request_id": full_command["id"], "command": command_name,
+                        "idempotency_key": idempotency_key,
+                    })
+
                 if game_conn.send_command(full_command):
                     state_manager.record_command_sent(bootstrap_cmd["command"])
                     state_manager.record_ai_metric("commands_sent")
@@ -2219,6 +2242,16 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
 
         except Exception as e:
             logger.error("Critical error in process_responses: %s", e, exc_info=True)
+
+        else:
+            uncertain = state_manager.get("uncertain_trade") or {}
+            expected_receipt = {"trade.buy": "trade.buy_receipt_v1",
+                                "trade.sell": "trade.sell_receipt_v1"}.get(command_name)
+            if (expected_receipt and uncertain.get("request_id") == request_id
+                    and ((response.get("status") == "ok" and response_type == expected_receipt
+                          and response_data.get("lines") and response_data.get("credits_remaining") is not None)
+                         or response.get("status") == "refused")):
+                state_manager.set("uncertain_trade", None)
 
         # In live audit mode, verify every successful movement/trade against
         # fresh public player and ship reads. Refusals are logged as refusals

@@ -8,7 +8,7 @@ AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from planner import Planner  # noqa: E402
-from main import _get_fallback_plan  # noqa: E402
+from main import _get_fallback_plan, select_strategy_plan  # noqa: E402
 
 
 def make_planner():
@@ -47,6 +47,24 @@ def test_buy_decision_selects_commodity_with_known_positive_margin():
 
     assert planner._get_cheapest_commodity_to_buy(state) == "ORE"
     assert planner._can_buy(state) is True
+
+
+def test_local_strategy_selects_buy_route_and_sale_from_observed_state(monkeypatch):
+    planner = make_planner()
+    planner.state_manager.get.return_value = []
+    planner.state_manager.find_path.side_effect = lambda start, target: [int(start), int(target)]
+    state = market_state(remote_sell_price=113)
+    state["sector_data"]["1"]["adjacent"] = [2]
+    state["sector_data"]["2"] = {"has_port": True, "adjacent": [1]}
+    monkeypatch.setattr("main.get_strategy_from_llm", lambda *a, **kw: (_ for _ in ()).throw(AssertionError("inference called")))
+    config = {"strategy_mode": "deterministic"}
+
+    assert select_strategy_plan(state, config, planner.state_manager, planner) == ["buy: ORE"]
+    state["ship_info"]["cargo"] = [{"commodity": "ORE", "quantity": 1,
+                                    "purchase_price": 100, "origin_port_id": 101}]
+    assert select_strategy_plan(state, config, planner.state_manager, planner) == ["goto: 2", "sell: ORE"]
+    state["player_location_sector"] = 2
+    assert select_strategy_plan(state, config, planner.state_manager, planner) == ["sell: ORE"]
 
 
 def test_quote_payload_uses_observed_port_and_advertised_commodity_without_schema():

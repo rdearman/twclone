@@ -5,6 +5,9 @@ ordinary player. Each source file is a normal `ai_player/config.json`-shaped
 configuration. The runner does not register accounts, equip ships, connect to a
 database, or grant privileges. Prepare one config per authorised player with a
 distinct username and credential; the runner rejects duplicates.
+Usernames used for fleet runs must be 1–64 ASCII letters, digits, underscores,
+or hyphens, beginning with a letter or digit, so each runtime directory stays
+within the run root.
 
 Example for a disposable isolated test server:
 

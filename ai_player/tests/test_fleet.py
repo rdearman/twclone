@@ -60,6 +60,18 @@ def test_count_is_bounded_to_population_target(tmp_path):
         fleet.load_player_configs(tmp_path, 51)
 
 
+@pytest.mark.parametrize("username", ["../outside", "user/name", ".", "user\nname"])
+def test_unsafe_player_identity_cannot_escape_runtime_directory(tmp_path, username):
+    source = tmp_path / "source"
+    source.mkdir()
+    path = _write_config(source, "one", username, "secret")
+    with pytest.raises(fleet.FleetConfigError, match="unsafe player_username"):
+        fleet.load_player_configs(source, 1)
+    with pytest.raises(fleet.FleetConfigError, match="runtime directory"):
+        fleet.prepare_runtime_configs([(path, json.loads(path.read_text()))], tmp_path / "run")
+    assert not (tmp_path / "run").exists()
+
+
 def test_aggregate_metrics_sum_only_available_players_and_numeric_values():
     records = [
         {"state_available": True, "metrics": {

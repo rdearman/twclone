@@ -8,7 +8,7 @@ sys.path.insert(0, str(AI_PLAYER_DIR))
 
 from main import (advance_completed_goals, align_command_idempotency,
                   build_registration_command, is_goal_complete, _pause_for_turn_refresh,
-                  process_responses)  # noqa: E402
+                  process_responses, quarantine_timed_out_trades)  # noqa: E402
 from planner import Planner  # noqa: E402
 from state_manager import StateManager  # noqa: E402
 
@@ -72,6 +72,21 @@ class UnusedBugReporter:
 class QuietBandit:
     def give_feedback(self, *_args):
         pass
+
+
+def test_timed_out_trade_quarantine_survives_restart(tmp_path):
+    path = tmp_path / "state.json"
+    manager = StateManager(str(path), {})
+    quarantine_timed_out_trades(manager, [("buy-1", {"command": "trade.buy", "meta": {"session_token": "secret"}})])
+    restored = StateManager(str(path), {})
+    assert restored.get("uncertain_trade") == {"request_id": "buy-1", "command": "trade.buy"}
+    assert "secret" not in path.read_text()
+
+
+def test_read_timeout_does_not_quarantine_gameplay(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    quarantine_timed_out_trades(manager, [("read-1", {"command": "ship.info"})])
+    assert manager.get("uncertain_trade") is None
 
 
 def test_pending_command_timeout_removes_only_expired_request(tmp_path):
@@ -302,3 +317,33 @@ def test_refused_pathfind_discards_unreachable_navigation_goal():
 
     assert state.state["current_path"] == []
     assert state.state["strategy_plan"] == ["sell: ORE"]
+
+
+def test_uncertain_trade_survives_disconnect_and_late_unmatched_reply(tmp_path):
+    path = tmp_path / "state.json"
+    manager = StateManager(str(path), {})
+    marker = {"request_id": "buy-1", "command": "trade.buy", "idempotency_key": "key-1"}
+    manager.set("uncertain_trade", marker)
+    manager.add_pending_command("buy-1", {"command": "trade.buy", "data": {"port_id": 1}})
+    manager.clear_connection_state()
+    restored = StateManager(str(path), {})
+    process_responses([{"reply_to": "buy-1", "status": "ok", "type": "trade.buy_receipt_v1",
+                        "data": {"lines": [{"commodity": "ORE", "quantity": 1}],
+                                 "credits_remaining": "900"}}],
+                      FakeConnection(), restored, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert restored.get("uncertain_trade") == marker
+    assert restored.get("pending_commands") == {}
+
+
+def test_correlated_trade_receipt_resolves_uncertain_marker(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("uncertain_trade", {"request_id": "buy-1", "command": "trade.buy"})
+    manager.set("ship_info", {"cargo": []})
+    manager.set("player_info", {"player": {"credits": "1000"}})
+    manager.add_pending_command("buy-1", {"command": "trade.buy", "data": {"port_id": 1}})
+    process_responses([{"reply_to": "buy-1", "status": "ok", "type": "trade.buy_receipt_v1",
+                        "data": {"lines": [{"commodity": "ORE", "quantity": 1, "value": "100"}],
+                                 "credits_remaining": "900"}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_trade") is None
+    assert manager.get("player_info")["player"]["credits"] == "900"

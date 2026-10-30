@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -23,6 +24,7 @@ from typing import Any
 MAX_PLAYERS = 50
 DEFAULT_MAX_CONCURRENT = 5
 DEFAULT_DURATION_SECONDS = 1800
+SAFE_IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 
 
 class FleetConfigError(ValueError):
@@ -50,6 +52,8 @@ def load_player_configs(config_dir: Path, count: int) -> list[tuple[Path, dict[s
         password = config.get("player_password")
         if not isinstance(username, str) or not username.strip():
             raise FleetConfigError(f"player config {path.name} has no player_username")
+        if not SAFE_IDENTITY.fullmatch(username):
+            raise FleetConfigError(f"player config {path.name} has an unsafe player_username")
         if not isinstance(password, str) or not password:
             raise FleetConfigError(f"player config {path.name} has no player_password")
         if username in usernames:
@@ -68,6 +72,8 @@ def prepare_runtime_configs(
     prepared = []
     for index, (source, config) in enumerate(players, start=1):
         username = config["player_username"]
+        if not isinstance(username, str) or not SAFE_IDENTITY.fullmatch(username):
+            raise FleetConfigError("player username cannot safely name a runtime directory")
         player_dir = run_root / f"{index:02d}_{username}"
         player_dir.mkdir(parents=True, exist_ok=False)
         os.chmod(player_dir, 0o700)
