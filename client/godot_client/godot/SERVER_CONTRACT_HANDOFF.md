@@ -4,7 +4,7 @@ The Godot command menu disables the actions below because the server request sch
 
 | Action | Client-observed blocker | References |
 | --- | --- | --- |
-| `ship.rename` | Schema accepts `name`; handler requires `ship_id` and `new_name`. | `CommandMenu.gd` Rename ship; `src/schemas.c` `schema_ship_rename`; `src/server_ships.c` `cmd_ship_rename` |
+| `ship.rename` | Supported with `{ "name": "New name" }`; the server renames the caller's active ship and validates ownership and length. | `CommandMenu.gd` Rename ship; `src/schemas.c` `schema_ship_rename`; `src/server_ships.c` `cmd_ship_rename` |
 | `chat.send` private message | Schema rejects the recipient fields needed by the handler. | `CommandMenu.gd` Private message; `src/schemas.c` `schema_chat_send`; `src/server_communication.c` `cmd_chat_send` |
 | `mail.send` | Schema requires `to_player_name`; handler reads `to` or `to_id`. | `CommandMenu.gd` Send mail; `src/schemas.c` `schema_mail_send`; `src/server_communication.c` `cmd_mail_send` |
 | `mail.delete` | Schema requires `mail_id`; handler reads an `ids` array. | `CommandMenu.gd` Delete mail; `src/schemas.c` `schema_mail_delete`; `src/server_communication.c` `cmd_mail_delete` |

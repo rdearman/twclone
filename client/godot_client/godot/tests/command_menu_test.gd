@@ -211,8 +211,13 @@ func _run() -> void:
 	if computer_help_button != null:
 		computer_help_button.pressed.emit()
 		_check(menu._result_text.text.contains("COMMANDS AND SHORTCUTS"), "Computer Help shortcut did not open the field guide")
-	var rename_button := _action_button(menu, "Rename ship · unavailable")
-	_check(rename_button != null and rename_button.disabled and rename_button.tooltip_text.contains("ship_id and new_name"), "unsupported ship rename was not explained as disabled")
+	var rename_button := _action_button(menu, "Rename ship")
+	_check(rename_button != null and not rename_button.disabled, "supported ship rename stayed unavailable")
+	var before_rename := captured.size()
+	menu._choose_action({"label": "Rename ship", "command": "ship.rename", "fields": [["name", "text", "New ship name", ""]], "mutating": true})
+	(menu._form_fields["name"] as LineEdit).text = "Aurora"
+	menu._submit_form()
+	_check(captured.size() == before_rename + 1 and captured.back()["command"] == "ship.rename" and captured.back()["data"] == {"name": "Aurora"}, "ship rename did not use the active-ship name contract")
 	menu._active_category = "COMMUNICATIONS"
 	menu._render_actions()
 	var private_chat_button := _action_button(menu, "Private message · unavailable")

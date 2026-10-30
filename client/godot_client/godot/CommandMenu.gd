@@ -25,7 +25,7 @@ const COMMANDS := {
 		{"label": "Ship towing status", "command": "ship.tow.status", "fixed": {}},
 		{"label": "Release current tow beam", "command": "ship.tow", "fixed": {}, "mutating": true, "tooltip": "Releases the active tow relationship if your ship is towing another vessel."},
 		{"label": "Repair ship at shipyard", "command": "ship.repair", "mutating": true, "requires_shipyard_dock": true, "tooltip": "Repair restores hull to 100; the server checks the final cost and your credits."},
-		{"label": "Rename ship · unavailable", "unavailable_reason": "The ship.rename schema accepts name, but its handler requires ship_id and new_name."},
+		{"label": "Rename ship", "command": "ship.rename", "fields": [["name", FIELD_TEXT, "New ship name", ""]], "mutating": true, "tooltip": "Renames your active ship; the server validates ownership and length."},
 		{"label": "Scan adjacent sectors", "command": "move.scan"},
 		{"label": "Sector density scan", "command": "sector.scan.density", "fixed": {}},
 		{"label": "Trade history", "command": "trade.history", "fixed": {"limit": 20}},
