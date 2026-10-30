@@ -41,11 +41,11 @@ Manage recurring payments (e.g., salaries).
 *   **`bank.pay_interest.v1`**: Engine command to process interest.
 # Insurance commands
 
-`insurance.policies.list`, `insurance.policies.buy`, and
-`insurance.claim.file` remain registered for compatibility, but their V3
-handlers are placeholders. Completing them requires transactional repository
-support for: listing policies by holder; creating a policy while debiting the
-premium and crediting its fund; and filing a claim with policy lock, active/
-expiry validation, duplicate-event protection, payout debit and claim status
-update in one transaction. Claims also need an authoritative event lookup;
-clients must treat their current success payloads as provisional.
+`insurance.policies.list` returns the authenticated player's policies.
+`insurance.policies.buy` requires `subject_type`, `subject_id`, `duration`,
+`premium`, `payout`, and `fund_id`; PostgreSQL debits the holder's CRD account,
+credits the fund, and creates the policy atomically. `insurance.claim.file`
+settles an existing `claim_id` with `event_id` and `amount`; PostgreSQL locks
+the claim, policy, fund and holder account, and repeated settlement is
+idempotent. No server-side balance or claim updates are performed outside
+those routines.
