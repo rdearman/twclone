@@ -250,6 +250,13 @@ def test_player_id_is_not_treated_as_current_ship_id(ctx_factory, fake_conn):
     assert client.get_my_ship_id(fake_conn, ctx) is None
 
 
+def test_owned_spare_ship_is_selectable_but_current_and_other_owned_ships_are_not():
+    ships = [{"id": 10, "owner": "Captain"}, {"id": 20, "owner": "Captain"}]
+    assert client.has_boardable_ship(ships, my_ship_id=10, my_name="Captain")
+    assert not client.has_boardable_ship([ships[0]], my_ship_id=10, my_name="Captain")
+    assert not client.has_boardable_ship([{"id": 30, "owner": "Other"}], my_ship_id=10, my_name="Captain")
+
+
 def test_claim_refusal_does_not_refresh_or_replace_state(ctx_factory, fake_conn, monkeypatch, capsys):
     sector = {"id": 7, "ships": [{"id": 20, "owner": "derelict"}]}
     ctx = ctx_factory(sector=sector)
@@ -264,3 +271,22 @@ def test_claim_refusal_does_not_refresh_or_replace_state(ctx_factory, fake_conn,
     assert ctx.player_info == {"player": {"ship_id": 10}}
     assert ctx.last_sector_desc == sector
     assert "Ship not claimable" in capsys.readouterr().out
+
+
+def test_owned_spare_ship_can_be_selected_and_claimed(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory(sector={"id": 7, "ships": [
+        {"id": 10, "name": "Current", "owner": "Captain"},
+        {"id": 20, "name": "Spare", "owner": "Captain"},
+    ]})
+    ctx.player_info = {"player": {"ship_id": 10, "name": "Captain"}}
+    fake_conn.queue("ship.claim", {"status": "ok", "data": {"ship": {"id": 20}}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"ship_id": 20}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 20}}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"id": 7, "ships": []}})
+    answers = iter(["", "c", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.enter_ship_menu(ctx)
+
+    assert fake_conn.calls[0] == {"command": "ship.claim", "data": {"ship_id": 20}}
+    assert client.get_my_ship_id(fake_conn, ctx) == 20

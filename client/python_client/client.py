@@ -1865,11 +1865,10 @@ def has_boardable_ship(ships, my_ship_id: Optional[int] = None, my_name: Optiona
             continue
         owner_lc = (owner or "").strip().lower()
         is_derelict = (not owner_lc) or owner_lc == "derelict"
-        if not is_derelict:
+        is_owned = bool(my_name_lc) and owner_lc == my_name_lc
+        if not is_derelict and not is_owned:
             continue
         if my_ship_id is not None and isinstance(sid, int) and sid == my_ship_id:
-            continue
-        if my_name_lc and owner_lc == my_name_lc:
             continue
         return True
     return False
@@ -4066,7 +4065,7 @@ def enter_ship_menu(ctx: Context):
             continue
 
         elif cmd == "c":
-            # Claim an unpiloted ship in this sector
+            # The server decides whether the selected ship can be claimed.
             payload = {"ship_id": ship_id}
             resp = ctx.conn.rpc("ship.claim", payload)
             print(json.dumps(resp, ensure_ascii=False, indent=2))
