@@ -83,7 +83,7 @@ def test_normal_mode_excludes_debug_only_menu_entries(ctx_factory, menus):
     assert "k" in move_keys  # Supported autopilot controls are normal play.
 
     computer_keys = {o["key"] for o in _visible_options(menus["COMPUTER"], ctx)}
-    assert "g" not in computer_keys  # Unsupported game.get_clock is not offered.
+    assert "g" in computer_keys  # Supported cargo transfer is available in normal play.
 
     exchange_keys = {o["key"] for o in _visible_options(menus["EXCHANGE_MAIN"], ctx)}
     assert "l" in exchange_keys  # Canonical equity exchange list.
@@ -113,7 +113,7 @@ def test_debug_mode_exposes_retained_diagnostic_actions(ctx_factory, menus):
     assert "k" in move_keys
 
     computer_keys = {o["key"] for o in _visible_options(menus["COMPUTER"], ctx)}
-    assert "g" not in computer_keys
+    assert "g" in computer_keys
 
     exchange_keys = {o["key"] for o in _visible_options(menus["EXCHANGE_MAIN"], ctx)}
     assert "l" in exchange_keys
