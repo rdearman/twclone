@@ -238,6 +238,14 @@ def test_boardable_ship_requires_usable_id_and_known_owner_shape():
     assert client.has_boardable_ship([{"id": 20, "owner": "derelict"}], my_ship_id=10)
 
 
+def test_player_id_is_not_treated_as_current_ship_id(ctx_factory, fake_conn):
+    ctx = ctx_factory()
+    ctx.player_info = {"player": {"id": 20}, "ship": {"id": 42}}
+    assert client.get_my_ship_id(fake_conn, ctx) == 42
+    ctx.player_info = {"player": {"id": 20, "ship_id": True}}
+    assert client.get_my_ship_id(fake_conn, ctx) is None
+
+
 def test_claim_refusal_does_not_refresh_or_replace_state(ctx_factory, fake_conn, monkeypatch, capsys):
     sector = {"id": 7, "ships": [{"id": 20, "owner": "derelict"}]}
     ctx = ctx_factory(sector=sector)

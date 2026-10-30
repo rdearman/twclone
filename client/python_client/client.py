@@ -1806,19 +1806,22 @@ def get_my_ship_id(conn: Conn, ctx: Optional[Context] = None) -> Optional[int]:
     except Exception:
         return None
 
-    # Try nested player.ship_id
-    pl = d.get("player") or {}
-    for k in ("ship_id", "current_ship_id", "id"):
-        if isinstance(pl.get(k), int): return pl[k]
+    if not isinstance(d, dict):
+        return None
+
+    # A player ID is not a ship ID, even when both happen to be integers.
+    pl = d.get("player") if isinstance(d.get("player"), dict) else {}
+    for k in ("ship_id", "current_ship_id"):
+        if type(pl.get(k)) is int and pl[k] > 0: return pl[k]
 
     # Try top-level
     for k in ("ship_id", "current_ship_id"):
-        if isinstance(d.get(k), int): return d[k]
+        if type(d.get(k)) is int and d[k] > 0: return d[k]
         
     # Try ship object
-    ship = d.get("ship") or {}
+    ship = d.get("ship") if isinstance(d.get("ship"), dict) else {}
     sid = ship.get("id") or ship.get("ship_id")
-    if isinstance(sid, int): return sid
+    if type(sid) is int and sid > 0: return sid
     
     return None
 
