@@ -5664,12 +5664,28 @@ def genesis_torpedo_flow(ctx: Context):
 
 @register("rename_ship_flow")
 def rename_ship_flow(ctx: Context):
-    """Explain why the published rename commands cannot currently be used."""
-    print(
-        "Ship renaming is unavailable: the published ship.rename and "
-        "ship.reregister schemas accept 'name', but both handlers require "
-        "'ship_id' and 'new_name'. No rename request was sent."
-    )
+    """Rename the active ship using the authoritative V3 contract."""
+    new_name = input("New ship name (1-100 characters, Enter to cancel): ").strip()
+    if not new_name:
+        print("Ship rename cancelled.")
+        return
+    if len(new_name) > 100:
+        print("Ship name must be 1 to 100 characters.")
+        return
+
+    response = ctx.conn.rpc("ship.rename", {"name": new_name})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print("Ship rename refused or failed:")
+        _pp(response)
+        return
+
+    data = get_data(response)
+    confirmed_name = data.get("name", new_name) if isinstance(data, dict) else new_name
+    print(f"Ship renamed to '{confirmed_name}' (confirmed by server).")
+    refreshed = _hud_rpc(ctx, "ship.status", {})
+    if refreshed.get("status") != "ok":
+        print("Warning: the rename succeeded, but ship status could not be refreshed.")
 
 
 # ---------------------------

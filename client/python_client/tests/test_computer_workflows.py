@@ -24,14 +24,36 @@ def test_computer_menu_exposes_trade_history(menus):
     assert "trade_history_flow" in client.HANDLERS
 
 
-def test_ship_rename_is_marked_unavailable_until_public_schema_matches_handler(
-    menus, ctx_factory, fake_conn, capsys
+def test_ship_rename_uses_active_ship_contract_and_refreshes_authoritative_state(
+    menus, ctx_factory, fake_conn, monkeypatch, capsys
 ):
     options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
-    assert "unavailable" in options["r"]["label"].lower()
+    assert options["r"]["action"] == {"pycall": "rename_ship_flow"}
+    fake_conn.queue("ship.rename", {"status": "ok", "data": {"ship_id": 10, "name": "Aurora"}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10, "name": "Aurora"}}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "Aurora")
+
     client.rename_ship_flow(ctx_factory())
-    assert fake_conn.calls == []
-    assert "No rename request was sent" in capsys.readouterr().out
+
+    assert fake_conn.calls == [
+        {"command": "ship.rename", "data": {"name": "Aurora"}},
+        {"command": "ship.status", "data": {}},
+    ]
+    assert "renamed to 'Aurora'" in capsys.readouterr().out
+
+
+def test_ship_rename_refusal_does_not_refresh_or_claim_success(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("ship.rename", {"status": "error", "error": {"message": "Name already in use"}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "Aurora")
+
+    client.rename_ship_flow(ctx_factory())
+
+    assert fake_conn.calls == [{"command": "ship.rename", "data": {"name": "Aurora"}}]
+    output = capsys.readouterr().out
+    assert "refused or failed" in output
+    assert "Aurora" not in output
 
 
 def test_computer_menu_exposes_supported_police_controls(menus):
