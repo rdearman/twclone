@@ -661,16 +661,6 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
       return -1;
     }
 
-  // Consume 1 turn for landing
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-
-
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "planet.land", root,
-					    NULL);
-    }
-
   json_t *data = json_object_get (root, "data");
 
 
@@ -805,11 +795,37 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
 	}
     }
 
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &txerr))
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Unable to begin landing transaction.");
+      return 0;
+    }
+
+  /* All validation and refusal checks complete before charging the turn. */
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      db_tx_rollback (db, NULL);
+      return handle_turn_consumption_error (ctx, tc, "planet.land", root,
+                                            NULL);
+    }
+
   if (db_player_land_on_planet (db, ctx->player_id, planet_id) != 0)
     {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx,
 			   root,
 			   ERR_SERVER_ERROR, "Failed to land on planet.");
+      return 0;
+    }
+
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Landing transaction could not be committed.");
       return 0;
     }
 
