@@ -5417,7 +5417,7 @@ def shipyard_upgrade_flow(ctx: Context):
         return
 
     new_ship_type_id = selected_ship.get("type_id")
-    new_ship_name = input(f"Enter new name for your {selected_ship.get('name')} (current ship name suggested): ").strip()
+    new_ship_name = input(f"Enter new name for your {selected_ship.get('name')}: ").strip()
     if not new_ship_name:
         print("New ship name cannot be empty. Cancelled.")
         return
@@ -5433,13 +5433,20 @@ def shipyard_upgrade_flow(ctx: Context):
     if upgrade_resp.get("status") == "ok":
         print(f"Successfully upgraded to {new_ship_name}!")
         _pp(upgrade_resp)
-        # Refresh player info and sector description after a successful upgrade
+        # The receipt contains the amount spent, not the resulting balances or ship.
         my_info_resp = _hud_rpc(ctx, "player.my_info", {})
         if my_info_resp.get("status") == "ok":
             ctx.player_info = get_data(my_info_resp)
-            ctx.last_sector_desc = normalize_sector(get_data(ctx.conn.rpc("move.describe_sector", {"sector_id": ctx.current_sector_id})))
         else:
-            print("[Warning] Could not refresh player info after ship upgrade.")
+            print("[Warning] Could not refresh player info after ship upgrade; displayed credits may be stale.")
+        ship_resp = _hud_rpc(ctx, "ship.status", {})
+        if ship_resp.get("status") != "ok":
+            print("[Warning] Could not refresh ship status after ship upgrade; displayed ship data may be stale.")
+        sector_resp = ctx.conn.rpc("move.describe_sector", {"sector_id": ctx.current_sector_id})
+        if sector_resp.get("status") == "ok" and isinstance(sector_resp.get("data"), dict):
+            ctx.last_sector_desc = normalize_sector(get_data(sector_resp))
+        else:
+            print("[Warning] Could not refresh sector after ship upgrade; displayed sector may be stale.")
     else:
         print(f"[Error] Ship upgrade failed: {upgrade_resp.get('error', {}).get('message', 'Unknown error')}")
         _pp(upgrade_resp)
