@@ -198,3 +198,57 @@ def test_jettison_over_reported_cargo_is_rejected_before_turn_spending(
 
     assert [call["command"] for call in fake_conn.calls] == ["ship.info"]
     assert "no jettison was sent" in capsys.readouterr().out
+
+
+def test_claim_selected_ship_refreshes_independently_and_preserves_failed_sector(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    sector = {"id": 7, "ships": [{"id": 20, "name": "Drifter", "owner": "derelict"}]}
+    ctx = ctx_factory(sector=sector)
+    ctx.player_info = {"player": {"ship_id": 10}}
+    fake_conn.queue("ship.claim", {"status": "ok", "data": {"ship": {"id": 20}}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"ship_id": 20}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"hull": 73}}})
+    fake_conn.queue("move.describe_sector", {"status": "refused", "error": {"message": "Unavailable"}})
+    answers = iter(["", "c", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.enter_ship_menu(ctx)
+
+    assert fake_conn.calls[0] == {"command": "ship.claim", "data": {"ship_id": 20}}
+    assert [call["command"] for call in fake_conn.calls[1:]] == ["player.my_info", "ship.status", "move.describe_sector"]
+    assert client.get_my_ship_id(fake_conn, ctx) == 20
+    assert ctx.last_sector_desc == sector
+    assert "displayed sector may be stale" in capsys.readouterr().out
+
+
+def test_invalid_claim_selection_never_defaults_to_first_ship(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory(sector={"id": 7, "ships": [{"id": 20, "owner": "derelict"}]})
+    ctx.player_info = {"player": {"ship_id": 10}}
+    monkeypatch.setattr("builtins.input", lambda *_: "99")
+
+    client.enter_ship_menu(ctx)
+
+    assert fake_conn.calls == []
+    assert "no ship selected" in capsys.readouterr().out
+
+
+def test_boardable_ship_requires_usable_id_and_known_owner_shape():
+    assert not client.has_boardable_ship([{"name": "Unknown"}, {"id": 0}, {"id": 5, "owner": {"name": "Alice"}}])
+    assert client.has_boardable_ship([{"id": 20, "owner": "derelict"}], my_ship_id=10)
+
+
+def test_claim_refusal_does_not_refresh_or_replace_state(ctx_factory, fake_conn, monkeypatch, capsys):
+    sector = {"id": 7, "ships": [{"id": 20, "owner": "derelict"}]}
+    ctx = ctx_factory(sector=sector)
+    ctx.player_info = {"player": {"ship_id": 10}}
+    fake_conn.queue("ship.claim", {"status": "refused", "error": {"message": "Ship not claimable"}})
+    answers = iter(["", "c", "y", "q"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.enter_ship_menu(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["ship.claim"]
+    assert ctx.player_info == {"player": {"ship_id": 10}}
+    assert ctx.last_sector_desc == sector
+    assert "Ship not claimable" in capsys.readouterr().out

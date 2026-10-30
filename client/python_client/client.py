@@ -1852,8 +1852,15 @@ def get_my_beacon_count(conn: Conn, ctx: Optional[Context] = None) -> Optional[i
 def has_boardable_ship(ships, my_ship_id: Optional[int] = None, my_name: Optional[str] = None) -> bool:
     my_name_lc = (my_name or "").strip().lower()
     for s in ships or []:
+        if not isinstance(s, dict):
+            continue
         sid = s.get("id") or s.get("ship_id")
-        owner_lc = (s.get("owner") or "").strip().lower()
+        if isinstance(sid, bool) or not isinstance(sid, int) or sid <= 0:
+            continue
+        owner = s.get("owner")
+        if owner is not None and not isinstance(owner, str):
+            continue
+        owner_lc = (owner or "").strip().lower()
         is_derelict = (not owner_lc) or owner_lc == "derelict"
         if not is_derelict:
             continue
@@ -3968,10 +3975,7 @@ def enter_ship_menu(ctx: Context):
     # Build list of boardable ships
     boardable = []
     for s in ships:
-        owner = (s.get("owner") or "").strip().lower()
-        sid = s.get("id") or s.get("ship_id")
-        is_derelict = (not owner) or owner == "derelict"
-        if is_derelict and (sid != my_ship_id) and (owner != (my_name or "").lower()):
+        if has_boardable_ship([s], my_ship_id=my_ship_id, my_name=my_name):
             boardable.append(s)
 
     if not boardable:
@@ -4002,8 +4006,12 @@ def enter_ship_menu(ctx: Context):
             i = int(sel)
             if 1 <= i <= len(boardable):
                 target_idx = i - 1
+            else:
+                print("Invalid selection; no ship selected.")
+                return
         except ValueError:
-            pass
+            print("Invalid selection; no ship selected.")
+            return
 
     while True:
         target, nm, tp, ship_id = current_target(target_idx)
@@ -4014,7 +4022,7 @@ def enter_ship_menu(ctx: Context):
         #print(" (R) Rename / Re-register")
         if ctx.state.get("debug"):
             print(" (P) Set Primary [debug: ship.set_primary not implemented]")
-        #print(" (S) Select a different ship")
+        print(" (S) Select a different ship")
         print(" (Q) Quit to Previous Menu")
         cmd = input("Enter-Ship Command: ").strip().lower()
 
@@ -4029,6 +4037,8 @@ def enter_ship_menu(ctx: Context):
                 i = int(sel)
                 if 1 <= i <= len(boardable):
                     target_idx = i - 1
+                else:
+                    print("Invalid selection.")
             except ValueError:
                 print("Invalid selection.")
             continue
@@ -4040,6 +4050,10 @@ def enter_ship_menu(ctx: Context):
             # misleadingly appear to inspect this individual vessel.
             print("Visible sector report (fields supplied by the server):")
             print(json.dumps(target, ensure_ascii=False, indent=2, sort_keys=True))
+            continue
+
+        if cmd != "c" and not (cmd == "p" and ctx.state.get("debug")):
+            print("Invalid command. Please try again.")
             continue
 
         # Confirm current target before any mutating action.
@@ -4055,16 +4069,19 @@ def enter_ship_menu(ctx: Context):
             print(json.dumps(resp, ensure_ascii=False, indent=2))
 
             if resp.get("status") == "ok":
-                # Optional: update client’s idea of current ship (if you track it)
-                try:
-                    claimed = resp.get("data", {}).get("ship", {})
-                    ctx.current_ship_id = claimed.get("id", ctx.current_ship_id)
-                except Exception:
-                    pass
-
-                # Refresh sector after claiming (your old ship remains derelict here)
+                player = _hud_rpc(ctx, "player.my_info", {})
+                if player.get("status") == "ok" and isinstance(player.get("data"), dict):
+                    ctx.player_info = get_data(player)
+                else:
+                    print("[Warning] Could not refresh player info after claim; displayed player data may be stale.")
+                ship = _hud_rpc(ctx, "ship.status", {})
+                if ship.get("status") != "ok":
+                    print("[Warning] Could not refresh ship status after claim; displayed ship data may be stale.")
                 new = ctx.conn.rpc("move.describe_sector", {"sector_id": d.get("id")})
-                ctx.last_sector_desc = normalize_sector(get_data(new))
+                if new.get("status") == "ok" and isinstance(new.get("data"), dict):
+                    ctx.last_sector_desc = normalize_sector(get_data(new))
+                else:
+                    print("[Warning] Could not refresh sector after claim; displayed sector may be stale.")
                 return
             else:
                 # Nicer errors for common cases
