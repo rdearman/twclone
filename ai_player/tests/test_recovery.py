@@ -402,6 +402,17 @@ def test_valid_late_trade_receipt_reconciles_without_replay(tmp_path):
     assert manager.get("ship_info")["cargo"][0]["commodity"] == "ORE"
 
 
+def test_malformed_late_trade_receipt_keeps_uncertainty_marker(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    marker = {"request_id": "sell-1", "command": "trade.sell"}
+    manager.set("uncertain_trade", marker)
+    process_responses([{"reply_to": "sell-1", "status": "ok", "type": "trade.sell_receipt_v1",
+                        "data": {"lines": [{"commodity": "ORE", "quantity": 1}]}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+    assert manager.get("uncertain_trade") == marker
+    assert manager.get("trade_successful") is False
+
+
 def test_correlated_trade_receipt_resolves_uncertain_marker(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.set("uncertain_trade", {"request_id": "buy-1", "command": "trade.buy"})
