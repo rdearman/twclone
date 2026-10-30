@@ -387,6 +387,21 @@ def test_uncertain_trade_survives_disconnect_and_mismatched_late_reply(tmp_path)
     assert restored.get("pending_commands") == {}
 
 
+def test_stale_player_read_cannot_overwrite_state_during_uncertain_warp(tmp_path):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("player_info", {"player": {"credits": "900.00"}})
+    manager.set("player_location_sector", 1)
+    marker = {"request_id": "warp-1", "command": "move.warp", "to_sector_id": 2}
+    manager.set("uncertain_warp", marker)
+
+    process_responses([{"reply_to": "warp-1", "status": "ok", "type": "player.my_info",
+                        "data": {"player": {"credits": "9999.00"}}}],
+                      FakeConnection(), manager, UnusedBugReporter(), QuietBandit(), {}, None)
+
+    assert manager.get("uncertain_warp") == marker
+    assert manager.get("player_info")["player"]["credits"] == "900.00"
+
+
 def test_valid_late_trade_receipt_reconciles_without_replay(tmp_path):
     manager = StateManager(str(tmp_path / "state.json"), {})
     marker = {"request_id": "buy-1", "command": "trade.buy", "idempotency_key": "key-1"}
