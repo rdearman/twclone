@@ -896,7 +896,7 @@ func _finish_trade_quote(response: Dictionary) -> void:
 		return
 	var trade_data: Dictionary = _pending_trade.duplicate(true)
 	gameplay_view.set_command_busy(false)
-	gameplay_view.confirm_trade_quote(str(trade_data["direction"]), str(trade_data["commodity"]), int(trade_data["quantity"]), result.get("data", {}))
+	gameplay_view.confirm_trade_quote(str(trade_data["direction"]), str(trade_data["commodity"]), int(trade_data["quantity"]), int(trade_data["account"]), result.get("data", {}))
 
 func _on_trade_confirmation(accepted: bool) -> void:
 	if _pending_trade.is_empty():

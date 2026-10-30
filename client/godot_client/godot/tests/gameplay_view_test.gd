@@ -13,6 +13,16 @@ func _run() -> void:
 	root.add_child(view)
 	await process_frame
 	var commands = view.command_menu
+	var trades: Array[Dictionary] = []
+	view.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int, account: int) -> void:
+		trades.append({"direction": direction, "port_id": port_id, "sector_id": sector_id, "commodity": commodity, "quantity": quantity, "account": account})
+	)
+	view.port_workflow.trade_requested.emit("buy", 7, 17, "ORE", 3, 0)
+	view.port_workflow.trade_requested.emit("sell", 7, 17, "ORG", 2, 1)
+	_check(trades == [{"direction": "buy", "port_id": 7, "sector_id": 17, "commodity": "ORE", "quantity": 3, "account": 0}, {"direction": "sell", "port_id": 7, "sector_id": 17, "commodity": "ORG", "quantity": 2, "account": 1}], "port trade signal lost its account or trade context")
+	view.confirm_trade_quote("buy", "ORE", 3, 1, {"total_buy_price": 120, "buy_price": 40})
+	_check(view.trade_quote_dialog.dialog_text.contains("120") and view.trade_quote_dialog.dialog_text.contains("Bank") and view.trade_quote_dialog.dialog_text.contains("Fees are not included"), "trade confirmation did not disclose the selected account and quote limitations")
+	view.trade_quote_dialog.hide()
 	_check(commands is PanelContainer, "general commands are not a docked panel")
 	_check(commands.get_parent() == view.gameplay_body and view.gameplay_body.get_child(0) == commands, "command panel is not persistently placed on the left")
 	_check(is_equal_approx(view.toast_panel.anchor_left, 0.5) and is_equal_approx(view.toast_panel.anchor_right, 0.5), "notification ribbon is not centered at the bottom")

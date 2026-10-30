@@ -4,7 +4,7 @@ signal reconnect_requested
 signal warp_requested(destination: int)
 signal warp_activated(destination: int)
 signal command_requested(command: String, data: Dictionary, label: String, mutating: bool)
-signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int)
+signal trade_requested(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int, account: int)
 signal trade_confirmation(accepted: bool)
 signal tavern_enter_requested
 signal route_engage_requested
@@ -376,8 +376,8 @@ func _build() -> void:
 	gameplay_body.move_child(information_panel, 1)
 	command_menu.open_for(_snapshot, {})
 	port_workflow = PortWorkflowScript.new()
-	port_workflow.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int) -> void:
-		trade_requested.emit(direction, port_id, sector_id, commodity, quantity)
+	port_workflow.trade_requested.connect(func(direction: String, port_id: int, sector_id: int, commodity: String, quantity: int, account: int) -> void:
+		trade_requested.emit(direction, port_id, sector_id, commodity, quantity, account)
 	)
 	port_workflow.tavern_enter_requested.connect(func() -> void:
 		tavern_enter_requested.emit()
@@ -1103,12 +1103,13 @@ func leave_planet_workflow() -> void:
 	planet_workflow.launch_confirmed(0)
 	_render_snapshot(_snapshot)
 
-func confirm_trade_quote(direction: String, commodity: String, quantity: int, quote: Dictionary) -> void:
+func confirm_trade_quote(direction: String, commodity: String, quantity: int, account: int, quote: Dictionary) -> void:
 	var total_key := "total_buy_price" if direction == "buy" else "total_sell_price"
 	var unit_key := "buy_price" if direction == "buy" else "sell_price"
 	var total = quote.get(total_key, null)
 	var unit = quote.get(unit_key, null)
-	trade_quote_dialog.dialog_text = "%s %d × %s\n\nAuthoritative total: %s CR\nUnit price: %s CR\n\nNo cargo or credits change unless you confirm." % [direction.capitalize(), quantity, commodity, _display_money(total), _display_money(unit)]
+	var account_name := "Bank" if account == 1 else "Petty cash"
+	trade_quote_dialog.dialog_text = "%s %d × %s\n\nQuoted goods value: %s CR\nUnit price: %s CR\nAccount: %s\n\nFees are not included. Prices may change before the trade is processed. No cargo or credits change unless you confirm." % [direction.capitalize(), quantity, commodity, _display_money(total), _display_money(unit), account_name]
 	trade_quote_dialog.ok_button_text = "CONFIRM %s" % direction.to_upper()
 	trade_quote_dialog.cancel_button_text = "CANCEL"
 	DialogLayout.popup(trade_quote_dialog, Vector2i(520, 280))
