@@ -34,7 +34,7 @@ const COMMANDS := {
 		{"label": "Police status", "command": "police.status", "fixed": {}},
 		{"label": "Offer a bribe", "command": "police.bribe", "fields": [["amount", FIELD_INT, "Bribe amount in credits", ""]], "mutating": true, "tooltip": "The server decides whether the offer is accepted and applies any consequences."},
 		{"label": "Surrender to authorities", "command": "police.surrender", "fixed": {}, "mutating": true},
-		{"label": "Player rankings · unavailable", "unavailable_reason": "The current server handler returns an empty rankings list rather than authoritative player ranks, even when players exist."},
+		{"label": "Player rankings", "command": "player.rankings", "fixed": {"limit": 10}},
 		{"label": "Shipyard catalogue", "command": "shipyard.list", "requires_shipyard_dock": true},
 		{"label": "Hardware catalogue", "command": "hardware.list", "requires_supported_dock": true, "tooltip": "Dock at a supported hardware port first."},
 		{"label": "Buy ship hardware", "command": "hardware.buy", "requires_supported_dock": true, "fields": [["item_code", FIELD_TEXT, "Hardware item code (from catalogue)", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true, "idempotency": true, "tooltip": "Dock first; the server catalogue supplies valid hardware codes."},
@@ -52,7 +52,7 @@ const COMMANDS := {
 		{"label": "Cancel player offer by ID", "command": "trade.cancel", "fields": [["offer_id", FIELD_INT, "Your offer ID", ""]], "mutating": true},
 		{"label": "Chat history", "command": "chat.history", "fixed": {"limit": 20}},
 		{"label": "Broadcast message", "command": "chat.broadcast", "fields": [["message", FIELD_TEXT, "Message", ""]], "mutating": true},
-		{"label": "Private message · unavailable", "unavailable_reason": "The chat.send schema rejects the recipient fields required by its handler."},
+		{"label": "Private message", "command": "chat.send", "fields": [["to_player", FIELD_TEXT, "Recipient player name", ""], ["message", FIELD_TEXT, "Message", ""]], "mutating": true},
 		{"label": "Active bounties", "command": "bounty.list", "fixed": {}},
 		{"label": "Notices", "command": "notice.list"},
 		{"label": "Acknowledge notice", "command": "notice.ack", "fields": [["notice_id", FIELD_INT, "Unread notice ID", ""]], "mutating": true},
@@ -742,13 +742,10 @@ func _render_actions() -> void:
 				{"label": "Claim this ship · server verifies eligibility", "command": "ship.claim", "context_id": "ship_id", "mutating": true},
 				{"label": "Tow this ship · requires owned, unpiloted vessel", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true},
 			]
-		_add_unavailable("Private messages need a server handler/schema fix: chat.send currently has no compatible recipient field.")
 	elif _active_category == "PINNED":
 		actions = _pinned_actions
 	else:
 		actions = COMMANDS.get(_active_category, [])
-		if _active_category == "COMMUNICATIONS":
-			_add_unavailable("Private chat is temporarily unavailable because the server's chat.send schema does not accept the recipient field its handler requires.")
 	if actions.is_empty():
 		_add_unavailable("No commands are available in this category.")
 		return

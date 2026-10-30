@@ -3780,7 +3780,7 @@ def help_main(ctx: Context):
         print("F: Scan adjacent sectors   D: Sector density scan")
         print("R: Rename ship          H: Hardware catalogue")
         print("J: Jettison cargo       T: Genesis torpedo")
-        print("K: Player rankings · unavailable   ?: This help")
+        print("K: Player rankings        ?: This help")
         print("Q: Return to the main menu")
         return
 
@@ -3793,8 +3793,20 @@ def help_main(ctx: Context):
 
 @register("rankings_unavailable_flow")
 def rankings_unavailable_flow(ctx: Context):
-    """Explain that the registered rankings endpoint has no authoritative data yet."""
-    print("Player rankings are unavailable: the server currently returns an empty ranking list.")
+    """Display the server-authoritative player rankings."""
+    response = ctx.conn.rpc("player.rankings", {"limit": 10})
+    ctx.state["last_rpc"] = response
+    if response.get("status") != "ok":
+        print("Player rankings refused or failed:")
+        _pp(response)
+        return
+    data = get_data(response)
+    rows = data.get("rankings", []) if isinstance(data, dict) else []
+    if not isinstance(rows, list) or not rows:
+        print("No player rankings are available yet.")
+        return
+    for index, row in enumerate((r for r in rows if isinstance(r, dict)), 1):
+        print(f"{index}. {row.get('name', 'Unknown')} · XP {row.get('experience', '—')} · alignment {row.get('alignment', '—')}")
 
 # ---------------------------
 # Beacon flow

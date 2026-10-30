@@ -465,7 +465,7 @@
         },
         {
           "key": "k",
-          "label": "(K) Ranks · unavailable",
+          "label": "(K) Player Rankings",
           "action": {
             "pycall": "rankings_unavailable_flow"
           }

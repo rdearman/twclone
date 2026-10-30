@@ -134,16 +134,19 @@ def test_dock_buy_sell_and_star_dock_bank_use_distinct_hotkeys(ctx_factory, menu
     assert by_key["y"]["label"].startswith("(Y) Shipyard")
 
 
-def test_rankings_placeholder_is_explained_without_calling_empty_server_endpoint(
+def test_rankings_uses_authoritative_server_endpoint(
     ctx_factory, fake_conn, capsys
 ):
     ctx = ctx_factory()
     ctx.push("COMPUTER")
+    fake_conn.queue("player.rankings", {"status": "ok", "data": {"rankings": [
+        {"name": "Nova", "experience": 42, "alignment": 10},
+    ]}})
 
     client.handle_choice(ctx, "k")
 
-    assert "rankings are unavailable" in capsys.readouterr().out
-    assert fake_conn.calls == []
+    assert "Nova" in capsys.readouterr().out
+    assert fake_conn.calls == [{"command": "player.rankings", "data": {"limit": 10}}]
 
 
 def test_no_normal_mode_rpc_action_uses_known_absent_command(ctx_factory, menus):

@@ -891,7 +891,9 @@ func _add_object_actions(kind: String, object: Dictionary) -> void:
 				_add_context_button("INSPECT SHIP DETAILS", false, _dispatch_context_action.bind({"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"}, object))
 			else:
 				_add_context_unavailable("INSPECT SHIP DETAILS · ID UNAVAILABLE", "The selected ship has no server identifier, so inspection is unavailable.")
-			_add_context_unavailable("PRIVATE MESSAGE OWNER · unavailable", "The chat.send schema rejects the recipient fields required by its handler.")
+			var owner_name := str(ship_data.get("owner_name", ship_data.get("owner", ""))).strip_edges()
+			if not owner_name.is_empty():
+				_add_context_button("PRIVATE MESSAGE OWNER", false, _dispatch_context_action.bind({"label": "Private message", "command": "chat.send", "fixed": {"to_player": owner_name}, "fields": [["message", "text", "Message", ""]], "mutating": true}, object))
 
 func _add_context_button(label: String, primary: bool, callback: Callable) -> Button:
 	var button := Button.new()

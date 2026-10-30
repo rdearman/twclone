@@ -220,8 +220,14 @@ func _run() -> void:
 	_check(captured.size() == before_rename + 1 and captured.back()["command"] == "ship.rename" and captured.back()["data"] == {"name": "Aurora"}, "ship rename did not use the active-ship name contract")
 	menu._active_category = "COMMUNICATIONS"
 	menu._render_actions()
-	var private_chat_button := _action_button(menu, "Private message · unavailable")
-	_check(private_chat_button != null and private_chat_button.disabled, "unsupported private messaging was not visibly disabled")
+	var private_chat_button := _action_button(menu, "Private message")
+	_check(private_chat_button != null and not private_chat_button.disabled, "supported private messaging stayed unavailable")
+	var before_private_chat := captured.size()
+	menu._choose_action({"label": "Private message", "command": "chat.send", "fields": [["to_player", "text", "Recipient player name", ""], ["message", "text", "Message", ""]], "mutating": true})
+	(menu._form_fields["to_player"] as LineEdit).text = "Nova"
+	(menu._form_fields["message"] as LineEdit).text = "Hello"
+	menu._submit_form()
+	_check(captured.size() == before_private_chat + 1 and captured.back()["command"] == "chat.send" and captured.back()["data"] == {"to_player": "Nova", "message": "Hello"}, "private chat did not use the corrected recipient contract")
 	menu._active_category = "MAIL & SUBSCRIPTIONS"
 	menu._render_actions()
 	var send_mail_button := _action_button(menu, "Send mail")
@@ -246,7 +252,7 @@ func _run() -> void:
 	var insurance_buy_button := _action_button(menu, "Buy insurance · server stub")
 	_check(insurance_buy_button != null and insurance_buy_button.disabled, "stub insurance operation was presented as usable")
 	var count_before_unavailable := captured.size()
-	menu._choose_action({"label": "Private message", "unavailable_reason": "chat.send contract mismatch"})
+	menu._choose_action({"label": "Synthetic unavailable action", "unavailable_reason": "test unavailable"})
 	_check(captured.size() == count_before_unavailable, "unavailable action emitted a server command")
 	menu._choose_action({"label": "Add subscription", "unavailable_reason": "subscribe contract mismatch"})
 	_check(captured.size() == count_before_unavailable, "unavailable subscription emitted a server command")
@@ -443,6 +449,10 @@ func _run() -> void:
 	_check(captured.back()["command"] == "ship.transfer_cargo" and captured.back()["data"] == {"commodity_id": 2, "quantity": 3, "target_ship_id": 61}, "cargo transfer did not bind target ship and canonical fields")
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
+	var rankings_button := _action_button(menu, "Player rankings")
+	_check(rankings_button != null and not rankings_button.disabled, "authoritative player rankings stayed unavailable")
+	menu._choose_action({"label": "Player rankings", "command": "player.rankings", "fixed": {"limit": 10}})
+	_check(captured.back()["command"] == "player.rankings" and captured.back()["data"] == {"limit": 10}, "player rankings did not use the authoritative limit request")
 	var upgrade_button := _action_button(menu, "Upgrade ship equipment")
 	_check(upgrade_button != null and not upgrade_button.disabled, "ship equipment upgrade stayed unavailable")
 	menu._choose_action({"label": "Upgrade ship equipment", "command": "ship.upgrade", "fields": [["upgrade_type", "text", "Upgrade type", ""]], "mutating": true})
