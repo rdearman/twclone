@@ -80,6 +80,21 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("db_tx_rollback (db, NULL)", land)
         self.assertIn("db_tx_commit (db, &txerr)", land)
 
+    def test_landing_refusals_and_failures_are_before_transaction_or_rollback(self):
+        land = self.planets.split("cmd_planet_land", 1)[1].split(
+            "cmd_planet_launch", 1
+        )[0]
+        # Malformed requests are rejected before any database transaction.
+        self.assertLess(land.index("Missing data payload"), land.index("db_tx_begin"))
+        self.assertLess(land.index("Missing or invalid 'planet_id'"), land.index("db_tx_begin"))
+        # Remote and unauthorized targets are also refusal-only paths.
+        self.assertLess(land.index("not in the same sector"), land.index("db_tx_begin"))
+        self.assertLess(land.index("cannot land"), land.index("db_tx_begin"))
+        # Resource/defense and persistence failures must unwind the transaction.
+        self.assertIn("handle_turn_consumption_error", land)
+        self.assertGreater(land.index("db_tx_rollback"), land.index("db_tx_begin"))
+        self.assertIn("Landing transaction could not be committed", land)
+
     def test_citadel_lookup_does_not_treat_query_failure_as_no_defense(self):
         self.assertIn("load_landing_citadel_defenses", self.planets)
         self.assertIn("rc == ERR_DB_NOT_FOUND", self.planets)
