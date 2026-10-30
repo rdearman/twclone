@@ -39,3 +39,10 @@ Manage recurring payments (e.g., salaries).
 ## 3. Engine Events
 
 *   **`bank.pay_interest.v1`**: Engine command to process interest.
+# Insurance commands
+
+`insurance.policies.list`, `insurance.policies.buy`, and
+`insurance.claim.file` remain registered for compatibility, but their V3
+handlers are placeholders. Completing them requires transactional repository
+support for policy ownership, premium/fund accounting, and claim settlement;
+clients must treat their current success payloads as provisional.
