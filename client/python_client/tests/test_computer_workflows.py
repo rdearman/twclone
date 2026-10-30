@@ -28,6 +28,7 @@ def test_ship_rename_uses_active_ship_contract_and_refreshes_authoritative_state
     menus, ctx_factory, fake_conn, monkeypatch, capsys
 ):
     options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
+    assert "unavailable" not in options["r"]["label"].lower()
     assert options["r"]["action"] == {"pycall": "rename_ship_flow"}
     fake_conn.queue("ship.rename", {"status": "ok", "data": {"ship_id": 10, "name": "Aurora"}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10, "name": "Aurora"}}})
