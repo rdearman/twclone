@@ -449,6 +449,17 @@ func _run() -> void:
 	(menu._form_fields["upgrade_type"] as LineEdit).text = "shields"
 	menu._submit_form()
 	_check(captured.back()["command"] == "ship.upgrade" and captured.back()["data"] == {"upgrade_type": "shields"}, "ship upgrade did not use the canonical upgrade_type field")
+	menu._snapshot["ship"] = {"onplanet": 19}
+	menu._active_category = "PLANET"
+	menu._render_actions()
+	var citadel_button := _action_button(menu, "Build planet citadel")
+	_check(citadel_button != null and not citadel_button.disabled, "planet citadel action stayed unavailable while landed")
+	menu._choose_action({"label": "Allocate planet colonists", "command": "planet.colonists.allocate", "context_id": "planet_id", "fields": [["ore", "integer", "Ore colonists", "0"], ["organics", "integer", "Organics colonists", "0"], ["equipment", "integer", "Equipment colonists", "0"]], "mutating": true})
+	(menu._form_fields["ore"] as LineEdit).text = "4"
+	(menu._form_fields["organics"] as LineEdit).text = "2"
+	(menu._form_fields["equipment"] as LineEdit).text = "1"
+	menu._submit_form()
+	_check(captured.back()["command"] == "planet.colonists.allocate" and captured.back()["data"] == {"planet_id": 19, "ore": 4, "organics": 2, "equipment": 1}, "planet colonist allocation did not use canonical landed-planet fields")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():

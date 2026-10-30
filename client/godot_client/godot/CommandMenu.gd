@@ -703,6 +703,10 @@ func _render_actions() -> void:
 		var ship_state: Dictionary = _snapshot.get("ship", {})
 		if int(ship_state.get("onplanet", 0)) > 0:
 			actions.append({"label": "Launch from planet", "command": "planet.launch", "fixed": {}, "mutating": true})
+			actions.append({"label": "Planet colonist status", "command": "planet.colonists.get", "context_id": "planet_id"})
+			actions.append({"label": "Allocate planet colonists", "command": "planet.colonists.allocate", "context_id": "planet_id", "fields": [["ore", FIELD_INT, "Ore colonists", "0"], ["organics", FIELD_INT, "Organics colonists", "0"], ["equipment", FIELD_INT, "Equipment colonists", "0"]], "mutating": true})
+			actions.append({"label": "Build planet citadel", "command": "citadel.build", "context_id": "planet_id", "mutating": true})
+			actions.append({"label": "Upgrade planet citadel", "command": "citadel.upgrade", "context_id": "planet_id", "mutating": true})
 		else:
 			actions.append({"label": "Land on planet", "command": "planet.land", "context_id": "planet_id", "mutating": true})
 		var selected: Dictionary = _selection.get("data", {})
