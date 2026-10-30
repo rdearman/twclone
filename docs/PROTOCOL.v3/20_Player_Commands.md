@@ -18,7 +18,9 @@ List online players.
 ### `player.rankings`
 Get player rankings.
 **Args**: `{ "by": "net_worth", "limit": 10 }`
-**Response**: `{ "rankings": [...] }`
+**Response**: `{ "rankings": [...] }`. Each entry contains `player_id`,
+`name`, `experience`, and `alignment`, ordered by experience descending and
+player ID ascending for ties. `limit` defaults to 10 and accepts 1–100.
 
 ### `player.computer.recommend_routes`
 Request recommended trade loops based on personally visited ports and their known buy/sell profiles. Each result identifies the matching commodity and direction, names both ports, and includes a current gross per-unit price spread estimate. The estimate excludes transaction fees and can change before arrival; the server remains authoritative for quotes and trades.
