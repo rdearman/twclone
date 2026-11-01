@@ -47,6 +47,27 @@ for migration_test in \
   "$ROOT"/tests.v2/test_migration_102_porttypes.sql \
   "$ROOT"/tests.v2/test_migration_107_illegal_stock.sql \
   "$ROOT"/tests.v2/test_migration_108_planet_entity_stock.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_invariants.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_cargo_relocation.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_bundle.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_legacy_duplicates.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_legacy_race_guards.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_update_guards.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_transition_invariants.sql \
+  "$ROOT"/tests.v2/test_pg_ship_relationship_invariants.sql \
+  "$ROOT"/tests.v2/test_pg_ship_cargo_invariant_snapshot.sql \
+  "$ROOT"/tests.v2/test_pg_ship_legacy_cargo_capacity.sql \
+  "$ROOT"/tests.v2/test_pg_ship_active_reference_invariants.sql \
+  "$ROOT"/tests.v2/test_pg_ship_active_sector_invariant.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_state_snapshot.sql \
+  "$ROOT"/tests.v2/test_pg_ship_tow_invariants.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_final_snapshot.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_restart_snapshot.sql \
+  "$ROOT"/tests.v2/test_pg_ship_lifecycle_current_snapshot.sql \
+  "$ROOT"/tests.v2/test_pg_ship_primary_owner_semantics_snapshot.sql \
+  "$ROOT"/tests.v2/test_pg_ship_primary_flag_invariant.sql \
+  "$ROOT"/tests.v2/test_pg_bank_interest_ledger_invariants.sql \
+  "$ROOT"/tests.v2/test_pg_insurance_ledger_invariants.sql \
   "$ROOT"/tests.v2/test_pg_migration_*.sql; do
   case "$migration_test" in
     */test_pg_migration_116_player_event_journal.sql) continue ;;

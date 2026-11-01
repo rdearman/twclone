@@ -888,6 +888,33 @@ cmd_trade_cancel (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
+int
+cmd_trade_offers (client_ctx_t *ctx, json_t *root)
+{
+  if (!trade_offer_require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_BUSY, "Database unavailable");
+      return 0;
+    }
+  trade_offer_list_t list;
+  int rc = repo_trade_offer_list_for_player (db, ctx->player_id, &list);
+  if (rc != 0)
+    {
+      send_response_error (ctx, root, rc, "Could not list player offers");
+      return 0;
+    }
+  json_t *offers = json_array ();
+  for (int i = 0; i < list.count; ++i)
+    json_array_append_new (offers, trade_offer_json (&list.items[i]));
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "offers", offers);
+  send_response_ok_take (ctx, root, "trade.offers_v1", &payload);
+  return 0;
+}
+
 
 //////////////////////////////////////////////////
 // --- helpers ---------------------------------------------------------------
@@ -1236,6 +1263,22 @@ h_update_port_stock (db_t *db,
 		     int port_id,
 		     const char *commodity_code, int delta, int *new_qty_out)
 {
+
+  /* Port inventory is part of the trade settlement.  Do not let the
+   * generic entity-stock helper silently clamp an invalid settlement: that
+   * would mint cargo when a buy exceeds stock, or overfill a port when a
+   * sell exceeds capacity. */
+  int current_quantity = 0;
+  int max_capacity = 0;
+  if (db_ports_get_market_move_info (db, port_id, commodity_code,
+                                     &current_quantity, &max_capacity) != 0)
+    return ERR_DB_NOT_FOUND;
+
+  int new_quantity = 0;
+  if (__builtin_add_overflow (current_quantity, delta, &new_quantity)
+      || new_quantity < 0 || new_quantity > max_capacity)
+    return ERR_DB_CONSTRAINT;
+
   return h_update_entity_stock (db,
 				ENTITY_TYPE_PORT,
 				port_id, commodity_code, delta, new_qty_out);
@@ -1289,8 +1332,11 @@ h_market_move_port_stock (db_t *db,
     }
 
 
-  new_quantity = (new_quantity < 0) ? 0 : new_quantity;
-  new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
+  /* A settlement outside the port's inventory bounds is a refusal, not a
+   * clamped success.  Clamping here used to grant cargo that the port did
+   * not own when a buy raced or requested more than available stock. */
+  if (new_quantity < 0 || new_quantity > max_capacity)
+    return ERR_DB_CONSTRAINT;
 
   /* 3. Update DB */
   return h_update_entity_stock (db,
@@ -1985,13 +2031,6 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
     }
   sector_id = port_sector_id;
 
-  /* Record player knowledge and visit */
-  repo_players_record_port_knowledge (db, ctx->player_id, port_id_val);
-  if (sector_id > 0)
-    {
-      repo_players_record_visit (db, ctx->player_id, sector_id);
-    }
-
   /* --- Retrieve commodities from entity_stock --- */
   {
     if (db_ports_get_commodities (db, port_id_val, &commodities_array) != 0)
@@ -2037,6 +2076,15 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
 
   json_object_set_new (payload, "port", port);
   port = NULL;			/* Ownership transferred to payload */
+
+  /* Only persist knowledge after the complete response has been assembled.
+   * A refused or failed information request must not leave a visit/knowledge
+   * side effect behind. */
+  repo_players_record_port_knowledge (db, ctx->player_id, port_id_val);
+  if (sector_id > 0)
+    {
+      repo_players_record_visit (db, ctx->player_id, sector_id);
+    }
 
   send_response_ok_take (ctx, root, "trade.port_info", &payload);
   payload = NULL;		/* Ownership transferred */
@@ -3017,6 +3065,16 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, 400, "Invalid sector_id.");
       return 0;
     }
+  /* Trading is a current-location action.  Do not let a caller select a
+   * remote sector and then settle against a port there; this check must run
+   * before idempotency, turn, cargo, credit, or knowledge mutations. */
+  if (sector_id != ctx->sector_id)
+    {
+      send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND,
+                                   "You must be in the port's sector to trade.",
+                                   NULL);
+      return 0;
+    }
   if (!cluster_can_trade (db, sector_id, ctx->player_id))
     {
       send_response_refused_steal (ctx,
@@ -3093,6 +3151,16 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       if (db_ports_check_port_id (db, requested_port_id, &exists) == 0
 	  && exists)
 	{
+	  int port_sector_id = 0;
+	  if (db_ports_get_port_sector (db, requested_port_id,
+	                                 &port_sector_id) != 0
+	      || port_sector_id != ctx->sector_id)
+	    {
+	      send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND,
+	                                   "You must be in the port's sector to trade.",
+	                                   NULL);
+	      return 0;
+	    }
 	  port_id = requested_port_id;
 	}
       else
@@ -3843,6 +3911,20 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       requested_port_id = (int) json_integer_value (jport);
     }
 
+  /* A trade cannot be directed at a remote sector.  Keep the supplied
+   * sector_id as receipt metadata, but require it to identify the live
+   * player location before any settlement work begins. */
+  if (json_is_integer (json_object_get (data, "sector_id"))
+      && json_integer_value (json_object_get (data, "sector_id"))
+         != ctx->sector_id)
+    {
+      send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND,
+                                   "You must be in the port's sector to trade.",
+                                   NULL);
+      rc = 0;
+      goto cleanup;
+    }
+
   /* items */
   jitems = json_object_get (data, "items");
   if (!json_is_array (jitems))
@@ -3913,6 +3995,16 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	{
 	  send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND,
 				       "Port not found.", NULL);
+	  rc = 0;
+	  goto cleanup;
+	}
+      int port_sector_id = 0;
+      if (db_ports_get_port_sector (db, port_id, &port_sector_id) != 0
+          || port_sector_id != ctx->sector_id)
+	{
+	  send_response_refused_steal (ctx, root, ERR_PORT_NOT_FOUND,
+	                               "You must be in the port's sector to trade.",
+	                               NULL);
 	  rc = 0;
 	  goto cleanup;
 	}
@@ -4221,7 +4313,12 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 	  (db, ctx->player_id, port_id, sector_id, commodity, amount,
 	   unit_price) != 0)
 	{
-	  /* we just skip log failures or if it was constraint but we continue buy path */
+	  /* The receipt, inventory movement and trade journal are one settlement.
+	   * A missing journal row makes a successful response non-replayable and
+	   * breaks the conservation/audit contract, so abort the whole transaction. */
+	  send_response_error (ctx, root, ERR_DB,
+	                       "Failed to record trade settlement.");
+	  goto fail_tx;
 	}
 
       /* receipt line */
@@ -4280,9 +4377,22 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 
     if (get_account_rc == 0)
       {
-	h_add_credits_unlocked (db, port_bank_account_id,
-				total_item_cost, "TRADE_BUY", tx_group_id,
-				&new_port_balance);
+	int port_credit_rc =
+	  h_add_credits_unlocked (db, port_bank_account_id,
+				 total_item_cost, "TRADE_BUY", tx_group_id,
+				 &new_port_balance);
+	if (port_credit_rc != 0)
+	  {
+	    send_response_error (ctx, root, ERR_DB,
+				 "Failed to credit port settlement account.");
+	    goto fail_tx;
+	  }
+      }
+    else
+      {
+	send_response_error (ctx, root, ERR_DB,
+				 "Failed to resolve port settlement account.");
+	goto fail_tx;
       }
   }
 

@@ -9,14 +9,7 @@
     {
       "name": "Rig: Move player to Sector 200",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector_id = 200 WHERE player_id = @{mine_tester_player_id};" },
-      "user": "admin",
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Rig: Move ship to Sector 200",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector_id = 200 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{mine_tester_player_id});" },
+      "data": { "sql": "WITH moved_ship AS (UPDATE ships SET sector_id = 200 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{mine_tester_player_id}) RETURNING ship_id) UPDATE players SET sector_id = 200 WHERE player_id = @{mine_tester_player_id};" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -31,7 +24,7 @@
       "name": "Action: Lay Armid Mines",
       "command": "combat.lay_mines",
       "data": {
-        "count": 50,
+        "quantity": 50,
         "mine_type": "armid"
       },
       "user": "mine_tester",
@@ -63,9 +56,9 @@
     {
       "name": "Action: Lay Negative Amount (Invalid Input)",
       "command": "combat.lay_mines",
-      "data": { "count": -10, "mine_type": "armid" },
+      "data": { "quantity": -10, "mine_type": "armid" },
       "user": "mine_tester",
-      "expect": { "status": "error", "error_code": 400 } 
+      "expect": { "status": "error", "error_code": 400 }
     },
     {
       "name": "Setup: Reset for Sweep (Clear)",
@@ -77,7 +70,7 @@
     {
       "name": "Setup: Reset for Sweep (Seed)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (1, 1, 1, 10, now());" },
+      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (200, 1, 1, 10, now());" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -85,13 +78,17 @@
       "name": "Action: Sweep Mines",
       "command": "combat.sweep_mines",
       "data": {
-        "from_sector_id": 200,
-        "target_sector_id": 200,
-        "fighters_committed": 100,
-        "mine_type": "armid"
+        "target_sector_id": 200
       },
       "user": "mine_tester",
       "expect": { "status": "ok", "data": { "success": true } }
+    },
+    {
+      "name": "Action: Reject non-current sweep target",
+      "command": "combat.sweep_mines",
+      "data": { "target_sector_id": 201 },
+      "user": "mine_tester",
+      "expect": { "status": "error" }
     }
   ]
 }

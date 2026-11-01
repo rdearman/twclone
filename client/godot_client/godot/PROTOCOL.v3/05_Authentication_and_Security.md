@@ -16,7 +16,7 @@ Creates a new player account.
   "command": "auth.register",
   "data": {
     "username": "new_player",
-    "password": "strong_password",
+    "passwd": "strong_password",
     "ship_name": "My First Ship",
     "ui_locale": "en_US",
     "ui_timezone": "America/New_York"
@@ -42,7 +42,7 @@ Authenticates a user.
 ```json
 {
   "command": "auth.login",
-  "data": { "username": "player", "password": "password" }
+  "data": { "username": "player", "passwd": "password" }
 }
 ```
 **Response**

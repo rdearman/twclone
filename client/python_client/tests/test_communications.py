@@ -82,6 +82,7 @@ def test_mail_inbox_uses_display_index_and_unread_marker(ctx_factory, fake_conn,
     ]}})
     ctx = ctx_factory()
     client.mail_inbox_flow(ctx)
+    assert fake_conn.calls[0] == {"command": "mail.inbox", "data": {}}
     assert ctx.state["mail_items"][0]["id"] == 44
     out = capsys.readouterr().out
     assert "1. [NEW]" in out
@@ -90,10 +91,42 @@ def test_mail_inbox_uses_display_index_and_unread_marker(ctx_factory, fake_conn,
     fake_conn.queue("mail.read", {"status": "ok", "data": {
         "id": 44, "sender_name": "Nova", "subject": "Hello", "body": "Welcome", "sent_at": "now"
     }})
+    fake_conn.queue("mail.inbox", {"status": "ok", "data": {"items": [
+        {"id": 44, "sender_name": "Nova", "subject": "Hello", "read_at": "now"},
+    ]}})
     monkeypatch.setattr("builtins.input", lambda _prompt: "1")
     client.mail_read_flow(ctx)
-    assert fake_conn.calls[-1] == {"command": "mail.read", "data": {"id": 44}}
-    assert "Welcome" in capsys.readouterr().out
+    assert [call["command"] for call in fake_conn.calls[-2:]] == ["mail.read", "mail.inbox"]
+    assert fake_conn.calls[-2]["data"] == {"mail_id": 44}
+    assert fake_conn.calls[-1]["data"] == {}
+
+
+def test_mail_inbox_discards_non_authoritative_ids(ctx_factory, fake_conn, capsys):
+    fake_conn.queue("mail.inbox", {"status": "ok", "data": {"items": [
+        {"id": True, "subject": "Boolean"},
+        {"id": "44", "subject": "String"},
+        {"id": 45, "subject": "Valid"},
+    ]}})
+
+    ctx = ctx_factory()
+    client.mail_inbox_flow(ctx)
+
+    assert [item["id"] for item in ctx.state["mail_items"]] == [45]
+    output = capsys.readouterr().out
+    assert "Valid" in output
+    assert "Boolean" not in output
+
+
+def test_mail_delete_refreshes_authoritative_inbox(ctx_factory, fake_conn, monkeypatch):
+    fake_conn.queue("mail.delete", {"status": "ok", "data": {"deleted": [44]}})
+    fake_conn.queue("mail.inbox", {"status": "ok", "data": {"items": []}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "44")
+
+    ctx = ctx_factory()
+    client.mail_delete_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["mail.delete", "mail.inbox"]
+    assert ctx.state["mail_items"] == []
 
 
 def test_mail_empty_and_refusal_are_clean(ctx_factory, fake_conn, capsys):

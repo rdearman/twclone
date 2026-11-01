@@ -13,7 +13,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{information_visibility_user_player_id};"
+        "sql": "WITH moved_player AS (UPDATE players SET sector_id = 1 WHERE player_id = @{information_visibility_user_player_id} RETURNING ship_id) UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM moved_player);"
       },
       "expect": { "status": "ok" }
     },
@@ -22,7 +22,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id});"
+        "sql": "SELECT 1;"
       },
       "expect": { "status": "ok" }
     },
@@ -32,6 +32,15 @@
       "user": "admin",
       "data": {
         "sql": "UPDATE ports SET sector_id = 2 WHERE port_id = 2;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Keep the visible test port in the current sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET sector_id = 1 WHERE port_id = 1;"
       },
       "expect": { "status": "ok" }
     },
@@ -93,9 +102,16 @@
       "command": "sector.scan",
       "expect": { "status": "ok", "type": "sector.scan" },
       "asserts": [
-        { "path": "data.ports.*[port_id=1].name", "op": "==", "value": "Tavern Central" },
+        { "path": "data.ports.*[port_id=1].name", "op": "==", "value": { "sql_int": "SELECT name FROM ports WHERE port_id = 1" } },
         { "path": "data.ports.*[port_id=1].type", "op": "==", "value": null }
       ]
+    },
+    {
+      "name": "Current-sector density scan is available",
+      "user": "information_visibility_user",
+      "command": "sector.scan.density",
+      "data": { "sector_id": 1 },
+      "expect": { "status": "ok", "type": "sector.scan.density" }
     },
     {
       "name": "A scan does not record remote port knowledge",
@@ -168,17 +184,37 @@
       "expect": { "status": "error", "error_code": 403 }
     },
     {
+      "name": "Rig: Select real unowned planets for visibility checks",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets (num, sector_id, name, owner_id, owner_type, class, type, created_by) SELECT COALESCE(MAX(num), 0) + 1, 1, 'Fog Visible QA', 0, 'none', 'M', MIN(planettypes_id), @{admin_player_id} FROM planets, planettypes RETURNING planet_id;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "visible_planet_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Select a real remote planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT planet_id FROM planets WHERE sector_id <> 1 ORDER BY planet_id LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "remote_planet_id": "data.rows.0.0" }
+    },
+    {
       "name": "Unowned planet details are hidden before landing",
       "user": "information_visibility_user",
       "command": "planet.info",
-      "data": { "planet_id": 700 },
+      "data": { "planet_id": "@{visible_planet_id}" },
       "expect": { "status": "error", "error_code": 1703 }
     },
     {
       "name": "Remote planet details are hidden",
       "user": "information_visibility_user",
       "command": "planet.info",
-      "data": { "planet_id": 8001 },
+      "data": { "planet_id": "@{remote_planet_id}" },
       "expect": { "status": "error", "error_code": 1703 }
     },
     {
@@ -186,7 +222,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET lastplanet = 700 WHERE player_id = @{information_visibility_user_player_id}"
+        "sql": "UPDATE players SET lastplanet = @{visible_planet_id} WHERE player_id = @{information_visibility_user_player_id}"
       },
       "expect": { "status": "ok" }
     },
@@ -204,7 +240,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES (700, 'ORE', 0, 1000, 0) ON CONFLICT (planet_id, commodity) DO NOTHING"
+        "sql": "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES (@{visible_planet_id}, 'ORE', 0, 1000, 0) ON CONFLICT (planet_id, commodity) DO NOTHING"
       },
       "expect": { "status": "ok" }
     },
@@ -212,7 +248,7 @@
       "name": "Planet details become available after landing",
       "user": "information_visibility_user",
       "command": "planet.info",
-      "data": { "planet_id": 700 },
+      "data": { "planet_id": "@{visible_planet_id}" },
       "expect": { "status": "ok", "type": "planet.info" }
     },
     {
@@ -266,7 +302,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 980001 WHERE player_id = @{information_visibility_user_player_id}"
+        "sql": "WITH moved_player AS (UPDATE players SET sector_id = 980001 WHERE player_id = @{information_visibility_user_player_id} RETURNING ship_id) UPDATE ships SET sector_id = 980001 WHERE ship_id = (SELECT ship_id FROM moved_player);"
       },
       "expect": { "status": "ok" }
     },
@@ -275,7 +311,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 980001 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id})"
+        "sql": "SELECT 1;"
       },
       "expect": { "status": "ok" }
     },
@@ -440,7 +476,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{information_visibility_user_player_id}"
+        "sql": "WITH moved_player AS (UPDATE players SET sector_id = 1 WHERE player_id = @{information_visibility_user_player_id} RETURNING ship_id) UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM moved_player);"
       },
       "expect": { "status": "ok" }
     },
@@ -449,7 +485,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{information_visibility_user_player_id})"
+        "sql": "SELECT 1;"
       },
       "expect": { "status": "ok" }
     },
@@ -462,6 +498,24 @@
       "asserts": [
         { "path": "data.current_sector", "op": "==", "value": 1 }
       ]
+    },
+    {
+      "name": "Snapshot: visibility state after reconnect",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.player_id, p.sector_id, t.turns_remaining, s.cloaked FROM players p LEFT JOIN turns t ON t.player_id = p.player_id LEFT JOIN ships s ON s.ship_id = p.ship_id WHERE p.player_id = @{information_visibility_user_player_id}"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Event evidence: visibility refusals for observer",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT engine_events_id, type, actor_player_id, sector_id, payload FROM engine_events WHERE actor_player_id = @{information_visibility_user_player_id} ORDER BY engine_events_id"
+      },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Rig: Remove isolated sector knowledge",

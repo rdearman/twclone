@@ -643,48 +643,71 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
   json_t *basic = NULL;
 
 
-  if (db_sector_basic_json (db, sector_id, &basic) == 0 && basic)
+  if (db_sector_basic_json (db, sector_id, &basic) != 0 || !basic)
     {
-      json_object_set_new (root, "sector_id", json_integer (sector_id));
-      json_object_set (root, "name", json_object_get (basic, "name"));
-      json_object_set (root, "beacon", json_object_get (basic, "beacon"));
-      json_decref (basic);
+      /* A missing or unreadable sector is a refused scan, not an empty
+       * result.  Callers use NULL to avoid charging a turn or changing
+       * cloak state after a failed lookup. */
+      if (basic)
+        json_decref (basic);
+      json_decref (root);
+      return NULL;
     }
+  json_object_set_new (root, "sector_id", json_integer (sector_id));
+  json_object_set (root, "name", json_object_get (basic, "name"));
+  json_object_set (root, "beacon", json_object_get (basic, "beacon"));
+  json_decref (basic);
   json_t *adj = NULL;
 
 
-  if (db_adjacent_sectors_json (db, sector_id, &adj) == 0 && adj)
+  if (db_adjacent_sectors_json (db, sector_id, &adj) != 0 || !adj)
     {
-      json_object_set_new (root, "adjacent_sectors", adj);
+      /* Do not return a partial scan after a failed visibility query. */
+      if (adj)
+        json_decref (adj);
+      json_decref (root);
+      return NULL;
     }
+  json_object_set_new (root, "adjacent_sectors", adj);
   json_t *ships = NULL;
-  if (db_ships_at_sector_json (db, player_id, sector_id, &ships) == 0)
+  if (db_ships_at_sector_json (db, player_id, sector_id, &ships) != 0 || !ships)
     {
-      json_object_set_new (root, "ships_present", ships ? : json_array ());
+      if (ships)
+        json_decref (ships);
+      json_decref (root);
+      return NULL;
     }
+  json_object_set_new (root, "ships_present", ships);
   json_t *ports = NULL;
 
 
-  if (db_ports_at_sector_json (db, sector_id, &ports) == 0)
+  if (db_ports_at_sector_json (db, sector_id, &ports) != 0 || !ports)
     {
-      /* Port class determines its fixed buy/sell behavior. Do not expose it
-       * through sector scans; clients learn trading details in port context. */
-      size_t index;
-      json_t *port;
-      json_array_foreach (ports, index, port)
-      {
-        json_object_del (port, "type");
-      }
-      json_object_set_new (root, "ports", ports ? : json_array ());
+      if (ports)
+        json_decref (ports);
+      json_decref (root);
+      return NULL;
     }
+  /* Port class determines its fixed buy/sell behavior. Do not expose it
+   * through sector scans; clients learn trading details in port context. */
+  size_t index;
+  json_t *port;
+  json_array_foreach (ports, index, port)
+    {
+      json_object_del (port, "type");
+    }
+  json_object_set_new (root, "ports", ports);
   json_t *planets = NULL;
 
 
-  if (db_planets_at_sector_json (db, sector_id, &planets) == 0)
+  if (db_planets_at_sector_json (db, sector_id, &planets) != 0 || !planets)
     {
-      json_object_set_new (root, "celestial_objects",
-			   planets ? : json_array ());
+      if (planets)
+        json_decref (planets);
+      json_decref (root);
+      return NULL;
     }
+  json_object_set_new (root, "celestial_objects", planets);
 
 
   attach_sector_asset_counts (db, sector_id, root);
@@ -717,7 +740,18 @@ sector_is_current_or_adjacent (db_t *db, int current_sector, int target_sector)
 void
 cmd_sector_scan (client_ctx_t *ctx, json_t *root)
 {
+  if (!ctx || !root)
+    {
+      return;
+    }
+
   db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB_CLOSED,
+                           "Database connection failed");
+      return;
+    }
   int ship_id = h_get_active_ship_id (db,
 				      ctx->player_id);
   if (ship_id <= 0)
@@ -743,6 +777,11 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
 {
   client_ctx_t *ctx = (client_ctx_t *) ctx_in;
 
+  if (!ctx || !root)
+    {
+      return;
+    }
+
   /* Get target sector from context or request data */
   int target_sector = ctx->sector_id;
   json_t *jdata = json_object_get (root, "data");
@@ -758,6 +797,17 @@ cmd_sector_scan_density (void *ctx_in, json_t *root)
   if (!db)
     {
       send_response_error (ctx, root, ERR_DB, "Database connection failed");
+      return;
+    }
+
+  /* Density is still sector intelligence: do not allow an arbitrary target
+   * sector to bypass the same current/adjacent visibility boundary used by
+   * sector descriptions.  Refuse before querying any target-sector data. */
+  if (!ctx || !sector_is_current_or_adjacent (db, ctx->sector_id,
+                                               target_sector))
+    {
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Sector density is limited to your current or adjacent sectors");
       return;
     }
 
@@ -881,6 +931,11 @@ universe_shutdown (void)
 int
 cmd_move_describe_sector (client_ctx_t *ctx, json_t *root)
 {
+  if (!ctx || !root)
+    {
+      return 1;
+    }
+
   db_t *db = game_db_get_handle ();
   if (!db)
     {
@@ -1015,16 +1070,35 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       }
   }
 
+  /* Movement and entry hazards are one gameplay mutation.  Keep the outer
+   * transaction open so a failed hazard lookup/application cannot leave the
+   * player moved (or charged) without its entry outcome. */
+  db_error_t txerr;
+  db_error_clear (&txerr);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin warp transaction");
+      return 0;
+    }
+
+  int previous_sector = ctx->sector_id;
+
   /* Consume turn */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
   if (tc != TURN_CONSUME_SUCCESS)
     {
+      db_tx_rollback (db, NULL);
       return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
     }
 
   int player_ship_id = h_get_active_ship_id (db, ctx->player_id);
 
-  if (db_player_set_sector (ctx->player_id, to) == 0)
+  /* Movement owns player/ship/tow location consistency.  Keep the mutation
+   * in the universe repository so a successful warp cannot leave the player
+   * and active/towed ships in different sectors. */
+  if (repo_universe_move_player_and_ship (db, ctx->player_id,
+                                          player_ship_id, to) == 0)
     {
       /* Record visit */
       repo_players_record_visit (db, ctx->player_id, to);
@@ -1043,12 +1117,49 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
 
       /* Canon #471: Sector assets engage on entry */
       json_t *hazard_report = NULL;
-      if (server_combat_apply_entry_hazards_report (db, ctx, to,
-                                                    &hazard_report))
+      int hazard_rc = server_combat_apply_entry_hazards_report
+        (db, ctx, to, &hazard_report);
+      if (hazard_rc < 0)
         {
           if (hazard_report)
             json_decref (hazard_report);
-          send_response_error (ctx, root, 403, "Ship destroyed by sector hazards.");
+          db_tx_rollback (db, NULL);
+          ctx->sector_id = previous_sector;
+          send_response_error (ctx, root, ERR_DB,
+                               "Warp could not resolve sector defenses; no movement was committed.");
+          return 0;
+        }
+      if (hazard_rc == 1)
+        {
+          if (!db_tx_commit (db, &txerr))
+            {
+              if (hazard_report)
+                json_decref (hazard_report);
+              db_tx_rollback (db, NULL);
+              ctx->sector_id = previous_sector;
+              send_response_error (ctx, root, ERR_DB_TX,
+                                   "Warp aftermath could not be committed.");
+              return 0;
+            }
+          json_t *data = json_object ();
+          json_object_set_new (data, "sector_id", json_integer (to));
+          json_object_set_new (data, "ship_destroyed", json_true ());
+          json_object_set_new (data, "hazards",
+                               hazard_report ? hazard_report : json_array ());
+          send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
+                                    "Ship destroyed by sector hazards.", data);
+          json_decref (data);
+          return 0;
+        }
+
+      if (!db_tx_commit (db, &txerr))
+        {
+          if (hazard_report)
+            json_decref (hazard_report);
+          db_tx_rollback (db, NULL);
+          ctx->sector_id = previous_sector;
+          send_response_error (ctx, root, ERR_DB_TX,
+                               "Warp and entry hazards could not be committed.");
           return 0;
         }
 
@@ -1064,8 +1175,12 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     }
   else
     {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_DB, "Failed");
+      ctx->sector_id = previous_sector;
+      return 0;
     }
+
   return 0;
 }
 
@@ -1497,7 +1612,7 @@ build_sector_info_json (db_t *db, int sid)
 int
 cmd_move_scan (client_ctx_t *ctx, json_t *root)
 {
-  if (!ctx)
+  if (!ctx || !root)
     {
       return 1;
     }
@@ -1509,25 +1624,40 @@ cmd_move_scan (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-
-  if (tc != TURN_CONSUME_SUCCESS)
+  /* Never substitute a public/default sector for an invalid session
+   * location.  Doing so would disclose sector 1 and charge a turn despite
+   * the caller having no authoritative location. */
+  int sector_id = ctx->sector_id;
+  if (sector_id <= 0)
     {
-      return handle_turn_consumption_error (ctx, tc, "move.scan", root, NULL);
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Current sector is unavailable");
+      return 0;
     }
-
-  int sector_id = (ctx->sector_id > 0) ? ctx->sector_id : 1;
   LOGI ("[move.scan] sector_id=%d\n", sector_id);
 
+  /* Build the read-only result before charging the scan.  A database or
+   * allocation failure must not consume a turn or alter cloak state. */
   json_t *payload =
     build_sector_scan_json (db, sector_id, ctx->player_id, false);
   if (!payload)
     {
       send_response_error (ctx, root, ERR_SECTOR_NOT_FOUND,
-			   "Sector not found");
+                           "Sector not found");
       return 0;
     }
+
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      json_decref (payload);
+      return handle_turn_consumption_error (ctx, tc, "move.scan", root, NULL);
+    }
+
+  /* A refused scan must not reveal the ship.  Decloak only after the
+   * turn check has succeeded, so zero-turn requests remain side-effect free. */
+  h_decloak_ship (db, h_get_active_ship_id (db, ctx->player_id));
 
   send_response_ok_take (ctx, root, "sector.scan", &payload);
   return 0;
@@ -1760,6 +1890,23 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Reject destinations outside the generated universe before charging a
+     turn. Universe sector IDs are generated as the contiguous range 1..max. */
+  int max_sector_id = 0;
+  if (repo_universe_get_max_sector_id (db, &max_sector_id) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Failed to validate transwarp destination");
+      return 0;
+    }
+  if (max_sector_id <= 0 || to_sector_id > max_sector_id)
+    {
+      send_response_refused_steal (ctx, root, ERR_SECTOR_NOT_FOUND,
+                                   "Transwarp destination does not exist.",
+                                   NULL);
+      return 0;
+    }
+
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (ship_id <= 0)
     {
@@ -1770,7 +1917,12 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
   /* Check transwarp capability */
   int has_transwarp = 0;
-  repo_universe_check_transwarp (db, ship_id, &has_transwarp);
+  if (repo_universe_check_transwarp (db, ship_id, &has_transwarp) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Failed to verify transwarp capability");
+      return 0;
+    }
 
   if (!has_transwarp)
     {
@@ -1780,17 +1932,35 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Keep turn consumption, relocation and entry hazards in one authoritative
+   * transaction. A failed hazard resolution must not strand a moved ship or
+   * consume the turn. */
+  db_error_t txerr;
+  db_error_clear (&txerr);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin transwarp transaction");
+      return 0;
+    }
+  int previous_sector = ctx->sector_id;
+
   /* Try to perform transwarp */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
   if (tc != TURN_CONSUME_SUCCESS)
     {
+      db_tx_rollback (db, NULL);
       return handle_turn_consumption_error (ctx, tc, "move.transwarp", root,
 					    NULL);
     }
 
   /* Update player sector (and ship/towed ships) */
-  if (db_player_set_sector (ctx->player_id, to_sector_id) != 0)
+  /* Use the same authoritative movement primitive as ordinary warp.  This
+   * updates the player, active ship and tow chain atomically. */
+  if (repo_universe_move_player_and_ship (db, ctx->player_id, ship_id,
+                                          to_sector_id) != 0)
     {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_DB,
 			   "Database error during transwarp");
       return 0;
@@ -1800,12 +1970,49 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
   /* Canon #471: Sector assets engage on entry */
   json_t *hazard_report = NULL;
-  if (server_combat_apply_entry_hazards_report (db, ctx, to_sector_id,
-                                                &hazard_report))
+  int hazard_rc = server_combat_apply_entry_hazards_report
+    (db, ctx, to_sector_id, &hazard_report);
+  if (hazard_rc < 0)
     {
       if (hazard_report)
         json_decref (hazard_report);
-      send_response_error (ctx, root, 403, "Ship destroyed by sector hazards during transwarp.");
+      db_tx_rollback (db, NULL);
+      ctx->sector_id = previous_sector;
+      send_response_error (ctx, root, ERR_DB,
+                           "Transwarp could not resolve sector defenses; no movement was committed.");
+      return 0;
+    }
+  if (hazard_rc == 1)
+    {
+      if (!db_tx_commit (db, &txerr))
+        {
+          if (hazard_report)
+            json_decref (hazard_report);
+          db_tx_rollback (db, NULL);
+          ctx->sector_id = previous_sector;
+          send_response_error (ctx, root, ERR_DB_TX,
+                               "Transwarp aftermath could not be committed.");
+          return 0;
+        }
+      json_t *data = json_object ();
+      json_object_set_new (data, "sector_id", json_integer (to_sector_id));
+      json_object_set_new (data, "ship_destroyed", json_true ());
+      json_object_set_new (data, "hazards",
+                           hazard_report ? hazard_report : json_array ());
+      send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
+                                "Ship destroyed by sector hazards during transwarp.", data);
+      json_decref (data);
+      return 0;
+    }
+
+  if (!db_tx_commit (db, &txerr))
+    {
+      if (hazard_report)
+        json_decref (hazard_report);
+      db_tx_rollback (db, NULL);
+      ctx->sector_id = previous_sector;
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Transwarp and entry hazards could not be committed.");
       return 0;
     }
 

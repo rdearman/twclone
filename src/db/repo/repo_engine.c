@@ -10,7 +10,7 @@ int repo_engine_get_config_int(db_t *db, const char *key, int *value_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q1 */
-    const char *q1 = "SELECT value FROM config WHERE key = {1} AND type = 'int' LIMIT 1;";
+    const char *q1 = "SELECT config.value FROM config WHERE config.key = {1} AND config.type = 'int' LIMIT 1;";
     char sql[512]; sql_build(db, q1, sql, sizeof(sql));
     if (db_query (db, sql, (db_bind_t[]){ db_bind_text(key) }, 1, &res, &err) && db_res_step(res, &err)) {
         *value_out = db_res_col_i32(res, 0, &err);
@@ -219,8 +219,10 @@ int repo_engine_cleanup_expired_limpets(db_t *db, const char *deployed_as_epoch,
 }
 
 db_res_t* repo_engine_get_active_interest_accounts(db_t *db, db_error_t *err) {
-    /* SQL_VERBATIM: Q17 */
-    const char *q17 = "SELECT bank_accounts_id, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick FROM bank_accounts WHERE is_active = TRUE AND interest_rate_bp > 0;";
+    const char *id_column = sql_bank_account_id_column(db);
+    if (!id_column) return NULL;
+    char q17[512];
+    snprintf(q17, sizeof(q17), "SELECT %s, owner_type, owner_id, balance, interest_rate_bp, last_interest_tick FROM bank_accounts WHERE is_active = TRUE AND interest_rate_bp > 0;", id_column);
     db_res_t *res = NULL;
     db_query(db, q17, NULL, 0, &res, err);
     return res;
@@ -228,8 +230,10 @@ db_res_t* repo_engine_get_active_interest_accounts(db_t *db, db_error_t *err) {
 
 int repo_engine_update_last_interest_tick(db_t *db, int current_epoch_day, int account_id) {
     db_error_t err;
-    /* SQL_VERBATIM: Q18 */
-    const char *q18 = "UPDATE bank_accounts SET last_interest_tick = {1} WHERE bank_accounts_id = {2};";
+    const char *id_column = sql_bank_account_id_column(db);
+    if (!id_column) return ERR_NOT_IMPLEMENTED;
+    char q18[256];
+    snprintf(q18, sizeof(q18), "UPDATE bank_accounts SET last_interest_tick = {1} WHERE %s = {2};", id_column);
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(current_epoch_day), db_bind_i64(account_id) }, 2, &err)) return err.code;
     return 0;

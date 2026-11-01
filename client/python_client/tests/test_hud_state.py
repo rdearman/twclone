@@ -8,6 +8,8 @@ Requirements covered:
 8. Refused/error responses do not mutate HUD state.
 9. Successful state-changing responses update relevant fields.
 """
+import pytest
+
 from hud import (
     HudState, hydrate_login, apply_response, merge_hud,
     extract_player_fields, extract_ship_fields, extract_mail_unread,
@@ -82,10 +84,20 @@ def test_unknown_fields_remain_unknown_not_zero():
 
 
 def test_zero_is_a_valid_distinct_value_from_unknown():
-    ship_zero_cargo = {"status": "ok", "data": {"ship": {"holds": 40, "cargo": []}}}
+    ship_zero_cargo = {"status": "ok", "data": {"ship": {"id": 7, "holds": 40, "cargo": []}}}
     fields = extract_ship_fields(ship_zero_cargo)
     assert fields["cargo_used"] == 0
     assert fields["cargo_used"] is not None
+
+
+@pytest.mark.parametrize("invalid_id", [None, 0, -1, True, 7.0, "7"])
+def test_ship_status_without_positive_authoritative_id_does_not_refresh_state(invalid_id):
+    resp = {"status": "ok", "data": {"ship": {
+        "id": invalid_id, "hull": 12, "fighters": 3,
+        "shields": 4, "holds": 20, "cargo": [],
+    }}}
+
+    assert extract_ship_fields(resp) == {}
 
 
 def test_refused_response_does_not_mutate_hud_state():

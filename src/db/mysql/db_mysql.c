@@ -61,6 +61,7 @@ typedef struct
   unsigned long *lengths;
   mysql_flag_t *is_null;
   char **owned;
+  size_t n_owned;
 } mysql_params_t;
 
 static void
@@ -285,11 +286,11 @@ mysql_rewrite_placeholders (const char *sql, size_t n_params, char **out_sql,
 }
 
 static void
-mysql_params_free (mysql_params_t *params, size_t n)
+mysql_params_free (mysql_params_t *params)
 {
   if (!params) return;
   if (params->owned)
-    for (size_t i = 0; i < n; i++) free (params->owned[i]);
+    for (size_t i = 0; i < params->n_owned; i++) free (params->owned[i]);
   free (params->owned);
   free (params->bind);
   free (params->lengths);
@@ -322,6 +323,7 @@ mysql_bind_params (const db_bind_t *params, size_t n_params,
   out->owned = calloc (n_markers, sizeof (*out->owned));
   if (!out->bind || !out->lengths || !out->is_null || !out->owned)
     goto oom;
+  out->n_owned = n_markers;
 
   for (size_t i = 0; i < n_markers; i++)
     {
@@ -378,12 +380,12 @@ mysql_bind_params (const db_bind_t *params, size_t n_params,
   return true;
 
 oom:
-  mysql_params_free (out, n_markers);
+  mysql_params_free (out);
   mysql_set_error (err, ERR_DB_NOMEM, DB_ERR_CAT_UNKNOWN, 0,
                    "Out of memory binding MySQL parameters.");
   return false;
 invalid:
-  mysql_params_free (out, n_markers);
+  mysql_params_free (out);
   mysql_set_error (err, ERR_DB_QUERY_FAILED, DB_ERR_CAT_UNKNOWN, 0,
                    "Unsupported or invalid MySQL bind parameter.");
   return false;
@@ -512,13 +514,13 @@ mysql_exec_common (db_t *db, const char *sql, const db_bind_t *params,
   if (!stmt)
     {
       pthread_mutex_unlock (&g_mysql_mutex);
-      mysql_params_free (&bound, n_params);
+      mysql_params_free (&bound);
       return false;
     }
   if (out_rows) *out_rows = (int64_t) mysql_stmt_affected_rows (stmt);
   if (out_id) *out_id = (int64_t) mysql_stmt_insert_id (stmt);
   mysql_stmt_close (stmt);
-  mysql_params_free (&bound, n_params);
+  mysql_params_free (&bound);
   pthread_mutex_unlock (&g_mysql_mutex);
   return true;
 }
@@ -700,7 +702,7 @@ mysql_query_impl (db_t *db, const char *sql, const db_bind_t *params,
   res->current_row = -1;
   *out_res = res;
   free (rewritten); free (order);
-  mysql_params_free (&bound, n_params);
+  mysql_params_free (&bound);
   pthread_mutex_unlock (&g_mysql_mutex);
   return true;
 
@@ -718,7 +720,7 @@ result_fail:
   free (res);
 fail:
   free (rewritten); free (order);
-  mysql_params_free (&bound, n_params);
+  mysql_params_free (&bound);
   pthread_mutex_unlock (&g_mysql_mutex);
   return false;
 }

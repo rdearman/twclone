@@ -90,6 +90,14 @@ extern "C"
     int planet_type_count;
     int server_port;
     char pg_conn_str[512];
+    /* Bootstrap-only database selection. PostgreSQL remains the default. */
+    char db_backend[16];
+    char mysql_host[256];
+    char mysql_user[128];
+    char mysql_password[256];
+    char mysql_database[128];
+    char mysql_unix_socket[256];
+    unsigned int mysql_port;
 
 
     struct

@@ -33,6 +33,7 @@ func begin_login(username: String, password: String) -> Dictionary:
 
 func handle_response(response: Dictionary) -> bool:
 	var status := Protocol.response_status(response)
+	print("[AUTH_TRACE] AuthSession response status=%s type=%s state=%s" % [status, str(response.get("type", "")), str(state)])
 	if status != "ok":
 		if state == State.AUTHENTICATING:
 			_login_in_flight = false
@@ -48,13 +49,31 @@ func handle_response(response: Dictionary) -> bool:
 		authentication_failed.emit("The server returned an invalid login response.")
 		return false
 	var token := str(data.get("session", data.get("session_token", "")))
+	print("[AUTH_TRACE] AuthSession response session_present=%s data_dictionary=%s" % [not token.is_empty(), data is Dictionary])
 	if token.is_empty():
 		_login_in_flight = false
 		state = State.UNAUTHENTICATED
 		authentication_failed.emit("The server did not return a session token.")
 		return false
+	var raw_player_id: Variant = data.get("player_id", null)
+	print("[AUTH_TRACE] AuthSession response player_id_type=%s" % [type_string(typeof(raw_player_id))])
+	# The authenticated player identity is the binding used by subsequent
+	# authoritative refreshes and landing reconciliation. Godot's JSON parser
+	# can represent an integer JSON number as an integral float, so normalize
+	# that wire representation without accepting fractional, string, or boolean
+	# values as an identity.
+	var player_id_valid := false
+	if typeof(raw_player_id) == TYPE_INT:
+		player_id_valid = int(raw_player_id) > 0
+	elif typeof(raw_player_id) == TYPE_FLOAT:
+		player_id_valid = is_finite(raw_player_id) and raw_player_id > 0.0 and raw_player_id == floor(raw_player_id)
+	if not player_id_valid:
+		_login_in_flight = false
+		state = State.UNAUTHENTICATED
+		authentication_failed.emit("The server did not return a valid player identity.")
+		return false
 	session_token = token
-	player_id = int(data.get("player_id", 0))
+	player_id = int(raw_player_id)
 	_login_in_flight = false
 	state = State.AUTHENTICATED
 	authenticated.emit(session_token, player_id)

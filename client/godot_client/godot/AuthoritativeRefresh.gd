@@ -65,20 +65,45 @@ func handle_reply(request_id: String, response: Dictionary, command: String) -> 
 	var expected_command := str(operation["command"])
 	var expected_type := str(operation["type"])
 	var result: Dictionary = Protocol.result_from_response(response)
-	var accepted: bool = result["kind"] == "ok" and command == expected_command and str(response.get("type", "")) == expected_type
+	# The V3 server publishes one typed response schema for each refresh. An
+	# omitted type is not a parallel response variant that can authorize stale
+	# ownership or a post-landing surface.
+	var response_type: Variant = response.get("type", null)
+	var type_matches: bool = response_type == expected_type
+	var accepted: bool = result["kind"] == "ok" and command == expected_command and type_matches
 	if accepted:
 		var data = response.get("data", {})
 		if not (data is Dictionary):
 			accepted = false
 		else:
 			match domain:
-				"player": accepted = state.accept_player(data, _generation)
+				"player":
+					# A fresh player record is only authoritative for this session
+					# when it carries the authenticated player identity.  Without
+					# this check, an unrelated success-shaped refresh could make a
+					# post-landing surface appear actionable.
+					accepted = _player_belongs_to_session(data) and state.accept_player(data, _generation)
 				"ship": accepted = state.accept_ship(data, _generation)
 				"sector": accepted = state.accept_sector(data, _generation)
 	if not accepted:
 		state.record_failure(domain, _generation)
 	_next_or_finish(domain)
 	return true
+
+func _player_belongs_to_session(data: Dictionary) -> bool:
+	var expected_id: Variant = auth_session.get("player_id")
+	if typeof(expected_id) != TYPE_INT or int(expected_id) <= 0:
+		# Test doubles and pre-session refreshes may not expose a session ID;
+		# the normal authenticated session always does.
+		return true
+	if not data.has("player") or not (data["player"] is Dictionary):
+		return false
+	var actual_id: Variant = data["player"].get("id", null)
+	# Godot's JSON parser can represent numeric wire values as floats. Accept
+	# only an integral positive number; strings, booleans and fractional values
+	# remain invalid identities.
+	var actual_valid: bool = (typeof(actual_id) == TYPE_INT and int(actual_id) > 0) or (typeof(actual_id) == TYPE_FLOAT and is_finite(actual_id) and actual_id > 0.0 and actual_id == floor(actual_id))
+	return actual_valid and int(actual_id) == int(expected_id)
 
 func handle_failure(request_id: String, _command: String, _result: Dictionary) -> bool:
 	if _retired.has(request_id):
@@ -146,7 +171,6 @@ func _next_or_finish(domain: String) -> void:
 	for requested_domain in _domains:
 		if str(snapshot["freshness"].get(requested_domain, "")) != ClientState.FRESH:
 			requested_are_fresh = false
-		break
 	if requested_are_fresh:
 		refresh_finished.emit(snapshot)
 	else:

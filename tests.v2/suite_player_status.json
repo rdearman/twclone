@@ -6,7 +6,7 @@
   "tests": [
     {
       "name": "Setup: User in Ship",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "status_player",
       "password": "password"
     },
@@ -17,10 +17,24 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Damaged ship hull",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull = 73 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'status_player');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Ship Status",
       "command": "ship.status",
       "user": "status_player",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.hull", "op": "==", "value": 73 },
+        { "path": "data.ship.hull", "op": ">=", "value": 0 },
+        { "path": "data.ship.hull", "op": "<=", "value": 100 }
+      ]
     }
   ]
 }

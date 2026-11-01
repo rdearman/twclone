@@ -47,7 +47,19 @@ class FakeConn:
         self.calls.append({"command": command, "data": data})
         q = self._queued.get(command)
         if q:
-            return q.pop(0)
+            response = q.pop(0)
+            # The live server publishes one explicit response schema for each
+            # trade read/settlement.  Keep fixtures concise while still
+            # exercising the same contract consumed by the client.
+            if (command == "trade.quote"
+                    and response.get("status") == "ok"
+                    and "type" not in response):
+                response["type"] = "trade.quote"
+            elif (command in ("trade.buy", "trade.sell")
+                  and response.get("status") == "ok"
+                  and "type" not in response):
+                response["type"] = f"{command}_receipt_v1"
+            return response
         # Sensible default: unknown command → ok with empty data, so tests
         # that don't care about a given call don't crash.
         return {"status": "ok", "data": {}}

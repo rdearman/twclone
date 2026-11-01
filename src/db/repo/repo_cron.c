@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include "globals.h"
 #include "repo_cron.h"
+#include "repo_universe.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 #include "planet_fighter_production.h"
@@ -45,25 +46,8 @@ db_cron_get_ship_info (db_t *db, int ship_id, int *sector_id, int *owner_id)
 int
 db_cron_tow_ship (db_t *db, int ship_id, int new_sector_id, int owner_id)
 {
-  if (!db) return -1;
-  db_error_t err;
-  db_error_clear (&err);
-
-  char sql_ship[512];
-  if (sql_build(db, "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};", sql_ship, sizeof(sql_ship)) != 0) return -1;
-  
-  if (!db_exec (db, sql_ship, (db_bind_t[]){ db_bind_i32 (new_sector_id), db_bind_i32 (ship_id) }, 2, &err))
-    return -1;
-
-  if (owner_id > 0)
-    {
-      char sql_player[512];
-      if (sql_build(db, "UPDATE players SET sector_id = {1} WHERE player_id = {2};", sql_player, sizeof(sql_player)) != 0) return -1;
-      
-      if (!db_exec (db, sql_player, (db_bind_t[]){ db_bind_i32 (new_sector_id), db_bind_i32 (owner_id) }, 2, &err))
-        return -1;
-    }
-  return 0;
+  (void) owner_id; /* ownership is resolved from the persisted ship relation */
+  return repo_universe_update_ship_sector (db, ship_id, new_sector_id);
 }
 
 int

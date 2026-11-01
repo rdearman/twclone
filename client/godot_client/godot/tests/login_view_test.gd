@@ -6,6 +6,7 @@ var failures: Array[String] = []
 var persisted_profiles: Array = []
 var persisted_index := -2
 var registration: Dictionary = {}
+var cancelled := false
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -19,8 +20,15 @@ func _run() -> void:
 		persisted_index = selected_index
 	)
 	_check(view.profile_selector != null and view.host_input != null, "login profile/address controls were not created")
-	_check(_has_label(view, "SERVER ADDRESS") and _has_label(view, "PORT") and _has_label(view, "USERNAME") and _has_label(view, "PASSWORD"), "connection inputs do not have visible labels")
+	_check(_has_label(view, "SERVER ADDRESS *") and _has_label(view, "PORT *") and _has_label(view, "USERNAME *") and _has_label(view, "PASSWORD *"), "required connection inputs do not have visible labels")
+	_check(_has_label(view, "SHIP NAME (optional)") and _has_label(view, "LOCALE (optional)") and _has_label(view, "TIMEZONE (optional)"), "optional registration inputs were not labelled")
+	_check(view.host_input.text.is_empty() and view.host_input.placeholder_text.begins_with("e.g."), "empty server address was indistinguishable from a populated default")
+	_check(view.host_input.get_theme_color("font_placeholder_color") != view.host_input.get_theme_color("font_color"), "placeholder and entered text colours were indistinguishable")
 	_check(view.mode_toggle_button != null and view.confirm_password_input != null and not view._registration_mode, "account registration controls were not initialized")
+	view.connection_cancelled.connect(func() -> void:
+		cancelled = true
+		view.set_status("Connection attempt cancelled.")
+	)
 	view.registration_requested.connect(func(host: String, port: int, username: String, password: String, ship_name: String, locale: String, timezone: String) -> void:
 		registration = {"host": host, "port": port, "username": username, "password": password, "ship_name": ship_name, "ui_locale": locale, "ui_timezone": timezone}
 	)
@@ -53,6 +61,19 @@ func _run() -> void:
 	_check(view.profile_selector.get_item_text(0) == "Current connection · not saved", "profile selector does not expose unsaved current connection")
 	view._toggle_registration_mode()
 	_check(view._registration_mode and view._registration_fields.visible, "registration mode did not show account fields")
+	_check(not view.ui_locale_input.text.is_empty() and not view.ui_timezone_input.text.is_empty(), "registration did not apply operating-system locale/timezone defaults")
+	view.host_input.clear()
+	view._submit()
+	_check(registration.is_empty() and view.status_label.text.contains("address is required"), "missing required address was not rejected locally")
+	view.host_input.text = "localhost"
+	view.port_input.text = "5432"
+	view._submit()
+	_check(registration.is_empty() and view.status_label.text.contains("PostgreSQL"), "PostgreSQL port was allowed as a game-server endpoint")
+	view.port_input.text = "1234"
+	view.set_status("Connecting…", true)
+	_check(view.cancel_button.visible and view.connect_button.disabled, "connection attempt did not expose a cancel state")
+	view.cancel_button.pressed.emit()
+	_check(cancelled and not view.cancel_button.visible, "connection cancellation was not emitted or did not restore the form")
 	view.host_input.text = "localhost"
 	view.port_input.text = "1234"
 	view.username_input.text = "captain"
@@ -73,7 +94,7 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():
-		print("Godot login view tests: 18 passed")
+		print("Godot login view regression tests passed")
 		quit(0)
 	else:
 		for failure in failures:

@@ -8,7 +8,7 @@ or a complete live gameplay journey.
 
 **Canonical reference:** [TradeWars 2002 Version 3 documentation](https://www.tw-attac.com/docs/TradeWars.html).
 See also [issue #491](https://github.com/rdearman/twclone/issues/491) and
-[`docs/CANONICAL_COMPARISON.md`](../CANONICAL_COMPARISON.md), whose March 2026
+the superseded March 2026 parity comparison,
 status estimates are historical and must not be treated as current verification.
 
 ## Client capability matrix

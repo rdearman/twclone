@@ -31,13 +31,6 @@
 #include "db/sql_driver.h"
 
 
-static inline int
-get_utc_epoch_day (int64_t ts)
-{
-  return (int) (ts / 86400);
-}
-
-
 #include "server_envelope.h"
 #include "s2s_transport.h"
 #include "engine_consumer.h"
@@ -49,6 +42,7 @@ get_utc_epoch_day (int64_t ts)
 #include "server_ports.h"
 #include "server_cron.h"
 #include "server_stardock.h"
+#include "server_bank.h"
 #include "common.h"
 #include "server_config.h"
 #include "server_clusters.h"
@@ -63,7 +57,6 @@ get_utc_epoch_day (int64_t ts)
 // Define the interval for the main game loop ticks in seconds
 #define GAME_TICK_INTERVAL_SEC 60
 #define MAX_RETRIES 3
-#define MAX_BACKLOG_DAYS 30	// Cap for how many days of interest can be applied retroactively
 static const int64_t CRON_PERIOD_MS = 500;	/* run every 0.5s */
 static const int CRON_BATCH_LIMIT = 8;	/* max tasks per runner tick */
 static const int64_t CRON_LOCK_STALE_MS = 120000;	/* reclaim after 2 min */
@@ -447,15 +440,26 @@ h_player_progress_from_event_payload (json_t *ev_payload)
     }
   json_t *j_player_id = json_object_get (ev_payload, "player_id");
   json_t *j_event_type = json_object_get (ev_payload, "type");	// Event type from engine_events
+#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
+  json_t *j_source_event_id = json_object_get (ev_payload, "source_event_id");
+#endif
 
 
-  if (!json_is_integer (j_player_id) || !json_is_string (j_event_type))
+  if (!json_is_integer (j_player_id) || !json_is_string (j_event_type)
+#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
+      || !json_is_integer (j_source_event_id)
+      || json_integer_value (j_source_event_id) <= 0
+#endif
+      )
     {
       LOGE
 	("h_player_progress_from_event_payload: Missing player_id or event type in payload.");
       return -1;
     }
   int player_id = json_integer_value (j_player_id);
+#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
+  int64_t source_event_id = json_integer_value (j_source_event_id);
+#endif
   const char *event_type = json_string_value (j_event_type);
   long long xp_delta = 0;
   int align_delta = 0;
@@ -512,8 +516,17 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       reason = "trade";
     }
   // TODO: Add more event types (player.destroy_ship.v1, etc.) here
+#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
+  char source_key[64];
+  snprintf (source_key, sizeof source_key, "engine_event:%" PRId64,
+            source_event_id);
+  (void) reason;
+  return db_player_apply_progress_event (db, player_id, event_type, source_key,
+                                         xp_delta, align_delta, 1);
+#else
   return h_player_apply_progress (db, player_id, xp_delta, align_delta,
 				  reason);
+#endif
 }
 
 
@@ -1351,111 +1364,9 @@ h_daily_bank_interest_tick (db_t *db, int64_t now_s)
       return 0;
     }
   LOGI ("daily_bank_interest_tick: Starting daily bank interest accrual.");
-
-  db_res_t *res = NULL;
-  db_error_t err;
-
-
-  db_error_clear (&err);
-
-  if ((res = repo_engine_get_active_interest_accounts (db, &err)) == NULL)
-    {
-      LOGE
-	("daily_bank_interest_tick: Failed to select accounts: %s",
-	 err.message);
-      unlock (db, "daily_bank_interest_tick");
-      return -1;
-    }
-
-  int current_epoch_day = get_utc_epoch_day (now_s);
-  int processed_accounts = 0;
-  long long min_balance_for_interest =
-    h_get_config_int_unlocked (db, "bank_min_balance_for_interest", 0);
-  long long max_daily_per_account =
-    h_get_config_int_unlocked (db, "bank_max_daily_interest_per_account",
-			       9223372036854775807LL);
-
-
-  while (db_res_step (res, &err))
-    {
-      int account_id = (int) db_res_col_i32 (res, 0, &err);
-      const char *owner_type = db_res_col_text (res, 1, &err);
-      int owner_id = (int) db_res_col_i32 (res, 2, &err);
-      long long balance = db_res_col_i64 (res, 3, &err);
-      int interest_rate_bp = (int) db_res_col_i32 (res, 4, &err);
-      int last_interest_tick = (int) db_res_col_i32 (res, 5, &err);
-
-
-      if (balance < min_balance_for_interest)
-	{
-	  continue;
-	}
-      int days_to_accrue = current_epoch_day - last_interest_tick;
-
-
-      if (days_to_accrue <= 0)
-	{
-	  continue;
-	}
-      if (days_to_accrue > MAX_BACKLOG_DAYS)
-	{
-	  days_to_accrue = MAX_BACKLOG_DAYS;
-	}
-      char tx_group_id[33];
-
-
-      h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
-      for (int i = 0; i < days_to_accrue; ++i)
-	{
-	  if (balance <= 0)
-	    {
-	      break;
-	    }
-	  long long daily_interest =
-	    (balance * interest_rate_bp) / (10000 * 365);
-
-
-	  if (daily_interest > max_daily_per_account)
-	    {
-	      daily_interest = max_daily_per_account;
-	    }
-	  if (daily_interest > 0)
-	    {
-	      int add_rc =
-		h_add_credits_unlocked (db, account_id, daily_interest,
-					"INTEREST", tx_group_id, &balance);
-
-
-	      if (add_rc != 0)
-		{
-		  LOGE
-		    ("daily_bank_interest_tick: Failed to add interest to account %d (owner %s:%d)",
-		     account_id, owner_type ? owner_type : "?", owner_id);
-		  db_res_finalize (res);
-		  unlock (db, "daily_bank_interest_tick");
-		  return -1;
-		}
-	    }
-	}
-
-      if (repo_engine_update_last_interest_tick
-	  (db, current_epoch_day, account_id) != 0)
-	{
-	  LOGE
-	    ("daily_bank_interest_tick: Failed to update last_interest_tick for account %d",
-	     account_id);
-	  db_res_finalize (res);
-	  unlock (db, "daily_bank_interest_tick");
-	  return -1;
-	}
-      processed_accounts++;
-    }
-
-  db_res_finalize (res);
-
-  LOGI
-    ("daily_bank_interest_tick: Successfully processed interest for %d accounts.",
-     processed_accounts);
+  int rc = server_bank_apply_interest (db, now_s);
+  if (rc != 0)
+    LOGE ("daily_bank_interest_tick: bank settlement failed: %d", rc);
   unlock (db, "daily_bank_interest_tick");
-  return 0;
+  return rc;
 }

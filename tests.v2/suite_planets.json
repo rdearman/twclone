@@ -14,10 +14,68 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Clear Sector 500 Planet Goods",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM planet_goods WHERE planet_id IN (SELECT planet_id FROM planets WHERE sector_id = 500);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Clear Sector 500 Planets",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "DELETE FROM planets WHERE sector_id = 500;" },
       "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Locate a real Stardock",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.sector_id LIMIT 1;"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "stardock_sector_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Move player and active ship to Stardock",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "WITH moved_player AS (UPDATE players SET sector_id = @{stardock_sector_id} WHERE player_id = @{planet_tester_1_player_id} RETURNING ship_id) UPDATE ships SET sector_id = @{stardock_sector_id} WHERE ship_id = (SELECT ship_id FROM moved_player);"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Dock the active ship at Stardock shipyard",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE ships SET ported = (SELECT p.port_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE p.sector_id = @{stardock_sector_id} AND pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1) WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{planet_tester_1_player_id});"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Fund the supported shipyard purchase",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE players SET credits = 1000000 WHERE player_id = @{planet_tester_1_player_id};"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Exchange starter ship for a Genesis-capable hull",
+      "command": "shipyard.upgrade",
+      "data": { "new_type_id": 1, "new_ship_name": "Q" },
+      "user": "planet_tester_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Buy Genesis torpedo through hardware service",
+      "command": "hardware.buy",
+      "data": { "code": "GENESIS", "quantity": 1 },
+      "user": "planet_tester_1",
       "expect": { "status": "ok" }
     },
     {
@@ -29,11 +87,11 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Deposit Funds (T2-01)",
+      "name": "Reject treasury deposit before citadel exists (T2-01)",
       "command": "planet.deposit",
-      "data": { "planet_id": "@t201_planet_id", "amount": 10000 },
+      "data": { "planet_id": "@t201_planet_id", "commodity": "CREDITS", "quantity": 10000 },
       "user": "planet_tester_1",
-      "expect": { "status": "ok" }
+      "expect": { "status": "refused", "error_code": 1454 }
     }
   ]
 }

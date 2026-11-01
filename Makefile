@@ -223,16 +223,16 @@ distuninstallcheck_listfiles = find . -type f -print
 am__distuninstallcheck_listfiles = $(distuninstallcheck_listfiles) \
   | sed 's|^\./|$(prefix)/|' | grep -v '$(infodir)/dir$$'
 distcleancheck_listfiles = find . -type f -print
-ACLOCAL = ${SHELL} '/home/rick/twclone/missing' aclocal-1.16
+ACLOCAL = ${SHELL} '/home/rick/Development/Active/twclone/missing' aclocal-1.16
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
-AUTOCONF = ${SHELL} '/home/rick/twclone/missing' autoconf
-AUTOHEADER = ${SHELL} '/home/rick/twclone/missing' autoheader
-AUTOMAKE = ${SHELL} '/home/rick/twclone/missing' automake-1.16
+AUTOCONF = ${SHELL} '/home/rick/Development/Active/twclone/missing' autoconf
+AUTOHEADER = ${SHELL} '/home/rick/Development/Active/twclone/missing' autoheader
+AUTOMAKE = ${SHELL} '/home/rick/Development/Active/twclone/missing' automake-1.16
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g -O2 -I/usr/include/postgresql -I/usr/include/mysql 
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -249,13 +249,14 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-02-16
-LDFLAGS = 
+ISODATE = 2026-11-01
+LDFLAGS =  -L/usr/lib/x86_64-linux-gnu
 LIBOBJS = 
-LIBS = -lhistory -lreadline -lpthread -lm 
+LIBS = -L/usr/lib/x86_64-linux-gnu -lmysqlclient -lz  -lzstd -lssl -lcrypto -lresolv -lm -lpq -lhistory -lreadline -lpthread -lm 
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} '/home/rick/twclone/missing' makeinfo
+MAKEINFO = ${SHELL} '/home/rick/Development/Active/twclone/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
+MYSQL_CONFIG = /usr/bin/mysql_config
 OBJEXT = o
 PACKAGE = twclone
 PACKAGE_BUGREPORT = 
@@ -265,15 +266,15 @@ PACKAGE_TARNAME = twclone
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.0.2
 PATH_SEPARATOR = :
-PG_CONFIG = 
+PG_CONFIG = /usr/bin/pg_config
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 
 VERSION = 0.0.2
-abs_builddir = /home/rick/twclone
-abs_srcdir = /home/rick/twclone
-abs_top_builddir = /home/rick/twclone
-abs_top_srcdir = /home/rick/twclone
+abs_builddir = /home/rick/Development/Active/twclone
+abs_srcdir = /home/rick/Development/Active/twclone
+abs_top_builddir = /home/rick/Development/Active/twclone
+abs_top_srcdir = /home/rick/Development/Active/twclone
 ac_ct_CC = gcc
 am__include = include
 am__leading_dot = .
@@ -300,7 +301,7 @@ host_vendor = pc
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/rick/twclone/install-sh
+install_sh = ${SHELL} /home/rick/Development/Active/twclone/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
@@ -679,6 +680,7 @@ distcleancheck: distclean
 	       $(distcleancheck_listfiles) ; \
 	       exit 1; } >&2
 check-am: all-am
+	$(MAKE) $(AM_MAKEFLAGS) check-local
 check: check-recursive
 all-am: Makefile autoconf.h
 installdirs: installdirs-recursive
@@ -782,29 +784,35 @@ ps-am:
 
 uninstall-am:
 
-.MAKE: $(am__recursive_targets) all install-am install-strip
+.MAKE: $(am__recursive_targets) all check-am install-am install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am \
-	am--refresh check check-am clean clean-cscope clean-generic \
-	cscope cscopelist-am ctags ctags-am dist dist-all dist-bzip2 \
-	dist-gzip dist-lzip dist-shar dist-tarZ dist-xz dist-zip \
-	dist-zstd distcheck distclean distclean-generic distclean-hdr \
-	distclean-tags distcleancheck distdir distuninstallcheck dvi \
-	dvi-am html html-am info info-am install install-am \
-	install-data install-data-am install-dvi install-dvi-am \
-	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs installdirs-am \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-generic pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am
+	am--refresh check check-am check-local clean clean-cscope \
+	clean-generic cscope cscopelist-am ctags ctags-am dist \
+	dist-all dist-bzip2 dist-gzip dist-lzip dist-shar dist-tarZ \
+	dist-xz dist-zip dist-zstd distcheck distclean \
+	distclean-generic distclean-hdr distclean-tags distcleancheck \
+	distdir distuninstallcheck dvi dvi-am html html-am info \
+	info-am install install-am install-data install-data-am \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-info install-info-am \
+	install-man install-pdf install-pdf-am install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-generic pdf \
+	pdf-am ps ps-am tags tags-am uninstall uninstall-am
 
 .PRECIOUS: Makefile
 
 
 db-gates:
 	@$(top_srcdir)/tools/db_gates.sh
+
+.PHONY: architecture-check
+architecture-check:
+	@python3 $(top_srcdir)/tools/check_architecture_boundaries.py
+
+check-local: architecture-check
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

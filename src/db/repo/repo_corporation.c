@@ -61,8 +61,10 @@ int repo_corp_get_bank_account_id(db_t *db, int corp_id) {
     db_res_t *res = NULL;
     db_error_t err;
     int account_id = -1;
-    /* SQL_VERBATIM: Q4 */
-    const char *q4 = "SELECT bank_accounts_id FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};";
+    const char *id_column = sql_bank_account_id_column(db);
+    if (!id_column) return ERR_NOT_IMPLEMENTED;
+    char q4[256];
+    snprintf(q4, sizeof(q4), "SELECT %s FROM bank_accounts WHERE owner_type = 'corp' AND owner_id = {1};", id_column);
     char sql[512]; sql_build(db, q4, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         account_id = db_res_col_i32(res, 0, &err);

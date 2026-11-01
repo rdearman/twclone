@@ -108,6 +108,7 @@ extern int cmd_equity_dividend_set (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_accept (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_cancel (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_offer (client_ctx_t * ctx, json_t * root);
+extern int cmd_trade_offers (client_ctx_t * ctx, json_t * root);
 extern int cmd_ferengi_traders (client_ctx_t *ctx, json_t *root);
 extern int cmd_ferengi_deal_accept (client_ctx_t *ctx, json_t *root);
 extern int cmd_ferengi_deal_reject (client_ctx_t *ctx, json_t *root);
@@ -558,6 +559,9 @@ static const command_entry_t k_command_registry[] = {
    schema_planet_harvest, 0, false, NULL},
   {"planet.info", cmd_planet_info, "Planet information", schema_planet_info,
    0, false, NULL},
+  {"planet.fighters.transfer", cmd_planet_fighters_transfer,
+   "Transfer fighters between a landed ship and its planet",
+   schema_planet_fighters_transfer, 0, false, NULL},
   {"planet.land", cmd_planet_land, "Land on a planet", schema_planet_land, 0, false, NULL},
   {"planet.colonists.get", cmd_planet_colonists_get, "Get colonist info for planet",
    schema_placeholder, 0, false, NULL},
@@ -728,13 +732,13 @@ static const command_entry_t k_command_registry[] = {
    schema_ship_reregister, 0, false, NULL},
   {"ship.self_destruct", cmd_ship_self_destruct, "Self-destruct a ship",
    schema_ship_self_destruct, 0, false, NULL},
-  {"ship.sell", cmd_ship_sell, "Sell a ship", schema_placeholder, 0, false, NULL},
+  {"ship.sell", cmd_ship_sell, "Sell a ship", schema_ship_sell, 0, false, NULL},
   {"ship.status", cmd_ship_status, "Ship status", schema_ship_status, 0, false, NULL},
   {"ship.tow", cmd_ship_tow, "Engage or disengage towing",
    schema_ship_tow, 0, false, NULL},
   {"ship.tow.status", cmd_ship_tow_status, "Ship towing status",
    schema_ship_tow_status, 0, false, NULL},
-  {"ship.transfer", cmd_ship_transfer, "Transfer a ship", schema_placeholder,
+  {"ship.transfer", cmd_ship_transfer, "Transfer a ship", schema_ship_transfer,
    0, false, NULL},
   {"ship.transfer_cargo", cmd_ship_transfer_cargo, "Transfer cargo",
    schema_ship_transfer_cargo, 0, false, NULL},
@@ -742,7 +746,7 @@ static const command_entry_t k_command_registry[] = {
    0, false, NULL},
   {"shipyard.list", cmd_shipyard_list, "List available ship hulls",
    schema_nav_no_args, 0, false, NULL},
-  {"shipyard.sell", cmd_shipyard_sell, "Sell a ship hull", schema_placeholder,
+  {"shipyard.sell", cmd_shipyard_sell, "Sell a ship hull", schema_shipyard_sell,
    0, false, NULL},
     {"shipyard.upgrade", cmd_shipyard_upgrade, "Upgrade to a new ship hull",
      schema_shipyard_upgrade, 0, false, NULL},
@@ -762,6 +766,10 @@ static const command_entry_t k_command_registry[] = {
     {"stock.exchange.orders.create", cmd_equity, "Create a stock order (DEPRECATED: use equity.exchange.order.create)", schema_placeholder, 0, true, "equity.exchange.order.create"},
     {"stock.ipo.register", cmd_equity_ipo_register, "Register corporation for IPO (DEPRECATED: use equity.ipo_register)", schema_placeholder, 0, true, "equity.ipo_register"},
     {"stock.portfolio.list", cmd_equity, "List stock portfolio (DEPRECATED: use equity.portfolio.list)", schema_placeholder, 0, true, "equity.portfolio.list"},
+#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
+    {"events.resume", cmd_events_resume, "Resume the player's event stream",
+     schema_events_resume, 0, false, NULL},
+#endif
     {"subscribe.add", cmd_subscribe_add, "Add a subscription",
    schema_subscribe_add, 0, false, NULL},
   {"subscribe.catalog", cmd_subscribe_catalog, "Subscription catalog",
@@ -810,6 +818,8 @@ static const command_entry_t k_command_registry[] = {
    schema_trade_jettison, 0, false, NULL},
   {"trade.offer", cmd_trade_offer, "Create a trade offer to another player",
    schema_trade_offer, 0, false, NULL},
+  {"trade.offers", cmd_trade_offers, "List the authenticated player's pending trade offers",
+   schema_trade_offers, 0, false, NULL},
   {"ferengi.traders", cmd_ferengi_traders,
    "View named Ferengi traders and their offers", schema_ferengi_traders,
    0, false, NULL},
@@ -1081,20 +1091,67 @@ server_deliver_to_player_topic (int player_id, const char *topic,
   char *event_id = gen_uuid_v4 ();
   if (!event_id)
     return -1;
+
+  int replayable = 0;
+  char timestamp[32] = {0};
+#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
+  char stream_id[37] = {0};
+  int64_t sequence = 0;
+  db_t *db = game_db_get_handle ();
+  if (db)
+    {
+      char *payload = json_dumps (data, JSON_COMPACT | JSON_SORT_KEYS);
+      if (payload && repo_comm_event_append (db, player_id, event_id,
+                                              event_type, topic, payload,
+                                              stream_id, &sequence,
+                                              timestamp) == 0)
+        replayable = 1;
+      else
+        LOGE ("event journal append failed for player %d event %s; delivering live-only",
+              player_id, event_type);
+      free (payload);
+    }
+#endif
+
+  char cursor[96];
+#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
+  if (replayable)
+    snprintf (cursor, sizeof cursor, "v1.%s.%" PRId64, stream_id, sequence);
+  else
+    {
+      free (event_id);
+      event_id = gen_uuid_v4 ();
+      timestamp[0] = '\0';
+      cursor[0] = '\0';
+      if (!event_id)
+        return -1;
+    }
+#else
+  (void) topic;
+  cursor[0] = '\0';
+#endif
+
   int delivered = 0;
   pthread_mutex_lock (&g_clients_mu);
-  for (client_node_t *n = g_clients; n; n = n->next)
+  for (client_node_t * n = g_clients; n; n = n->next)
     {
       client_ctx_t *c = n->ctx;
-      if (c && c->player_id == player_id && c->fd >= 0)
-        {
-          send_player_event (c, event_id, event_type, data, topic);
-          delivered++;
-        }
+
+      if (!c)
+	{
+	  continue;
+	}
+      if (c->player_id == player_id && c->fd >= 0)
+	{
+	  send_player_event (c, event_id, event_type, data,
+                             replayable ? timestamp : NULL, topic,
+                             replayable ? cursor : NULL, replayable);
+	  delivered++;
+	}
     }
   pthread_mutex_unlock (&g_clients_mu);
   free (event_id);
-  return delivered > 0 ? 0 : -1;
+  return (delivered > 0) ? 0 : -1;
 }
 
 int
@@ -1645,6 +1702,7 @@ server_loop (volatile sig_atomic_t *running)
       int rc = poll (&pfd, 1, 100);
       {
 	static uint64_t last_broadcast_ms = 0;
+	static uint64_t last_event_prune_ms = 0;
 	uint64_t now_ms = monotonic_millis ();
 
 	if (now_ms - last_broadcast_ms >= 500)
@@ -1652,6 +1710,22 @@ server_loop (volatile sig_atomic_t *running)
 	    (void) broadcast_sweep_once (game_db_get_handle (), 64);
 	    last_broadcast_ms = now_ms;
 	  }
+#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
+	if (now_ms - last_event_prune_ms >= 60000)
+	  {
+	    int64_t deleted = 0;
+	    int prune_rc = repo_comm_event_prune (game_db_get_handle (), 128,
+	                                          &deleted);
+	    if (prune_rc != 0)
+	      LOGE ("player event retention cleanup failed (%d)", prune_rc);
+	    else if (deleted > 0)
+	      LOGI ("player event retention removed %" PRId64 " expired rows",
+	            deleted);
+	    last_event_prune_ms = now_ms;
+	  }
+#else
+        (void) last_event_prune_ms;
+#endif
       }
 
       if (rc < 0)

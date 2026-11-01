@@ -26,6 +26,47 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Capture state before invalid destination",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining, p.sector_id FROM turns t JOIN players p ON p.player_id=t.player_id WHERE p.name='mover_transwarp';"
+      },
+      "expect": { "status": "ok" },
+      "save": {
+        "transwarp_invalid_turns": "data.rows.0.0",
+        "transwarp_invalid_sector": "data.rows.0.1"
+      }
+    },
+    {
+      "name": "Negative: Out-of-universe transwarp destination is refused",
+      "command": "move.transwarp",
+      "data": { "to_sector_id": 2147483647 },
+      "user": "mover_transwarp",
+      "expect": { "status": "refused", "error_code": 1700 }
+    },
+    {
+      "name": "Invalid destination preserves turns and location",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining, p.sector_id FROM turns t JOIN players p ON p.player_id=t.player_id WHERE p.name='mover_transwarp';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "@{transwarp_invalid_turns}"
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": "@{transwarp_invalid_sector}"
+        }
+      ]
+    },
+    {
       "name": "Positive: Transwarp to Sector",
       "command": "move.transwarp",
       "data": { "to_sector_id": 10 },

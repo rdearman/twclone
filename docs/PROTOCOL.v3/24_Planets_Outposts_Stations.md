@@ -7,6 +7,23 @@ Land on a planet (if within range).
 **Args**: `{ "planet_id": 123 }`
 **Response**: `{ "status": "landed", "planet_id": 123 }`
 
+The planet owner and authorized members of its owning corporation land without
+hostile-fire checks. An unauthorized attempt resolves active atmosphere Quasar
+fire and the existing planetary fighter/citadel combat rules before the access
+check is returned. Quasar damage consumes ship shields before hull, persists in
+the same transaction as `combat.hit.quasar`, and destroys the ship if hull
+reaches zero. Planetary fighters use the existing combat.attack_planet strength
+comparison and citadel gates; both fighter pools, citadel shields, and a
+`combat.planet_landing_defense.v1` event are persisted transactionally. The
+atmosphere cannon applies the existing military reaction multiplier used by
+sector Quasars. The
+unauthorized player does not gain access or land after an engagement. The error
+response includes `error.data.planet_id`, `error.data.landing_allowed`,
+`error.data.ship_remains_in_sector`, and `error.data.combat[]`. A surviving
+attacker remains in the sector; a destroyed ship has no active assignment.
+Unguarded planets retain the normal permission response, and an unowned planet
+retains its existing landing behavior.
+
 ### `planet.launch`
 Launch from a planet.
 **Response**: `{ "status": "launched", "in_space": true }`
@@ -15,7 +32,7 @@ Launch from a planet.
 Get detailed information about a planet after landing or when authorized as its
 player/corporation owner. Remote and unowned unlanded planet details are refused.
 **Args**: `{ "planet_id": 123 }`
-**Response**:
+**Response** (existing planet fields are retained):
 ```json
 {
   "planet_id": 123,
@@ -27,9 +44,102 @@ player/corporation owner. Remote and unowned unlanded planet details are refused
     {"commodity": "ORG", "quantity": 300, "max_capacity": 4000}
   ],
   "owner_id": 42,
-  "owner_type": "player"
+  "owner_type": "player",
+  "fighters": 50,
+  "citadel": {
+    "level": 2,
+    "construction_status": "upgrading",
+    "target_level": 3,
+    "construction_start_time": 1793214000,
+    "expected_completion_time": 1793217600,
+    "planetary_shields": 500,
+    "military_reaction_level": 1,
+    "treasury_balance": 25000
+  }
 }
 ```
+
+`fighters` is the planet's stored fighter count. `citadel.level`,
+`construction_status`, `planetary_shields`, and `military_reaction_level` are
+included when a citadel row exists and its defensive state can be read. The
+upgrade target and Unix epoch start/completion timestamps are included when
+the construction-state repository query is available. Quantum Cannon settings
+are not currently returned by `planet.info`; a repository read that exposes
+those settings while distinguishing absent configuration from query failure
+is still required.
+`treasury_balance` is included only for the planet owner or a member of its
+owning corporation; landing on the planet alone does not grant treasury access.
+
+Errors: `401` when unauthenticated, `400` for a missing or invalid
+`planet_id`, `403` (`ERR_NOT_FOUND`) when the planet does not exist, `402`
+(`ERR_PERMISSION_DENIED`) when the caller is neither landed nor an authorized
+owner/member, and a database error when authorized treasury data cannot be
+read.
+
+### `planet.fighters.transfer`
+
+Transfer fighters between the caller's active ship and a planet they control.
+The ship must be landed on the specified planet. `direction` is
+`ship_to_planet` or `planet_to_ship`; `quantity` must be a positive integer.
+
+```json
+{"command":"planet.fighters.transfer","data":{"planet_id":123,"direction":"ship_to_planet","quantity":25}}
+```
+
+Success response type: `planet.fighters.transferred_v1`.
+
+```json
+{"planet_id":123,"direction":"ship_to_planet","quantity":25,"planet_fighters":75,"ship_fighters":25}
+```
+
+The server rejects unauthenticated callers (`401`), invalid arguments (`400`),
+unknown planets (`403` / `ERR_NOT_FOUND`), callers who do not own/control the
+planet (`402` / `ERR_PERMISSION_DENIED`), and ships not landed on the planet
+(`402`). The transactional repository must
+recheck those conditions, available fighter quantity, and ship fighter
+capacity while locking both authoritative rows. Any rejected transfer must
+leave both fighter counts unchanged. A repository or transaction failure
+returns an error; the server never synthesizes a successful transfer.
+
+#### Repository integration contract
+
+The server uses these existing citadel/planet functions:
+
+```c
+int repo_citadel_get_construction_state(
+    db_t *db, int32_t planet_id, int32_t *level_out,
+    char *status_out, size_t status_out_size, int32_t *target_level_out,
+    int64_t *started_at_epoch_out, int64_t *completion_epoch_out);
+
+int db_planets_get_citadel_defenses_ex(
+    db_t *db, int planet_id, bool *has_active_defenses_out,
+    int *level_out, int *shields_out, int *reaction_out);
+
+int db_planets_consume_citadel_shields(
+    db_t *db, int planet_id, int expected_shields,
+    int amount, int *remaining_out);
+
+int repo_planets_transfer_fighters(
+    db_t *db, int player_id, int ship_id, int planet_id,
+    const char *direction, int quantity,
+    int *planet_fighters_after_out, int *ship_fighters_after_out);
+
+/* Legacy atmospheric defense lookup; its no-cannon result currently shares
+ * the failure result, so a distinct result is needed for level-3+ citadels
+ * with no atmosphere cannon configured. */
+int db_combat_get_planet_atmosphere_quasar(
+    db_t *db, int planet_id, int *owner_id, char *owner_type_out,
+    int *base_strength_out, int *reaction_out);
+```
+
+The construction read returns `0` on a row, `ERR_DB_NOT_FOUND` when there is
+no citadel row, and a database error for failed reads. The defense read
+distinguishes a failed read from an empty defense row. Shield consumption uses
+a compare-and-decrement update and returns `ERR_DB_BUSY` when its snapshot is
+stale. The fighter-transfer function is atomic, verifies player/ship/planet
+ownership and landing, rejects insufficient source fighters or ship capacity,
+and returns authoritative post-transfer quantities only after commit. It does
+not charge turns.
 
 ### `planet.view` [NYI]
 View detailed planet information after landing (includes colonists, production, citadel status, treasury).

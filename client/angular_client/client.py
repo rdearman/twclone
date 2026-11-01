@@ -797,42 +797,51 @@ def compute_flags(ctx: Context) -> dict:
 @register("sector_density_scan_flow")
 def sector_density_scan_flow(ctx: Context):
     """
-    Density-only scan that is resilient:
-    - Sends sector_id (if known)
-    - Tries sector.scan.density; falls back to move.scan.density
-    - Prints table for [sid, density, ...] or single dict shape
+    Density-only scan using the published sector.scan.density contract.
+
+    The server publishes one response schema (sector.density.scan) and a
+    flat [sector_id, density, ...] payload. Do not invent a fallback command
+    or display a success-shaped response that cannot be tied to server-owned
+    integer identifiers.
     """
-    sector_id = ctx.current_sector_id
-    payload = {"sector_id": sector_id} if sector_id is not None else {}
-    try:
-        resp = ctx.conn.rpc("sector.scan.density", payload)
-    except Exception:
-        resp = ctx.conn.rpc("move.scan.density", payload)
+    sector_id = _scan_positive_id(ctx.current_sector_id)
+    if sector_id is None:
+        print("Density scan unavailable: reconnect and refresh the current sector first.")
+        return
+
+    resp = ctx.conn.rpc("sector.scan.density", {"sector_id": sector_id})
     ctx.state["last_rpc"] = resp
 
     print("\n=== Density Scan ===")
-    data = resp.get("data") if isinstance(resp, dict) else None
+    if not isinstance(resp, dict) or resp.get("status") != "ok":
+        error = resp.get("error", {}) if isinstance(resp, dict) else {}
+        message = error.get("message", "The server did not return density information.") if isinstance(error, dict) else "The server did not return density information."
+        print(f"Density scan refused: {message}")
+        return
+    if resp.get("type") != "sector.density.scan":
+        print("Density scan response had an unexpected type; cached state was not changed.")
+        return
 
-    # Fix: Unwrap "sectors" list if present
-    if isinstance(data, dict) and "sectors" in data:
+    data = resp.get("data")
+    if isinstance(data, dict) and set(data) == {"sectors"}:
         data = data["sectors"]
+    if not isinstance(data, list) or len(data) % 2 != 0:
+        print("Density scan returned no usable authoritative rows.")
+        return
 
-    # Case A: {"sector_id": X, "density": Y}
-    if isinstance(data, dict) and "density" in data:
-        sid = data.get("sector_id", sector_id)
-        dens = data.get("density")
-        print(f"Sector: {sid}")
-        print(f"Density: {dens if dens is not None else '(unknown)'}")
+    pairs = []
+    for index in range(0, len(data), 2):
+        sid = _scan_positive_id(data[index])
+        density = data[index + 1]
+        if sid is None or not isinstance(density, int) or isinstance(density, bool) or density < 0:
+            print("Density scan returned malformed authoritative rows.")
+            return
+        pairs.append((sid, density))
 
-    # Case B: [sid, density, sid, density, ...]
-    elif isinstance(data, list) and all(isinstance(x, int) for x in data):
-        pairs = list(zip(data[0::2], data[1::2]))
-        print("Sector   Density")
-        print("----------------")
-        for sid, dens in pairs:
-            print(f"{sid:>6}   {dens:>7}")
-    else:
-        print("(unexpected response shape)")
+    print("Sector   Density")
+    print("----------------")
+    for sid, density in pairs:
+        print(f"{sid:>6}   {density:>7}")
 
 
 @register("pathfind_flow")
@@ -2956,6 +2965,37 @@ def list_deployed_mines_flow(ctx: Context):
         print(f"  Asset ID: {m.get('asset_id')}, Quantity: {m.get('count')}, Offensive Setting: {m.get('offense_mode')}")
     print("----------------------")
 
+def _scan_positive_id(value: Any) -> Optional[int]:
+    """Return only a server-shaped positive integer identifier."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _scan_optional_count(value: Any) -> str:
+    """Render a count only when the server supplied a non-negative integer."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return "not reported"
+    return str(value)
+
+
+def _scan_count(data: dict, counts: Any, key: str, aliases: tuple[str, ...] = ()) -> str:
+    """Read one count without treating absent/malformed data as zero."""
+    if isinstance(counts, dict) and key in counts:
+        return _scan_optional_count(counts[key])
+    for alias in aliases:
+        if alias in data:
+            return _scan_optional_count(data[alias])
+    if key in data:
+        return _scan_optional_count(data[key])
+    return "not reported"
+
+
+def _scan_bool(value: Any) -> str:
+    """Render a boolean disclosure only when its wire type is authoritative."""
+    return str(value).lower() if isinstance(value, bool) else "not reported"
+
+
 def _render_scan_card(scan: dict) -> str:
     """
     Pretty-print the server's move.scan response.
@@ -2966,45 +3006,45 @@ def _render_scan_card(scan: dict) -> str:
         if not isinstance(scan, dict):
             return str(scan)
 
-        # Error envelope -> show code/message
-        if scan.get("status") == "error":
+        # Error/refusal envelopes are not visibility facts. Never render data
+        # nested beside a negative response, even if the server included it.
+        if scan.get("status") in ("error", "refused"):
             err = scan.get("error") or {}
             code = err.get("code")
             msg = err.get("message") or "Unknown error"
-            return f"\n── Fast Scan: ERROR {code} — {msg}"
+            label = "REFUSED" if scan.get("status") == "refused" else "ERROR"
+            return f"\n── Fast Scan: {label} {code} — {msg}"
 
         d = scan.get("data") or {}
         if not isinstance(d, dict):
             return "\n── Fast Scan: (no data)"
 
-        # Core fields (tolerant fallbacks)
-        sid = d.get("sector_id") or d.get("id")
-        name = d.get("name") or "Unknown"
+        # A visibility response without an authoritative sector ID is not
+        # actionable information. Do not display an unbound name or counts.
+        sid = _scan_positive_id(d.get("sector_id"))
+        if sid is None:
+            return "\n── Fast Scan: no authoritative sector ID was returned."
+        name = d.get("name") if isinstance(d.get("name"), str) and d.get("name").strip() else "Unknown"
 
         sec = d.get("security") or {}
-        fed = bool(sec.get("fedspace"))
-        safe = bool(sec.get("safe_zone"))
-        locked = bool(sec.get("combat_locked"))
+        fed = _scan_bool(sec.get("fedspace"))
+        safe = _scan_bool(sec.get("safe_zone"))
+        locked = _scan_bool(sec.get("combat_locked"))
 
-        adj = d.get("adjacent") or []
-        if not isinstance(adj, list):
-            adj = []
+        adj = d.get("adjacent")
+        adjacent_ids = []
+        if isinstance(adj, list):
+            adjacent_ids = [str(item) for item in adj if _scan_positive_id(item) is not None]
 
-        port = d.get("port") or {}
-        port_present = bool(port.get("present"))
+        port = d.get("port")
+        port_present = port.get("present") if isinstance(port, dict) and isinstance(port.get("present"), bool) else None
 
         # Counts: prefer nested object; else reconstruct from flat fields
         counts = d.get("counts")
-        if isinstance(counts, dict):
-            ships = int(counts.get("ships") or 0)
-            planets = int(counts.get("planets") or 0)
-            mines = int(counts.get("mines") or 0)
-            fighters = int(counts.get("fighters") or 0)
-        else:
-            ships = int((d.get("ships") or d.get("ship_count") or d.get("ships_count") or 0) or 0)
-            planets = int((d.get("planets") or d.get("planet_count") or d.get("planets_count") or 0) or 0)
-            mines = int(d.get("mines") or 0)
-            fighters = int(d.get("fighters") or 0)
+        ships = _scan_count(d, counts, "ships", ("ship_count", "ships_count"))
+        planets = _scan_count(d, counts, "planets", ("planet_count", "planets_count"))
+        mines = _scan_count(d, counts, "mines")
+        fighters = _scan_count(d, counts, "fighters")
 
         beacon = d.get("beacon")
         # normalise beacon: allow string or explicit null
@@ -3012,10 +3052,10 @@ def _render_scan_card(scan: dict) -> str:
 
         # Render
         lines = []
-        lines.append(f"\n── Fast Scan: Sector {sid if sid is not None else '∅'} — {name}")
-        lines.append(f"   Adjacent: {', '.join(map(str, adj)) if adj else 'none'}")
+        lines.append(f"\n── Fast Scan: Sector {sid} — {name}")
+        lines.append(f"   Adjacent: {', '.join(adjacent_ids) if adjacent_ids else 'not reported'}")
         lines.append(f"   Security: fedspace={fed}, safe_zone={safe}, combat_locked={locked}")
-        lines.append(f"   Port: {'present' if port_present else 'none'}")
+        lines.append(f"   Port: {'present' if port_present else 'none' if port_present is False else 'not reported'}")
         lines.append(f"   Counts: ships={ships}, planets={planets}, mines={mines}, fighters={fighters}")
         lines.append(f"   Beacon: {beacon_str if beacon_str else 'none'}")
         return "\n".join(lines)
@@ -3045,23 +3085,28 @@ def scan_sector(ctx: "Context"):
     # Optional: lightly merge a few fields into our cached view WITHOUT
     # wiping richer objects from describe_sector (ships/planets lists, etc.)
     try:
-        d = (resp or {}).get("data") or {}
+        if not isinstance(resp, dict) or resp.get("status", "ok") != "ok":
+            return
+        d = resp.get("data") or {}
         if not isinstance(d, dict):
+            return
+        response_sector_id = _scan_positive_id(d.get("sector_id"))
+        confirmed_sector_id = _scan_positive_id(ctx.current_sector_id)
+        if response_sector_id is None or confirmed_sector_id is None or response_sector_id != confirmed_sector_id:
             return
         cur = ctx.last_sector_desc or {}
         merged = dict(cur)
 
-        if isinstance(d.get("sector_id"), int):
-            merged["id"] = d["sector_id"]
+        merged["id"] = response_sector_id
         if isinstance(d.get("name"), str):
             merged["name"] = d["name"]
-        if isinstance(d.get("adjacent"), list):
+        if isinstance(d.get("adjacent"), list) and all(_scan_positive_id(item) is not None for item in d["adjacent"]):
             merged["adjacent"] = d["adjacent"]
 
         # Represent scan’s port presence as a minimal port object
         port = d.get("port") or {}
-        if isinstance(port, dict):
-            merged["port"] = {"present": bool(port.get("present"))}
+        if isinstance(port, dict) and isinstance(port.get("present"), bool):
+            merged["port"] = {"present": port["present"]}
             # keep old 'class' if we had one previously
             if isinstance(cur.get("port"), dict) and "class" in cur["port"]:
                 merged["port"]["class"] = cur["port"]["class"]
@@ -4281,35 +4326,3 @@ def _ctx_capabilities_get(ctx, path, default=None):
 
 
 
-@register("sector_density_scan_flow")
-def sector_density_scan_flow(ctx: Context):
-    """
-    Density-only scan: calls sector.scan.density (fallback to move.scan.density).
-    Supports both dict payload and flat [sector_id, density, ...] arrays.
-    """
-    sector_id = ctx.current_sector_id
-    payload = {"sector_id": sector_id} if sector_id is not None else {}
-    try:
-        resp = ctx.conn.rpc("sector.scan.density", payload)
-    except Exception:
-        resp = ctx.conn.rpc("move.scan.density", payload)
-    ctx.state["last_rpc"] = resp
-
-    print("\n=== Density Scan ===")
-    data = resp.get("data") if isinstance(resp, dict) else None
-
-    # Case A
-    if isinstance(data, dict) and "density" in data:
-        sid = data.get("sector_id", sector_id)
-        dens = data.get("density")
-        print(f"Sector: {sid}")
-        print(f"Density: {dens if dens is not None else '(unknown)'}")
-    # Case B
-    elif isinstance(data, list) and all(isinstance(x, int) for x in data):
-        pairs = list(zip(data[0::2], data[1::2]))
-        print("Sector   Density")
-        print("----------------")
-        for sid, dens in pairs:
-            print(f"{sid:>6}   {dens:>7}")
-    else:
-        print("(unexpected response shape)")

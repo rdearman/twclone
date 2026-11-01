@@ -265,7 +265,7 @@
 - **MYSQL_COMPATIBILITY_DESIGN.md** — MySQL 8.0+ support design
 - **SHIPTYPE_RESTRICTIONS.md** — Ship type limitations (data-driven)
 - **SYSOP_MENU.md** — SysOp command menu structure
-- **FEATURE_PARITY_ANALYSIS.md** — Feature checklist vs. TradeWars 2002
+- **V3_STATUS.md** — maintained V3 scope, evidence, blockers and parity status
 
 ### Reports & Analysis
 - **docs/reports/** — Phase-specific implementation reports (commodity system, dynamic pricing, ship cargo, etc.)

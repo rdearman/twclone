@@ -1,4 +1,4 @@
-"""Disposable PostgreSQL integration for the V2-only BigBang SQL set.
+"""Disposable PostgreSQL integration for default V2 and opt-in V3 BigBang.
 
 The test derives connection strings from bin/bigbang.json, replaces the
 database with unique twclone_bigbang_qa_* names, and drops only those names.
@@ -23,6 +23,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 BIGBANG = ROOT / "bin/bigbang"
 SQL_DIR = ROOT / "sql/pg"
+MANIFEST = json.loads((SQL_DIR / "migration_manifest.json").read_text())
+DIAGNOSTIC_SCRIPTS = {
+    entry["name"] for entry in MANIFEST["scripts"] if entry["diagnostic"]
+}
 
 
 def apply_lines(output: str) -> list[str]:
@@ -48,7 +52,7 @@ def drop_if_present(admin_dsn: str, name: str) -> None:
         conn.close()
 
 
-def run_bigbang(base: dict, name: str) -> tuple[str, str]:
+def run_bigbang(base: dict, name: str, include_v3: bool) -> tuple[str, str]:
     admin_dsn = base["admin"]
     app_dsn = base["app"].replace("%DB%", name)
     with psycopg2.connect(admin_dsn) as admin:
@@ -66,6 +70,9 @@ def run_bigbang(base: dict, name: str) -> tuple[str, str]:
         "server_port": 28654,
         "s2s_port": 48654,
     })
+    config.pop("include_v3_migrations", None)
+    if include_v3:
+        config["include_v3_migrations"] = True
     with tempfile.TemporaryDirectory(prefix="twclone-bigbang-select-") as tmp:
         run_dir = Path(tmp)
         cfg = run_dir / "bigbang.json"
@@ -82,9 +89,14 @@ def run_bigbang(base: dict, name: str) -> tuple[str, str]:
     common = sorted(
         path.name for path in SQL_DIR.glob("*.sql")
         if path.name not in {"107_seed_illegal_commodities.sql",
-                             }
+                             "115_v3_xp_tax_persistence.sql",
+                             "116_player_event_journal.sql"}
+        and path.name not in DIAGNOSTIC_SCRIPTS
     )
     expected = common[:]
+    if include_v3:
+        expected += ["115_v3_xp_tax_persistence.sql", "116_player_event_journal.sql"]
+        expected.sort(key=lambda filename: (int(filename.split("_", 1)[0]), filename))
     expected.append("107_seed_illegal_commodities.sql")
     if applied != expected:
         raise AssertionError(f"unexpected script order: {applied!r}; expected {expected!r}")
@@ -118,8 +130,10 @@ def run_bigbang(base: dict, name: str) -> tuple[str, str]:
                 "to_regclass('public.player_events')"
             )
             v3_objects = cur.fetchone()
-            if any(v3_objects):
-                raise AssertionError(f"V2 selection created V3 objects: {v3_objects}")
+            if include_v3 and not all(v3_objects):
+                raise AssertionError(f"explicit V3 selection omitted V3 objects: {v3_objects}")
+            if not include_v3 and any(v3_objects):
+                raise AssertionError(f"default V2 selection created V3 objects: {v3_objects}")
         app_conn.commit()
     finally:
         app_conn.close()
@@ -131,11 +145,12 @@ def main() -> None:
         raise SystemExit("Build bin/bigbang first")
     base = json.loads((ROOT / "bin/bigbang.json").read_text(encoding="utf-8"))
     suffix = secrets.token_hex(5)
-    names = [f"twclone_bigbang_qa_{suffix}_v2"]
-    print(f"QA database: {names[0]}", flush=True)
+    names = [f"twclone_bigbang_qa_{suffix}_v2", f"twclone_bigbang_qa_{suffix}_v3"]
+    print(f"QA databases: {names[0]}, {names[1]}", flush=True)
     try:
-        v2_name, _ = run_bigbang(base, names[0])
-        print(f"PASS canonical SQL BigBang: V2 database={v2_name}")
+        v2_name, _ = run_bigbang(base, names[0], include_v3=False)
+        v3_name, _ = run_bigbang(base, names[1], include_v3=True)
+        print(f"PASS canonical SQL BigBang: V2 database={v2_name}; V3 opt-in database={v3_name}")
     finally:
         for name in names:
             drop_if_present(base["admin"], name)

@@ -327,6 +327,12 @@ int db_port_add_bust_record (int port_id,
                              const char *bust_type);
 int db_port_is_busted (int port_id, int player_id);
 int db_player_update_commission (db_t *db, int player_id);
+int db_player_apply_progress_event (db_t *db, int player_id,
+                                    const char *source_type,
+                                    const char *source_key,
+                                    long long xp_delta,
+                                    int alignment_delta,
+                                    int formula_version);
 int h_get_cluster_id_for_sector (db_t *db, int sector_id, int *out_cluster_id);
 int h_get_cluster_alignment (db_t *db, int sector_id, int *out_alignment);
 int h_get_cluster_alignment_band (db_t *db, int sector_id, int *out_band_id);

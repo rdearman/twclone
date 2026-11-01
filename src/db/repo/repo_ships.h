@@ -22,6 +22,13 @@ int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out);
 int repo_ships_rename_active(db_t *db, int32_t player_id, int32_t ship_id,
                              const char *name, int64_t *rows_out);
 
+/* Transfer the primary ownership row when the source ship is not active.
+ * The caller owns the surrounding transaction and must commit/rollback it. */
+int repo_ships_transfer_primary(db_t *db, int32_t ship_id,
+                                int32_t source_player_id,
+                                int32_t target_player_id,
+                                int64_t *rows_out);
+
 int repo_ships_get_towing_id(db_t *db, int32_t ship_id, int32_t *towing_id_out);
 
 int repo_ships_clear_towing_id(db_t *db, int32_t ship_id);

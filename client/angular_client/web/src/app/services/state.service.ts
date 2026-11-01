@@ -99,6 +99,11 @@ export class StateService {
     this.publish();
   }
 
+  confirmAuthenticatedSession(): void {
+    this.state.session.authentication = 'authenticated';
+    this.publish();
+  }
+
   /** Updates stream connectivity without asserting anything about session validity. */
   markStreamConnected(): void {
     this.state.session.connection = 'online';

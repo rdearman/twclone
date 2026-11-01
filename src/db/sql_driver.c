@@ -212,6 +212,7 @@ sql_conflict_target_fmt(const db_t *db)
  * @brief Return SQL expression for converting Unix epoch parameter to TIMESTAMPTZ.
  *
  * PostgreSQL: to_timestamp($X)
+ * MySQL:      FROM_UNIXTIME($X) (connection session time zone is UTC)
  * SQLite:     datetime($X, 'unixepoch')
  *
  * Use in WHERE clauses: WHERE timestamp_col <= <this_function>
@@ -295,11 +296,77 @@ sql_epoch_param_to_timestamptz(const db_t *db)
     {
     case DB_BACKEND_POSTGRES:
       return "to_timestamp(%s)";
+    case DB_BACKEND_MYSQL:
+      return "FROM_UNIXTIME(%s)";
     
     default:
       /* Fail fast for unsupported backends */
       return NULL;
     }
+}
+
+const char *
+sql_bank_account_id_column (const db_t *db)
+{
+  if (!db)
+    return "bank_accounts_id";
+  switch (db_backend (db))
+    {
+    case DB_BACKEND_POSTGRES:
+      return "bank_accounts_id";
+    case DB_BACKEND_MYSQL:
+      return "id";
+    default:
+      return NULL;
+    }
+}
+
+const char *
+sql_bank_transaction_id_column (const db_t *db)
+{
+  if (!db)
+    return "bank_transactions_id";
+  switch (db_backend (db))
+    {
+    case DB_BACKEND_POSTGRES:
+      return "bank_transactions_id";
+    case DB_BACKEND_MYSQL:
+      return "id";
+    default:
+      return NULL;
+    }
+}
+
+int
+sql_quote_identifier (const db_t *db, const char *identifier,
+                      char *out_buf, size_t out_size)
+{
+  char quote;
+  size_t len;
+  if (!identifier || !*identifier || !out_buf || out_size < 3)
+    return -1;
+  switch (db ? db_backend (db) : DB_BACKEND_POSTGRES)
+    {
+    case DB_BACKEND_POSTGRES:
+      quote = '"';
+      break;
+    case DB_BACKEND_MYSQL:
+      quote = '`';
+      break;
+    default:
+      return -1;
+    }
+  len = strlen (identifier);
+  if (len + 3 > out_size)
+    return -1;
+  for (size_t i = 0; i < len; i++)
+    if (!(isalnum ((unsigned char) identifier[i]) || identifier[i] == '_'))
+      return -1;
+  out_buf[0] = quote;
+  memcpy (out_buf + 1, identifier, len);
+  out_buf[len + 1] = quote;
+  out_buf[len + 2] = '\0';
+  return 0;
 }
 
 /**
@@ -350,8 +417,8 @@ sql_for_update_of (const db_t *db, const char *tables, char *out_buf,
 	      (int) out_sz) ? 0 : -1;
 
     case DB_BACKEND_MYSQL:
-      /* MySQL does not support 'OF' in FOR UPDATE; just return FOR UPDATE */
-      return (snprintf (out_buf, out_sz, " FOR UPDATE") <
+      /* MySQL 8 supports an OF table list and SKIP LOCKED. */
+      return (snprintf (out_buf, out_sz, " FOR UPDATE OF %s", tables) <
 	      (int) out_sz) ? 0 : -1;
 
     default:
@@ -362,8 +429,7 @@ sql_for_update_of (const db_t *db, const char *tables, char *out_buf,
 /**
  * @brief Return SQL clause for SELECT ... FOR UPDATE SKIP LOCKED.
  *
- * PostgreSQL: " FOR UPDATE SKIP LOCKED"
- * MySQL 9.5+: " FOR UPDATE SKIP LOCKED" (same syntax, supported since 8.0)
+ * PostgreSQL and MySQL 8.0+: " FOR UPDATE SKIP LOCKED"
  * For unsupported backends: FAILS (returns NULL).
  */
 const char *
@@ -381,11 +447,8 @@ sql_for_update_skip_locked(const db_t *db)
     {
     case DB_BACKEND_POSTGRES:
       return " FOR UPDATE SKIP LOCKED";
-    
-    /* MySQL 8.0+ supports identical syntax; add case when backend available:
     case DB_BACKEND_MYSQL:
       return " FOR UPDATE SKIP LOCKED";
-    */
     
     default:
       /* Fail safe for unsupported backends */
@@ -416,10 +479,8 @@ sql_json_object_fn(const db_t *db)
     case DB_BACKEND_POSTGRES:
       return "json_build_object";
     
-    /* MySQL 8.0+ uses JSON_OBJECT; add case when backend available:
     case DB_BACKEND_MYSQL:
       return "JSON_OBJECT";
-    */
     
     default:
       /* Fail fast for unsupported backends */
@@ -591,6 +652,7 @@ sqlb_puts(char *out, size_t out_cap, size_t *io, const char *s)
  *
  * Dialects:
  *   - PostgreSQL: "{1}" -> "$1"
+ *   - MySQL:      "{1}" -> "$1" (the MySQL driver remaps numbered markers to '?', preserving sparse/repeated indices)
  *   - SQLite:     "{1}" -> "?1"  (preserves index; allows reuse like "... {1} ... {1} ...")
  *   - Others:     "{1}" -> "?"   (typical)
  *
@@ -655,6 +717,15 @@ sql_build(const db_t *db, const char *template, char *out_buf, size_t buf_size)
                 {
                   /* $N */
                   /* tmp size is ample for "$2147483647" */
+                  int written = snprintf(tmp, sizeof tmp, "$%lu", n);
+                  if (written <= 0 || (size_t)written >= sizeof tmp) goto parse_error;
+                  if (sqlb_puts(out_buf, buf_size, &out_i, tmp) != 0) goto overflow;
+                }
+              else if (backend == DB_BACKEND_MYSQL)
+                {
+                  /* Keep the ordinal visible: the native MySQL prepared
+                   * statement uses '?', but the driver must remap sparse and
+                   * repeated positional binds before preparing it. */
                   int written = snprintf(tmp, sizeof tmp, "$%lu", n);
                   if (written <= 0 || (size_t)written >= sizeof tmp) goto parse_error;
                   if (sqlb_puts(out_buf, buf_size, &out_i, tmp) != 0) goto overflow;

@@ -30,8 +30,12 @@ int server_combat_apply_entry_hazards (db_t * db, client_ctx_t * ctx,
 				   int sector_id);
 int server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
                                              int sector_id, json_t **report);
+/* Atmosphere Quasar trigger: 0 = no hostile shot, 1 = shot survived,
+ * 2 = ship destroyed, negative = persistence/lookup failure. */
 int h_trigger_atmosphere_quasar (db_t * db, client_ctx_t * ctx,
-				 int planet_id);
+                                  int planet_id);
+int h_trigger_atmosphere_quasar_report (db_t *db, client_ctx_t *ctx,
+                                        int planet_id, json_t **outcome);
 
 bool is_asset_hostile (int asset_player_id, int asset_corp_id,
 		       int ship_player_id, int ship_corp_id);

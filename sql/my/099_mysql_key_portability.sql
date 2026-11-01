@@ -148,6 +148,8 @@ SELECT 'bank_accounts', 'owner_type', 32, 'VARCHAR(32) CHARACTER SET utf8mb4 COL
 UNION ALL
 SELECT 'bank_transactions', 'idempotency_key', 191, 'VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'
 UNION ALL
+SELECT 'bank_transactions', 'tx_group_id', 191, 'VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'
+UNION ALL
 SELECT 'bank_fee_schedules', 'tx_type', 64, 'VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL'
 UNION ALL
 SELECT 'bank_fee_schedules', 'owner_type', 32, 'VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin'

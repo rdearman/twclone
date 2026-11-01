@@ -39,17 +39,10 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: move tester to test port",
+      "name": "Rig: move tester and active ship to test port",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE players SET sector_id = (SELECT sector_id FROM ports WHERE name = 'V2 hardware test black market') WHERE player_id = @{black_market_hardware_tester_player_id};" },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Rig: move tester ship to test port",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": { "sql": "UPDATE ships SET sector_id = (SELECT sector_id FROM ports WHERE name = 'V2 hardware test black market') WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{black_market_hardware_tester_player_id});" },
+      "data": { "sql": "WITH target AS (SELECT sector_id FROM ports WHERE name = 'V2 hardware test black market'), moved_ship AS (UPDATE ships SET sector_id = (SELECT sector_id FROM target) WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{black_market_hardware_tester_player_id}) RETURNING ship_id) UPDATE players SET sector_id = (SELECT sector_id FROM target) WHERE player_id = @{black_market_hardware_tester_player_id};" },
       "expect": { "status": "ok" }
     },
     {

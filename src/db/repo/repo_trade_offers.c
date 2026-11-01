@@ -212,3 +212,45 @@ repo_trade_offer_transition (db_t *db, int64_t offer_id, const char *status,
   *changed_out = changed > 0;
   return 0;
 }
+
+int
+repo_trade_offer_list_for_player (db_t *db, int player_id,
+                                  trade_offer_list_t *list_out)
+{
+  if (!db || player_id <= 0 || !list_out)
+    return ERR_INVALID_ARG;
+  memset (list_out, 0, sizeof *list_out);
+  db_res_t *res = NULL;
+  db_error_t err;
+  char sql[768];
+  sql_build (db,
+             "SELECT trade_offer_id, sender_player_id, recipient_player_id, commodity_code, mode, quantity, unit_price, status, created_at, expires_at "
+             "FROM trade_offers WHERE (sender_player_id = {1} OR recipient_player_id = {1}) "
+             "AND status = 'pending' ORDER BY created_at DESC LIMIT 128;",
+             sql, sizeof sql);
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (player_id)}, 1, &res, &err))
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+  while (list_out->count < TRADE_OFFER_LIST_MAX && db_res_step (res, &err))
+    {
+      trade_offer_t *offer = &list_out->items[list_out->count];
+      memset (offer, 0, sizeof *offer);
+      offer->offer_id = db_res_col_i64 (res, 0, &err);
+      offer->sender_player_id = db_res_col_i32 (res, 1, &err);
+      offer->recipient_player_id = db_res_col_i32 (res, 2, &err);
+      copy_column_text (offer->commodity_code, sizeof offer->commodity_code, db_res_col_text (res, 3, &err));
+      copy_column_text (offer->mode, sizeof offer->mode, db_res_col_text (res, 4, &err));
+      offer->quantity = db_res_col_i32 (res, 5, &err);
+      offer->unit_price = db_res_col_i64 (res, 6, &err);
+      copy_column_text (offer->status, sizeof offer->status, db_res_col_text (res, 7, &err));
+      copy_column_text (offer->created_at, sizeof offer->created_at, db_res_col_text (res, 8, &err));
+      copy_column_text (offer->expires_at, sizeof offer->expires_at, db_res_col_text (res, 9, &err));
+      if (err.code != 0)
+        {
+          db_res_finalize (res);
+          return err.code;
+        }
+      list_out->count++;
+    }
+  db_res_finalize (res);
+  return err.code == 0 ? 0 : err.code;
+}

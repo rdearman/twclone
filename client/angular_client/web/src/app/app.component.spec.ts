@@ -16,9 +16,10 @@ class FakeGatewayTransport extends GatewayTransport {
 class FakeGameCommandTransport extends GameCommandTransport {
   calls: Array<{ command: string; data: unknown }> = [];
   response: unknown = { status: 'ok', data: { success: true } };
+  responses = new Map<string, unknown>();
   override sendCommand(command: string, data: unknown = {}) {
     this.calls.push({ command, data });
-    return of(this.response);
+    return of(this.responses.get(command) ?? this.response);
   }
 }
 
@@ -59,6 +60,21 @@ describe('AppComponent', () => {
     expect(TestBed.inject(StateService).snapshot().player.value?.['id']).toBe(17);
   });
 
+  it('restores an existing gateway session and player state on startup', async () => {
+    const transport = TestBed.inject(GatewayTransport) as FakeGatewayTransport;
+    spyOn(transport, 'playerMe').and.returnValue(of({ player: {
+      id: 17, username: 'captain', credits: '4879.00', sector: 2, ship_id: 41
+    } }));
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const state = TestBed.inject(StateService).snapshot();
+    expect(state.session.authentication).toBe('authenticated');
+    expect(state.player.value).toEqual(jasmine.objectContaining({ id: 17, credits: '4879.00', sector: 2 }));
+    expect(fixture.componentInstance.playerDetails).toEqual(jasmine.objectContaining({ username: 'captain' }));
+  });
+
   it('sends a selected sector ship to the existing combat.attack command', () => {
     const fixture = TestBed.createComponent(AppComponent);
     const component = fixture.componentInstance;
@@ -79,6 +95,62 @@ describe('AppComponent', () => {
       { ship_id: 41, name: 'Player ship' }, { ship_id: 52, name: 'Raider' }
     ] });
     expect(component.sectorShips.map(ship => ship['ship_id'])).toEqual([52]);
+  });
+
+  it('renders adjacent sectors using the server to_sector response field', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    const component = fixture.componentInstance;
+    TestBed.inject(StateService).acceptSector({
+      sector_id: 7,
+      adjacent_sectors: [{ to_sector: 8 }, { to_sector: 9, name: 'Nearby' }]
+    });
+    expect(component.adjacentSectors).toEqual([
+      { id: 8, name: '' }, { id: 9, name: 'Nearby' }
+    ]);
+  });
+
+  it('refreshes authoritative player credits and location with gameplay state', async () => {
+    const transport = TestBed.inject(GatewayTransport) as FakeGatewayTransport;
+    spyOn(transport, 'playerMe').and.returnValue(of({ player: {
+      id: 17, username: 'captain', credits: '4879.00', sector: 2, ship_id: 41
+    } }));
+    const fixture = TestBed.createComponent(AppComponent);
+    const component = fixture.componentInstance;
+    component.refreshGameplayState();
+    await fixture.whenStable();
+    expect(component.playerDetails).toEqual({
+      id: 17, username: 'captain', credits: '4879.00', sector: 2, ship_id: 41
+    });
+    expect(component.clientState.session.authentication).toBe('authenticated');
+  });
+
+  it('reconciles credits, cargo and sector from authoritative state after a trade', async () => {
+    const gateway = TestBed.inject(GatewayTransport) as FakeGatewayTransport;
+    spyOn(gateway, 'playerMe').and.returnValue(of({ player: {
+      id: 17, username: 'captain', credits: '4768.00', sector: 2, ship_id: 41
+    } }));
+    const commands = TestBed.inject(GameCommandTransport) as FakeGameCommandTransport;
+    commands.responses.set('port.status', { status: 'ok', data: { port: { port_id: 12, name: 'Market' } } });
+    commands.responses.set('trade.buy', { status: 'ok', data: { port_id: 12, credits_remaining: '4768.00' } });
+    commands.responses.set('ship.status', { status: 'ok', data: { ship: {
+      id: 41, cargo: [{ commodity: 'ore', quantity: 2 }]
+    } } });
+    commands.responses.set('sector.info', { status: 'ok', data: {
+      sector_id: 2, adjacent_sectors: [{ to_sector: 3 }], ports: [{ port_id: 12 }]
+    } });
+    const fixture = TestBed.createComponent(AppComponent);
+    const component = fixture.componentInstance;
+    TestBed.inject(StateService).acceptSector({ sector_id: 2, ports: [{ port_id: 12 }] });
+    component.selectPort({ port_id: 12, name: 'Market' });
+    component.commodity = 'ORE';
+    component.tradeQuantity = 2;
+    component.trade('trade.buy');
+    await fixture.whenStable();
+
+    expect(component.playerDetails).toEqual(jasmine.objectContaining({ credits: '4768.00', sector: 2 }));
+    expect(component.shipDetails).toEqual({ id: 41, cargo: [{ commodity: 'ore', quantity: 2 }] });
+    expect(component.sectorDetails).toEqual({ sector_id: 2, adjacent_sectors: [{ to_sector: 3 }], ports: [{ port_id: 12 }] });
+    expect(component.adjacentSectors).toEqual([{ id: 3, name: '' }]);
   });
 
   it('shows a server refusal from combat without treating it as a successful attack', () => {

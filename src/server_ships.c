@@ -37,6 +37,7 @@
 #include "server_envelope.h"
 #include "server_rules.h"
 #include "server_players.h"
+#include "db/repo/repo_players.h"
 #include "server_log.h"
 #include "server_ports.h"
 #include "db/db_api.h"
@@ -1103,9 +1104,13 @@ cmd_ship_list (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_sell (client_ctx_t *ctx, json_t *root)
 {
+  /* V3-SHIP-01 remains decision-gated: sale price and cargo disposition are
+   * not pinned by the canonical policy record.  Keep this refusal explicit
+   * until the domain settlement contract is selected. */
   send_response_error (ctx,
 		       root,
-		       ERR_NOT_IMPLEMENTED, "Not implemented: ship.sell");
+		       ERR_NOT_IMPLEMENTED,
+                       "ship.sell unavailable pending canonical settlement policy");
   return 0;
 }
 
@@ -1113,9 +1118,100 @@ cmd_ship_sell (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_transfer (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED, "Not implemented: ship.transfer");
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Authentication required");
+      return 0;
+    }
+
+  json_t *data = json_object_get (root, "data");
+  int ship_id = 0, target_player_id = 0;
+  if (!json_is_object (data)
+      || !json_get_int_flexible (data, "ship_id", &ship_id)
+      || !json_get_int_flexible (data, "target_player_id", &target_player_id)
+      || ship_id <= 0 || target_player_id <= 0
+      || target_player_id == ctx->player_id)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "ship_id and a different target_player_id are required");
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  /* Use the player repository for an early, side-effect-free refusal.  The
+   * ship repository repeats the existence check while locking both players;
+   * that in-transaction check remains authoritative when a recipient changes
+   * between this read and the ownership mutation. */
+  int target_exists = 0;
+  int target_rc = repo_players_check_exists (db, target_player_id,
+                                            &target_exists);
+  if (target_rc != 0)
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not validate transfer recipient");
+      return 0;
+    }
+  if (!target_exists)
+    {
+      send_response_refused_steal (ctx, root, ERR_TARGET_INVALID,
+                                   "Transfer recipient does not exist", NULL);
+      return 0;
+    }
+
+  /* Both-player locking and the ownership mutation belong to the ship
+   * repository.  Keeping that validation inside the transaction closes the
+   * check-then-transfer race and makes the repository the only ownership
+   * mutation boundary. */
+  db_error_t err = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not start ship transfer");
+      return 0;
+    }
+
+  int64_t rows = 0;
+  int rc = repo_ships_transfer_primary (db, ship_id, ctx->player_id,
+                                        target_player_id, &rows);
+  if (rc != 0 || rows != 1)
+    {
+      db_tx_rollback (db, &err);
+      /* repo_ships_transfer_primary owns the guarded ownership predicate.
+       * A failed predicate is ordinary gameplay refusal, not a persistence
+       * outage; preserve the no-write transaction outcome on the wire. */
+      /* A zero-row guarded update is a gameplay refusal only when the
+       * repository completed successfully.  Do not let the initial zero
+       * value of rows hide a query/transaction failure from the client or
+       * from rollback evidence. */
+      if (rc == 0 && rows == 0)
+        send_response_refused_steal (ctx, root, ERR_TARGET_INVALID,
+                                     "Ship is not transferable or target is invalid",
+                                     NULL);
+      else if (rc == ERR_TARGET_INVALID || rc == ERR_INVALID_ARG)
+        send_response_refused_steal (ctx, root, ERR_TARGET_INVALID,
+                                     "Ship is not transferable or target is invalid",
+                                     NULL);
+      else if (rc != 0)
+        send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                             "Ship transfer failed");
+      return 0;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Ship transfer could not be committed");
+      return 0;
+    }
+
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "ship_id", json_integer (ship_id));
+  json_object_set_new (payload, "from_player_id",
+                       json_integer (ctx->player_id));
+  json_object_set_new (payload, "target_player_id",
+                       json_integer (target_player_id));
+  send_response_ok_take (ctx, root, "ship.transfer.response", &payload);
   return 0;
 }
 

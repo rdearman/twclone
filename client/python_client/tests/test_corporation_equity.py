@@ -97,6 +97,33 @@ def test_corporation_roster_refuses_to_guess_missing_corp_id(ctx_factory, fake_c
     assert "valid corporation ID" in capsys.readouterr().out
 
 
+def test_treasury_deposit_refreshes_authoritative_balance(ctx_factory, fake_conn, monkeypatch):
+    ctx = ctx_factory()
+    ctx.state["in_corporation"] = True
+    ctx.state["is_ceo_or_officer"] = True
+    fake_conn.queue("corp.deposit", {"status": "ok", "data": {"amount": 50}})
+    fake_conn.queue("corp.balance", {"status": "ok", "data": {"balance": 450}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "50")
+
+    client.corp_deposit_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["corp.deposit", "corp.balance"]
+    assert ctx.state["corp_balance"] == {"balance": 450}
+
+
+def test_treasury_withdraw_refusal_does_not_refresh_balance(ctx_factory, fake_conn, monkeypatch, capsys):
+    ctx = ctx_factory()
+    ctx.state["in_corporation"] = True
+    ctx.state["is_ceo_or_officer"] = True
+    fake_conn.queue("corp.withdraw", {"status": "error", "error": {"message": "Insufficient treasury funds"}})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "50")
+
+    client.corp_withdraw_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["corp.withdraw"]
+    assert "Insufficient treasury funds" in capsys.readouterr().out
+
+
 def test_dividend_action_visible_to_ceo_in_normal_mode(ctx_factory, menus):
     ctx = ctx_factory(debug=False)
     ctx.state["is_ceo"] = True

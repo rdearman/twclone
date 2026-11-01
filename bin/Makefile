@@ -91,6 +91,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = x86_64-pc-linux-gnu
 host_triplet = x86_64-pc-linux-gnu
+am__append_1 = -DHAVE_MYSQL
 bin_PROGRAMS = server$(EXEEXT) bigbang$(EXEEXT)
 subdir = bin
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -115,7 +116,8 @@ am__DEPENDENCIES_1 =
 bigbang_DEPENDENCIES = $(am__DEPENDENCIES_1)
 bigbang_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bigbang_LDFLAGS) \
 	$(LDFLAGS) -o $@
-am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
+am_server_OBJECTS = ../src/common.$(OBJEXT) \
+	../src/password_hash.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/sql_driver.$(OBJEXT) ../src/db/pg/db_pg.$(OBJEXT) \
 	../src/db/mysql/db_mysql.$(OBJEXT) ../src/game_db.$(OBJEXT) \
 	../src/db/repo/repo_cmd.$(OBJEXT) \
@@ -132,6 +134,8 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/db/repo/repo_main.$(OBJEXT) \
 	../src/db/repo/repo_news.$(OBJEXT) \
 	../src/db/repo/repo_player_settings.$(OBJEXT) \
+	../src/db/repo/repo_sector_notices.$(OBJEXT) \
+	../src/db/repo/repo_trade_offers.$(OBJEXT) \
 	../src/db/repo/repo_cron.$(OBJEXT) \
 	../src/db/repo/repo_combat.$(OBJEXT) \
 	../src/db/repo/repo_communication.$(OBJEXT) \
@@ -172,8 +176,10 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) ../src/db/db_api.$(OBJEXT) \
 	../src/server_news.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
 	../src/server_players.$(OBJEXT) ../src/server_police.$(OBJEXT) \
 	../src/server_ports.$(OBJEXT) ../src/server_s2s.$(OBJEXT) \
-	../src/server_ships.$(OBJEXT) ../src/server_stardock.$(OBJEXT) \
-	../src/server_sysop.$(OBJEXT) ../src/server_universe.$(OBJEXT) \
+	../src/server_ships.$(OBJEXT) \
+	../src/server_sector_notices.$(OBJEXT) \
+	../src/server_stardock.$(OBJEXT) ../src/server_sysop.$(OBJEXT) \
+	../src/server_universe.$(OBJEXT) \
 	../src/server_warp_post_processing.$(OBJEXT) \
 	../src/sysop_interaction.$(OBJEXT)
 server_OBJECTS = $(am_server_OBJECTS)
@@ -196,6 +202,7 @@ am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/common.Po ../src/$(DEPDIR)/engine_consumer.Po \
 	../src/$(DEPDIR)/game_db.Po ../src/$(DEPDIR)/globals.Po \
+	../src/$(DEPDIR)/password_hash.Po \
 	../src/$(DEPDIR)/s2s_keyring.Po \
 	../src/$(DEPDIR)/s2s_transport.Po ../src/$(DEPDIR)/schemas.Po \
 	../src/$(DEPDIR)/server_auth.Po \
@@ -220,6 +227,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/server_police.Po \
 	../src/$(DEPDIR)/server_ports.Po \
 	../src/$(DEPDIR)/server_s2s.Po \
+	../src/$(DEPDIR)/server_sector_notices.Po \
 	../src/$(DEPDIR)/server_ships.Po \
 	../src/$(DEPDIR)/server_stardock.Po \
 	../src/$(DEPDIR)/server_sysop.Po \
@@ -261,11 +269,13 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/db/repo/$(DEPDIR)/repo_ports.Po \
 	../src/db/repo/$(DEPDIR)/repo_porttypes.Po \
 	../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po \
+	../src/db/repo/$(DEPDIR)/repo_sector_notices.Po \
 	../src/db/repo/$(DEPDIR)/repo_session.Po \
 	../src/db/repo/$(DEPDIR)/repo_ships.Po \
 	../src/db/repo/$(DEPDIR)/repo_shiptypes.Po \
 	../src/db/repo/$(DEPDIR)/repo_stardock.Po \
 	../src/db/repo/$(DEPDIR)/repo_sysop.Po \
+	../src/db/repo/$(DEPDIR)/repo_trade_offers.Po \
 	../src/db/repo/$(DEPDIR)/repo_universe.Po \
 	../src/db/repo/$(DEPDIR)/repo_warp.Po
 am__mv = mv -f
@@ -316,7 +326,7 @@ AUTOMAKE = ${SHELL} '/home/rick/Development/Active/twclone/missing' automake-1.1
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g -O2 -I/usr/include/postgresql -I/usr/include/mysql 
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -333,13 +343,14 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-09-27
-LDFLAGS = 
+ISODATE = 2026-11-01
+LDFLAGS =  -L/usr/lib/x86_64-linux-gnu
 LIBOBJS = 
-LIBS = -lhistory -lreadline -lpthread -lm 
+LIBS = -L/usr/lib/x86_64-linux-gnu -lmysqlclient -lz  -lzstd -lssl -lcrypto -lresolv -lm -lpq -lhistory -lreadline -lpthread -lm 
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/rick/Development/Active/twclone/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
+MYSQL_CONFIG = /usr/bin/mysql_config
 OBJEXT = o
 PACKAGE = twclone
 PACKAGE_BUGREPORT = 
@@ -349,7 +360,7 @@ PACKAGE_TARNAME = twclone
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.0.2
 PATH_SEPARATOR = :
-PG_CONFIG = 
+PG_CONFIG = /usr/bin/pg_config
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 
@@ -416,11 +427,14 @@ MYSQL_INC = -I/usr/include/mysql # Common MySQL include path
 
 # 3. Update AM_CFLAGS
 # added $(PG_INC) and $(MYSQL_INC) here
-AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized  -D_GNU_SOURCE -I../src -I../src/db -I../src/db/repo $(PG_INC) $(MYSQL_INC) -DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS)
+AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized -D_GNU_SOURCE \
+	-I../src -I../src/db -I../src/db/repo $(PG_INC) $(MYSQL_INC) \
+	-DDB_BACKEND_PG -ljansson -lpq $(SANITIZE_FLAGS) \
+	$(am__append_1)
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
-server_LDADD = -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory
+server_LDADD = -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory -ldl
 AUTOMAKE_OPTIONS = subdir-objects
 
 # BigBang sources (PostgreSQL Only)
@@ -439,6 +453,7 @@ bigbang_LDADD = -ljansson -lpq -lcrypto -lpthread -lm -lreadline -lhistory $(ser
 # Server sources (now with DB abstraction)
 server_SOURCES = \
 	../src/common.c \
+	../src/password_hash.c \
 	../src/db/db_api.c \
 	../src/db/sql_driver.c \
 	../src/db/pg/db_pg.c \
@@ -458,6 +473,8 @@ server_SOURCES = \
 	../src/db/repo/repo_main.c \
 	../src/db/repo/repo_news.c \
 	../src/db/repo/repo_player_settings.c \
+	../src/db/repo/repo_sector_notices.c \
+	../src/db/repo/repo_trade_offers.c \
 	../src/db/repo/repo_cron.c \
 	../src/db/repo/repo_combat.c \
 	../src/db/repo/repo_communication.c \
@@ -511,6 +528,7 @@ server_SOURCES = \
 	../src/server_ports.c \
 	../src/server_s2s.c \
 	../src/server_ships.c \
+	../src/server_sector_notices.c \
 	../src/server_stardock.c \
 	../src/server_sysop.c \
 	../src/server_universe.c \
@@ -634,6 +652,8 @@ clean-binPROGRAMS:
 bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEPENDENCIES) 
 	@rm -f bigbang$(EXEEXT)
 	$(AM_V_CCLD)$(bigbang_LINK) $(bigbang_OBJECTS) $(bigbang_LDADD) $(LIBS)
+../src/password_hash.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/game_db.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/$(am__dirstamp):
@@ -672,6 +692,12 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 ../src/db/repo/repo_news.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_player_settings.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_sector_notices.$(OBJEXT):  \
+	../src/db/repo/$(am__dirstamp) \
+	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
+../src/db/repo/repo_trade_offers.$(OBJEXT):  \
 	../src/db/repo/$(am__dirstamp) \
 	../src/db/repo/$(DEPDIR)/$(am__dirstamp)
 ../src/db/repo/repo_cron.$(OBJEXT): ../src/db/repo/$(am__dirstamp) \
@@ -791,6 +817,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_ships.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_sector_notices.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_stardock.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_sysop.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -822,6 +850,7 @@ include ../src/$(DEPDIR)/common.Po # am--include-marker
 include ../src/$(DEPDIR)/engine_consumer.Po # am--include-marker
 include ../src/$(DEPDIR)/game_db.Po # am--include-marker
 include ../src/$(DEPDIR)/globals.Po # am--include-marker
+include ../src/$(DEPDIR)/password_hash.Po # am--include-marker
 include ../src/$(DEPDIR)/s2s_keyring.Po # am--include-marker
 include ../src/$(DEPDIR)/s2s_transport.Po # am--include-marker
 include ../src/$(DEPDIR)/schemas.Po # am--include-marker
@@ -848,6 +877,7 @@ include ../src/$(DEPDIR)/server_players.Po # am--include-marker
 include ../src/$(DEPDIR)/server_police.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ports.Po # am--include-marker
 include ../src/$(DEPDIR)/server_s2s.Po # am--include-marker
+include ../src/$(DEPDIR)/server_sector_notices.Po # am--include-marker
 include ../src/$(DEPDIR)/server_ships.Po # am--include-marker
 include ../src/$(DEPDIR)/server_stardock.Po # am--include-marker
 include ../src/$(DEPDIR)/server_sysop.Po # am--include-marker
@@ -889,11 +919,13 @@ include ../src/db/repo/$(DEPDIR)/repo_port_rules.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_ports.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_porttypes.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_sector_notices.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_session.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_ships.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_shiptypes.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_stardock.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_sysop.Po # am--include-marker
+include ../src/db/repo/$(DEPDIR)/repo_trade_offers.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_universe.Po # am--include-marker
 include ../src/db/repo/$(DEPDIR)/repo_warp.Po # am--include-marker
 
@@ -1060,6 +1092,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/game_db.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
+	-rm -f ../src/$(DEPDIR)/password_hash.Po
 	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
 	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
@@ -1086,6 +1119,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_police.Po
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
+	-rm -f ../src/$(DEPDIR)/server_sector_notices.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_stardock.Po
 	-rm -f ../src/$(DEPDIR)/server_sysop.Po
@@ -1127,11 +1161,13 @@ distclean: distclean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ports.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_porttypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_sector_notices.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_shiptypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_sysop.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_trade_offers.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_universe.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_warp.Po
 	-rm -f Makefile
@@ -1184,6 +1220,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/engine_consumer.Po
 	-rm -f ../src/$(DEPDIR)/game_db.Po
 	-rm -f ../src/$(DEPDIR)/globals.Po
+	-rm -f ../src/$(DEPDIR)/password_hash.Po
 	-rm -f ../src/$(DEPDIR)/s2s_keyring.Po
 	-rm -f ../src/$(DEPDIR)/s2s_transport.Po
 	-rm -f ../src/$(DEPDIR)/schemas.Po
@@ -1210,6 +1247,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_police.Po
 	-rm -f ../src/$(DEPDIR)/server_ports.Po
 	-rm -f ../src/$(DEPDIR)/server_s2s.Po
+	-rm -f ../src/$(DEPDIR)/server_sector_notices.Po
 	-rm -f ../src/$(DEPDIR)/server_ships.Po
 	-rm -f ../src/$(DEPDIR)/server_stardock.Po
 	-rm -f ../src/$(DEPDIR)/server_sysop.Po
@@ -1251,11 +1289,13 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ports.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_porttypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_s2s_peers.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_sector_notices.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_session.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_ships.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_shiptypes.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_stardock.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_sysop.Po
+	-rm -f ../src/db/repo/$(DEPDIR)/repo_trade_offers.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_universe.Po
 	-rm -f ../src/db/repo/$(DEPDIR)/repo_warp.Po
 	-rm -f Makefile

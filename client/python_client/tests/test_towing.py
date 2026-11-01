@@ -114,6 +114,44 @@ def test_tow_status_reconciles_existing_tow_after_reconnect(
 def test_has_tow_target_requires_real_non_player_ship_id():
     assert client.has_tow_target([{"id": 10}, {"name": "unknown"}], my_ship_id=10) is False
     assert client.has_tow_target([{"ship_id": 20}], my_ship_id=10) is True
+    assert client.has_tow_target([{"ship_id": True}], my_ship_id=10) is False
+
+
+def test_tow_flow_does_not_submit_boolean_target_id(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={
+        "id": 2271,
+        "ships": [
+            {"id": 10, "name": "Player ship", "owner": "Newguy"},
+            {"ship_id": True, "name": "Untrusted target", "owner": "Newguy"},
+        ],
+    })
+    ctx.player_info = {"player": {"ship_id": 10}}
+    fake_conn.queue("ship.tow.status", {
+        "status": "ok", "data": {"ship_id": 10, "towing_ship_id": None},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "1")
+
+    client.tow_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "ship.tow.status", "data": {}}]
+    assert "not listed" in capsys.readouterr().out
+
+
+def test_tow_status_boolean_id_is_not_treated_as_active_tow(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {
+        "status": "ok", "data": {"ship_id": 10, "towing_ship_id": True},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    assert fake_conn.calls == [{"command": "ship.tow.status", "data": {}}]
+    assert "Cannot engage a tow until the server confirms" in capsys.readouterr().out
 
 
 def test_selecting_current_tow_does_not_toggle_it_off(ctx_factory, fake_conn, monkeypatch, capsys):
@@ -137,3 +175,130 @@ def test_unknown_tow_status_does_not_risk_toggling_selected_ship(ctx_factory, fa
 
     assert [call["command"] for call in fake_conn.calls] == ["ship.tow.status"]
     assert "until the server confirms" in capsys.readouterr().out
+
+
+def test_tow_hazard_is_presented_and_authoritative_state_is_refreshed(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {
+        "ship_id": 10, "towing_ship_id": None,
+    }})
+    fake_conn.queue("ship.tow", {
+        "status": "ok", "type": "ship.tow.engaged",
+        "data": {"status": "Towing beam engaged", "towee_ship_id": 20,
+                  "hazards": [{"hazard_type": "minefield", "hull_lost": 6}]},
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "type": "sector.info",
+        "data": {"sector_id": 2271, "ships": []},
+    })
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "data": {"player": {"id": 3, "turns_remaining": 39}},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "data": {"ship": {"id": 10, "hull": 94}},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    output = capsys.readouterr().out
+    assert "minefield" in output and "hull lost: 6" in output
+    assert [call["command"] for call in fake_conn.calls] == [
+        "ship.tow.status", "ship.tow", "move.describe_sector",
+        "player.my_info", "ship.status",
+    ]
+
+
+def test_tow_hazard_refusal_refreshes_without_recording_tow(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {
+        "ship_id": 10, "towing_ship_id": None,
+    }})
+    fake_conn.queue("ship.tow", {
+        "status": "refused", "type": "error",
+        "error": {"message": "Entry hazard stopped towing", "data": {
+            "hazards": [{"hazard_type": "limpet", "damage": 4}],
+        }},
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "type": "sector.info",
+        "data": {"sector_id": 2271, "ships": []},
+    })
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "data": {"player": {"id": 3, "turns_remaining": 40}},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "data": {"ship": {"id": 10, "hull": 96}},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    output = capsys.readouterr().out
+    assert "limpet" in output and "damage: 4" in output
+    assert "towing_ship_id" not in ctx.state
+    assert [call["command"] for call in fake_conn.calls] == [
+        "ship.tow.status", "ship.tow", "move.describe_sector",
+        "player.my_info", "ship.status",
+    ]
+
+
+def test_tow_engagement_does_not_infer_missing_authoritative_towee_id(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {
+        "ship_id": 10, "towing_ship_id": None,
+    }})
+    fake_conn.queue("ship.tow", {
+        "status": "ok", "type": "ship.tow.engaged",
+        "data": {"status": "Towing beam engaged"},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    assert "towing_ship_id" not in ctx.state
+    assert "authoritative towed ship ID" in capsys.readouterr().out
+
+
+def test_tow_success_without_canonical_response_type_is_reconciled(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    """An untyped success must not authorize a local tow relationship."""
+    ctx = _ctx(ctx_factory)
+    fake_conn.queue("ship.tow.status", {"status": "ok", "data": {
+        "ship_id": 10, "towing_ship_id": None,
+    }})
+    fake_conn.queue("ship.tow", {
+        "status": "ok", "data": {
+            "status": "Towing beam engaged", "towee_ship_id": 20,
+            "hazards": [{"hazard_type": "minefield", "hull_lost": 6}],
+        },
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "type": "sector.info",
+        "data": {"sector_id": 2271, "ships": []},
+    })
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "data": {"player": {"id": 3, "turns_remaining": 39}},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "data": {"ship": {"id": 10, "hull": 94}},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "20")
+
+    client.tow_flow(ctx)
+
+    output = capsys.readouterr().out
+    assert "unexpected type" in output
+    assert "minefield" not in output
+    assert "towing_ship_id" not in ctx.state
+    assert [call["command"] for call in fake_conn.calls] == [
+        "ship.tow.status", "ship.tow", "move.describe_sector",
+        "player.my_info", "ship.status",
+    ]

@@ -305,7 +305,7 @@ int repo_stardock_get_player_ship_info(db_t *db, int32_t player_id, db_res_t **o
     /* SQL_VERBATIM: Q12 */
     /* Wait, Q12 also includes s.credits at index 3. Let's fix. */
     const char *sql_q12 = "SELECT "
-                         "p.alignment, p.commission_id, p.experience, s.credits, "
+                         "p.alignment, p.commission_id, p.experience, p.credits, "
                          "s.fighters, s.shields, s.mines, s.limpets, s.genesis, s.detonators, s.probes, s.cloaking_devices, "
                          "s.colonists, s.ore, s.organics, s.equipment, "
                          "s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, s.ship_id, s.type_id, st.basecost "

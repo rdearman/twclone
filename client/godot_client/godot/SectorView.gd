@@ -71,7 +71,7 @@ func compose(sector: Dictionary, selection_key: String) -> void:
 			current_objects.append(_descriptor("port", item, "port", ["id", "port_id"]))
 	for item in sector.get("planets", []):
 		if item is Dictionary:
-			current_objects.append(_descriptor("planet", item, "planet", ["id", "planet_id"]))
+			current_objects.append(_descriptor("planet", item, "planet", ["planet_id", "id"]))
 	for item in sector.get("ships", []):
 		if item is Dictionary:
 			current_objects.append(_descriptor("ship", item, "ship", ["id", "ship_id"]))

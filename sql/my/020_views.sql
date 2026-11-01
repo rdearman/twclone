@@ -29,6 +29,13 @@ FROM
     outdeg o
     JOIN indeg i USING (sector_id);
 
+-- Match PostgreSQL stardock_location semantics for Stardock ports and
+-- legacy ports named Stardock. This view feeds MSL and FedSpace cloaking jobs.
+CREATE OR REPLACE VIEW stardock_location AS
+SELECT port_id, number, name, sector_id
+FROM ports
+WHERE type = 9 OR name LIKE '%Stardock%';
+
 CREATE OR REPLACE VIEW world_summary AS
 WITH a AS (
     SELECT

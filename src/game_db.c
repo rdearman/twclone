@@ -13,6 +13,12 @@ static pthread_key_t g_db_handle_key;
 static pthread_once_t g_db_key_once = PTHREAD_ONCE_INIT;
 static char g_main_conninfo[1024];
 static db_backend_t g_main_backend;
+static char g_mysql_host[256];
+static char g_mysql_user[128];
+static char g_mysql_password[256];
+static char g_mysql_database[128];
+static char g_mysql_unix_socket[256];
+static unsigned int g_mysql_port;
 
 
 static void
@@ -41,6 +47,24 @@ int
 game_db_init (void)
 {
   pthread_once (&g_db_key_once, make_db_key);
+
+  if (strcmp (g_cfg.db_backend, "mysql") == 0)
+    {
+#ifndef HAVE_MYSQL
+      LOGE ("MySQL selected in bootstrap config, but this binary was built without --enable-mysql.");
+      return -1;
+#else
+      g_main_backend = DB_BACKEND_MYSQL;
+      strlcpy (g_mysql_host, g_cfg.mysql_host, sizeof (g_mysql_host));
+      strlcpy (g_mysql_user, g_cfg.mysql_user, sizeof (g_mysql_user));
+      strlcpy (g_mysql_password, g_cfg.mysql_password, sizeof (g_mysql_password));
+      strlcpy (g_mysql_database, g_cfg.mysql_database, sizeof (g_mysql_database));
+      strlcpy (g_mysql_unix_socket, g_cfg.mysql_unix_socket, sizeof (g_mysql_unix_socket));
+      g_mysql_port = g_cfg.mysql_port;
+      LOGI ("game_db_init: MySQL backend selected for per-thread connections.");
+      return 0;
+#endif
+    }
 
 #ifdef DB_BACKEND_PG
   g_main_backend = DB_BACKEND_POSTGRES;
@@ -87,10 +111,24 @@ game_db_get_handle (void)
       db_cfg.backend = g_main_backend;
 
 #ifdef DB_BACKEND_PG
-      db_cfg.pg_conninfo = g_main_conninfo;
-      LOGI ("game_db_get_handle: Creating new PG connection for thread %lu.",
-	    (unsigned long) pthread_self ());
+      if (g_main_backend == DB_BACKEND_POSTGRES)
+        {
+          db_cfg.pg_conninfo = g_main_conninfo;
+          LOGI ("game_db_get_handle: Creating new PG connection for thread %lu.",
+                (unsigned long) pthread_self ());
+        }
 #endif
+      if (g_main_backend == DB_BACKEND_MYSQL)
+        {
+          db_cfg.mysql_host = g_mysql_host;
+          db_cfg.mysql_user = g_mysql_user;
+          db_cfg.mysql_password = g_mysql_password;
+          db_cfg.mysql_database = g_mysql_database;
+          db_cfg.mysql_unix_socket = g_mysql_unix_socket[0] ? g_mysql_unix_socket : NULL;
+          db_cfg.mysql_port = (uint16_t) g_mysql_port;
+          LOGI ("game_db_get_handle: Creating new MySQL connection for thread %lu.",
+                (unsigned long) pthread_self ());
+        }
 
       db = db_open (&db_cfg, &err);
       if (!db)

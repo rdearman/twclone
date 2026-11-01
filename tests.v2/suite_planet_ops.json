@@ -15,12 +15,21 @@
       "password": "password"
     },
     {
+      "name": "Rig: Provision an owned planet for operations",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE planets SET owner_id = @{planet_lord_player_id}, owner_type = 'player' WHERE planet_id = 1;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Planet: Rename (Success)",
       "command": "planet.rename",
       "user": "planet_lord",
       "data": {
-        "planet_id": 200,
-        "new_name": "Arrakis"
+        "planet_id": 1,
+        "name": "Arrakis"
       },
       "expect": {
         "status": "planet.rename.success"
@@ -31,7 +40,7 @@
       "command": "planet.transfer_ownership",
       "user": "planet_lord",
       "data": {
-        "planet_id": 200,
+        "planet_id": 1,
         "target_id": "@planet_heir_player_id",
         "target_type": "player"
       },

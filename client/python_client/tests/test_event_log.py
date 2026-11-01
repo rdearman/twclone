@@ -6,7 +6,7 @@ Requirements covered:
 14. Recognised events render without raw JSON.
 15. Unknown events are safe in normal mode and inspectable in debug mode.
 """
-from events import EventLog, render_event_text
+from events import EventLog, render_event_text, targets_player_ship_destruction
 from state import Context
 
 
@@ -80,6 +80,68 @@ def test_combat_hit_renders_authoritative_damage_and_remaining_hp():
     assert "attacker_id" not in text and "defender_id" not in text
 
 
+def test_planet_attack_event_renders_canonical_authoritative_facts_only():
+    event = {"category": "combat", "type": "player.attack_planet.v1", "data": {
+        "planet_id": 77, "result": "win", "ship_loss": 25, "planet_loss": 20,
+    }}
+    assert render_event_text(event) == (
+        "[Combat] Planet attack · planet 77 · result: win · ship fighters lost: 25 · planet fighters lost: 20"
+    )
+    malformed = {"category": "combat", "type": "player.attack_planet.v1", "data": {
+        "planet_id": "77", "result": 1, "ship_loss": -1, "planet_loss": "20",
+    }}
+    assert render_event_text(malformed) == "[Combat] Planet attack"
+
+
+def test_planet_capture_event_renders_canonical_server_fact():
+    event = {"category": "combat", "type": "player.capture_planet.v1", "data": {
+        "planet_id": 77, "previous_owner": 9,
+    }}
+    assert render_event_text(event) == "[Combat] Planet captured · planet 77 · previous owner 9"
+
+
+def test_defense_events_render_authoritative_depletion_without_inference():
+    ev = {"category": "combat", "type": "combat.hit.fighters", "data": {
+        "damage": 12, "fighters_engaged": 3, "shields_lost": 4,
+        "fighters_lost": 2, "hull_lost": 6,
+    }}
+    assert render_event_text(ev) == (
+        "[Combat] Defensive fighters engaged · 3 engaged · damage: 12 · "
+        "shields lost: 4 · fighters lost: 2 · hull lost: 6"
+    )
+
+
+def test_persisted_planetary_defense_event_renders_authoritative_counts():
+    ev = {"category": "combat", "type": "combat.planet_landing_defense.v1", "data": {
+        "planet_id": 42, "result": "repelled", "attacker_fighters_lost": 8,
+        "attacker_fighters_remaining": 2, "planet_fighters_lost": 4,
+        "planet_fighters_remaining": 16, "citadel_shields_absorbed": 12,
+        "citadel_shields_remaining": 0,
+    }}
+    assert render_event_text(ev) == (
+        "[Combat] Planetary defense · repelled · attacker fighters lost: 8 · "
+        "attacker fighters remaining: 2 · planet fighters lost: 4 · "
+        "planet fighters remaining: 16 · citadel shields absorbed: 12 · "
+        "citadel shields remaining: 0"
+    )
+
+
+def test_persisted_limpet_attachment_event_is_presented_without_ids():
+    ev = {"category": "combat", "type": "combat.limpet.attached", "data": {
+        "target_ship_id": 61, "target_player_id": 9, "asset_owner_id": 4,
+        "sector_id": 17,
+    }}
+    assert render_event_text(ev) == "[Combat] Limpet attached"
+    assert "target_ship_id" not in render_event_text(ev)
+
+
+def test_environment_defense_event_rejects_malformed_measurements():
+    ev = {"category": "combat", "type": "combat.hit.environment", "data": {
+        "hazard_type": "minefield", "damage": "12", "destroyed": 1,
+    }}
+    assert render_event_text(ev) == "[Combat] Environmental hazard · minefield"
+
+
 def test_tavern_round_event_renders_server_message_as_social_event():
     ev = {"category": "chat", "type": "tavern.round.bought", "data": {
         "message": "A round has been bought for everyone!", "sector_id": 17,
@@ -124,3 +186,15 @@ def test_context_activity_count_combines_mail_notices_and_event_log(ctx_factory)
     ctx.conn.events.push("chat", "chat.broadcast", {})
     ctx.drain_events()
     assert ctx.activity_count == 4
+
+
+def test_destruction_trigger_requires_authoritative_victim_identity():
+    event = {"type": "combat.ship_destroyed", "data": {"victim_player_id": 42}}
+    assert targets_player_ship_destruction(event, 42)
+    assert not targets_player_ship_destruction(event, 43)
+    assert not targets_player_ship_destruction(
+        {"type": "combat.hit", "data": {"victim_player_id": 42}}, 42
+    )
+    assert not targets_player_ship_destruction(
+        {"type": "combat.ship_destroyed", "data": {"victim_player_id": "42"}}, 42
+    )

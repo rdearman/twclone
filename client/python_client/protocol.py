@@ -270,36 +270,95 @@ def get_data(resp: Dict[str, Any]) -> Dict[str, Any]:
 def extract_current_sector(resp: Dict[str, Any]) -> Optional[int]:
     d = get_data(resp)
     for k in ("current_sector", "sector_id"):
-        v = d.get(k)
-        if isinstance(v, int):
-            return v
+        if k in d:
+            # IDs are server-owned JSON integers.  In Python, bool is an int
+            # subclass; accepting it would turn malformed visibility data
+            # into sector 1 and could send pathfinding or refresh requests to
+            # an invented location.  An explicit malformed primary field must
+            # also stop fallback to a contradictory legacy alias.
+            v = d[k]
+            return v if type(v) is int and v > 0 else None
     sess = d.get("session") or {}
-    if isinstance(sess.get("current_sector"), int):
-        return sess["current_sector"]
+    if isinstance(sess, dict) and "current_sector" in sess:
+        v = sess["current_sector"]
+        return v if type(v) is int and v > 0 else None
     # player.my_info nested style
     pl = d.get("player") or {}
-    if isinstance(pl.get("sector"), int):
-        return pl["sector"]
-    if isinstance(pl.get("sector_id"), int):
-        return pl["sector_id"]
+    if isinstance(pl, dict):
+        for k in ("sector", "sector_id"):
+            if k in pl:
+                v = pl[k]
+                return v if type(v) is int and v > 0 else None
     ship = d.get("ship") or {}
-    if isinstance(ship.get("location"), dict) and isinstance(ship["location"].get("sector_id"), int):
-        return ship["location"]["sector_id"]
+    if isinstance(ship, dict) and isinstance(ship.get("location"), dict):
+        location = ship["location"]
+        if "sector_id" in location:
+            v = location["sector_id"]
+            return v if type(v) is int and v > 0 else None
     return None
+
+
+def _authoritative_positive_id(value: Any) -> Optional[int]:
+    """Return only a JSON integer ID; never coerce aliases or booleans."""
+    if type(value) is int and value > 0:
+        return value
+    return None
+
+
+def _first_authoritative_id(source: Dict[str, Any], keys: tuple[str, ...]) -> Optional[int]:
+    """Use the first declared ID field, preserving an invalid primary field."""
+    for key in keys:
+        if key in source:
+            return _authoritative_positive_id(source[key])
+    return None
+
+
+def _authoritative_adjacent_ids(value: Any) -> Optional[list[int]]:
+    """Keep only server-owned positive integer neighbor IDs."""
+    if not isinstance(value, list):
+        return None
+    return [item for item in value if _authoritative_positive_id(item) is not None]
 
 
 def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
     """Convert server sector data to the simplified shape used by v3 flags/menus."""
-    sid = d.get("sector_id") or (d.get("sector") or {}).get("id") or d.get("id") \
-          or (d.get("port") or {}).get("sector_id") or (d.get("port") or {}).get("sector") \
-          or (d.get("port") or {}).get("number")
+    # ``data`` is transport input, not a trusted object.  A malformed or
+    # schema-mismatched visibility response must not crash a refresh caller
+    # (or become a reason to replace the confirmed sector cache).  Callers
+    # decide whether an empty normalized record is acceptable.
+    if not isinstance(d, dict):
+        return {}
+    nested_sector = d.get("sector") if isinstance(d.get("sector"), dict) else {}
+    nested_port = d.get("port") if isinstance(d.get("port"), dict) else {}
+    # Do not let an invalid authoritative sector_id fall through to a
+    # contradictory legacy alias. The refresh caller uses this identity to
+    # correlate visibility data with the confirmed current location.
+    if "sector_id" in d:
+        sid = _authoritative_positive_id(d["sector_id"])
+    else:
+        sid = _first_authoritative_id(nested_sector, ("id",))
+        if sid is None and "id" in d:
+            sid = _authoritative_positive_id(d["id"])
+        if sid is None:
+            sid = _first_authoritative_id(nested_port, ("sector_id", "sector", "number"))
 
     # Only default to "Sector X" if we have an ID; otherwise keep None so merge skips it
-    name = d.get("name") or (d.get("sector") or {}).get("name")
+    raw_name = d.get("name") if "name" in d else nested_sector.get("name")
+    # Visibility data is server-owned display state.  Do not let a
+    # schema-mismatched name (for example an object or integer) enter the
+    # confirmed cache and later be stringified by the menu layer.  Preserve
+    # the canonical name when it is a non-empty string, otherwise use the
+    # existing ID-derived display label.
+    name = raw_name if isinstance(raw_name, str) and raw_name else None
     if name is None and sid is not None:
         name = f"Sector {sid}"
 
-    adj = d.get("adjacent_sectors") or d.get("adjacent") or d.get("adjacent_sectors_info") or d.get("neighbors")
+    adjacent_source = None
+    for key in ("adjacent_sectors", "adjacent", "adjacent_sectors_info", "neighbors"):
+        if key in d:
+            adjacent_source = d[key]
+            break
+    adj = _authoritative_adjacent_ids(adjacent_source)
 
     # Port presence is public sector information; port class and trade mode
     # are only available from an in-sector port.info response. Older server
@@ -308,20 +367,31 @@ def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:
     ports = d.get("ports")
     ports_known = "ports" in d or "port" in d
     if isinstance(ports, list):
-        if ports and isinstance(ports[0], dict):
+        # A non-empty array is visibility evidence only when every row has
+        # the authoritative object shape.  Accepting the first row alone
+        # would let a later malformed row turn a schema-mismatched response
+        # into a cached port disclosure.
+        if ports and all(isinstance(row, dict) for row in ports):
             p0 = ports[0]
             port_obj = {"present": True}
-            port_id = p0.get("port_id", p0.get("id"))
+            port_id = _first_authoritative_id(p0, ("port_id", "id"))
             if port_id is not None:
                 port_obj["id"] = port_id
             if isinstance(p0.get("name"), str) and p0["name"]:
                 port_obj["name"] = p0["name"]
+        elif ports:
+            port_obj = {"present": None}
         else:
             port_obj = {"present": False}
     elif isinstance(d.get("port"), dict):
         source_port = d["port"]
-        port_obj = {"present": bool(source_port.get("present", True))}
-        port_id = source_port.get("id", source_port.get("port_id"))
+        # A port object implies presence only when the server omitted the
+        # optional flag.  If the flag is supplied, it must be a JSON boolean;
+        # coercing values such as "false" would turn malformed visibility
+        # metadata into an actionable port disclosure.
+        raw_present = source_port.get("present", True)
+        port_obj = {"present": raw_present if type(raw_present) is bool else None}
+        port_id = _first_authoritative_id(source_port, ("id", "port_id"))
         if port_id is not None:
             port_obj["id"] = port_id
         if isinstance(source_port.get("name"), str) and source_port["name"]:

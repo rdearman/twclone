@@ -20,6 +20,7 @@ class FakeAuth:
 	extends RefCounted
 	var session_token := "session-1"
 	var authenticated := true
+	var player_id := 0
 
 	func is_authenticated() -> bool:
 		return authenticated
@@ -48,11 +49,12 @@ func _init() -> void:
 	_run("late generation", _test_late_generation)
 	_run("unexpected type", _test_unexpected_type)
 	_run("reauth refresh", _test_reauth_refresh)
+	_run("terminal ship replacement", _test_terminal_ship_replacement)
 	_run("scene state boundary", _test_scene_state_boundary)
 	_run("normal output safety", _test_normal_output_safety)
 	_run("debug redaction", _test_debug_redaction)
 	if failures.is_empty():
-		print("Godot state tests: 33 passed")
+		print("Godot state tests: 34 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -156,8 +158,8 @@ func _test_zero_fields() -> void:
 	var state := ClientState.new()
 	state.mark_authenticated()
 	state.begin_refresh(1)
-	state.accept_player({"player": {"credits": 0, "turns_remaining": 0}}, 1)
-	state.accept_ship({"ship": {"holds": 0, "fighters": 0, "shields": 0, "cargo": []}}, 1)
+	state.accept_player({"player": {"id": 3, "ship_id": 12, "sector": 9, "credits": 0, "turns_remaining": 0}}, 1)
+	state.accept_ship({"ship": {"id": 12, "holds": 0, "fighters": 0, "shields": 0, "cargo": []}}, 1)
 	var hud: Dictionary = state.snapshot()["hud"]
 	_check(hud["credits"] == 0 and hud["turns_remaining"] == 0, "valid player zero became unknown")
 	_check(hud["cargo_used"] == 0 and hud["cargo_total"] == 0, "valid ship zero became unknown")
@@ -183,8 +185,54 @@ func _test_malformed_fields() -> void:
 	state.begin_refresh(1)
 	_check(not state.accept_player({"player": "bad"}, 1), "malformed player object was accepted")
 	_check(not state.accept_ship({"ship": [1, 2]}, 1), "malformed ship object was accepted")
+	_check(not state.accept_ship({"ship": {"name": "Unidentified", "hull": 25}}, 1), "ship status without an authoritative ID was accepted")
 	var sector: Dictionary = ClientState.normalize_sector({"sector_id": "bad", "ports": [null, "bad"]})
 	_check(not sector.has("id") and sector.get("ports", []).is_empty(), "malformed sector fields leaked into state")
+
+func _test_terminal_ship_replacement() -> void:
+	var parts: Array = _new_refresh()
+	var transport = parts[0]
+	var auth = parts[1]
+	var state = parts[2]
+	var refresh = parts[3]
+	auth.player_id = 3
+	_check(refresh.refresh(), "terminal replacement refresh did not start")
+	var player_request: String = transport.calls[0]["id"]
+	refresh.handle_reply(player_request, {
+		"status": "ok", "type": "player.info",
+		"data": {"player": {"id": 3, "ship_id": 9, "sector": 17}},
+	}, "player.my_info")
+	var ship_request: String = transport.calls[1]["id"]
+	refresh.handle_reply(ship_request, {
+		"status": "ok", "type": "ship.status",
+		"data": {"ship": {"id": 9, "name": "Destroyed ship", "hull": 0}},
+	}, "ship.status")
+	var sector_request: String = transport.calls[2]["id"]
+	refresh.handle_reply(sector_request, _sector_reply("Before"), "sector.info")
+
+	_check(refresh.refresh(true), "post-destruction refresh did not start")
+	var replacement_player_request: String = transport.calls[3]["id"]
+	refresh.handle_reply(replacement_player_request, {
+		"status": "ok", "type": "player.info",
+		"data": {"player": {"id": 3, "ship_id": 44, "sector": 1}},
+	}, "player.my_info")
+	var replacement_ship_request: String = transport.calls[4]["id"]
+	refresh.handle_reply(replacement_ship_request, {
+		"status": "ok", "type": "ship.status",
+		"data": {"ship": {"id": 44, "name": "Escape Pod", "hull": 100, "cargo": []}},
+	}, "ship.status")
+	var replacement_sector_request: String = transport.calls[5]["id"]
+	refresh.handle_reply(replacement_sector_request, _sector_reply("After"), "sector.info")
+	_check(state.snapshot()["hud"]["ship_id"] == 44, "authoritative replacement ship was not accepted")
+	_check(state.snapshot()["hud"]["ship_name"] == "Escape Pod", "replacement ship details were not refreshed")
+
+	_check(refresh.refresh(true), "cross-account refresh did not start")
+	var foreign_player_request: String = transport.calls[6]["id"]
+	refresh.handle_reply(foreign_player_request, {
+		"status": "ok", "type": "player.info",
+		"data": {"player": {"id": 99, "ship_id": 88, "sector": 9}},
+	}, "player.my_info")
+	_check(state.snapshot()["hud"]["ship_id"] == 44, "cross-account refresh replaced the confirmed escape pod")
 
 func _new_refresh() -> Array:
 	var transport = FakeTransport.new()
@@ -305,7 +353,8 @@ func _test_partial_refresh() -> void:
 	var parts: Array = _new_refresh()
 	var state = parts[2]
 	var refresh = parts[3]
-	refresh.refresh()
+	_seed_confirmed(parts)
+	refresh.refresh(true)
 	var player_id: String = parts[0].calls[parts[0].calls.size() - 1]["id"]
 	refresh.handle_failure(player_id, "player.my_info", Protocol.timeout_result("player.my_info"))
 	var ship_id: String = parts[0].calls[parts[0].calls.size() - 1]["id"]
@@ -313,7 +362,7 @@ func _test_partial_refresh() -> void:
 	var sector_id: String = parts[0].calls[parts[0].calls.size() - 1]["id"]
 	refresh.handle_failure(sector_id, "sector.info", Protocol.disconnected_result("lost"))
 	_check(state.overall_availability() == ClientState.PARTIAL, "partial refresh was not represented")
-	_check(state.player.is_empty() and not state.ship.is_empty(), "partial refresh did not retain successful domain")
+	_check(state.player.get("username", "") == "Alice" and not state.ship.is_empty(), "partial refresh did not retain previously confirmed domain")
 
 func _test_late_generation() -> void:
 	var parts: Array = _new_refresh()
@@ -361,10 +410,10 @@ func _test_scene_state_boundary() -> void:
 	_check(source.contains("client_state.mark_authenticated") and source.contains("refresh_coordinator.refresh"), "authentication does not trigger authoritative refresh")
 	_check(source.contains("command_name == \"auth.logout\"") and source.contains("transport.close(\"Logged out.\")"), "confirmed logout is not routed through the correlated command lifecycle")
 	_check(source.contains("client_state.clear_session_state()"), "logout does not clear prior captain state")
-	_check(source.contains("command == \"move.warp\"") and source.contains("_on_warp_requested(int(data.get(\"to_sector_id\", 0)))"), "typed warp does not share the guarded direct-movement path")
-	_check(source.contains("transport.request(\n\t\t\t\"subscribe.add\""), "login does not request supported player event feeds")
+	_check(source.contains("command == \"move.warp\"") and source.contains("_on_warp_requested(data.get(\"to_sector_id\", null))"), "typed warp does not share the guarded direct-movement path")
+	_check(source.contains("\"subscribe.add\"") and source.contains("{\"topic\": topic}"), "login does not request supported player event feeds")
 	_check(source.contains("{\"topic\": topic}"), "event subscription does not use the published V2 topic field")
-	_check(source.contains("for topic in [\"sector.*\"]"), "Godot redundantly adds the locked system.notice subscription")
+	_check(source.contains("for topic in [\"sector.*\", \"combat.*\"]"), "Godot did not subscribe only to supported player event topics")
 	_check(source.contains("_pending_event_subscriptions[request_id] = topic"), "subscription replies are not correlated with their requested topic")
 	_check(source.contains("gameplay_view.tavern_enter_requested.connect(_on_tavern_enter_requested)"), "StarDock tavern entry is not correlated through Main")
 	_check(source.contains("transport.request(\"tavern.lottery.status\", {}, auth_session.session_token)"), "tavern entry does not verify authoritative tavern presence")

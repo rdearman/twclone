@@ -16,7 +16,9 @@ signal protocol_warning(message: String)
 signal events_available
 signal diagnostic(kind: String, payload: String)
 
+const DEFAULT_CONNECTION_TIMEOUT_SECONDS := 5.0
 var request_timeout_seconds: float = 15.0
+var connection_timeout_seconds: float = DEFAULT_CONNECTION_TIMEOUT_SECONDS
 var max_events: int = 200
 
 var _socket: StreamPeerTCP = StreamPeerTCP.new()
@@ -25,19 +27,24 @@ var _requests := RequestManager.new()
 var _events: Array = []
 var _connected_announced := false
 var _connecting := false
+var _connection_deadline_ms := 0
 
-func _init(timeout_seconds: float = 15.0, event_limit: int = 200) -> void:
+func _init(timeout_seconds: float = 15.0, event_limit: int = 200, connect_timeout_seconds: float = DEFAULT_CONNECTION_TIMEOUT_SECONDS) -> void:
 	request_timeout_seconds = timeout_seconds
+	connection_timeout_seconds = maxf(0.1, connect_timeout_seconds)
 	max_events = event_limit
 	_requests.timeout_seconds = timeout_seconds
 
 func connect_to_server(host: String, port: int) -> Error:
+	print("[AUTH_TRACE] Transport connect start host=%s port=%d" % [host, port])
 	close("Connection reset.")
 	_socket = StreamPeerTCP.new()
 	_buffer = ""
 	_connected_announced = false
 	_connecting = true
+	_connection_deadline_ms = Time.get_ticks_msec() + int(connection_timeout_seconds * 1000.0)
 	var error := _socket.connect_to_host(host, port)
+	print("[AUTH_TRACE] Transport connect requested result=%s" % [str(error)])
 	if error != OK:
 		_connecting = false
 		_mark_disconnected("Unable to connect to the server.")
@@ -46,10 +53,14 @@ func connect_to_server(host: String, port: int) -> Error:
 func poll(_delta: float = 0.0) -> void:
 	_socket.poll()
 	var status := _socket.get_status()
+	if _connecting and status != StreamPeerTCP.STATUS_CONNECTED and Time.get_ticks_msec() >= _connection_deadline_ms:
+		_mark_disconnected("Connection timed out after %d seconds." % int(ceil(connection_timeout_seconds)))
+		return
 	if status == StreamPeerTCP.STATUS_CONNECTED:
 		if not _connected_announced:
 			_connected_announced = true
 			_connecting = false
+			print("[AUTH_TRACE] Transport connection established")
 			transport_connected.emit()
 			_emit_diagnostic("STATE", {"status": "connected"})
 		_read_available()
@@ -71,6 +82,7 @@ func request(command: String, data: Dictionary, session_token: String = "") -> S
 		return ""
 	var request_id := _requests.next_id()
 	var envelope: Dictionary = Protocol.build_request(request_id, command, data, session_token)
+	print("[AUTH_TRACE] Transport writing request command=%s request_id=%s" % [command, request_id])
 	_requests.register(request_id, command)
 	_emit_diagnostic("SEND", envelope)
 	var error := _socket.put_data((JSON.stringify(envelope) + "\n").to_utf8_buffer())
@@ -86,6 +98,7 @@ func close(reason: String = "Client disconnected.") -> void:
 	_socket.disconnect_from_host()
 	_connected_announced = false
 	_connecting = false
+	_connection_deadline_ms = 0
 	_buffer = ""
 	if was_connected or was_connecting:
 		_fail_pending(Protocol.disconnected_result(reason))
@@ -135,6 +148,7 @@ func _process_line(line: String) -> void:
 		if request.is_empty():
 			protocol_warning.emit("Ignored a reply for an unknown or expired request.")
 			return
+		print("[AUTH_TRACE] Transport dispatching reply command=%s request_id=%s" % [str(request.get("command", "")), request_id])
 		reply_received.emit(request_id, frame, str(request.get("command", "")))
 		return
 	if _is_async_event(frame):

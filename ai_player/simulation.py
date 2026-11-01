@@ -53,6 +53,8 @@ def load_scenarios(directory: Path = SCENARIO_DIR) -> list[dict[str, Any]]:
     for path in sorted(directory.glob("*.json")):
         with path.open(encoding="utf-8") as scenario_file:
             scenario = json.load(scenario_file)
+        if scenario.get("simulation_fixture") is False:
+            continue
         scenario["_source"] = path.name
         scenarios.append(scenario)
     return scenarios

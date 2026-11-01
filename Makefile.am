@@ -26,3 +26,9 @@ SUBDIRS = bin
 
 db-gates:
 	@$(top_srcdir)/tools/db_gates.sh
+
+.PHONY: architecture-check
+architecture-check:
+	@python3 $(top_srcdir)/tools/check_architecture_boundaries.py
+
+check-local: architecture-check

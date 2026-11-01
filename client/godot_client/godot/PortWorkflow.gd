@@ -159,8 +159,12 @@ func _ready() -> void:
 	account_label.text = "Pay from / credit to"
 	quantity_box.add_child(account_label)
 	_trade_account = OptionButton.new()
-	_trade_account.add_item("Petty cash", 0)
+	_trade_account.add_item("Server preference", -1)
 	_trade_account.add_item("Bank", 1)
+	_trade_account.add_item("Petty cash", 0)
+	# The server owns the saved account preference.  Default each new trade to
+	# the omitted-account sentinel so a bank preference is not silently replaced
+	# by a client-side petty-cash choice.
 	_trade_account.selected = 0
 	_trade_account.tooltip_text = "Choose which player account funds a purchase or receives sale proceeds."
 	quantity_box.add_child(_trade_account)
@@ -171,13 +175,33 @@ func _ready() -> void:
 	resized.connect(_update_responsive_layout)
 	call_deferred("_update_responsive_layout")
 
-func show_port(payload: Dictionary, sector_id: int) -> void:
+func show_port(payload: Dictionary, sector_id: Variant) -> void:
 	var port_data = payload.get("port", {})
-	if not (port_data is Dictionary) or port_data.is_empty():
+	# A port screen is actionable only when it is tied to the confirmed current
+	# sector. Do not coerce a malformed JSON number/string/bool into a sector ID
+	# and then let a quote request cross the protocol boundary.
+	if (not (port_data is Dictionary) or port_data.is_empty()
+			or not _is_positive_integral(sector_id)):
+		close_for_location_change()
 		return
+	# The server's port.info payload also carries the port's resolved sector.
+	# A delayed response for a previous location must not replace the current
+	# dock with a valid-looking port ID. Keep compatibility with older payloads
+	# that omit the optional field, but reject it when present and malformed or
+	# inconsistent with the authoritative current-sector identity.
+	if port_data.has("sector"):
+		var port_sector: Variant = port_data["sector"]
+		if (not _is_positive_integral(port_sector)
+				or int(port_sector) != int(sector_id)):
+			close_for_location_change()
+			return
 	if _tavern_mode:
 		_tavern_mode = false
 		tavern_exited.emit()
+	# A refreshed port snapshot supersedes any open quantity dialog.  Do not let
+	# a delayed confirmation submit the previous port row after stock, fixed
+	# direction, or commodity identity has changed.
+	_clear_pending_trade()
 	_port = port_data.duplicate(true)
 	_sector_id = sector_id
 	_port_artwork.texture = AssetCatalog.texture_for_object("port", _port, "large")
@@ -198,7 +222,11 @@ func _rebuild_commodity_rows() -> void:
 	var list: VBoxContainer = _commodity_list
 	_trade_buttons.clear()
 	for child in list.get_children():
-		child.queue_free()
+		# Rebuilds happen immediately after an authoritative port refresh.  A
+		# deferred queue_free leaves stale rows in the container until the next
+		# frame, which can expose old commodities and duplicate controls while the
+		# refreshed port is being acted on.
+		child.free()
 	var commodities = _port.get("commodities", [])
 	if not commodities is Array or commodities.is_empty():
 		var empty := Label.new()
@@ -206,7 +234,7 @@ func _rebuild_commodity_rows() -> void:
 		list.add_child(empty)
 	else:
 		for item in commodities:
-			if item is Dictionary:
+			if item is Dictionary and not _authoritative_commodity_code(item).is_empty():
 				_add_commodity_row(list, item)
 
 func set_player_hold(ship: Dictionary) -> void:
@@ -263,39 +291,52 @@ func exit_tavern() -> void:
 func close_for_location_change() -> void:
 	_tavern_mode = false
 	visible = false
-	_trade_dialog.hide()
+	_clear_pending_trade()
 	_port.clear()
 	_sector_id = 0
 	_tavern_button.visible = false
 
 func _is_stardock() -> bool:
-	return int(_port.get("type", -1)) == 9
+	# Port type is server-owned service identity.  Do not coerce malformed JSON
+	# values into the Stardock discriminator and unlock tavern actions locally.
+	var value: Variant = _port.get("type", null)
+	return typeof(value) == TYPE_INT and int(value) == 9
 
 func _add_commodity_row(list: VBoxContainer, item: Dictionary) -> void:
+	var code := _authoritative_commodity_code(item)
+	if code.is_empty():
+		return
 	var card := PanelContainer.new()
 	var compact := _compact_layout
 	card.custom_minimum_size.y = 94 if compact else 58
 	card.add_theme_stylebox_override("panel", _panel_style(Color(0.02, 0.055, 0.078, 0.98), Color(0.19, 0.38, 0.43, 0.8)))
 	list.add_child(card)
-	var code := str(item.get("code", item.get("commodity", "UNKNOWN"))).to_upper()
 	var stock = item.get("quantity", item.get("available", item.get("stock", null)))
-	var capacity = item.get("max_quantity", null)
-	var price: Variant = item.get("price", item.get("base_price", null))
+	# The authoritative trade.port_info schema publishes `capacity`. Keep the
+	# legacy display alias only for already-cached snapshots; trade quantity
+	# validation remains server-owned.
+	var capacity = item.get("capacity", item.get("max_quantity", null))
+	var price: Variant = _authoritative_price_label(item)
 	var name_label := Label.new()
 	name_label.text = code
 	name_label.add_theme_font_size_override("font_size", 16)
 	var stock_label := Label.new()
 	stock_label.text = "%s / %s" % ["—" if stock == null else _format_amount(stock), "—" if capacity == null else _format_amount(capacity)]
 	var price_label := Label.new()
-	price_label.text = "— CR" if price == null else "%s CR" % str(price)
+	price_label.text = price
 	var buy := Button.new()
 	buy.text = "BUY"
-	var buy_available: bool = stock != null and int(stock) > 0
+	# `sells` means the port sells this commodity to the player.  When the
+	# authoritative payload supplies the fixed direction, it must override any
+	# stock-based hint. Older port.info responses omit these flags; unknown
+	# direction is left to the authoritative quote rather than inferred here.
+	var buy_available: bool = _direction_available(item, "sells")
 	buy.disabled = not buy_available
 	buy.pressed.connect(_choose_trade.bind("buy", code, item))
 	var sell := Button.new()
 	sell.text = "SELL"
-	var sell_available: bool = stock != null and capacity != null and int(stock) < int(capacity)
+	# `buys` means the port buys this commodity from the player.
+	var sell_available: bool = _direction_available(item, "buys")
 	sell.disabled = not sell_available
 	sell.pressed.connect(_choose_trade.bind("sell", code, item))
 	if compact:
@@ -365,29 +406,153 @@ func _column_heading(text: String, width: float) -> Label:
 	return label
 
 func _choose_trade(direction: String, commodity: String, item: Dictionary) -> void:
-	var port_id = _port.get("id", _port.get("port_id", null))
-	if port_id == null or _sector_id <= 0:
+	var port_id := _authoritative_port_id()
+	if port_id <= 0 or _sector_id <= 0:
+		return
+	if not ["buy", "sell"].has(direction):
+		return
+	var authoritative_code := _authoritative_commodity_code(item)
+	if authoritative_code.is_empty() or authoritative_code != commodity:
+		return
+	# The buttons are disabled from the same metadata, but keep the protocol
+	# boundary safe when a stale signal or test harness invokes this handler
+	# directly.  An explicit false or malformed fixed-mode flag is a server
+	# refusal, not a client-side hint that may open a quote dialog.
+	var mode_key := "sells" if direction == "buy" else "buys"
+	if not _direction_available(item, mode_key):
 		return
 	_pending_direction = direction
 	_pending_commodity = commodity
 	_trade_dialog.title = "%s %s" % [direction.capitalize(), commodity]
 	_quantity.value = 1
+	# Use the authoritative server preference by default; explicit petty-cash or
+	# bank selection remains available in the dialog.
 	_trade_account.select(0)
-	var stock = item.get("quantity", item.get("available", item.get("stock", null)))
-	var capacity = item.get("max_quantity", null)
-	if direction == "buy" and stock != null and int(stock) > 0:
-		_quantity.max_value = int(stock)
-	elif direction == "sell" and stock != null and capacity != null and int(capacity) > int(stock):
-		_quantity.max_value = int(capacity) - int(stock)
-	else:
-		_quantity.max_value = 1000000
+	# Cached stock/capacity is display context, not a client-side trade rule.
+	# The quote and settlement commands own quantity availability; keeping the
+	# input open prevents stale port data from blocking a server-valid request.
+	_quantity.max_value = 1000000
 	DialogLayout.popup(_trade_dialog, Vector2i(460, 250))
 
 func _submit_trade() -> void:
-	var port_id = _port.get("id", _port.get("port_id", null))
-	if port_id == null or _sector_id <= 0 or _quantity.value < 1:
+	var port_id := _authoritative_port_id()
+	if port_id <= 0 or _sector_id <= 0 or _quantity.value < 1 or not _pending_trade_is_current():
+		_clear_pending_trade()
 		return
-	trade_requested.emit(_pending_direction, int(port_id), _sector_id, _pending_commodity, int(_quantity.value), _trade_account.get_selected_id())
+	trade_requested.emit(_pending_direction, port_id, _sector_id, _pending_commodity, int(_quantity.value), _selected_trade_account())
+	_clear_pending_trade()
+
+func _clear_pending_trade() -> void:
+	_pending_direction = ""
+	_pending_commodity = ""
+	if is_instance_valid(_trade_dialog):
+		_trade_dialog.hide()
+
+func _pending_trade_is_current() -> bool:
+	if not ["buy", "sell"].has(_pending_direction) or _pending_commodity.is_empty():
+		return false
+	var mode_key := "sells" if _pending_direction == "buy" else "buys"
+	var commodities: Variant = _port.get("commodities", null)
+	if not commodities is Array:
+		return false
+	for item in commodities:
+		if not item is Dictionary or _authoritative_commodity_code(item) != _pending_commodity:
+			continue
+		return _direction_available(item, mode_key)
+	return false
+
+func _selected_trade_account() -> int:
+	# OptionButton reserves an item ID of -1 as "use the item index", so the
+	# saved-preference choice cannot be represented by get_selected_id(). Keep
+	# the UI order local and emit the protocol value expected by Main.gd:
+	# -1=omitted/server preference, 0=petty cash, 1=bank.
+	match _trade_account.selected:
+		0:
+			return -1
+		1:
+			return 1
+		2:
+			return 0
+		_:
+			return -1
+
+func _authoritative_port_id() -> int:
+	# Port identity comes from the server's JSON schema. Do not coerce bools,
+	# floats, strings, or non-positive values into a trade target.
+	# An explicit canonical `id` takes precedence over the compatibility alias.
+	# If it is present but malformed, reject the record instead of allowing a
+	# contradictory `port_id` alias to cross the trade command boundary.
+	if _port.has("id"):
+		var canonical_value: Variant = _port["id"]
+		return int(canonical_value) if _is_positive_integral(canonical_value) else 0
+	if _port.has("port_id"):
+		var alias_value: Variant = _port["port_id"]
+		return int(alias_value) if _is_positive_integral(alias_value) else 0
+	return 0
+
+func _is_positive_integral(value: Variant) -> bool:
+	return (typeof(value) == TYPE_INT and int(value) > 0) or (typeof(value) == TYPE_FLOAT and is_finite(value) and value > 0.0 and value == floor(value))
+
+func _authoritative_commodity_code(item: Dictionary) -> String:
+	# Commodity identity is a server-owned string. Do not stringify booleans,
+	# numbers, empty values, or whitespace-padded values into a command target.
+	# The quote response supplies the canonical representation later; it must
+	# not be used to repair a malformed port-info identity.
+	var value: Variant = item.get("code", item.get("commodity", null))
+	if typeof(value) != TYPE_STRING:
+		return ""
+	var code := str(value)
+	return code if not code.is_empty() and code == code.strip_edges() else ""
+
+func _direction_available(item: Dictionary, key: String) -> bool:
+	# The authoritative trade.port_info commodity schema reports stock and
+	# prices, while fixed buy/sell mode is enforced by the trade quote/settle
+	# commands.  An omitted mode is therefore not a refusal: keep the action
+	# available and let the server's quote be authoritative.  An explicit false
+	# is a canonical refusal and malformed metadata is unsafe to act on.
+	if not item.has(key):
+		return true
+	# An explicitly present but schema-invalid capability is not permission to
+	# send a trade.  Refuse locally until the port is refreshed with a valid
+	# authoritative boolean.
+	return item[key] if typeof(item[key]) == TYPE_BOOL else false
+
+func _authoritative_price(item: Dictionary) -> Variant:
+	# Port-info prices are server-owned indicative integer credits.  They are
+	# display-only here; malformed values must not look like a usable quote.
+	# The authoritative trade.port_info payload names the directional values
+	# `buy_price` and `sell_price`; retain the older aliases only as a
+	# compatibility read for already-cached payloads.  The workflow does not
+	# derive direction or settlement from this display value.
+	var value: Variant = item.get("buy_price", item.get("sell_price", item.get("price", item.get("base_price", null))))
+	# The server's price fields are integer-valued credits, but JSON encoding
+	# may publish them as a real (the trade.quote contract does this). Keep
+	# integral reals visible as display data without using them as a local
+	# settlement rule.
+	if typeof(value) == TYPE_INT and int(value) >= 0:
+		return value
+	if typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value):
+		return int(value)
+	return null
+
+func _authoritative_price_label(item: Dictionary) -> String:
+	# Port rows expose both server-owned directional indicators.  Do not show
+	# the buy value for a sell action: that makes a valid sale look as though it
+	# will settle at the wrong authoritative price.  These values are display
+	# only; trade.quote remains the source of settlement truth.
+	var buy: Variant = _authoritative_price_field(item, "buy_price", "price")
+	var sell: Variant = _authoritative_price_field(item, "sell_price", "price")
+	if buy == null and sell == null:
+		return "—"
+	return "BUY %s · SELL %s" % ["—" if buy == null else str(buy), "—" if sell == null else str(sell)]
+
+func _authoritative_price_field(item: Dictionary, field: String, fallback: String) -> Variant:
+	var value: Variant = item.get(field, item.get(fallback, null))
+	if typeof(value) == TYPE_INT and int(value) >= 0:
+		return value
+	if typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0:
+		return value
+	return null
 
 func _panel_style(fill: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

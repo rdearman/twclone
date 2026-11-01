@@ -753,6 +753,82 @@ send_response_error (client_ctx_t *ctx, json_t *req, int code,
 }
 
 void
+send_response_error_data (client_ctx_t *ctx, json_t *req, int code,
+                          const char *msg, json_t *data_opt)
+{
+  if (!ctx)
+    return;
+  if (ctx == g_ctx_for_send && ctx->captured_envelopes_valid
+      && ctx->captured_envelopes)
+    {
+      json_t *resp = json_object ();
+      if (!resp)
+        return;
+      if (req && json_is_object (req))
+        {
+          json_t *jid = json_object_get (req, "id");
+          if (json_is_string (jid))
+            json_object_set_new (resp, "reply_to",
+                                 json_string (json_string_value (jid)));
+        }
+      char tsbuf[32];
+      iso8601_utc (tsbuf);
+      json_object_set_new (resp, "ts", json_string (tsbuf));
+      json_object_set_new (resp, "status", json_string ("error"));
+      json_object_set_new (resp, "type", json_string ("error"));
+      json_t *err = json_object ();
+      if (!err)
+        {
+          json_decref (resp);
+          return;
+        }
+      json_object_set_new (err, "code", json_integer (code));
+      json_object_set_new (err, "message", json_string (msg ? msg : ""));
+      if (data_opt)
+        json_object_set (err, "data", data_opt);
+      json_object_set_new (resp, "error", err);
+      json_object_set_new (resp, "data", json_null ());
+      json_object_set_new (resp, "meta", make_default_meta ());
+      sanitize_json_strings (resp);
+      json_array_append_new (ctx->captured_envelopes, resp);
+      return;
+    }
+
+  json_t *resp = json_object ();
+  json_t *err = json_object ();
+  if (!resp || !err)
+    {
+      if (resp) json_decref (resp);
+      if (err) json_decref (err);
+      return;
+    }
+  json_object_set_new (resp, "id", json_string ("srv-err"));
+  if (req && json_is_object (req))
+    {
+      json_t *jid = json_object_get (req, "id");
+      if (json_is_string (jid))
+        json_object_set_new (resp, "reply_to",
+                             json_string (json_string_value (jid)));
+    }
+  char tsbuf[32];
+  iso8601_utc (tsbuf);
+  json_object_set_new (resp, "ts", json_string (tsbuf));
+  json_object_set_new (resp, "status", json_string ("error"));
+  json_object_set_new (resp, "type", json_string ("error"));
+  json_object_set_new (err, "code", json_integer (code));
+  json_object_set_new (err, "message", json_string (msg ? msg : ""));
+  if (data_opt)
+    json_object_set (err, "data", data_opt);
+  json_object_set_new (resp, "error", err);
+  json_object_set_new (resp, "data", json_null ());
+  json_object_set_new (resp, "meta", make_default_meta ());
+  sanitize_json_strings (resp);
+  send_all_json (ctx->fd, resp);
+  json_decref (resp);
+}
+
+
+void
 send_response_refused (client_ctx_t *ctx,
 		       json_t *req,
 		       int code, const char *msg, json_t *data_opt)
@@ -878,7 +954,9 @@ gen_uuid_v4 (void)
 
 void
 send_player_event (client_ctx_t *ctx, const char *event_id,
-                   const char *event_type, json_t *data, const char *topic)
+                   const char *event_type, json_t *data,
+                   const char *timestamp, const char *topic,
+                   const char *cursor, int replayable)
 {
   if (!ctx || ctx->fd < 0 || !event_id || !event_type || !data)
     return;
@@ -890,16 +968,24 @@ send_player_event (client_ctx_t *ctx, const char *event_id,
       if (meta) json_decref (meta);
       return;
     }
-  char ts[32];
-  iso8601_utc (ts);
   json_object_set_new (env, "id", json_string (event_id));
-  json_object_set_new (env, "ts", json_string (ts));
+  if (!timestamp)
+    {
+      char ts[32];
+      iso8601_utc (ts);
+      json_object_set_new (env, "ts", json_string (ts));
+    }
+  else
+    json_object_set_new (env, "ts", json_string (timestamp));
   json_object_set_new (env, "status", json_string ("ok"));
   json_object_set_new (env, "type", json_string (event_type));
   json_object_set (env, "data", data);
   json_object_set_new (env, "error", json_null ());
   if (topic)
     json_object_set_new (meta, "topic", json_string (topic));
+  json_object_set_new (meta, "replayable", json_boolean (replayable));
+  if (replayable && cursor)
+    json_object_set_new (meta, "cursor", json_string (cursor));
   json_object_set_new (env, "meta", meta);
   sanitize_json_strings (env);
   send_all_json (ctx->fd, env);

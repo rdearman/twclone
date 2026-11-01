@@ -83,6 +83,27 @@ func accept_player(data: Dictionary, generation: int) -> bool:
 func accept_ship(data: Dictionary, generation: int) -> bool:
 	if not authenticated or disconnected or generation != refresh_generation or not data.has("ship") or not (data["ship"] is Dictionary):
 		return false
+	# When the player refresh has identified an active ship, a later ship
+	# response is authoritative only if it describes that same server-owned
+	# object.  Never replace usable state with a well-formed response for a
+	# different ship (for example, a delayed reply from a previous request).
+	var expected_ship_id: Variant = player.get("ship_id", null)
+	var actual_ship_id: Variant = data["ship"].get("id", data["ship"].get("ship_id", null))
+	# player.my_info is the authoritative relationship between the session and
+	# its active ship.  Do not accept a well-formed ship.status for an
+	# unconfirmed ship when that relationship is missing or malformed; this can
+	# otherwise replace the HUD with a delayed response for another ship after a
+	# movement, hazard, or reconnect refresh.
+	if not _is_authoritative_id(expected_ship_id):
+		return false
+	if not _is_authoritative_id(actual_ship_id) or int(actual_ship_id) != int(expected_ship_id):
+		return false
+	# ship.status/ship.info establish the active ship used by subsequent
+	# actions.  Do not mark the domain fresh when the server omitted or
+	# malformed that identity; an incomplete record must not hide stale hull,
+	# cargo, or equipment state.
+	if not _has_authoritative_ship_id(data["ship"]):
+		return false
 	var normalized := normalize_ship(data)
 	ship = normalized
 	ship_availability = FRESH
@@ -90,8 +111,15 @@ func accept_ship(data: Dictionary, generation: int) -> bool:
 	return true
 
 func accept_sector(data: Dictionary, generation: int) -> bool:
-	if not authenticated or disconnected or generation != refresh_generation:
+	if not authenticated or disconnected or generation != refresh_generation or not _has_authoritative_sector_id(data):
 		return false
+	# player.my_info is the authoritative session/location binding.  Once it
+	# has supplied a valid sector, a delayed sector.info response for another
+	# sector must not replace the confirmed visibility state.
+	var expected_sector_id: Variant = player.get("sector_id", null)
+	if _is_authoritative_id(expected_sector_id):
+		if int(data["sector_id"]) != int(expected_sector_id):
+			return false
 	var normalized := normalize_sector(data)
 	if normalized.is_empty() and not data.is_empty():
 		return false
@@ -239,11 +267,17 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 	return result
 
 static func normalize_sector(data: Dictionary) -> Dictionary:
-	if data.is_empty() or not data.has("sector_id") or not _is_integral_number(data["sector_id"]):
+	if data.is_empty() or not data.has("sector_id") or not _is_authoritative_id(data["sector_id"]):
 		return {}
 	var result := {}
 	_copy_int(data, result, "sector_id", "id")
 	_copy_string(data, result, "name")
+	# Keep the authoritative sector usable when the optional display name is
+	# absent or schema-mismatched.  This mirrors the Python client: derive only
+	# presentation text from the already-validated server ID; never derive an ID
+	# from a name or accept malformed visibility metadata.
+	if not result.has("name") and result.has("id"):
+		result["name"] = "Sector %d" % int(result["id"])
 	# Protocol v3 calls this field beacon. Accept beacon_text only as a
 	# defensive read of older server envelopes; presentation still gets the
 	# value from this normalized authoritative sector record.
@@ -256,7 +290,7 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 		var adjacent_ids := []
 		for item in adjacent:
 			var destination = item.get("to_sector") if item is Dictionary else item
-			if _is_integral_number(destination):
+			if _is_authoritative_id(destination):
 				adjacent_ids.append(int(destination))
 		result["adjacent_sector_ids"] = adjacent_ids
 	var ports_known := data.has("ports") or data.has("port")
@@ -265,10 +299,15 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 		ports = _normalize_entities(data["ports"], ["id", "port_id", "name"])
 	elif data.get("port") is Dictionary:
 		var port: Dictionary = data["port"]
-		if bool(port.get("present", true)):
+		# Visibility metadata is authoritative only when the server supplied a
+		# JSON boolean.  In particular, bool("false") is true in GDScript and
+		# would turn a malformed/refused disclosure into an actionable port.
+		var raw_present: Variant = port.get("present", true)
+		var port_present: bool = typeof(raw_present) == TYPE_BOOL and raw_present
+		if port_present:
 			var normalized_port := {}
-			_copy_int(port, normalized_port, "id")
-			_copy_int(port, normalized_port, "port_id")
+			_copy_authoritative_id(port, normalized_port, "id")
+			_copy_authoritative_id(port, normalized_port, "port_id")
 			_copy_string(port, normalized_port, "name")
 			if not normalized_port.is_empty():
 				ports.append(normalized_port)
@@ -301,7 +340,11 @@ static func _normalize_entities(value, allowed: Array) -> Array:
 			if not source.has(key):
 				continue
 			var field = source[key]
-			if _is_integral_number(field):
+			if key in ["id", "planet_id", "port_id", "ship_id"] and _is_authoritative_id(field):
+				item[key] = int(field)
+			elif key in ["id", "planet_id", "port_id", "ship_id"]:
+				continue
+			elif _is_integral_number(field):
 				item[key] = int(field)
 			elif typeof(field) == TYPE_STRING:
 				item[key] = field
@@ -312,10 +355,38 @@ static func _normalize_entities(value, allowed: Array) -> Array:
 static func _has_object(data: Dictionary, key: String) -> bool:
 	return data.has(key) and data[key] is Dictionary
 
+static func _has_authoritative_sector_id(data: Dictionary) -> bool:
+	# Refresh responses establish the location used by every proximity-sensitive
+	# action. Godot parses JSON numbers as floats, so integral floats are valid
+	# wire representations; fractional, string and boolean values remain invalid.
+	if not data.has("sector_id") or not _is_authoritative_id(data["sector_id"]):
+		return false
+	return int(data["sector_id"]) > 0
+
+static func _has_authoritative_ship_id(source: Dictionary) -> bool:
+	for key in ["id", "ship_id"]:
+		if source.has(key) and _is_authoritative_id(source[key]):
+			return true
+	return false
+
 static func _copy_int(source: Dictionary, target: Dictionary, source_key: String, target_key: String = "") -> void:
 	var key := target_key if not target_key.is_empty() else source_key
 	if source.has(source_key) and _is_integral_number(source[source_key]):
 		target[key] = int(source[source_key])
+
+static func _copy_authoritative_id(source: Dictionary, target: Dictionary, source_key: String, target_key: String = "") -> void:
+	var key := target_key if not target_key.is_empty() else source_key
+	if source.has(source_key) and _is_authoritative_id(source[source_key]):
+		target[key] = int(source[source_key])
+
+static func _is_strict_authoritative_id(value: Variant) -> bool:
+	# Visibility IDs are JSON integer contract fields. Godot may parse generic
+	# numeric values as floats, but an integral float is still schema-mismatched
+	# here and must not become an actionable port, planet, ship, or warp target.
+	return typeof(value) == TYPE_INT and int(value) > 0
+
+static func _is_authoritative_id(value: Variant) -> bool:
+	return _is_integral_number(value) and int(value) > 0
 
 static func _is_integral_number(value: Variant) -> bool:
 	if typeof(value) == TYPE_INT:

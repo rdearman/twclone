@@ -24,6 +24,8 @@
 #include "game_db.h"
 #include "repo_cmd.h"
 #include "repo_combat.h"
+#include "db/repo/repo_citadel.h"
+#include "db/repo/repo_planets.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 
@@ -50,7 +52,9 @@ static int load_ship_combat_stats_locked (db_t * db, int ship_id,
 					  combat_ship_t * out,
 					  bool skip_locked);
 static int h_apply_quasar_damage (client_ctx_t * ctx, int damage,
-				  const char *source_desc);
+				  const char *source_desc, int planet_id,
+				  json_t **outcome);
+static int destroy_ship_in_transaction (db_t *db, int player_id, int ship_id);
 static int persist_ship_damage (db_t * db, combat_ship_t * ship,
 				int fighters_lost);
 static int cmd_deploy_assets_list_internal (client_ctx_t * ctx, json_t * root,
@@ -213,17 +217,28 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
   if (ship_id <= 0)
     return 0;
   int damage_per_unit = 10;
-  repo_combat_ship_t ship;
-  if (db_combat_get_ship_stats (db, ship_id, &ship) != 1)
-    return 0;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return -1;
+  combat_ship_t ship = { 0 };
+  if (load_ship_combat_stats_locked (db, ship_id, &ship, false) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
   int *ids = NULL, *quantities = NULL, *owners = NULL, *corps = NULL, *modes =
     NULL;
   int count = 0;
   if (db_combat_get_hostile_fighters
       (db, sector_id, &ids, &quantities, &owners, &corps, &modes,
        &count) != 0)
-    return 0;
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
 
+  int result = 0;
   for (int i = 0; i < count; i++)
     {
       if (!is_asset_hostile
@@ -232,48 +247,66 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
 	  continue;
 	}
       int damage = quantities[i] * damage_per_unit;
-      ship_t s = {.hull = ship.hull,.fighters = ship.fighters,.shields =
-	  ship.shields };
+      ship_t s = {.hull = ship.hull,.fighters = ship.fighters,.shields = ship.shields };
       armid_damage_breakdown_t breakdown = { 0 };
       apply_armid_damage_to_ship (&s, damage, &breakdown);
-      
-      /* Calculate units actually consumed based on damage applied */
       int total_applied = breakdown.shields_lost + breakdown.fighters_lost + breakdown.hull_lost;
+      if (total_applied <= 0)
+        continue;
       int units_consumed = (total_applied + damage_per_unit - 1) / damage_per_unit;
       if (units_consumed > quantities[i]) units_consumed = quantities[i];
 
       ship.hull = s.hull;
       ship.fighters = s.fighters;
       ship.shields = s.shields;
-      db_combat_update_ship_stats (db, ship_id, ship.hull, ship.fighters,
-				   ship.shields);
-      
-      db_combat_decrement_or_delete_asset (db, ids[i], units_consumed);
-      
+      if (db_combat_update_ship_stats (db, ship_id, ship.hull, ship.fighters,
+                                       ship.shields) != 0
+          || db_combat_decrement_or_delete_asset (db, ids[i], units_consumed) != 0)
+        {
+          result = -1;
+          goto fighters_done;
+        }
       json_t *evt = json_object ();
+      if (!evt)
+        {
+          result = -1;
+          goto fighters_done;
+        }
       json_object_set_new (evt, "damage", json_integer (total_applied));
-      json_object_set_new (evt, "fighters_engaged",
-			   json_integer (units_consumed));
-      db_log_engine_event ((long long) time (NULL), "combat.hit.fighters",
-			   "player", ctx->player_id, sector_id, evt, NULL);
+      json_object_set_new (evt, "fighters_engaged", json_integer (units_consumed));
+      json_object_set_new (evt, "shields_lost", json_integer (breakdown.shields_lost));
+      json_object_set_new (evt, "fighters_lost", json_integer (breakdown.fighters_lost));
+      json_object_set_new (evt, "hull_lost", json_integer (breakdown.hull_lost));
+      if (db_log_engine_event ((long long) time (NULL), "combat.hit.fighters",
+                               "player", ctx->player_id, sector_id, evt, db) != 0)
+        {
+          json_decref (evt);
+          result = -1;
+          goto fighters_done;
+        }
       json_decref (evt);
       if (ship.hull <= 0)
 	{
-	  free (ids);
-	  free (quantities);
-	  free (owners);
-	  free (corps);
-	  free (modes);
-	  destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
-	  return 1;
+          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id) != 0)
+            result = -1;
+          else
+            result = 1;
+          break;
 	}
     }
+
+fighters_done:
   free (ids);
   free (quantities);
   free (owners);
   free (corps);
   free (modes);
-  return 0;
+  if (result < 0 || !db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  return result;
 }
 
 int
@@ -353,10 +386,16 @@ apply_sector_quasar_on_entry (client_ctx_t *ctx, int sector_id)
     return 0;
   db_t *db = game_db_get_handle ();
   if (!db)
-    return 0;
+    return -1;
   int shot_fired = 0;
   json_t *planets = NULL;
-  if (db_combat_get_planet_quasar_info (db, sector_id, &planets) == 0)
+  if (db_combat_get_planet_quasar_info (db, sector_id, &planets) != 0
+      || !planets)
+    {
+      json_decref (planets);
+      return -1;
+    }
+  else
     {
       size_t i;
       json_t *p;
@@ -383,108 +422,146 @@ apply_sector_quasar_on_entry (client_ctx_t *ctx, int sector_id)
 	    char source_desc[64];
 	    snprintf (source_desc, sizeof (source_desc),
 		      "Quasar Sector Shot (Planet %d)", planet_id);
-	    if (h_apply_quasar_damage (ctx, damage, source_desc))
+	    int hit_rc = h_apply_quasar_damage (ctx, damage, source_desc, planet_id,
+						NULL);
+	    if (hit_rc == 2)
 	      shot_fired = 1;
-	    else
+	    else if (hit_rc == 1)
 	      shot_fired = 2;
+	    else
+	      shot_fired = -1;
 	    break;
 	  }
       }
       json_decref (planets);
     }
-  return (shot_fired == 1);
+  return shot_fired < 0 ? -1 : shot_fired;
 }
 
 int
 apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
 			    armid_encounter_t *out_enc)
 {
+  if (!ctx || new_sector_id <= 0)
+    return -1;
   db_t *db = game_db_get_handle ();
   if (!db)
     return -1;
-  int ship_id = h_get_active_ship_id (db, ctx->player_id);
-  if (ship_id <= 0)
-    return 0;
   if (out_enc)
     {
       memset (out_enc, 0, sizeof (*out_enc));
       out_enc->sector_id = new_sector_id;
     }
-  ship_t ship_stats = { 0 };
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    return 0;
   db_error_t err;
   db_error_clear (&err);
-  if (db_ship_get_combat_stats (db, ship_id, &ship_stats, &err) <= 0)
-    return 0;
-  int damage_per_mine = db_get_config_int (db, "armid_damage_per_mine", 25);
-  if (g_armid_config.armid.enabled)
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return -1;
+  combat_ship_t combat = { 0 };
+  if (load_ship_combat_stats_locked (db, ship_id, &combat, false) != 0)
     {
-      json_t *mines = NULL;
-      if (db_combat_select_armid_mines_locked (db, new_sector_id, &mines) ==
-	  0)
-	{
-	  size_t i;
-	  json_t *m;
-	  json_array_foreach (mines, i, m)
-	  {
-	    int mine_id = json_integer_value (json_object_get (m, "id"));
-	    int mine_quantity =
-	      json_integer_value (json_object_get (m, "quantity"));
-	    int owner_id =
-	      json_integer_value (json_object_get (m, "owner_id"));
-	    int corp_id = json_integer_value (json_object_get (m, "corp_id"));
-	    if (!is_asset_hostile
-		(owner_id, corp_id, ctx->player_id, ctx->corp_id))
-	      continue;
-	    int damage = mine_quantity * damage_per_mine;
-	    armid_damage_breakdown_t d = { 0 };
-	    apply_armid_damage_to_ship (&ship_stats, damage, &d);
-            
-            int total_applied = d.shields_lost + d.fighters_lost + d.hull_lost;
-            int units_consumed = (total_applied + damage_per_mine - 1) / damage_per_mine;
-            if (units_consumed > mine_quantity) units_consumed = mine_quantity;
-
-	    db_combat_decrement_or_delete_asset (db, mine_id, units_consumed);
-	    if (out_enc)
-	      {
-		out_enc->armid_triggered += units_consumed;
-		out_enc->shields_lost += d.shields_lost;
-		out_enc->fighters_lost += d.fighters_lost;
-		out_enc->hull_lost += d.hull_lost;
-	      }
-	    json_t *hit_data = json_object ();
-	    json_object_set_new (hit_data, "attacker_id",
-				 json_integer (owner_id));
-	    json_object_set_new (hit_data, "defender_id",
-				 json_integer (ctx->player_id));
-	    json_object_set_new (hit_data, "weapon",
-				 json_string ("armid_mines"));
-	    json_object_set_new (hit_data, "damage_total",
-				 json_integer (total_applied));
-	    db_log_engine_event ((long long) time (NULL), "combat.hit",
-				 "player", ctx->player_id, new_sector_id,
-				 hit_data, NULL);
-	    json_decref (hit_data);
-	    db_combat_persist_ship_damage (db, ship_id, ship_stats.hull,
-					   ship_stats.shields, 0);
-	    if (ship_stats.hull <= 0)
-	      {
-		destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
-		if (out_enc)
-		  out_enc->destroyed = true;
-		break;
-	      }
-	  }
-	  json_decref (mines);
-	}
+      db_tx_rollback (db, NULL);
+      return -1;
     }
-  return 0;
+  ship_t ship_stats = { .hull = combat.hull, .fighters = combat.fighters,
+                        .shields = combat.shields };
+  int damage_per_mine = db_get_config_int (db, "armid_damage_per_mine", 25);
+  if (damage_per_mine <= 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  json_t *mines = NULL;
+  if (db_combat_select_armid_mines_locked (db, new_sector_id, &mines) != 0
+      || !mines)
+    {
+      json_decref (mines);
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  int result = 0;
+  size_t i;
+  json_t *m;
+  json_array_foreach (mines, i, m)
+    {
+      int mine_id = json_integer_value (json_object_get (m, "id"));
+      int mine_quantity = json_integer_value (json_object_get (m, "quantity"));
+      int owner_id = json_integer_value (json_object_get (m, "owner_id"));
+      int corp_id = json_integer_value (json_object_get (m, "corp_id"));
+      int64_t ttl = json_integer_value (json_object_get (m, "ttl"));
+      sector_asset_t asset = { .quantity = mine_quantity, .ttl = (time_t) ttl };
+      if (!is_asset_hostile (owner_id, corp_id, ctx->player_id, ctx->corp_id)
+          || !armid_stack_is_active (&asset, time (NULL)))
+        continue;
+      int damage = mine_quantity * damage_per_mine;
+      armid_damage_breakdown_t d = { 0 };
+      apply_armid_damage_to_ship (&ship_stats, damage, &d);
+      int total_applied = d.shields_lost + d.fighters_lost + d.hull_lost;
+      if (total_applied <= 0)
+        continue;
+      int units_consumed = (total_applied + damage_per_mine - 1)
+        / damage_per_mine;
+      if (units_consumed > mine_quantity)
+        units_consumed = mine_quantity;
+      combat.hull = ship_stats.hull;
+      combat.fighters = ship_stats.fighters;
+      combat.shields = ship_stats.shields;
+      json_t *hit_data = json_pack
+        ("{s:i,s:i,s:s,s:i,s:i,s:i,s:i}",
+         "attacker_id", owner_id, "defender_id", ctx->player_id,
+         "weapon", "armid_mines", "damage_total", total_applied,
+         "shields_lost", d.shields_lost, "fighters_lost", d.fighters_lost,
+         "hull_lost", d.hull_lost);
+      if (db_combat_decrement_or_delete_asset (db, mine_id, units_consumed) != 0
+          || db_combat_update_ship_stats (db, ship_id, combat.hull,
+                                          combat.fighters, combat.shields) != 0
+          || !hit_data
+          || db_log_engine_event ((long long) time (NULL), "combat.hit",
+                                 "player", ctx->player_id, new_sector_id,
+                                 hit_data, db) != 0)
+        {
+          json_decref (hit_data);
+          result = -1;
+          break;
+        }
+      json_decref (hit_data);
+      if (out_enc)
+        {
+          out_enc->armid_triggered += units_consumed;
+          out_enc->shields_lost += d.shields_lost;
+          out_enc->fighters_lost += d.fighters_lost;
+          out_enc->hull_lost += d.hull_lost;
+        }
+      if (ship_stats.hull <= 0)
+        {
+          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id) != 0)
+            result = -1;
+          else
+            {
+              if (out_enc)
+                out_enc->destroyed = true;
+              result = 1;
+            }
+          break;
+        }
+    }
+  json_decref (mines);
+  if (result < 0 || !db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  return result;
 }
 
 int
 apply_limpet_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
 			     armid_encounter_t *out_enc)
 {
-  (void) out_enc;
+  if (!ctx || new_sector_id <= 0)
+    return -1;
   db_t *db = game_db_get_handle ();
   if (!db)
     return -1;
@@ -493,14 +570,28 @@ apply_limpet_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
     return 0;
   if (!g_cfg.mines.limpet.enabled)
     return 0;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return -1;
   json_t *limpets = NULL;
   if (db_combat_select_limpets_locked (db, new_sector_id, &limpets) != 0)
-    return -1;
+    {
+      json_decref (limpets);
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  if (!limpets)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
   int64_t now_ts = (int64_t) time (NULL);
+  int attached_count = 0;
+  int result = 0;
   size_t i;
   json_t *limpet;
-  json_array_foreach (limpets, i, limpet)
-  {
+  json_array_foreach (limpets, i, limpet) {
     int asset_id = json_integer_value (json_object_get (limpet, "id"));
     int quantity = json_integer_value (json_object_get (limpet, "quantity"));
     int owner_id = json_integer_value (json_object_get (limpet, "owner_id"));
@@ -512,23 +603,43 @@ apply_limpet_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
     if (!armid_stack_is_active (&asset, (time_t) now_ts))
       continue;
     bool attached = false;
-    if (db_combat_check_limpet_attached (db, ship_id, owner_id, &attached) !=
-	0 || attached)
-      continue;
-    if (db_combat_decrement_or_delete_asset (db, asset_id, quantity) == 0)
+    if (db_combat_check_limpet_attached (db, ship_id, owner_id, &attached) != 0)
       {
-	db_combat_attach_limpet (db, ship_id, owner_id, now_ts);
-	json_t *event_data = json_object ();
-	json_object_set_new (event_data, "target_ship_id",
-			     json_integer (ship_id));
-	json_object_set_new (event_data, "target_player_id",
-			     json_integer (ctx->player_id));
-	db_log_engine_event (now_ts, "combat.limpet.attached", "player",
-			     owner_id, new_sector_id, event_data, NULL);
-	json_decref (event_data);
+        result = -1;
+        break;
       }
+    if (attached)
+      continue;
+    if (db_combat_decrement_or_delete_asset (db, asset_id, quantity) != 0
+        || db_combat_attach_limpet (db, ship_id, owner_id, now_ts) != 0)
+      {
+	result = -1;
+	break;
+      }
+    json_t *event_data = json_pack ("{s:i,s:i,s:i,s:i}",
+                                    "target_ship_id", ship_id,
+                                    "target_player_id", ctx->player_id,
+                                    "asset_owner_id", owner_id,
+                                    "sector_id", new_sector_id);
+    if (!event_data
+        || db_log_engine_event (now_ts, "combat.limpet.attached", "player",
+                                owner_id, new_sector_id, event_data, db) != 0)
+      {
+	json_decref (event_data);
+	result = -1;
+	break;
+      }
+    json_decref (event_data);
+    attached_count++;
   }
   json_decref (limpets);
+  if (result < 0 || !db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  if (out_enc)
+    out_enc->limpet_triggered += attached_count;
   return 0;
 }
 
@@ -557,7 +668,23 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
 	  if (db_combat_move_ship_and_player
 	      (db, ship_id, ctx->player_id, dest) == 0)
 	    {
-	      server_combat_apply_entry_hazards (db, ctx, dest);
+	      ctx->sector_id = dest;
+	      int hazard_rc = server_combat_apply_entry_hazards (db, ctx, dest);
+	      if (hazard_rc < 0)
+		{
+		  send_response_error (ctx, root, ERR_DB,
+				       "Flee succeeded, but entry defenses could not be resolved.");
+		  return 0;
+		}
+	      if (hazard_rc == 1)
+		{
+		  json_t *data = json_pack ("{s:i,s:b}", "to_sector", dest,
+					    "ship_destroyed", true);
+		  send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
+				    "Ship destroyed by defenses in the flee destination.", data);
+		  json_decref (data);
+		  return 0;
+		}
 	      json_t *res = json_object ();
 	      json_object_set_new (res, "success", json_true ());
 	      json_object_set_new (res, "to_sector", json_integer (dest));
@@ -622,9 +749,7 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
 
   int amount = 0;
   if (!json_get_int_flexible (data, "amount", &amount))
-    {
-      json_get_int_flexible (data, "count", &amount);
-    }
+    json_get_int_flexible (data, "count", &amount);
 
   if (amount <= 0)
     {
@@ -723,10 +848,9 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
     return 0;
 
   int amount = 0;
-  if (!json_get_int_flexible (data, "amount", &amount))
-    {
-      json_get_int_flexible (data, "count", &amount);
-    }
+  if (!json_get_int_flexible (data, "quantity", &amount)
+      && !json_get_int_flexible (data, "amount", &amount))
+    json_get_int_flexible (data, "count", &amount);
 
   if (amount <= 0)
     {
@@ -1002,26 +1126,88 @@ cmd_combat_status (client_ctx_t *ctx, json_t *root)
 }
 
 static int
-h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc)
+h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc,
+                       int planet_id, json_t **outcome)
 {
-  (void) source_desc;
   db_t *db = game_db_get_handle ();
-  if (!db)
-    return 0;
+  if (!db || !ctx || damage <= 0)
+    return -1;
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (ship_id <= 0)
-    return 0;
+    return -1;
   db_error_t err;
   db_error_clear (&err);
-  db_tx_begin (db, DB_TX_DEFAULT, &err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return -1;
   combat_ship_t ship = { 0 };
-  load_ship_combat_stats_locked (db, ship_id, &ship, true);
-  ship.hull -= damage;
-  persist_ship_damage (db, &ship, 0);
-  db_tx_commit (db, &err);
-  if (ship.hull <= 0)
-    destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
-  return 0;
+  if (load_ship_combat_stats_locked (db, ship_id, &ship, true) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  int shields_lost = 0, hull_lost = 0;
+  apply_combat_damage (&ship, damage, &shields_lost, &hull_lost);
+  if (persist_ship_damage (db, &ship, 0) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  bool destroyed = ship.hull <= 0;
+  if (destroyed
+      && destroy_ship_in_transaction (db, ctx->player_id, ship_id) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  json_t *event = json_object ();
+  if (!event)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  json_object_set_new (event, "target_ship_id", json_integer (ship_id));
+  json_object_set_new (event, "target_player_id", json_integer (ctx->player_id));
+  json_object_set_new (event, "damage", json_integer (damage));
+  json_object_set_new (event, "shields_lost", json_integer (shields_lost));
+  json_object_set_new (event, "hull_lost", json_integer (hull_lost));
+  json_object_set_new (event, "shields_remaining", json_integer (ship.shields));
+  json_object_set_new (event, "hull_remaining", json_integer (ship.hull));
+  json_object_set_new (event, "planet_id", json_integer (planet_id));
+  json_object_set_new (event, "source", json_string (source_desc ? source_desc : "Quasar"));
+  json_object_set_new (event, "destroyed", json_boolean (destroyed));
+  if (db_log_engine_event ((long long) time (NULL), "combat.hit.quasar",
+                           "player", ctx->player_id, ship.sector, event, db) != 0)
+    {
+      json_decref (event);
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  json_decref (event);
+  json_t *result = NULL;
+  if (outcome)
+    {
+      result = json_pack ("{s:s,s:i,s:i,s:i,s:i,s:i,s:i,s:b}",
+                          "defense", "atmosphere_quasar",
+                          "planet_id", planet_id, "damage", damage,
+                          "shields_lost", shields_lost, "hull_lost", hull_lost,
+                          "shields_remaining", ship.shields,
+                          "hull_remaining", ship.hull,
+                          "destroyed", destroyed);
+      if (!result)
+        {
+          db_tx_rollback (db, NULL);
+          return -1;
+        }
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      json_decref (result);
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  if (outcome)
+    *outcome = result;
+  return destroyed ? 2 : 1;
 }
 
 static void
@@ -1042,8 +1228,11 @@ apply_combat_damage (combat_ship_t *target, int damage, int *shields_lost,
     }
   if (rem > 0)
     {
-      target->hull -= rem;
-      *hull_lost = rem;
+      /* Damage cannot reduce persisted hull below zero. Keeping the actual
+       * hull loss here also lets the normal destruction transaction run for
+       * lethal overkill instead of rejecting a negative database value. */
+      *hull_lost = MIN (rem, target->hull);
+      target->hull -= *hull_lost;
     }
 }
 
@@ -1063,11 +1252,43 @@ db_get_stardock_sectors (void)
   return arr;
 }
 
+static int
+destroy_ship_in_transaction (db_t *db, int player_id, int ship_id)
+{
+  if (!db || player_id <= 0 || ship_id <= 0)
+    return -1;
+  if (db_destroy_ship (db, player_id, ship_id) != 0
+      || db_create_podded_status_entry (db, player_id) != 0
+      || db_update_player_podded_status (db, player_id, "active", 0) != 0)
+    return -1;
+  return 0;
+}
+
 int
 destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int player_id)
 {
-  (void) ctx;
-  (void) player_id;
+  if (!ctx || player_id <= 0)
+    return -1;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    return -1;
+  int ship_id = h_get_active_ship_id (db, player_id);
+  if (ship_id <= 0)
+    return 0;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return -1;
+  if (destroy_ship_in_transaction (db, player_id, ship_id) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      return -1;
+    }
   return 0;
 }
 
@@ -1094,14 +1315,15 @@ server_combat_apply_environmental_hazards (db_t *db, client_ctx_t *ctx,
   if (db_combat_get_sector_hazards (db, sector_id, &hazards) != 0 || !hazards)
     {
       LOGE ("Could not read environmental hazards for sector %d", sector_id);
-      return 0;
+      json_decref (hazards);
+      return -1;
     }
 
   ship_t ship = { 0 };
   if (db_ship_get_combat_stats (db, ship_id, &ship, NULL) != 1)
     {
       json_decref (hazards);
-      return 0;
+      return -1;
     }
 
   json_t *results = report && *report ? *report : json_array ();
@@ -1130,7 +1352,12 @@ server_combat_apply_environmental_hazards (db_t *db, client_ctx_t *ctx,
                                          damage.fighters_lost) != 0)
         {
           LOGE ("Failed to persist %s hazard damage to ship %d", type, ship_id);
-          break;
+          json_decref (hazards);
+          if (report)
+            *report = results;
+          else
+            json_decref (results);
+          return -1;
         }
 
       json_t *event = json_object ();
@@ -1145,8 +1372,18 @@ server_combat_apply_environmental_hazards (db_t *db, client_ctx_t *ctx,
           json_object_set_new (event, "shields_lost", json_integer (damage.shields_lost));
           json_object_set_new (event, "fighters_lost", json_integer (damage.fighters_lost));
           json_object_set_new (event, "hull_lost", json_integer (damage.hull_lost));
-          db_log_engine_event ((long long) time (NULL), "combat.hit.environment",
-                               "player", ctx->player_id, sector_id, event, NULL);
+          if (db_log_engine_event ((long long) time (NULL), "combat.hit.environment",
+                                   "player", ctx->player_id, sector_id, event,
+                                   game_db_get_handle ()) != 0)
+            {
+              json_decref (event);
+              json_decref (hazards);
+              if (report)
+                *report = results;
+              else
+                json_decref (results);
+              return -1;
+            }
 
           json_t *shown = json_copy (event);
           if (shown && results)
@@ -1163,7 +1400,15 @@ server_combat_apply_environmental_hazards (db_t *db, client_ctx_t *ctx,
 
       if (ship.hull <= 0)
         {
-          destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
+          if (destroy_ship_and_handle_side_effects (ctx, ctx->player_id) != 0)
+            {
+              json_decref (hazards);
+              if (report)
+                *report = results;
+              else
+                json_decref (results);
+              return -1;
+            }
           destroyed = 1;
           break;
         }
@@ -1184,23 +1429,36 @@ server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int secto
   armid_encounter_t enc = { 0 };
 
   /* 1. Quasars fire first */
-  if (apply_sector_quasar_on_entry (ctx, sector_id))
-    return 1;			/* Ship destroyed */
+  int quasar_rc = apply_sector_quasar_on_entry (ctx, sector_id);
+  if (quasar_rc < 0)
+    return -1;
+  if (quasar_rc == 1)
+    return 1;                   /* Ship destroyed */
 
   /* 2. Mines detonate next */
-  apply_armid_mines_on_entry (ctx, sector_id, &enc);
+  int mine_rc = apply_armid_mines_on_entry (ctx, sector_id, &enc);
+  if (mine_rc < 0)
+    return -1;
   if (enc.destroyed)
     return 1;
 
   /* 3. Fighters engage */
-  if (apply_sector_fighters_on_entry (ctx, sector_id))
+  int fighters_rc = apply_sector_fighters_on_entry (ctx, sector_id);
+  if (fighters_rc < 0)
+    return -1;
+  if (fighters_rc == 1)
     return 1;
 
   /* 4. Limpets attach last */
-  apply_limpet_mines_on_entry (ctx, sector_id, &enc);
+  if (apply_limpet_mines_on_entry (ctx, sector_id, &enc) < 0)
+    return -1;
 
   /* 5. Environmental hazards resolve after existing armed defenses. */
-  if (server_combat_apply_environmental_hazards (db, ctx, sector_id, report))
+  int environment_rc = server_combat_apply_environmental_hazards
+    (db, ctx, sector_id, report);
+  if (environment_rc < 0)
+    return -1;
+  if (environment_rc == 1)
     return 1;
 
   return 0;
@@ -1219,7 +1477,11 @@ server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
   if (!db || !ctx || ctx->player_id <= 0 || sector_id <= 0)
     return 0;
   if (report)
-    *report = json_array ();
+    {
+      *report = json_array ();
+      if (!*report)
+        return -1;
+    }
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   
   /* Apply to entering ship */
@@ -1238,12 +1500,16 @@ server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
           towed_ctx.corp_id = towed_cid;
           towed_ctx.sector_id = sector_id;
           
-          if (server_combat_apply_entry_hazards_single (db, &towed_ctx, sector_id,
-                                                        NULL))
+          int towed_rc = server_combat_apply_entry_hazards_single
+            (db, &towed_ctx, sector_id, NULL);
+          if (towed_rc < 0)
+            return -1;
+          if (towed_rc == 1)
             {
               /* Towed ship destroyed! Disengage beam. */
-              repo_ships_clear_is_being_towed_by (db, towed_sid);
-              repo_ships_clear_towing_id (db, ship_id);
+              if (repo_ships_clear_is_being_towed_by (db, towed_sid) != 0
+                  || repo_ships_clear_towing_id (db, ship_id) != 0)
+                return -1;
             }
         }
     }
@@ -1254,13 +1520,44 @@ server_combat_apply_entry_hazards_report (db_t *db, client_ctx_t *ctx,
 int
 h_trigger_atmosphere_quasar (db_t *db, client_ctx_t *ctx, int planet_id)
 {
+  return h_trigger_atmosphere_quasar_report (db, ctx, planet_id, NULL);
+}
+
+int
+h_trigger_atmosphere_quasar_report (db_t *db, client_ctx_t *ctx, int planet_id,
+                                    json_t **outcome)
+{
   int owner = 0, base = 0, react = 0;
   char type[32] = { 0 };
+  if (!db || !ctx || planet_id <= 0)
+    return -1;
+  /* The construction repository distinguishes a planet with no citadel from
+   * a failed database read. Do not turn an ambiguous defense lookup failure
+   * into an unarmed planet. */
+  int32_t level = 0, target_level = 0;
+  int64_t started_at = 0, completes_at = 0;
+  char status[32] = { 0 };
+  int state_rc = repo_citadel_get_construction_state
+    (db, planet_id, &level, status, sizeof status, &target_level,
+     &started_at, &completes_at);
+  if (state_rc == ERR_DB_NOT_FOUND)
+    return 0;
+  if (state_rc != 0)
+    return -1;
+  if (level < 3)
+    return 0;
   if (db_combat_get_planet_atmosphere_quasar
-      (db, planet_id, &owner, type, &base, &react) == 0)
+      (db, planet_id, &owner, type, &base, &react) != 0)
+    return -1;
+  int corp_id = (strcasecmp (type, "corp") == 0
+                 || strcasecmp (type, "corporation") == 0) ? owner : 0;
+  if (is_asset_hostile (owner, corp_id, ctx->player_id, ctx->corp_id))
     {
-      if (is_asset_hostile (owner, 0, ctx->player_id, ctx->corp_id))
-	h_apply_quasar_damage (ctx, base, "Quasar");
+      int percent = react == 1 ? 125 : react >= 2 ? 150 : 100;
+      int damage = (int) floor ((double) base * (double) percent / 100.0);
+      return h_apply_quasar_damage (ctx, damage,
+                                  "Planet atmosphere Quasar", planet_id,
+                                  outcome);
     }
   return 0;
 }
@@ -1298,6 +1595,12 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
   if (!db)
     return 0;
   json_t *data = json_object_get (root, "data");
+  if (!json_is_object (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "target_sector_id is required");
+      return 0;
+    }
   int tsid =
     (int) json_integer_value (json_object_get (data, "target_sector_id"));
   if (tsid <= 0 || tsid != ctx->sector_id)
@@ -1306,9 +1609,19 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
                            "target_sector_id must be the current sector");
       return 0;
     }
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not begin mine sweep");
+      return 0;
+    }
+
   json_t *mines = NULL;
   if (db_combat_select_mines_locked (db, tsid, 1, &mines) != 0 || !mines)
     {
+      db_tx_rollback (db, &err);
       send_response_error (ctx, root, ERR_SERVER_ERROR,
                            "Could not read sector mines");
       return 0;
@@ -1323,6 +1636,13 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
       removed++;
   }
   json_decref (mines);
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Mine sweep could not be committed");
+      return 0;
+    }
   if (removed > 0)
     {
       json_t *notice_details = json_object ();
@@ -1337,6 +1657,7 @@ cmd_combat_sweep_mines (client_ctx_t *ctx, json_t *root)
     }
   json_t *out = json_object ();
   json_object_set_new (out, "success", json_true ());
+  json_object_set_new (out, "mines_removed", json_integer (removed));
   send_response_ok_take (ctx, root, "combat.mines_swept_v1", &out);
   return 0;
 }

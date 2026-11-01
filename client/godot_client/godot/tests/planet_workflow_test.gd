@@ -16,22 +16,31 @@ func _run() -> void:
 	workflow.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
 		captured.append({"command": command, "data": data, "label": label, "mutating": mutating})
 	)
+	for malformed_id in [true, 77.0, "77", 0, null]:
+		workflow.open_planet(malformed_id)
+	_check(captured.is_empty(), "malformed planet metadata was coerced into a surface request")
 	workflow.open_planet(77)
 	_check(captured.size() == 2, "opening the landed-planet view did not request authoritative details")
 	_check(captured[0]["command"] == "planet.info" and captured[1]["command"] == "planet.colonists.get", "planet screen requested unexpected operations")
-	workflow.set_colonist_state({"planet_colonists": 8, "ship_colonists": 3, "ship_holds_available": 4})
-	_check(not workflow._pickup.disabled and not workflow._dropoff.disabled, "valid pickup/dropoff actions remained disabled")
 	workflow.set_planet_info({
-		"name": "Test World", "population": 40, "fighters": 12, "citadel_level": 1,
+		"planet_id": 77, "name": "Test World", "population": 40, "fighters": 12, "citadel_level": 1,
 		"colonists_unassigned": 10, "colonists_ore": 8, "colonists_org": 6,
 		"colonists_eq": 4, "colonists_weapons": 12,
 		"max_colonists_ore": 20, "max_colonists_organics": 20,
 		"max_colonists_equipment": 20,
 		"goods": [{"commodity": "ORE", "quantity": 5, "max_capacity": 50}],
 	})
+	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": 8, "ship_colonists": 3, "ship_holds_available": 4})
+	_check(not workflow._pickup.disabled and not workflow._dropoff.disabled, "valid pickup/dropoff actions remained disabled")
+	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": "8", "ship_colonists": 3.0, "ship_holds_available": true})
+	_check(workflow._pickup.disabled and workflow._dropoff.disabled, "malformed colony counts became actionable transfer limits")
 	_check(workflow._info_label.text.to_lower().contains("fighters: 12"), "confirmed planetary fighter count was not displayed")
 	_check(int(workflow._labor_weapons.value) == 12, "confirmed weapons workforce was not loaded")
 	_check(workflow._labor_status.text.contains("weapons 12"), "weapons assignment was not shown in workforce status")
+	workflow.set_planet_info({"planet_id": 77, "citadel_level": "1"})
+	_check(workflow._citadel_button.disabled, "malformed citadel level enabled development action")
+	workflow.set_planet_info({"planet_id": 77, "citadel_level": 1})
+	_check(not workflow._citadel_button.disabled, "valid citadel level did not enable development action")
 	workflow._labor_weapons.value = 11
 	workflow._save_labor_assignments()
 	_check(captured.size() == 3 and captured[2]["command"] == "planet.colonists.allocate", "workforce save did not use the existing allocation command")
@@ -54,6 +63,10 @@ func _run() -> void:
 		_check(captured[4]["data"] == {"planet_id": 77, "action": "pickup", "quantity": 4} and captured[4]["mutating"], "colonist transfer payload did not match the implemented handler")
 	workflow._launch_now()
 	_check(captured.size() == 6 and captured[5]["command"] == "planet.launch" and captured[5]["mutating"], "planet launch action did not use server-confirmed command flow")
+	var requests_before_invalid_selection := captured.size()
+	workflow.open_planet("77")
+	_check(captured.size() == requests_before_invalid_selection, "malformed replacement selection sent a surface request")
+	_check(not workflow.visible and workflow._planet_id == 0 and not workflow._surface_identity_confirmed, "malformed replacement selection left stale planet actions visible")
 	workflow.queue_free()
 	await process_frame
 	if failures.is_empty():

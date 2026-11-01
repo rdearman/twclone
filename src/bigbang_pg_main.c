@@ -152,6 +152,7 @@ sync_config_to_db (PGconn *c, json_t *jcfg)
     // Skip meta-config keys used only by bigbang
     if (strcmp (key, "admin") == 0 || strcmp (key, "db") == 0 ||
     strcmp (key, "app") == 0 || strcmp (key, "sql_dir") == 0 ||
+    strcmp (key, "include_v3_migrations") == 0 ||
     strcmp (key, "port_seed") == 0)
       {
 	continue;
@@ -239,48 +240,108 @@ compare_sql_files (const void *a, const void *b)
 
 typedef struct
 {
-  const char *name;
+  char *name;
   int required;
+  int v3_only;
+  int diagnostic;
 } bigbang_sql_script_t;
 
-/* Selection metadata only: sql/pg is the sole source of SQL contents. */
-static const bigbang_sql_script_t k_bigbang_sql_scripts[] = {
-  {"000_tables.sql", 1}, {"005_namegen.sql", 1},
-  {"010_indexes.sql", 1}, {"020_views.sql", 1},
-  {"040_functions.sql", 1}, {"088_generate_tunnels.sql", 1},
-  {"090_seed_lookup.sql", 1}, {"091_seed_essential.sql", 1},
-  {"091_seed_fedspace_warps.sql", 1}, {"092_seed_gameplay.sql", 1},
-  {"094_gameplay_procs.sql", 1}, {"095_player_registration.sql", 1},
-  {"100_init_ship_cargo.sql", 1},
-  {"101_phase4_shiptypes_restrictions.sql", 1},
-  {"102_phase5_porttypes.sql", 1}, {"103_phase6_items_legality.sql", 1},
-  {"104_phase8_port_behaviour.sql", 1},
-  {"105_phase9_dynamic_pricing.sql", 1},
-  {"106_phase9_2_cluster_pressure.sql", 1},
-  {"107_seed_illegal_commodities.sql", 1},
-  {"108_planet_entity_stock.sql", 1},
-  {"109_v2_sector_notices_trade_offers.sql", 1},
-  {"110_sector_environmental_hazards.sql", 1},
-  {"111_ship_personalities.sql", 1},
-  {"112_v2_economy_commerce.sql", 1},
-  {"113_ferengi_trader_configuration.sql", 1},
-  {"114_planet_fighter_production.sql", 1},
-  {"119_password_hash_enforcement.sql", 1}
-};
+/* Loaded from sql_dir/migration_manifest.json.  SQL files are contents only;
+ * the manifest is the executable's complete, reviewable selection contract. */
+static bigbang_sql_script_t *k_bigbang_sql_scripts;
+static size_t k_bigbang_sql_script_count;
+
+static int
+load_sql_manifest (const char *sql_dir)
+{
+  char path[2048];
+  snprintf (path, sizeof path, "%s/migration_manifest.json", sql_dir);
+  json_error_t error;
+  json_t *root = json_load_file (path, 0, &error);
+  if (!root)
+    {
+      fprintf (stderr, "ERROR: cannot load migration manifest '%s': %s\n",
+               path, error.text);
+      return -1;
+    }
+  json_t *scripts = json_object_get (root, "scripts");
+  if (!json_is_array (scripts) || json_array_size (scripts) == 0)
+    {
+      fprintf (stderr, "ERROR: migration manifest has no scripts array: %s\n",
+               path);
+      json_decref (root);
+      return -1;
+    }
+
+  k_bigbang_sql_script_count = json_array_size (scripts);
+  k_bigbang_sql_scripts = calloc (k_bigbang_sql_script_count,
+                                  sizeof *k_bigbang_sql_scripts);
+  if (!k_bigbang_sql_scripts)
+    {
+      json_decref (root);
+      return -1;
+    }
+
+  size_t i;
+  json_t *entry;
+  json_array_foreach (scripts, i, entry)
+    {
+      json_t *name = json_object_get (entry, "name");
+      json_t *required = json_object_get (entry, "required");
+      json_t *v3_only = json_object_get (entry, "v3_only");
+      json_t *diagnostic = json_object_get (entry, "diagnostic");
+      if (!json_is_object (entry) || !json_is_string (name)
+          || !json_is_boolean (required) || !json_is_boolean (v3_only)
+          || !json_is_boolean (diagnostic))
+        {
+          fprintf (stderr, "ERROR: malformed migration manifest entry %zu\n", i);
+          json_decref (root);
+          return -1;
+        }
+      k_bigbang_sql_scripts[i].name = strdup (json_string_value (name));
+      k_bigbang_sql_scripts[i].required = json_is_true (required);
+      k_bigbang_sql_scripts[i].v3_only = json_is_true (v3_only);
+      k_bigbang_sql_scripts[i].diagnostic = json_is_true (diagnostic);
+      if (!k_bigbang_sql_scripts[i].name)
+        {
+          json_decref (root);
+          return -1;
+        }
+      for (size_t j = 0; j < i; ++j)
+        if (strcmp (k_bigbang_sql_scripts[j].name,
+                    k_bigbang_sql_scripts[i].name) == 0)
+          {
+            fprintf (stderr, "ERROR: duplicate migration manifest entry '%s'\n",
+                     k_bigbang_sql_scripts[i].name);
+            json_decref (root);
+            return -1;
+          }
+    }
+  json_decref (root);
+  return 0;
+}
+
+static void
+free_sql_manifest (void)
+{
+  for (size_t i = 0; i < k_bigbang_sql_script_count; ++i)
+    free (k_bigbang_sql_scripts[i].name);
+  free (k_bigbang_sql_scripts);
+  k_bigbang_sql_scripts = NULL;
+  k_bigbang_sql_script_count = 0;
+}
 
 static int
 bigbang_sql_script_index (const char *name)
 {
-  for (size_t i = 0;
-       i < sizeof k_bigbang_sql_scripts / sizeof k_bigbang_sql_scripts[0];
-       ++i)
+  for (size_t i = 0; i < k_bigbang_sql_script_count; ++i)
     if (strcmp (name, k_bigbang_sql_scripts[i].name) == 0)
       return (int) i;
   return -1;
 }
 
 static int
-validate_sql_directory (const char *sql_dir)
+validate_sql_directory (const char *sql_dir, int include_v3)
 {
   DIR *dir = opendir (sql_dir);
   if (!dir)
@@ -289,7 +350,12 @@ validate_sql_directory (const char *sql_dir)
                sql_dir, strerror (errno));
       return -1;
     }
-  int seen[sizeof k_bigbang_sql_scripts / sizeof k_bigbang_sql_scripts[0]] = {0};
+  int *seen = calloc (k_bigbang_sql_script_count, sizeof *seen);
+  if (!seen)
+    {
+      closedir (dir);
+      return -1;
+    }
   struct dirent *entry;
   int rc = 0;
   while ((entry = readdir (dir)) != NULL)
@@ -314,17 +380,24 @@ validate_sql_directory (const char *sql_dir)
     }
   closedir (dir);
   if (rc != 0)
-    return rc;
-  for (size_t i = 0;
-       i < sizeof k_bigbang_sql_scripts / sizeof k_bigbang_sql_scripts[0];
-       ++i)
-      if (k_bigbang_sql_scripts[i].required && !seen[i])
+    {
+      free (seen);
+      return rc;
+    }
+  for (size_t i = 0; i < k_bigbang_sql_script_count; ++i)
+      if ((k_bigbang_sql_scripts[i].required
+         || (include_v3 && k_bigbang_sql_scripts[i].v3_only)) && !seen[i])
       {
-        fprintf (stderr, "ERROR: required V2 SQL script is missing: %s\n",
+        fprintf (stderr, "ERROR: required %s SQL script is missing: %s\n",
+                 k_bigbang_sql_scripts[i].v3_only ? "V3" : "V2",
                  k_bigbang_sql_scripts[i].name);
-        return -1;
+        {
+          free (seen);
+          return -1;
+        }
       }
-    else if (k_bigbang_sql_scripts[i].required)
+    else if (k_bigbang_sql_scripts[i].required
+             || (include_v3 && k_bigbang_sql_scripts[i].v3_only))
       {
         char path[2048];
         snprintf (path, sizeof path, "%s/%s", sql_dir,
@@ -334,17 +407,24 @@ validate_sql_directory (const char *sql_dir)
           {
             fprintf (stderr, "ERROR: required SQL script is unreadable: %s\n",
                      k_bigbang_sql_scripts[i].name);
-            return -1;
+            {
+              free (seen);
+              return -1;
+            }
           }
         if (contents[0] == '\0')
           {
             fprintf (stderr, "ERROR: required SQL script is empty: %s\n",
                      k_bigbang_sql_scripts[i].name);
             free (contents);
-            return -1;
+            {
+              free (seen);
+              return -1;
+            }
           }
         free (contents);
       }
+  free (seen);
   return 0;
 }
 
@@ -370,9 +450,9 @@ apply_file (PGconn *c, const char *path)
 
 
 static int
-load_sql_files_in_order (PGconn *app, const char *sql_dir)
+load_sql_files_in_order (PGconn *app, const char *sql_dir, int include_v3)
 {
-  if (validate_sql_directory (sql_dir) != 0)
+  if (validate_sql_directory (sql_dir, include_v3) != 0)
     return -1;
   DIR *dir = opendir (sql_dir);
   if (!dir)
@@ -397,7 +477,10 @@ load_sql_files_in_order (PGconn *app, const char *sql_dir)
 	}
 
       int script_index = bigbang_sql_script_index (entry->d_name);
-      if (script_index < 0)
+      if (script_index < 0
+          || (k_bigbang_sql_scripts[script_index].v3_only && !include_v3))
+        continue;
+      if (k_bigbang_sql_scripts[script_index].diagnostic)
         continue;
       char candidate_path[2048];
       struct stat candidate_stat;
@@ -932,6 +1015,8 @@ usage (const char *argv0)
 	   "Please edit bigbang.json to configure database and game options.\n");
   fprintf (stderr,
 	   "Optional --port-seed VALUE sets PostgreSQL random() for reproducible port generation (-1.0 to 1.0).\n");
+  fprintf (stderr,
+           "Optional --include-v3-migrations enables all classified V3 migrations.\n");
   exit (1);
 }
 
@@ -948,6 +1033,7 @@ main (int argc, char **argv)
   int density = 4;
   int port_ratio = 40;
   double planet_ratio = 30.0;
+  int include_v3_migrations = 0;
   double port_seed = 0.0;
   int have_port_seed = 0;
   int port_size = 0;
@@ -966,6 +1052,7 @@ main (int argc, char **argv)
     {"port-ratio", required_argument, 0, 'r'},
     {"planet-ratio", required_argument, 0, 'R'},
     {"port-seed", required_argument, 0, 1005},
+    {"include-v3-migrations", no_argument, 0, 1006},
     {0, 0, 0, 0}
   };
 
@@ -1001,6 +1088,9 @@ main (int argc, char **argv)
 	  free (sql_dir);
 	  sql_dir = strdup (s);
 	}
+      if ((j = json_object_get (jcfg, "include_v3_migrations"))
+          && json_is_boolean (j))
+        include_v3_migrations = json_is_true (j);
       if ((j = json_object_get (jcfg, "sectors")) && json_is_integer (j))
 	{
 	  sectors = (int) json_integer_value (j);
@@ -1089,6 +1179,9 @@ main (int argc, char **argv)
 	  }
 	  have_port_seed = 1;
 	  break;
+	case 1006:
+	  include_v3_migrations = 1;
+	  break;
 	case 's':
 	  sectors = atoi (optarg);
 	  break;
@@ -1108,8 +1201,19 @@ main (int argc, char **argv)
 
   /* Fail before creating or cleaning a database if the requested release
    * selection is incomplete or contains an unclassified SQL script. */
-  if (validate_sql_directory (sql_dir) != 0)
+  if (load_sql_manifest (sql_dir) != 0)
     {
+      if (jcfg)
+        json_decref (jcfg);
+      free (admin_cs);
+      free (db_name);
+      free (app_cs_tmpl);
+      free (sql_dir);
+      return 2;
+    }
+  if (validate_sql_directory (sql_dir, include_v3_migrations) != 0)
+    {
+      free_sql_manifest ();
       if (jcfg)
         json_decref (jcfg);
       free (admin_cs);
@@ -1215,7 +1319,7 @@ main (int argc, char **argv)
 
   // 3) Apply Schema (in order: sorted by numeric prefix)
   printf ("BIGBANG: Loading SQL files from %s...\n", sql_dir);
-  if (load_sql_files_in_order (app, sql_dir) != 0)
+  if (load_sql_files_in_order (app, sql_dir, include_v3_migrations) != 0)
     {
       die ("schema apply failed");
     }

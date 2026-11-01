@@ -88,6 +88,143 @@ int repo_ships_rename_active(db_t *db, int32_t player_id, int32_t ship_id,
     return 0;
 }
 
+int repo_ships_transfer_primary(db_t *db, int32_t ship_id,
+                                int32_t source_player_id,
+                                int32_t target_player_id,
+                                int64_t *rows_out)
+{
+    if (!db || ship_id <= 0 || source_player_id <= 0 || target_player_id <= 0
+        || source_player_id == target_player_id || !rows_out)
+        return ERR_INVALID_ARG;
+
+    /* Serialize the player references before checking ownership.  The server
+     * starts the transaction, while this repository owns the lifecycle
+     * mutation and its concurrency contract.  Always acquire the two player
+     * locks in ID order: opposing transfers (A -> B and B -> A) must not
+     * deadlock while closing the race with active-ship changes or a second
+     * transfer. */
+    const char *lock_player =
+        "SELECT player_id FROM players WHERE player_id = {1} FOR UPDATE;";
+    char sql[1024];
+    db_error_t err = {0};
+    db_res_t *res = NULL;
+    int32_t player_id = 0;
+    int32_t player_ids[2] = {
+        source_player_id < target_player_id ? source_player_id : target_player_id,
+        source_player_id < target_player_id ? target_player_id : source_player_id
+    };
+    if (sql_build(db, lock_player, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    for (size_t i = 0; i < 2; ++i)
+      {
+        res = NULL;
+        if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(player_ids[i])},
+                      1, &res, &err))
+          return err.code ? err.code : ERR_DB_QUERY_FAILED;
+        if (!db_res_step(res, &err))
+          {
+            db_res_finalize(res);
+            return err.code ? err.code : ERR_TARGET_INVALID;
+          }
+        player_id = db_res_col_i32(res, 0, &err);
+        db_res_finalize(res);
+        if (player_id != player_ids[i])
+          return ERR_TARGET_INVALID;
+      }
+
+    /* A player-to-player handoff is an in-world exchange: both players and
+     * the transferred hull must currently occupy the same sector.  Resolve
+     * these facts after locking both player rows so the ownership mutation
+     * cannot race a movement update. */
+    const char *lock_ship =
+        "SELECT sector_id FROM ships WHERE ship_id = {1} FOR UPDATE;";
+    if (sql_build(db, lock_ship, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    res = NULL;
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(ship_id)}, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err))
+      {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_TARGET_INVALID;
+      }
+    int32_t ship_sector = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+
+    const char *player_sector =
+        "SELECT sector_id FROM players WHERE player_id = {1} FOR UPDATE;";
+    if (sql_build(db, player_sector, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    int32_t source_sector = 0;
+    int32_t target_sector = 0;
+    for (size_t i = 0; i < 2; ++i)
+      {
+        res = NULL;
+        if (!db_query(db, sql,
+                      (db_bind_t[]){db_bind_i64(player_ids[i])}, 1,
+                      &res, &err))
+          return err.code ? err.code : ERR_DB_QUERY_FAILED;
+        if (!db_res_step(res, &err))
+          {
+            db_res_finalize(res);
+            return err.code ? err.code : ERR_TARGET_INVALID;
+          }
+        int32_t sector = db_res_col_i32(res, 0, &err);
+        db_res_finalize(res);
+        if (player_ids[i] == source_player_id)
+            source_sector = sector;
+        else
+            target_sector = sector;
+      }
+    if (ship_sector <= 0 || source_sector != ship_sector
+        || target_sector != ship_sector)
+        return ERR_TARGET_INVALID;
+
+    /* Lock the primary ownership row before applying the guarded update. */
+    const char *lock_owner =
+        "SELECT ship_id FROM ship_ownership "
+        "WHERE ship_id = {1} AND player_id = {2} AND is_primary = {3} "
+        "FOR UPDATE;";
+    if (sql_build(db, lock_owner, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    res = NULL;
+    if (!db_query(db, sql,
+                  (db_bind_t[]){db_bind_i64(ship_id),
+                                db_bind_i64(source_player_id),
+                                db_bind_bool(true)},
+                  3, &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_TARGET_INVALID;
+    }
+    db_res_finalize(res);
+
+    /* Keep lifecycle mutation in the ship repository.  In particular, do not
+     * update players.ship_id here: an active ship is deliberately not
+     * transferable and the deferred ownership invariants must remain true. */
+    const char *template =
+        "UPDATE ship_ownership SET player_id = {1} "
+        "WHERE ship_id = {2} AND player_id = {3} AND is_primary = {4} "
+        "AND EXISTS (SELECT 1 FROM players WHERE player_id = {1}) "
+        "AND NOT EXISTS (SELECT 1 FROM players WHERE player_id = {3} "
+        "                       AND ship_id = {2}) "
+        "AND NOT EXISTS (SELECT 1 FROM ship_ownership "
+        "                 WHERE ship_id = {2} AND player_id = {1});";
+    if (sql_build(db, template, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+
+    if (!db_exec_rows_affected(db, sql,
+                               (db_bind_t[]){ db_bind_i64(target_player_id),
+                                              db_bind_i64(ship_id),
+                                              db_bind_i64(source_player_id),
+                                              db_bind_bool(true) },
+                               4, rows_out, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    return 0;
+}
+
 int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out)
 {
     /* SQL_VERBATIM: Q2 */

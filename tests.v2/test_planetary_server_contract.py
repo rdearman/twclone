@@ -72,28 +72,148 @@ class PlanetaryServerContractTests(unittest.TestCase):
         land = self.planets.split("cmd_planet_land", 1)[1].split(
             "cmd_planet_launch", 1
         )[0]
+        self.assertIn(
+            'json_unpack (data, "{s:i}", "planet_id", &planet_id) != 0',
+            land,
+        )
+        self.assertLess(
+            land.index("Missing or invalid 'planet_id'."),
+            land.index("db_player_get_sector"),
+        )
+        # A failed authoritative sector read must fail closed before any
+        # landing/turn decision; it must not be interpreted as sector 0.
+        self.assertIn("db_player_get_sector (db, ctx->player_id, &player_sector) != 0", land)
+        self.assertLess(
+            land.index("Could not determine your current sector."),
+            land.index("db_planets_get_land_info"),
+        )
         self.assertLess(land.index("if (player_sector != planet_sector)"),
                         land.index("h_consume_player_turn"))
         self.assertLess(land.index("if (!can_land)"),
                         land.index("h_consume_player_turn"))
+        # Jurisdiction and alignment refusals are also pre-charge checks.
+        self.assertLess(land.index("ERR_BANNED_FROM_JURISDICTION"),
+                        land.index("h_consume_player_turn"))
+        self.assertLess(land.index("REASON_EVIL_ALIGN"),
+                        land.index("h_consume_player_turn"))
+        self.assertIn("repo_clusters_get_cluster_for_sector(db, planet_sector, &cluster_id)", land)
+        self.assertIn("Could not determine jurisdiction for landing.", land)
+        self.assertIn("repo_clusters_get_player_banned(db, cluster_id,", land)
+        self.assertIn("Could not determine landing permissions.", land)
+        self.assertIn("db_player_get_alignment (db, ctx->player_id, &alignment) != 0", land)
+        self.assertIn("Could not determine alignment for landing.", land)
+        # Jurisdiction and Earth-alignment refusals must precede hostile
+        # defense resolution, otherwise a refusal can mutate defenses or ship
+        # state and emit a combat event.
+        self.assertLess(
+            land.index("Could not determine jurisdiction for landing."),
+            land.index("h_trigger_atmosphere_quasar_report"),
+        )
+        self.assertLess(
+            land.index("REASON_EVIL_ALIGN"),
+            land.index("h_trigger_atmosphere_quasar_report"),
+        )
         self.assertIn("db_tx_begin (db, DB_TX_IMMEDIATE", land)
+        self.assertIn("h_get_active_ship_id (db, ctx->player_id) <= 0", land)
+        self.assertIn("tx_ship_id = h_get_active_ship_id (db, ctx->player_id)", land)
+        self.assertIn("Could not revalidate landing state.", land)
+        self.assertIn("tx_player_sector", land)
+        self.assertIn("tx_can_land", land)
         self.assertIn("db_tx_rollback (db, NULL)", land)
         self.assertIn("db_tx_commit (db, &txerr)", land)
+        # Policy changes must not race the turn-consuming write after the
+        # transaction has revalidated location and ownership.
+        self.assertIn("tx_cluster_id", land)
+        self.assertIn("repo_clusters_get_player_banned (db, tx_cluster_id", land)
+        self.assertIn("db_player_get_alignment (db, ctx->player_id, &tx_alignment)", land)
+        self.assertIn("tx_alignment < 0 && tx_planet_sector == 1", land)
+        self.assertLess(land.index("Could not revalidate landing permissions."),
+                        land.index("h_consume_player_turn"))
 
-    def test_landing_refusals_and_failures_are_before_transaction_or_rollback(self):
+    def test_planet_land_schema_is_strict_and_positive_only(self):
+        # The C schema is the dispatch authority; keep malformed payloads out
+        # before cmd_planet_land can reach any database or turn path.
+        schema_c = (ROOT / "src/schemas.c").read_text(encoding="utf-8")
+        land_schema = schema_c.split("schema_planet_land (void)\n{", 1)[1].split(
+            "schema_planet_launch", 1
+        )[0]
+        self.assertIn('json_array_append_new (required, json_string ("planet_id"))', land_schema)
+        self.assertIn('json_object_set_new (root, "additionalProperties", json_boolean (0))', land_schema)
+        self.assertIn('json_object_set_new (planet_id_prop, "minimum", json_integer (1))', land_schema)
+
+    def test_landing_fixture_requires_state_snapshots_for_refusals_and_success(self):
+        names = [test["name"] for test in self.landing_suite["tests"]]
+        required = {
+            "Evidence snapshot before owner landing",
+            "Evidence snapshot after owner landing",
+            "Reject owner landing with zero turns",
+            "Verify zero-turn landing preserved state",
+            "Reject malformed owner landing without mutation",
+            "Undefended outsider landing is refused without damage",
+            "Verify undefended ship unchanged and not landed",
+            "Planet owner bypasses its armed Quasar defense",
+        }
+        self.assertTrue(required.issubset(names))
+
+        # A fixture assertion is evidence intent only; it is not a live-run
+        # result. Require the immutable fields that prove turn/landing state.
+        snapshots = [
+            test for test in self.landing_suite["tests"]
+            if "snapshot" in test["name"].lower()
+        ]
+        self.assertTrue(snapshots)
+        for snapshot in snapshots:
+            sql = snapshot.get("data", {}).get("sql", "")
+            self.assertIn("turns_remaining", sql)
+            self.assertIn("lastplanet", sql)
+            self.assertIn("onplanet", sql)
+
+    def test_landing_transaction_rolls_back_failures_before_context_refresh(self):
         land = self.planets.split("cmd_planet_land", 1)[1].split(
             "cmd_planet_launch", 1
         )[0]
-        # Malformed requests are rejected before any database transaction.
-        self.assertLess(land.index("Missing data payload"), land.index("db_tx_begin"))
-        self.assertLess(land.index("Missing or invalid 'planet_id'"), land.index("db_tx_begin"))
-        # Remote and unauthorized targets are also refusal-only paths.
-        self.assertLess(land.index("not in the same sector"), land.index("db_tx_begin"))
-        self.assertLess(land.index("cannot land"), land.index("db_tx_begin"))
-        # Resource/defense and persistence failures must unwind the transaction.
-        self.assertIn("handle_turn_consumption_error", land)
-        self.assertGreater(land.index("db_tx_rollback"), land.index("db_tx_begin"))
-        self.assertIn("Landing transaction could not be committed", land)
+
+        begin = land.index("db_tx_begin (db, DB_TX_IMMEDIATE")
+        consume = land.index("h_consume_player_turn (db, ctx, 1)")
+        persist = land.index("db_player_land_on_planet (db, ctx->player_id, planet_id)")
+        event = land.index('db_log_engine_event ((long long) time (NULL), "planet.land.v1"')
+        commit = land.index("db_tx_commit (db, &txerr)")
+        context_refresh = land.index("ctx->sector_id = 0")
+
+        self.assertLess(begin, consume)
+        self.assertLess(land.index("Could not revalidate landing state."), consume)
+        self.assertLess(consume, persist)
+        self.assertLess(persist, event)
+        self.assertLess(event, commit)
+        self.assertLess(commit, context_refresh)
+
+        # Every post-charge failure path must roll back before returning.
+        turn_failure = land.index("if (tc != TURN_CONSUME_SUCCESS)")
+        self.assertLess(turn_failure, land.index("db_tx_rollback (db, NULL)", turn_failure))
+        landing_failure = land.index("if (db_player_land_on_planet")
+        self.assertLess(landing_failure, land.index("db_tx_rollback (db, NULL)", landing_failure))
+        event_failure = land.index("if (!landing_event")
+        self.assertLess(event_failure, land.index("db_tx_rollback (db, NULL)", event_failure))
+        commit_failure = land.index("if (!db_tx_commit")
+        self.assertLess(commit_failure, land.index("db_tx_rollback (db, NULL)", commit_failure))
+
+    def test_landing_transaction_starts_only_after_defense_refusal_resolution(self):
+        land = self.planets.split("cmd_planet_land", 1)[1].split(
+            "cmd_planet_launch", 1
+        )[0]
+
+        defense = land.index("h_trigger_atmosphere_quasar_report")
+        denial = land.index("if (!can_land)")
+        transaction = land.index("db_tx_begin (db, DB_TX_IMMEDIATE")
+        consume = land.index("h_consume_player_turn (db, ctx, 1)")
+
+        # Hostile landing defenses may update defensive state, but a refused
+        # landing must never enter the turn/landing transaction.  This keeps
+        # refusal semantics distinct from the successful landing commit.
+        self.assertLess(defense, denial)
+        self.assertLess(denial, transaction)
+        self.assertLess(transaction, consume)
+        self.assertIn("json_decref (defense_results);", land)
 
     def test_citadel_lookup_does_not_treat_query_failure_as_no_defense(self):
         self.assertIn("load_landing_citadel_defenses", self.planets)

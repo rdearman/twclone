@@ -4,6 +4,17 @@ const ClientState = preload("res://ClientState.gd")
 const GameplayScene = preload("res://GameplayView.tscn")
 
 func _ready() -> void:
+	# This scene is a deterministic visual-capture fixture, not a playable
+	# client.  It contains deliberately fixed sample state so screenshots are
+	# repeatable.  If it is launched directly (for example by an exported
+	# project or an editor scene run), never present that sample state as live
+	# gameplay; hand control to the authoritative client scene instead.
+	var showcase_mode := OS.get_environment("TWCLONE_SHOWCASE") == "1" or not OS.get_environment("TWCLONE_CAPTURE").is_empty()
+	if not showcase_mode:
+		# The scene is still inside the tree during _ready(); defer the scene
+		# replacement so Godot does not mutate its parent while instantiating it.
+		call_deferred("_redirect_to_live_client")
+		return
 	var showcase_width := int(OS.get_environment("TWCLONE_SHOWCASE_WIDTH"))
 	if showcase_width <= 0:
 		showcase_width = 1600
@@ -40,6 +51,10 @@ func _ready() -> void:
 		gameplay.select_object_key(showcase_selection)
 	else:
 		gameplay.select_object_key("port:7")
+	var showcase_workspace := OS.get_environment("TWCLONE_SHOWCASE_WORKSPACE").to_upper()
+	var workspace_index := ["SECTOR", "NAVIGATION", "TRADING", "COMMUNICATIONS", "COMPUTER"].find(showcase_workspace)
+	if workspace_index >= 0:
+		gameplay._on_workspace_tab_changed(workspace_index)
 	if OS.get_environment("TWCLONE_SHOWCASE_COMMANDS") == "1":
 		gameplay.command_menu.open_for(state.snapshot(), {})
 	var showcase_notice := OS.get_environment("TWCLONE_SHOWCASE_NOTICE")
@@ -83,3 +98,6 @@ func _ready() -> void:
 			if OS.get_environment("TWCLONE_SHOWCASE_WARP_EFFECT") == "1":
 				await get_tree().create_timer(0.55).timeout
 		get_tree().quit(0 if error == OK else 1)
+
+func _redirect_to_live_client() -> void:
+	get_tree().change_scene_to_file("res://Main.tscn")

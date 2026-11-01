@@ -31,6 +31,15 @@ describe('StateService', () => {
     expect(state.player.value?.['credits']).toBe(25);
   });
 
+  it('confirms session authentication after player refresh without claiming the socket is online', () => {
+    service.markDisconnected();
+    service.confirmAuthenticatedSession();
+
+    const state = service.snapshot();
+    expect(state.session.authentication).toBe('authenticated');
+    expect(state.session.connection).toBe('offline');
+  });
+
   it('derives selected port freshness from the sector listing and expires stale values', () => {
     service.markAuthenticated();
     service.acceptSector({ sector_id: 9, ports: [{ id: 4, name: 'Port' }] }, 100);

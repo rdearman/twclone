@@ -745,10 +745,83 @@ load_bootstrap_config (const char *filename)
       return -1;
     }
 
+  const char *backend = json_string_value (json_object_get (root, "backend"));
   const char *app_conn_tmpl =
     json_string_value (json_object_get (root, "app"));
   const char *db_name = json_string_value (json_object_get (root, "db"));
 
+  if (backend && strcasecmp (backend, "postgres") != 0
+      && strcasecmp (backend, "postgresql") != 0
+      && strcasecmp (backend, "mysql") != 0
+      && strcasecmp (backend, "mariadb") != 0)
+    {
+      LOGE ("Unsupported bootstrap database backend '%s'.", backend);
+      json_decref (root);
+      return -1;
+    }
+
+  snprintf (g_cfg.db_backend, sizeof (g_cfg.db_backend), "%s",
+            backend && (strcasecmp (backend, "mysql") == 0
+                        || strcasecmp (backend, "mariadb") == 0)
+              ? "mysql" : "postgres");
+
+  if (backend && (strcasecmp (backend, "mysql") == 0
+                  || strcasecmp (backend, "mariadb") == 0))
+    {
+      const char *host = json_string_value (json_object_get (root, "mysql_host"));
+      const char *user = json_string_value (json_object_get (root, "mysql_user"));
+      const char *password = json_string_value (json_object_get (root, "mysql_password"));
+      const char *socket = json_string_value (json_object_get (root, "mysql_unix_socket"));
+      json_t *port = json_object_get (root, "mysql_port");
+
+      if (!host || !*host || !user || !*user)
+        {
+          LOGE ("MySQL bootstrap requires nonempty mysql_host and mysql_user.");
+          json_decref (root);
+          return -1;
+        }
+      if (strlen (host) >= sizeof (g_cfg.mysql_host)
+          || strlen (user) >= sizeof (g_cfg.mysql_user)
+          || (password && strlen (password) >= sizeof (g_cfg.mysql_password))
+          || (socket && strlen (socket) >= sizeof (g_cfg.mysql_unix_socket)))
+        {
+          LOGE ("A MySQL bootstrap setting exceeds its supported length.");
+          json_decref (root);
+          return -1;
+        }
+      if (!db_name || !*db_name)
+        db_name = json_string_value (json_object_get (root, "mysql_database"));
+      if (!db_name || !*db_name)
+        {
+          LOGE ("MySQL bootstrap requires 'db' or 'mysql_database'.");
+          json_decref (root);
+          return -1;
+        }
+      if (strlen (db_name) >= sizeof (g_cfg.mysql_database))
+        {
+          LOGE ("MySQL database name exceeds its supported length.");
+          json_decref (root);
+          return -1;
+        }
+      if (port && (!json_is_integer (port) || json_integer_value (port) < 0
+                   || json_integer_value (port) > 65535))
+        {
+          LOGE ("mysql_port must be an integer between 0 and 65535.");
+          json_decref (root);
+          return -1;
+        }
+      snprintf (g_cfg.mysql_host, sizeof (g_cfg.mysql_host), "%s", host);
+      snprintf (g_cfg.mysql_user, sizeof (g_cfg.mysql_user), "%s", user);
+      snprintf (g_cfg.mysql_password, sizeof (g_cfg.mysql_password), "%s",
+                password ? password : "");
+      snprintf (g_cfg.mysql_database, sizeof (g_cfg.mysql_database), "%s", db_name);
+      if (socket)
+        snprintf (g_cfg.mysql_unix_socket, sizeof (g_cfg.mysql_unix_socket), "%s", socket);
+      g_cfg.mysql_port = port ? (unsigned int) json_integer_value (port) : 0;
+      LOGI ("Loaded MySQL bootstrap DB config (credentials redacted).");
+      json_decref (root);
+      return 0;
+    }
 
   if (!app_conn_tmpl)
     {
@@ -954,6 +1027,12 @@ config_load (void)
   c->startingcredits = (int) g_cfg.startingcredits;
   c->startingfighters = g_cfg.startingfighters;
   c->startingholds = g_cfg.startingholds;
+  c->max_ship_name_length = g_cfg.max_ship_name_length;
+  /* Keep the runtime starter-ship policy in the legacy config view used by
+   * player provisioning.  Without this copy, spawn_starter_ship() receives
+   * an empty type name even though g_cfg has the configured value. */
+  snprintf (c->starter_shiptype_name, sizeof c->starter_shiptype_name, "%s",
+            g_cfg.starter_shiptype_name);
   c->max_players = 200;
   c->max_ships = 1000;
   return c;

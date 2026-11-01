@@ -27,6 +27,9 @@ class Context:
     capabilities: Dict[str, Any] = field(default_factory=dict)
     hud: HudState = field(default_factory=HudState)
     event_log: EventLog = field(default_factory=EventLog)
+    # The most recent drain is retained only as a hand-off to the session
+    # loop, which may reconcile server-owned aftermath before the next action.
+    last_drained_events: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def current_menu(self) -> str:
@@ -50,6 +53,7 @@ class Context:
         while a prompt is mid-read). Returns the number of events ingested.
         """
         drained = self.conn.events.drain()
+        self.last_drained_events = drained
         if not drained:
             return 0
         return self.event_log.ingest(drained)

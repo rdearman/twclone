@@ -26,20 +26,11 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Position player at route start",
+      "name": "Rig: Position player and active ship at route start",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id=1 WHERE name='mover_autopilot';"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Rig: Position ship at route start",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE name='mover_autopilot');"
+        "sql": "WITH moved_ship AS (UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE name='mover_autopilot') RETURNING ship_id) UPDATE players SET sector_id=1 WHERE name='mover_autopilot';"
       },
       "expect": { "status": "ok" }
     },
@@ -99,9 +90,31 @@
     },
     {
       "name": "The next route hop uses the normal warp API",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{mover_autopilot_player_id}"
+      },
+      "save": { "route_turns_before_first_hop": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "The next route hop uses the normal warp API",
       "command": "move.warp",
       "user": "mover_autopilot",
       "data": { "to_sector_id": "@next_hop" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "First route hop consumes exactly one turn",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{mover_autopilot_player_id}"
+      },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": { "sql_int": "SELECT @{route_turns_before_first_hop} - 1" } }
+      ],
       "expect": { "status": "ok" }
     },
     {
@@ -121,6 +134,45 @@
       "asserts": [
         { "path": "data.action", "op": "==", "value": "continue" },
         { "path": "data.state", "op": "==", "value": "running" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Resumed route completes its second hop",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{mover_autopilot_player_id}"
+      },
+      "save": { "route_turns_before_second_hop": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Resumed route completes its second hop",
+      "command": "move.warp",
+      "user": "mover_autopilot",
+      "data": { "to_sector_id": 678 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Second route hop consumes exactly one turn",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{mover_autopilot_player_id}"
+      },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": { "sql_int": "SELECT @{route_turns_before_second_hop} - 1" } }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Completed route reports the authoritative destination",
+      "command": "move.autopilot.status",
+      "user": "mover_autopilot",
+      "asserts": [
+        { "path": "data.state", "op": "==", "value": "complete" },
+        { "path": "data.current_sector_id", "op": "==", "value": 678 }
       ],
       "expect": { "status": "ok" }
     },

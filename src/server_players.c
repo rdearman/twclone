@@ -1481,7 +1481,13 @@ h_player_is_npc (db_t *db, int player_id)
 int
 spawn_starter_ship (db_t *db, int player_id, int sector_id)
 {
-  if (!db)
+  if (!db || player_id <= 0 || sector_id <= 0)
+    {
+      return -1;
+    }
+
+  db_error_t tx_err = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &tx_err))
     {
       return -1;
     }
@@ -1490,6 +1496,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
   struct twconfig *cfg = config_load ();
   if (!cfg)
     {
+      db_tx_rollback (db, &tx_err);
       return -1;
     }
 
@@ -1498,6 +1505,7 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
       (db, cfg->starter_shiptype_name, &ship_type_id, &holds, &fighters, &shields) != 0)
     {
       free (cfg);
+      db_tx_rollback (db, &tx_err);
       return -1;
     }
 
@@ -1507,12 +1515,14 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
        &ship_id) != 0)
     {
       free (cfg);
+      db_tx_rollback (db, &tx_err);
       return -1;
     }
 
   if (repo_players_set_ship_ownership (db, ship_id, player_id) != 0)
     {
       free (cfg);
+      db_tx_rollback (db, &tx_err);
       return -1;
     }
 
@@ -1520,16 +1530,25 @@ spawn_starter_ship (db_t *db, int player_id, int sector_id)
       != 0)
     {
       free (cfg);
+      db_tx_rollback (db, &tx_err);
       return -1;
     }
 
   if (repo_players_update_podded_status (db, player_id, "alive") != 0)
     {
       free (cfg);
+      db_tx_rollback (db, &tx_err);
       return -1;
     }
 
   free (cfg);
+
+  if (!db_tx_commit (db, &tx_err))
+    {
+      db_tx_rollback (db, &tx_err);
+      return -1;
+    }
+
   return 0;
 }
 

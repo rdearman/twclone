@@ -26,6 +26,12 @@ int repo_universe_get_random_neighbor(db_t *db, int sector_id, int *neighbor_out
 int repo_universe_get_random_unprotected_sector(db_t *db, int *sector_out);
 int repo_universe_get_random_port_sector(db_t *db, int *sector_out);
 int repo_universe_update_ship_sector(db_t *db, int ship_id, int sector_id);
+/* Authoritative player movement: updates the player, active ship, towed
+ * ships and towed owners in one nested-safe transaction.  If
+ * expected_ship_id is positive, the player's persisted active ship must
+ * match it or the operation fails without changing state. */
+int repo_universe_move_player_and_ship(db_t *db, int player_id,
+                                       int expected_ship_id, int sector_id);
 int repo_universe_mass_randomize_zero_sector_ships(db_t *db);
 db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err);
 int repo_universe_update_ship_target(db_t *db, int ship_id, int target_sector);

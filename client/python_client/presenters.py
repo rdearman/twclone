@@ -24,9 +24,17 @@ def present_move_result(resp: Dict[str, Any]) -> Tuple[bool, str]:
     on failure/refusal we must not imply the player went anywhere, so the
     destination is deliberately omitted here.
     """
-    status = (resp or {}).get("status")
-    data = (resp or {}).get("data") or {}
-    err = (resp or {}).get("error") or {}
+    # Keep malformed transport data on the same safe refusal path as any
+    # other unrecognised movement envelope.  The caller still requires the
+    # published response type before accepting movement, and will refresh
+    # authoritative state; presentation must not turn that recovery into a
+    # client traceback.
+    envelope = resp if isinstance(resp, dict) else {}
+    status = envelope.get("status")
+    data = envelope.get("data")
+    data = data if isinstance(data, dict) else {}
+    err = envelope.get("error")
+    err = err if isinstance(err, dict) else {}
 
     if status == "ok":
         return True, "Move succeeded."
@@ -42,6 +50,15 @@ def present_move_result(resp: Dict[str, Any]) -> Tuple[bool, str]:
         parts.append(f"reason: {reason}")
 
     msg = err.get("message")
+    # Entry-hazard/refusal envelopes may carry the server's canonical reason
+    # beside the hazard report in error.data.  Preserve that authoritative
+    # message instead of replacing it with a generic client refusal.
+    if not isinstance(msg, str) or not msg.strip():
+        error_data = err.get("data")
+        if isinstance(error_data, dict):
+            nested_msg = error_data.get("message")
+            if isinstance(nested_msg, str) and nested_msg.strip():
+                msg = nested_msg
     if msg:
         parts.append(msg)
 
@@ -53,9 +70,21 @@ def present_move_hazards(resp: Dict[str, Any]) -> List[str]:
     if not isinstance(resp, dict):
         return []
     data = resp.get("data")
-    if not isinstance(data, dict) or "hazards" not in data:
-        error = resp.get("error")
-        data = error.get("data", {}) if isinstance(error, dict) else {}
+    envelope_data = data if isinstance(data, dict) else {}
+    error = resp.get("error")
+    error_data = error.get("data", {}) if isinstance(error, dict) else {}
+    # A failed/partial command may include an empty success-shaped data object
+    # while the authoritative entry-hazard report is attached to error.data.
+    # Prefer the non-empty server report; never synthesize an outcome locally.
+    data_hazards = data.get("hazards") if isinstance(data, dict) else None
+    error_hazards = error_data.get("hazards") if isinstance(error_data, dict) else None
+    # A malformed success-shaped field must not hide a valid authoritative
+    # report carried by error.data. Only arrays are usable hazard lists.
+    if (not isinstance(data, dict)
+            or not isinstance(data_hazards, list)
+            or (not data_hazards and isinstance(error_hazards, list)
+                and (error_hazards or "ship_destroyed" in error_data))):
+        data = error_data if isinstance(error_data, dict) else {}
     hazards = data.get("hazards", []) if isinstance(data, dict) else []
     if not isinstance(hazards, list):
         return []
@@ -63,14 +92,64 @@ def present_move_hazards(resp: Dict[str, Any]) -> List[str]:
     for hazard in hazards:
         if not isinstance(hazard, dict):
             continue
-        parts = [str(hazard.get("hazard_type", hazard.get("type", "hazard")))]
-        for key, label in (("damage", "damage"), ("shields_lost", "shields lost"),
+        # Hazard identity is authoritative server data.  Do not invent a
+        # generic label for malformed rows: the Godot client and the V3
+        # response contract both fail closed when no usable identity exists.
+        hazard_type = hazard.get("hazard_type", hazard.get("type"))
+        if not isinstance(hazard_type, str) or not hazard_type.strip():
+            continue
+        parts = [hazard_type]
+        for key, label in (("severity", "severity"), ("damage", "damage"), ("shields_lost", "shields lost"),
                            ("fighters_lost", "fighters lost"), ("hull_lost", "hull lost")):
-            if key in hazard:
+            # These are display-only facts, but reject schema-mismatched
+            # values so a string/bool placeholder is not presented as damage.
+            value = hazard.get(key)
+            # The server hazard schema emits loss counters as JSON integers.
+            # Keep Python aligned with Godot and fail closed on a
+            # schema-mismatched float instead of displaying it as damage.
+            # Entry-hazard loss counters are non-negative server measurements.
+            # A negative integer is schema-invalid and must not be presented as
+            # authoritative damage or loss.
+            valid_numeric = type(value) is int and value >= 0
+            # Severity is an authoritative server label in the V3 hazard
+            # payload (for example, "critical"), not a locally-derived
+            # numeric measurement. Preserve it only when it is a non-empty
+            # string; do not infer or coerce malformed values.
+            valid_severity = key == "severity" and isinstance(value, str) and bool(value.strip())
+            if valid_numeric or valid_severity:
                 parts.append(f"{label}: {hazard[key]}")
-        if hazard.get("message"):
-            parts.append(str(hazard["message"]))
+        # Preserve server-provided terminal state without deriving it locally.
+        for key, label in (("destroyed", "destroyed"),
+                           ("ship_remains_in_sector", "ship remains in sector")):
+            if key in hazard and type(hazard[key]) is bool:
+                parts.append(f"{label}: {hazard[key]}")
+        if isinstance(hazard.get("message"), str) and hazard["message"].strip():
+            parts.append(hazard["message"])
         lines.append("Sector hazard · " + " · ".join(parts))
+    # Destructive entry responses may carry the terminal state beside the
+    # hazard array, or in error.data when the hazard report is in data.
+    # Preserve either server-supplied field without deriving one from the
+    # other; the caller still refreshes player/ship/sector state before the
+    # next action.
+    # Keep the original envelope data separate from the hazard source selected
+    # above; an empty success-shaped payload must not hide its own terminal
+    # fields when hazard rows are read from error.data.
+    terminal_data = envelope_data
+    terminal_sources = [terminal_data]
+    if isinstance(error_data, dict):
+        terminal_sources.append(error_data)
+    for key, label in (("sector_id", "reported sector"),
+                       ("ship_destroyed", "ship destroyed"),
+                       ("ship_remains_in_sector", "ship remains in sector")):
+        for source in terminal_sources:
+            valid = (key == "sector_id"
+                     and type(source.get(key)) is int
+                     and source[key] > 0) or (
+                         key != "sector_id" and type(source.get(key)) is bool
+                     )
+            if valid:
+                lines.append(f"Movement outcome · {label}: {source[key]}")
+                break
     return lines
 
 

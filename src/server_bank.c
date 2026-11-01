@@ -1,5 +1,7 @@
 #include "db/repo/repo_bank.h"
+#include "db/repo/repo_engine.h"
 /* src/server_bank.c */
+#define MAX_BACKLOG_DAYS 30
 #include <stdio.h>
 #include <stdint.h>
 #include <jansson.h>
@@ -707,8 +709,105 @@ db_bank_apply_interest (db_t *db)
     {
       return ERR_DB_CLOSED;
     }
-  /* TODO: implement based on full bank_interest_policy / bank_accounts schema */
-  return 0;
+  return server_bank_apply_interest (db, (int64_t) time (NULL));
+}
+
+/* Banking owns the balance and ledger mutation; the engine only schedules it. */
+int
+server_bank_apply_interest (db_t *db, int64_t now_s)
+{
+  if (!db)
+    return ERR_DB_CLOSED;
+
+  db_error_t err;
+  db_res_t *res = repo_engine_get_active_interest_accounts (db, &err);
+  if (!res)
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+
+  const int current_epoch_day = (int) (now_s / 86400);
+  const long long minimum =
+    h_get_config_int_unlocked (db, "bank_min_balance_for_interest", 0);
+  const long long maximum =
+    h_get_config_int_unlocked (db, "bank_max_daily_interest_per_account",
+                               9223372036854775807LL);
+  int rc = 0;
+
+  while (db_res_step (res, &err))
+    {
+      const int account_id = (int) db_res_col_i32 (res, 0, &err);
+      long long balance = db_res_col_i64 (res, 3, &err);
+      const int rate_bp = (int) db_res_col_i32 (res, 4, &err);
+      const int last_tick = (int) db_res_col_i32 (res, 5, &err);
+      int days = current_epoch_day - last_tick;
+
+      if (days <= 0 || balance < minimum)
+        continue;
+      if (days > MAX_BACKLOG_DAYS)
+        days = MAX_BACKLOG_DAYS;
+
+      if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+        {
+          rc = err.code;
+          break;
+        }
+
+      char tx_group[96];
+      snprintf (tx_group, sizeof tx_group, "bank-interest-%d-%d",
+                account_id, current_epoch_day);
+      const char *now_epoch = sql_epoch_now (db);
+      if (!now_epoch)
+        {
+          db_tx_rollback (db, NULL);
+          rc = ERR_DB_QUERY_FAILED;
+          break;
+        }
+
+      for (int day = 0; day < days; ++day)
+        {
+          if (balance <= 0)
+            break;
+          long long daily = (long long)
+            (((__int128) balance * rate_bp) / (10000 * 365));
+          if (daily > maximum)
+            daily = maximum;
+          if (daily <= 0)
+            continue;
+
+          long long new_balance = 0;
+          rc = repo_bank_add_credits_returning (db, account_id, daily,
+                                                &new_balance);
+          if (rc != 0)
+            break;
+
+          const char *tx_template =
+            "INSERT INTO bank_transactions "
+            "(account_id, tx_type, direction, amount, currency, "
+            "balance_after, tx_group_id, ts) VALUES "
+            "({1}, {2}, 'CREDIT', {3}, 'CRD', {4}, {5}, %s);";
+          rc = repo_bank_insert_transaction (db, tx_template, account_id,
+                                             "INTEREST", "CREDIT", daily,
+                                             new_balance, tx_group, now_epoch);
+          if (rc != 0)
+            break;
+          balance = new_balance;
+        }
+
+      if (rc == 0)
+        rc = repo_engine_update_last_interest_tick (db, current_epoch_day,
+                                                    account_id);
+      if (rc == 0 && !db_tx_commit (db, &err))
+        rc = err.code;
+      if (rc != 0)
+        {
+          db_tx_rollback (db, NULL);
+          break;
+        }
+    }
+
+  if (rc == 0 && err.code != 0)
+    rc = err.code;
+  db_res_finalize (res);
+  return rc;
 }
 
 

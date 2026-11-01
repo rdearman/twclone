@@ -105,9 +105,14 @@ def extract_ship_fields(resp: Dict[str, Any]) -> Dict[str, Any]:
     if not _is_ok(resp):
         return {}
     ship = (resp.get("data") or {}).get("ship") or {}
+    # A ship snapshot is only authoritative when it identifies the ship it
+    # describes.  Do not let a schema-mismatched response refresh hull,
+    # cargo, or defensive state for the currently selected vessel.
+    ship_id = ship.get("id")
+    if type(ship_id) is not int or ship_id <= 0:
+        return {}
     out: Dict[str, Any] = {}
-    if isinstance(ship.get("id"), int):
-        out["ship_id"] = ship["id"]
+    out["ship_id"] = ship_id
     if isinstance(ship.get("name"), str):
         out["ship_name"] = ship["name"]
     if isinstance(ship.get("fighters"), int):

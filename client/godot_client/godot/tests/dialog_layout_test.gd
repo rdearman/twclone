@@ -14,13 +14,15 @@ func _run() -> void:
 	await process_frame
 
 	var form_label := menu._form_dialog.get_label()
-	_check(menu._form_content.get_parent() == form_label.get_parent(), "command form content bypassed the dialog's vertical layout")
+	_check(menu._form_scroll.get_parent() == form_label.get_parent(), "command form scroll container bypassed the dialog's vertical layout")
+	_check(menu._form_content.get_parent() == menu._form_scroll, "command form content is not inside the bounded scroll container")
+	_check(menu._form_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "command form does not scroll vertically")
 	_check(form_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "command dialog description wrap mode %d differs from expected %d" % [form_label.autowrap_mode, TextServer.AUTOWRAP_WORD_SMART])
 
 	menu._choose_action({
 		"command": "hardware.buy",
 		"label": "Long prompt form",
-		"fields": [["item_code", "text", "A deliberately long hardware item description that must wrap instead of colliding with the input", ""]]
+		"fields": [["code", "text", "A deliberately long hardware item description that must wrap instead of colliding with the input", ""]]
 	})
 	await process_frame
 	_check(not form_label.visible, "command dialog description should stay hidden so it cannot overlap custom field labels")

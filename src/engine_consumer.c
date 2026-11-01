@@ -224,6 +224,12 @@ engine_event_handler_player_trade_v1 (db_t *db, db_res_t *ev_row)
 {
   (void) db;
   db_error_t err;
+  int64_t event_id = db_res_col_i64 (ev_row, 0, &err);
+  if (err.code != 0 || event_id <= 0)
+    {
+      LOGE ("engine_event_handler_player_trade_v1: Invalid event ID.");
+      return 1;
+    }
   // Payload is the 6th column (index 5) in the new expanded SELECT
   const char *payload_str = db_res_col_text (ev_row, 5, &err);
   json_error_t jerr;
@@ -237,6 +243,9 @@ engine_event_handler_player_trade_v1 (db_t *db, db_res_t *ev_row)
 	 jerr.text);
       return 1;			// Quarantine
     }
+  /* This identity comes from the persisted event row, never from its payload. */
+  json_object_set_new (payload, "source_event_id", json_integer (event_id));
+  json_object_set_new (payload, "type", json_string ("player.trade.v1"));
   int rc = h_player_progress_from_event_payload (payload);
 
 

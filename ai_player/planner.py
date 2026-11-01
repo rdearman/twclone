@@ -1729,6 +1729,7 @@ class Planner:
             return None
 
         universe_map = current_state.get("universe_map", {})
+        known_sector_data = current_state.get("sector_data", {})
         recent = {str(sector) for sector in current_state.get("recent_sectors", [])[-5:]}
         known_port_sectors = {
             str(sector_id)
@@ -1776,7 +1777,14 @@ class Planner:
 
         def rank(sector):
             sector_key = str(sector)
-            explored = bool(universe_map.get(sector_key, {}).get("is_explored"))
+            # Missing universe-map rows are common in a newly explored world.
+            # Sector details are public knowledge too, and must keep the
+            # explorer from repeatedly preferring an already surveyed sector
+            # over an adjacent frontier merely because no map row was cached.
+            explored = (
+                sector_key in known_sector_data
+                or bool(universe_map.get(sector_key, {}).get("is_explored"))
+            )
             if profile == "cautious":
                 novelty_rank = 0 if explored else 1
             else:

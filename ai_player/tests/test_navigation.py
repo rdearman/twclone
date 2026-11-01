@@ -31,6 +31,25 @@ def test_goto_pathfind_uses_only_protocol_fields():
     }
 
 
+def test_exploration_prefers_an_unknown_adjacent_sector_over_known_sector():
+    planner = Planner.__new__(Planner)
+    planner.state_manager = MagicMock()
+    planner.state_manager.get.return_value = []
+    planner.config = {"behavior_profile": "balanced"}
+
+    target = planner._get_next_warp_target({
+        "player_location_sector": 7,
+        "sector_data": {
+            "7": {"adjacent": [{"to_sector": 1}, {"to_sector": 6}]},
+            "1": {"adjacent": []},
+        },
+        "universe_map": {},
+        "recent_sectors": [],
+    })
+
+    assert target == 6
+
+
 class _Unused:
     def report_state_inconsistency(self, *_args):
         raise AssertionError("unexpected state inconsistency")

@@ -174,7 +174,7 @@ broadcast_system_notice (int notice_id,
 			 time_t created_at, time_t expires_at)
 {
   json_t *data = json_object ();
-  if (!data)
+  if (!data || !json_is_object (data))
     return;
   json_object_set_new (data, "id", json_integer (notice_id));
   json_object_set_new (data, "title", json_string (title ? title : ""));
@@ -984,7 +984,7 @@ cmd_chat_send (client_ctx_t *ctx, json_t *root)
     return 0;
 
   json_t *data = json_object_get (root, "data");
-  if (!data || !json_is_object (data))
+  if (!data)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST, "Missing data");
       return 0;
@@ -1633,6 +1633,215 @@ comm_clear_subscriptions (client_ctx_t *ctx)
 	}
     }
 }
+
+static int
+parse_event_cursor (const char *cursor, char stream_id[37], int64_t *sequence)
+{
+  if (!cursor || strncmp (cursor, "v1.", 3) != 0
+      || strlen (cursor) < 41 || cursor[39] != '.')
+    return -1;
+  for (int i = 0; i < 36; ++i)
+    {
+      const char c = cursor[i + 3];
+      if (i == 8 || i == 13 || i == 18 || i == 23)
+        {
+          if (c != '-') return -1;
+        }
+      else if (!isxdigit ((unsigned char)c))
+        return -1;
+      stream_id[i] = c;
+    }
+  stream_id[36] = '\0';
+  const char *digits = cursor + 40;
+  if (!*digits)
+    return -1;
+  for (const char *p = digits; *p; ++p)
+    if (!isdigit ((unsigned char)*p)) return -1;
+  errno = 0;
+  char *end = NULL;
+  long long parsed = strtoll (digits, &end, 10);
+  if (errno == ERANGE || !end || *end || parsed < 0)
+    return -1;
+  *sequence = (int64_t) parsed;
+  return 0;
+}
+
+static void
+send_event_cursor_error (client_ctx_t *ctx, json_t *root, const char *message)
+{
+  json_t *details = json_object ();
+  if (!details)
+    {
+      send_response_error (ctx, root, ERR_CURSOR_INVALID, message);
+      return;
+    }
+  json_object_set_new (details, "resync_required", json_true ());
+  send_response_error_data (ctx, root, ERR_CURSOR_INVALID, message, details);
+  json_decref (details);
+}
+
+int
+cmd_events_resume (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "authentication required");
+      return 0;
+  }
+  json_t *data = json_object_get (root, "data");
+  if (data && !json_is_object (data) && !json_is_null (data))
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+                           "data must be an object");
+      return 0;
+    }
+  int limit = 100;
+  json_t *limit_value = data ? json_object_get (data, "limit") : NULL;
+  if (json_is_integer (limit_value))
+    limit = (int) json_integer_value (limit_value);
+  if (limit < 1 || limit > 500)
+    {
+      send_response_error (ctx, root, ERR_INVALID_SCHEMA,
+                           "limit must be between 1 and 500");
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "database unavailable");
+      return 0;
+    }
+  char stream_id[37];
+  int64_t high_water = 0, pruned_through = 0;
+  if (repo_comm_event_stream_state (db, ctx->player_id, stream_id,
+                                    &high_water, &pruned_through) != 0)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "event stream unavailable");
+      return 0;
+    }
+
+  const char *after_text = data ?
+    json_string_value (json_object_get (data, "after_cursor")) : NULL;
+  const char *through_text = data ?
+    json_string_value (json_object_get (data, "through_cursor")) : NULL;
+  char after_stream[37], through_stream[37];
+  int64_t after = high_water, through = high_water;
+  if (after_text
+      && (parse_event_cursor (after_text, after_stream, &after) != 0
+          || strcasecmp (after_stream, stream_id) != 0
+          || after > high_water || after < pruned_through))
+    {
+      send_event_cursor_error (ctx, root, "event cursor is invalid or expired");
+      return 0;
+    }
+  if (through_text
+      && (parse_event_cursor (through_text, through_stream, &through) != 0
+          || strcasecmp (through_stream, stream_id) != 0
+          || through > high_water || through < after
+          || through < pruned_through))
+    {
+      send_event_cursor_error (ctx, root, "event watermark is invalid or expired");
+      return 0;
+    }
+
+  db_error_t err;
+  db_res_t *res = repo_comm_event_page (db, ctx->player_id, stream_id,
+                                        after, through, limit, &err);
+  if (!res)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "event page unavailable");
+      return 0;
+    }
+  json_t *events = json_array ();
+  if (!events)
+    {
+      db_res_finalize (res);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "out of memory");
+      return 0;
+    }
+  int64_t last_sequence = after;
+  int count = 0;
+  int failed = 0;
+  while (db_res_step (res, &err))
+    {
+      const char *id = db_res_col_text (res, 0, &err);
+      const char *event_type = db_res_col_text (res, 1, &err);
+      const char *payload_text = db_res_col_text (res, 2, &err);
+      const char *timestamp = db_res_col_text (res, 3, &err);
+      const char *topic = db_res_col_is_null (res, 4) ? NULL :
+        db_res_col_text (res, 4, &err);
+      int64_t sequence = db_res_col_i64 (res, 5, &err);
+      if (err.code || !id || !event_type || !payload_text || !timestamp
+          || sequence != last_sequence + 1)
+        {
+          failed = 1;
+          break;
+        }
+      json_error_t parse_error;
+      json_t *payload = json_loads (payload_text, JSON_REJECT_DUPLICATES,
+                                   &parse_error);
+      json_t *event = json_object ();
+      json_t *meta = json_object ();
+      char cursor[96];
+      snprintf (cursor, sizeof cursor, "v1.%s.%" PRId64, stream_id,
+                sequence);
+      if (!payload || !event || !meta)
+        {
+          if (payload) json_decref (payload);
+          if (event) json_decref (event);
+          if (meta) json_decref (meta);
+          failed = 1;
+          break;
+        }
+      json_object_set_new (event, "id", json_string (id));
+      json_object_set_new (event, "type", json_string (event_type));
+      json_object_set_new (event, "ts", json_string (timestamp));
+      json_object_set_new (event, "data", payload);
+      if (topic)
+        json_object_set_new (meta, "topic", json_string (topic));
+      json_object_set_new (meta, "cursor", json_string (cursor));
+      json_object_set_new (meta, "replayable", json_true ());
+      json_object_set_new (event, "meta", meta);
+      json_array_append_new (events, event);
+      last_sequence = sequence;
+      ++count;
+    }
+  if (err.code || (last_sequence < through && count < limit))
+    failed = 1;
+  db_res_finalize (res);
+  if (failed)
+    {
+      json_decref (events);
+      send_event_cursor_error (ctx, root,
+                               "event history has expired; resynchronization required");
+      return 0;
+    }
+
+  json_t *response = json_object ();
+  char next_cursor[96], watermark[96];
+  snprintf (next_cursor, sizeof next_cursor, "v1.%s.%" PRId64, stream_id,
+            last_sequence);
+  snprintf (watermark, sizeof watermark, "v1.%s.%" PRId64, stream_id,
+            through);
+  if (!response)
+    {
+      json_decref (events);
+      send_response_error (ctx, root, ERR_SERVER_ERROR, "out of memory");
+      return 0;
+    }
+  json_object_set_new (response, "events", events);
+  json_object_set_new (response, "next_cursor", json_string (next_cursor));
+  json_object_set_new (response, "high_watermark", json_string (watermark));
+  json_object_set_new (response, "has_more",
+                       json_boolean (last_sequence < through));
+  send_response_ok_take (ctx, root, "events.resume_v1", &response);
+  return 0;
+}
+
 
 int
 cmd_subscribe_add (client_ctx_t *ctx, json_t *root)

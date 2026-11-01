@@ -30,6 +30,38 @@ func _initialize() -> void:
 	assert(str(destroyed_report["message"]).contains("ship destroyed"))
 	assert(str(destroyed_report["message"]).contains("did not remain in the sector"))
 	assert(not Presenter.landing_refusal({"error": {"message": "Permission denied"}})["has_combat"])
+	var attack_refusal := Presenter.attack_refusal({
+		"status": "refused",
+		"error": {"data": {"ship_remains_in_sector": true, "combat": [{"result": "repelled", "attacker_fighters_lost": 2}]}}
+	})
+	assert(str(attack_refusal["message"]).contains("Planet attack was refused"))
+	assert(not str(attack_refusal["message"]).contains("Landing was refused"))
+	var terminal_only := Presenter.landing_refusal({
+		"status": "error",
+		"error": {"data": {"ship_remains_in_sector": false}},
+	})
+	assert(terminal_only["has_combat"])
+	assert(str(terminal_only["message"]).contains("did not remain in the sector"))
+	assert(not Presenter.landing_refusal({
+		"status": "error",
+		"error": {"data": {"landing_allowed": false}},
+	})["has_combat"])
+	var data_envelope := Presenter.landing_refusal({
+		"status": "refused",
+		"data": {
+			"ship_remains_in_sector": false,
+			"combat": [{"defense": "atmosphere_quasar", "damage": 12, "destroyed": true}],
+		},
+		"error": {"message": "Landing denied."},
+	})
+	assert(data_envelope["has_combat"])
+	assert(str(data_envelope["message"]).contains("Atmospheric Quasar"))
+	assert(str(data_envelope["message"]).contains("12 damage"))
+	assert(str(data_envelope["message"]).contains("did not remain in the sector"))
 	assert(Presenter.attack_result({"planet_id": 42, "captured": true, "attacker_remaining_fighters": 12, "defender_remaining_fighters": 0}).contains("captured: true"))
-	print("Godot planetary combat presenter tests: 10 passed")
+	var malformed_attack := Presenter.attack_result({"planet_id": "42", "captured": "true", "attacker_remaining_fighters": -1, "defender_remaining_fighters": 0})
+	assert(malformed_attack.contains("Planet not reported"))
+	assert(malformed_attack.contains("captured: not reported"))
+	assert(malformed_attack.contains("your fighters remaining: not reported"))
+	print("Godot planetary combat presenter tests: 13 passed")
 	quit(0)

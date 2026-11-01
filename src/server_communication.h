@@ -24,6 +24,7 @@ extern "C"
   int cmd_subscribe_remove (client_ctx_t * ctx, json_t * root);	// "subscribe.remove"
   int cmd_subscribe_list (client_ctx_t * ctx, json_t * root);	// "subscribe.list"
   int cmd_subscribe_catalog (client_ctx_t * ctx, json_t * root);
+  int cmd_events_resume (client_ctx_t * ctx, json_t * root);
 /*admin */
   int cmd_admin_notice (client_ctx_t * ctx, json_t * root);
   int cmd_admin_shutdown_warning (client_ctx_t * ctx, json_t * root);

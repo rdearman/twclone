@@ -41,7 +41,20 @@ Move to an adjacent sector.
 
 ### `move.transwarp`
 Long-range jump (requires equipment).
-**Args**: `{ "sector_id": 50 }`
+**Args**: `{ "to_sector_id": 50 }`
+**Response**: `move.transwarp`
+```json
+{
+  "sector_id": 50,
+  "status": "transwarp_complete",
+  "hazards": []
+}
+```
+
+The client must treat the response as the authoritative outcome. It must not
+infer fuel, interdiction, turn, hazard, or destination state locally; refused,
+error, timeout, and terminal-hazard responses require an authoritative state
+refresh before another movement action.
 
 ### `move.pathfind`
 Calculate route.

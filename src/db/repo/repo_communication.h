@@ -19,6 +19,24 @@ int repo_comm_delete_mail_bulk(db_t *db, int recipient_id, const int *mail_ids, 
 int repo_comm_get_subscription_count(db_t *db, int player_id, int *count_out);
 db_res_t* repo_comm_list_subscriptions(db_t *db, int player_id, db_error_t *err);
 
+/* Durable per-player event journal. stream_id_out must hold at least 37 bytes.
+   The page columns are event_id, event_type, payload::text, created_at UTC,
+   topic, sequence. */
+int repo_comm_event_stream_state(db_t *db, int player_id,
+                                 char stream_id_out[37],
+                                 int64_t *last_sequence_out,
+                                 int64_t *pruned_through_out);
+int repo_comm_event_append(db_t *db, int player_id, const char *event_id,
+                           const char *event_type, const char *topic,
+                           const char *payload_json,
+                           char stream_id_out[37],
+                           int64_t *sequence_out, char timestamp_out[32]);
+db_res_t *repo_comm_event_page(db_t *db, int player_id,
+                               const char *stream_id, int64_t after_sequence,
+                               int64_t through_sequence, int limit,
+                               db_error_t *err);
+int repo_comm_event_prune(db_t *db, int max_streams, int64_t *deleted_out);
+
 /* Chat */
 int repo_comm_insert_chat(db_t *db, int sender_id, int recipient_id, int sector_id, const char *message, int64_t *new_id_out);
 db_res_t* repo_comm_list_chat(db_t *db, int player_id, int sector_id, int limit, db_error_t *err);

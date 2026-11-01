@@ -114,6 +114,7 @@ class MysqlMigrationPortabilityTests(unittest.TestCase):
             ("commodity_orders", "status", 16),
             ("bank_accounts", "owner_type", 32),
             ("bank_transactions", "idempotency_key", 191),
+            ("bank_transactions", "tx_group_id", 191),
             ("bank_fee_schedules", "tx_type", 64),
             ("bank_fee_schedules", "owner_type", 32),
             ("bank_fee_schedules", "currency", 16),
@@ -131,6 +132,7 @@ class MysqlMigrationPortabilityTests(unittest.TestCase):
                 )
         portability = (MYSQL_MIGRATIONS / "099_mysql_key_portability.sql").read_text(encoding="utf-8")
         self.assertIn("SELECT 'players', 'name', 191", portability)
+        self.assertIn("SELECT 'bank_transactions', 'tx_group_id', 191", portability)
         self.assertIn("SELECT 'bank_fee_schedules', 'tx_type', 64", portability)
         self.assertIn("SELECT 'engine_commands', 'status', 32", portability)
 
@@ -192,6 +194,54 @@ class MysqlMigrationPortabilityTests(unittest.TestCase):
             "CORP_INSUFFICIENT_FUNDS",
         ):
             self.assertIn(message, sql)
+
+    def test_mysql_name_generation_functions_are_replayable_and_not_postgresql(self):
+        sql = (MYSQL_MIGRATIONS / "005_namegen.sql").read_text(encoding="utf-8")
+        self.assertNotRegex(sql, r"(?i)CREATE\s+OR\s+REPLACE\s+FUNCTION|LANGUAGE\s+plpgsql|ARRAY\[")
+        for name in (
+            "get_first_syllable",
+            "get_middle_syllable",
+            "get_last_syllable",
+            "get_constellation_name_entry",
+            "randomname",
+            "constellation_name",
+        ):
+            with self.subTest(function=name):
+                self.assertRegex(sql, rf"(?i)DROP\s+FUNCTION\s+IF\s+EXISTS\s+{name}\b")
+                self.assertRegex(sql, rf"(?i)CREATE\s+FUNCTION\s+{name}\b")
+        self.assertIn("ELT(idx + 1", sql)
+        self.assertIn("RETURNS TEXT DETERMINISTIC", sql)
+        self.assertIn("RETURNS TEXT NOT DETERMINISTIC NO SQL", sql)
+
+    def test_mysql_sector_generator_starts_after_max_and_reaches_requested_count(self):
+        sql = (MYSQL_MIGRATIONS / "040_functions.sql").read_text(encoding="utf-8")
+        sector_generator = sql.split("CREATE FUNCTION generate_sectors", 1)[1].split(
+            "-- 2) Ports", 1
+        )[0]
+        self.assertIn("WHILE v_max_id < target_count DO", sector_generator)
+        self.assertIn("SET v_max_id = v_max_id + 1", sector_generator)
+        self.assertNotIn("@counter", sector_generator)
+
+    def test_mysql_port_generator_inserts_ports_before_trade_rows(self):
+        sql = (MYSQL_MIGRATIONS / "040_functions.sql").read_text(encoding="utf-8")
+        port_generator = sql.split("CREATE FUNCTION generate_ports", 1)[1].split(
+            "-- 2.5) Stardock", 1
+        )[0]
+        self.assertIn("SELECT COALESCE(MAX(CAST(value AS SIGNED)), 40)", port_generator)
+        self.assertIn("INSERT INTO ports (number, name, sector_id, type, size, techlevel, porttype_id)", port_generator)
+        self.assertIn("SET v_port_id = LAST_INSERT_ID()", port_generator)
+        self.assertLess(port_generator.index("INSERT INTO ports"), port_generator.index("INSERT INTO port_trade"))
+        self.assertIn("SET v_added = v_added + 1", port_generator)
+
+    def test_lookup_rows_are_seeded_once_in_install_order(self):
+        lookup = (MYSQL_MIGRATIONS / "090_seed_lookup.sql").read_text(encoding="utf-8")
+        essential = (MYSQL_MIGRATIONS / "091_seed_essential.sql").read_text(encoding="utf-8")
+        lookup_tables = set(re.findall(r"(?im)^INSERT\s+INTO\s+`?(\w+)`?", lookup))
+        essential_tables = set(re.findall(r"(?im)^INSERT\s+INTO\s+`?(\w+)`?", essential))
+        self.assertFalse(
+            lookup_tables & essential_tables,
+            "090 owns shared lookup rows; 091 should seed only additional essential data",
+        )
 
     def test_key_migration_preflights_orphans_before_dropping_foreign_keys(self):
         portability = (MYSQL_MIGRATIONS / "099_mysql_key_portability.sql").read_text(encoding="utf-8")

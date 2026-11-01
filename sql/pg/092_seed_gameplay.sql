@@ -183,25 +183,15 @@ CREATE TRIGGER trg_bank_transactions_before_insert
     FOR EACH ROW
     EXECUTE FUNCTION fn_bank_transactions_before_insert ();
 
--- 8. Bank Transactions: Update Balance
+-- 8. Bank Transactions: Record the balance already committed by the
+-- authoritative bank repository.  Balance mutation belongs to the repository
+-- transaction; this trigger must not apply the same delta a second time.
 CREATE OR REPLACE FUNCTION fn_bank_transactions_after_insert ()
     RETURNS TRIGGER
     AS $$
 BEGIN
-    UPDATE
-        bank_accounts
-    SET
-        balance = CASE NEW.direction
-        WHEN 'DEBIT' THEN
-            balance - NEW.amount
-        WHEN 'CREDIT' THEN
-            balance + NEW.amount
-        ELSE
-            balance
-        END
-    WHERE
-        bank_accounts_id = NEW.account_id;
-    -- Update the transaction record with the resulting balance (requires another update in PG unless logic is moved to app layer, keeping as is to match legacy logic)
+    -- The bank repository has already changed bank_accounts atomically.  Only
+    -- capture the resulting balance on the append-only ledger row.
     UPDATE
         bank_transactions
     SET

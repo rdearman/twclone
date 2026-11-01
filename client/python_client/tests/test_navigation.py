@@ -155,7 +155,13 @@ def test_transwarp_flow_uses_server_command_then_refreshes_authoritative_sector(
     ctx_factory, fake_conn, monkeypatch
 ):
     ctx = ctx_factory(sector={"id": 4, "name": "Old Sector"})
-    fake_conn.queue("move.transwarp", {"status": "ok", "data": {"current_sector": 77}})
+    # NAV-02 uses the move.transwarp success contract: only sector_id is the
+    # authoritative destination. Generic movement aliases must not authorize
+    # a transwarp completion in the client.
+    fake_conn.queue("move.transwarp", {
+        "status": "ok", "type": "move.transwarp",
+        "data": {"sector_id": 77, "status": "transwarp_complete"},
+    })
     fake_conn.queue("move.describe_sector", {"status": "ok", "data": {
         "sector_id": 77, "name": "New Sector", "adjacent_sectors": [],
         "ports": [], "ships_present": [], "players_present": [],
@@ -172,6 +178,30 @@ def test_transwarp_flow_uses_server_command_then_refreshes_authoritative_sector(
         "command": "move.describe_sector", "data": {},
     }
     assert ctx.last_sector_desc["id"] == 77
+
+
+def test_successful_transwarp_does_not_cache_a_different_sector_response(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    """A successful envelope cannot authorize a mismatched sector refresh."""
+    ctx = ctx_factory(sector={"id": 4, "name": "Old Sector"})
+    fake_conn.queue("move.transwarp", {"status": "ok", "data": {"to_sector_id": 77}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {
+        "sector_id": 88, "name": "Unrequested Sector",
+    }})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"turns": 9}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"ship_id": 2}}})
+    monkeypatch.setattr("builtins.input", lambda *_: "77")
+
+    client.transwarp_flow(ctx)
+
+    # A mismatched post-move read is not authoritative, but it must not erase
+    # the last confirmed location while the client is waiting for reconnect.
+    assert ctx.last_sector_desc == {"id": 4, "name": "Old Sector"}
+    assert "requested destination could not be confirmed" in capsys.readouterr().out
+    assert [call["command"] for call in fake_conn.calls] == [
+        "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
+    ]
 
 
 def test_transwarp_error_reconciles_after_possible_committed_move(ctx_factory, fake_conn, monkeypatch, capsys):
@@ -193,21 +223,69 @@ def test_transwarp_error_reconciles_after_possible_committed_move(ctx_factory, f
     assert "Current sector refreshed after the movement error: 77" in capsys.readouterr().out
 
 
-def test_transwarp_refusal_does_not_refresh_or_replace_cached_sector(
+def test_transwarp_refusal_reconciles_authoritative_state_before_retry(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
-    old_sector = {"id": 4, "name": "Old Sector"}
-    ctx = ctx_factory(sector=old_sector)
+    ctx = ctx_factory(sector={"id": 4, "name": "Old Sector"})
     fake_conn.queue("move.transwarp", {
         "status": "refused", "error": {"message": "Transwarp drive not installed."},
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "type": "sector.info",
+        "data": {"sector_id": 4, "name": "Confirmed Sector"},
+    })
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "type": "player.info",
+        "data": {"player": {"id": 3, "sector": 4}},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "type": "ship.status",
+        "data": {"ship": {"id": 9, "has_transwarp": False}},
     })
     monkeypatch.setattr("builtins.input", lambda *_: "77")
 
     client.transwarp_flow(ctx)
 
-    assert [call["command"] for call in fake_conn.calls] == ["move.transwarp"]
-    assert ctx.last_sector_desc == old_sector
-    assert "Transwarp drive not installed" in capsys.readouterr().out
+    assert [call["command"] for call in fake_conn.calls] == [
+        "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
+    ]
+    assert ctx.last_sector_desc == {"id": 4, "name": "Confirmed Sector"}
+    output = capsys.readouterr().out
+    assert "Transwarp drive not installed" in output
+    assert "Current sector refreshed after the movement error: 4." in output
+
+
+def test_transwarp_refusal_with_hazard_report_reconciles_authoritative_state(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 12, "name": "Origin"})
+    fake_conn.queue("move.transwarp", {
+        "status": "refused",
+        "error": {
+            "message": "Entry hazard processing failed.",
+            "data": {"hazards": [{"hazard_type": "minefield", "hull_lost": 9}]},
+        },
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "data": {"sector_id": 13, "name": "Confirmed"},
+    })
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "data": {"player": {"turns": 4}},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "data": {"ship": {"hull": 91}},
+    })
+    monkeypatch.setattr("builtins.input", lambda _prompt: "13")
+
+    client.transwarp_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == [
+        "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
+    ]
+    assert ctx.last_sector_desc["id"] == 13
+    output = capsys.readouterr().out
+    assert "minefield" in output and "hull lost: 9" in output
+    assert "Current sector refreshed after the movement error: 13." in output
 
 
 def test_current_sector_info_and_detailed_scan_use_only_empty_current_sector_requests(
@@ -224,16 +302,63 @@ def test_current_sector_info_and_detailed_scan_use_only_empty_current_sector_req
         {"command": "sector.info", "data": {}},
         {"command": "sector.scan", "data": {}},
     ]
-    assert '"sector_id": 41' in capsys.readouterr().out
+    # sector.info is normalized into the client's canonical sector record. The
+    # authoritative server ID is retained as ``id`` for subsequent refreshes;
+    # do not require the transport field name in the rendered record.
+    assert '"id": 41' in capsys.readouterr().out
+
+
+def test_sector_info_rejects_response_for_unconfirmed_sector(
+    ctx_factory, fake_conn, capsys
+):
+    ctx = ctx_factory(sector={"id": 4, "name": "Stale sector"})
+    fake_conn.queue("sector.info", {
+        "status": "ok", "type": "sector.info", "data": {
+            "sector_id": 41,
+            "name": "Current sector",
+            "ports": [{"id": 8, "name": "Known port", "type": 9, "class": 9}],
+            "planets": [], "ships_present": [],
+        },
+    })
+
+    client.sector_info_flow(ctx)
+
+    # sector.info is a display/read response, not permission to move the
+    # client's confirmed location.  A mismatched authoritative ID must not
+    # replace the cache or leak remote port metadata into later actions.
+    assert ctx.last_sector_desc == {"id": 4, "name": "Stale sector"}
+    assert "sector 41 instead of confirmed sector 4" in capsys.readouterr().out
+
+
+def test_refused_sector_info_preserves_last_confirmed_cache(
+    ctx_factory, fake_conn, capsys
+):
+    known = {"id": 41, "name": "Known sector"}
+    ctx = ctx_factory(sector=known)
+    fake_conn.queue("sector.info", {
+        "status": "refused", "error": {"message": "Current sector unavailable."},
+        "data": {"sector_id": 999, "name": "Untrusted sector"},
+    })
+
+    client.sector_info_flow(ctx)
+
+    assert ctx.last_sector_desc == known
+    output = capsys.readouterr().out
+    assert "Current sector unavailable." in output
+    assert "Untrusted sector" not in output
 
 
 def test_density_scan_does_not_guess_an_unregistered_fallback(ctx_factory, fake_conn):
     ctx = ctx_factory(sector={"id": 41})
     fake_conn.queue("sector.scan.density", {"status": "error", "error": {"message": "Unavailable"}})
+    fake_conn.queue("move.describe_sector", {"status": "refused", "error": {"message": "Unavailable"}})
 
     client.sector_density_scan_flow(ctx)
 
-    assert fake_conn.calls == [{"command": "sector.scan.density", "data": {"sector_id": 41}}]
+    assert fake_conn.calls == [
+        {"command": "sector.scan.density", "data": {"sector_id": 41}},
+        {"command": "move.describe_sector", "data": {"sector_id": 41}},
+    ]
 
 
 def test_submenus_have_functioning_back_action(menus):

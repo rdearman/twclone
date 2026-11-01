@@ -258,7 +258,7 @@ int repo_players_insert_ship(db_t *db, const char *name, int type_id, int holds,
     db_error_t err;
     int64_t new_id = 0;
     /* SQL_VERBATIM: Q19 */
-    const char *q19 = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
+    const char *q19 = "INSERT INTO ships (name, type_id, holds, fighters, shields, sector_id) VALUES ({1}, {2}, {3}, {4}, {5}, {6})";
     char sql[512]; sql_build(db, q19, sql, sizeof(sql));
     if (db_exec_insert_id(db, sql, (db_bind_t[]){ db_bind_text(name), db_bind_i64(type_id), db_bind_i64(holds), db_bind_i64(fighters), db_bind_i64(shields), db_bind_i64(sector_id) }, 6, "ship_id", &new_id, &err)) {
         *ship_id_out = (int)new_id;

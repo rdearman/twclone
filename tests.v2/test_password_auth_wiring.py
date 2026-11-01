@@ -7,6 +7,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PasswordAuthWiringTest(unittest.TestCase):
+    def test_clients_use_the_authoritative_passwd_contract(self):
+        python_client = (ROOT / "client/python_client/client.py").read_text()
+        godot_auth = (ROOT / "client/godot_client/godot/AuthSession.gd").read_text()
+        godot_protocol = (ROOT / "client/godot_client/godot/PROTOCOL.v3/05_Authentication_and_Security.md").read_text()
+        self.assertIn('"passwd": password', python_client)
+        self.assertIn('"passwd": password', godot_auth)
+        self.assertIn('"passwd": "password"', godot_protocol)
+        self.assertNotIn('"password": "password"', godot_protocol)
+
+    def test_duplicate_registration_uses_server_error_and_client_message(self):
+        server = (ROOT / "src/server_auth.c").read_text()
+        godot = (ROOT / "client/godot_client/godot/Main.gd").read_text()
+        self.assertIn("ERR_NAME_TAKEN, \"Username already exists\"", server)
+        self.assertIn("error_code == 1105", godot)
+        self.assertIn("captain name is already in use", godot)
+
     def test_both_registration_repositories_hash_before_database_write(self):
         for path, function_name in (
             (ROOT / "src/db/repo/repo_auth.c", "repo_auth_register_player"),

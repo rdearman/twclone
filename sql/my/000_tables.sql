@@ -130,7 +130,7 @@ CREATE TABLE players (
     `type` BIGINT DEFAULT 2,
     `number` bigint,
     `name` VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
-    passwd TEXT NOT NULL,
+    passwd VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     sector_id bigint DEFAULT 1,
     ship_id bigint,
     experience bigint DEFAULT 0,
@@ -851,6 +851,7 @@ CREATE TABLE commodity_orders (
     price bigint NOT NULL CHECK (price >= 0),
     status VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled', 'expired')),
     ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL,
     FOREIGN KEY (commodity_id) REFERENCES commodities (commodities_id) ON DELETE CASCADE
 );
 
@@ -923,7 +924,7 @@ CREATE TABLE bank_transactions (
     direction TEXT NOT NULL CHECK (direction IN ('CREDIT', 'DEBIT')),
     amount bigint NOT NULL CHECK (amount > 0),
     currency TEXT NOT NULL,
-    tx_group_id TEXT,
+    tx_group_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin,
     related_account_id bigint,
     description TEXT,
     ts bigint NOT NULL,
@@ -1554,3 +1555,16 @@ CREATE TABLE player_visited_sectors (
     PRIMARY KEY (player_id, sector_id),
     FOREIGN KEY (player_id) REFERENCES players(player_id) ON DELETE CASCADE,
     FOREIGN KEY (sector_id) REFERENCES sectors(sector_id) ON DELETE CASCADE);
+
+-- Typed environmental hazards used by the sector-entry combat resolver.
+CREATE TABLE sector_hazards (
+    sector_id BIGINT NOT NULL,
+    hazard_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    severity INT NOT NULL,
+    PRIMARY KEY (sector_id, hazard_type),
+    KEY idx_sector_hazards_type (hazard_type, sector_id),
+    CONSTRAINT sector_hazards_sector_fk FOREIGN KEY (sector_id) REFERENCES sectors (sector_id) ON DELETE CASCADE,
+    CONSTRAINT sector_hazards_type_check CHECK
+        (hazard_type IN ('volcanic', 'nebula', 'radiation')),
+    CONSTRAINT sector_hazards_severity_check CHECK
+        (severity BETWEEN 1 AND 1000));

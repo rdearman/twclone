@@ -15,9 +15,10 @@ func _run() -> void:
 	menu.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
 		captured.append({"command": command, "data": data, "label": label, "mutating": mutating})
 	)
-	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 17}}
+	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 17}, "freshness": {"sector": "fresh"}}
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
+	await process_frame
 	var status_button := _action_button(menu, "Ship towing status")
 	_check(status_button != null, "towing status was not reachable from the computer menu")
 	if status_button != null:
@@ -31,6 +32,7 @@ func _run() -> void:
 	_check(captured.size() == 2 and captured[1]["command"] == "ship.tow" and captured[1]["data"].is_empty() and captured[1]["mutating"], "tow release did not send the documented empty disengage request")
 	menu._active_category = "NAVIGATION"
 	menu._render_actions()
+	await process_frame
 	var transwarp_button := _action_button(menu, "Transwarp to sector")
 	_check(transwarp_button != null, "transwarp was not reachable in navigation")
 	if transwarp_button != null:
@@ -38,6 +40,26 @@ func _run() -> void:
 		menu._form_fields["to_sector_id"].text = "77"
 		menu._submit_form()
 	_check(captured.size() == 3 and captured[2]["command"] == "move.transwarp" and captured[2]["data"] == {"to_sector_id": 77}, "transwarp did not use the documented destination payload")
+	# NAV-02 boundary: a stale sector snapshot must not issue a long-range move.
+	# The server remains authoritative for fuel/interdiction and rollback; the
+	# client only gates the request until an authoritative origin refresh exists.
+	menu._snapshot["freshness"] = {"sector": "stale"}
+	menu._render_actions()
+	await process_frame
+	var stale_transwarp_button := _action_button(menu, "Transwarp to sector")
+	_check(stale_transwarp_button != null, "transwarp disappeared instead of becoming unavailable while stale")
+	if stale_transwarp_button != null:
+		stale_transwarp_button.pressed.emit()
+		if menu._form_dialog != null:
+			menu._form_fields["to_sector_id"].text = "88"
+			menu._submit_form()
+	_check(captured.size() == 3, "stale transwarp origin issued a request before authoritative refresh")
+	# Malformed freshness metadata must fail closed at the menu boundary too.
+	menu._snapshot["freshness"] = "fresh"
+	menu._render_actions()
+	await process_frame
+	var malformed_transwarp_button := _action_button(menu, "Transwarp to sector")
+	_check(malformed_transwarp_button != null and malformed_transwarp_button.disabled, "malformed freshness metadata enabled transwarp")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():

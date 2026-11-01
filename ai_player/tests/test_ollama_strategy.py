@@ -112,6 +112,75 @@ def test_ollama_prompt_uses_the_selected_population_profile(monkeypatch, tmp_pat
     assert "fresh public route recommendations" in prompts[2]
 
 
+def test_exploration_prompt_shows_known_map_and_rejects_revisiting_known_sectors(
+    monkeypatch, tmp_path
+):
+    manager = StateManager(str(tmp_path / "state.json"), {})
+    manager.set("valid_commodity_names", ["ORE", "ORG", "EQU"])
+    state = _game_state()
+    state.update({
+        "player_location_sector": 10,
+        "sector_data": {
+            "5": {"adjacent": []},
+            "10": {"adjacent": [{"to_sector": 5}, {"to_sector": 11}]},
+            "20": {"adjacent": []},
+        },
+        "port_info_by_sector": {},
+    })
+    call = {}
+
+    def fake_ollama(game_state, _model, _key, override_prompt=None, **_kwargs):
+        call["state"] = game_state
+        call["prompt"] = override_prompt
+        return json.dumps({"plan": ["goto: 5", "goto: 11"]})
+
+    monkeypatch.setattr(main, "get_ollama_response", fake_ollama)
+    monkeypatch.setattr(main.time, "sleep", lambda _seconds: None)
+
+    plan = main.select_strategy_plan(
+        state, {"ollama_model": "qwen3:8b", "behavior_profile": "explorer"},
+        manager, PlannerStub(),
+    )
+
+    assert call["state"]["known_sector_ids"] == [5, 10, 20]
+    assert call["state"]["valid_goto_sectors"] == [5, 11]
+    assert call["state"]["unexplored_adjacent_sector_ids"] == [11]
+    assert "unexplored_adjacent_sector_ids" in call["prompt"]
+    assert plan == ["goto: 11"]
+    assert manager.get("strategy_plan_source") == "ollama"
+
+
+def test_recovery_discards_stale_non_port_navigation_but_keeps_trade_route():
+    state = {
+        "sector_data": {"5": {}, "10": {}, "20": {}},
+        "port_info_by_sector": {"20": {"port_id": 4, "commodities": [{"commodity": "ORE"}]}},
+        "ship_info": {"cargo": []},
+    }
+    assert main.discard_stale_exploration_goals(
+        ["goto: 5", "goto: 11", "goto: 20"], state
+    ) == ["goto: 11", "goto: 20"]
+
+    state["ship_info"]["cargo"] = [{"commodity": "ORE", "quantity": 1}]
+    assert main.discard_stale_exploration_goals(["goto: 5", "sell: ORE"], state) == [
+        "goto: 5", "sell: ORE"
+    ]
+
+
+def test_live_audit_before_snapshot_is_not_mutated_by_authoritative_readback():
+    state = {
+        "player_location_sector": 7,
+        "player_info": {"player": {"turns_remaining": 100, "credits": "5000.00"}},
+        "ship_info": {"cargo": []},
+    }
+
+    before = main._audit_state_snapshot(state)
+    state["player_info"]["player"]["turns_remaining"] = 99
+    state["ship_info"]["cargo"].append({"commodity": "ORE", "quantity": 1})
+
+    assert before["player_info"]["player"]["turns_remaining"] == 100
+    assert before["ship_info"]["cargo"] == []
+
+
 def test_ollama_failure_uses_existing_fallback_and_records_failure(monkeypatch, tmp_path, caplog):
     manager = StateManager(str(tmp_path / "state.json"), {})
     manager.set("valid_commodity_names", ["ORE", "ORG", "EQU"])

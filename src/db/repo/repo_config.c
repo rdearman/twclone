@@ -8,7 +8,9 @@
 int repo_config_get_all(db_t *db, db_res_t **out_res)
 {
     /* SQL_VERBATIM: Q1 */
-    const char *sql = "SELECT key, value, type FROM config;";
+    /* Qualify key because MySQL treats KEY as a reserved keyword; PostgreSQL
+     * accepts the same qualified column reference unchanged. */
+    const char *sql = "SELECT config.key, config.value, config.type FROM config;";
     db_error_t err;
     if (db_query(db, sql, NULL, 0, out_res, &err)) {
         return 0;
@@ -19,7 +21,7 @@ int repo_config_get_all(db_t *db, db_res_t **out_res)
 int repo_config_get_value(db_t *db, const char *key, char *out_val, size_t out_sz)
 {
     /* SQL_VERBATIM: Q3 */
-    const char *sql = "SELECT value FROM config WHERE key = {1} LIMIT 1;";
+    const char *sql = "SELECT config.value FROM config WHERE config.key = {1} LIMIT 1;";
     db_res_t *res = NULL;
     db_error_t err;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_text(key) }, 1, &res, &err)) {
@@ -41,7 +43,7 @@ int repo_config_set_value(db_t *db, const char *key, const char *val)
 {
     db_error_t err;
     /* SQL_VERBATIM: Q_CFG_SET */
-    const char *sql = "UPDATE config SET value={2} WHERE key={1};";
+    const char *sql = "UPDATE config SET value={2} WHERE config.key={1};";
     
     char sql_buf[512];
     sql_build(db, sql, sql_buf, sizeof(sql_buf));

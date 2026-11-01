@@ -30,7 +30,7 @@ def test_ship_rename_uses_active_ship_contract_and_refreshes_authoritative_state
     options = {item["key"]: item for item in menus["COMPUTER"]["options"]}
     assert "unavailable" not in options["r"]["label"].lower()
     assert options["r"]["action"] == {"pycall": "rename_ship_flow"}
-    fake_conn.queue("ship.rename", {"status": "ok", "data": {"ship_id": 10, "name": "Aurora"}})
+    fake_conn.queue("ship.rename", {"status": "ok", "type": "ship.renamed", "data": {"ship_id": 10, "name": "Aurora"}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10, "name": "Aurora"}}})
     monkeypatch.setattr("builtins.input", lambda _prompt: "Aurora")
 
@@ -55,6 +55,24 @@ def test_ship_rename_refusal_does_not_refresh_or_claim_success(
     output = capsys.readouterr().out
     assert "refused or failed" in output
     assert "Aurora" not in output
+
+
+def test_ship_rename_success_without_authoritative_name_does_not_claim_local_name(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    fake_conn.queue("ship.rename", {"status": "ok", "data": {"ship_id": 10}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"ship_id": 10}}})
+    monkeypatch.setattr("builtins.input", lambda *_: "Aurora")
+
+    client.rename_ship_flow(ctx_factory())
+
+    assert fake_conn.calls == [
+        {"command": "ship.rename", "data": {"name": "Aurora"}},
+        {"command": "ship.status", "data": {}},
+    ]
+    output = capsys.readouterr().out
+    assert "no authoritative ship name" in output
+    assert "renamed to 'Aurora' (confirmed by server)" not in output
 
 
 def test_computer_menu_exposes_supported_police_controls(menus):

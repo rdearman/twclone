@@ -31,8 +31,50 @@ ${CC:-cc} -std=c11 -D_GNU_SOURCE -DHAVE_MYSQL -DTW_DB_INTERNAL \
   "$ROOT/src/db/db_api.c" "$ROOT/src/db/sql_driver.c" "$ROOT/src/db/mysql/db_mysql.c" \
   -lpthread $("$MYSQL_CONFIG" --libs) -o "$TMPDIR_TEST/test_db_mysql"
 
+# Compile the cron repository in isolation and discard unrelated repository
+# entry points; this verifies the database-agnostic registration path.
+${CC:-cc} -std=c11 -D_GNU_SOURCE -DHAVE_MYSQL -DTW_DB_INTERNAL \
+  -ffunction-sections -fdata-sections \
+  -I"$ROOT" -I"$ROOT/src" -I"$ROOT/src/db" -I"$ROOT/src/db/repo" $("$MYSQL_CONFIG" --cflags) \
+  "$ROOT/tests/mysql/test_repo_engine_cron.c" \
+  "$ROOT/src/db/db_api.c" "$ROOT/src/db/sql_driver.c" \
+  "$ROOT/src/db/mysql/db_mysql.c" "$ROOT/src/db/repo/repo_engine.c" \
+  "$ROOT/src/db/repo/repo_bank.c" \
+  -Wl,--gc-sections -lpthread $("$MYSQL_CONFIG" --libs) \
+  -o "$TMPDIR_TEST/test_repo_engine_cron"
+
+# The event retention test uses migration 116 tables and a dedicated player
+# fixture from a disposable database.
+${CC:-cc} -std=c11 -D_GNU_SOURCE -DHAVE_MYSQL -DTW_DB_INTERNAL \
+  -ffunction-sections -fdata-sections \
+  -I"$ROOT/src" -I"$ROOT/src/db" -I"$ROOT/src/db/repo" $("$MYSQL_CONFIG" --cflags) \
+  "$ROOT/tests/mysql/test_repo_event_prune.c" \
+  "$ROOT/src/db/db_api.c" "$ROOT/src/db/sql_driver.c" \
+  "$ROOT/src/db/mysql/db_mysql.c" "$ROOT/src/db/repo/repo_communication.c" \
+  -Wl,--gc-sections -lpthread $("$MYSQL_CONFIG" --libs) \
+  -o "$TMPDIR_TEST/test_repo_event_prune"
+
+${CC:-cc} -std=c11 -D_GNU_SOURCE -DHAVE_MYSQL -DTW_DB_INTERNAL \
+  -ffunction-sections -fdata-sections \
+  -I"$ROOT" -I"$ROOT/src" -I"$ROOT/src/db" -I"$ROOT/src/db/repo" $("$MYSQL_CONFIG" --cflags) \
+  "$ROOT/tests/mysql/test_repo_world_cron.c" \
+  "$ROOT/src/db/db_api.c" "$ROOT/src/db/sql_driver.c" \
+  "$ROOT/src/db/mysql/db_mysql.c" "$ROOT/src/db/repo/repo_cron.c" \
+  -Wl,--gc-sections -lpthread $("$MYSQL_CONFIG" --libs) \
+  -o "$TMPDIR_TEST/test_repo_world_cron"
+
 set +e
 "$TMPDIR_TEST/test_db_mysql"
 status=$?
 set -e
-exit "$status"
+if [ "$status" -ne 0 ]; then exit "$status"; fi
+
+"$TMPDIR_TEST/test_repo_engine_cron"
+
+set +e
+"$TMPDIR_TEST/test_repo_event_prune"
+status=$?
+set -e
+if [ "$status" -ne 0 ] && [ "$status" -ne 77 ]; then exit "$status"; fi
+
+"$TMPDIR_TEST/test_repo_world_cron"

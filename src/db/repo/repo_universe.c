@@ -42,13 +42,115 @@ int repo_universe_get_random_neighbor(db_t *db, int sector_id, int *neighbor_out
     return err.code ? err.code : -1;
 }
 
-int repo_universe_update_ship_sector(db_t *db, int ship_id, int sector_id) {
-    db_error_t err;
-    /* SQL_VERBATIM: Q4 */
-    const char *q4 = "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};";
-    char sql[512]; sql_build(db, q4, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(ship_id) }, 2, &err)) return err.code;
+/* Execute inside a caller-owned transaction. All movement entry points use
+ * this primitive for the ship and tow chain. */
+static int
+move_ship_records (db_t *db, int ship_id, int sector_id, db_error_t *err)
+{
+    char sql[768];
+    if (!db || ship_id <= 0 || sector_id <= 0 || !err) return -1;
+
+    if (sql_build(db, "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};",
+                  sql, sizeof(sql)) != 0
+        || !db_exec(db, sql,
+                    (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(ship_id) },
+                    2, err))
+        return err->code ? err->code : -1;
+    if (sql_build(db, "UPDATE players SET sector_id = {1} WHERE ship_id = {2};",
+                  sql, sizeof(sql)) != 0
+        || !db_exec(db, sql,
+                    (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(ship_id) },
+                    2, err))
+        return err->code ? err->code : -1;
+    if (sql_build(db, "UPDATE ships SET sector_id = {1} WHERE is_being_towed_by = {2};",
+                  sql, sizeof(sql)) != 0
+        || !db_exec(db, sql,
+                    (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(ship_id) },
+                    2, err))
+        return err->code ? err->code : -1;
+    if (sql_build(db, "UPDATE players SET sector_id = {1} WHERE ship_id IN (SELECT ship_id FROM ships WHERE is_being_towed_by = {2});",
+                  sql, sizeof(sql)) != 0
+        || !db_exec(db, sql,
+                    (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(ship_id) },
+                    2, err))
+        return err->code ? err->code : -1;
     return 0;
+}
+
+int repo_universe_update_ship_sector(db_t *db, int ship_id, int sector_id) {
+    if (!db || ship_id <= 0 || sector_id <= 0) return -1;
+    db_error_t err = {0};
+    bool owns_tx = db->tx_nest_level == 0;
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err)) return err.code;
+
+    if (move_ship_records(db, ship_id, sector_id, &err) != 0)
+        goto rollback;
+
+    if (!db_tx_commit(db, &err)) {
+        if (owns_tx) db_tx_rollback(db, NULL);
+        return err.code;
+    }
+    return 0;
+
+rollback:
+    /* db_tx_rollback() is intentionally an outer-transaction operation in
+     * db_api.c.  A nested failure must release only this call's logical
+     * nesting level; its caller owns the decision to roll back the outer
+     * transaction. */
+    if (owns_tx) db_tx_rollback(db, NULL);
+    else db_tx_commit(db, NULL);
+    return err.code ? err.code : -1;
+}
+
+int
+repo_universe_move_player_and_ship(db_t *db, int player_id,
+                                   int expected_ship_id, int sector_id)
+{
+    if (!db || player_id <= 0 || sector_id <= 0) return -1;
+    db_error_t err = {0};
+    db_res_t *res = NULL;
+    int ship_id = 0;
+    bool owns_tx = db->tx_nest_level == 0;
+
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err)) return err.code;
+
+    char sql[768];
+    if (sql_build(db, "SELECT ship_id FROM players WHERE player_id = {1} FOR UPDATE;",
+                  sql, sizeof(sql)) != 0
+        || !db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1,
+                     &res, &err))
+        goto rollback;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        res = NULL;
+        goto rollback;
+    }
+    ship_id = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    res = NULL;
+    if (err.code != 0 || (expected_ship_id > 0 && ship_id != expected_ship_id))
+        goto rollback;
+
+    if (sql_build(db, "UPDATE players SET sector_id = {1} WHERE player_id = {2};",
+                  sql, sizeof(sql)) != 0
+        || !db_exec(db, sql,
+                    (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(player_id) },
+                    2, &err))
+        goto rollback;
+    if (ship_id > 0 && move_ship_records(db, ship_id, sector_id, &err) != 0)
+        goto rollback;
+
+    if (!db_tx_commit(db, &err)) {
+        if (owns_tx) db_tx_rollback(db, NULL);
+        return err.code;
+    }
+    return 0;
+
+rollback:
+    if (res) db_res_finalize(res);
+    if (owns_tx) db_tx_rollback(db, NULL);
+    else db_tx_commit(db, NULL);
+    return err.code ? err.code : -1;
 }
 
 int repo_universe_mass_randomize_zero_sector_ships(db_t *db) {
@@ -353,12 +455,7 @@ int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out) {
 }
 
 int repo_universe_update_player_sector(db_t *db, int player_id, int sector_id) {
-    db_error_t err;
-    /* SQL_VERBATIM: Q25 */
-    const char *q25 = "UPDATE players SET sector_id = {1} WHERE player_id = {2};";
-    char sql[512]; sql_build(db, q25, sql, sizeof(sql));
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(sector_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
-    return 0;
+    return repo_universe_move_player_and_ship(db, player_id, 0, sector_id);
 }
 
 int repo_universe_get_ferengi_corp_info(db_t *db, int *corp_id_out, int *player_id_out) {

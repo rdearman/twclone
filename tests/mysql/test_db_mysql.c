@@ -2,6 +2,7 @@
 #include "db/db_api.h"
 #include "db/db_int.h"
 #include "db/mysql/db_mysql.h"
+#include "db/sql_driver.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -51,6 +52,9 @@ int main (void)
   db_error_t err;
   db_t *db;
   db_res_t *res;
+  char sparse_sql[128];
+  char epoch_sql[128];
+  char epoch_expr[64];
   int64_t initial_id = 0, rows = 0;
   long port = port_text ? strtol (port_text, NULL, 10) : 0;
 
@@ -83,6 +87,33 @@ int main (void)
     { db_res_finalize (res); db_close (db); return fail ("typed result reading", &err); }
   if (db_res_step (res, &err))
     { db_res_finalize (res); db_close (db); return fail ("single-row result termination", &err); }
+  db_res_finalize (res);
+
+  const char *epoch_fmt = sql_epoch_param_to_timestamptz (db);
+  db_bind_t epoch_param = db_bind_i64 (0);
+  if (!epoch_fmt || snprintf (epoch_expr, sizeof (epoch_expr), epoch_fmt, "{1}") >= (int) sizeof (epoch_expr) ||
+      snprintf (epoch_sql, sizeof (epoch_sql), "SELECT %s AS ts", epoch_expr) >= (int) sizeof (epoch_sql))
+    { db_close (db); return fail ("MySQL epoch-to-timestamp SQL", NULL); }
+  char epoch_template[128];
+  strcpy (epoch_template, epoch_sql);
+  if (sql_build (db, epoch_template, epoch_sql, sizeof (epoch_sql)) != 0)
+    { db_close (db); return fail ("build MySQL epoch-to-timestamp SQL", NULL); }
+  res = query (db, epoch_sql, &epoch_param, 1, &err);
+  if (!res || !db_res_step (res, &err) ||
+      strncmp (db_res_col_text (res, 0, &err), "1970-01-01 00:00:00", 19) != 0)
+    { if (res) db_res_finalize (res); db_close (db); return fail ("UTC epoch-to-timestamp conversion", &err); }
+  db_res_finalize (res);
+
+  db_bind_t sparse_params[] = { db_bind_text ("first"), db_bind_i64 (22),
+                                db_bind_i64 (33), db_bind_text ("fourth") };
+  if (sql_build (db, "SELECT {1} AS val_a, {4} AS val_d",
+                 sparse_sql, sizeof (sparse_sql)) != 0)
+    { db_close (db); return fail ("build sparse numbered SQL", NULL); }
+  res = query (db, sparse_sql, sparse_params, 4, &err);
+  if (!res || !db_res_step (res, &err) ||
+      strcmp (db_res_col_text (res, 0, &err), "first") != 0 ||
+      strcmp (db_res_col_text (res, 1, &err), "fourth") != 0)
+    { if (res) db_res_finalize (res); db_close (db); return fail ("sparse numbered parameter binding", &err); }
   db_res_finalize (res);
 
   db_bind_t repeated_param = db_bind_text ("numbered marker");

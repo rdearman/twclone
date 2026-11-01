@@ -2,7 +2,7 @@
   "name": "Combat Sector Entry Hazards Regression",
   "version": "2.0.0",
   "protocol_category": "23_Combat",
-  "description": "Regression tests for all sector entry hazards (mines, fighters, quasars)",
+  "description": "Deterministic warp/transwarp tests for hostile mines, fighters, and limpets in a suite-owned sector.",
   "tests": [
     {
       "name": "Setup: Hazard Master User",
@@ -21,9 +21,11 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 555), (555, 1) ON CONFLICT DO NOTHING;"
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 679), (679, 1) ON CONFLICT DO NOTHING;"
       },
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
     },
     {
       "name": "Rig: Position players at Sector 1",
@@ -32,92 +34,441 @@
       "data": {
         "sql": "UPDATE players SET sector_id = 1 WHERE name IN ('hazard_victim', 'hazard_master');"
       },
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
     },
     {
       "name": "Rig: Position ships at Sector 1",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('hazard_victim', 'hazard_master'));"
+        "sql": "UPDATE ships SET sector_id = 1, hull=100, shields=0, fighters=0 WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('hazard_victim', 'hazard_master'));"
       },
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Rig: Clear suite-owned entry assets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id=679 AND owner_id=@{hazard_master_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Rig: Place hostile mine, fighter, and limpet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, ttl) VALUES (679,@{hazard_master_player_id},0,1,1,0,0),(679,@{hazard_master_player_id},0,2,1,1,0),(679,@{hazard_master_player_id},0,4,1,0,0);"
+      },
+      "expect": {
+        "status": "ok"
+      }
     },
     {
       "name": "Victim Status Before Entry",
       "command": "combat.status",
       "user": "hazard_victim",
-      "expect": { "status": "ok" },
-      "save": { "hull_initial": "data.hull" }
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "hull_initial": "data.hull"
+      }
+    },
+    {
+      "name": "Capture victim turns before refused warp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{hazard_victim_player_id}"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "turns_before_refused_warp": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Refused warp to unlinked sector changes no state",
+      "command": "move.warp",
+      "data": {
+        "to_sector_id": 999999
+      },
+      "user": "hazard_victim",
+      "expect": {
+        "status": "error",
+        "error_code": 1453
+      }
+    },
+    {
+      "name": "Verify refused warp left position and assets unchanged",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.sector_id=1 AND (SELECT COUNT(*) FROM sector_assets WHERE sector_id=679 AND owner_id=@{hazard_master_player_id})=3 FROM players p WHERE p.player_id=@{hazard_victim_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Refused warp consumes no turns",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{hazard_victim_player_id}"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "@{turns_before_refused_warp}"
+        }
+      ]
+    },
+    {
+      "name": "Capture victim turns before successful warp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{hazard_victim_player_id}"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "warp_turns_before": "data.rows.0.0"
+      }
     },
     {
       "name": "Victim Warps to Hazard Sector (Multi-Hazard Entry)",
       "command": "move.warp",
-      "data": { "to_sector_id": 555 },
+      "data": {
+        "to_sector_id": 679
+      },
       "user": "hazard_victim",
-      "expect": { "status": "ok" },
+      "expect": {
+        "status": "ok"
+      },
       "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 555 }
+        {
+          "path": "data.sector_id",
+          "op": "==",
+          "value": 679
+        }
+      ]
+    },
+    {
+      "name": "Successful warp charges its normal single turn",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{hazard_victim_player_id}"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": {
+            "sql_int": "SELECT @{warp_turns_before} - 1"
+          }
+        }
       ]
     },
     {
       "name": "Victim Status After Entry (Multiple Hazards)",
       "command": "combat.status",
       "user": "hazard_victim",
-      "expect": { "status": "ok" },
+      "expect": {
+        "status": "ok"
+      },
       "asserts": [
-        { "path": "data.hull", "op": "<", "value": "@hull_initial" }
+        {
+          "path": "data.hull",
+          "op": "<",
+          "value": "@hull_initial"
+        }
       ]
     },
     {
-      "name": "Verify Multiple Damage Sources",
-      "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(DISTINCT type) as hazard_types FROM engine_events WHERE actor_player_id = @{hazard_victim_player_id} AND type LIKE 'combat.hit%';" },
-      "user": "admin",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.rows.0.0", "op": ">=", "value": 1 }
-      ]
-    },
-    {
-      "name": "Rig: Give Transwarp and Heal Ship",
+      "name": "Verify attached limpet persists on victim ship",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET has_transwarp = TRUE, hull = 100, shields = 50 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim');"
+        "sql": "SELECT EXISTS (SELECT 1 FROM limpet_attached la JOIN players p ON p.ship_id=la.ship_id WHERE p.player_id=@{hazard_victim_player_id} AND la.owner_player_id=@{hazard_master_player_id});"
       },
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Verify mine damage event persistence",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT EXISTS (SELECT 1 FROM engine_events WHERE actor_player_id=@{hazard_victim_player_id} AND type='combat.hit');"
+      },
+      "user": "admin",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Verify fighter damage event persistence",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT EXISTS (SELECT 1 FROM engine_events WHERE actor_player_id=@{hazard_victim_player_id} AND type='combat.hit.fighters');"
+      },
+      "user": "admin",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Verify limpet attachment event persistence",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT EXISTS (SELECT 1 FROM engine_events WHERE actor_player_id=@{hazard_master_player_id} AND type='combat.limpet.attached' AND payload::jsonb->>'target_player_id'='@{hazard_victim_player_id}');"
+      },
+      "user": "admin",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Verify all hostile sector assets were consumed",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT NOT EXISTS (SELECT 1 FROM sector_assets WHERE sector_id=679 AND owner_id=@{hazard_master_player_id});"
+      },
+      "user": "admin",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Victim returns to sector one",
+      "command": "move.warp",
+      "user": "hazard_victim",
+      "data": {
+        "to_sector_id": 1
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Rig: Restore victim ship and transwarp capability",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=1, onplanet=FALSE, has_transwarp=TRUE, hull=100, shields=0, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='hazard_victim');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Rig: Reinstall hostile entry assets for transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id=679 AND owner_id=@{hazard_master_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Rig: Add transwarp mine, fighter, and limpet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, ttl) VALUES (679,@{hazard_master_player_id},0,1,1,0,0),(679,@{hazard_master_player_id},0,2,1,1,0),(679,@{hazard_master_player_id},0,4,1,0,0);"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Capture victim turns before transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{hazard_victim_player_id}"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "transwarp_turns_before": "data.rows.0.0"
+      }
     },
     {
       "name": "Victim Transwarps to Hazard Sector",
       "command": "move.transwarp",
-      "data": { "to_sector_id": 555 },
+      "data": {
+        "to_sector_id": 679
+      },
       "user": "hazard_victim",
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Successful transwarp charges its normal single turn",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT turns_remaining FROM turns WHERE player_id=@{hazard_victim_player_id}"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": {
+            "sql_int": "SELECT @{transwarp_turns_before} - 1"
+          }
+        }
+      ]
     },
     {
       "name": "Victim Status After Transwarp",
       "command": "combat.status",
       "user": "hazard_victim",
-      "expect": { "status": "ok" },
+      "expect": {
+        "status": "ok"
+      },
       "asserts": [
-        { "path": "data.hull", "op": "<", "value": 100 }
+        {
+          "path": "data.hull",
+          "op": "<",
+          "value": 100
+        }
       ]
+    },
+    {
+      "name": "Limpet attachment remains persistent after repeated sector entry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*)=1 FROM limpet_attached la JOIN players p ON p.ship_id=la.ship_id WHERE p.player_id=@{hazard_victim_player_id} AND la.owner_player_id=@{hazard_master_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Rig: Clear friendly-owner asset rows",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id=679 AND owner_id=@{hazard_master_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Rig: Restore friendly-owned entry assets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, ttl) VALUES (679,@{hazard_master_player_id},0,1,1,0,0),(679,@{hazard_master_player_id},0,2,1,1,0),(679,@{hazard_master_player_id},0,4,1,0,0);"
+      },
+      "expect": {
+        "status": "ok"
+      }
     },
     {
       "name": "Master Warps to Hazard Sector (Owner/Friendly)",
       "command": "move.warp",
-      "data": { "to_sector_id": 555 },
+      "data": {
+        "to_sector_id": 679
+      },
       "user": "hazard_master",
-      "expect": { "status": "ok" }
+      "expect": {
+        "status": "ok"
+      }
     },
     {
       "name": "Master Status After Entry (Should be No Damage)",
       "command": "combat.status",
       "user": "hazard_master",
-      "expect": { "status": "ok" },
+      "expect": {
+        "status": "ok"
+      },
       "asserts": [
-        { "path": "data.hull", "op": "==", "value": 100 }
+        {
+          "path": "data.hull",
+          "op": "==",
+          "value": 100
+        }
       ]
     }
   ]

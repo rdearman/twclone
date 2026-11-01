@@ -94,12 +94,13 @@ export class AppComponent implements OnInit, OnDestroy {
       const item = typeof value === 'number' ? { sector_id: value } : value;
       if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
       const record = item as Record<string, unknown>;
-      const id = Number(record['sector_id'] ?? record['id']);
+      const id = Number(record['sector_id'] ?? record['to_sector'] ?? record['id']);
       return Number.isInteger(id) && id > 0 ? [{ id, name: String(record['name'] ?? '') }] : [];
     });
   }
 
   refreshGameplayState(): void {
+    void this.refreshPlayerState();
     this.runCommand('ship.status', {}, value => this.shipDetails = value['ship'] ?? value);
     this.runCommand('sector.info', {}, value => {
       this.sectorDetails = value;
@@ -311,6 +312,7 @@ export class AppComponent implements OnInit, OnDestroy {
       const result = await firstValueFrom(this.transport.playerMe());
       const player = this.playerRecord(result.player);
       if (player) {
+        this.state.confirmAuthenticatedSession();
         this.playerDetails = result.player;
         this.playerSummary = this.summaryFrom(result.player);
         this.state.acceptPlayer(player);

@@ -47,20 +47,11 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Move player and ship into SBB sector",
+      "name": "Rig: Move player and active ship into SBB sector atomically",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 2 WHERE player_id = @{port_mode_player_player_id}"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Rig: Move player ship into SBB sector",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id})"
+        "sql": "WITH moved AS (UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}) RETURNING ship_id) UPDATE players SET sector_id = 2 WHERE player_id = @{port_mode_player_player_id}"
       },
       "expect": { "status": "ok" }
     },

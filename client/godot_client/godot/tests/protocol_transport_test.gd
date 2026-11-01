@@ -10,6 +10,7 @@ var failures: Array = []
 func _init() -> void:
 	_test_protocol_status_and_redaction()
 	_test_request_lifecycle_and_timeout()
+	_test_connection_timeout_configuration()
 	_test_framing_and_correlation()
 	_test_events_and_invalid_frames()
 	_test_disconnect_and_late_reply()
@@ -17,7 +18,7 @@ func _init() -> void:
 	_test_structured_results()
 	_test_event_classification()
 	if failures.is_empty():
-		print("Godot protocol tests: 8 passed")
+		print("Godot protocol tests: 9 passed")
 		quit(0)
 	else:
 		for failure in failures:
@@ -55,6 +56,18 @@ func _test_request_lifecycle_and_timeout() -> void:
 	var expired := manager.expire(2001)
 	_check(expired.size() == 1 and expired[0]["id"] == "r2", "expired request was not reported")
 	_check(manager.size() == 0, "expired request remained pending")
+
+func _test_connection_timeout_configuration() -> void:
+	var transport = Transport.new(15.0, 10, 5.0)
+	_check(is_equal_approx(transport.request_timeout_seconds, 15.0), "response timeout was not kept separate at 15 seconds")
+	_check(is_equal_approx(transport.connection_timeout_seconds, 5.0), "connection timeout was not configured at 5 seconds")
+	transport._connecting = true
+	transport._connection_deadline_ms = Time.get_ticks_msec() - 1
+	var failures_seen: Array = []
+	transport.transport_disconnected.connect(func(reason: String): failures_seen.append(reason))
+	transport._mark_disconnected("Connection timed out after 5 seconds.")
+	_check(failures_seen.size() == 1 and failures_seen[0].contains("timed out"), "connection timeout did not produce a recoverable failure")
+	_check(not transport._connecting, "connection timeout left transport in connecting state")
 
 func _test_framing_and_correlation() -> void:
 	var transport = Transport.new(15.0, 10)
@@ -114,6 +127,13 @@ func _test_authentication_contract() -> void:
 	_check(auth.is_authenticated() and auth.player_id == 9, "authenticated state was not stored")
 	auth.invalidate("test")
 	_check(not auth.is_authenticated() and auth.session_token.is_empty(), "session was not invalidated")
+	var json_number = AuthSession.new()
+	json_number.begin_login("alice", "pw")
+	_check(json_number.handle_response({"status": "ok", "type": "auth.session", "data": {"session": "s2", "player_id": 9.0}}), "integral JSON float player ID was rejected")
+	_check(json_number.is_authenticated() and json_number.player_id == 9, "integral JSON float player ID was not normalized")
+	var malformed_number = AuthSession.new()
+	malformed_number.begin_login("alice", "pw")
+	_check(not malformed_number.handle_response({"status": "ok", "type": "auth.session", "data": {"session": "s3", "player_id": 9.5}}), "fractional player ID was accepted")
 	var refused = AuthSession.new()
 	refused.begin_login("alice", "pw")
 	_check(not refused.handle_response({"status": "refused", "error": {"message": "bad credentials"}}), "refused login was accepted")
@@ -135,6 +155,7 @@ func _test_structured_results() -> void:
 
 func _test_event_classification() -> void:
 	_check(Protocol.classify_event_type("system.notice") == "system", "system event category incorrect")
+	_check(Protocol.classify_event_type("broadcast.message_v1") == "chat", "global broadcast event category incorrect")
 	_check(Protocol.classify_event_type("chat.message") == "chat", "chat event category incorrect")
 	_check(Protocol.classify_event_type("tavern.round.bought") == "chat", "tavern events were not classified for social presentation")
 	_check(Protocol.classify_event_type("unknown.broadcast") == "unknown", "unknown event category incorrect")

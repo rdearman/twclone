@@ -1121,39 +1121,64 @@ BEGIN
     END IF;
     
     -- Spawn Zydras with Heavy Fighter Patrol (shiptypes_id 18)
-    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-    VALUES ('Zydras Heavy Cruiser', 18, v_orion_sector, 10, 5, 3, FALSE)
+    INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets, fighters,
+                       genesis, detonators, probes, photons, shields,
+                       installed_shields, beacons, colonists, equipment,
+                       organics, ore, slaves, weapons, drugs, cloaking_devices,
+                       destroyed, hull)
+    VALUES ('Zydras Heavy Cruiser', 18, v_orion_sector, 10, 0, 0, 5,
+            0, 0, 0, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
     RETURNING ship_id INTO v_ship_id;
     INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 5, 1) ON CONFLICT DO NOTHING;
-    UPDATE players SET ship_id = v_ship_id WHERE player_id = 5;
+    UPDATE players SET ship_id = v_ship_id, sector_id = v_orion_sector WHERE player_id = 5;
     
     -- Spawn Krell with Scout/Looter (shiptypes_id 19)
-    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-    VALUES ('Krell Scout', 19, v_orion_sector, 10, 2, 1, FALSE)
+    INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets, fighters,
+                       genesis, detonators, probes, photons, shields,
+                       installed_shields, beacons, colonists, equipment,
+                       organics, ore, slaves, weapons, drugs, cloaking_devices,
+                       destroyed, hull)
+    VALUES ('Krell Scout', 19, v_orion_sector, 10, 0, 0, 2,
+            0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
     RETURNING ship_id INTO v_ship_id;
     INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 6, 1) ON CONFLICT DO NOTHING;
-    UPDATE players SET ship_id = v_ship_id WHERE player_id = 6;
+    UPDATE players SET ship_id = v_ship_id, sector_id = v_orion_sector WHERE player_id = 6;
     
     -- Spawn Vex with Contraband Runner (shiptypes_id 20)
-    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-    VALUES ('Vex Contraband Runner', 20, v_orion_sector, 10, 3, 2, FALSE)
+    INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets, fighters,
+                       genesis, detonators, probes, photons, shields,
+                       installed_shields, beacons, colonists, equipment,
+                       organics, ore, slaves, weapons, drugs, cloaking_devices,
+                       destroyed, hull)
+    VALUES ('Vex Contraband Runner', 20, v_orion_sector, 10, 0, 0, 3,
+            0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
     RETURNING ship_id INTO v_ship_id;
     INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 7, 1) ON CONFLICT DO NOTHING;
-    UPDATE players SET ship_id = v_ship_id WHERE player_id = 7;
+    UPDATE players SET ship_id = v_ship_id, sector_id = v_orion_sector WHERE player_id = 7;
     
     -- Spawn Jaxx with Smuggler's Kiss (shiptypes_id 21)
-    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-    VALUES ('Jaxx Smuggler', 21, v_orion_sector, 10, 3, 2, FALSE)
+    INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets, fighters,
+                       genesis, detonators, probes, photons, shields,
+                       installed_shields, beacons, colonists, equipment,
+                       organics, ore, slaves, weapons, drugs, cloaking_devices,
+                       destroyed, hull)
+    VALUES ('Jaxx Smuggler', 21, v_orion_sector, 10, 0, 0, 3,
+            0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
     RETURNING ship_id INTO v_ship_id;
     INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 8, 1) ON CONFLICT DO NOTHING;
-    UPDATE players SET ship_id = v_ship_id WHERE player_id = 8;
+    UPDATE players SET ship_id = v_ship_id, sector_id = v_orion_sector WHERE player_id = 8;
     
     -- Spawn Sira with Black Market Guard (shiptypes_id 22)
-    INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-    VALUES ('Sira Market Guard', 22, v_orion_sector, 10, 4, 2, FALSE)
+    INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets, fighters,
+                       genesis, detonators, probes, photons, shields,
+                       installed_shields, beacons, colonists, equipment,
+                       organics, ore, slaves, weapons, drugs, cloaking_devices,
+                       destroyed, hull)
+    VALUES ('Sira Market Guard', 22, v_orion_sector, 10, 0, 0, 4,
+            0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
     RETURNING ship_id INTO v_ship_id;
     INSERT INTO ship_ownership (ship_id, player_id, role_id) VALUES (v_ship_id, 9, 1) ON CONFLICT DO NOTHING;
-    UPDATE players SET ship_id = v_ship_id WHERE player_id = 9;
+    UPDATE players SET ship_id = v_ship_id, sector_id = v_orion_sector WHERE player_id = 9;
     -- Add all Orion captains to the Orion Syndicate corporation (by name, not ID)
     -- All are Officers; Zydras is the Owner at corporation level
     INSERT INTO corp_members (corporation_id, player_id, role)
@@ -1217,8 +1242,13 @@ BEGIN
         v_sector_id := 11 + floor(random() * (v_sector_count - 10));
 
         -- Insert Ship (Ownerless by default as we don't insert into ship_ownership)
-        INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields, destroyed)
-        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id, 10, 1, 1, FALSE)
+        INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets,
+                           fighters, genesis, detonators, probes, photons,
+                           shields, installed_shields, beacons, colonists,
+                           equipment, organics, ore, slaves, weapons, drugs,
+                           cloaking_devices, destroyed, hull)
+        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id, 10, 0, 0, 1,
+                0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
         RETURNING ship_id INTO v_ship_id;
 
         -- Optional: Add random cargo? (Old code didn't, but we could)

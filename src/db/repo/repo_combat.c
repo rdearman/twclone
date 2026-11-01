@@ -2,6 +2,7 @@
 #include "db_int.h"
 #include "repo_combat.h"
 #include "repo_players.h"
+#include "repo_universe.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -128,15 +129,7 @@ int db_combat_get_first_adjacent_sector(db_t *db, int sector_id, int *dest_secto
 }
 
 int db_combat_move_ship_and_player(db_t *db, int ship_id, int player_id, int dest_sector) {
-    if (!db) return -1;
-    db_error_t err = {0};
-    char sql_ship[256];
-    sql_build(db, "UPDATE ships SET sector_id = {1} WHERE ship_id = {2};", sql_ship, sizeof(sql_ship));
-    if (!db_exec(db, sql_ship, (db_bind_t[]){ db_bind_i64(dest_sector), db_bind_i64(ship_id) }, 2, &err)) return -1;
-    char sql_player[256];
-    sql_build(db, "UPDATE players SET sector_id = {1} WHERE player_id = {2};", sql_player, sizeof(sql_player));
-    if (!db_exec(db, sql_player, (db_bind_t[]){ db_bind_i64(dest_sector), db_bind_i64(player_id) }, 2, &err)) return -1;
-    return 0;
+    return repo_universe_move_player_and_ship(db, player_id, ship_id, dest_sector);
 }
 
 /* Deploy Assets List */

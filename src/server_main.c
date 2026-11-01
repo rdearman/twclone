@@ -371,11 +371,12 @@ main (void)
       return EXIT_FAILURE;
     }
 
-  /* 0a) Fail fast if SQLite was selected */
-  if (db_backend (game_db_get_handle ()) != DB_BACKEND_POSTGRES)
+  /* 0a) Fail fast if no supported runtime backend was selected. */
+  db_t *startup_db = game_db_get_handle ();
+  if (!startup_db || (db_backend (startup_db) != DB_BACKEND_POSTGRES
+                      && db_backend (startup_db) != DB_BACKEND_MYSQL))
     {
-      LOGE
-	("FATAL: SQLite backend is not supported. PostgreSQL is required.");
+      LOGE ("FATAL: No supported database backend is available.");
       return EXIT_FAILURE;
     }
 

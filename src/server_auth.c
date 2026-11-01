@@ -348,7 +348,9 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int spawn_sid = (rand () % 10) + 1;
+  /* New players enter through the canonical Federation starting sector.
+   * Existing accounts retain their persisted location on login. */
+  int spawn_sid = 1;
 
 
   if (!ship_name || !*ship_name)

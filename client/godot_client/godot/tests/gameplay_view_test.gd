@@ -26,6 +26,11 @@ func _run() -> void:
 	_check(not view.trade_quote_dialog.visible, "disconnect did not dismiss the pending trade quote")
 	_check(commands is PanelContainer, "general commands are not a docked panel")
 	_check(commands.get_parent() == view.gameplay_body and view.gameplay_body.get_child(0) == commands, "command panel is not persistently placed on the left")
+	_check(view.primary_tabs.tab_count == 5, "primary gameplay workspaces were not created")
+	view._on_workspace_tab_changed(1)
+	_check(view._active_workspace == "NAVIGATION" and commands._active_category == "NAVIGATION", "Navigation workspace did not select the existing navigation command category")
+	view._on_workspace_tab_changed(0)
+	_check(view._active_workspace == "SECTOR" and not commands.visible, "Sector workspace did not prioritise the graphical sector view")
 	_check(is_equal_approx(view.toast_panel.anchor_left, 0.5) and is_equal_approx(view.toast_panel.anchor_right, 0.5), "notification ribbon is not centered at the bottom")
 	view.set_snapshot({
 		"authenticated": true,
@@ -35,6 +40,21 @@ func _run() -> void:
 		"sector": {"id": 17, "adjacent_sector_ids": [18], "ports": [], "planets": [], "ships": []},
 	})
 	_check(view.hull_label.text == "HULL  73", "authoritative ship hull was not visible in the persistent HUD")
+	_check(view.credits_label.text == "— CR" and view.turns_label.text == "— TURNS", "missing authoritative HUD values did not remain unavailable")
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 44, "credits": 42850, "turns_remaining": 318, "cargo_used": 24, "cargo_total": 50, "shields": 80, "hull": 43, "fighters": 120},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 44, "adjacent_sector_ids": [45, 91], "ports": [], "planets": [], "ships": []}
+	})
+	_check(view.credits_label.text == "42,850 CR", "credits HUD did not reflect the supplied authoritative state")
+	_check(view.turns_label.text == "318 TURNS", "turn HUD did not reflect the supplied authoritative state")
+	_check(view.cargo_label.text == "CARGO  24/50", "cargo HUD did not reflect the supplied authoritative state")
+	_check(view.shields_label.text == "SHIELDS  80", "shield HUD did not reflect the supplied authoritative state")
+	_check(view.hull_label.text == "HULL  43", "hull HUD did not reflect the supplied authoritative state")
+	_check(view.fighters_label.text == "FIGHTERS  120", "fighter HUD did not reflect the supplied authoritative state")
+	_check(view.sector_title.text.contains("44") and view.warp_links_label.text == "WARP LINKS: 45 · 91", "sector and warp-link HUD did not reflect the supplied authoritative state")
 	view.show_command_result("Sector density scan", {"sectors": [21, 21.0, 213, 100.0, 808, 0, 1793, null]})
 	_check(not view.command_menu._result_dialog.visible, "read-only result opened a modal dialog")
 	_check(view.information_text.text.contains("Sector 21 · Density: 21") and view.information_text.text.contains("Sector 1793 · Density: unavailable"), "density result was not rendered in the Information panel")
@@ -91,16 +111,23 @@ func _run() -> void:
 		"disconnected": false,
 		"hud": {"sector_id": 18},
 		"freshness": {"sector": "fresh", "overall": "fresh"},
-		"sector": {"id": 18, "adjacent_sector_ids": [17], "ports": [], "planets": [], "ships": [{"ship_id": 74, "name": "Long Meridian"}]},
+		"sector": {"id": 18, "adjacent_sector_ids": [17], "ports": [], "planets": [], "ships": [{"ship_id": 74, "name": "Long Meridian", "owner_player_id": 17, "owner_name": "Renamed Captain"}]},
 	})
 	_check(not view.port_workflow.visible and not commands._tavern_access, "authoritative movement did not close the old port/Tavern context")
 	view.select_object_key("ship:74")
 	var inspect_button := _context_button(view, "INSPECT SHIP DETAILS")
-	var private_message_button := _context_button(view, "PRIVATE MESSAGE OWNER · unavailable")
+	var private_message_button := _context_button(view, "PRIVATE MESSAGE OWNER")
 	var attack_button := _context_button(view, "ATTACK THIS SHIP")
 	var tow_button := _context_button(view, "TOW THIS SHIP")
 	_check(inspect_button != null and not inspect_button.disabled, "selected ship inspection was not enabled with a confirmed ID")
-	_check(private_message_button != null and private_message_button.disabled, "unsupported ship messaging was not visibly disabled")
+	_check(private_message_button != null and not private_message_button.disabled, "authoritative owner ID did not enable private ship-owner messaging")
+	if private_message_button != null:
+		var before_private_message := command_calls
+		private_message_button.pressed.emit()
+		(commands._form_fields["message"] as LineEdit).text = "ID route"
+		commands._submit_form()
+		_check(command_calls == before_private_message + 1, "private ship-owner message did not emit a command")
+		_check(commands._form_action.get("fixed", {}) == {"to_id": 17}, "private ship-owner message did not preserve the authoritative owner ID")
 	_check(attack_button != null and not attack_button.disabled, "confirmed selected-ship action was incorrectly disabled")
 	_check(tow_button != null and not tow_button.disabled, "implemented tow action was not available for a ship with a confirmed ID")
 	view.set_snapshot({
@@ -123,6 +150,53 @@ func _run() -> void:
 	_check(_context_button(view, "TOW THIS SHIP") == null, "ship without an ID exposed a tow action")
 	var missing_ship_id := _context_button(view, "SHIP ACTIONS · ID UNAVAILABLE")
 	_check(missing_ship_id != null and missing_ship_id.disabled, "missing ship ID did not explain why target actions are unavailable")
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("ship", {"data": {"ship_id": true, "name": "Boolean-ID vessel"}})
+	var boolean_ship_id := _context_button(view, "SHIP ACTIONS · ID UNAVAILABLE")
+	_check(boolean_ship_id != null and boolean_ship_id.disabled, "boolean ship metadata was coerced into target actions")
+	_check(_context_button(view, "INSPECT SHIP DETAILS · ID UNAVAILABLE") != null, "boolean ship metadata exposed inspection")
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("ship", {"data": {"ship_id": 74.0, "name": "Fractional-ID vessel"}})
+	var fractional_ship_id := _context_button(view, "SHIP ACTIONS · ID UNAVAILABLE")
+	_check(fractional_ship_id != null and fractional_ship_id.disabled, "fractional ship metadata was coerced into target actions")
+	_check(_context_button(view, "INSPECT SHIP DETAILS · ID UNAVAILABLE") != null, "fractional ship metadata exposed inspection")
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 18, "ship_id": 74},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"ship": {"cargo": [{"commodity": "ORE", "quantity": 4}], "holds": 20},
+		"sector": {"id": 18, "ports": [], "planets": [], "ships": [{"ship_id": 74.0, "name": "Fractional metadata"}]}
+	})
+	view.select_object_key("ship:74")
+	_check(not view.selection_detail.text.contains("Holds"), "fractional selected-ship ID was treated as the confirmed active ship")
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("planet", {"data": {"name": "Unidentified planet", "planet_id": 0}})
+	var missing_planet_info := _context_button(view, "PLANET INFORMATION · ID UNAVAILABLE")
+	var missing_planet_land := _context_button(view, "LAND ON PLANET · ID UNAVAILABLE")
+	_check(missing_planet_info != null and missing_planet_info.disabled, "missing planet ID did not explain why information is unavailable")
+	_check(missing_planet_land != null and missing_planet_land.disabled, "missing planet ID did not explain why landing is unavailable")
+	var before_missing_planet_activation := command_calls
+	view.sector_view.select_object("planet:unknown:unidentified_planet")
+	view._on_art_object_activated("planet:unknown:unidentified_planet")
+	_check(command_calls == before_missing_planet_activation, "artwork activation sent a landing request without an authoritative planet ID")
+	_check(view.notification_label.text.contains("did not provide a planet ID"), "missing planet ID activation did not explain why landing is unavailable")
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("planet", {"data": {"planet_id": 77.5, "name": "Fractional metadata"}})
+	var fractional_planet_land := _context_button(view, "LAND ON PLANET · ID UNAVAILABLE")
+	_check(fractional_planet_land != null and fractional_planet_land.disabled, "fractional planet metadata was coerced into an actionable landing ID")
+	var before_fractional_activation := command_calls
+	view.sector_view.select_object("planet:unknown:fractional_metadata")
+	view._on_art_object_activated("planet:unknown:fractional_metadata")
+	_check(command_calls == before_fractional_activation, "fractional planet metadata sent a landing request")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": true,
@@ -143,7 +217,7 @@ func _run() -> void:
 		_check(route_detail.text.contains("Price estimate unavailable") and route_plot.text == "PLOT TO 18", "legacy route response did not explain missing estimates or offer a usable plot target")
 	view.show_restored_autopilot_route([18, 21, 24], 24, "stopped", "manual")
 	_check(view._route_panel.visible and view._route_label.text.contains("SAVED ROUTE · STOPPED") and view._route_label.text.contains("18 → 21 → 24"), "reconnected persisted autopilot route was not presented with its authoritative state")
-	_check(view._route_engage_button.visible and not view._route_engage_button.disabled and command_calls == 0, "restoring a saved route moved the ship or prevented explicit review/engagement")
+	_check(view._route_express_button.visible and not view._route_express_button.disabled and view._route_single_step_button.visible and not view._route_single_step_button.disabled and command_calls == 0, "restoring a saved route moved the ship or did not expose explicit Express/Single Step engagement")
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():

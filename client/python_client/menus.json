@@ -197,6 +197,7 @@
         {
           "key": "t",
           "label": "(T) Transwarp to Sector",
+          "show_if": ["has_authoritative_sector"],
           "action": {
             "pycall": "transwarp_flow"
           }
@@ -304,6 +305,13 @@
           }
         },
         {
+          "key": "h",
+          "label": "(H) Harvest Production · unavailable",
+          "action": {
+            "pycall": "planet_harvest_unavailable_flow"
+          }
+        },
+        {
           "key": "s",
           "label": "(S) Planet Stock Transfer",
           "action": {
@@ -381,6 +389,20 @@
           }
         },
         {
+          "key": "o",
+          "label": "(O) Owned Ship Roster",
+          "action": {
+            "pycall": "ship_list_flow"
+          }
+        },
+        {
+          "key": "i",
+          "label": "(I) Inspect Owned Ship",
+          "action": {
+            "pycall": "ship_roster_inspect_flow"
+          }
+        },
+        {
           "key": "?",
           "label": "(?) Help for this menu",
           "action": {
@@ -447,6 +469,13 @@
           "label": "(G) Transfer Cargo",
           "action": {
             "pycall": "transfer_cargo_flow"
+          }
+        },
+        {
+          "key": "x",
+          "label": "(X) Transfer Owned Ship",
+          "action": {
+            "pycall": "ship_transfer_flow"
           }
         },
         {
@@ -638,11 +667,14 @@
           "key": "r",
           "label": "(R) Repair Ship",
           "action": {
-            "rpc": {
-              "command": "ship.repair",
-              "data": {}
-            },
-            "post": "print_last_rpc"
+            "pycall": "ship_repair_flow"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Sell Current Ship",
+          "action": {
+            "pycall": "shipyard_sell_flow"
           }
         },
         {
@@ -1397,7 +1429,7 @@
         },
         {
           "key": "i",
-          "label": "(I) Interactive Buy (ibuy)",
+          "label": "(I) Buy via quoted port flow (ibuy)",
           "action": {
             "pycall": "interactive_buy_handler"
           }
@@ -1482,6 +1514,13 @@
           "label": "(P) Preferences",
           "action": {
             "submenu": "PREFS"
+          }
+        },
+        {
+          "key": "t",
+          "label": "(T) Default trade account",
+          "action": {
+            "pycall": "trade_account_preference_flow"
           }
         },
         {
@@ -1964,6 +2003,13 @@
           "label": "(L) List Deployed Mines",
           "action": {
             "pycall": "list_deployed_mines_flow"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Sweep Mines in Current Sector",
+          "action": {
+            "pycall": "sweep_mines_flow"
           }
         },
         {

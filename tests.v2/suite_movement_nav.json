@@ -24,7 +24,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 1 WHERE name = 'nav_user';"
+        "sql": "WITH moved_player AS (UPDATE players SET sector_id = 1 WHERE name = 'nav_user' RETURNING ship_id) UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM moved_player);"
       },
       "expect": { "status": "ok" }
     },
@@ -33,7 +33,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'nav_user');"
+        "sql": "SELECT 1;"
       },
       "expect": { "status": "ok" }
     },
@@ -117,11 +117,37 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Capture turns before transwarp without equipment",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining FROM turns t JOIN players p ON p.player_id=t.player_id WHERE p.name='nav_user';"
+      },
+      "expect": { "status": "ok" },
+      "save": { "nav_transwarp_turns_before": "data.rows.0.0" }
+    },
+    {
       "name": "Move Transwarp (Fail - No Equipment)",
       "command": "move.transwarp",
       "data": { "sector_id": 2 },
       "user": "nav_user",
-      "expect": { "error_code": 1458 }
+      "expect": { "status": "refused", "error_code": 1458 }
+    },
+    {
+      "name": "Missing transwarp equipment preserves turns",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining FROM turns t JOIN players p ON p.player_id=t.player_id WHERE p.name='nav_user';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "@{nav_transwarp_turns_before}"
+        }
+      ]
     }
   ]
 }

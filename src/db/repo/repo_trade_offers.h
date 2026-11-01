@@ -18,6 +18,13 @@ typedef struct
   char expires_at[40];
 } trade_offer_t;
 
+#define TRADE_OFFER_LIST_MAX 128
+typedef struct
+{
+  trade_offer_t items[TRADE_OFFER_LIST_MAX];
+  int count;
+} trade_offer_list_t;
+
 int repo_trade_offer_create (db_t *db, int sender_player_id,
                              int recipient_player_id,
                              const char *commodity_code, const char *mode,
@@ -36,5 +43,7 @@ int repo_trade_offer_find_idempotent (db_t *db, int sender_player_id,
 int repo_trade_offer_transition (db_t *db, int64_t offer_id,
                                  const char *status, int64_t now_s,
                                  int *changed_out);
+int repo_trade_offer_list_for_player (db_t *db, int player_id,
+                                      trade_offer_list_t *list_out);
 
 #endif

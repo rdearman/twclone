@@ -183,6 +183,12 @@ const char *sql_entity_stock_upsert_epoch_fmt(const db_t *db);
  */
 const char *sql_epoch_param_to_timestamptz(const db_t *db);
 
+/* Native primary-key column name for bank_accounts. */
+const char *sql_bank_account_id_column(const db_t *db);
+const char *sql_bank_transaction_id_column(const db_t *db);
+int sql_quote_identifier(const db_t *db, const char *identifier,
+                         char *out_buf, size_t out_size);
+
 /**
  * @brief Return SQL clause for SELECT ... FOR UPDATE.
  *
@@ -217,7 +223,7 @@ int sql_for_update_of(const db_t *db, const char *tables, char *out_buf, size_t 
  * Append this to a SELECT query to lock selected rows.
  *
  * PostgreSQL: " FOR UPDATE SKIP LOCKED"
- * MySQL 9.5+: " FOR UPDATE SKIP LOCKED" (same syntax)
+ * MySQL 8.0+: " FOR UPDATE SKIP LOCKED" (same syntax)
  * For unsupported backends: FAILS (returns NULL).
  *
  * @param db Database handle.
