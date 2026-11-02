@@ -88,7 +88,10 @@ func _ready() -> void:
 	login_view.set_status("Enter your captain credentials to begin.")
 	gameplay_view.visible = false
 	login_view.visible = true
-	network_log_file = FileAccess.open("user://network_debug.log", FileAccess.WRITE)
+	# Temporary playtest log. Keep it in /tmp so it can be inspected directly
+	# while the client is running without asking the player to locate Godot's
+	# per-user application directory.
+	network_log_file = FileAccess.open("/tmp/twclone-godot-client.log", FileAccess.WRITE)
 	if network_log_file:
 		log_network("CLIENT_START", "Illustrated client session started.")
 
@@ -237,6 +240,11 @@ func _on_transport_disconnected(reason: String) -> void:
 
 func _on_transport_reply(request_id: String, response: Dictionary, command: String) -> void:
 	print("[AUTH_TRACE] Main received reply command=%s request_id_present=%s response_type=%s" % [command, not request_id.is_empty(), str(response.get("type", ""))])
+	var reply_summary := "command=%s type=%s status=%s request_id_present=%s" % [command, str(response.get("type", "")), str(response.get("status", "")), not request_id.is_empty()]
+	if command in ["move.scan", "sector.info"]:
+		log_network("REPLY", "%s response=%s" % [reply_summary, Protocol.diagnostic_json(response)])
+	else:
+		log_network("REPLY", reply_summary)
 	if request_id == _pending_registration_request_id:
 		_pending_registration_request_id = ""
 		var registration_result: Dictionary = Protocol.result_from_response(response)
@@ -774,7 +782,9 @@ func _finish_pending_launch_departure(snapshot: Dictionary) -> void:
 		gameplay_view.show_notification("Launch state was incomplete; keeping the confirmed planet surface until a fresh state is available.")
 		return
 	var onplanet: Variant = ship_snapshot.get("onplanet")
-	if typeof(onplanet) != TYPE_INT or onplanet != 0:
+	var onplanet_valid_zero: bool = (typeof(onplanet) == TYPE_INT and int(onplanet) == 0) \
+		or (typeof(onplanet) == TYPE_FLOAT and is_finite(onplanet) and onplanet == 0.0)
+	if not onplanet_valid_zero:
 		_landing_surface_ready = false
 		gameplay_view.set_command_busy(false)
 		gameplay_view.show_notification("Launch state was contradictory; keeping the confirmed planet surface until a fresh state is available.")
@@ -913,6 +923,7 @@ func _on_command_requested(command: String, data: Dictionary, label: String, mut
 	if request_id.is_empty():
 		gameplay_view.show_notification("%s was not sent. Check the connection and try again." % label)
 		return
+	log_network("COMMAND", "command=%s label=%s mutating=%s data=%s" % [command, label, mutating, Protocol.diagnostic_json(data)])
 	var kind := "command"
 	if is_planet_read:
 		kind = "planet_info" if command == "planet.info" else "planet_colonists"
@@ -1053,7 +1064,7 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			# treating it as a generic command result.
 			gameplay_view.enter_port_workflow(data)
 		if command_name in ["move.scan", "move.describe_sector", "sector.info", "sector.scan"]:
-			if not _scan_response_type_matches(command_name, response):
+			if not _scan_response_type_matches(command_name, response, operation.get("data", {})):
 				gameplay_view.set_command_busy(false)
 				gameplay_view.show_notification("%s was not displayed because the response type did not match the requested scan; refreshing current-sector state." % label)
 				_refresh_after_command(["sector"])
@@ -1231,10 +1242,13 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			_refresh_after_command(["player", "ship", "sector"])
 			return
 		if command_name == "ferengi.traders":
+			var ferengi_offers: Variant = data.get("offers", [])
+			gameplay_view.command_menu.set_ferengi_offer_available(ferengi_offers is Array and not ferengi_offers.is_empty())
 			gameplay_view.show_information("FERENGI TRADERS", FerengiPresenter.traders(data))
 			gameplay_view.set_command_busy(false)
 			return
 		if command_name in ["ferengi.deal.accept", "ferengi.deal.reject"]:
+			gameplay_view.command_menu.set_ferengi_offer_available(false)
 			var deal_message := FerengiPresenter.deal_result(data)
 			gameplay_view.show_notification(deal_message)
 			gameplay_view.show_information("FERENGI DEAL", deal_message)
@@ -1326,7 +1340,10 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			var launch_data: Variant = response.get("data", {})
 			# The C server's authoritative success payload identifies the
 			# destination sector. Do not invent an `in_space` response variant.
-			var launch_confirmed: bool = launch_data is Dictionary and typeof(launch_data.get("sector_id", null)) == TYPE_INT and int(launch_data.get("sector_id")) > 0
+			var launch_sector_id := 0
+			if launch_data is Dictionary:
+				launch_sector_id = _authoritative_positive_id(launch_data.get("sector_id", 0))
+			var launch_confirmed: bool = launch_sector_id > 0
 			if not launch_confirmed:
 				# A successful envelope without the server's destination sector
 				# cannot establish that the ship left the planet. This can happen
@@ -1768,10 +1785,10 @@ func _response_sector_id(data: Dictionary) -> int:
 	for key in identity_keys:
 		if data.has(key):
 			var value: Variant = data.get(key)
-			# Sector identity is an authoritative JSON integer. Do not coerce a
-			# floating-point value (even 12.0) into an ID: that would make a
-			# schema-mismatched response appear correlated with the current sector.
-			return int(value) if typeof(value) == TYPE_INT and int(value) > 0 else 0
+			# Godot decodes JSON numbers as integral floats in some transport paths.
+			# Accept only positive integral numeric values; reject strings, booleans
+			# and fractional values without falling through to an alias.
+			return _authoritative_positive_id(value)
 	return 0
 
 func _density_has_authoritative_ids(payload: Dictionary) -> bool:
@@ -1809,7 +1826,7 @@ func _density_has_authoritative_ids(payload: Dictionary) -> bool:
 			return false
 	return true
 
-func _scan_response_type_matches(command: String, response: Dictionary) -> bool:
+func _scan_response_type_matches(command: String, response: Dictionary, request_data: Dictionary = {}) -> bool:
 	# Visibility reads have one published response schema per operation. An
 	# omitted or empty type is not a compatibility variant: accepting it could
 	# render a success-shaped payload from an unrelated or unavailable command.
@@ -1818,6 +1835,8 @@ func _scan_response_type_matches(command: String, response: Dictionary) -> bool:
 		return false
 	var actual := str(raw_type)
 	var expected := ""
+	if command == "sector.scan" and request_data.get("mode", "") == "holographic":
+		return actual == "sector.holographic.scan"
 	match command:
 		"move.describe_sector", "sector.info":
 			expected = "sector.info"
@@ -1858,9 +1877,9 @@ func _launch_response_type_matches(response: Dictionary) -> bool:
 	return actual in ["error", "refused"] and str(response.get("status", "")) in ["error", "refused"]
 
 func _authoritative_density_value(value: Variant) -> bool:
-	# The server's density rows are JSON integers. Do not render booleans,
-	# strings, or floating-point values as authoritative scan measurements.
-	return typeof(value) == TYPE_INT and int(value) >= 0
+	# Godot may decode JSON integers as integral floats. Accept those values,
+	# while still rejecting booleans, strings, fractional values, and negatives.
+	return (typeof(value) == TYPE_INT and int(value) >= 0) or (typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value))
 
 func _response_ship_id(data: Dictionary) -> int:
 	var ship_value: Variant = data.get("ship", data)
@@ -2549,6 +2568,10 @@ func _subscribe_to_player_events() -> void:
 			_pending_event_subscriptions[request_id] = topic
 
 func _present_server_event(event: Dictionary) -> void:
+	var event_type := str(event.get("type", ""))
+	if event_type in ["ferengi.trader.offer_v1", "ferengi.offer.created_v1"]:
+		gameplay_view.command_menu.set_ferengi_offer_available(true)
+		gameplay_view.show_notification("A Ferengi trade offer is available in this sector.")
 	if auth_session.is_authenticated() and EventPresenter.targets_player_ship_destruction(event, auth_session.player_id):
 		# The event identifies only that the server resolved destruction.  The
 		# canonical escape-pod, cargo, credit, and location outcomes arrive via
@@ -2590,8 +2613,11 @@ func _load_config() -> void:
 			profile_name = "Local server"
 		server_profiles.append({"name": profile_name, "host": server_ip, "port": server_port, "username": auth_username})
 		selected_server_profile = 0
+	# Recover the first saved connection when an older client left the selected
+	# index unset (for example after the captain name was edited). The profile is
+	# still valid for the server; the username can be changed independently.
 	if selected_server_profile < 0 or selected_server_profile >= server_profiles.size():
-		selected_server_profile = -1
+		selected_server_profile = 0 if not server_profiles.is_empty() else -1
 
 func _save_config() -> void:
 	var config := ConfigFile.new()

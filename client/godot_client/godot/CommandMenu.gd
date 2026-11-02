@@ -15,6 +15,7 @@ const LOCAL_PREFERENCES_PATH := "user://client_ui_preferences.cfg"
 const FIELD_INT := "integer"
 const FIELD_NONNEGATIVE_INT := "nonnegative_integer"
 const FIELD_TEXT := "text"
+const TAB_CATEGORIES := ["NAVIGATION", "SECTOR", "TRADING", "COMPUTER", "COMMUNICATIONS"]
 const COMMANDS := {
 	"COMPUTER": [
 		{"label": "Help · controls and command flow", "local_help": true},
@@ -24,11 +25,12 @@ const COMMANDS := {
 		{"label": "Transfer owned ship by roster ID", "command": "ship.transfer", "fields": [["ship_id", FIELD_INT, "Ship ID from owned ship roster", ""], ["target_player_id", FIELD_INT, "Recipient player ID", ""]], "mutating": true, "tooltip": "Use a ship_id returned by Owned ship roster; the server validates ownership and performs the atomic transfer."},
 		{"label": "Current sector information", "command": "sector.info", "fixed": {}},
 		{"label": "Detailed current-sector scan", "command": "sector.scan", "fixed": {}, "requires_fresh_sector": true},
+		{"label": "Holographic adjacent-sector scan", "command": "sector.scan", "fixed": {"mode": "holographic"}, "requires_fresh_sector": true},
 		{"label": "Ship towing status", "command": "ship.tow.status", "fixed": {}},
 		{"label": "Release current tow beam", "command": "ship.tow", "fixed": {}, "mutating": true, "tooltip": "Releases the active tow relationship if your ship is towing another vessel."},
 		{"label": "Repair ship at shipyard", "command": "ship.repair", "mutating": true, "requires_shipyard_dock": true, "tooltip": "Repair restores hull to 100; the server checks the final cost and your credits."},
 		{"label": "Rename ship", "command": "ship.rename", "fields": [["name", FIELD_TEXT, "New ship name", ""]], "mutating": true, "tooltip": "Renames your active ship; the server validates ownership and length."},
-		{"label": "Scan adjacent sectors", "command": "move.scan", "requires_fresh_sector": true},
+		{"label": "Scan adjacent sectors", "command": "sector.scan.density", "fixed": {}, "context_sector": true, "requires_fresh_sector": true},
 		{"label": "Sector density scan", "command": "sector.scan.density", "fixed": {}, "context_sector": true, "requires_fresh_sector": true},
 		{"label": "Trade history", "command": "trade.history", "fixed": {"limit": 20}},
 		{"label": "Outstanding fines", "command": "fine.list", "fixed": {}},
@@ -81,18 +83,22 @@ const COMMANDS := {
 	],
 	"FINANCES": [
 		{"label": "Bank balance", "command": "bank.balance"},
+		{"label": "Bank statement", "command": "bank.statement", "fields": [["limit", FIELD_INT, "Number of entries", "20"]]},
 		{"label": "Deposit credits", "command": "bank.deposit", "fields": [["amount", FIELD_INT, "Amount", ""]], "mutating": true},
 		{"label": "Withdraw credits", "command": "bank.withdraw", "fields": [["amount", FIELD_INT, "Amount", ""]], "mutating": true},
 		{"label": "Transfer credits to player", "command": "bank.transfer", "fields": [["to_player_id", FIELD_INT, "Recipient player ID", ""], ["amount", FIELD_INT, "Amount", ""]], "mutating": true},
 		{"label": "Bank history", "command": "bank.history"},
 		{"label": "Bank leaderboard", "command": "bank.leaderboard"},
+		{"label": "Standing orders", "command": "bank.orders.list"},
+		{"label": "Create standing order", "command": "bank.orders.create", "fields": [["recipient_id", FIELD_INT, "Recipient player ID", ""], ["amount", FIELD_INT, "Amount", ""], ["frequency", FIELD_TEXT, "Payment frequency", "daily"]], "mutating": true},
+		{"label": "Cancel standing order", "command": "bank.orders.cancel", "fields": [["order_id", FIELD_INT, "Standing order ID", ""]], "mutating": true},
 	],
 	"NEWS & RECORDS": [
 		{"label": "News feed", "command": "news.get_feed"},
 		{"label": "Mark news read", "command": "news.mark_feed_read", "mutating": true},
-		{"label": "Insurance policy list · server stub", "unavailable_reason": "The current insurance handler returns a hard-coded stub, not authoritative policies."},
-		{"label": "Buy insurance · server stub", "unavailable_reason": "The current insurance purchase handler returns a hard-coded stub and does not create a policy."},
-		{"label": "File insurance claim · server stub", "unavailable_reason": "The current insurance claim handler returns a hard-coded stub and does not process a claim."},
+		{"label": "Insurance policies", "command": "insurance.policies.list"},
+		{"label": "Buy insurance", "command": "insurance.policies.buy", "fields": [["subject_type", FIELD_TEXT, "Subject type", "ship"], ["subject_id", FIELD_INT, "Subject ID", ""], ["duration", FIELD_INT, "Duration", ""], ["premium", FIELD_INT, "Premium", ""], ["payout", FIELD_INT, "Payout", ""], ["fund_id", FIELD_INT, "Insurance fund ID", ""]], "mutating": true},
+		{"label": "File insurance claim", "command": "insurance.claim.file", "fields": [["claim_id", FIELD_INT, "Claim ID", ""], ["event_id", FIELD_TEXT, "Event ID", ""], ["amount", FIELD_INT, "Claim amount", ""]], "mutating": true},
 		{"label": "Subscriptions", "command": "subscribe.list"},
 	],
 	"CORPORATION": [
@@ -185,6 +191,7 @@ var _action_list: Container
 var _action_scroll: ScrollContainer
 var _title: Label
 var _active_category := "COMPUTER"
+var _settings_mode := false
 var _busy := false
 var _form_dialog: ConfirmationDialog
 var _result_dialog: AcceptDialog
@@ -207,6 +214,84 @@ var _deployment_command := ""
 var _deployment_sector := 0
 var _activity_history: Array[String] = []
 var _tavern_access := false
+var _ferengi_offer_available := false
+
+func _action_without_labels(actions: Array, hidden_labels: Array[String]) -> Array:
+	var result: Array = []
+	for action in actions:
+		if str(action.get("label", "")) not in hidden_labels:
+			result.append(action)
+	return result
+
+func _player_has_corporation() -> bool:
+	var player: Variant = _snapshot.get("player", {})
+	if not player is Dictionary:
+		return false
+	var corp_id: Variant = player.get("corp_id", 0)
+	return (typeof(corp_id) == TYPE_INT or typeof(corp_id) == TYPE_FLOAT) and int(corp_id) > 0
+
+func set_ferengi_offer_available(available: bool) -> void:
+	_ferengi_offer_available = available
+	_render_actions()
+
+func _actions_for_category(category: String) -> Array:
+	# The server-facing command definitions remain grouped by implementation
+	# legacy for compatibility. The visible catalogue is grouped by the
+	# player's intent instead.
+	var actions: Array = []
+	match category:
+		"NAVIGATION":
+			actions.append_array(COMMANDS.get("NAVIGATION", []))
+			for action in COMMANDS.get("COMPUTER", []):
+				var label := str(action.get("label", ""))
+				if label in ["Scan adjacent sectors", "Sector density scan", "Holographic adjacent-sector scan"]:
+					var scanner: Dictionary = action.duplicate(true)
+					if label == "Sector density scan":
+						scanner["label"] = "Density scan"
+					elif label == "Scan adjacent sectors":
+						scanner["label"] = "Scan adjacent sectors"
+					actions.append(scanner)
+		"SECTOR":
+			actions.append_array(COMMANDS.get("OPERATIONS", []))
+		"TRADING":
+			actions.append_array(COMMANDS.get("FINANCES", []))
+			actions.append_array(COMMANDS.get("MARKET", []))
+			for action in COMMANDS.get("COMPUTER", []):
+				var label := str(action.get("label", ""))
+				if label in ["Trade history", "Trade routes"] or (_ferengi_offer_available and label in ["Ferengi traders and open offers", "Accept Ferengi offer", "Reject Ferengi offer"]):
+					actions.append(action)
+			for action in COMMANDS.get("NEWS & RECORDS", []):
+				if str(action.get("label", "")).contains("Insurance"):
+					actions.append(action)
+		"COMPUTER":
+			var hidden: Array[String] = [
+				"Help · controls and command flow", "Detailed current-sector scan",
+				"Holographic adjacent-sector scan", "Scan adjacent sectors",
+				"Sector density scan", "Trade history", "Shipyard catalogue", "Sell current ship · unavailable",
+				"Hardware catalogue", "Buy ship hardware",
+				"Ship equipment upgrade · unavailable", "Trade routes",
+				"Ferengi traders and open offers", "Accept Ferengi offer", "Reject Ferengi offer"
+			]
+			actions.append_array(_action_without_labels(COMMANDS.get("COMPUTER", []), hidden))
+			for action in COMMANDS.get("CORPORATION", []):
+				var label := str(action.get("label", ""))
+				if not _player_has_corporation() and label in ["Create corporation", "Join corporation"]:
+					actions.append(action)
+			actions.append_array(COMMANDS.get("TAVERN", []) if _tavern_access else [])
+		"CORPORATION":
+			if _player_has_corporation():
+				actions.append_array(COMMANDS.get("CORPORATION", []))
+		"COMMUNICATIONS":
+			actions.append_array(COMMANDS.get("COMMUNICATIONS", []))
+			actions.append_array(COMMANDS.get("NEWS & RECORDS", []).slice(0, 2))
+			actions.append_array(COMMANDS.get("MAIL & SUBSCRIPTIONS", []))
+		"SETTINGS & NOTES":
+			actions.append_array(COMMANDS.get("SETTINGS & NOTES", []))
+			actions.append_array(COMMANDS.get("HELP", []))
+			actions.append_array(COMMANDS.get("SESSION", []))
+		_:
+			actions.append_array(COMMANDS.get(category, []))
+	return actions
 var _reduced_motion_enabled := false
 var _pinned_actions: Array[Dictionary] = []
 var _key_bindings: Dictionary = {}
@@ -403,15 +488,12 @@ func update_snapshot(snapshot: Dictionary) -> void:
 	if _active_category in ["PLANET", "PORT", "SHIP"]:
 		_active_category = "COMPUTER"
 	_rebuild_categories()
-	_render_actions()
 	visible = true
 
 func set_tavern_access(available: bool) -> void:
 	_tavern_access = available
 	if not available and _active_category == "TAVERN":
 		_active_category = "COMPUTER"
-	if available:
-		_active_category = "TAVERN"
 	(get_meta("context_label") as Label).text = _context_description()
 	_rebuild_categories()
 
@@ -457,6 +539,8 @@ func format_result(label: String, payload: Dictionary) -> String:
 		return _format_police_result(payload)
 	if label.to_lower().contains("density"):
 		return _format_density_result(payload)
+	if payload.get("scanner", "") == "holographic":
+		return _format_holographic_result(payload)
 	if label.to_lower().contains("scan"):
 		return _format_scan_result(payload)
 	if label.to_lower().contains("news"):
@@ -710,6 +794,33 @@ func _format_scan_result(payload: Dictionary) -> String:
 	lines.append("Beacon: %s" % (beacon if not beacon.is_empty() else "unavailable"))
 	return "\n".join(lines)
 
+func _format_holographic_result(payload: Dictionary) -> String:
+	var data: Variant = payload.get("data", payload)
+	if not (data is Dictionary) or data.get("scanner", "") != "holographic":
+		return "No holographic scan data was returned by the server."
+	var sectors: Variant = data.get("sectors", [])
+	if not (sectors is Array):
+		return "No holographic scan data was returned by the server."
+	var lines: Array[String] = ["HOLOGRAPHIC SCAN", ""]
+	for sector in sectors:
+		if not (sector is Dictionary) or not _authoritative_density_id(sector.get("sector_id", null)):
+			return "Holographic scan returned malformed sector data."
+		var sector_title := "Sector %s" % str(int(sector["sector_id"]))
+		var raw_sector_name: Variant = sector.get("name", null)
+		if raw_sector_name is String and not raw_sector_name.strip_edges().is_empty():
+			sector_title += " · " + raw_sector_name.strip_edges()
+		lines.append(sector_title)
+		var ports: Variant = sector.get("ports", [])
+		var ships: Variant = sector.get("ships_present", [])
+		var planets: Variant = sector.get("celestial_objects", [])
+		lines.append("  Ports: %s" % (str(ports.size()) if ports is Array else "unknown"))
+		lines.append("  Ships: %s" % (str(ships.size()) if ships is Array else "unknown"))
+		lines.append("  Planets: %s" % (str(planets.size()) if planets is Array else "unknown"))
+		var raw_beacon: Variant = sector.get("beacon", null)
+		if raw_beacon is String and not raw_beacon.strip_edges().is_empty():
+			lines.append("  Beacon: " + raw_beacon.strip_edges())
+	return "\n".join(lines) if sectors.size() > 0 else "No adjacent sectors were returned by the holographic scan."
+
 func _authoritative_port_rows(value: Variant) -> bool:
 	# A non-empty array is not visibility evidence when it contains malformed
 	# rows. Fail closed instead of turning an untrusted payload into "Port:
@@ -726,8 +837,8 @@ func _scan_count(data: Dictionary, counts: Dictionary, key: String, aliases: Arr
 		var value = counts.get(field, data.get(field, null))
 		# Scan measurements are authoritative JSON integers. Do not coerce
 		# booleans, strings, or floating-point values into displayable counts.
-		if typeof(value) == TYPE_INT and int(value) >= 0:
-			return str(value)
+		if _is_integral_number(value) and int(value) >= 0:
+			return str(int(value))
 	return "unknown"
 
 func _scan_list(value: Variant) -> String:
@@ -743,8 +854,8 @@ func _scan_list(value: Variant) -> String:
 		# Adjacent-sector identifiers are server-owned JSON integers. Ignore
 		# malformed rows rather than turning arbitrary payload text into a
 		# seemingly actionable location.
-		if typeof(sector_id) == TYPE_INT and int(sector_id) > 0:
-			values.append(str(sector_id))
+		if _is_integral_number(sector_id) and int(sector_id) > 0:
+			values.append(str(int(sector_id)))
 	if values.is_empty():
 		return "unknown"
 	return ", ".join(values)
@@ -798,10 +909,13 @@ func _format_density_result(payload: Dictionary) -> String:
 	return "\n".join(rows)
 
 func _authoritative_density_id(value: Variant) -> bool:
-	return typeof(value) == TYPE_INT and int(value) > 0
+	return _is_integral_number(value) and int(value) > 0
+
+func _is_integral_number(value: Variant) -> bool:
+	return (typeof(value) == TYPE_INT and int(value) >= 0) or (typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value))
 
 func _authoritative_positive_id(value: Variant) -> int:
-	return int(value) if typeof(value) == TYPE_INT and int(value) > 0 else 0
+	return int(value) if _is_integral_number(value) and int(value) > 0 else 0
 
 func _format_visibility_refusal(payload: Dictionary, operation: String) -> String:
 	var error: Variant = payload.get("error", {})
@@ -813,7 +927,7 @@ func _format_visibility_refusal(payload: Dictionary, operation: String) -> Strin
 	return "%s refused: %s" % [operation, message]
 
 func _authoritative_density_value(value: Variant) -> bool:
-	return typeof(value) == TYPE_INT and int(value) >= 0
+	return _is_integral_number(value)
 
 func _sector_identifier(value: Variant) -> String:
 	if value is float and is_finite(value) and value == floor(value):
@@ -996,16 +1110,18 @@ func _append_result(value: Variant, key: String, depth: int, lines: Array[String
 
 func _categories() -> Array[String]:
 	var result: Array[String] = []
+	if _settings_mode:
+		result.append("SETTINGS & NOTES")
 	if not _pinned_actions.is_empty():
 		result.append("PINNED")
 	if not _selection.is_empty():
 		var kind := str(_selection.get("kind", ""))
 		if kind in ["planet", "port", "ship"]:
 			result.append(kind.to_upper())
-	for category in COMMANDS:
-		if category == "TAVERN" and not _tavern_access:
-			continue
-		result.append(str(category))
+	for category in TAB_CATEGORIES:
+		result.append(category)
+	if _player_has_corporation():
+		result.append("CORPORATION")
 	return result
 
 func _rebuild_categories() -> void:
@@ -1031,10 +1147,40 @@ func _on_category_selected(index: int) -> void:
 func select_category(category: String) -> void:
 	# Presentation tabs select the existing command registry; they do not
 	# create a second dispatcher or duplicate command definitions.
+	# Keep old category names usable by saved UI state and existing shortcuts,
+	# while presenting only the five player-facing tabs.
+	var legacy_category_map := {
+		"PORT": "TRADING",
+		"FINANCES": "TRADING",
+		"MARKET": "TRADING",
+		"NEWS & RECORDS": "COMMUNICATIONS",
+		"MAIL & SUBSCRIPTIONS": "COMMUNICATIONS",
+		"TAVERN": "COMPUTER",
+		"OPERATIONS": "SECTOR",
+		"SETTINGS & NOTES": "COMPUTER",
+		"SESSION": "COMPUTER"
+	}
+	if legacy_category_map.has(category):
+		category = str(legacy_category_map[category])
+	_settings_mode = category == "SETTINGS & NOTES"
 	var categories := _categories()
 	if category in categories:
 		_active_category = category
 		_rebuild_categories()
+
+func open_settings_category() -> void:
+	_settings_mode = true
+	_active_category = "SETTINGS & NOTES"
+	_rebuild_categories()
+
+func invoke_local_action(label: String) -> bool:
+	# Used by the gear menu for actions that do not belong in a gameplay tab.
+	for group_name in ["SETTINGS & NOTES", "SESSION"]:
+		for action in COMMANDS.get(group_name, []):
+			if str(action.get("label", "")) == label:
+				_choose_action(action)
+				return true
+	return false
 
 func _render_actions() -> void:
 	for child in _action_list.get_children():
@@ -1119,7 +1265,7 @@ func _render_actions() -> void:
 	elif _active_category == "PINNED":
 		actions = _pinned_actions
 	else:
-		actions = COMMANDS.get(_active_category, [])
+		actions = _actions_for_category(_active_category)
 	var query := _search_input.text.strip_edges().to_lower() if is_instance_valid(_search_input) else ""
 	if not query.is_empty():
 		actions = actions.filter(func(action: Dictionary) -> bool: return str(action.get("label", "")).to_lower().contains(query))

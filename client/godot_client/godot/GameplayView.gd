@@ -18,7 +18,6 @@ const PlanetWorkflowScript = preload("res://PlanetWorkflow.gd")
 const PlanetArt = preload("res://PlanetArt.gd")
 const LocalSectorNotes = preload("res://LocalSectorNotes.gd")
 const WARP_TRANSITION_SHADER := preload("res://WarpTransition.gdshader")
-const COMMAND_RAIL_TOAST_X := 310.0
 const LOCAL_PREFERENCES_PATH := "user://client_ui_preferences.cfg"
 
 var sector_view
@@ -58,6 +57,10 @@ var workspace_controls_column: VBoxContainer
 var _workspace_catalog_open := false
 var _has_information_result := false
 var _navigation_destination_text := ""
+var _navigation_route_plotted := false
+var _navigation_action_buttons: Array[Button] = []
+var _communications_view_name := "CHAT"
+var _viewport_split_ratio := 0.60
 var gameplay_scroll: ScrollContainer
 var command_panel: PanelContainer
 var information_panel: PanelContainer
@@ -80,12 +83,10 @@ var _planet_mode := false
 var _reduced_motion := false
 var _hud_visible := {"cargo": true, "shields": true, "hull": true, "fighters": true}
 var _hud_settings_dialog: ConfirmationDialog
+var _settings_popup: PopupMenu
 var _hud_setting_checks: Dictionary = {}
 var _route_panel: PanelContainer
 var _route_label: Label
-var _route_express_button: Button
-var _route_single_step_button: Button
-var _route_cancel_button: Button
 var _local_notes
 var _note_input: LineEdit
 var _note_status: Label
@@ -94,6 +95,7 @@ var _note_toggle: Button
 var primary_tabs: TabBar
 var workspace_buttons: Array[Button] = []
 var workspace_status: Label
+var _holographic_scan_buttons: Array[Button] = []
 var _active_workspace := "SECTOR"
 const WORKSPACES := ["SECTOR", "NAVIGATION", "TRADING", "COMMUNICATIONS", "COMPUTER"]
 
@@ -113,6 +115,7 @@ func set_snapshot(snapshot: Dictionary) -> void:
 		command_menu.set_tavern_access(false)
 	_snapshot = snapshot.duplicate(true)
 	_render_snapshot(_snapshot)
+	_sync_holographic_scan_controls()
 
 func set_connection_notice(disconnected: bool, message: String = "") -> void:
 	offline_overlay.visible = disconnected
@@ -123,7 +126,9 @@ func set_connection_notice(disconnected: bool, message: String = "") -> void:
 func show_notification(message: String) -> void:
 	notification_label.text = message
 	notification_label.visible = not message.is_empty()
-	toast_panel.visible = not message.is_empty()
+	toast_panel.visible = not message.is_empty() and (not is_instance_valid(_route_panel) or not _route_panel.visible)
+	if is_instance_valid(port_workflow) and port_workflow.visible and not message.is_empty():
+		port_workflow.show_trade_message(message)
 	if not message.is_empty():
 		var timer := get_tree().create_timer(4.0)
 		timer.timeout.connect(func() -> void:
@@ -136,14 +141,14 @@ func show_hover_hint(kind: String, title: String) -> void:
 	_hovered_key = "%s:%s" % [kind.to_lower(), title]
 	notification_label.text = "PREVIEW · HOVER · %s · %s" % [kind.to_upper(), title]
 	notification_label.visible = true
-	toast_panel.visible = true
+	toast_panel.visible = not is_instance_valid(_route_panel) or not _route_panel.visible
 
 func clear_hover_hint(_key: String) -> void:
 	_hovered_key = ""
 	if _selected_key.is_empty():
 		notification_label.text = "Select an object to see its contextual actions."
 		notification_label.visible = true
-		toast_panel.visible = true
+		toast_panel.visible = not is_instance_valid(_route_panel) or not _route_panel.visible
 	else:
 		# Selection details live only in the Sector Contents panel. Do not put a
 		# second selection summary over the Information panel/artwork boundary.
@@ -177,6 +182,9 @@ func _load_local_preferences() -> void:
 	var config := ConfigFile.new()
 	if config.load(LOCAL_PREFERENCES_PATH) == OK:
 		_reduced_motion = bool(config.get_value("accessibility", "reduced_motion", false))
+		var saved_split_ratio = config.get_value("layout", "viewport_split_ratio", 0.60)
+		if (typeof(saved_split_ratio) == TYPE_FLOAT or typeof(saved_split_ratio) == TYPE_INT) and float(saved_split_ratio) >= 0.40 and float(saved_split_ratio) <= 0.80:
+			_viewport_split_ratio = float(saved_split_ratio)
 		var saved_hud = config.get_value("hud", "visible", {})
 		if saved_hud is Dictionary:
 			for key in _hud_visible:
@@ -213,6 +221,32 @@ func _open_hud_settings() -> void:
 		for key in _hud_setting_checks:
 			(_hud_setting_checks[key] as CheckBox).button_pressed = bool(_hud_visible[key])
 	DialogLayout.popup(_hud_settings_dialog, Vector2i(500, 300))
+
+func _open_settings_popup() -> void:
+	# Settings live in the Computer/admin workspace rather than in a second
+	# floating dialog. This keeps the gear action inside the normal tab layout.
+	var computer_index := WORKSPACES.find("COMPUTER")
+	if computer_index >= 0:
+		_on_workspace_tab_changed(computer_index)
+		_workspace_catalog_open = true
+		_apply_workspace_layout()
+		if is_instance_valid(command_menu):
+			command_menu.open_settings_category()
+
+func _on_settings_popup_id_pressed(id: int) -> void:
+	match id:
+		1:
+			_open_hud_settings()
+		2:
+			_toggle_reduced_motion()
+		4:
+			_on_workspace_tab_changed(WORKSPACES.find("COMPUTER"))
+			_workspace_catalog_open = true
+			_apply_workspace_layout()
+			command_menu.open_settings_category()
+		3:
+			if is_instance_valid(command_menu):
+				command_menu.invoke_local_action("Log out to login screen")
 
 func _save_hud_settings() -> void:
 	for key in _hud_setting_checks:
@@ -284,14 +318,14 @@ func _build() -> void:
 	settings_button.text = "⚙"
 	settings_button.tooltip_text = "HUD and accessibility settings"
 	settings_button.focus_mode = Control.FOCUS_ALL
-	settings_button.pressed.connect(_open_hud_settings)
+	settings_button.pressed.connect(_open_settings_popup)
 	_apply_button_style(settings_button, false)
 	top_row.add_child(settings_button)
 	var help_button := Button.new()
 	help_button.text = "?"
 	help_button.tooltip_text = "Show keyboard and command help"
 	help_button.focus_mode = Control.FOCUS_ALL
-	help_button.pressed.connect(func() -> void: show_notification("Alt+1–5 switches workspaces · Esc clears selection · use the command shortcuts configured in Computer."))
+	help_button.pressed.connect(func() -> void: show_notification("Alt+1–5 switches workspaces · Alt+D docks at the selected port · Alt+S density scan · Alt+H holographic scan when equipped · Esc clears selection · use the command shortcuts configured in Computer."))
 	_apply_button_style(help_button, false)
 	top_row.add_child(help_button)
 
@@ -327,7 +361,9 @@ func _build() -> void:
 		workspace_buttons.append(workspace_button)
 	_sync_workspace_buttons()
 	workspace_status = _label("SECTOR WORKSPACE · select an object or scan the current sector", 10, Color(0.48, 0.78, 0.78))
-	layout.add_child(workspace_status)
+	# Context is retained for accessibility/state updates but no longer consumes
+	# a separate row above the flexible viewport.
+	workspace_status.visible = false
 
 	gameplay_scroll = ScrollContainer.new()
 	gameplay_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -337,22 +373,18 @@ func _build() -> void:
 	gameplay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	layout.add_child(gameplay_scroll)
 	gameplay_body = BoxContainer.new()
-	# The live layout is always a vertical workspace: the sector renderer and
-	# contextual inspector occupy the centre, while command/results content is
-	# opened below it for the selected workspace. This prevents the legacy
-	# Commands + Information + sector + contents four-column layout from being
-	# reconstructed when switching tabs.
-	gameplay_body.vertical = true
+	# This is the single flexible third row: artwork on the left and the active
+	# contents/command surface on the right. Nothing is stacked below it.
+	gameplay_body.vertical = false
 	gameplay_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	gameplay_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	gameplay_body.add_theme_constant_override("separation", 10)
+	gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	gameplay_scroll.add_child(gameplay_body)
 	center_split = SplitContainer.new()
 	center_split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_split.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	center_split.custom_minimum_size.y = 280
+	center_split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	center_split.split_offset = -370
-	center_split.dragger_visibility = SplitContainer.DRAGGER_HIDDEN_COLLAPSED
+	center_split.dragger_visibility = SplitContainer.DRAGGER_VISIBLE
+	center_split.dragged.connect(_on_viewport_split_dragged)
 	gameplay_body.add_child(center_split)
 	sector_view = SectorViewScript.new()
 	sector_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -365,14 +397,14 @@ func _build() -> void:
 	workspace_stack = VBoxContainer.new()
 	workspace_stack.name = "WorkspaceDrawer"
 	workspace_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	workspace_stack.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	workspace_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	workspace_stack.add_theme_constant_override("separation", 8)
-	gameplay_body.add_child(workspace_stack)
+	center_split.add_child(workspace_stack)
 
 	command_panel = PanelContainer.new()
 	command_panel.custom_minimum_size.x = 340
 	command_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.014, 0.041, 0.063, 0.96), Color(0.28, 0.61, 0.66, 0.82)))
-	center_split.add_child(command_panel)
+	workspace_stack.add_child(command_panel)
 	var panel_margin := _inner_margin(command_panel, 17, 15)
 	panel_column = VBoxContainer.new()
 	panel_column.add_theme_constant_override("separation", 12)
@@ -382,6 +414,23 @@ func _build() -> void:
 	var panel_title := _label("SECTOR CONTENTS", 16, Color(0.48, 0.86, 0.84))
 	panel_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel_header.add_child(panel_title)
+	var sector_scan_button := _workspace_button("DENSITY SCAN", func() -> void:
+		_emit_workspace_command("sector.scan.density", {}, "Sector density scan"), true)
+	sector_scan_button.custom_minimum_size.y = 34
+	panel_header.add_child(sector_scan_button)
+	var sector_holo_button := _workspace_button("HOLOGRAPHIC SCAN", func() -> void:
+		_emit_workspace_command("sector.scan", {"mode": "holographic"}, "Holographic adjacent-sector scan"))
+	sector_holo_button.custom_minimum_size.y = 34
+	sector_holo_button.visible = false
+	_holographic_scan_buttons.append(sector_holo_button)
+	panel_header.add_child(sector_holo_button)
+	var sector_information_row := HBoxContainer.new()
+	sector_information_row.add_theme_constant_override("separation", 6)
+	sector_information_row.add_child(_workspace_button("PLAYER INFORMATION", func() -> void:
+		_emit_workspace_command("player.my_info", {}, "Player information")))
+	sector_information_row.add_child(_workspace_button("SHIP INFORMATION", func() -> void:
+		_emit_workspace_command("ship.status", {}, "Ship information")))
+	panel_column.add_child(sector_information_row)
 	selection_hint = _label("No object selected", 11, Color(0.68, 0.77, 0.79))
 	panel_column.add_child(selection_hint)
 	var rule := ColorRect.new()
@@ -541,10 +590,11 @@ func _build() -> void:
 	notification_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	toast_margin.add_child(notification_label)
 	_route_panel = PanelContainer.new()
-	_route_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_route_panel.offset_left = COMMAND_RAIL_TOAST_X
-	_route_panel.offset_top = 76
-	_route_panel.offset_right = -20
+	_route_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_route_panel.offset_left = 18
+	_route_panel.offset_top = -62
+	_route_panel.offset_right = -18
+	_route_panel.offset_bottom = -14
 	_route_panel.custom_minimum_size.y = 48
 	_route_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.04, 0.10, 0.10, 0.97), Color(0.84, 0.64, 0.3, 0.9)))
 	_route_panel.visible = false
@@ -553,22 +603,8 @@ func _build() -> void:
 	_route_panel.add_child(route_row)
 	_route_label = _label("ROUTE", 12, Color(0.95, 0.88, 0.7))
 	_route_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_route_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	route_row.add_child(_route_label)
-	_route_express_button = Button.new()
-	_route_express_button.text = "EXPRESS"
-	_route_express_button.tooltip_text = "Traverse every remaining route hop automatically, with server confirmation after each warp"
-	_route_express_button.pressed.connect(func() -> void: route_engage_requested.emit("express"))
-	route_row.add_child(_route_express_button)
-	_route_single_step_button = Button.new()
-	_route_single_step_button.text = "SINGLE STEP"
-	_route_single_step_button.tooltip_text = "Move one sector, then pause so you can continue or cancel"
-	_route_single_step_button.pressed.connect(func() -> void: route_engage_requested.emit("single_step"))
-	route_row.add_child(_route_single_step_button)
-	_route_cancel_button = Button.new()
-	_route_cancel_button.text = "CANCEL ROUTE"
-	_route_cancel_button.tooltip_text = "Discard a plotted route, or stop after the current confirmed warp"
-	_route_cancel_button.pressed.connect(func() -> void: route_cancel_requested.emit())
-	route_row.add_child(_route_cancel_button)
 
 	offline_overlay = PanelContainer.new()
 	offline_overlay.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -1151,12 +1187,11 @@ func show_information(title: String, content: String) -> void:
 	if not is_instance_valid(information_panel):
 		return
 	_has_information_result = true
-	# The Sector workspace starts uncluttered. A real command result promotes
-	# the existing information surface into view without inventing a second
-	# activity/state store.
-	if _active_workspace == "SECTOR":
-		workspace_stack.visible = true
-		information_panel.visible = true
+	# Keep the workspace uncluttered until a result exists, then reveal the
+	# existing information surface in whichever viewport menu issued the command
+	# (Sector, Navigation, or another workspace).
+	workspace_stack.visible = true
+	information_panel.visible = true
 	information_title.text = title.to_upper()
 	information_text.text = content if not content.strip_edges().is_empty() else "No information was returned."
 	information_scroll.scroll_vertical = 0
@@ -1167,8 +1202,9 @@ func clear_information() -> void:
 
 func _build_information_panel() -> void:
 	information_panel = PanelContainer.new()
-	information_panel.custom_minimum_size.y = 150
+	information_panel.custom_minimum_size.y = 0
 	information_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	information_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	information_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.012, 0.032, 0.049, 0.97), Color(0.55, 0.42, 0.25, 0.9)))
 	workspace_stack.add_child(information_panel)
 	var margin := _inner_margin(information_panel, 14, 14)
@@ -1220,59 +1256,54 @@ func show_planned_route(path: Array, destination: int) -> void:
 	for item in path:
 		if typeof(item) == TYPE_INT or typeof(item) == TYPE_FLOAT:
 			ids.append(str(int(item)))
+	_set_navigation_route_plotted(true)
 	_route_label.text = "PLANNED ROUTE · DESTINATION %d · %s · Choose Express or Single Step" % [destination, " → ".join(ids)]
-	_route_express_button.visible = true
-	_route_express_button.disabled = false
-	_route_single_step_button.visible = true
-	_route_single_step_button.disabled = false
-	_route_cancel_button.text = "CANCEL ROUTE"
-	_route_cancel_button.disabled = false
-	_route_panel.visible = not ids.is_empty()
+	_set_route_display(not ids.is_empty())
 
 func show_restored_autopilot_route(path: Array, destination: int, state: String, mode: String) -> void:
 	var ids: Array[String] = []
 	for item in path:
 		if typeof(item) == TYPE_INT or typeof(item) == TYPE_FLOAT:
 			ids.append(str(int(item)))
+	_set_navigation_route_plotted(true)
 	_route_label.text = "SAVED ROUTE · %s · MODE %s · DESTINATION %d · %s · Review, then engage to move" % [state.to_upper(), mode.to_upper(), destination, " → ".join(ids)]
-	_route_express_button.visible = true
-	_route_express_button.disabled = ids.is_empty()
-	_route_single_step_button.visible = true
-	_route_single_step_button.disabled = ids.is_empty()
-	_route_cancel_button.text = "STOP SAVED ROUTE"
-	_route_cancel_button.disabled = false
-	_route_panel.visible = not ids.is_empty()
+	_set_route_display(not ids.is_empty())
 
 func set_autonav_status(status: String, stop_pending: bool = false) -> void:
 	_route_label.text = status
-	_route_express_button.visible = false
-	_route_single_step_button.visible = false
-	_route_cancel_button.text = "STOPPING…" if stop_pending else "STOP AFTER CURRENT WARP"
-	_route_cancel_button.disabled = stop_pending
-	_route_panel.visible = true
+	_set_route_display(true)
 
 func clear_planned_route() -> void:
-	_route_panel.visible = false
-	_route_express_button.visible = true
-	_route_express_button.disabled = false
-	_route_single_step_button.visible = true
-	_route_single_step_button.disabled = false
-	_route_cancel_button.text = "CANCEL ROUTE"
-	_route_cancel_button.disabled = false
+	_set_navigation_route_plotted(false)
+	_set_route_display(false)
 
 func show_single_step_ready(path: Array, destination: int, current_sector: int) -> void:
 	var ids: Array[String] = []
 	for item in path:
 		if typeof(item) == TYPE_INT or typeof(item) == TYPE_FLOAT:
 			ids.append(str(int(item)))
+	_set_navigation_route_plotted(true)
 	_route_label.text = "SINGLE STEP · Sector %d confirmed · next %s · destination %d" % [current_sector, str(ids[0]) if not ids.is_empty() else "none", destination]
-	_route_express_button.visible = true
-	_route_express_button.disabled = ids.is_empty()
-	_route_single_step_button.visible = true
-	_route_single_step_button.disabled = ids.is_empty()
-	_route_cancel_button.text = "CANCEL ROUTE"
-	_route_cancel_button.disabled = false
-	_route_panel.visible = not ids.is_empty()
+	_set_route_display(not ids.is_empty())
+
+func _set_route_display(active: bool) -> void:
+	_route_panel.visible = active
+	if not is_instance_valid(bottom_row):
+		return
+	for child in bottom_row.get_children():
+		child.visible = not active
+	if active:
+		toast_panel.visible = false
+	else:
+		_apply_hud_visibility()
+		if is_instance_valid(notification_label):
+			toast_panel.visible = notification_label.visible
+
+func _set_navigation_route_plotted(plotted: bool) -> void:
+	_navigation_route_plotted = plotted
+	for button in _navigation_action_buttons:
+		if is_instance_valid(button):
+			button.disabled = not plotted
 
 func show_shipyard(data: Dictionary) -> void:
 	var ship_state: Dictionary = _snapshot.get("ship", {})
@@ -1338,6 +1369,14 @@ func confirm_trade_quote(direction: String, commodity: String, quantity: int, ac
 	var unit_key := "buy_price" if direction == "buy" else "sell_price"
 	var total = quote.get(total_key, null)
 	var unit = quote.get(unit_key, null)
+	port_workflow.show_trade_quote(direction, commodity, quote)
+	# Ordinary row trades commit the server-issued quote immediately. The server
+	# may mark an exceptional quote for confirmation without changing the quote
+	# or settlement protocol.
+	if quote.get("requires_confirmation", false) != true:
+		trade_quote_dialog.hide()
+		trade_confirmation.emit(true)
+		return
 	var account_name := "Server preference" if account < 0 else ("Bank" if account == 1 else "Petty cash")
 	trade_quote_dialog.dialog_text = "%s %d × %s\n\nQuoted goods value: %s CR\nUnit price: %s CR\nAccount: %s\n\nFees are not included. Prices may change before the trade is processed. No cargo or credits change unless you confirm." % [direction.capitalize(), quantity, commodity, _display_money(total), _display_money(unit), account_name]
 	trade_quote_dialog.ok_button_text = "CONFIRM %s" % direction.to_upper()
@@ -1450,6 +1489,33 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	var focused := get_viewport().gui_get_focus_owner()
+	if event.alt_pressed and event.keycode == KEY_D:
+		if focused is LineEdit or focused is TextEdit:
+			return
+		if is_instance_valid(port_workflow) and port_workflow.visible:
+			show_notification("Already docked at the current port.")
+		else:
+			var selected := _selected_descriptor()
+			var port_data: Dictionary = selected.get("data", {}) if selected is Dictionary and str(selected.get("kind", "")) == "port" else {}
+			var port_id := _authoritative_object_id(port_data, ["port_id", "id"])
+			if port_id > 0:
+				_emit_workspace_command("port.info", {"port_id": port_id}, "Dock · open port screen")
+			else:
+				show_notification("Select a port before docking.")
+		get_viewport().set_input_as_handled()
+		return
+	if event.alt_pressed and event.keycode in [KEY_S, KEY_H]:
+		if focused is LineEdit or focused is TextEdit:
+			return
+		if event.keycode == KEY_H:
+			if _has_holographic_scanner():
+				_emit_workspace_command("sector.scan", {"mode": "holographic"}, "Holographic adjacent-sector scan")
+			else:
+				show_notification("Holographic scan unavailable · install a long-range scanner.")
+		else:
+			_emit_workspace_command("sector.scan.density", {}, "Sector density scan")
+		get_viewport().set_input_as_handled()
+		return
 	if focused is LineEdit or focused is TextEdit or event.ctrl_pressed or event.alt_pressed or event.meta_pressed:
 		return
 	if command_menu.dispatch_shortcut(event.keycode):
@@ -1488,40 +1554,55 @@ func _on_workspace_tab_changed(index: int) -> void:
 	# not expose a second generic command catalogue by default.
 	_workspace_catalog_open = _active_workspace == "COMPUTER"
 	if is_instance_valid(command_menu):
-		var command_category := _active_workspace
-		if command_category == "TRADING":
-			command_category = "PORT"
-		command_menu.select_category(command_category)
+		command_menu.select_category(_active_workspace)
 	_build_workspace_controls()
 	_apply_workspace_layout()
 
 func _apply_workspace_layout() -> void:
 	if not is_instance_valid(command_menu) or not is_instance_valid(information_panel) or not is_instance_valid(workspace_stack) or not is_instance_valid(workspace_controls):
 		return
-	# The sector renderer belongs to Sector and Navigation only. Trading,
-	# Communications and Computer are task workspaces: keeping the renderer
-	# visible there consumes the very space needed for their actual controls and
-	# results. All workspaces continue to use the same state and dispatch paths.
+	# Only Sector and Navigation are spatial workspaces. Trading, Communications,
+	# and Computer are full-width terminal surfaces with no artwork column.
 	var viewport_workspace := _active_workspace in ["SECTOR", "NAVIGATION"]
 	var sector_workspace := _active_workspace == "SECTOR"
-	center_split.visible = viewport_workspace
-	# Keep the activity drawer available below the Sector viewport when a real
-	# command result has been received.
-	workspace_stack.visible = not sector_workspace or _has_information_result
+	center_split.visible = true
+	sector_view.visible = viewport_workspace
+	if viewport_workspace and not center_split.vertical:
+		_set_viewport_split_from_ratio()
+	else:
+		center_split.split_offset = 0
+	workspace_stack.visible = true
 	var integrated_catalog_workspace := _active_workspace == "COMPUTER"
+	command_panel.visible = sector_workspace
 	workspace_controls.visible = not sector_workspace and not integrated_catalog_workspace
 	command_menu.visible = not sector_workspace and _workspace_catalog_open
 	information_panel.visible = not sector_workspace and (_workspace_catalog_open or _has_information_result)
 	if viewport_workspace:
-		gameplay_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		workspace_stack.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		workspace_controls.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	else:
-		# Promote the selected activity to the full content region when the
-		# graphical sector is not part of that workflow.
 		gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		workspace_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		workspace_controls.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	else:
+		gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+func _set_viewport_split_from_ratio() -> void:
+	if not is_instance_valid(center_split) or center_split.vertical or center_split.size.x <= 0:
+		return
+	var offset := int(round(float(center_split.size.x) * _viewport_split_ratio))
+	var minimum_left := int(sector_view.custom_minimum_size.x)
+	var minimum_right := int(command_panel.custom_minimum_size.x)
+	offset = clampi(offset, minimum_left, maxi(minimum_left, int(center_split.size.x) - minimum_right))
+	center_split.split_offset = offset
+
+func _on_viewport_split_dragged(offset: int) -> void:
+	if not is_instance_valid(center_split) or center_split.vertical or center_split.size.x <= 0:
+		return
+	_viewport_split_ratio = clampf(float(offset) / float(center_split.size.x), 0.40, 0.80)
+	var config := ConfigFile.new()
+	config.load(LOCAL_PREFERENCES_PATH)
+	config.set_value("layout", "viewport_split_ratio", _viewport_split_ratio)
+	config.save(LOCAL_PREFERENCES_PATH)
+	if is_instance_valid(information_panel):
+		information_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	if is_instance_valid(workspace_status):
 		workspace_status.text = _workspace_context_text()
 	_sync_workspace_buttons()
@@ -1570,6 +1651,23 @@ func _workspace_heading(title: String, description: String) -> void:
 func _emit_workspace_command(command: String, data: Dictionary = {}, label: String = "Command", mutating: bool = false) -> void:
 	command_requested.emit(command, data, label, mutating)
 
+func _has_holographic_scanner() -> bool:
+	var ship_value: Variant = _snapshot.get("ship", {})
+	return ship_value is Dictionary and ship_value.get("has_long_range_scanner", false) == true
+
+func _sync_holographic_scan_controls() -> void:
+	var available := _has_holographic_scanner()
+	for button in _holographic_scan_buttons:
+		if is_instance_valid(button):
+			button.visible = available
+	# Array.filter() returns an untyped Array in Godot 4. Assigning that result
+	# to Array[Button] raises during every authoritative refresh.
+	var live_buttons: Array[Button] = []
+	for button in _holographic_scan_buttons:
+		if is_instance_valid(button):
+			live_buttons.append(button)
+	_holographic_scan_buttons = live_buttons
+
 func _build_workspace_controls() -> void:
 	if not is_instance_valid(workspace_controls_column):
 		return
@@ -1581,15 +1679,26 @@ func _build_workspace_controls() -> void:
 	match _active_workspace:
 		"NAVIGATION":
 			_workspace_heading("NAVIGATION", "Plot a destination, then choose Express or Single Step. Every hop remains server-confirmed.")
+			workspace_controls_column.add_child(_workspace_button("DENSITY SCAN", func() -> void:
+				_emit_workspace_command("sector.scan.density", {}, "Sector density scan"), true))
+			var navigation_holo_button := _workspace_button("HOLOGRAPHIC SCAN", func() -> void:
+				_emit_workspace_command("sector.scan", {"mode": "holographic"}, "Holographic adjacent-sector scan"))
+			navigation_holo_button.visible = false
+			_holographic_scan_buttons.append(navigation_holo_button)
+			workspace_controls_column.add_child(navigation_holo_button)
 			var route_row := HBoxContainer.new()
 			var destination := LineEdit.new()
 			destination.name = "NavigationDestination"
-			destination.placeholder_text = "Destination sector"
+			destination.placeholder_text = "ENTER DESTINATION SECTOR #"
 			destination.tooltip_text = "Enter a valid sector number"
 			destination.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			destination.custom_minimum_size.y = 34
+			destination.custom_minimum_size.y = 38
 			destination.text = _navigation_destination_text
-			destination.text_changed.connect(func(value: String) -> void: _navigation_destination_text = value)
+			destination.add_theme_color_override("font_color", Color(0.96, 0.9, 0.68))
+			destination.add_theme_color_override("font_placeholder_color", Color(0.95, 0.72, 0.36, 0.95))
+			destination.add_theme_font_size_override("font_size", 14)
+			destination.add_theme_stylebox_override("normal", _panel_style(Color(0.08, 0.065, 0.025, 0.98), Color(0.95, 0.68, 0.25, 0.95)))
+			destination.add_theme_stylebox_override("focus", _panel_style(Color(0.10, 0.075, 0.025, 1.0), Color(1.0, 0.84, 0.38, 1.0)))
 			route_row.add_child(destination)
 			var plot := _workspace_button("PLOT ROUTE", func() -> void:
 				var value := int(destination.text.strip_edges()) if destination.text.strip_edges().is_valid_int() else 0
@@ -1601,13 +1710,31 @@ func _build_workspace_controls() -> void:
 			route_row.add_child(plot)
 			workspace_controls_column.add_child(route_row)
 			var modes := HBoxContainer.new()
-			modes.add_child(_workspace_button("EXPRESS", func() -> void: route_engage_requested.emit("express"), true))
-			modes.add_child(_workspace_button("SINGLE STEP", func() -> void: route_engage_requested.emit("single_step")))
-			modes.add_child(_workspace_button("PAUSE", func() -> void: _emit_workspace_command("move.autopilot.control", {"action": "stop_at_next"}, "Pause autopilot", true)))
-			modes.add_child(_workspace_button("RESUME", func() -> void: _emit_workspace_command("move.autopilot.control", {"action": "continue"}, "Resume autopilot", true)))
-			modes.add_child(_workspace_button("CANCEL", func() -> void: route_cancel_requested.emit()))
+			_navigation_action_buttons.clear()
+			var express := _workspace_button("EXPRESS", func() -> void: route_engage_requested.emit("express"), true)
+			var single_step := _workspace_button("SINGLE STEP", func() -> void: route_engage_requested.emit("single_step"))
+			var pause := _workspace_button("PAUSE", func() -> void: _emit_workspace_command("move.autopilot.control", {"action": "stop_at_next"}, "Pause autopilot", true))
+			var resume := _workspace_button("RESUME", func() -> void: _emit_workspace_command("move.autopilot.control", {"action": "continue"}, "Resume autopilot", true))
+			var cancel := _workspace_button("CANCEL", func() -> void: route_cancel_requested.emit())
+			for button in [express, single_step, pause, resume, cancel]:
+				modes.add_child(button)
+				_navigation_action_buttons.append(button)
 			workspace_controls_column.add_child(modes)
-			workspace_controls_column.add_child(_workspace_button("AUTOPILOT STATUS", func() -> void: _emit_workspace_command("move.autopilot.status", {}, "Autopilot status")))
+			var autopilot_status := _workspace_button("AUTOPILOT STATUS", func() -> void: _emit_workspace_command("move.autopilot.status", {}, "Autopilot status"))
+			workspace_controls_column.add_child(autopilot_status)
+			_navigation_action_buttons.append(autopilot_status)
+			var update_navigation_state := func(value: String) -> void:
+				var changed := value != _navigation_destination_text
+				_navigation_destination_text = value
+				if changed:
+					_navigation_route_plotted = false
+				var valid := value.strip_edges().is_valid_int() and int(value.strip_edges()) > 0
+				destination.add_theme_color_override("font_color", Color(0.9, 0.98, 0.88) if valid else Color(1.0, 0.48, 0.36))
+				plot.disabled = not valid
+				for button in _navigation_action_buttons:
+					button.disabled = not valid or not _navigation_route_plotted
+			destination.text_changed.connect(update_navigation_state)
+			update_navigation_state.call(destination.text)
 		"TRADING":
 			_workspace_heading("TRADING", "Select a port in the Sector workspace, then open its authoritative trading interface.")
 			var selected: Dictionary = sector_view.selected_object() if is_instance_valid(sector_view) else {}
@@ -1630,7 +1757,7 @@ func _build_workspace_controls() -> void:
 					show_notification("Select a port with an authoritative ID first.")))
 			workspace_controls_column.add_child(_workspace_button("BANK BALANCE", func() -> void: _emit_workspace_command("bank.balance", {}, "Bank balance")))
 		"COMMUNICATIONS":
-			_build_communications_workspace("CHAT")
+			_build_communications_workspace(_communications_view_name)
 		"COMPUTER":
 			_workspace_heading("COMPUTER", "Frequently used information, scans and records. The full command catalogue remains available below.")
 			var computer := HBoxContainer.new()
@@ -1638,6 +1765,7 @@ func _build_workspace_controls() -> void:
 			computer.add_child(_workspace_button("SHIP STATUS", func() -> void: _emit_workspace_command("ship.status", {}, "Ship information")))
 			computer.add_child(_workspace_button("SECTOR INFO", func() -> void: _emit_workspace_command("sector.info", {}, "Current sector information")))
 			computer.add_child(_workspace_button("DETAILED SCAN", func() -> void: _emit_workspace_command("sector.scan", {}, "Detailed current-sector scan")))
+			computer.add_child(_workspace_button("HOLOGRAPHIC SCAN", func() -> void: _emit_workspace_command("sector.scan", {"mode": "holographic"}, "Holographic adjacent-sector scan")))
 			workspace_controls_column.add_child(computer)
 			workspace_controls_column.add_child(_workspace_button("OPEN FULL COMMAND CATALOGUE", func() -> void:
 				_workspace_catalog_open = not _workspace_catalog_open
@@ -1647,7 +1775,9 @@ func _build_communications_workspace(view_name: String) -> void:
 	_workspace_heading("COMMUNICATIONS", "Server-backed messages, mail, notices and player activity.")
 	var navigation := HBoxContainer.new()
 	for name in ["CHAT", "MAIL", "BROADCASTS", "NOTICES", "OFFERS", "BOUNTIES", "PLAYERS"]:
-		var tab := _workspace_button(name, func() -> void: _build_communications_workspace(name))
+		var tab := _workspace_button(name, func() -> void:
+			_communications_view_name = name
+			_build_workspace_controls())
 		tab.button_pressed = name == view_name
 		navigation.add_child(tab)
 	workspace_controls_column.add_child(navigation)
@@ -1819,11 +1949,10 @@ func _update_responsive_layout() -> void:
 		freshness_label.text = "LINK %s · DATA %s" % ["ONLINE" if connected else "OFFLINE", overall]
 		freshness_label.add_theme_font_size_override("font_size", 9)
 	if center_split.vertical:
-		gameplay_body.vertical = true
-		gameplay_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		gameplay_body.vertical = false
+		gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		gameplay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		gameplay_body.move_child(center_split, 0)
-		gameplay_body.move_child(workspace_stack, 1)
 		top_row.vertical = true
 		brand_label.visible = false
 		sector_subtitle.visible = false
@@ -1846,10 +1975,9 @@ func _update_responsive_layout() -> void:
 		details_button.visible = true
 		toast_panel.visible = false
 	else:
-		gameplay_body.vertical = true
-		gameplay_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		gameplay_body.vertical = false
+		gameplay_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		gameplay_body.move_child(center_split, 0)
-		gameplay_body.move_child(workspace_stack, 1)
 		top_row.vertical = false
 		brand_label.visible = true
 		brand_label.add_theme_font_size_override("font_size", 23)
@@ -1861,7 +1989,10 @@ func _update_responsive_layout() -> void:
 		credits_label.custom_minimum_size.x = 150
 		turns_label.add_theme_font_size_override("font_size", 15)
 		turns_label.custom_minimum_size.x = 125
-		center_split.split_offset = -370
+		if _active_workspace in ["SECTOR", "NAVIGATION"]:
+			_set_viewport_split_from_ratio()
+		else:
+			center_split.split_offset = 0
 		sector_view.custom_minimum_size = Vector2(520, 0)
 		command_panel.custom_minimum_size = Vector2(340, 0)
 		panel_column.move_child(selection_panel, 3)
@@ -1870,4 +2001,4 @@ func _update_responsive_layout() -> void:
 		selection_panel.visible = true
 		context_action_list.visible = true
 		details_button.visible = true
-		toast_panel.visible = notification_label.visible
+		toast_panel.visible = notification_label.visible and not _route_panel.visible
