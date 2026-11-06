@@ -65,14 +65,24 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Warp to Sector 1570 (Has Port 618)",
+      "name": "Rig: Find an adjacent port in the disposable universe",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT sw.to_sector, p.port_id FROM sector_warps sw JOIN ports p ON p.sector_id = sw.to_sector WHERE sw.from_sector = 14 LIMIT 1"
+      },
+      "expect": { "status": "ok" },
+      "save": { "scan_target_sector": "data.rows.0.0", "scan_target_port_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Warp to the adjacent port sector",
       "command": "move.warp",
       "user": "scan_player",
-      "data": { "to_sector_id": 1570 },
+      "data": { "to_sector_id": "@{scan_target_sector}" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Scan Sector 1570 (Has Port 618)",
+      "name": "Scan the adjacent port sector",
       "command": "sector.scan",
       "user": "scan_player",
       "data": {},
@@ -91,7 +101,7 @@
       }
     },
     {
-      "name": "Dock at Port 618 (Now we know 1)",
+      "name": "Dock at the adjacent port (Now we know 1)",
       "command": "dock.status",
       "user": "scan_player",
       "data": { "action": "dock" },
@@ -122,7 +132,7 @@
           "routes": [
             {
               "port_a_id": 2,
-              "port_b_id": 618
+              "port_b_id": "@{scan_target_port_id}"
             }
           ],
           "pathing_model": "full_graph"
