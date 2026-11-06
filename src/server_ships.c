@@ -713,6 +713,30 @@ cmd_ship_status (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_DB, "Could not build ship status.");
       return 0;
     }
+  db_res_t *scanner_res = NULL;
+  db_error_t scanner_err;
+  if (repo_stardock_get_ship_state (db, ship_id, &scanner_res) != 0
+      || !scanner_res || !db_res_step (scanner_res, &scanner_err))
+    {
+      if (scanner_res)
+	db_res_finalize (scanner_res);
+      json_decref (ship_status);
+      json_decref (player_info);
+      send_response_error (ctx, root, ERR_DB,
+				   "Database error reading scanner equipment.");
+      return 0;
+    }
+  int has_long_range_scanner =
+    (int) db_res_col_i64 (scanner_res, 9, &scanner_err);
+  db_res_finalize (scanner_res);
+  if (json_object_set_new (ship_status, "has_long_range_scanner",
+				   json_boolean (has_long_range_scanner != 0)) != 0)
+    {
+      json_decref (ship_status);
+      json_decref (player_info);
+      send_response_error (ctx, root, ERR_DB, "Could not build ship status.");
+      return 0;
+    }
   json_t *payload = json_object ();
   if (!payload)
     {
@@ -1241,6 +1265,13 @@ h_update_ship_cargo (db_t *db,
   int64_t new_qty = 0;
   int rc = repo_cargo_add (db, ship_id, commodity_code, (int64_t) delta, &new_qty);
 
+  /* The cargo table is authoritative, but the legacy ships.* columns are
+   * still read by older gameplay handlers and by the public ship status
+   * path.  Keep the compatibility columns in sync after every successful
+   * mutation so a subsequent request cannot observe stale cargo. */
+  if (rc == 0)
+    rc = repo_cargo_sync_legacy_columns (db, ship_id);
+
   if (new_quantity_out)
     {
       *new_quantity_out = (int) new_qty;
@@ -1264,11 +1295,50 @@ h_get_ship_cargo_and_holds (db_t *db,
       return ERR_DB_MISUSE;
     }
 
-  return repo_ships_get_cargo_and_holds (db,
-					 ship_id,
-					 ore,
-					 organics,
-					 equipment,
-					 colonists,
-					 slaves, weapons, drugs, holds);
+  /* Keep legacy callers working for ships that predate ship_cargo, but use
+   * the authoritative cargo rows whenever they exist.  Several handlers
+   * mutate ship_cargo directly; reading only ships.* here makes the next
+   * request see stale quantities. */
+  int legacy_ore = 0, legacy_org = 0, legacy_eq = 0;
+  int legacy_col = 0, legacy_slv = 0, legacy_wpn = 0, legacy_drg = 0;
+  int rc = repo_ships_get_cargo_and_holds (db, ship_id,
+                                           &legacy_ore, &legacy_org,
+                                           &legacy_eq, &legacy_col,
+                                           &legacy_slv, &legacy_wpn,
+                                           &legacy_drg, holds);
+  if (rc != 0)
+    return rc;
+
+  int64_t cargo_total = 0;
+  rc = repo_cargo_get_total (db, ship_id, &cargo_total);
+  if (rc != 0)
+    return rc;
+  if (cargo_total == 0)
+    {
+      if (ore) *ore = legacy_ore;
+      if (organics) *organics = legacy_org;
+      if (equipment) *equipment = legacy_eq;
+      if (colonists) *colonists = legacy_col;
+      if (slaves) *slaves = legacy_slv;
+      if (weapons) *weapons = legacy_wpn;
+      if (drugs) *drugs = legacy_drg;
+      return 0;
+    }
+
+  int64_t value = 0;
+  if ((rc = repo_cargo_get (db, ship_id, "ORE", &value)) != 0) return rc;
+  if (ore) *ore = (int) value;
+  if ((rc = repo_cargo_get (db, ship_id, "ORG", &value)) != 0) return rc;
+  if (organics) *organics = (int) value;
+  if ((rc = repo_cargo_get (db, ship_id, "EQU", &value)) != 0) return rc;
+  if (equipment) *equipment = (int) value;
+  if ((rc = repo_cargo_get (db, ship_id, "COL", &value)) != 0) return rc;
+  if (colonists) *colonists = (int) value;
+  if ((rc = repo_cargo_get (db, ship_id, "SLV", &value)) != 0) return rc;
+  if (slaves) *slaves = (int) value;
+  if ((rc = repo_cargo_get (db, ship_id, "WPN", &value)) != 0) return rc;
+  if (weapons) *weapons = (int) value;
+  if ((rc = repo_cargo_get (db, ship_id, "DRG", &value)) != 0) return rc;
+  if (drugs) *drugs = (int) value;
+  return 0;
 }

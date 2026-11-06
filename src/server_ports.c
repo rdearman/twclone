@@ -1123,6 +1123,16 @@ h_can_trade_commodity (db_t *db,
     }
 
   // From here, we know it's an illegal commodity.
+  int player_xp = db_get_player_xp (db, player_id);
+  int minimum_illegal_xp = db_get_config_int (db, "illegal_min_experience", 400);
+  if (player_xp < minimum_illegal_xp)
+    {
+      LOGI
+	("h_can_trade_commodity: Port %d, Player %d: insufficient experience (%d < %d) for illegal trade.",
+	 port_id, player_id, player_xp, minimum_illegal_xp);
+      return false;
+    }
+
   // 3. Get port's sector and its cluster alignment
   int sector_id = 0;
   if (db_ports_get_port_sector (db, port_id, &sector_id) != 0)
@@ -1204,29 +1214,30 @@ check_player_alignment:
 
   db_player_get_alignment (db, player_id, &player_alignment);	// Retrieve player's raw alignment score
   int player_align_band_id = 0;
+  int player_is_good = 0;
   int player_is_evil = 0;
 
 
   db_alignment_band_for_value (db,
 			       player_alignment,
 			       &player_align_band_id,
-			       NULL, NULL, NULL, &player_is_evil, NULL, NULL);
-  int neutral_band_value = db_get_config_int (db, "neutral_band", 75);	// Get neutral_band from config
+		       NULL, NULL, &player_is_good, &player_is_evil, NULL, NULL);
 
 
   LOGD
-    ("h_can_trade_commodity: Port %d, Player %d (Alignment %d, Band %d): player_is_evil=%d, neutral_band_value=%d",
+    ("h_can_trade_commodity: Port %d, Player %d (Alignment %d, Band %d): player_is_good=%d, player_is_evil=%d, xp=%d/%d",
      port_id,
      player_id,
      player_alignment,
-     player_align_band_id, player_is_evil, neutral_band_value);
+     player_align_band_id, player_is_good, player_is_evil,
+     player_xp, minimum_illegal_xp);
 
-  // If player is Good (alignment > neutral_band), refuse illegal trade.
-  if (player_alignment > neutral_band_value)
+  // Good alignment is blocked; neutral and evil are handled separately below.
+  if (player_is_good)
     {
       LOGI
-	("h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player alignment is too good (%d). Refused illegal trade.",
-	 port_id, player_id, commodity_code, player_alignment);
+	("h_can_trade_commodity: Port %d, Player %d, Cmd %s: Player is good-aligned. Refused illegal trade.",
+	 port_id, player_id, commodity_code);
       return false;
     }
 
@@ -2053,6 +2064,20 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
 			   json_integer (port_size * 1000));
       json_object_set_new (commodity_obj, "illegal", json_boolean (illegal));
 
+      /* The stock table's `price` is a legacy single-price field.  The
+       * playable trade contract has separate player-facing prices: buying
+       * from the port uses the port sell price, while selling to the port
+       * uses the port buy price.  Publish both here so port screens do not
+       * have to display one price as both directions. */
+      int player_buy_price = h_entity_calculate_sell_price
+        (db, ENTITY_TYPE_PORT, port_id_val, commodity_code);
+      int player_sell_price = h_entity_calculate_buy_price
+        (db, ENTITY_TYPE_PORT, port_id_val, commodity_code);
+      json_object_set_new (commodity_obj, "buy_price",
+                           json_integer (player_buy_price > 0 ? player_buy_price : 0));
+      json_object_set_new (commodity_obj, "sell_price",
+                           json_integer (player_sell_price > 0 ? player_sell_price : 0));
+
       if (illegal
 	  && !h_can_trade_commodity (db, port_id_val, ctx->player_id,
 				     commodity_code))
@@ -2139,16 +2164,6 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  h_decloak_ship (db, player_ship_id);
-  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
-
-
-  if (tc != TURN_CONSUME_SUCCESS)
-    {
-      return handle_turn_consumption_error (ctx, tc, "ship.jettison", root,
-					    NULL);
-    }
-
   if (!json_is_object (data))
     {
       send_response_error (ctx, root, 400, "Missing data object.");
@@ -2186,9 +2201,9 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
 
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
-				  &cur_ore, &cur_org, &cur_eq, &cur_holds,
-				  &cur_colonists,
-				  &cur_slaves, &cur_weapons, &cur_drugs) != 0)
+                                  &cur_ore, &cur_org, &cur_eq,
+				  &cur_colonists, &cur_slaves,
+				  &cur_weapons, &cur_drugs, &cur_holds) != 0)
     {
       send_response_error (ctx, root, 500, "Could not read ship cargo.");
       return 0;
@@ -2212,11 +2227,13 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
     {
       have = cur_eq;
     }
-  else if (strcasecmp (commodity, "colonists") == 0)
+  else if (strcasecmp (commodity, "colonists") == 0
+           || strcasecmp (commodity, "COL") == 0)
     {
       have = cur_colonists;
     }
-  else if (strcasecmp (commodity, "slaves") == 0)
+  else if (strcasecmp (commodity, "slaves") == 0
+           || strcasecmp (commodity, "SLV") == 0)
     {
       have = cur_slaves;
     }
@@ -2247,7 +2264,25 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  /* Update ship cargo (jettisoning means negative delta) */
+  /* Validate first, then make the turn, cargo, and population-alignment
+   * changes one atomic operation. */
+  h_decloak_ship (db, player_ship_id);
+  db_error_t tx_err = { 0 };
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &tx_err))
+    {
+      send_response_error (ctx, root, ERR_DB_BUSY, "Database busy.");
+      return 0;
+    }
+
+  TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+  if (tc != TURN_CONSUME_SUCCESS)
+    {
+      db_tx_rollback (db, &tx_err);
+      return handle_turn_consumption_error (ctx, tc, "ship.jettison", root,
+						    NULL);
+    }
+
+  /* Update ship cargo (jettisoning means negative delta). */
   int new_qty = 0;
 
 
@@ -2257,7 +2292,42 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
   if (rc != 0)
     {
+      db_tx_rollback (db, &tx_err);
       send_response_error (ctx, root, 500, "Failed to update ship cargo.");
+      return 0;
+    }
+
+  int updated_alignment = 0;
+  bool is_population = strcasecmp (commodity, "colonists") == 0
+    || strcasecmp (commodity, "COL") == 0
+    || strcasecmp (commodity, "slaves") == 0
+    || strcasecmp (commodity, "SLV") == 0;
+  if (is_population)
+    {
+      /* Use an expression based on the locked row so concurrent jettisons
+       * cannot overwrite one another's alignment penalty. */
+      const char *alignment_sql =
+        "UPDATE players SET alignment = alignment - {1} "
+        "WHERE player_id = {2};";
+      char alignment_query[512];
+      if (sql_build (db, alignment_sql, alignment_query,
+                     sizeof alignment_query) != 0
+          || !db_exec (db, alignment_query,
+                       (db_bind_t[]){ db_bind_i64 (quantity),
+                                      db_bind_i64 (ctx->player_id) },
+                       2, &tx_err))
+        {
+          db_tx_rollback (db, &tx_err);
+          send_response_error (ctx, root, ERR_DB,
+                               "Failed to update player alignment.");
+          return 0;
+        }
+    }
+
+  if (db_player_get_alignment (db, ctx->player_id, &updated_alignment) != 0)
+    {
+      db_tx_rollback (db, &tx_err);
+      send_response_error (ctx, root, ERR_DB, "Failed to read player alignment.");
       return 0;
     }
 
@@ -2268,9 +2338,9 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 
   /* Re-fetch current cargo to ensure accurate remaining_cargo */
   if (h_get_ship_cargo_and_holds (db, player_ship_id,
-				  &cur_ore, &cur_org, &cur_eq, &cur_holds,
-				  &cur_colonists,
-				  &cur_slaves, &cur_weapons, &cur_drugs) == 0)
+                                  &cur_ore, &cur_org, &cur_eq,
+				  &cur_colonists, &cur_slaves,
+				  &cur_weapons, &cur_drugs, &cur_holds) == 0)
     {
       if (cur_ore > 0)
 	{
@@ -2334,7 +2404,16 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
 	  json_object_set_new (it, "commodity", json_string ("drugs"));
 	  json_object_set_new (it, "quantity", json_integer (cur_drugs));
 	  json_array_append_new (remaining_cargo_array, it);
-	}
+      }
+    }
+
+  json_object_set_new (payload, "alignment", json_integer (updated_alignment));
+  if (!db_tx_commit (db, &tx_err))
+    {
+      db_tx_rollback (db, &tx_err);
+      json_decref (payload);
+      send_response_error (ctx, root, ERR_DB, "Jettison could not be committed.");
+      return 0;
     }
 
   json_object_set_new (payload, "remaining_cargo", remaining_cargo_array);
@@ -3318,7 +3397,10 @@ cmd_trade_sell (client_ctx_t *ctx, json_t *root)
       int ore, org, eq, holds, colonists, slaves, weapons, drugs;	// Declare for new cargo types
 
 
-      if (h_get_ship_cargo_and_holds (db, player_ship_id, &ore, &org, &eq, &holds, &colonists, &slaves, &weapons, &drugs) != 0)	// Pass new cargo types
+      if (h_get_ship_cargo_and_holds (db, player_ship_id,
+                                      &ore, &org, &eq,
+                                      &colonists, &slaves,
+                                      &weapons, &drugs, &holds) != 0)	// Pass new cargo types
 	{
 	  send_response_error (ctx, root, 500, "Could not read ship cargo.");
 	  free (canonical_commodity_code);

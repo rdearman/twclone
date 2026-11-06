@@ -22,12 +22,16 @@ class JsonSuiteRunner:
         self.tls_skip_verify = tls_skip_verify
         self.macros = self._load_macros(macros_path)
         self.user_clients: Dict[str, TWClient] = {}
+        self.user_credentials: Dict[str, Tuple[str, str]] = {}
         self.vars = {}
         self._admin_client: Optional[TWClient] = None
         self.run_id = f"_{int(time.time())}"
         self.username_map = {}
         self.capture_responses = capture_responses
         self.active_suite = None
+        self.last_suite_report = None
+        self.case_results = []
+        self._current_response = None
 
     @staticmethod
     def _redact_response(value):
@@ -153,12 +157,26 @@ class JsonSuiteRunner:
         return self._expand_vars_with_context(obj, {}, use_globals=True)
 
     def _get_user_client(self, username: str) -> TWClient:
-        if username not in self.user_clients:
+        client = self.user_clients.get(username)
+        if client is None or client.sock is None:
             client = TWClient(self.host, self.port, timeout=self.timeout,
                             use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
             client.connect()
+            credentials = self.user_credentials.get(username)
+            if credentials and not client.login(*credentials):
+                client.close()
+                raise ConnectionError(f"could not re-authenticate JSON test user {username}")
             self.user_clients[username] = client
         return self.user_clients[username]
+
+    def _forget_client(self, username: Optional[str], client: Optional[TWClient]) -> None:
+        if client is None:
+            return
+        if username is not None and self.user_clients.get(username) is client:
+            self.user_clients.pop(username, None)
+        if self._admin_client is client:
+            self._admin_client = None
+        client.close()
 
     def _get_admin_client(self) -> TWClient:
         if not self._admin_client:
@@ -174,8 +192,15 @@ class JsonSuiteRunner:
     def run_suite(self, suite_path: str) -> bool:
         print(f"Running Suite: {suite_path}")
         self.active_suite = suite_path
+        self.case_results = []
         if not os.path.exists(suite_path):
             print(f"Error: Suite file {suite_path} not found.")
+            self.last_suite_report = {
+                "suite": suite_path,
+                "status": "blocked",
+                "reason": "suite file not found",
+                "cases": [],
+            }
             return False
         with open(suite_path, "r") as f:
             data = json.load(f)
@@ -187,7 +212,19 @@ class JsonSuiteRunner:
             self.tls_skip_verify = config.get("tls_skip_verify", False)
         
         raw_tests = data.get("tests", [])
-        tests = self._expand_macros(raw_tests)
+        try:
+            tests = self._expand_macros(raw_tests)
+        except Exception as error:
+            print(f"Suite cannot be expanded by json_runner.py: {error}")
+            self.last_suite_report = {
+                "suite": suite_path,
+                "status": "blocked",
+                "reason": "runner incompatibility",
+                "error": str(error),
+                "cases": [],
+                "total_cases": len(raw_tests),
+            }
+            return False
         
         all_passed = True
         for test in tests:
@@ -199,12 +236,45 @@ class JsonSuiteRunner:
         for client in self.user_clients.values():
             client.close()
         self.user_clients.clear()
+        self.user_credentials.clear()
         if self._admin_client:
             self._admin_client.close()
             self._admin_client = None
+        self.last_suite_report = {
+            "suite": suite_path,
+            "status": "passed" if all_passed else "failed",
+            "cases": self.case_results,
+            "total_cases": len(self.case_results),
+        }
         return all_passed
 
     def _run_test(self, test: Dict[str, Any]) -> bool:
+        self._current_response = None
+        runner_error = None
+        try:
+            passed = self._run_test_impl(test)
+        except Exception as error:
+            print(f"FAIL (Runner exception: {error})")
+            runner_error = f"{type(error).__name__}: {error}"
+            passed = False
+        expect = test.get("expect", {"status": "ok"})
+        response = self._current_response
+        self.case_results.append({
+            "id": test.get("id"),
+            "name": test.get("name", "Unnamed"),
+            "command": test.get("command"),
+            "expected": expect,
+            "actual": self._redact_response(response),
+            "status": "passed" if passed else "failed",
+            "classification": "passed" if passed else (
+                "infrastructure_error" if response is None else "failed_assertion"
+            ),
+        })
+        if runner_error:
+            self.case_results[-1]["runner_error"] = runner_error
+        return passed
+
+    def _run_test_impl(self, test: Dict[str, Any]) -> bool:
         name = test.get("name", "Unnamed")
         print(f"  Test: {name}...", end=" ", flush=True)
         xfail = bool(test.get("xfail", False))
@@ -215,6 +285,39 @@ class JsonSuiteRunner:
         test = self._expand_vars_with_context(test, test, use_globals=False)
         # Pass 2: Resolve remaining globals
         test = self._expand_vars(test)
+
+        # Database fixtures are part of the existing JSON suite contract.
+        # Apply them through the real authenticated sysop protocol rather
+        # than silently treating the fixture step as documentation.  This
+        # keeps setup observable and ensures the suite still exercises the
+        # actual server/database boundary.
+        if "db_setup" in test:
+            setup = test.get("db_setup") or {}
+            statements = setup.get("sql", [])
+            if not isinstance(statements, list):
+                print("FAIL (db_setup.sql must be an array)")
+                return False
+            admin = self._get_admin_client()
+            for statement in statements:
+                if not isinstance(statement, str) or not statement.strip():
+                    print("FAIL (db_setup contains an empty SQL statement)")
+                    return False
+                try:
+                    admin.send_json({
+                        "command": "sys.raw_sql_exec",
+                        "data": {"sql": statement},
+                        "auth": {"session": admin.session_token},
+                    })
+                    response = admin.recv_next_non_notice()
+                except Exception as error:
+                    print(f"FAIL (database fixture communication error: {error})")
+                    raise
+                self._current_response = response
+                if not response or response.get("status") != "ok":
+                    print(f"FAIL (database fixture statement rejected: {response})")
+                    return False
+            print("PASS (database fixture)")
+            return True
         
         if "command" not in test:
             if "comment" in test:
@@ -253,13 +356,31 @@ class JsonSuiteRunner:
             resp = client.recv_next_non_notice()
         except Exception as e:
             print(f"FAIL (Communication Error: {e})")
+            self._forget_client(user, client)
+            raise
             return False
 
         if not resp:
             print("FAIL (No response)")
             return False
 
+        self._current_response = resp
+
         self._capture_response(name, cmd_json.get("command"), resp)
+
+        # system.disconnect is an intentional per-connection shutdown.  Do
+        # not retain the now-closed socket in the username cache; a later
+        # test for the same user must create a fresh connection and replay
+        # its known login credentials.
+        if cmd_json.get("command") in ("system.disconnect", "session.disconnect"):
+            self._forget_client(user, client)
+
+        if cmd_json.get("command") == "auth.login":
+            data = cmd_json.get("data") or {}
+            username = data.get("username")
+            password = data.get("passwd")
+            if isinstance(username, str) and isinstance(password, str):
+                self.user_credentials[username] = (username, password)
 
         # register_if_missing logic
         if cmd_json.get("command") == "auth.register" and test.get("register_if_missing"):

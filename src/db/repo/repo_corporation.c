@@ -139,9 +139,22 @@ int repo_corp_add_shares(db_t *db, int player_id, int equity_id, int quantity_ch
     const char *q_ins = "INSERT INTO corp_shareholders (player_id, corp_id, shares) VALUES ({1}, (SELECT corp_id FROM stocks WHERE id = {2}), {3});";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     if (!db_exec(db, sql_ins, (db_bind_t[]){ db_bind_i64(player_id), db_bind_i64(equity_id), db_bind_i64(quantity_change) }, 3, &err)) {
-        if (err.code == ERR_DB_CONSTRAINT) {
-            /* Race condition: retry update */
-            return repo_corp_add_shares(db, player_id, equity_id, quantity_change);
+        if (err.category == DB_ERR_CAT_CONSTRAINT) {
+            /* A unique/check conflict can be the concurrent update race.
+             * Foreign-key failures are permanent data errors and must be
+             * returned to the caller; retrying them recursively can exhaust
+             * the server stack. */
+            db_error_t retry_err;
+            int64_t retry_rows = 0;
+            if (db_exec_rows_affected(db, sql_upd,
+                                      (db_bind_t[]){
+                                        db_bind_i64(quantity_change),
+                                        db_bind_i64(player_id),
+                                        db_bind_i64(equity_id)
+                                      }, 3, &retry_rows, &retry_err)
+                && retry_rows > 0)
+                return 0;
+            return retry_err.code ? retry_err.code : err.code;
         }
         return err.code;
     }

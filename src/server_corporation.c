@@ -10,6 +10,7 @@
 #include "server_corporation.h"
 #include "server_config.h"
 #include "db/repo/repo_database.h"
+#include "db/repo/repo_cmds.h"
 #include "game_db.h"
 #include "server_log.h"
 #include "server_envelope.h"
@@ -1623,6 +1624,30 @@ cmd_equity_ipo_register (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   int64_t new_equity_id_64 = 0;
+  int system_player_id = 0;
+  char unused_password[1] = { 0 };
+
+  /* Player IDs are sequence-backed and are not stable across database
+   * creation. Resolve the seeded treasury account by its canonical name. */
+  if (repo_cmds_get_login_info (db, "System", &system_player_id,
+                                unused_password, sizeof (unused_password),
+                                NULL) != 0
+      || system_player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_DB_NOT_FOUND,
+                           "System treasury account is unavailable.");
+      return 0;
+    }
+
+  db_error_t tx_err;
+  db_error_clear (&tx_err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &tx_err))
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Unable to begin IPO transaction.");
+      return 0;
+    }
+
   int rc =
     repo_corp_register_equity (db, corp_id, ticker, total_shares, par_value,
 			      &new_equity_id_64);
@@ -1645,12 +1670,14 @@ cmd_equity_ipo_register (client_ctx_t *ctx, json_t *root)
 			       ERR_DB,
 			       "Database error during IPO registration.");
 	}
+      db_tx_rollback (db, &tx_err);
       return 0;
     }
   int new_equity_id = (int) new_equity_id_64;
 
-  // Distribute initial shares to the corporation itself (using System player ID 1)
-  rc = h_update_player_shares (db, 1, new_equity_id, total_shares);	// player_id 1 for System/Treasury
+  /* Distribute initial shares to the System treasury account. */
+  rc = h_update_player_shares (db, system_player_id, new_equity_id,
+                               total_shares);
 
 
   if (rc != 0)
@@ -1658,7 +1685,17 @@ cmd_equity_ipo_register (client_ctx_t *ctx, json_t *root)
       LOGE
 	("cmd_equity_ipo_register: Failed to distribute initial shares to corp %d for stock %d: %d",
 	 corp_id, new_equity_id, rc);
-      // This is a critical error, consider rolling back or marking stock invalid
+	  db_tx_rollback (db, &tx_err);
+	  send_response_error (ctx, root, ERR_DB,
+	                       "Database error during initial share allocation.");
+	  return 0;
+    }
+  if (!db_tx_commit (db, &tx_err))
+    {
+      db_tx_rollback (db, &tx_err);
+      send_response_error (ctx, root, ERR_DB,
+                           "Database error committing IPO registration.");
+      return 0;
     }
   json_t *response_data = json_object ();
 
