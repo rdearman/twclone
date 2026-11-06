@@ -1,0 +1,3007 @@
+{
+  "source": "docs/PROTOCOL.v3",
+  "registered_source": "src/server_loop.c",
+  "commands": [
+    {
+      "command": "auth.login",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/05_Authentication_and_Security.md",
+          "line": 39
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "macros.json",
+        "suite_auth_change_password.json",
+        "suite_auth_negative.json",
+        "suite_black_market_hardware.json",
+        "suite_combat_complete.json",
+        "suite_combat_functions_validation.json",
+        "suite_combat_toll_fighters_final.json",
+        "suite_combat_toll_fighters_inline.json",
+        "suite_combat_toll_fighters_simple.json",
+        "suite_combat_toll_fighters_v2.json",
+        "suite_combat_toll_fighters_working.json",
+        "suite_combat_toll_final_working.json",
+        "suite_combat_toll_simple.json",
+        "suite_combat_toll_simple_fixed.json",
+        "suite_communication.json",
+        "suite_computer_loops.json",
+        "suite_computer_loops_scan_negative.json",
+        "suite_ferengi_travelling_traders.json",
+        "suite_information_fog.json",
+        "suite_movement_autopilot_controls.json",
+        "suite_port_fixed_modes.json",
+        "suite_port_operations.json",
+        "suite_sector_scan.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "auth.logout",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/05_Authentication_and_Security.md",
+          "line": 63
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_auth_negative.json",
+        "suite_auth_session.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "auth.refresh",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/05_Authentication_and_Security.md",
+          "line": 75
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_auth_negative.json",
+        "suite_auth_session.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "auth.register",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/05_Authentication_and_Security.md",
+          "line": 11
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "macros.json",
+        "suite_auth_and_settings.json",
+        "suite_combat_functions_validation.json",
+        "suite_combat_toll_fighters_final.json",
+        "suite_combat_toll_fighters_inline.json",
+        "suite_combat_toll_fighters_simple.json",
+        "suite_combat_toll_fighters_v2.json",
+        "suite_combat_toll_fighters_working.json",
+        "suite_combat_toll_final_working.json",
+        "suite_combat_toll_simple.json",
+        "suite_combat_toll_simple_fixed.json",
+        "suite_communication.json",
+        "suite_computer_loops.json",
+        "suite_computer_loops_scan_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bank.balance",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 7
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bank_negative.json",
+        "suite_bank_single_authority.json",
+        "suite_economy_and_bank.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bank.deposit",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 13
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bank_negative.json",
+        "suite_bank_single_authority.json",
+        "suite_economy_and_bank.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bank.history",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 28
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bank_negative.json",
+        "suite_economy_and_bank.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bank.leaderboard",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 31
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_economy_bank_leaderboard.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bank.orders.cancel",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 36
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "bank.orders.create",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 36
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "bank.orders.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 36
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "bank.statement",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 10
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "bank.transfer",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 19
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bank_negative.json",
+        "suite_corporations.json",
+        "suite_economy_and_bank.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bank.withdraw",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md",
+          "line": 13
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bank_negative.json",
+        "suite_economy_and_bank.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bounty.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/28_Tavern_Noticeboard_and_Community_Systems.md",
+          "line": 5
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_auth_bounty.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "bounty.post",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/28_Tavern_Noticeboard_and_Community_Systems.md",
+          "line": 8
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "citadel.build",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 245
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_citadel.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "citadel.upgrade",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 245
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_citadel_upgrade_lifecycle.json",
+        "suite_combat_citadel.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "client.hello",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/06_Connection_States_and_Handshake.md",
+          "line": 81
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "combat.attack.port",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/23_Combat_and_Weapons.md",
+          "line": 18
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "combat.attack.ship",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/23_Combat_and_Weapons.md",
+          "line": 5
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "combat.attack_planet",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/23_Combat_and_Weapons.md",
+          "line": 9
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_advanced.json",
+        "suite_combat_negative.json",
+        "suite_fedspace_aggression_captainz.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "combat.hit",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/23_Combat_and_Weapons.md",
+          "line": 45
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "response_or_event"
+      ],
+      "implementation_state": "PRODUCED_RESPONSE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "combat.ship_damage.v1",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/23_Combat_and_Weapons.md",
+          "line": 62
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "response_or_event"
+      ],
+      "implementation_state": "PRODUCED_RESPONSE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "corp.balance",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 36
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_bulk_corp_fine.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.create",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 5
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json",
+        "suite_corp_perms.json",
+        "suite_corporations.json",
+        "suite_economy_stocks.json",
+        "suite_stock_market.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.deposit",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 45
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_negative.json",
+        "suite_economy_corp_funds.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.dissolve",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 27
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.invite",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 17
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json",
+        "suite_corporations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.issue_dividend",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 55
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "corp.join",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 17
+        },
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 59
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json",
+        "suite_corporations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.kick",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 22
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_perms.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.leave",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 27
+        },
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 59
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 9
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.roster",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 22
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_advanced.json",
+        "suite_corp_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.set_tax",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 51
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "corp.statement",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 40
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_bulk_corp_fine.json",
+        "suite_corporations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.status",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 13
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corporations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.transfer_ceo",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 32
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_perms.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "corp.withdraw",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md",
+          "line": 45
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_corp_negative.json",
+        "suite_economy_corp_funds.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "dock.status",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md",
+          "line": 10
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_computer_loops.json",
+        "suite_computer_loops_scan_negative.json",
+        "suite_port_operations.json",
+        "suite_ship_repair.json",
+        "test_issue_354.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "engine.tick",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/03_Message_Types_and_Semantics.md",
+          "line": 59
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "engine_or_event"
+      ],
+      "implementation_state": "ENGINE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "fine.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 108
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_bulk_corp_fine.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "fine.pay",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 112
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_economy_fine_pay.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "hardware.buy",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md",
+          "line": 143
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_black_market_hardware.json",
+        "suite_economy_hardware_buy.json",
+        "suite_planets.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "hardware.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md",
+          "line": 134
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_black_market_hardware.json",
+        "suite_ship_negative.json",
+        "suite_ship_operations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "i18n.manifest.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/06_Connection_States_and_Handshake.md",
+          "line": 106
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "move.autopilot.control",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 127
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_autopilot_controls.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.autopilot.start",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 111
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_autopilot_controls.json",
+        "suite_movement_move_autopilot_start.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.autopilot.status",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 119
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_autopilot_controls.json",
+        "suite_movement_move_autopilot_status.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.autopilot.stop",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 137
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_autopilot_controls.json",
+        "suite_movement_move_autopilot_stop.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.describe_sector",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 5
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_information_fog.json",
+        "suite_movement_move_describe_sector.json",
+        "suite_movement_nav.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.pathfind",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 97
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_information_fog.json",
+        "suite_movement_move_pathfind.json",
+        "suite_navigation.json",
+        "suite_navigation_pathfind.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.scan",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 21
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_debug_scan.json",
+        "suite_movement_move_scan.json",
+        "suite_movement_nav.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.transwarp",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 90
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_sector_hazards.json",
+        "suite_movement_move_transwarp.json",
+        "suite_movement_nav.json",
+        "suite_sector_environmental_hazards.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "move.warp",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 66
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_quasar.json",
+        "suite_combat_sector_hazards.json",
+        "suite_combat_toll_fighters.json",
+        "suite_computer_loops_scan_negative.json",
+        "suite_movement_autopilot_controls.json",
+        "suite_movement_move_warp.json",
+        "suite_movement_nav.json",
+        "suite_nav_regression.json",
+        "suite_police_phase_c_resolution.json",
+        "suite_sector_environmental_hazards.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "nav.avoid.add",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 153
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "suite_navigation_avoid_invariants.json",
+        "suite_player_get_settings.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "nav.avoid.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 153
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "suite_navigation_avoid_invariants.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "nav.avoid.remove",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 153
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "suite_navigation_avoid_invariants.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "nav.bookmark.add",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 145
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "suite_player_get_settings.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "nav.bookmark.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 145
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "nav.bookmark.remove",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 145
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "notes.delete",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 97
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "notes.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 97
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_chat_mail_news.json",
+        "suite_comm_negative.json",
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "notes.set",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 97
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_server_nav_notes_contracts.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "notice.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/28_Tavern_Noticeboard_and_Community_Systems.md",
+          "line": 17
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_chat_mail_news.json",
+        "suite_comm_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.colonists.allocate",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 202
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_v3_command_coverage.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.colonists.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 197
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_v3_command_coverage.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.colonists.set",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 197
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_v3_command_coverage.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.deposit",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 191
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_commodities_data_driven_phase2.json",
+        "suite_planet_negative.json",
+        "suite_planets.json",
+        "suite_ship_cargo_dynamic.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.fighters.transfer",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 92
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_planet_fighter_transfers.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.genesis_create",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 216
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_planet_genesis.json",
+        "suite_planets.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.info",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 40
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_quasar.json",
+        "suite_information_fog.json",
+        "suite_planet_advanced.json",
+        "suite_planet_creation.json",
+        "suite_planet_fighter_transfers.json",
+        "suite_planet_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.land",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 5
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_planet_advanced.json",
+        "suite_planet_landing_defense.json",
+        "suite_planet_negative.json",
+        "suite_police_phase_c_resolution.json",
+        "suite_v3_command_coverage.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.launch",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 36
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_combat_planet_ops.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.market.buy_order",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 284
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_planet.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.market.sell",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 256
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_planet.json",
+        "suite_planet_taxable_activity_e2e.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "planet.resource_growth.v1",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 228
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "engine_or_event"
+      ],
+      "implementation_state": "ENGINE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "planet.view",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 157
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED_NYI",
+      "executable_json_target": true,
+      "nyi": true,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "planet.withdraw",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 191
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_planet.json",
+        "suite_ship_cargo_dynamic.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.computer.recommend_routes",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 25
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_computer_loops.json",
+        "suite_computer_loops_scan_negative.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.get_prefs",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 79
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_auth_and_settings.json",
+        "suite_player_negative.json",
+        "suite_player_preferences.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.get_settings",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 66
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_player_get_settings.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.get_subscriptions",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 87
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_player_settings.json",
+        "suite_player_preferences.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.get_topics",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 87
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_player_settings.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.list_online",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 13
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_player_negative.json",
+        "suite_player_status.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.mine.v1",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 240
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "response_or_event"
+      ],
+      "implementation_state": "PRODUCED_RESPONSE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "player.my_info",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 5
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "debug_auth.json",
+        "debug_sysop.json",
+        "macros.json",
+        "suite_auth_session.json",
+        "suite_auth_starting_sector.json",
+        "suite_bucket1_remainder_bulk_corp_fine.json",
+        "suite_player_negative.json",
+        "suite_ship_reregister.json",
+        "suite_smoke.json",
+        "test_sysop_players.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.rankings",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 18
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_player_settings.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.set_prefs",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 79
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_auth_and_settings.json",
+        "suite_player_get_settings.json",
+        "suite_player_negative.json",
+        "suite_player_preferences.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.set_subscriptions",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 91
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_player_settings.json",
+        "suite_player_preferences.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "player.set_topics",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/20_Player_Commands.md",
+          "line": 91
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_player_settings.json",
+        "suite_player_preferences.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "port.dock",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md",
+          "line": 5
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "DEFERRED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": false,
+      "classification": "uncovered"
+    },
+    {
+      "command": "sector.cleanse_mines_fighters.v1",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md",
+          "line": 237
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "engine_or_event"
+      ],
+      "implementation_state": "ENGINE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "sector.info",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 5
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_information_fog.json",
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "test_issue_251.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sector.scan",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 21
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_computer_loops_scan_negative.json",
+        "suite_information_fog.json",
+        "suite_sector_scan.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sector.search",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 56
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_sector_search.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sector.set_beacon",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/21_Sector_and_Movement_Commands.md",
+          "line": 60
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_insurance_nav_news.json",
+        "suite_fedspace_msl_asset_enforcement.json",
+        "suite_movement_nav.json",
+        "suite_nav_negative.json",
+        "test_issue_251.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.info",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 91
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_ship_stock_system.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.inspect",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 98
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_commodities_data_driven_phase2.json",
+        "suite_phase3_port_dynamic_trading.json",
+        "suite_ship_cargo_dynamic.json",
+        "suite_ship_negative.json",
+        "suite_ship_operations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.jettison",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 130
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_ship_stock_system.json",
+        "suite_ship_cargo_dynamic.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.rename",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 109
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_ship_negative.json",
+        "suite_ship_operations.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.repair",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 114
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_ship_negative.json",
+        "suite_ship_repair.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.self_destruct",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 143
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_ship_stock_system.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.status",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 8
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_player_status.json",
+        "suite_ship_negative.json",
+        "suite_ship_repair.json",
+        "suite_ship_status_hull.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.tow",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 84
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_ship_tow_live.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.tow.status",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 62
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_ship_tow_live.json",
+        "suite_ship_tow_status.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.transfer_cargo",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 120
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_ship_stock_system.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "ship.upgrade",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 117
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_ship_stock_system.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "shipyard.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 146
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_ship_negative.json",
+        "suite_shipyard_and_ships.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "shipyard.upgrade",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/19_Ship_Commands.md",
+          "line": 152
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_planets.json",
+        "suite_ship_negative.json",
+        "suite_shipyard_and_ships.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.broadcast.send",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 162
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_messaging.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.config.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 42
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_config_v1.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.config.history",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 79
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_v3_command_coverage.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.config.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 24
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_config_v1.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.config.set",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 51
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_config_v1.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.engine_status.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 176
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_engine.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.jobs.cancel",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 211
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_engine.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.jobs.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 197
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_engine.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.jobs.list",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 190
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_engine.json",
+        "test_sysop_world.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.jobs.retry",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 204
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_engine.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.notice.create",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 143
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_messaging.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.notice.delete",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 155
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_messaging.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.player.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 111
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_players.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.player.kick",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 118
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_players.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.player.sessions.get",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 125
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_players.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "sysop.players.search",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/29_SysOp_Commands.md",
+          "line": 97
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "test_sysop_players.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "system.capabilities",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/06_Connection_States_and_Handshake.md",
+          "line": 48
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_auth_negative.json",
+        "suite_auth_session.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "system.hello",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/06_Connection_States_and_Handshake.md",
+          "line": 14
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_auth_negative.json",
+        "suite_auth_session.json",
+        "suite_combat_functions_validation.json",
+        "suite_session_lifecycle.json",
+        "suite_smoke.json",
+        "suite_system_admin.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "system.notice",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/03_Message_Types_and_Semantics.md",
+          "line": 68
+        },
+        {
+          "file": "docs/PROTOCOL.v3/28_Tavern_Noticeboard_and_Community_Systems.md",
+          "line": 13
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "engine_or_event",
+        "response_or_event"
+      ],
+      "implementation_state": "PRODUCED_RESPONSE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "system.welcome",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/06_Connection_States_and_Handshake.md",
+          "line": 28
+        }
+      ],
+      "registered": false,
+      "kinds": [
+        "response_or_event"
+      ],
+      "implementation_state": "PRODUCED_RESPONSE_OR_EVENT",
+      "executable_json_target": false,
+      "nyi": false,
+      "json_cases": [],
+      "protocol_covered": null,
+      "classification": "specification_blocker"
+    },
+    {
+      "command": "trade.buy",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md",
+          "line": 15
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_port_fixed_modes.json",
+        "suite_trade_market.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    },
+    {
+      "command": "trade.sell",
+      "specification": [
+        {
+          "file": "docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md",
+          "line": 15
+        }
+      ],
+      "registered": true,
+      "kinds": [
+        "client_request"
+      ],
+      "implementation_state": "IMPLEMENTED_OR_REGISTERED",
+      "executable_json_target": true,
+      "nyi": false,
+      "json_cases": [
+        "suite_bucket1_remainder_tavern_trade.json",
+        "suite_port_fixed_modes.json"
+      ],
+      "protocol_covered": true,
+      "classification": "covered"
+    }
+  ],
+  "summary": {
+    "protocol_commands": 125,
+    "protocol_commands_with_json": 112,
+    "protocol_coverage_percent": 89.6,
+    "uncovered_commands": [
+      "bank.orders.cancel",
+      "bank.orders.create",
+      "bank.orders.list",
+      "bank.statement",
+      "bounty.post",
+      "client.hello",
+      "combat.attack.port",
+      "combat.attack.ship",
+      "corp.issue_dividend",
+      "corp.set_tax",
+      "i18n.manifest.get",
+      "planet.view",
+      "port.dock"
+    ],
+    "registered_executable_commands": 112,
+    "registered_executable_commands_with_json": 112,
+    "registered_executable_uncovered": [],
+    "specification_blockers": [
+      "combat.hit",
+      "combat.ship_damage.v1",
+      "engine.tick",
+      "planet.resource_growth.v1",
+      "player.mine.v1",
+      "sector.cleanse_mines_fighters.v1",
+      "system.notice",
+      "system.welcome"
+    ],
+    "category_counts": {
+      "client_request": 125,
+      "response_or_event": 4,
+      "engine_or_event": 4
+    },
+    "inventory_entries": 133,
+    "multi_classified_entries": [
+      "system.notice"
+    ],
+    "documented_unregistered_requests": [
+      "bank.orders.cancel",
+      "bank.orders.create",
+      "bank.orders.list",
+      "bank.statement",
+      "bounty.post",
+      "client.hello",
+      "combat.attack.port",
+      "combat.attack.ship",
+      "corp.issue_dividend",
+      "corp.set_tax",
+      "i18n.manifest.get",
+      "planet.view",
+      "port.dock"
+    ]
+  }
+}
