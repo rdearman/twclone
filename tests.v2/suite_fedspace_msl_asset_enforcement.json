@@ -26,9 +26,9 @@
     },
     {
       "name": "Test 1a: Move to FedSpace Sector 1",
-      "command": "nav.move_simple",
-      "data": { "sector_id": 1 },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{fedspace_user_1_player_id}) RETURNING ship_id) UPDATE players SET sector_id=1 WHERE player_id=@{fedspace_user_1_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -121,9 +121,9 @@
     },
     {
       "name": "Test 4a: Move to MSL Sector",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{msl_sector_id} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{fedspace_user_1_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{msl_sector_id} WHERE player_id=@{fedspace_user_1_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -223,6 +223,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Test 5f setup: advance simulated UTC day",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM fedspace_sweep_runs WHERE sweep_date_utc = CURRENT_DATE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test 5f: Run MSL Cleanse Cron Again",
       "command": "sys.run_cron_handler",
       "data": { "handler_name": "fedspace_cleanup" },
@@ -269,9 +276,9 @@
     },
     {
       "name": "Test 6a: Move to non-MSL sector > 10",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@non_msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{non_msl_sector_id} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{fedspace_user_1_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{non_msl_sector_id} WHERE player_id=@{fedspace_user_1_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -288,6 +295,13 @@
       "user": "fedspace_user_1",
       "expect": { "status": "ok" },
       "save": { "non_msl_fighters_before": "data.total" }
+    },
+    {
+      "name": "Test 6d setup: advance simulated UTC day",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM fedspace_sweep_runs WHERE sweep_date_utc = CURRENT_DATE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Test 6d: Run MSL Cleanse Cron",

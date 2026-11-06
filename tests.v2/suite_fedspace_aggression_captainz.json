@@ -25,16 +25,16 @@
     },
     {
       "name": "Rig: Move Attacker to FedSpace (Sector 1)",
-      "command": "nav.move_simple",
-      "data": { "sector_id": 1 },
-      "user": "attacker_captainz_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{attacker_captainz_1_player_id}) RETURNING ship_id) UPDATE players SET sector_id=1 WHERE player_id=@{attacker_captainz_1_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Rig: Move Target to FedSpace (Sector 1)",
-      "command": "nav.move_simple",
-      "data": { "sector_id": 1 },
-      "user": "target_captainz_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=1 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{target_captainz_1_player_id}) RETURNING ship_id) UPDATE players SET sector_id=1 WHERE player_id=@{target_captainz_1_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -122,16 +122,16 @@
     },
     {
       "name": "Rig: Move Attacker2 to Non-FedSpace",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@non_fed_sector" },
-      "user": "attacker_captainz_2",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{non_fed_sector} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{attacker_captainz_2_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{non_fed_sector} WHERE player_id=@{attacker_captainz_2_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "Rig: Move Target2 to Non-FedSpace",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@non_fed_sector" },
-      "user": "target_captainz_2",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{non_fed_sector} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{target_captainz_2_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{non_fed_sector} WHERE player_id=@{target_captainz_2_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -200,9 +200,9 @@
     },
     {
       "name": "Rig: Move Attacker3 to Planet Sector",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@test_planet_sector" },
-      "user": "attacker_captainz_3",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{test_planet_sector} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{attacker_captainz_3_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{test_planet_sector} WHERE player_id=@{attacker_captainz_3_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {

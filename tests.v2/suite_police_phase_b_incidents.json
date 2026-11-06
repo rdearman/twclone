@@ -32,9 +32,9 @@
     },
     {
       "name": "Rig: Move player to RANDOM cluster sector",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@{random_sector}" },
-      "user": "phase_b_player",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{random_sector} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{phase_b_player_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{random_sector} WHERE player_id=@{phase_b_player_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -75,7 +75,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ports SET cash = 100000 WHERE sector_id = @{random_sector} LIMIT 1;"
+        "sql": "UPDATE ports SET petty_cash = 100000 WHERE port_id = (SELECT port_id FROM ports WHERE sector_id = @{random_sector} LIMIT 1);"
       },
       "expect": { "status": "ok" }
     },
@@ -94,7 +94,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET xp = 10000 WHERE player_id = @{phase_b_player_player_id};"
+        "sql": "UPDATE players SET experience = 10000 WHERE player_id = @{phase_b_player_player_id};"
       },
       "expect": { "status": "ok" }
     },
@@ -110,7 +110,7 @@
     {
       "name": "Test B.1: Port robbery increments suspicion",
       "command": "port.rob",
-      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits" },
+      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-1" },
       "user": "phase_b_player",
       "expect": { "status": "ok" }
     },
@@ -143,7 +143,7 @@
     {
       "name": "Test B.4: Second robbery increments suspicion to 2",
       "command": "port.rob",
-      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits" },
+      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-2" },
       "user": "phase_b_player",
       "expect": { "status": "ok" }
     },
@@ -163,7 +163,7 @@
     {
       "name": "Test B.6: Third robbery triggers promotion (suspicion >= 3)",
       "command": "port.rob",
-      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits" },
+      "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-3" },
       "user": "phase_b_player",
       "expect": { "status": "ok" }
     },
@@ -193,7 +193,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(suspicion, 0), COALESCE(wanted_level, 0), COALESCE(banned, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE(suspicion, 0), COALESCE(wanted_level, 0), COALESCE(banned, false) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
       },
       "expect": { "status": "ok" },
       "save": { "cleared_state": "data.rows.0" },
@@ -225,9 +225,9 @@
     },
     {
       "name": "Rig: Move player to Orion sector",
-      "command": "nav.move_simple",
-      "data": { "sector_id": "@{orion_sector}" },
-      "user": "phase_b_player",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{orion_sector} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{phase_b_player_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{orion_sector} WHERE player_id=@{phase_b_player_player_id};" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -245,14 +245,14 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ports SET cash = 100000 WHERE port_id = @{orion_port_id};"
+        "sql": "UPDATE ports SET petty_cash = 100000 WHERE port_id = @{orion_port_id};"
       },
       "expect": { "status": "ok" }
     },
     {
       "name": "Test D.1: Lawless (Orion) - robbery should NOT create incident state",
       "command": "port.rob",
-      "data": { "sector_id": "@{orion_sector}", "port_id": "@{orion_port_id}", "mode": "credits" },
+      "data": { "sector_id": "@{orion_sector}", "port_id": "@{orion_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-orion-rob" },
       "user": "phase_b_player",
       "expect": { "status": "ok" }
     },
