@@ -1,0 +1,777 @@
+{
+  "name": "Planet Landing Defense Regression",
+  "version": "3.0.0",
+  "protocol_category": "24_Planets_Outposts_Stations",
+  "description": "Owner and corporation exemptions, denied landing, and existing Quasar and planetary-fighter defense resolution.",
+  "tests": [
+    {
+      "name": "Create owner",
+      "setup": "macro_auth_user",
+      "username": "landing_planet_owner",
+      "password": "qa-password"
+    },
+    {
+      "name": "Create corporation member",
+      "setup": "macro_auth_user",
+      "username": "landing_planet_member",
+      "password": "qa-password"
+    },
+    {
+      "name": "Create outsider",
+      "setup": "macro_auth_user",
+      "username": "landing_planet_outsider",
+      "password": "qa-password"
+    },
+    {
+      "name": "Create FedSpace outsider",
+      "setup": "macro_auth_user",
+      "username": "landing_planet_safe_outsider",
+      "password": "qa-password"
+    },
+    {
+      "name": "Fixture corporation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corporations (corporation_id, name, owner_id, tag) VALUES (97770, 'Landing QA Corp', @{landing_planet_owner_player_id}, 'LQA') ON CONFLICT (corporation_id) DO UPDATE SET owner_id=EXCLUDED.owner_id;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Add member to corporation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corp_members (corporation_id, player_id, role) VALUES (97770, @{landing_planet_member_player_id}, 'Member') ON CONFLICT (corporation_id, player_id) DO UPDATE SET role='Member';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create owned and defended planets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_by, fighters) VALUES (977710,20,'Landing Owner QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},0),(977711,20,'Landing Corp QA',97770,'corporation','M',1,@{admin_player_id},0),(977712,20,'Landing Quasar QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},10),(977713,20,'Landing Destroyer QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},10),(977714,20,'Landing Fighter QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},20),(977715,20,'Landing Shield QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},0),(977717,20,'Landing Undefended QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},0) ON CONFLICT (planet_id) DO UPDATE SET sector_id=EXCLUDED.sector_id, owner_id=EXCLUDED.owner_id, owner_type=EXCLUDED.owner_type, fighters=EXCLUDED.fighters;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Configure atmosphere Quasar defenses",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO citadels (planet_id, level, qCannonAtmosphere, militaryReactionLevel, planetaryShields, owner_id) VALUES (977710,3,100,0,0,@{landing_planet_owner_player_id}),(977711,3,100,0,0,@{landing_planet_owner_player_id}),(977712,3,100,0,0,@{landing_planet_owner_player_id}),(977713,3,200,0,0,@{landing_planet_owner_player_id}),(977714,1,0,0,0,@{landing_planet_owner_player_id}),(977715,5,0,0,20,@{landing_planet_owner_player_id}) ON CONFLICT (planet_id) DO UPDATE SET level=EXCLUDED.level, qCannonAtmosphere=EXCLUDED.qCannonAtmosphere, militaryReactionLevel=0, planetaryShields=EXCLUDED.planetaryShields;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Position owner",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=20 WHERE player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Owner ship in sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=20, onplanet=FALSE, hull=100, shields=0, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_owner_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Evidence snapshot before owner landing",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.player_id, p.sector_id, p.lastplanet, t.turns_remaining, s.ship_id, s.onplanet, s.hull, s.shields, (SELECT count(*) FROM engine_events e WHERE e.actor_player_id=p.player_id) AS event_count FROM players p JOIN turns t USING (player_id) JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "@{landing_planet_owner_player_id}"
+        },
+        {
+          "path": "data.rows.0.5",
+          "op": "==",
+          "value": "f"
+        }
+      ],
+      "save": {
+        "landing_owner_turns_before": "data.rows.0.3"
+      }
+    },
+    {
+      "name": "Zero-turn owner landing is refused without mutation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE turns SET turns_remaining=0 WHERE player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Reject owner landing with zero turns",
+      "command": "planet.land",
+      "user": "landing_planet_owner",
+      "data": {
+        "planet_id": 977710
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 1489
+      }
+    },
+    {
+      "name": "Verify zero-turn landing preserved state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.sector_id=20 AND p.lastplanet IS NULL AND t.turns_remaining=0 AND s.onplanet=FALSE AND (SELECT count(*) FROM engine_events e WHERE e.actor_player_id=p.player_id) = 0 FROM players p JOIN turns t USING (player_id) JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Restore owner turns after zero-turn refusal",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE turns SET turns_remaining=@{landing_owner_turns_before} WHERE player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Reject malformed owner landing without mutation",
+      "command": "planet.land",
+      "user": "landing_planet_owner",
+      "data": {},
+      "expect": {
+        "status": "error",
+        "error_code": 1301
+      }
+    },
+    {
+      "name": "Planet owner bypasses its armed Quasar defense",
+      "command": "planet.land",
+      "user": "landing_planet_owner",
+      "data": {
+        "planet_id": 977710
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.land.success"
+      }
+    },
+    {
+      "name": "Verify owner landing caused no defense damage",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.hull=100 AND s.shields=0 AND s.onplanet=TRUE AND pl.lastplanet=977710 AND NOT EXISTS (SELECT 1 FROM engine_events WHERE type='combat.hit.quasar' AND actor_player_id=@{landing_planet_owner_player_id}) FROM ships s JOIN players pl ON pl.ship_id=s.ship_id WHERE pl.player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Evidence snapshot after owner landing",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.player_id, p.sector_id, p.lastplanet, t.turns_remaining, s.ship_id, s.onplanet, s.hull, s.shields, (SELECT count(*) FROM engine_events e WHERE e.actor_player_id=p.player_id) AS event_count FROM players p JOIN turns t USING (player_id) JOIN ships s ON s.ship_id=p.ship_id WHERE p.player_id=@{landing_planet_owner_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "@{landing_planet_owner_player_id}"
+        },
+        {
+          "path": "data.rows.0.5",
+          "op": "==",
+          "value": "t"
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": "977710"
+        },
+        {
+          "path": "data.rows.0.3",
+          "op": "==",
+          "value": {
+            "sql_int": "SELECT @{landing_owner_turns_before} - 1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Position corporation member",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=20 WHERE player_id=@{landing_planet_member_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Corporation member ship in sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=20, onplanet=FALSE, hull=100, shields=0, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_member_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Authorized corporation member bypasses armed defense",
+      "command": "planet.land",
+      "user": "landing_planet_member",
+      "data": {
+        "planet_id": 977711
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.land.success"
+      }
+    },
+    {
+      "name": "Verify corporation landing caused no defense damage",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.hull=100 AND s.shields=0 AND s.onplanet=TRUE AND pl.lastplanet=977711 AND NOT EXISTS (SELECT 1 FROM engine_events WHERE type='combat.hit.quasar' AND actor_player_id=@{landing_planet_member_player_id}) FROM ships s JOIN players pl ON pl.ship_id=s.ship_id WHERE pl.player_id=@{landing_planet_member_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Position outsider",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=20 WHERE player_id=@{landing_planet_outsider_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Outsider ship enters sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=20, onplanet=FALSE, hull=100, shields=0, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Undefended outsider landing is refused without damage",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977717
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      }
+    },
+    {
+      "name": "Verify undefended ship unchanged and not landed",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT hull=100 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Defended outsider landing is refused after Quasar damage",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977712
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.landing_allowed",
+          "op": "==",
+          "value": false
+        },
+        {
+          "path": "error.data.ship_remains_in_sector",
+          "op": "==",
+          "value": true
+        },
+        {
+          "path": "error.data.combat.0.defense",
+          "op": "==",
+          "value": "atmosphere_quasar"
+        },
+        {
+          "path": "error.data.combat.0.hull_lost",
+          "op": "==",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "name": "Verify Quasar damage and event persistence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.hull=100 AND s.onplanet=FALSE AND EXISTS (SELECT 1 FROM engine_events WHERE type='combat.hit.quasar' AND actor_player_id=@{landing_planet_outsider_player_id}) FROM ships s WHERE s.ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Set shielded attacker for Quasar damage",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET shields=40, hull=100, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Quasar damage consumes shields before hull",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977712
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.combat.0.shields_lost",
+          "op": "==",
+          "value": 40
+        },
+        {
+          "path": "error.data.combat.0.hull_lost",
+          "op": "==",
+          "value": 60
+        }
+      ]
+    },
+    {
+      "name": "Verify Quasar shield and hull state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT shields=0 AND hull=140 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Enable the existing citadel military reaction level",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE citadels SET militaryReactionLevel=1 WHERE planet_id=977712;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Prepare shielded attacker for reacted Quasar shot",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET shields=40, hull=100 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Atmosphere Quasar uses the existing reaction multiplier",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977712
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.combat.0.damage",
+          "op": "==",
+          "value": 125
+        },
+        {
+          "path": "error.data.combat.0.shields_lost",
+          "op": "==",
+          "value": 40
+        },
+        {
+          "path": "error.data.combat.0.hull_lost",
+          "op": "==",
+          "value": 85
+        }
+      ]
+    },
+    {
+      "name": "Verify reacted Quasar damage persistence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT shields=0 AND hull=115 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Set attacker and planetary fighter pools",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET fighters=10, hull=100, shields=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Citadel shield grid engages without stored planetary fighters",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977715
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.combat.0.citadel_shields_absorbed",
+          "op": "==",
+          "value": 10
+        },
+        {
+          "path": "error.data.combat.0.citadel_shields_remaining",
+          "op": "==",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "name": "Verify shield-only defense consumed fighter strength",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.fighters=0 AND c.planetaryShields=10 AND s.onplanet=FALSE FROM ships s JOIN players pl ON pl.player_id=@{landing_planet_outsider_player_id} JOIN citadels c ON c.planet_id=977715 WHERE s.ship_id=pl.ship_id;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Reset fighters for planetary fighter exchange",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET fighters=10 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Planetary fighters engage outsider; access remains denied",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977714
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.landing_allowed",
+          "op": "==",
+          "value": false
+        },
+        {
+          "path": "error.data.combat.0.result",
+          "op": "==",
+          "value": "repelled"
+        },
+        {
+          "path": "error.data.combat.0.attacker_fighters_lost",
+          "op": "==",
+          "value": 10
+        },
+        {
+          "path": "error.data.combat.0.planet_fighters_lost",
+          "op": "==",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "name": "Verify fighter losses and event persistence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.fighters=0 AND p.fighters=10 AND s.onplanet=FALSE AND EXISTS (SELECT 1 FROM engine_events WHERE type='combat.planet_landing_defense.v1' AND actor_player_id=@{landing_planet_outsider_player_id}) FROM ships s JOIN planets p ON p.planet_id=977714 WHERE s.ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Reset outsider hull for lethal defense",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull=100, shields=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Lethal Quasar defense destroys attacking ship",
+      "command": "planet.land",
+      "user": "landing_planet_outsider",
+      "data": {
+        "planet_id": 977713
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.ship_remains_in_sector",
+          "op": "==",
+          "value": false
+        },
+        {
+          "path": "error.data.combat.0.hull_lost",
+          "op": "==",
+          "value": 100
+        },
+        {
+          "path": "error.data.combat.0.destroyed",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Verify destroyed ship and no active ship assignment",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.destroyed=TRUE AND s.hull=0 AND p.ship_id IS NULL AND EXISTS (SELECT 1 FROM podded_status ps WHERE ps.player_id=p.player_id AND ps.status='active') FROM ship_ownership so JOIN ships s ON s.ship_id=so.ship_id JOIN players p ON p.player_id=so.player_id WHERE so.player_id=@{landing_planet_outsider_player_id} ORDER BY so.ship_id DESC LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    },
+    {
+      "name": "Create armed FedSpace planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_by, fighters) VALUES (977716,1,'Landing FedSpace QA',@{landing_planet_owner_player_id},'player','M',1,@{admin_player_id},50) ON CONFLICT (planet_id) DO UPDATE SET sector_id=1, owner_id=EXCLUDED.owner_id, owner_type=EXCLUDED.owner_type, fighters=50;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Configure armed FedSpace planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO citadels (planet_id, level, qCannonAtmosphere, militaryReactionLevel, planetaryShields, owner_id) VALUES (977716,3,200,0,0,@{landing_planet_owner_player_id}) ON CONFLICT (planet_id) DO UPDATE SET level=3, qCannonAtmosphere=200, militaryReactionLevel=0, planetaryShields=0;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Position FedSpace outsider",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=1 WHERE player_id=@{landing_planet_safe_outsider_player_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Position FedSpace outsider ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=1, onplanet=FALSE, hull=100, shields=0, fighters=10 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_safe_outsider_player_id});"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "FedSpace refusal prevents planetary defense engagement",
+      "command": "planet.land",
+      "user": "landing_planet_safe_outsider",
+      "data": {
+        "planet_id": 977716
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      }
+    },
+    {
+      "name": "Verify protected-sector attempt caused no damage or defense event",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.hull=100 AND s.shields=0 AND s.fighters=10 AND s.onplanet=FALSE AND p.fighters=50 AND NOT EXISTS (SELECT 1 FROM engine_events WHERE type IN ('combat.hit.quasar','combat.planet_landing_defense.v1') AND actor_player_id=@{landing_planet_safe_outsider_player_id}) FROM ships s JOIN players pl ON pl.player_id=@{landing_planet_safe_outsider_player_id} JOIN planets p ON p.planet_id=977716 WHERE s.ship_id=pl.ship_id;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": "t"
+        }
+      ]
+    }
+  ]
+}
