@@ -23,3 +23,6 @@ Updated 2026-11-07.
 - Prior commits: `60967ed5`, `317d0576`, `caf3b9e3`.
 - Remaining Ferengi issue: the temporary `codex_fixture_roster_only` case expects a new active definition to bypass the configured population target; this is a fixture/specification question, not a provisioning error.
 - Next group: tavern fixtures and other high-count shared fixture groups.
+- Latest complete run (2026-11-07): 2,083 cases executed; 1,927 passed; 156 failed; 1 blocked; 2 unsupported; 0 not executed. No server crash or transport cascade. Navigation avoid add/remove and deterministic sector-search assertions now pass.
+- Additional focused commits: `712ac898`, `cfe7f715`, `cad6fd43`, `156d78f4`, `12780a7d`.
+- Immediate next action: investigate the remaining supported gameplay/fixture failures, beginning with the isolated limpet-removal case and then the tavern/economy group; unknown commands remain protocol blockers unless an approved replacement exists.
