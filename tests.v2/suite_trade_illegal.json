@@ -28,37 +28,47 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Move good_trader to Sector 564 (Port 224)",
+      "name": "Rig: Locate a port with illegal commodity rows",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector_id = 564 WHERE name = 'good_trader';" },
+      "data": {
+        "sql": "SELECT p.port_id, p.sector_id FROM ports p JOIN port_trade pt ON pt.port_id = p.port_id WHERE pt.commodity IN ('SLV','WPN','DRG') GROUP BY p.port_id, p.sector_id HAVING COUNT(DISTINCT pt.commodity) = 3 ORDER BY p.port_id LIMIT 1;"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "illegal_port_id": "data.rows.0.0", "illegal_sector_id": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Move good_trader to the selected port sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET sector_id = @{illegal_sector_id} WHERE name = 'good_trader';" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Move good_trader ship to Sector 564 (Port 224)",
+      "name": "Rig: Move good_trader ship to the selected port sector",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector_id = 564 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'good_trader');" },
+      "data": { "sql": "UPDATE ships SET sector_id = @{illegal_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'good_trader');" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Move evil_trader to Sector 564 (Port 224)",
+      "name": "Rig: Move evil_trader to the selected port sector",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET sector_id = 564 WHERE name = 'evil_trader';" },
+      "data": { "sql": "UPDATE players SET sector_id = @{illegal_sector_id} WHERE name = 'evil_trader';" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Move evil_trader ship to Sector 564 (Port 224)",
+      "name": "Rig: Move evil_trader ship to the selected port sector",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE ships SET sector_id = 564 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'evil_trader');" },
+      "data": { "sql": "UPDATE ships SET sector_id = @{illegal_sector_id} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'evil_trader');" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
       "name": "good_trader sees no illegal goods",
       "command": "trade.port_info",
-      "data": { "port_id": 224 },
+      "data": { "port_id": "@{illegal_port_id}" },
       "user": "good_trader",
       "expect": {
         "status": "ok",
@@ -87,7 +97,7 @@
     {
       "name": "evil_trader sees illegal goods",
       "command": "trade.port_info",
-      "data": { "port_id": 224 },
+      "data": { "port_id": "@{illegal_port_id}" },
       "user": "evil_trader",
       "expect": {
         "status": "ok",
