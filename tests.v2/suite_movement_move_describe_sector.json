@@ -11,6 +11,7 @@
       "name": "Positive: Describe Current Sector",
       "command": "move.describe_sector",
       "user": "mover_describe",
+      "data": { "sector_id": 1 },
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.sector_id", "op": "==", "value": 1 }
