@@ -16,6 +16,7 @@ Updated 2026-11-07.
 - Current batch: made the sector.search `Sol` assertion deterministic by establishing the documented sector-name fixture in the disposable database; tavern failures remain invalid-state/contract cases pending individual reconciliation.
 - The sector-search full-run result returned the expected Sol row but exposed bracket notation unsupported by the JSON assertion path resolver; the assertion now uses the established dotted array-index form. Two computer-loop scan cases fluctuated in that run and remain under fixture investigation.
 - Current batch: aligned navigation-avoid list assertions with the V3 response field `data.items`; the server already persisted and returned the correct add/remove state.
+- The first avoid-list rerun showed the fixture used sector 999 in a 500-sector disposable universe; the add was acknowledged but not persisted. The fixture now uses valid sector 499.
 - Commits created: `b90d1aa6`, `9347c2e8`, `f7b95c7c` (corporation and planet fixtures), and `20dc575a` (sector description fixture).
 - Known blockers: `events.resume` is compile-gated and unregistered; MSL tests request an unregistered cron command; quasar/Captain Z expectations require contract decisions.
 - Prior commits: `60967ed5`, `317d0576`, `caf3b9e3`.

@@ -13,7 +13,7 @@
     {
       "name": "Nav: Add Avoid",
       "command": "nav.avoid.add",
-      "data": { "sector_id": 999 },
+      "data": { "sector_id": 499 },
       "user": "nav_avoid_user",
       "expect": { "status": "ok" }
     },
@@ -23,13 +23,13 @@
       "user": "nav_avoid_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.items", "op": "contains", "value": 999 }
+        { "path": "data.items", "op": "contains", "value": 499 }
       ]
     },
     {
       "name": "Nav: Remove Avoid",
       "command": "nav.avoid.remove",
-      "data": { "sector_id": 999 },
+      "data": { "sector_id": 499 },
       "user": "nav_avoid_user",
       "expect": { "status": "ok" }
     },
