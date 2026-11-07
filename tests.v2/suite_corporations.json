@@ -15,6 +15,13 @@
       "password": "password"
     },
     {
+      "name": "Rig: Fund corporation CEO",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET credits = 100000 WHERE name = 'basic_corp_ceo_user';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Create Corp for CEO Player",
       "command": "corp.create",
       "data": { "name": "BasicCorp" },
