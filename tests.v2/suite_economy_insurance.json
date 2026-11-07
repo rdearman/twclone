@@ -8,10 +8,34 @@
       "password": "password"
     },
     {
+      "name": "Rig: Seed insurance fund",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO insurance_funds (fund_id, owner_type, owner_id, balance) VALUES (1, 'system', NULL, 100000) ON CONFLICT (fund_id) DO UPDATE SET balance = 100000;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Resolve active ship",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT ship_id FROM players WHERE name = 'econ_trader';" },
+      "user": "admin",
+      "save": { "econ_trader_ship_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Positive: Buy Policy",
       "command": "insurance.policies.buy",
-      "data": { "policy_type": "standard", "ship_id": 1005 },
+      "data": { "subject_type": "ship", "subject_id": "@econ_trader_ship_id", "duration": 3600, "premium": 10, "payout": 50, "fund_id": 1 },
       "user": "econ_trader",
+      "save": { "policy_id": "data.policy_id" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Create owned insurance claim",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO insurance_claims (policy_id, event_id, amount, status) VALUES (@{policy_id}, 'insurance-regression-event', 25, 'open') RETURNING insurance_claims_id;" },
+      "user": "admin",
+      "save": { "claim_id": "data.rows.0.0" },
       "expect": { "status": "ok" }
     },
     {
@@ -23,7 +47,7 @@
     {
       "name": "Positive: File Claim",
       "command": "insurance.claim.file",
-      "data": { "policy_id": 1 },
+      "data": { "claim_id": "@claim_id", "event_id": "insurance-regression-event", "amount": 25 },
       "user": "econ_trader",
       "expect": { "status": "ok" }
     },
