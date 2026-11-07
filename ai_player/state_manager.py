@@ -46,6 +46,8 @@ class StateManager:
             "uncertain_mutations": {},  # Durable ambiguity markers for every mutating command
             "port_trade_blacklist": [], # NEW: List of ports that failed on trade
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
+            "sector_danger": {},        # Persisted hazard/interdiction risk by sector
+            "route_memory": [],         # Successful profitable trade routes
             "current_path": [],         # NEW: Stores the server-provided path for navigation
             "last_action_result": None, # NEW: Feedback loop for LLM
             "last_quotes": {},          # NEW: Deterministic trade rule support
@@ -507,6 +509,11 @@ class StateManager:
                 return None
 
         fee_total = money(fees) or Decimal("0")
+        origin_ports = {}
+        for cargo_item in self.state["ship_info"].get("cargo", []):
+            commodity = canon_commodity(cargo_item.get("commodity"))
+            if commodity and cargo_item.get("origin_port_id") is not None:
+                origin_ports.setdefault(commodity, cargo_item.get("origin_port_id"))
         gross_values = []
         for item in items_sold:
             quantity = item.get("quantity") or item.get("units")
@@ -580,6 +587,22 @@ class StateManager:
                 "commodity": commodity_sold,
                 "type": "sell"
             }
+            # A completed sale is the strongest evidence that a route works.
+            # Resolve the original port back to its surveyed sector so the
+            # next cargo run can prefer this route without guessing.
+            origin_port = origin_ports.get(commodity_sold)
+            buy_sector = None
+            for sector_id, port in (self.state.get("port_info_by_sector") or {}).items():
+                if str((port or {}).get("port_id")) == str(origin_port):
+                    buy_sector = sector_id
+                    break
+            if buy_sector is not None and self.state.get("player_location_sector") is not None:
+                self.record_trade_route({
+                    "buy_sector": buy_sector,
+                    "sell_sector": self.state.get("player_location_sector"),
+                    "commodity": commodity_sold,
+                    "profit": total_profit,
+                })
 
         logger.info(f"Cargo updated after sell. Profit: {total_profit}. New cargo: {self.state['ship_info']['cargo']}")
         self.save_state()
@@ -857,6 +880,50 @@ class StateManager:
             self.state["warp_blacklist"].append(sector_id)
             logger.info(f"Added sector {sector_id} to warp blacklist.")
             self.save_state()
+
+    def record_sector_danger(self, sector_id, hazard_types=None, severity=1):
+        """Persist destination risk so autonomous routing avoids repeat losses."""
+        try:
+            key = str(int(sector_id))
+        except (TypeError, ValueError):
+            return
+        current = self.state.setdefault("sector_danger", {}).get(key, {})
+        hazards = set(current.get("hazards", []))
+        hazards.update(str(value) for value in (hazard_types or []) if value)
+        try:
+            severity = max(1, int(severity))
+        except (TypeError, ValueError):
+            severity = 1
+        self.state.setdefault("sector_danger", {})[key] = {
+            "hazards": sorted(hazards),
+            "severity": max(severity, int(current.get("severity", 0) or 0)),
+            "last_seen": time.time(),
+        }
+        self.save_state()
+
+    def record_trade_route(self, route):
+        """Keep bounded memory of routes that actually produced a sale."""
+        if not isinstance(route, dict):
+            return
+        if any(route.get(key) is None for key in ("buy_sector", "sell_sector", "commodity")):
+            return
+        normalized = dict(route)
+        try:
+            normalized["buy_sector"] = int(normalized["buy_sector"])
+            normalized["sell_sector"] = int(normalized["sell_sector"])
+        except (TypeError, ValueError):
+            return
+        normalized["commodity"] = canon_commodity(normalized["commodity"])
+        normalized["last_used"] = time.time()
+        routes = self.state.setdefault("route_memory", [])
+        routes = [item for item in routes if not (
+            str(item.get("buy_sector")) == str(normalized["buy_sector"])
+            and str(item.get("sell_sector")) == str(normalized["sell_sector"])
+            and canon_commodity(item.get("commodity")) == normalized["commodity"]
+        )]
+        routes.insert(0, normalized)
+        self.state["route_memory"] = routes[:50]
+        self.save_state()
 
     def record_trade_failure(self, port_id, command_name, error_code, error_message):
         """Records a trade command failure and updates blacklists as appropriate."""

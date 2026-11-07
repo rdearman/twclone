@@ -5,7 +5,7 @@ from pathlib import Path
 AI_PLAYER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_PLAYER_DIR))
 
-from simulation import load_scenarios, run_scenario, run_suite  # noqa: E402
+from simulation import load_scenarios, run_competition, run_scenario, run_suite  # noqa: E402
 
 
 def test_scenario_episodes_are_repeatable_for_a_fixed_seed():
@@ -59,3 +59,12 @@ def test_adaptive_archetype_uses_shield_state_and_cargo_state():
     planner.config.update({"behavior_profile": "adaptive", "adaptive_caution_threshold": "invalid"})
     state["ship_info"].update({"shields": 20, "max_shields": 100})
     assert planner._behavior_profile(state) == "cautious"
+
+
+def test_competition_harness_ranks_repeatable_surviving_policies():
+    scenarios = load_scenarios()
+    first = run_competition(scenarios, ["trader", "cautious"], rounds=2, seed=17)
+    second = run_competition(scenarios, ["trader", "cautious"], rounds=2, seed=17)
+    assert first["winner"] == second["winner"]
+    assert first["ranking"] == ["cautious", "trader"] or first["ranking"] == ["trader", "cautious"]
+    assert all(value["episodes"] == len(scenarios) * 2 for value in first["leaderboard"].values())

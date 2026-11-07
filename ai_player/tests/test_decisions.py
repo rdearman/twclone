@@ -203,6 +203,31 @@ def test_solo_policy_does_not_create_planet_in_three_exit_sector():
     assert planner._solo_progression_goal(state) is None
 
 
+def test_solo_policy_assigns_workforce_and_reinforces_planet():
+    planner = make_planner()
+    planner.config.update({"solo_empire_mode": True, "enable_citadel_management": True})
+    state = {
+        "ship_info": {"onplanet": 321, "planet_id": 321, "fighters": 20},
+        "planet_info": {"planet_id": 321, "colonists_unassigned": 10, "fighters": 0},
+        "server_commands": ["planet.colonists.allocate", "planet.fighters.transfer"],
+    }
+    assert planner._solo_progression_goal(state) == "planet: workforce"
+    state["planet_info"]["colonists_unassigned"] = 0
+    assert planner._solo_progression_goal(state) == "planet: defend"
+    assert planner._achieve_goal(state, "planet: defend") == {
+        "command": "planet.fighters.transfer",
+        "data": {"planet_id": 321, "direction": "ship_to_planet", "quantity": 20},
+    }
+
+
+def test_navigation_prefers_safe_exit_after_entry_hazard():
+    planner = make_planner()
+    planner.state_manager.get.return_value = []
+    state = navigation_state("explorer")
+    state["sector_danger"] = {"20": {"severity": 4, "hazards": ["mine"]}}
+    assert planner._get_next_warp_target(state) == 30
+
+
 def test_autonomous_exploit_does_not_randomly_attempt_planet_landings():
     planner = make_planner()
     state = {

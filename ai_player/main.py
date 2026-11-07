@@ -255,6 +255,8 @@ def mutation_reconciliation_contract(command_name):
         "fighters.recall": ["combat.fighters.deployed", "sector.info", "ship.info"],
         "mines.recall": ["combat.mines.recalled", "sector.info", "ship.info"],
         "notice.ack": ["notice.acknowledged", "notice.list"],
+        "nav.avoid.add": ["nav.avoid.add", "nav.avoid.list"],
+        "nav.avoid.remove": ["nav.avoid.remove", "nav.avoid.list"],
     }
     return {"response_types": contracts.get(command_name, []), "readback_required": True}
 
@@ -701,7 +703,7 @@ V3_ORDINARY_PLAYER_COMMANDS = [
     "player.set_subscriptions", "player.set_topics", "notes.set", "notes.delete",
     "notes.list", "fine.list", "fine.pay", "session.ping",
     "sector.info", "sector.scan", "sector.scan.density", "sector.search",
-    "sector.set_beacon", "move.scan", "move.warp", "move.transwarp",
+    "sector.set_beacon", "move.describe_sector", "move.scan", "move.warp", "move.transwarp",
     "move.pathfind", "move.intercept", "move.autopilot.start", "move.autopilot.status",
     "move.autopilot.control", "move.autopilot.stop", "nav.bookmark.add",
     "nav.bookmark.remove", "nav.bookmark.list", "nav.avoid.add", "nav.avoid.remove",
@@ -713,6 +715,7 @@ V3_ORDINARY_PLAYER_COMMANDS = [
     "ship.tow.status", "ship.tow", "shipyard.list", "shipyard.upgrade",
     "combat.attack.ship", "combat.attack_planet", "combat.attack.port",
     "planet.land", "planet.launch", "planet.info", "planet.fighters.transfer",
+    "planet.rename", "planet.transfer_ownership", "planet.harvest", "planet.genesis",
     "planet.deposit", "planet.withdraw", "planet.colonists.get",
     "planet.colonists.set", "planet.colonists.allocate", "planet.genesis_create",
     "planet.view", "planet.market.sell", "planet.market.buy_order",
@@ -722,6 +725,13 @@ V3_ORDINARY_PLAYER_COMMANDS = [
     "corp.deposit", "corp.withdraw", "corp.set_tax", "corp.issue_dividend",
     "bank.balance", "bank.statement", "bank.deposit", "bank.withdraw", "bank.transfer",
     "bank.history", "bank.leaderboard", "bank.orders.list", "bounty.list", "bounty.post",
+    "trade.history", "trade.jettison", "port.rob", "combat.sweep_mines",
+    "player.set_trade_account_preference", "player.get_bookmarks", "player.set_bookmarks",
+    "player.get_avoids", "player.set_avoids", "nav.bookmark.set", "nav.avoid.set",
+    "news.get_feed", "news.read", "news.mark_feed_read", "subscribe.add",
+    "subscribe.remove", "subscribe.list", "subscribe.catalog", "ship.claim",
+    "ship.reregister", "shipyard.sell", "insurance.policies_list", "insurance.policies_buy",
+    "insurance.claim_file", "fine.list", "trade.offer", "trade.accept", "trade.cancel",
     "notice.list", "notice.ack", "chat.send", "mail.send", "mail.inbox", "mail.read", "mail.delete",
     "insurance.policies.list", "ferengi.traders",
 ]
@@ -1312,6 +1322,12 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
 
         elif goal_type == "citadel" and goal_target in ("maintain", "build", "upgrade"):
             return response_type in ("citadel.upgrade_started", "planet.info")
+
+        elif goal_type == "planet" and goal_target == "workforce":
+            return response_type == "planet.colonists.allocate"
+
+        elif goal_type == "planet" and goal_target == "defend":
+            return response_type == "planet.fighters.transferred_v1"
 
     except Exception as e:
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
@@ -2430,6 +2446,38 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     if response.get("status") == "ok":
                         new_sector = response_data.get("to_sector_id")
                         if new_sector:
+                            hazards = response_data.get("hazards") or []
+                            if isinstance(hazards, list) and hazards and hasattr(state_manager, "record_sector_danger"):
+                                hazard_types = [
+                                    item.get("hazard_type", item.get("type"))
+                                    for item in hazards if isinstance(item, dict)
+                                ]
+                                severity = sum(
+                                    max(1, int(item.get("hull_lost", 0) or 0)
+                                        + int(item.get("fighters_lost", 0) or 0)
+                                        + int(item.get("shields_lost", 0) or 0))
+                                    for item in hazards if isinstance(item, dict)
+                                )
+                                previous_danger = (state_manager.get("sector_danger", {}) or {}).get(str(new_sector))
+                                state_manager.record_sector_danger(new_sector, hazard_types, severity or 1)
+                                if (config.get("persist_dangerous_sectors", True)
+                                        and not previous_danger
+                                        and "nav.avoid.add" in game_state_before.get("server_commands", [])
+                                        and game_conn is not None):
+                                    avoid_id = str(uuid.uuid4())
+                                    avoid_cmd = {
+                                        "id": f"c-avoid-{avoid_id[:8]}",
+                                        "command": "nav.avoid.add",
+                                        "data": {"sector_id": int(new_sector)},
+                                        "meta": {
+                                            "client_version": config.get("client_version"),
+                                            "idempotency_key": avoid_id,
+                                            "session_token": state_manager.get("session_id"),
+                                        },
+                                    }
+                                    if game_conn.send_command(avoid_cmd):
+                                        state_manager.add_pending_command(avoid_cmd["id"], avoid_cmd)
+                                        state_manager.record_ai_metric("commands_sent")
                             state_manager.record_ai_metric("completed_warps")
                             state_manager.set("player_location_sector", new_sector)
                             current_path = game_state_before.get("current_path", [])
@@ -2808,6 +2856,28 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         },
                     }
                     if refresh["data"]["planet_id"] is not None and game_conn.send_command(refresh):
+                        state_manager.add_pending_command(refresh_id, refresh)
+                        state_manager.record_ai_metric("commands_sent")
+
+                elif response_type in ("planet.colonists.allocate", "planet.fighters.transferred_v1"):
+                    planet_id = response_data.get("planet_id")
+                    if response_type == "planet.colonists.allocate":
+                        state_manager.set("planet_info", {
+                            **(state_manager.get("planet_info") or {}),
+                            **response_data,
+                        })
+                    refresh_id = f"c-planet-refresh-{uuid.uuid4().hex[:8]}"
+                    refresh = {
+                        "id": refresh_id,
+                        "command": "planet.info",
+                        "data": {"planet_id": planet_id},
+                        "meta": {
+                            "client_version": config.get("client_version"),
+                            "idempotency_key": str(uuid.uuid4()),
+                            "session_token": state_manager.get("session_id"),
+                        },
+                    }
+                    if planet_id is not None and game_conn.send_command(refresh):
                         state_manager.add_pending_command(refresh_id, refresh)
                         state_manager.record_ai_metric("commands_sent")
                     else:

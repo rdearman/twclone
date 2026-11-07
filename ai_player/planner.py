@@ -127,6 +127,21 @@ class Planner:
                 return "planet: create"
 
         if self.config.get("enable_citadel_management", True) and ship.get("onplanet"):
+            planet = current_state.get("planet_info") or {}
+            planet_id = planet.get("planet_id", planet.get("id")) or ship.get("planet_id")
+            if planet_id is not None:
+                if (self.config.get("enable_planet_workforce", True)
+                        and "planet.colonists.allocate" in current_state.get("server_commands", [])):
+                    unassigned = int(planet.get("colonists_unassigned", 0) or 0)
+                    if unassigned > 0:
+                        return "planet: workforce"
+                if (self.config.get("enable_planet_defense", True)
+                        and "planet.fighters.transfer" in current_state.get("server_commands", [])):
+                    stored_fighters = int(planet.get("fighters", planet.get("planet_fighters", 0)) or 0)
+                    ship_fighters = int(ship.get("fighters", 0) or 0)
+                    target = int(self.config.get("planet_defense_fighters", 25))
+                    if stored_fighters < target and ship_fighters > 0:
+                        return "planet: defend"
             return "citadel: maintain"
 
         return None
@@ -749,6 +764,39 @@ class Planner:
                 if advertised and command not in advertised:
                     return None
                 return {"command": command, "data": {"planet_id": planet_id}}
+
+            elif goal_type == "planet" and goal_target == "workforce":
+                planet = current_state.get("planet_info") or {}
+                planet_id = planet.get("planet_id", planet.get("id")) or (current_state.get("ship_info") or {}).get("planet_id")
+                if planet_id is None or not (current_state.get("ship_info") or {}).get("onplanet"):
+                    return None
+                unassigned = int(planet.get("colonists_unassigned", 0) or 0)
+                if unassigned <= 0:
+                    return None
+                # Feed production without exceeding the confirmed population:
+                # ore and equipment support trading, while a smaller weapons
+                # allocation grows the colony's defensive capacity.
+                targets = {
+                    "ore": int(unassigned * 0.4),
+                    "organics": int(unassigned * 0.2),
+                    "equipment": int(unassigned * 0.3),
+                    "weapons": unassigned - int(unassigned * 0.4) - int(unassigned * 0.2) - int(unassigned * 0.3),
+                }
+                return {"command": "planet.colonists.allocate", "data": {"planet_id": int(planet_id), **targets}}
+
+            elif goal_type == "planet" and goal_target == "defend":
+                planet = current_state.get("planet_info") or {}
+                ship = current_state.get("ship_info") or {}
+                planet_id = planet.get("planet_id", planet.get("id")) or ship.get("planet_id")
+                available = int(ship.get("fighters", 0) or 0)
+                current = int(planet.get("fighters", planet.get("planet_fighters", 0)) or 0)
+                target = int(self.config.get("planet_defense_fighters", 25))
+                quantity = min(available, max(1, target - current))
+                if planet_id is None or quantity <= 0:
+                    return None
+                return {"command": "planet.fighters.transfer", "data": {
+                    "planet_id": int(planet_id), "direction": "ship_to_planet", "quantity": quantity,
+                }}
 
             elif goal_type == "corp":
                 logger.info("Solo empire policy refuses corporation goal %s", goal_str)
@@ -1584,6 +1632,37 @@ class Planner:
         if field_name == "from_sector_id":
             if command_name == "move.pathfind":
                 return current_sector
+
+        if field_name == "query" and command_name == "sector.search":
+            return str(current_sector or "sector")
+        if field_name == "text" and command_name == "sector.set_beacon":
+            return "AI player waypoint"
+        if field_name == "channel" and command_name in ("chat.send", "chat.broadcast"):
+            return "general"
+        if field_name == "message" and command_name in ("chat.send", "chat.broadcast"):
+            return "AI player online"
+        if field_name == "preference" and command_name == "player.set_trade_account_preference":
+            return "personal"
+        if field_name == "event_type" and command_name in ("subscribe.add", "subscribe.remove"):
+            return "sector.notice"
+        if field_name in ("fine_id", "mail_id", "notice_id", "policy_id", "trade_id"):
+            candidates = current_state.get({
+                "fine_id": "fines", "mail_id": "mail", "notice_id": "notices",
+                "policy_id": "insurance_policies", "trade_id": "trade_offers",
+            }[field_name], [])
+            if isinstance(candidates, list) and candidates:
+                entry = candidates[0] if isinstance(candidates[0], dict) else {}
+                return entry.get(field_name) or entry.get("id")
+        if field_name == "upgrade_type" and command_name == "ship.upgrade":
+            return str(self.config.get("default_ship_upgrade", "hull"))
+        if field_name == "mode" and command_name == "port.rob":
+            return "standard"
+        if field_name == "commodity_id" and command_name in ("ship.jettison", "ship.transfer_cargo"):
+            cargo = (current_state.get("ship_info") or {}).get("cargo", [])
+            first = cargo[0] if isinstance(cargo, list) and cargo else {}
+            return first.get("commodity_id", first.get("id", 1))
+        if field_name == "target_ship_id" and command_name == "ship.transfer_cargo":
+            return self._generate_required_field("target_ship_id", "combat.attack.ship", current_state)
         
         if field_name == "name":
             if command_name in ["planet.create", "ship.rename", "ship.reregister", "corp.create"]:
@@ -1595,7 +1674,7 @@ class Planner:
                 return "player"
         
         if field_name == "planet_id":
-            if command_name in ["planet.land", "planet.harvest", "planet.info", "planet.deposit", "planet.withdraw", "planet.rename"]:
+            if command_name in ["planet.land", "planet.harvest", "planet.info", "planet.deposit", "planet.withdraw", "planet.rename", "planet.fighters.transfer", "planet.colonists.allocate", "planet.market.sell", "planet.market.buy_order", "citadel.build", "citadel.upgrade"]:
                 # Get any planets in current sector
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
                 planets = sector_data.get("celestial_objects") or sector_data.get("planets", [])
@@ -1606,6 +1685,25 @@ class Planner:
                     if isinstance(planet, (str, int)):
                         return planet
                 return None
+
+        if field_name == "citadel_id":
+            citadel = (current_state.get("planet_info") or {}).get("citadel") or {}
+            return citadel.get("citadel_id", citadel.get("id"))
+
+        if field_name in ("ore", "organics", "equipment", "weapons") and command_name == "planet.colonists.allocate":
+            planet = current_state.get("planet_info") or {}
+            key = {"ore": "colonists_ore", "organics": "colonists_org",
+                   "equipment": "colonists_eq", "weapons": "colonists_weapons"}[field_name]
+            return int(planet.get(key, 0) or 0)
+
+        if field_name == "direction" and command_name == "planet.fighters.transfer":
+            return "ship_to_planet"
+
+        if field_name == "action" and command_name == "planet.colonists.set":
+            return "dropoff" if (current_state.get("ship_info") or {}).get("colonists", 0) else "pickup"
+
+        if field_name == "sector_id" and command_name in ("nav.avoid.add", "nav.avoid.remove", "fighters.recall", "mines.recall"):
+            return current_sector
         
         if field_name == "player_id":
             if command_name == "corp.invite":
@@ -1680,6 +1778,9 @@ class Planner:
                 return 50  # Default defensive stance
         
         if field_name == "quantity":
+            if command_name == "planet.fighters.transfer":
+                available = int((current_state.get("ship_info") or {}).get("fighters", 0) or 0)
+                return max(1, min(available, int(self.config.get("planet_defense_fighters", 25)))) if available > 0 else None
             if command_name == "combat.lay_mines":
                 available_mines = (current_state.get("ship_info") or {}).get("mines", 0)
                 if available_mines > 0:
@@ -1947,6 +2048,14 @@ class Planner:
                 adjacent_ids.append(target)
         
         possible_targets = adjacent_ids
+
+        # A successful warp may still report entry hazards. Prefer routes that
+        # have not hurt this player before, while retaining a deterministic
+        # fallback when every exit is dangerous.
+        danger = current_state.get("sector_danger", {}) or {}
+        safe_targets = [target for target in possible_targets if str(target) not in danger]
+        if safe_targets:
+            possible_targets = safe_targets
         
         logger.debug(f"Warp candidates from {current_sector}: {possible_targets} (Raw adj: {adjacent_sectors})")
 
@@ -2003,6 +2112,7 @@ class Planner:
 
         def rank(sector):
             sector_key = str(sector)
+            danger_penalty = int((danger.get(sector_key) or {}).get("severity", 0) or 0)
             # Missing universe-map rows are common in a newly explored world.
             # Sector details are public knowledge too, and must keep the
             # explorer from repeatedly preferring an already surveyed sector
@@ -2022,7 +2132,7 @@ class Planner:
             else:
                 destination_rank = 0
             revisit_rank = 1 if sector_key in recent else 0
-            return (destination_rank, novelty_rank, revisit_rank, sector)
+            return (danger_penalty, destination_rank, novelty_rank, revisit_rank, sector)
 
         target = min(possible_targets, key=rank)
         logger.info("Selected sector %s for %s-profile navigation.", target, profile)
@@ -2190,6 +2300,41 @@ class Planner:
         candidates = []
         unknown_route_hops = max(1, int(self.config.get("unknown_route_hop_cost", 6)))
         blacklisted_ports = {str(p) for p in current_state.get("port_trade_blacklist", [])}
+        dangerous_sectors = {str(s) for s in (current_state.get("sector_danger") or {})}
+        origin_sectors = set()
+        for sector_id, port in (current_state.get("port_info_by_sector") or {}).items():
+            port_id = str((port or {}).get("port_id"))
+            if any(port_id in {str(origin) for origin in cargo.get("origins", set())}
+                   for cargo in my_cargo.values()):
+                origin_sectors.add(str(sector_id))
+
+        # Prefer routes that previously completed profitably, provided the
+        # destination is still surveyed and is not now known to be dangerous.
+        for route in current_state.get("route_memory", []):
+            if not isinstance(route, dict) or str(route.get("buy_sector")) not in origin_sectors:
+                continue
+            commodity = canon_commodity(route.get("commodity"))
+            cargo = my_cargo.get(commodity)
+            try:
+                sector_id = int(route.get("sell_sector"))
+            except (TypeError, ValueError):
+                continue
+            if not cargo or str(sector_id) in dangerous_sectors:
+                continue
+            port_data = current_state.get("port_info_by_sector", {}).get(str(sector_id), {})
+            target_port_id = str(port_data.get("port_id"))
+            sell_price = price_cache.get(target_port_id, {}).get("sell", {}).get(commodity)
+            unit_cost = cargo["cost"] / cargo["quantity"] if cargo["cost_known"] else None
+            if (sell_price is None or unit_cost is None or sell_price <= unit_cost
+                    or not self._quote_is_fresh(current_state, target_port_id, commodity)):
+                continue
+            path = self.state_manager.find_path(current_sector, sector_id)
+            hops = len(path) - 1 if isinstance(path, list) and path else unknown_route_hops
+            total_profit = (sell_price - unit_cost) * cargo["quantity"]
+            candidates.append((
+                -total_profit / max(1, hops), -total_profit, hops,
+                sector_id, commodity, sell_price,
+            ))
 
         # Server recommendations include pathing estimates and current price
         # spreads. They supplement locally surveyed quotes, but a route is only
@@ -2218,6 +2363,8 @@ class Planner:
                 except (TypeError, ValueError):
                     continue
                 if sector_id == int(current_sector):
+                    continue
+                if str(sector_id) in dangerous_sectors:
                     continue
                 if target_port_id in blacklisted_ports or target_port_id in cargo["origins"]:
                     continue
@@ -2251,6 +2398,8 @@ class Planner:
                         if str(port_data.get("port_id")) == port_id_str:
                             sector_id = int(sector_id_str)
                             if sector_id == int(current_sector):
+                                continue
+                            if str(sector_id) in dangerous_sectors:
                                 continue
 
                             unit_cost = cargo["cost"] / cargo["quantity"] if cargo["cost_known"] else None
