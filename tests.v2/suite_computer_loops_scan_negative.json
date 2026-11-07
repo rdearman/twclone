@@ -69,7 +69,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT sw.to_sector, p.port_id FROM sector_warps sw JOIN ports p ON p.sector_id = sw.to_sector WHERE sw.from_sector = 14 LIMIT 1"
+        "sql": "SELECT sw.to_sector::integer, p.port_id::integer FROM sector_warps sw JOIN sector_warps back ON back.from_sector = sw.to_sector AND back.to_sector = sw.from_sector JOIN ports p ON p.sector_id = sw.to_sector WHERE sw.from_sector = 14 LIMIT 1"
       },
       "expect": { "status": "ok" },
       "save": { "scan_target_sector": "data.rows.0.0", "scan_target_port_id": "data.rows.0.1" }
