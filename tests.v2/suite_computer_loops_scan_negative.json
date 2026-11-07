@@ -42,12 +42,27 @@
       }
     },
     {
-      "name": "Teleport to Sector 14",
+      "name": "Rig: Choose a connected two-way port pair",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 14 WHERE name = 'scan_player'"
+        "sql": "SELECT p1.port_id, p1.sector_id, p2.port_id, p2.sector_id FROM sector_warps sw JOIN sector_warps back ON back.from_sector = sw.to_sector AND back.to_sector = sw.from_sector JOIN ports p1 ON p1.sector_id = sw.from_sector JOIN ports p2 ON p2.sector_id = sw.to_sector AND p2.port_id > p1.port_id JOIN port_trade pt1 ON pt1.port_id = p1.port_id JOIN port_trade pt2 ON pt2.port_id = p2.port_id AND pt2.commodity = pt1.commodity GROUP BY p1.port_id, p1.sector_id, p2.port_id, p2.sector_id, pt1.commodity HAVING SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) > 0 AND SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) > 0 ORDER BY p1.port_id, p2.port_id LIMIT 1"
       },
+      "save": { "scan_origin_port_id": "data.rows.0.0", "scan_origin_sector": "data.rows.0.1", "scan_target_port_id": "data.rows.0.2", "scan_target_sector": "data.rows.0.3" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Teleport to selected origin sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id = @{scan_origin_sector} WHERE name = 'scan_player';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Teleport active ship to selected origin sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id = @{scan_origin_sector} WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'scan_player');" },
       "expect": { "status": "ok" }
     },
     {
@@ -58,21 +73,11 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Scan Sector 14 (Has Port 2)",
+      "name": "Scan selected origin sector",
       "command": "sector.scan",
       "user": "scan_player",
       "data": {},
       "expect": { "status": "ok" }
-    },
-    {
-      "name": "Rig: Find an adjacent port in the disposable universe",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT sw.to_sector::integer, p.port_id::integer FROM sector_warps sw JOIN sector_warps back ON back.from_sector = sw.to_sector AND back.to_sector = sw.from_sector JOIN ports p ON p.sector_id = sw.to_sector WHERE sw.from_sector = 14 LIMIT 1"
-      },
-      "expect": { "status": "ok" },
-      "save": { "scan_target_sector": "data.rows.0.0", "scan_target_port_id": "data.rows.0.1" }
     },
     {
       "name": "Warp to the adjacent port sector",
@@ -108,14 +113,14 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Warp back to Sector 14",
+      "name": "Warp back to selected origin sector",
       "command": "move.warp",
       "user": "scan_player",
-      "data": { "to_sector_id": 14 },
+      "data": { "to_sector_id": "@{scan_origin_sector}" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Dock at Port 2 (Now we know 2)",
+      "name": "Dock at the origin port (Now we know 2)",
       "command": "dock.status",
       "user": "scan_player",
       "data": { "action": "dock" },
@@ -131,7 +136,7 @@
         "data": {
           "routes": [
             {
-              "port_a_id": 2,
+              "port_a_id": "@{scan_origin_port_id}",
               "port_b_id": "@{scan_target_port_id}"
             }
           ],
