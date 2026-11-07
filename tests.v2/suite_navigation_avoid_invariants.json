@@ -23,7 +23,7 @@
       "user": "nav_avoid_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.avoids", "op": "contains", "value": 999 }
+        { "path": "data.items", "op": "contains", "value": 999 }
       ]
     },
     {
@@ -39,7 +39,7 @@
       "user": "nav_avoid_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.avoids.length", "op": "==", "value": 0 }
+        { "path": "data.items.length", "op": "==", "value": 0 }
       ]
     }
   ]

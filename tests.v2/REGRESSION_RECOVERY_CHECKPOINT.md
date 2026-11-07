@@ -15,6 +15,7 @@ Updated 2026-11-07.
 - Current batch: aligned the move.describe_sector positive fixture with the V3 contract's required sector_id argument. The remaining ship-cargo dynamic failures use obsolete port.trade.* and planet.deposit request schemas and require a separate protocol reconciliation.
 - Current batch: made the sector.search `Sol` assertion deterministic by establishing the documented sector-name fixture in the disposable database; tavern failures remain invalid-state/contract cases pending individual reconciliation.
 - The sector-search full-run result returned the expected Sol row but exposed bracket notation unsupported by the JSON assertion path resolver; the assertion now uses the established dotted array-index form. Two computer-loop scan cases fluctuated in that run and remain under fixture investigation.
+- Current batch: aligned navigation-avoid list assertions with the V3 response field `data.items`; the server already persisted and returned the correct add/remove state.
 - Commits created: `b90d1aa6`, `9347c2e8`, `f7b95c7c` (corporation and planet fixtures), and `20dc575a` (sector description fixture).
 - Known blockers: `events.resume` is compile-gated and unregistered; MSL tests request an unregistered cron command; quasar/Captain Z expectations require contract decisions.
 - Prior commits: `60967ed5`, `317d0576`, `caf3b9e3`.
