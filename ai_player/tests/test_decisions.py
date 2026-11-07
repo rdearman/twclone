@@ -268,6 +268,42 @@ def test_state_manager_persists_market_forecast_opponents_and_restart_plan():
         assert manager2.get("opponent_model")["8"]["threat_score"] == 25
 
 
+def test_mission_planner_honors_deadline_budget_and_fallback():
+    planner = make_planner()
+    state = {
+        "mission": {"goals": ["goto: 44"], "deadline": time.time() - 1, "fallback": "goto: 2"},
+        "player_info": {"player": {"credits": 5000}},
+    }
+    assert planner._mission_goal(state) == "goto: 2"
+
+
+def test_fleet_roles_and_player_to_player_offer_are_explicit():
+    planner = make_planner()
+    state = {
+        "fleet_state": {"ships": {"1": {"ship_id": 1}, "2": {"ship_id": 2, "role": "scout"}}},
+        "server_commands": ["ship.info", "trade.offer"],
+        "diplomacy_queue": [{"target_player_id": 9, "commodity": "ORE", "quantity": 3, "price": 40}],
+    }
+    assert planner._fleet_goal(state) == "fleet: assign"
+    assert planner._achieve_goal(state, "fleet: assign")["command"] == "ship.info"
+    assert planner._diplomacy_goal(state) == "diplomacy: offer"
+    assert planner._achieve_goal(state, "diplomacy: offer") == {
+        "command": "trade.offer",
+        "data": {"target_player_id": 9, "commodity": "ORE", "quantity": 3, "price": 40},
+    }
+
+
+def test_decision_trace_and_learning_history_survive_restart():
+    with TemporaryDirectory() as directory:
+        path = str(Path(directory) / "state.json")
+        manager = StateManager(path, {})
+        manager.record_decision({"goal": "goto: 4", "reason": "mission", "source": "deterministic"})
+        manager.record_learning_outcome("move.warp", "ctx", 2.5, True)
+        restored = StateManager(path, {})
+        assert restored.get("decision_trace")[0]["goal"] == "goto: 4"
+        assert restored.get("learning_history")[0]["reward"] == 2.5
+
+
 def test_navigation_prefers_safe_exit_after_entry_hazard():
     planner = make_planner()
     planner.state_manager.get.return_value = []

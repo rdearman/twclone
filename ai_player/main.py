@@ -832,6 +832,18 @@ def _get_fallback_plan(game_state, state_manager, planner):
     # Solo players need a persistent win path, not just an endless trade loop.
     # The planner only emits these milestones when the required state is
     # observed, so a refused/unsupported action cannot strand the strategy.
+    mission_goal = planner._mission_goal(game_state)
+    if mission_goal:
+        return [mission_goal]
+
+    diplomacy_goal = planner._diplomacy_goal(game_state)
+    if diplomacy_goal:
+        return [diplomacy_goal]
+
+    fleet_goal = planner._fleet_goal(game_state)
+    if fleet_goal:
+        return [fleet_goal]
+
     endgame_goal = planner._endgame_goal(game_state)
     if endgame_goal:
         return [endgame_goal]
@@ -1187,17 +1199,28 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     # stale or imaginative LLM plan in every strategy mode.
     endgame_reader = getattr(planner, "_endgame_goal", None)
     readiness_reader = getattr(planner, "_combat_readiness_command", None)
-    priority_goal = endgame_reader(game_state) if callable(endgame_reader) else None
+    mission_reader = getattr(planner, "_mission_goal", None)
+    diplomacy_reader = getattr(planner, "_diplomacy_goal", None)
+    fleet_reader = getattr(planner, "_fleet_goal", None)
+    priority_goal = mission_reader(game_state) if callable(mission_reader) else None
+    if priority_goal is None and callable(diplomacy_reader):
+        priority_goal = diplomacy_reader(game_state)
+    if priority_goal is None and callable(fleet_reader):
+        priority_goal = fleet_reader(game_state)
+    if priority_goal is None and callable(endgame_reader):
+        priority_goal = endgame_reader(game_state)
     if priority_goal is None and callable(readiness_reader) and readiness_reader(game_state):
         priority_goal = "combat: readiness"
     if priority_goal:
         state_manager.set("strategy_plan_source", "controller_priority")
         state_manager.set("strategy_inference_status", {"status": "preempted", "reason": priority_goal})
+        state_manager.record_decision({"goal": priority_goal, "reason": "controller priority", "source": "controller"})
         return [priority_goal]
     if mode == "deterministic":
         plan = _get_fallback_plan(game_state, state_manager, planner)
         state_manager.set("strategy_plan_source", "deterministic")
         state_manager.set("strategy_inference_status", {"status": "disabled", "reason": None})
+        state_manager.record_decision({"goal": plan[0] if plan else None, "reason": "deterministic fallback", "source": "deterministic"})
         return plan
     diagnostics = {}
     try:
@@ -1235,6 +1258,7 @@ def select_strategy_plan(game_state, config, state_manager, planner):
         plan = _get_fallback_plan(game_state, state_manager, planner)
     state_manager.set("strategy_plan_source", source)
     state_manager.set("strategy_inference_status", diagnostics)
+    state_manager.record_decision({"goal": plan[0] if plan else None, "reason": diagnostics.get("reason"), "source": source})
     return plan
 
 
@@ -1353,6 +1377,12 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
 
         elif goal_type == "victory" and goal_target == "consolidate":
             return response_type in ("bank.deposit.confirmed", "ship.repair", "planet.info")
+
+        elif goal_type == "fleet" and goal_target in ("assign", "acquire"):
+            return response_type in ("ship.info", "ship.claimed", "ship.claim.success")
+
+        elif goal_type == "diplomacy" and goal_target == "offer":
+            return response_type in ("trade.offer.created_v1", "trade.offer.accepted_v1")
 
     except Exception as e:
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
@@ -2306,6 +2336,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 # Give feedback for the last action that led to this success
                 if last_action and last_context:
                     bandit_policy.give_feedback(last_action, last_context, reward)
+                    state_manager.record_learning_outcome(last_action, last_context, reward, True)
 
                 # --- Handle Schema Responses ---
                 if response_type == "system.schema":
@@ -2406,6 +2437,8 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     ship_obj = response_data.get("ship", response_data)
                     # update_player_info expects {"ship": {...}} 
                     state_manager.update_player_info({"ship": ship_obj})
+                    if isinstance(ship_obj, dict):
+                        state_manager.record_fleet_snapshot([ship_obj])
                     if response_type == "ship.claimed":
                         logger.info(f"Bootstrap: Successfully claimed ship {ship_obj.get('id', '?')}")
 
@@ -2573,6 +2606,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                     ships = response_data.get("ships", [])
                     if ships:
                         state_manager.set("shipyard_list", ships)
+                        state_manager.record_fleet_snapshot(ships)
                         logger.info(f"Bootstrap: Received shipyard list with {len(ships)} available ships.")
                 
                 elif response_type == "trade.port_info":
@@ -2687,6 +2721,7 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 last_context = game_state_before.get("last_context_key")
                 if last_action and last_context:
                     bandit_policy.give_feedback(last_action, last_context, -1.0) # Negative reward for failure
+                    state_manager.record_learning_outcome(last_action, last_context, -1.0, False)
                 
                 if response_type == "error" and error_code == 1104 and command_name != "unknown":
                     state_manager.add_to_schema_blacklist(command_name)

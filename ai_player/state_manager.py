@@ -53,6 +53,11 @@ class StateManager:
             "combat_memory": [],        # Recent combat outcomes and readiness
             "victory_status": {},      # Server/configured endgame progress
             "restart_checkpoint": {},  # Last durable strategic checkpoint
+            "fleet_state": {"ships": {}, "active_ship_id": None},
+            "mission": {},              # Current objective, deadline, budget, fallback
+            "diplomacy_queue": [],      # Explicit player-to-player offers
+            "decision_trace": [],       # Bounded explainability history
+            "learning_history": [],     # Outcome samples used to tune policy
             "current_path": [],         # NEW: Stores the server-provided path for navigation
             "last_action_result": None, # NEW: Feedback loop for LLM
             "last_quotes": {},          # NEW: Deterministic trade rule support
@@ -143,6 +148,7 @@ class StateManager:
                 "strategy_plan": list(self.state.get("strategy_plan", [])),
                 "strategy_plan_source": self.state.get("strategy_plan_source"),
                 "player_location_sector": self.state.get("player_location_sector"),
+                "mission_name": (self.state.get("mission") or {}).get("name"),
             }
             # Session credentials are runtime-only. Reauthentication is already
             # required on process start, so there is no reason to persist them.
@@ -502,6 +508,71 @@ class StateManager:
             key: value for key, value in outcome.items() if key in allowed
         }})
         del history[:-50]
+        self.save_state()
+
+    def record_fleet_snapshot(self, ships):
+        """Track owned/public ships without assuming control of inactive ships."""
+        if not isinstance(ships, list):
+            return
+        fleet = self.state.setdefault("fleet_state", {"ships": {}, "active_ship_id": None})
+        registry = fleet.setdefault("ships", {})
+        for ship in ships:
+            if not isinstance(ship, dict):
+                continue
+            ship_id = ship.get("ship_id", ship.get("id"))
+            if ship_id is None:
+                continue
+            registry[str(ship_id)] = {
+                key: ship[key] for key in (
+                    "ship_id", "id", "name", "type", "sector_id", "status", "role",
+                    "hull", "shields", "fighters", "holds", "owner_id"
+                ) if key in ship
+            }
+        if len(registry) > 50:
+            fleet["ships"] = dict(list(registry.items())[-50:])
+        self.save_state()
+
+    def assign_fleet_role(self, ship_id, role):
+        fleet = self.state.setdefault("fleet_state", {"ships": {}, "active_ship_id": None})
+        entry = fleet.setdefault("ships", {}).setdefault(str(ship_id), {"ship_id": ship_id})
+        entry["role"] = str(role)
+        self.save_state()
+
+    def set_mission(self, mission):
+        """Persist a bounded mission contract used by the planner after restart."""
+        if not isinstance(mission, dict):
+            return
+        self.state["mission"] = {
+            "name": str(mission.get("name", "unnamed")),
+            "goals": list(mission.get("goals", [])),
+            "deadline": mission.get("deadline"),
+            "budget": mission.get("budget"),
+            "fallback": mission.get("fallback"),
+            "started_at": mission.get("started_at", time.time()),
+        }
+        self.save_state()
+
+    def record_decision(self, decision, outcome=None):
+        """Keep an explainable, bounded record of why the controller acted."""
+        if not isinstance(decision, dict):
+            return
+        trace = self.state.setdefault("decision_trace", [])
+        item = {"timestamp": time.time(), **{
+            key: decision[key] for key in ("goal", "command", "reason", "risk", "source")
+            if key in decision
+        }}
+        if outcome is not None:
+            item["outcome"] = outcome
+        trace.append(item)
+        del trace[:-100]
+        self.save_state()
+
+    def record_learning_outcome(self, action, context, reward, success):
+        history = self.state.setdefault("learning_history", [])
+        history.append({"timestamp": time.time(), "action": action,
+                        "context": context, "reward": float(reward),
+                        "success": bool(success)})
+        del history[:-200]
         self.save_state()
 
     def set_credits(self, credits):

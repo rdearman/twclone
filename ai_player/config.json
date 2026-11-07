@@ -20,6 +20,8 @@
     "combat_min_hull_ratio": 0.65,
     "combat_min_fighters": 10,
     "market_forecast_weight": 0.15,
+    "fleet_management": true,
+    "fleet_acquisition": false,
     "allow_corporation_play": false,
     "corporation_win_condition": false,
     "corporation_ai_players": 0,

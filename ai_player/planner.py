@@ -183,6 +183,47 @@ class Planner:
                 return {"command": "hardware.buy", "data": {"item": "fighters", "quantity": min_fighters - fighters}}
         return None
 
+    def _mission_goal(self, current_state):
+        """Return the next mission goal, honoring deadline and credit budget."""
+        mission = current_state.get("mission") or {}
+        goals = mission.get("goals") or []
+        if not goals:
+            return None
+        now = time.time()
+        try:
+            expired = mission.get("deadline") is not None and now >= float(mission["deadline"])
+        except (TypeError, ValueError):
+            expired = False
+        player = (current_state.get("player_info") or {}).get("player", {})
+        try:
+            over_budget = mission.get("budget") is not None and float(player.get("credits", 0)) < float(mission["budget"])
+        except (TypeError, ValueError):
+            over_budget = False
+        if (expired or over_budget) and mission.get("fallback"):
+            return str(mission["fallback"])
+        return str(goals[0])
+
+    def _fleet_goal(self, current_state):
+        """Plan only safe, advertised fleet operations; no implicit corp join."""
+        fleet = current_state.get("fleet_state") or {}
+        ships = fleet.get("ships") or {}
+        if len(ships) > 1 and self.config.get("fleet_management", True):
+            for ship_id, ship in ships.items():
+                if isinstance(ship, dict) and not ship.get("role"):
+                    return "fleet: assign"
+        shipyard = current_state.get("shipyard_list") or []
+        if (self.config.get("fleet_acquisition", False)
+                and shipyard and "ship.claim" in current_state.get("server_commands", [])):
+            return "fleet: acquire"
+        return None
+
+    def _diplomacy_goal(self, current_state):
+        """Use explicit player-to-player offers, never corporation membership."""
+        queue = current_state.get("diplomacy_queue") or []
+        if queue and "trade.offer" in current_state.get("server_commands", []):
+            return "diplomacy: offer"
+        return None
+
     def _stage_epsilon(self):
         """Return the configured exploration rate for the current planner stage."""
         if str(self.config.get("strategy_mode", "")).lower() == "deterministic":
@@ -684,6 +725,32 @@ class Planner:
 
             elif goal_type == "combat" and goal_target == "readiness":
                 return self._combat_readiness_command(current_state)
+
+            elif goal_type == "fleet" and goal_target == "assign":
+                fleet = current_state.get("fleet_state") or {}
+                for ship_id, ship in (fleet.get("ships") or {}).items():
+                    if isinstance(ship, dict) and not ship.get("role"):
+                        role = "trade" if ship.get("holds", 0) else "scout"
+                        self.state_manager.assign_fleet_role(ship_id, role)
+                        return {"command": "ship.info", "data": {"ship_id": ship_id}}
+                return None
+
+            elif goal_type == "fleet" and goal_target == "acquire":
+                shipyard = current_state.get("shipyard_list") or []
+                candidate = next((item for item in shipyard if isinstance(item, dict) and item.get("claimable", True)), None)
+                if candidate:
+                    return {"command": "ship.claim", "data": {"ship_id": candidate.get("ship_id", candidate.get("id"))}}
+                return None
+
+            elif goal_type == "diplomacy" and goal_target == "offer":
+                queue = current_state.get("diplomacy_queue") or []
+                if not queue or "trade.offer" not in current_state.get("server_commands", []):
+                    return None
+                offer = dict(queue[0])
+                return {"command": "trade.offer", "data": {
+                    key: offer[key] for key in ("target_player_id", "commodity", "quantity", "price")
+                    if key in offer
+                }}
 
             elif goal_type == "combat" and goal_target == "attack":
                 if self._is_protected_sector(current_state):
