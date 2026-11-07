@@ -53,7 +53,7 @@
       "data": { "q": "Sol", "type": "sector" },
       "expect": { "status": "ok", "type": "sector.search_results_v1" },
       "asserts": [
-        { "path": "data.items[0].name", "op": "==", "value": "Sol" }
+        { "path": "data.items.0.name", "op": "==", "value": "Sol" }
       ]
     }
   ]
