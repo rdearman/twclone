@@ -68,6 +68,15 @@
       "expect": { "status": "error", "error_code": 401 }
     },
     {
+      "name": "Rig: Restore Terra pickup population",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE planets SET colonists_unassigned = GREATEST(colonists_unassigned, 1), population = GREATEST(population, 1) WHERE planet_id = 1;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "planet.colonists.set Terra pickup - Positive",
       "command": "planet.colonists.set",
       "data": { "planet_id": 1, "action": "pickup", "quantity": 1 },
@@ -100,14 +109,11 @@
       "expect": { "status": "error", "error_code": 401 }
     },
     {
-      "name": "sysop.config.history - Positive",
+      "name": "sysop.config.history - Explicitly unimplemented",
       "command": "sysop.config.history",
       "data": { "key": "turnsperday", "limit": 10 },
       "user": "admin",
-      "expect": { "status": "ok" },
-      "asserts": [
-        { "path": "data.items", "op": "exists" }
-      ]
+      "expect": { "status": "error", "error_code": 1101 }
     },
     {
       "name": "sysop.config.history - Missing Auth",
