@@ -72,7 +72,7 @@
       "command": "corp.kick",
       "data": { "target_player_id": "@perms_officer_user_player_id" },
       "user": "perms_member_user",
-      "expect": { "status": "error", "error_code": 403 }
+      "expect": { "status": "error", "error_code": 402 }
     },
     {
       "name": "Guard: Unauthorized Kick (Outsider kicks Member)",
