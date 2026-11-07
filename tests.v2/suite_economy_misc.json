@@ -30,6 +30,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Set stock corporation credit rating",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE corporations SET credit_rating = 500 WHERE corporation_id = 100;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Stock IPO Register (Success)",
       "command": "stock.ipo.register",
       "data": { "corp_id": 100, "ticker": "ECN", "total_shares": 1000, "par_value": 10, "current_price": 10 },
