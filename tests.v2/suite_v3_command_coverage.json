@@ -1,0 +1,119 @@
+{
+  "name": "V3 command coverage",
+  "version": "3.0.0",
+  "description": "Direct JSON coverage for V3 commands with published client-facing contracts.",
+  "tests": [
+    {
+      "name": "Macro: Bootstrap Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Macro: Register Coverage User",
+      "setup": "macro_auth_user",
+      "username": "v3_command_coverage",
+      "password": "password"
+    },
+    {
+      "name": "player.ping alias - Positive",
+      "command": "player.ping",
+      "user": "v3_command_coverage",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "player.ping alias - Missing Auth",
+      "command": "player.ping",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "trade.offers - Positive",
+      "command": "trade.offers",
+      "user": "v3_command_coverage",
+      "data": { "offers": [] },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.offers", "op": "exists" }
+      ]
+    },
+    {
+      "name": "trade.offers - Missing Auth",
+      "command": "trade.offers",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Land on Terra for colonist operations",
+      "command": "planet.land",
+      "data": { "planet_id": 1 },
+      "user": "v3_command_coverage",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.planet_id", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "planet.colonists.get - Positive",
+      "command": "planet.colonists.get",
+      "data": { "planet_id": 1 },
+      "user": "v3_command_coverage",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.planet_id", "op": "==", "value": 1 },
+        { "path": "data.planet_colonists", "op": ">=", "value": 0 },
+        { "path": "data.ship_holds_available", "op": ">=", "value": 0 }
+      ]
+    },
+    {
+      "name": "planet.colonists.get - Missing Auth",
+      "command": "planet.colonists.get",
+      "data": { "planet_id": 1 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "planet.colonists.set Terra pickup - Positive",
+      "command": "planet.colonists.set",
+      "data": { "planet_id": 1, "action": "pickup", "quantity": 1 },
+      "user": "v3_command_coverage",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.action", "op": "==", "value": "pickup" },
+        { "path": "data.planet_id", "op": "==", "value": 1 },
+        { "path": "data.quantity", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "planet.colonists.set Terra non-pickup - Refused",
+      "command": "planet.colonists.set",
+      "data": { "planet_id": 1, "action": "dropoff", "quantity": 1 },
+      "user": "v3_command_coverage",
+      "expect": { "status": "error", "error_code": 402 }
+    },
+    {
+      "name": "planet.colonists.allocate Terra - Refused",
+      "command": "planet.colonists.allocate",
+      "data": { "planet_id": 1, "ore": 0, "organics": 0, "equipment": 0 },
+      "user": "v3_command_coverage",
+      "expect": { "status": "error", "error_code": 402 }
+    },
+    {
+      "name": "planet.colonists.allocate - Missing Auth",
+      "command": "planet.colonists.allocate",
+      "data": { "planet_id": 1, "ore": 0, "organics": 0, "equipment": 0 },
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "sysop.config.history - Positive",
+      "command": "sysop.config.history",
+      "data": { "key": "turnsperday", "limit": 10 },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.items", "op": "exists" }
+      ]
+    },
+    {
+      "name": "sysop.config.history - Missing Auth",
+      "command": "sysop.config.history",
+      "data": { "key": "turnsperday", "limit": 10 },
+      "expect": { "status": "error", "error_code": 401 }
+    }
+  ]
+}
