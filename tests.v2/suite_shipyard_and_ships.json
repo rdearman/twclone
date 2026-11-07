@@ -2,9 +2,37 @@
   "tests": [
     {
       "name": "Setup: shipyard_tester",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "shipyard_tester",
       "password": "password"
+    },
+    {
+      "name": "Rig: Locate an actual Stardock shipyard",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.sector_id LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "shipyard_sector_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Move and dock shipyard tester",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id = @{shipyard_sector_id} WHERE name = 'shipyard_tester';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Move active ship and dock at Stardock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id = @{shipyard_sector_id}, ported = (SELECT p.port_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE p.sector_id = @{shipyard_sector_id} AND pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1) WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'shipyard_tester');"
+      },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Test: shipyard.list at Stardock",
