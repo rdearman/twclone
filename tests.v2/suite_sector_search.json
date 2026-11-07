@@ -9,6 +9,13 @@
       "password": "password"
     },
     {
+      "name": "Setup: Ensure documented Sol search fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE sectors SET name = 'Sol' WHERE sector_id = 1;" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test sector.search with empty query and default params",
       "user": "search_user",
       "command": "sector.search",
