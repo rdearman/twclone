@@ -39,7 +39,7 @@ class BanditPolicy:
                 context_n_table[action] = 0
 
         # Epsilon-greedy exploration
-        if random.random() < self.epsilon:
+        if self.epsilon > 0 and random.random() < self.epsilon:
             # Explore: choose a random action
             chosen_action = random.choice(actions)
             logger.debug(f"Bandit: Exploring in context '{context_key}', chose {chosen_action}")
@@ -58,7 +58,7 @@ class BanditPolicy:
                 elif q_value == max_q_value:
                     best_actions.append(action)
             
-            chosen_action = random.choice(best_actions)
+            chosen_action = sorted(best_actions)[0]
             logger.debug(f"Bandit: Exploiting in context '{context_key}', chose {chosen_action} (Q={max_q_value})")
             return chosen_action
 

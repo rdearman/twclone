@@ -1,2 +1,3 @@
 ollama
 jsonschema
+httpx>=0.24

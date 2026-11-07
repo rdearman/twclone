@@ -86,6 +86,35 @@ def test_planet_landing_defers_when_sector_state_has_no_planet_id():
     assert planner._achieve_goal(state, "planet: land") is None
 
 
+def test_survival_override_repairs_damaged_ship_at_known_port():
+    planner = make_planner()
+    planner.config["repair_hull_threshold"] = 70
+    state = {
+        "ship_info": {"hull": 40},
+        "player_location_sector": 10,
+        "sector_data": {"10": {"has_port": True}},
+        "server_commands": ["ship.repair"],
+        "command_retry_info": {},
+    }
+    assert planner._survival_command(state) == {"command": "ship.repair", "data": {}}
+
+
+def test_survival_override_retreats_to_nearest_known_port():
+    planner = make_planner()
+    planner.state_manager.find_path.return_value = [10, 20]
+    state = {
+        "ship_info": {"hull": 20},
+        "player_location_sector": 10,
+        "sector_data": {"10": {"has_port": False}},
+        "port_info_by_sector": {"20": {"port_id": 200}},
+        "server_commands": ["move.warp"],
+        "command_retry_info": {},
+    }
+    assert planner._survival_command(state) == {
+        "command": "move.warp", "data": {"to_sector_id": 20}
+    }
+
+
 def test_planet_land_goal_completes_only_after_authoritative_landing_response():
     assert not is_goal_complete(
         "planet: land", {}, {"planet_id": 321}, "planet.info"
@@ -114,6 +143,64 @@ def test_planet_info_goal_waits_until_ship_is_landed():
     }
 
     assert planner._achieve_goal(state, "planet: info") is None
+
+
+def test_solo_policy_prioritizes_bank_security_over_optional_corporation_play():
+    planner = make_planner()
+    planner.config.update({
+        "solo_empire_mode": True,
+        "enable_bank_management": True,
+        "operating_reserve": 5000,
+        "minimum_bank_deposit": 1000,
+        "allow_corporation_play": True,
+        "corporation_win_condition": True,
+    })
+    state = {
+        "player_info": {"player": {"credits": "8000"}},
+        "player_location_sector": 12,
+        "sector_data": {"12": {"has_planet": True}},
+        "ship_info": {"onplanet": 0},
+        "server_commands": ["bank.deposit"],
+    }
+    assert planner._solo_progression_goal(state) == "bank: secure"
+    assert planner._achieve_goal(state, "corp: join") is None
+
+
+def test_solo_policy_creates_planet_then_maintains_landed_citadel():
+    planner = make_planner()
+    planner.config.update({"solo_empire_mode": True, "enable_planet_creation": True})
+    create_state = {
+        "player_location_sector": 12,
+        "sector_data": {"12": {"has_planet": False, "adjacent": [13, 14]}},
+        "ship_info": {"genesis_torpedoes": 1, "onplanet": 0},
+        "server_commands": ["planet.genesis_create"],
+    }
+    assert planner._solo_progression_goal(create_state) == "planet: create"
+    assert planner._achieve_goal(create_state, "planet: create") == {
+        "command": "planet.genesis_create",
+        "data": {"sector_id": 12, "name": "AI World 12", "owner_entity_type": "player"},
+    }
+
+    landed_state = {
+        "ship_info": {"onplanet": 321, "planet_id": 321},
+        "planet_info": {"planet_id": 321, "citadel": {"level": 0, "construction_status": "idle"}},
+        "server_commands": ["citadel.build"],
+    }
+    assert planner._achieve_goal(landed_state, "citadel: maintain") == {
+        "command": "citadel.build", "data": {"planet_id": 321}
+    }
+
+
+def test_solo_policy_does_not_create_planet_in_three_exit_sector():
+    planner = make_planner()
+    planner.config.update({"solo_empire_mode": True, "enable_planet_creation": True})
+    state = {
+        "player_location_sector": 12,
+        "sector_data": {"12": {"has_planet": False, "adjacent": [13, 14, 15]}},
+        "ship_info": {"genesis_torpedoes": 1, "onplanet": 0},
+        "server_commands": ["planet.genesis_create"],
+    }
+    assert planner._solo_progression_goal(state) is None
 
 
 def test_autonomous_exploit_does_not_randomly_attempt_planet_landings():

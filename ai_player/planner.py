@@ -68,8 +68,73 @@ class Planner:
             return "explorer"
         return profile if profile in {"balanced", "explorer", "trader", "cautious", "opportunist"} else "balanced"
 
+    def _solo_empire_enabled(self):
+        """Return whether this bot is allowed to pursue the solo win loop."""
+        return bool(self.config.get("solo_empire_mode", False))
+
+    def _corporation_action_allowed(self, command_name):
+        """Corporations are opt-in and only valid with an explicit win case."""
+        if command_name != "corp.join" and not command_name.startswith("corp."):
+            return True
+        return bool(
+            self.config.get("allow_corporation_play", False)
+            and self.config.get("corporation_win_condition", False)
+            and int(self.config.get("corporation_ai_players", 0) or 0) > 0
+        )
+
+    def _solo_progression_goal(self, current_state):
+        """Choose the next concrete solo-growth milestone from authoritative state."""
+        if not self._solo_empire_enabled():
+            return None
+
+        ship = current_state.get("ship_info") or {}
+        player = (current_state.get("player_info") or {}).get("player", {})
+        sector_id = current_state.get("player_location_sector")
+        sector = current_state.get("sector_data", {}).get(str(sector_id), {})
+
+        try:
+            credits = float(player.get("credits", 0) or 0)
+        except (TypeError, ValueError):
+            credits = 0.0
+        try:
+            reserve = max(0.0, float(self.config.get("operating_reserve", 5000)))
+        except (TypeError, ValueError):
+            reserve = 5000.0
+
+        # Do not strand the ship while building the empire. The fallback trade
+        # planner remains responsible for earning the reserve.
+        if self.config.get("enable_bank_management", True):
+            minimum_deposit = max(1.0, float(self.config.get("minimum_bank_deposit", 1000)))
+            if credits > reserve + minimum_deposit:
+                return "bank: secure"
+
+        if self.config.get("enable_planet_creation", True):
+            genesis = ship.get("genesis_torpedoes", ship.get("genesis", None))
+            no_planet = not sector.get("has_planet")
+            raw_exits = sector.get("adjacent", sector.get("adjacent_sectors"))
+            exits = set()
+            if isinstance(raw_exits, list):
+                for exit_info in raw_exits:
+                    target = exit_info.get("to_sector") if isinstance(exit_info, dict) else exit_info
+                    if target is not None and str(target) != str(sector_id):
+                        exits.add(str(target))
+            try:
+                has_genesis = genesis is None or float(genesis or 0) > 0
+            except (TypeError, ValueError):
+                has_genesis = False
+            if (sector_id is not None and no_planet and isinstance(raw_exits, list)
+                    and len(exits) < 3 and has_genesis):
+                return "planet: create"
+
+        if self.config.get("enable_citadel_management", True) and ship.get("onplanet"):
+            return "citadel: maintain"
+
+        return None
+
     def _stage_epsilon(self):
         """Return the configured exploration rate for the current planner stage."""
+        if str(self.config.get("strategy_mode", "")).lower() == "deterministic":
+            return 0.0
         value = self.config.get(f"epsilon_{self.current_stage}", self.bandit_policy.epsilon)
         try:
             return max(0.0, min(1.0, float(value)))
@@ -315,7 +380,7 @@ class Planner:
                 ]
                 
                 if candidates and self._is_command_ready("move.warp", current_state.get("command_retry_info", {})):
-                    chosen = random.choice(candidates)
+                    chosen = sorted(candidates, key=lambda value: str(value))[0]
                     logger.info(f"Goto {target_sector} path unknown; exploring via warp to {chosen}.")
                     return {"command": "move.warp", "data": {"to_sector_id": chosen}}
                 
@@ -620,6 +685,75 @@ class Planner:
                 logger.info("Deferring planet inspection: no public planet ID was observed.")
                 return None
 
+            elif goal_type == "bank" and goal_target in ("secure", "deposit"):
+                if not self.config.get("enable_bank_management", True):
+                    return None
+                player = (current_state.get("player_info") or {}).get("player", {})
+                try:
+                    credits = int(float(player.get("credits", 0) or 0))
+                    reserve = int(float(self.config.get("operating_reserve", 5000)))
+                    minimum = int(float(self.config.get("minimum_bank_deposit", 1000)))
+                except (TypeError, ValueError):
+                    return None
+                amount = credits - reserve
+                if amount < minimum:
+                    return None
+                if "bank.deposit" in current_state.get("server_commands", []):
+                    return {"command": "bank.deposit", "data": {"amount": amount}}
+                return None
+
+            elif goal_type == "planet" and goal_target == "create":
+                if not self.config.get("enable_planet_creation", True):
+                    return None
+                sector_id = current_state.get("player_location_sector")
+                sector = current_state.get("sector_data", {}).get(str(sector_id), {})
+                if sector_id is None or sector.get("has_planet"):
+                    return None
+                command = "planet.genesis_create"
+                advertised = set(current_state.get("server_commands", []))
+                if advertised and command not in advertised:
+                    command = "planet.create"
+                if advertised and command not in advertised:
+                    return None
+                name = self.config.get("planet_default_name") or f"{getattr(self, 'player_name', 'AI')} World {sector_id}"
+                return {"command": command, "data": {
+                    "sector_id": int(sector_id),
+                    "name": str(name)[:64],
+                    "owner_entity_type": "player",
+                }}
+
+            elif goal_type == "citadel" and goal_target in ("maintain", "build", "upgrade"):
+                if not self.config.get("enable_citadel_management", True) or not (current_state.get("ship_info") or {}).get("onplanet"):
+                    return None
+                planet = current_state.get("planet_info") or {}
+                planet_id = planet.get("planet_id", planet.get("id"))
+                if planet_id is None:
+                    planet_id = (current_state.get("ship_info") or {}).get("planet_id")
+                if planet_id is None:
+                    return None
+                citadel = planet.get("citadel") or {}
+                if not citadel:
+                    return {"command": "planet.info", "data": {"planet_id": planet_id}}
+                status = str(citadel.get("construction_status", "idle")).lower()
+                if status not in ("", "idle", "complete", "completed"):
+                    return None
+                try:
+                    level = int(citadel.get("level", planet.get("citadel_level", 0)) or 0)
+                    max_level = int(self.config.get("citadel_max_level", 6))
+                except (TypeError, ValueError):
+                    return None
+                if level >= max_level:
+                    return None
+                command = "citadel.build" if level == 0 else "citadel.upgrade"
+                advertised = set(current_state.get("server_commands", []))
+                if advertised and command not in advertised:
+                    return None
+                return {"command": command, "data": {"planet_id": planet_id}}
+
+            elif goal_type == "corp":
+                logger.info("Solo empire policy refuses corporation goal %s", goal_str)
+                return None
+
         except Exception as e:
             logger.error(f"Error in _achieve_goal for '{goal_str}': {e}", exc_info=True)
         
@@ -708,8 +842,28 @@ class Planner:
         # If goal is "execute: <command>", extract and execute the command directly (no overrides)
         if current_goal and current_goal.startswith("execute:"):
             command_name = current_goal.split(":", 1)[1].strip()
-            # Convert "player:info" to "player.info"
-            command_name = command_name.replace(":", ".")
+            # Resolve legacy workflow labels before checking capabilities.
+            aliases = {
+                "player:info": "player.my_info", "player:my_info": "player.my_info",
+                "ship:status": "ship.status", "sector:info": "sector.info",
+                "planet:list": "planet.list", "move:pathfind": "move.pathfind",
+                "move:warp": "move.warp", "planet:land": "planet.land",
+                "planet:info": "planet.info", "planet:launch": "planet.launch",
+                "trade:port_info": "trade.port_info", "trade:quote": "trade.quote",
+                "trade:buy": "trade.buy", "trade:sell": "trade.sell",
+                "bank:balance": "bank.balance", "bank:deposit": "bank.deposit",
+                "bank:withdraw": "bank.withdraw",
+            }
+            if command_name == "move:result":
+                return None
+            command_name = aliases.get(command_name, command_name.replace(":", "."))
+            if not self._corporation_action_allowed(command_name):
+                logger.info("Solo empire policy blocked corporation command %s", command_name)
+                return None
+            advertised = set(current_state.get("server_commands", []))
+            if advertised and command_name not in advertised:
+                logger.info("QA workflow command %s is not advertised; deferring", command_name)
+                return None
             
             if self._is_command_ready(command_name, current_state.get("command_retry_info", {})):
                 payload = self._build_payload(command_name, current_state)
@@ -722,6 +876,14 @@ class Planner:
             else:
                 logger.debug(f"QA Mode: Command '{command_name}' is on cooldown. Waiting.")
                 return None
+
+        # Survival override: repair before spending turns on trading or
+        # exploration, and route to a known port when damaged away from one.
+        # This is deliberately conservative; it never invents combat or
+        # police actions from incomplete state.
+        safety_command = self._survival_command(current_state)
+        if safety_command:
+            return safety_command
         
         # --- 0. Bootstrap Check ---
         bootstrap_cmd = self.ensure_minimum_world_state(current_state)
@@ -836,6 +998,9 @@ class Planner:
             goal_type, _, goal_target = current_goal.partition(":")
             goal_type = goal_type.strip()
 
+            if goal_type == "corp":
+                return None
+
             # Pre-check for credits if the goal is to buy
             if goal_type == "buy":
                 port_id = self._find_port_in_sector(current_state, current_state.get("player_location_sector"))
@@ -918,6 +1083,41 @@ class Planner:
             return {"command": command_name, "data": data_payload}
 
         logger.error(f"All candidate actions for stage '{self.current_stage}' failed payload generation or validation.")
+        return None
+
+    def _survival_command(self, current_state):
+        """Return a safe repair/retreat action when ship health is critical."""
+        ship = current_state.get("ship_info") or {}
+        try:
+            hull = float(ship.get("hull"))
+        except (TypeError, ValueError):
+            return None
+        try:
+            threshold = float(self.config.get("repair_hull_threshold", 70))
+        except (TypeError, ValueError):
+            threshold = 70.0
+        if hull > threshold:
+            return None
+
+        advertised = set(current_state.get("server_commands", []))
+        retry_info = current_state.get("command_retry_info", {})
+        at_port = self._at_port(current_state)
+        if at_port and (not advertised or "ship.repair" in advertised):
+            if self._is_command_ready("ship.repair", retry_info):
+                logger.warning("Survival override: hull %.0f; requesting ship repair.", hull)
+                return {"command": "ship.repair", "data": {}}
+
+        if not at_port:
+            known_ports = set(current_state.get("port_info_by_sector", {}).keys())
+            known_ports.update(
+                str(port.get("sector_id"))
+                for port in current_state.get("known_ports", {}).values()
+                if isinstance(port, dict) and port.get("sector_id") is not None
+            )
+            target = self._nearest_known_sector(current_state, known_ports)
+            if target is not None and self._is_command_ready("move.warp", retry_info):
+                logger.warning("Survival override: hull %.0f; retreating toward port sector %s.", hull, target)
+                return {"command": "move.warp", "data": {"to_sector_id": target}}
         return None
 
     # --- Invariant Checks (Priority 0) ---
@@ -1248,12 +1448,13 @@ class Planner:
                     logger.warning("bank.withdraw selected but bank balance is 0. Skipping.")
                     return None
             
-            # For QA mode: try empty payload for commands without schema
-            if hasattr(self, 'qa_mode') or True:  # Always attempt empty payload for missing schema
-                logger.debug(f"No schema found for command '{command_name}'. Attempting empty payload.")
+            # Normal play must fail closed. A missing contract is not evidence
+            # that the server accepts an empty request. Negative QA scenarios
+            # must opt in explicitly.
+            if self.config.get("qa_mode") and command_name in set(self.config.get("qa_negative_commands", [])):
+                logger.info("QA negative scenario explicitly permits empty payload for %s", command_name)
                 return {}
-            
-            logger.warning(f"No schema found for command '{command_name}'. Adding to schema blacklist and returning None.")
+            logger.warning("No schema for %s; deferring without network mutation.", command_name)
             self.state_manager.add_to_schema_blacklist(command_name)
             return None
 
@@ -1363,7 +1564,7 @@ class Planner:
                 logger.error(f"Could not determine valid to_sector_id for command {command_name}.")
                 return None
             return target
-        if field_name == "ship_id":
+        if field_name == "ship_id" and command_name != "move.intercept":
             return ship_id
         if field_name == "sector_id":
             # For planet.create, always use current sector
@@ -1399,7 +1600,7 @@ class Planner:
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
                 planets = sector_data.get("celestial_objects") or sector_data.get("planets", [])
                 if planets:
-                    planet = random.choice(planets)
+                    planet = sorted(planets, key=lambda value: json.dumps(value, sort_keys=True))[0]
                     if isinstance(planet, dict):
                         return planet.get("planet_id", planet.get("id"))
                     if isinstance(planet, (str, int)):
@@ -1413,7 +1614,7 @@ class Planner:
                 my_player_id = current_state.get("player_info", {}).get("player", {}).get("id")
                 other_players = [p for p in online_players if p.get("id") != my_player_id]
                 if other_players:
-                    return random.choice(other_players).get("id")
+                    return sorted(other_players, key=lambda value: str(value.get("id")))[0].get("id")
                 return None
         
         if field_name == "equity_id":
@@ -1425,7 +1626,7 @@ class Planner:
                 return 1  # Default equity_id when player has no portfolio
         
         if field_name == "target_ship_id":
-            if command_name == "combat.attack":
+            if command_name in ("combat.attack", "combat.attack.ship"):
                 # Find any other ships in current sector
                 sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
                 ships = sector_data.get("ships_present", sector_data.get("ships", []))
@@ -1433,6 +1634,25 @@ class Planner:
                 if other_ships:
                     return self._visible_ship_id(min(other_ships, key=lambda s: str(self._visible_ship_id(s))))
                 return None
+
+        if field_name == "ship_id" and command_name == "move.intercept":
+            sector_data = current_state.get("sector_data", {}).get(str(current_sector), {})
+            ships = sector_data.get("ships_present") or sector_data.get("ships", [])
+            candidates = [self._visible_ship_id(s) for s in ships]
+            candidates = [value for value in candidates if value is not None and str(value) != str(ship_id)]
+            return min(candidates, key=str) if candidates else None
+
+        if field_name == "notice_id" and command_name == "notice.ack":
+            notices = current_state.get("notices", [])
+            ids = [item.get("notice_id", item.get("id")) for item in notices if isinstance(item, dict)]
+            ids = [value for value in ids if value is not None]
+            return min(ids, key=str) if ids else None
+
+        if field_name == "asset_id" and command_name in ("fighters.recall", "mines.recall"):
+            assets = current_state.get("deployed_assets", {}).get(command_name, [])
+            ids = [item.get("asset_id") for item in assets if isinstance(item, dict)]
+            ids = [value for value in ids if value is not None]
+            return min(ids, key=str) if ids else None
         
         if field_name == "amount":
             if command_name in ["combat.deploy_fighters", "combat.deploy_mines"]:
@@ -1443,11 +1663,17 @@ class Planner:
                     return max(1, available // 2)  # Deploy half of what we have
                 return None
             if command_name in ["bank.deposit", "bank.withdraw"]:
-                # Use half of current balance
-                balance = (current_state.get("player_info") or {}).get("credits", 0)
-                if balance > 100:
-                    return int(balance * 0.5)
-                return None
+                player = (current_state.get("player_info") or {}).get("player", {})
+                if command_name == "bank.deposit":
+                    try:
+                        credits = float(player.get("credits", 0) or 0)
+                        reserve = float(self.config.get("operating_reserve", 5000))
+                    except (TypeError, ValueError):
+                        return None
+                    amount = int(credits - reserve)
+                    return amount if amount >= int(self.config.get("minimum_bank_deposit", 1000)) else None
+                balance = current_state.get("bank_balance", 0)
+                return int(min(float(balance), 500)) if float(balance or 0) > 0 else None
         
         if field_name == "offense":
             if command_name in ["combat.deploy_fighters", "combat.deploy_mines"]:
@@ -1488,7 +1714,7 @@ class Planner:
             if field_name == "fighters":
                 available_fighters = (current_state.get("ship_info") or {}).get("fighters", 0)
                 if available_fighters > 0:
-                    return random.randint(1, available_fighters)
+                    return 1 if self.config.get("strategy_mode") == "deterministic" else random.randint(1, available_fighters)
                 else:
                     return 0
             if field_name == "offense":
@@ -1499,7 +1725,7 @@ class Planner:
             if field_name == "quantity":
                 available_mines = (current_state.get("ship_info") or {}).get("mines", 0)
                 if available_mines > 0:
-                    return random.randint(1, available_mines)
+                    return 1 if self.config.get("strategy_mode") == "deterministic" else random.randint(1, available_mines)
                 else:
                     return 0
             if field_name == "type":
@@ -1576,10 +1802,10 @@ class Planner:
                 player_alignment = current_state.get("player_info", {}).get("player", {}).get("alignment", 0)
                 if player_alignment <= 75:
                     # Evil/Neutral player: prefer illegal goods (higher margin)
-                    return random.choice(["SLV", "WPN", "DRG", "ORE", "EQU", "ORG"])
+                    return "DRG" if self.config.get("strategy_mode") == "deterministic" else random.choice(["SLV", "WPN", "DRG", "ORE", "EQU", "ORG"])
                 else:
                     # Good/neutral player: legal only
-                    return random.choice(["ORE", "EQU", "ORG"])
+                    return "EQU" if self.config.get("strategy_mode") == "deterministic" else random.choice(["ORE", "EQU", "ORG"])
         
         if field_name == "quantity":
             if command_name == "trade.quote":
@@ -1689,7 +1915,7 @@ class Planner:
         elif roll < 0.20: # 10% chance to try to buy exactly max_quantity
             return max_quantity
         else: # 80% chance to buy a random amount between 1 and max_quantity
-            return random.randint(1, max_quantity)
+            return 1 if self.config.get("strategy_mode") == "deterministic" else random.randint(1, max_quantity)
 
     def _get_next_warp_target(self, current_state):
         current_sector = current_state.get("player_location_sector")

@@ -27,6 +27,7 @@ class StateManager:
             "port_info_by_sector": {},  # Caches for port.info
             "price_cache": {},          # Caches for trade.quote
             "bank_balance": 0,
+            "planet_info": None,
             "command_retry_info": {},   # Tracks failures/cooldowns
             "strategy_plan": [],        # NEW: For multi-stage plans
             "strategy_plan_source": None,
@@ -35,10 +36,14 @@ class StateManager:
             "q_table": {},              # Persist learning
             "n_table": {},              # Persist learning
             "command_schemas": {},      # NEW: Cache for command schemas
+            "server_capabilities": {},  # V3 system.welcome/system.capabilities
+            "handshake_complete": False,
+            "ordinary_player_commands": [],
             "schema_blacklist": [],     # NEW: List of commands that failed schema fetching
             "pending_schema_requests": {}, # NEW: Map of schema request ID to command name
             "recent_sectors": [],       # NEW: To avoid ping-ponging
             "pending_commands": {},     # NEW: To track sent commands for error correlation
+            "uncertain_mutations": {},  # Durable ambiguity markers for every mutating command
             "port_trade_blacklist": [], # NEW: List of ports that failed on trade
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
             "current_path": [],         # NEW: Stores the server-provided path for navigation
@@ -47,6 +52,8 @@ class StateManager:
             "command_sent_in_response_loop": False, # NEW: To prevent double-sending
             "last_port_trade": None,    # NEW: To prevent immediate buy-back or sell-back
             "server_events": [],       # Bounded event history for strategy/recovery
+            "notices": [],
+            "deployed_assets": {"fighters.recall": [], "mines.recall": []},
             "seen_server_event_ids": [],
             "event_refresh_requests": [],
             "market_recommendations": [],
@@ -165,6 +172,21 @@ class StateManager:
         """Sets a value in the state only if it doesn't exist."""
         if key not in self.state:
             self.state[key] = default_value
+
+    def mark_uncertain_mutation(self, request_id, command, data=None, contract=None):
+        """Persist an in-flight mutation so a restart cannot silently replay it."""
+        mutations = self.state.setdefault("uncertain_mutations", {})
+        mutations[str(request_id)] = {
+            "request_id": str(request_id), "command": command,
+            "data": data or {}, "contract": contract or {},
+        }
+        self.save_state()
+
+    def resolve_uncertain_mutation(self, request_id):
+        mutations = self.state.setdefault("uncertain_mutations", {})
+        if str(request_id) in mutations:
+            mutations.pop(str(request_id), None)
+            self.save_state()
 
     def set_last_action_result(self, result_dict):
         """Updates the result of the last attempted action for LLM feedback."""
@@ -739,6 +761,10 @@ class StateManager:
         self.state["pending_commands"] = {}
         self._pending_command_times.clear()
         self.state["pending_schema_requests"] = {}
+        self.state["handshake_complete"] = False
+        self.state["server_capabilities"] = {}
+        self.state["ordinary_player_commands"] = []
+        self.state["server_commands"] = []
         self.state["player_info"] = None
         self.state["ship_info"] = None
         self.state["player_location_sector"] = None

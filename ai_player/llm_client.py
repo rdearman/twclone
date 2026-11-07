@@ -53,7 +53,7 @@ def parse_llm_json(response_text):
         return None
 
 def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt=None,
-                        endpoint=None, error_report=None):
+                        endpoint=None, error_report=None, request_timeout=None):
     """
     Sends a prompt and game state to the Ollama server and gets a response.
     
@@ -108,7 +108,8 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
 
     # --- Make the API call ---
     try:
-        with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
+        timeout = REQUEST_TIMEOUT if request_timeout is None else max(0.1, float(request_timeout))
+        with httpx.Client(timeout=timeout) as client:
             response = client.post(api_url, json=payload)
             response.raise_for_status()  # Raise an exception for bad status codes
 
@@ -126,8 +127,8 @@ def get_ollama_response(game_state, model=None, prompt_key=None, override_prompt
             return None
 
     except httpx.TimeoutException as e:
-        logger.error(f"Timeout calling Ollama after {REQUEST_TIMEOUT}s: {e}")
-        record_error("timeout", f"Ollama request timed out after {REQUEST_TIMEOUT}s")
+        logger.error("Timeout calling Ollama: %s", e)
+        record_error("timeout", "Ollama request timed out")
         return None
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error calling Ollama: {e.response.status_code} - {e.response.text}")
