@@ -5,68 +5,68 @@
     {
       "name": "Setup: CEO User",
       "setup": "macro_auth_user",
-      "username": "ceo_user",
+      "username": "basic_corp_ceo_user",
       "password": "password"
     },
     {
       "name": "Setup: Member User",
       "setup": "macro_auth_user",
-      "username": "member_user",
+      "username": "basic_corp_member_user",
       "password": "password"
     },
     {
       "name": "Create Corp for CEO Player",
       "command": "corp.create",
       "data": { "name": "BasicCorp" },
-      "user": "ceo_user",
+      "user": "basic_corp_ceo_user",
       "save": { "corp_id": "data.corp_id" },
       "expect": { "status": "ok" }
     },
     {
       "name": "CEO Player - Get Status",
       "command": "corp.status",
-      "user": "ceo_user",
+      "user": "basic_corp_ceo_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Member Player - Get Status (not in corp)",
       "command": "corp.status",
-      "user": "member_user",
+      "user": "basic_corp_member_user",
       "expect": { "status": "error", "error_code": 400 }
     },
     {
       "name": "Corp Invite - Success",
       "command": "corp.invite",
-      "data": { "target_player_id": "@member_user_player_id" },
-      "user": "ceo_user",
+      "data": { "target_player_id": "@basic_corp_member_user_player_id" },
+      "user": "basic_corp_ceo_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp Join - Success",
       "command": "corp.join",
       "data": { "corp_id": "@corp_id" },
-      "user": "member_user",
+      "user": "basic_corp_member_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp Deposit - Success (CEO)",
-      "command": "bank.transfer",
-      "data": { "recipient_type": "corp", "recipient_id": "@corp_id", "amount": 100 },
-      "user": "ceo_user",
+      "command": "corp.deposit",
+      "data": { "amount": 100 },
+      "user": "basic_corp_ceo_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Corp statement rejects non-positive limit",
       "command": "corp.statement",
       "data": { "limit": 0 },
-      "user": "ceo_user",
+      "user": "basic_corp_ceo_user",
       "expect": { "status": "error", "error_code": 400 }
     },
     {
       "name": "Corp create request schema is discoverable",
       "command": "system.describe_schema",
       "data": { "name": "corp.create", "type": "command" },
-      "user": "ceo_user",
+      "user": "basic_corp_ceo_user",
       "asserts": [
         { "path": "data.schema.properties.name.type", "op": "==", "value": "string" },
         { "path": "data.schema.required.0", "op": "==", "value": "name" }
@@ -77,7 +77,7 @@
       "name": "Corp deposit request schema is discoverable",
       "command": "system.describe_schema",
       "data": { "name": "corp.deposit", "type": "command" },
-      "user": "ceo_user",
+      "user": "basic_corp_ceo_user",
       "asserts": [
         { "path": "data.schema.properties.amount.type", "op": "==", "value": "integer" },
         { "path": "data.schema.required.0", "op": "==", "value": "amount" }
@@ -88,7 +88,7 @@
       "name": "Corp roster request schema is discoverable",
       "command": "system.describe_schema",
       "data": { "name": "corp.roster", "type": "command" },
-      "user": "ceo_user",
+      "user": "basic_corp_ceo_user",
       "asserts": [
         { "path": "data.schema.properties.corp_id.type", "op": "==", "value": "integer" },
         { "path": "data.schema.required.0", "op": "==", "value": "corp_id" }
