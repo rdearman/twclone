@@ -2246,7 +2246,12 @@ db_get_port_id_by_sector (db_t *db, int sid)
   db_error_t err = {0};
   int pid = 0;
 
-  const char *sql_template = "SELECT port_id FROM ports WHERE sector_id = {1};";
+  /* Prefer the StarDock when a sector contains more than one port.  The
+     dock.status protocol does not carry a port id, so selecting an arbitrary
+     row could bypass StarDock-only behaviour such as limpet decontamination. */
+  const char *sql_template =
+    "SELECT port_id FROM ports WHERE sector_id = {1} "
+    "ORDER BY CASE WHEN type = 9 THEN 0 ELSE 1 END, port_id LIMIT 1;";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
@@ -3233,7 +3238,12 @@ db_ships_at_sector_json (db_t *db, int pid, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
-  const char *sql_template = "SELECT ship_id, name FROM ships WHERE sector_id = {1};";
+  const char *sql_template =
+    "SELECT s.ship_id, s.name, "
+    "       (NOT EXISTS (SELECT 1 FROM ship_ownership so "
+    "                    WHERE so.ship_id = s.ship_id)) AS is_derelict "
+    "FROM ships s "
+    "WHERE s.sector_id = {1} AND COALESCE(s.destroyed, FALSE) = FALSE;";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
@@ -3725,11 +3735,15 @@ db_ships_inspectable_at_sector_json (db_t *db,
   /* const char *sql = */
   /*   "SELECT ship_id, name FROM ships WHERE sector_id = {1} AND (cloaked IS NULL OR {2} = (SELECT player_id FROM ship_ownership WHERE ship_id = ships.ship_id AND is_primary = TRUE));"; */
   const char *sql =
-    "SELECT ship_id, name FROM ships "
-    "WHERE sector_id = {1} AND ( cloaked IS NULL "
+    "SELECT s.ship_id, s.name, "
+    "       (NOT EXISTS (SELECT 1 FROM ship_ownership so "
+    "                    WHERE so.ship_id = s.ship_id)) AS is_derelict "
+    "FROM ships s "
+    "WHERE s.sector_id = {1} AND COALESCE(s.destroyed, FALSE) = FALSE "
+    "  AND (s.cloaked IS NULL "
     "        OR EXISTS ( SELECT 1 "
     "            FROM ship_ownership "
-    "            WHERE ship_id = ships.ship_id "
+    "            WHERE ship_id = s.ship_id "
     "              AND is_primary = {3} "
     "              AND player_id = {2} )); ";
 
