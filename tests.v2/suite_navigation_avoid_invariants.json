@@ -39,7 +39,7 @@
       "user": "nav_avoid_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.items.length", "op": "==", "value": 0 }
+        { "path": "data.items", "op": "==", "value": [] }
       ]
     }
   ]
