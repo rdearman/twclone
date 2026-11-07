@@ -52,6 +52,7 @@
     {
       "name": "Corp Roster",
       "command": "corp.roster",
+      "data": { "corp_id": "@corp_id" },
       "user": "ceo_user",
       "expect": { "status": "ok" }
     },

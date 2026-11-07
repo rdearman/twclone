@@ -317,7 +317,7 @@ int repo_corp_get_invite_expiry(db_t *db, int corp_id, int player_id, long long 
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q21 */
-    const char *q21 = "SELECT expires_at FROM corp_invites WHERE corporation_id = {1} AND player_id = {2};";
+    const char *q21 = "SELECT EXTRACT(EPOCH FROM expires_at)::bigint FROM corp_invites WHERE corp_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q21, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (expires_at) *expires_at = db_res_col_i64(res, 0, &err);
@@ -341,7 +341,7 @@ int repo_corp_insert_member_basic(db_t *db, int corp_id, int player_id, const ch
 int repo_corp_delete_invite(db_t *db, int corp_id, int player_id) {
     db_error_t err;
     /* SQL_VERBATIM: Q23 */
-    const char *q23 = "DELETE FROM corp_invites WHERE corporation_id = {1} AND player_id = {2};";
+    const char *q23 = "DELETE FROM corp_invites WHERE corp_id = {1} AND player_id = {2};";
     char sql[512]; sql_build(db, q23, sql, sizeof(sql));
     if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) }, 2, &err)) return err.code;
     return 0;

@@ -1340,6 +1340,19 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
 	    }
 #endif
 
+	  /* AUTH GATE — SINGLE SOURCE OF TRUTH */
+	  if (!(k_command_registry[i].flags & CMD_FLAG_AUTH_FREE))
+	    {
+	      if (ctx->player_id <= 0)
+		{
+		  send_response_error (ctx,
+				       root,
+				       ERR_NOT_AUTHENTICATED,
+				       "Not authenticated");
+		return -1;
+		}
+	    }
+
 	  /* SCHEMA VALIDATION */
 	  json_t *data = json_object_get (root, "data");
 	  char *why = NULL;
@@ -1355,19 +1368,6 @@ server_dispatch_command (client_ctx_t *ctx, json_t *root)
 	      send_response_error (ctx, root, err_code, why ? why : "Invalid request schema");
 	      free (why);
 	      return 0;		/* Error handled */
-	    }
-
-	  /* AUTH GATE — SINGLE SOURCE OF TRUTH */
-	  if (!(k_command_registry[i].flags & CMD_FLAG_AUTH_FREE))
-	    {
-	      if (ctx->player_id <= 0)
-		{
-		  send_response_error (ctx,
-				       root,
-				       ERR_NOT_AUTHENTICATED,
-				       "Not authenticated");
-		  return -1;
-		}
 	    }
 
 	  return k_command_registry[i].handler (ctx, root);
