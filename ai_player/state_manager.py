@@ -48,6 +48,11 @@ class StateManager:
             "warp_blacklist": [],       # NEW: List of sectors that are unreachable via warp
             "sector_danger": {},        # Persisted hazard/interdiction risk by sector
             "route_memory": [],         # Successful profitable trade routes
+            "market_history": {},       # Bounded quote history for forecasting
+            "opponent_model": {},       # Public observations of other players
+            "combat_memory": [],        # Recent combat outcomes and readiness
+            "victory_status": {},      # Server/configured endgame progress
+            "restart_checkpoint": {},  # Last durable strategic checkpoint
             "current_path": [],         # NEW: Stores the server-provided path for navigation
             "last_action_result": None, # NEW: Feedback loop for LLM
             "last_quotes": {},          # NEW: Deterministic trade rule support
@@ -86,8 +91,20 @@ class StateManager:
                 with open(self.state_file, 'r') as f:
                     # Merge saved state with defaults
                     saved_state = json.load(f)
+                    if not isinstance(saved_state, dict):
+                        raise ValueError("state file root must be an object")
                     self.state.update(saved_state)
                     logger.info("Loaded state from %s", self.state_file)
+
+                    # Recover the last strategic plan if a process was
+                    # interrupted between planning and the normal state save.
+                    checkpoint = self.state.get("restart_checkpoint") or {}
+                    if (not self.state.get("strategy_plan")
+                            and isinstance(checkpoint.get("strategy_plan"), list)):
+                        self.state["strategy_plan"] = list(checkpoint["strategy_plan"])
+                    if (not self.state.get("strategy_plan_source")
+                            and checkpoint.get("strategy_plan_source")):
+                        self.state["strategy_plan_source"] = checkpoint["strategy_plan_source"]
                     
                     # Transient data that SHOULD be reset on load
                     self.state["command_retry_info"] = {} 
@@ -121,6 +138,12 @@ class StateManager:
         """Saves the current state to the state file."""
         temporary_path = None
         try:
+            self.state["restart_checkpoint"] = {
+                "saved_at": time.time(),
+                "strategy_plan": list(self.state.get("strategy_plan", [])),
+                "strategy_plan_source": self.state.get("strategy_plan_source"),
+                "player_location_sector": self.state.get("player_location_sector"),
+            }
             # Session credentials are runtime-only. Reauthentication is already
             # required on process start, so there is no reason to persist them.
             persisted_state = dict(self.state)
@@ -398,7 +421,87 @@ class StateManager:
         self.state["price_cache"][port_id]["buy"][commodity] = quote_data.get("buy_price")
         self.state["price_cache"][port_id]["sell"][commodity] = quote_data.get("sell_price")
         self.state["price_cache"][port_id].setdefault("quoted_at", {})[commodity] = time.time()
+        history = self.state.setdefault("market_history", {}).setdefault(
+            f"{port_id}:{commodity}", []
+        )
+        history.append({
+            "timestamp": time.time(),
+            "buy_price": quote_data.get("buy_price"),
+            "sell_price": quote_data.get("sell_price"),
+        })
+        del history[:-20]
             
+        self.save_state()
+
+    def forecast_market(self, port_id, commodity):
+        """Return a conservative trend forecast from persisted quote history."""
+        key = f"{port_id}:{canon_commodity(commodity)}"
+        samples = [item for item in self.state.get("market_history", {}).get(key, [])
+                   if isinstance(item, dict)]
+        if not samples:
+            return {}
+
+        def trend(field):
+            values = []
+            for item in samples:
+                try:
+                    values.append(float(item.get(field)))
+                except (TypeError, ValueError):
+                    continue
+            if not values:
+                return {}
+            recent = values[-min(5, len(values)):]
+            baseline_values = values[:-len(recent)] or recent[:1]
+            baseline = sum(baseline_values) / len(baseline_values)
+            return {"current": recent[-1], "baseline": baseline,
+                    "delta": recent[-1] - baseline}
+
+        return {"buy": trend("buy_price"), "sell": trend("sell_price"),
+                "samples": len(samples)}
+
+    def record_opponent_observation(self, observations, sector_id=None):
+        """Persist public observations of other players and their threat level."""
+        if not isinstance(observations, list):
+            return
+        models = self.state.setdefault("opponent_model", {})
+        now = time.time()
+        for observed in observations:
+            if not isinstance(observed, dict):
+                continue
+            identity = observed.get("player_id", observed.get("username", observed.get("ship_id")))
+            if identity is None:
+                continue
+            key = str(identity)
+            entry = dict(models.get(key, {}))
+            entry.update({k: observed[k] for k in (
+                "player_id", "username", "ship_id", "corporation_id", "alignment"
+            ) if k in observed})
+            entry["sector_id"] = observed.get("sector_id", sector_id)
+            entry["last_seen"] = now
+            try:
+                threat = float(entry.get("threat_score", 0) or 0)
+            except (TypeError, ValueError):
+                threat = 0.0
+            if observed.get("hostile") or observed.get("is_hostile"):
+                threat += 25.0
+            entry["threat_score"] = max(0.0, min(100.0, threat))
+            models[key] = entry
+        if len(models) > 200:
+            self.state["opponent_model"] = dict(sorted(
+                models.items(), key=lambda item: item[1].get("last_seen", 0), reverse=True
+            )[:200])
+        self.save_state()
+
+    def record_combat_outcome(self, outcome):
+        if not isinstance(outcome, dict):
+            return
+        allowed = {"result", "target_player_id", "sector_id", "hull", "shields",
+                   "fighters", "damage_taken"}
+        history = self.state.setdefault("combat_memory", [])
+        history.append({"timestamp": time.time(), **{
+            key: value for key, value in outcome.items() if key in allowed
+        }})
+        del history[:-50]
         self.save_state()
 
     def set_credits(self, credits):

@@ -832,6 +832,14 @@ def _get_fallback_plan(game_state, state_manager, planner):
     # Solo players need a persistent win path, not just an endless trade loop.
     # The planner only emits these milestones when the required state is
     # observed, so a refused/unsupported action cannot strand the strategy.
+    endgame_goal = planner._endgame_goal(game_state)
+    if endgame_goal:
+        return [endgame_goal]
+
+    readiness_action = planner._combat_readiness_command(game_state)
+    if readiness_action:
+        return ["combat: readiness"]
+
     progression_goal = planner._solo_progression_goal(game_state)
     if progression_goal:
         return [progression_goal]
@@ -1175,6 +1183,17 @@ def select_strategy_plan(game_state, config, state_manager, planner):
     mode = config.get("strategy_mode", "ollama")
     if mode not in ("deterministic", "ollama"):
         raise ValueError(f"Unknown strategy_mode: {mode!r}")
+    # Safety and victory transitions are controller-owned and must preempt a
+    # stale or imaginative LLM plan in every strategy mode.
+    endgame_reader = getattr(planner, "_endgame_goal", None)
+    readiness_reader = getattr(planner, "_combat_readiness_command", None)
+    priority_goal = endgame_reader(game_state) if callable(endgame_reader) else None
+    if priority_goal is None and callable(readiness_reader) and readiness_reader(game_state):
+        priority_goal = "combat: readiness"
+    if priority_goal:
+        state_manager.set("strategy_plan_source", "controller_priority")
+        state_manager.set("strategy_inference_status", {"status": "preempted", "reason": priority_goal})
+        return [priority_goal]
     if mode == "deterministic":
         plan = _get_fallback_plan(game_state, state_manager, planner)
         state_manager.set("strategy_plan_source", "deterministic")
@@ -1328,6 +1347,12 @@ def is_goal_complete(goal_str, game_state, response_data, response_type):
 
         elif goal_type == "planet" and goal_target == "defend":
             return response_type == "planet.fighters.transferred_v1"
+
+        elif goal_type == "victory" and goal_target == "claim":
+            return response_type in ("game.victory_claimed", "victory.claimed")
+
+        elif goal_type == "victory" and goal_target == "consolidate":
+            return response_type in ("bank.deposit.confirmed", "ship.repair", "planet.info")
 
     except Exception as e:
         logger.warning(f"Error checking goal completion for '{goal_str}': {e}")
@@ -2539,6 +2564,9 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                         # Add refresh timestamp so planner can detect stale data
                         response_data["_last_refreshed"] = time.time()
                         state_manager.update_sector_data(str(sector_id), response_data)
+                        public_players = response_data.get("players", response_data.get("ships_present", []))
+                        if isinstance(public_players, list):
+                            state_manager.record_opponent_observation(public_players, sector_id=sector_id)
                 
                 elif response_type == "shipyard.list":
                     # Store available ships for bootstrap ship claiming
@@ -2576,6 +2604,24 @@ def process_responses(responses, game_conn, state_manager, bug_reporter, bandit_
                 
                 elif response_type == "bank.balance":
                     state_manager.set("bank_balance", response_data.get("balance", 0))
+
+                # Victory status is intentionally copied only from an
+                # authoritative server response; local estimates cannot claim
+                # a win.  Combat receipts likewise feed recovery and opponent
+                # threat memory without storing private credentials.
+                if isinstance(response_data, dict):
+                    victory = response_data.get("victory") or response_data.get("game_status")
+                    if isinstance(victory, dict):
+                        state_manager.set("victory_status", victory)
+                    if response_type.startswith("combat.") or response_type.startswith("player.attack"):
+                        state_manager.record_combat_outcome(response_data)
+                        target = response_data.get("target_player_id") or response_data.get("player_id")
+                        if target is not None:
+                            state_manager.record_opponent_observation([{
+                                "player_id": target,
+                                "sector_id": state_manager.get("player_location_sector"),
+                                "hostile": True,
+                            }])
 
                 game_state_after = state_manager.get_all() 
                 strategy_plan = game_state_after.get("strategy_plan", [])

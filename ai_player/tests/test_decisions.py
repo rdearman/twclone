@@ -1,6 +1,8 @@
 import sys
 import time
+import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock
 
 
@@ -10,6 +12,7 @@ sys.path.insert(0, str(AI_PLAYER_DIR))
 from bandit_policy import make_context_key  # noqa: E402
 from planner import Planner  # noqa: E402
 from main import is_goal_complete  # noqa: E402
+from state_manager import StateManager  # noqa: E402
 
 
 def make_planner(profile="balanced"):
@@ -218,6 +221,51 @@ def test_solo_policy_assigns_workforce_and_reinforces_planet():
         "command": "planet.fighters.transfer",
         "data": {"planet_id": 321, "direction": "ship_to_planet", "quantity": 20},
     }
+
+
+def test_endgame_claim_preempts_growth_when_server_authorizes_victory():
+    planner = make_planner()
+    planner.config.update({"solo_empire_mode": True, "victory_command": "game.claim_victory"})
+    state = {
+        "victory_status": {"can_claim": True},
+        "server_commands": ["game.claim_victory"],
+        "ship_info": {},
+    }
+    assert planner._endgame_goal(state) == "victory: claim"
+    assert planner._achieve_goal(state, "victory: claim") == {
+        "command": "game.claim_victory", "data": {}
+    }
+
+
+def test_combat_readiness_repairs_at_port_and_avoids_threatened_exit():
+    planner = make_planner()
+    planner.config.update({"combat_min_hull_ratio": 0.65})
+    state = {
+        "ship_info": {"hull": 40, "max_hull": 100},
+        "player_location_sector": 10,
+        "sector_data": {"10": {"has_port": True, "adjacent": [20, 30]}},
+        "server_commands": ["ship.repair"],
+        "command_retry_info": {},
+    }
+    assert planner._combat_readiness_command(state) == {"command": "ship.repair", "data": {}}
+    state["ship_info"]["hull"] = 100
+    state["opponent_model"] = {"p1": {"sector_id": 20, "threat_score": 100}}
+    assert planner._get_next_warp_target(state) == 30
+
+
+def test_state_manager_persists_market_forecast_opponents_and_restart_plan():
+    with TemporaryDirectory() as directory:
+        path = str(Path(directory) / "state.json")
+        config = {"default_cooldown": 1}
+        manager = StateManager(path, config)
+        manager.set("strategy_plan", ["goto: 9"])
+        manager.update_price_cache({"port_id": 7, "commodity": "ORE", "buy_price": 10, "sell_price": 20})
+        manager.update_price_cache({"port_id": 7, "commodity": "ORE", "buy_price": 10, "sell_price": 30})
+        manager.record_opponent_observation([{"player_id": 8, "sector_id": 12, "hostile": True}])
+        manager2 = StateManager(path, config)
+        assert manager2.get("strategy_plan") == ["goto: 9"]
+        assert manager2.forecast_market(7, "ORE")["sell"]["delta"] > 0
+        assert manager2.get("opponent_model")["8"]["threat_score"] == 25
 
 
 def test_navigation_prefers_safe_exit_after_entry_hazard():

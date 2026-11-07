@@ -146,6 +146,43 @@ class Planner:
 
         return None
 
+    def _endgame_goal(self, current_state):
+        """Switch from growth to the server's explicit victory path when ready."""
+        victory = current_state.get("victory_status") or {}
+        advertised = set(current_state.get("server_commands", []))
+        claim_command = victory.get("claim_command") or self.config.get("victory_command", "game.claim_victory")
+        if victory.get("can_claim") and (not advertised or claim_command in advertised):
+            return "victory: claim"
+        if victory.get("winning") or victory.get("is_leading"):
+            return "victory: consolidate"
+        return None
+
+    def _combat_readiness_command(self, current_state):
+        """Repair or retreat before taking avoidable combat risk."""
+        ship = current_state.get("ship_info") or {}
+        try:
+            hull = float(ship.get("hull"))
+            max_hull = float(ship.get("max_hull", 100) or 100)
+        except (TypeError, ValueError):
+            return None
+        try:
+            minimum = float(self.config.get("combat_min_hull_ratio", 0.65))
+        except (TypeError, ValueError):
+            minimum = 0.65
+        if max_hull and hull / max_hull < minimum:
+            return self._survival_command(current_state)
+
+        try:
+            fighters = int(ship.get("fighters", 0) or 0)
+            min_fighters = int(self.config.get("combat_min_fighters", 10))
+        except (TypeError, ValueError):
+            fighters, min_fighters = 0, 10
+        if fighters < min_fighters and self._at_port(current_state):
+            advertised = set(current_state.get("server_commands", []))
+            if "hardware.buy" in advertised and self._is_command_ready("hardware.buy", current_state.get("command_retry_info", {})):
+                return {"command": "hardware.buy", "data": {"item": "fighters", "quantity": min_fighters - fighters}}
+        return None
+
     def _stage_epsilon(self):
         """Return the configured exploration rate for the current planner stage."""
         if str(self.config.get("strategy_mode", "")).lower() == "deterministic":
@@ -645,6 +682,9 @@ class Planner:
             elif goal_type == "scan" and goal_target == "density":
                 return {"command": "sector.scan.density", "data": {}}
 
+            elif goal_type == "combat" and goal_target == "readiness":
+                return self._combat_readiness_command(current_state)
+
             elif goal_type == "combat" and goal_target == "attack":
                 if self._is_protected_sector(current_state):
                     logger.warning("Refusing combat goal in protected FedSpace.")
@@ -736,6 +776,28 @@ class Planner:
                     "name": str(name)[:64],
                     "owner_entity_type": "player",
                 }}
+
+            elif goal_type == "victory" and goal_target == "claim":
+                victory = current_state.get("victory_status") or {}
+                command = victory.get("claim_command") or self.config.get("victory_command", "game.claim_victory")
+                advertised = set(current_state.get("server_commands", []))
+                if victory.get("can_claim") and (not advertised or command in advertised):
+                    return {"command": command, "data": {}}
+                return None
+
+            elif goal_type == "victory" and goal_target == "consolidate":
+                # Consolidation is intentionally ordinary-player behavior: bank
+                # excess cash or maintain the home planet while waiting for the
+                # authoritative victory claim window.
+                if self._at_port(current_state) and "bank.deposit" in current_state.get("server_commands", []):
+                    player = (current_state.get("player_info") or {}).get("player", {})
+                    try:
+                        amount = int(float(player.get("credits", 0))) - int(float(self.config.get("operating_reserve", 5000)))
+                    except (TypeError, ValueError):
+                        amount = 0
+                    if amount > 0:
+                        return {"command": "bank.deposit", "data": {"amount": amount}}
+                return self._survival_command(current_state)
 
             elif goal_type == "citadel" and goal_target in ("maintain", "build", "upgrade"):
                 if not self.config.get("enable_citadel_management", True) or not (current_state.get("ship_info") or {}).get("onplanet"):
@@ -2053,6 +2115,17 @@ class Planner:
         # have not hurt this player before, while retaining a deterministic
         # fallback when every exit is dangerous.
         danger = current_state.get("sector_danger", {}) or {}
+        opponent_threat = {}
+        for opponent in (current_state.get("opponent_model") or {}).values():
+            if not isinstance(opponent, dict) or opponent.get("sector_id") is None:
+                continue
+            try:
+                opponent_threat[str(int(opponent["sector_id"]))] = max(
+                    opponent_threat.get(str(int(opponent["sector_id"])), 0.0),
+                    float(opponent.get("threat_score", 0) or 0),
+                )
+            except (TypeError, ValueError):
+                continue
         safe_targets = [target for target in possible_targets if str(target) not in danger]
         if safe_targets:
             possible_targets = safe_targets
@@ -2113,6 +2186,7 @@ class Planner:
         def rank(sector):
             sector_key = str(sector)
             danger_penalty = int((danger.get(sector_key) or {}).get("severity", 0) or 0)
+            opponent_penalty = opponent_threat.get(sector_key, 0.0) / 25.0
             # Missing universe-map rows are common in a newly explored world.
             # Sector details are public knowledge too, and must keep the
             # explorer from repeatedly preferring an already surveyed sector
@@ -2132,7 +2206,7 @@ class Planner:
             else:
                 destination_rank = 0
             revisit_rank = 1 if sector_key in recent else 0
-            return (danger_penalty, destination_rank, novelty_rank, revisit_rank, sector)
+            return (danger_penalty + opponent_penalty, destination_rank, novelty_rank, revisit_rank, sector)
 
         target = min(possible_targets, key=rank)
         logger.info("Selected sector %s for %s-profile navigation.", target, profile)
@@ -2514,6 +2588,15 @@ class Planner:
                 # We will still calculate potential profit, but this note is important.
 
             potential_profit = self._calculate_potential_profit(commodity_code, buy_price, current_state)
+
+            # A recent upward sell-price trend is a small tie-breaker; it never
+            # turns an unprofitable or stale quote into a purchase decision.
+            forecast_reader = getattr(self.state_manager, "forecast_market", None)
+            forecast = forecast_reader(port_id, commodity_code) if callable(forecast_reader) else {}
+            if not isinstance(forecast, dict):
+                forecast = {}
+            sell_delta = float((forecast.get("sell") or {}).get("delta", 0) or 0)
+            potential_profit += max(0.0, sell_delta) * float(self.config.get("market_forecast_weight", 0.15))
 
             if potential_profit > highest_potential_profit:
                 highest_potential_profit = potential_profit
