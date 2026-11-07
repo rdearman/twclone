@@ -3164,7 +3164,7 @@ schema_sector_search (void)
 
   json_t *query_prop = json_object ();
   json_object_set_new (query_prop, "type", json_string ("string"));
-  json_object_set_new (props, "query", query_prop);
+  json_object_set_new (props, "q", query_prop);
 
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
@@ -3175,9 +3175,6 @@ schema_sector_search (void)
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
 
-  json_t *required = json_array ();
-  json_array_append_new (required, json_string ("query"));
-  json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }

@@ -10,6 +10,7 @@ Updated 2026-11-07.
 - Resolved in the latest run: literal numeric strings such as MFA codes now retain their JSON string type; the MFA suite passes. The corporation invite SQL now uses the schema's `corp_id` column; the remaining corporation failures are fixture/state sequencing issues rather than the prior missing-column error.
 - Current batch: corporation invite expiry now converts PostgreSQL `timestamptz` to epoch seconds before comparison, and the advanced corporation roster fixture supplies its required `corp_id`. Targeted validation passed; a full regression rerun is pending.
 - Resolved in the latest full run: the `sector.search` schema now matches the documented `q` field and permits the existing empty-query behavior; seven schema-driven failures disappeared. One remaining search failure is a fixture/result assertion for the requested `Sol` row.
+- Commits created: `b90d1aa6` (authentication dispatch, corporation invite expiry, corporation roster fixture, checkpoint) and `9347c2e8` (sector search schema).
 - Known blockers: `events.resume` is compile-gated and unregistered; MSL tests request an unregistered cron command; quasar/Captain Z expectations require contract decisions.
 - Prior commits: `60967ed5`, `317d0576`, `caf3b9e3`.
 - Remaining Ferengi issue: the temporary `codex_fixture_roster_only` case expects a new active definition to bypass the configured population target; this is a fixture/specification question, not a provisioning error.
