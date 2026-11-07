@@ -29,7 +29,7 @@
       "command": "fine.pay",
       "data": { "fine_id": 999999, "amount": 500 },
       "user": "wanted_criminal",
-      "expect": { "status": "error", "error_code": 405 }
+      "expect": { "status": "error", "error_code": 404 }
     },
     {
       "name": "Negative: Fine Pay Missing Auth",
