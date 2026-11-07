@@ -32,7 +32,7 @@
     {
       "name": "Rig: Seed Planet Stock",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', @{test_planet_id}, 'ORE', 100);" },
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', @{test_planet_id}, 'ORE', 100) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -85,27 +85,27 @@
     {
       "name": "planet.rename - Positive",
       "command": "planet.rename",
-      "data": { "planet_id": "@{test_planet_id}", "new_name": "RenamedWorld" },
+      "data": { "planet_id": "@{test_planet_id}", "name": "RenamedWorld" },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.rename - Negative (No Auth)",
       "command": "planet.rename",
-      "data": { "planet_id": "@{test_planet_id}", "new_name": "RenamedWorld" },
+      "data": { "planet_id": "@{test_planet_id}", "name": "RenamedWorld" },
       "expect": { "status": "error", "error_code": 401 }
     },
     {
       "name": "planet.withdraw - Positive",
       "command": "planet.withdraw",
-      "data": { "planet_id": "@{test_planet_id}", "amount": 100 },
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 90 },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "planet.withdraw - Negative (No Auth)",
       "command": "planet.withdraw",
-      "data": { "planet_id": "@{test_planet_id}", "amount": 100 },
+      "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 100 },
       "expect": { "status": "error", "error_code": 401 }
     },
     {

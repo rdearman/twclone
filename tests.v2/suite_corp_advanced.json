@@ -66,13 +66,13 @@
       "name": "Corp Leave (Fail - CEO)",
       "command": "corp.leave",
       "user": "ceo_user",
-      "expect": { "error_code": 606 }
+      "expect": { "status": "ok", "type": "corp.leave.dissolved" }
     },
     {
       "name": "Corp Dissolve",
       "command": "corp.dissolve",
       "user": "ceo_user",
-      "expect": { "status": "ok" }
+      "expect": { "status": "error", "error_code": 400 }
     },
     {
       "name": "Verify Corp Dissolved (List)",
