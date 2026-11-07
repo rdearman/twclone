@@ -6,21 +6,34 @@
   "tests": [
     {
       "name": "Setup: User A (Trader)",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "econ_trader",
       "password": "password"
     },
     {
       "name": "Setup: User B (Target)",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "econ_target",
       "password": "password"
+    },
+    {
+      "name": "Setup: Stock owner",
+      "setup": "macro_auth_user",
+      "username": "wall_street_wolf",
+      "password": "password"
+    },
+    {
+      "name": "Rig: Seed ORE for jettison",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 1 FROM players WHERE name = 'econ_trader' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Stock IPO Register (Success)",
       "command": "stock.ipo.register",
       "data": { "corp_id": 100, "ticker": "ECN", "total_shares": 1000, "par_value": 10, "current_price": 10 },
-      "user": " wall_street_wolf",
+      "user": "wall_street_wolf",
       "expect": { "status": "ok" },
       "save": { "stock_id": "data.stock_id" }
     },
@@ -34,7 +47,7 @@
     {
       "name": "Trade Jettison (Success)",
       "command": "trade.jettison",
-      "data": { "items": [{"commodity": "ORE", "quantity": 1}] },
+      "data": { "commodity": "ORE", "quantity": 1 },
       "user": "econ_trader",
       "expect": { "status": "ok" }
     }
