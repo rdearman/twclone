@@ -17,7 +17,7 @@
     {
       "name": "Rig: Fund corporation CEO",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE players SET credits = 100000 WHERE name = 'basic_corp_ceo_user';" },
+      "data": { "sql": "UPDATE bank_accounts SET balance = 100000 WHERE owner_type = 'player' AND owner_id = (SELECT player_id FROM players WHERE name = 'basic_corp_ceo_user') AND currency = 'CRD' AND is_active = TRUE;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
