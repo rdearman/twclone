@@ -14,30 +14,32 @@
     {
       "name": "Setup: Register and Login Toll Collector",
       "command": "auth.register",
-      "data": { "username": "toll_col_*uuid*", "passwd": "tc_pass" },
+      "data": { "username": "toll_final_collector", "passwd": "tc_pass" },
       "user": "toll_collector",
+      "register_if_missing": true,
       "expect": { "status": "ok" },
-      "save": { "toll_username": "data.username", "toll_collector_id": "data.player_id" }
+      "save": { "toll_collector_id": "data.player_id" }
     },
     {
       "name": "Setup: Toll Collector Re-login",
       "command": "auth.login",
-      "data": { "username": "@toll_username", "passwd": "tc_pass" },
+      "data": { "username": "toll_final_collector", "passwd": "tc_pass" },
       "user": "toll_collector",
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Register and Login Victim",
       "command": "auth.register",
-      "data": { "username": "toll_vic_*uuid*", "passwd": "tv_pass" },
+      "data": { "username": "toll_final_victim", "passwd": "tv_pass" },
       "user": "toll_victim",
+      "register_if_missing": true,
       "expect": { "status": "ok" },
-      "save": { "victim_username": "data.username", "victim_id": "data.player_id" }
+      "save": { "victim_id": "data.player_id" }
     },
     {
       "name": "Setup: Victim Re-login",
       "command": "auth.login",
-      "data": { "username": "@victim_username", "passwd": "tv_pass" },
+      "data": { "username": "toll_final_victim", "passwd": "tv_pass" },
       "user": "toll_victim",
       "expect": { "status": "ok" }
     },

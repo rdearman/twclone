@@ -14,13 +14,14 @@
     {
       "name": "Setup: Register Toll Collector",
       "command": "auth.register",
-      "data": { "username": "tfc_*uuid*", "passwd": "password" },
+      "data": { "username": "toll_v2_collector", "passwd": "password" },
+      "register_if_missing": true,
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Login Toll Collector",
       "command": "auth.login",
-      "data": { "username": "tfc_*uuid*", "passwd": "password" },
+      "data": { "username": "toll_v2_collector", "passwd": "password" },
       "user": "toll_collector",
       "expect": { "status": "ok" },
       "save": { "tc_player_id": "data.player_id" }
@@ -28,13 +29,14 @@
     {
       "name": "Setup: Register Victim",
       "command": "auth.register",
-      "data": { "username": "tfv_*uuid*", "passwd": "password" },
+      "data": { "username": "toll_v2_victim", "passwd": "password" },
+      "register_if_missing": true,
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Login Victim",
       "command": "auth.login",
-      "data": { "username": "tfv_*uuid*", "passwd": "password" },
+      "data": { "username": "toll_v2_victim", "passwd": "password" },
       "user": "toll_victim",
       "expect": { "status": "ok" },
       "save": { "tv_player_id": "data.player_id" }

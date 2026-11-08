@@ -14,13 +14,14 @@
     {
       "name": "Setup: Register Toll Collector *uuid*",
       "command": "auth.register",
-      "data": { "username": "toll_collector_*uuid*", "passwd": "password123" },
+      "data": { "username": "toll_working_collector", "passwd": "password123" },
+      "register_if_missing": true,
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Login Toll Collector",
       "command": "auth.login",
-      "data": { "username": "toll_collector_*uuid*", "passwd": "password123" },
+      "data": { "username": "toll_working_collector", "passwd": "password123" },
       "user": "toll_collector",
       "expect": { "status": "ok" },
       "save": { "toll_collector_id": "data.player_id" }
@@ -28,13 +29,14 @@
     {
       "name": "Setup: Register Victim *uuid*",
       "command": "auth.register",
-      "data": { "username": "toll_victim_*uuid*", "passwd": "password123" },
+      "data": { "username": "toll_working_victim", "passwd": "password123" },
+      "register_if_missing": true,
       "expect": { "status": "ok" }
     },
     {
       "name": "Setup: Login Victim",
       "command": "auth.login",
-      "data": { "username": "toll_victim_*uuid*", "passwd": "password123" },
+      "data": { "username": "toll_working_victim", "passwd": "password123" },
       "user": "toll_victim",
       "expect": { "status": "ok" },
       "save": { "victim_id": "data.player_id" }
