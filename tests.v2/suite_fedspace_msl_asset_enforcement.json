@@ -38,7 +38,7 @@
       "user": "fedspace_user_1",
       "expect": { "status": "refused", "error_code": 1454 },
       "asserts": [
-        { "path": "error_message", "op": "contains", "value": "FedSpace" }
+        { "path": "error.message", "op": "contains", "value": "FedSpace" }
       ]
     },
     {
@@ -64,11 +64,11 @@
     {
       "name": "Test 2a: Deploy Mines in FedSpace - SHOULD REFUSE",
       "command": "combat.deploy_mines",
-      "data": { "amount": 5, "type": "armid" },
+      "data": { "amount": 5, "offense": 3 },
       "user": "fedspace_user_1",
       "expect": { "status": "refused", "error_code": 1454 },
       "asserts": [
-        { "path": "error_message", "op": "contains", "value": "FedSpace" }
+        { "path": "error.message", "op": "contains", "value": "FedSpace" }
       ]
     },
     {
@@ -98,7 +98,7 @@
       "user": "fedspace_user_1",
       "expect": { "status": "refused", "error_code": 1454 },
       "asserts": [
-        { "path": "error_message", "op": "contains", "value": "FedSpace" }
+        { "path": "error.message", "op": "contains", "value": "FedSpace" }
       ]
     },
     {
@@ -108,7 +108,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": null }
+        { "path": "data.rows.0.0", "op": "==", "value": "The Federation -- Do Not Dump!" }
       ]
     },
     {
@@ -185,7 +185,7 @@
     {
       "name": "Test 5a: Deploy Mines in MSL - SHOULD SUCCEED",
       "command": "combat.deploy_mines",
-      "data": { "amount": 15, "type": "armid" },
+      "data": { "amount": 15, "offense": 3 },
       "user": "fedspace_user_1",
       "expect": { "status": "ok" },
       "save": { "msl_mine_asset_id": "data.asset_id" }
@@ -193,7 +193,7 @@
     {
       "name": "Test 5b: Deploy Limpet Mines in MSL - SHOULD SUCCEED",
       "command": "combat.deploy_mines",
-      "data": { "amount": 10, "type": "limpet" },
+      "data": { "amount": 10, "offense": 3 },
       "user": "fedspace_user_1",
       "expect": { "status": "ok" }
     },

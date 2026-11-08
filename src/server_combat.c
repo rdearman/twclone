@@ -20,12 +20,15 @@
 #include "server_config.h"
 #include "globals.h"
 #include "server_planets.h"
+#include "server_ports.h"
+#include "server_ships.h"
 #include "server_sector_notices.h"
 #include "game_db.h"
 #include "repo_cmd.h"
 #include "repo_combat.h"
 #include "db/repo/repo_citadel.h"
 #include "db/repo/repo_planets.h"
+#include "db/repo/repo_universe.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 
@@ -767,8 +770,9 @@ cmd_combat_deploy_fighters (client_ctx_t *ctx, json_t *root)
   /* Check for FedSpace denial (sectors 1-10) */
   if (ctx->sector_id >= 1 && ctx->sector_id <= 10)
     {
-      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
-                           "Cannot deploy fighters in protected FedSpace.");
+      send_response_refused_steal (ctx, root, 1454,
+                                   "Cannot deploy fighters in protected FedSpace.",
+                                   NULL);
       return 0;
     }
   
@@ -899,8 +903,9 @@ cmd_combat_deploy_mines (client_ctx_t *ctx, json_t *root)
   /* Check for FedSpace denial (sectors 1-10) */
   if (ctx->sector_id >= 1 && ctx->sector_id <= 10)
     {
-      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
-                           "Cannot deploy mines in protected FedSpace.");
+      send_response_refused_steal (ctx, root, 1454,
+                                   "Cannot deploy mines in protected FedSpace.",
+                                   NULL);
       return 0;
     }
   
@@ -1071,6 +1076,25 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
       return 0;
     }
 
+  /* A Ferengi attack is both a combat offence and a wanted-list event.  The
+   * handler is idempotent and runs in this transaction, so a failed combat
+   * operation cannot leave a bounty or hunt record behind. */
+  int ferengi_rc = ferengi_handle_hostile_attack
+    (db, ctx->player_id, target_id, ctx->sector_id, (int64_t) time (NULL));
+  if (ferengi_rc < 0)
+    LOGW ("combat.attack: could not record Ferengi hostile-action state for ship %d",
+          target_id);
+
+  /* Outside FedSpace, attacks on explicitly registered Federation assets
+   * create a persistent ISS incident.  Captain Z has already handled sectors
+   * 1-10 above, so this hook cannot duplicate immediate enforcement. */
+  char incident_key[128];
+  snprintf (incident_key, sizeof incident_key, "iss:attack:%d:%d:%lld",
+            ctx->player_id, target_id, (long long) time (NULL) / 60);
+  (void) repo_npc_security_incident_claim (db, incident_key, ctx->player_id,
+                                            "ship", target_id, ctx->sector_id,
+                                            (int64_t) time (NULL) + 86400);
+
   int s_lost = 0, h_lost = 0;
   apply_combat_damage (&def, 10, &s_lost, &h_lost);
   rc = persist_ship_damage (db, &def, 0);
@@ -1105,6 +1129,70 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
     }
 
   send_response_ok_take (ctx, root, "combat.attack.result", &resp);
+  return 0;
+}
+
+int
+npc_combat_attack_ship (db_t *db, int attacker_ship_id, int target_ship_id,
+                        int sector_id)
+{
+  if (!db || attacker_ship_id <= 0 || target_ship_id <= 0 ||
+      attacker_ship_id == target_ship_id || sector_id <= 10)
+    return ERR_INVALID_ARG;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err)) return ERR_DB_TX;
+  combat_ship_t attacker = {0}, target = {0};
+  if (load_ship_combat_stats_locked (db, attacker_ship_id, &attacker, true) != 0 ||
+      load_ship_combat_stats_locked (db, target_ship_id, &target, true) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return ERR_DB_NOT_FOUND;
+    }
+  int shields_lost = 0, hull_lost = 0;
+  apply_combat_damage (&target, 10, &shields_lost, &hull_lost);
+  if (persist_ship_damage (db, &target, 0) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return ERR_DB_EXEC_FAILED;
+    }
+  int target_cargo[7] = {0}, attacker_cargo[7] = {0};
+  int target_holds = 0, attacker_holds = 0;
+  if (h_get_ship_cargo_and_holds (db, target_ship_id,
+                                  &target_cargo[0], &target_cargo[1],
+                                  &target_cargo[2], &target_cargo[3],
+                                  &target_cargo[4], &target_cargo[5],
+                                  &target_cargo[6], &target_holds) == 0 &&
+      h_get_ship_cargo_and_holds (db, attacker_ship_id,
+                                  &attacker_cargo[0], &attacker_cargo[1],
+                                  &attacker_cargo[2], &attacker_cargo[3],
+                                  &attacker_cargo[4], &attacker_cargo[5],
+                                  &attacker_cargo[6], &attacker_holds) == 0)
+    {
+      (void) target_holds;
+      int used = 0;
+      for (size_t i = 0; i < 7; ++i) used += attacker_cargo[i];
+      static const char *const cargo_codes[] =
+        {"ORE", "ORG", "EQU", "COL", "SLV", "WPN", "DRG"};
+      for (size_t i = 0; i < 7 && attacker_holds - used > 0; ++i)
+        if (target_cargo[i] > 0)
+          {
+            if (h_update_ship_cargo (db, target_ship_id, cargo_codes[i], -1,
+                                     NULL) != 0 ||
+                h_update_ship_cargo (db, attacker_ship_id, cargo_codes[i], 1,
+                                     NULL) != 0)
+              {
+                db_tx_rollback (db, NULL);
+                return ERR_DB_EXEC_FAILED;
+              }
+            break;
+          }
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      return ERR_DB_EXEC_FAILED;
+    }
   return 0;
 }
 

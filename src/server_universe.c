@@ -47,6 +47,7 @@
 #include "db/repo/repo_ports.h"
 #include "db/repo/repo_cargo.h"
 #include "db/repo/repo_bank.h"
+#include "db/repo/repo_stardock.h"
 
 #define UUID_STR_LEN 37
 
@@ -64,6 +65,7 @@ static int g_iss_id = 0;
 static int g_iss_sector = 0;
 static int g_stardock_sector = 0;
 static int g_patrol_budget = 0;
+static int64_t g_iss_last_patrol_s = 0;
 #define kIssPatrolBudget 5000
 
 /* ============ Orion (Orion Syndicate) Globals ============ */
@@ -79,10 +81,17 @@ static void iss_move_to (db_t * db, int sector_id, int warp_enabled,
 			 const char *reason);
 static int iss_try_consume_summon (db_t * db);
 static void iss_patrol_step (db_t * db);
+static int npc_trade_at_port (db_t *db, const char *faction, int trader_id,
+                              int corp_id, int ship_id, int port_id,
+                              int sector_id, int visit_number);
+static int npc_deploy_defensive_fighter (db_t *db, int ship_id,
+                                         int sector_id, int owner_id,
+                                         int corp_id);
+static int npc_deploy_defensive_mine (db_t *db, int ship_id, int sector_id,
+                                      int owner_id, int corp_id);
 
 /* ============ Ferengi Event Logging ============ */
 /* Log events to engine_events table with formatted payload */
-#if 0
 static void
 fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 {
@@ -106,7 +115,6 @@ fer_event_json (const char *type, int sector_id, const char *fmt, ...)
 
   repo_universe_log_engine_event (g_fer_db, type, sector_id, payload);
 }
-#endif
 
 /* ============ Navigation Helper Functions ============ */
 
@@ -277,7 +285,7 @@ ori_attach_db (db_t *db)
 
 /* Loops through all Orion ships and executes their movement logic */
 static void
-ori_move_all_ships (void)
+ori_move_all_ships (int64_t now_s)
 {
   db_error_t err;
   db_error_clear (&err);
@@ -294,6 +302,13 @@ ori_move_all_ships (void)
     {
       int ship_id = db_res_col_i32 (res, 0, &err);
       int current_sector = db_res_col_i32 (res, 1, &err);
+      char action_key[128];
+      snprintf (action_key, sizeof action_key, "orion:move:%d:%" PRId64,
+                ship_id, now_s / 60);
+      int claimed = repo_npc_action_claim (ori_db, action_key, "ORION", "move",
+                                           ship_id, 0, current_sector, "{}");
+      if (claimed <= 0)
+        continue;
       const char *ship_override = db_res_col_text (res, 2, &err);
       const char *corp_default = db_res_col_text (res, 3, &err);
       const char *type_default = db_res_col_text (res, 4, &err);
@@ -325,10 +340,181 @@ ori_move_all_ships (void)
                                                 ori_home_sector_id,
                                                 balanced_target, random_sector,
                                                 adjacent_sector, port_sector);
+      int intel_player = 0, intel_sector = 0;
+      bool has_intel = false;
+      if ((personality == SHIP_PERSONALITY_OFFENSIVE
+           || personality == SHIP_PERSONALITY_LOOTER) &&
+          repo_npc_intel_get_sector (ori_db, ship_id, &intel_player,
+                                     &intel_sector) == 1 && intel_sector > 0)
+        { new_target = intel_sector; has_intel = true; }
+      (void) intel_player;
       if ((personality == SHIP_PERSONALITY_BALANCED
            || personality == SHIP_PERSONALITY_OFFENSIVE)
-          && new_target == current_sector)
+          && new_target == current_sector && !has_intel)
         new_target = (new_target % 999) + 1;
+
+      /* Orion ships use the same authoritative market settlement as Ferengi
+       * traders when they encounter a port.  Their personality still controls
+       * movement, so this gives the syndicate an economic loop without adding
+       * a second, weaker trading implementation. */
+      int port_id = 0;
+      if (db_ports_check_port_sector (ori_db, current_sector, &port_id) == 0
+          && port_id > 0)
+        (void) npc_trade_at_port (ori_db, "ORION", ship_id, ori_owner_id,
+                                  ship_id, port_id, current_sector,
+                                  (int) (now_s / 900));
+
+      if (personality == SHIP_PERSONALITY_BLOCKADER)
+        {
+          /* Blockaders hold their assigned home sector.  Their persistent
+           * assets and attacks are independently claimed so a duplicated
+           * scheduler invocation cannot duplicate blockade work. */
+          new_target = (ori_home_sector_id > 0)
+            ? ori_home_sector_id : current_sector;
+
+          if (current_sector > 10)
+            {
+              char defense_key[128];
+              snprintf (defense_key, sizeof defense_key,
+                        "orion:blockade:fighters:%d:%" PRId64,
+                        ship_id, now_s / 3600);
+              int defense_claim = repo_npc_action_claim
+                (ori_db, defense_key, "ORION", "blockade_deploy_fighters",
+                 ship_id, 0, current_sector, "{}");
+              if (defense_claim == 1)
+                {
+                  int defense_rc = npc_deploy_defensive_fighter
+                    (ori_db, ship_id, current_sector, ori_owner_id, 0);
+                  (void) repo_npc_action_complete
+                    (ori_db, defense_key,
+                     defense_rc == 0 ? "completed" : "failed", "{}");
+                }
+
+              char mine_key[128];
+              snprintf (mine_key, sizeof mine_key,
+                        "orion:blockade:mines:%d:%" PRId64,
+                        ship_id, now_s / 3600);
+              int mine_claim = repo_npc_action_claim
+                (ori_db, mine_key, "ORION", "blockade_deploy_mines",
+                 ship_id, 0, current_sector, "{}");
+              if (mine_claim == 1)
+                {
+                  int mine_rc = npc_deploy_defensive_mine
+                    (ori_db, ship_id, current_sector, ori_owner_id, 0);
+                  (void) repo_npc_action_complete
+                    (ori_db, mine_key,
+                     mine_rc == 0 ? "completed" : "failed", "{}");
+                }
+
+              db_error_t blockade_err;
+              db_error_clear (&blockade_err);
+              db_res_t *targets = repo_universe_get_players_in_sector
+                (ori_db, current_sector, &blockade_err);
+              if (targets)
+                {
+                  while (db_res_step (targets, &blockade_err))
+                    {
+                      int target_player = db_res_col_i32
+                        (targets, 0, &blockade_err);
+                      int target_ship = h_get_active_ship_id
+                        (ori_db, target_player);
+                      int target_is_orion = 0;
+                      if (target_ship <= 0 || target_ship == ship_id ||
+                          repo_universe_ship_is_orion_owned
+                            (ori_db, target_ship, &target_is_orion) < 0 ||
+                          target_is_orion)
+                        continue;
+                      char attack_key[128];
+                      snprintf (attack_key, sizeof attack_key,
+                                "orion:blockade:attack:%d:%d:%" PRId64,
+                                ship_id, target_player, now_s / 30);
+                      int attack_claim = repo_npc_action_claim
+                        (ori_db, attack_key, "ORION", "blockade_attack",
+                         ship_id, target_player, current_sector, "{}");
+                      if (attack_claim == 1)
+                        {
+                          int attack_rc = npc_combat_attack_ship
+                            (ori_db, ship_id, target_ship, current_sector);
+                          (void) repo_npc_action_complete
+                            (ori_db, attack_key,
+                             attack_rc == 0 ? "completed" : "failed", "{}");
+                        }
+                      break;
+                    }
+                  db_res_finalize (targets);
+                }
+            }
+        }
+
+      if (personality == SHIP_PERSONALITY_OFFENSIVE
+          || personality == SHIP_PERSONALITY_LOOTER)
+        {
+          db_error_t target_err;
+          db_error_clear (&target_err);
+          db_res_t *targets = repo_universe_get_players_in_sector
+            (ori_db, current_sector, &target_err);
+          if (targets)
+            {
+              while (db_res_step (targets, &target_err))
+                {
+                  int target_player = db_res_col_i32 (targets, 0, &target_err);
+                  int target_ship = h_get_active_ship_id (ori_db, target_player);
+                  if (target_ship <= 0 || target_ship == ship_id) continue;
+                  char attack_key[128];
+                  snprintf (attack_key, sizeof attack_key,
+                            "orion:attack:%d:%d:%" PRId64, ship_id,
+                            target_player, now_s / 60);
+                  int attack_claim = repo_npc_action_claim
+                    (ori_db, attack_key, "ORION", "attack", ship_id,
+                     target_player, current_sector, "{}");
+                  if (attack_claim == 1)
+                    {
+                      int attack_rc = npc_combat_attack_ship
+                        (ori_db, ship_id, target_ship, current_sector);
+                      (void) repo_npc_action_complete
+                        (ori_db, attack_key,
+                         attack_rc == 0 ? "completed" : "failed", "{}");
+                      (void) repo_npc_intel_upsert
+                        (ori_db, ship_id, target_player, current_sector,
+                         "same_sector_observation", now_s + 1800);
+                    }
+                  break;
+                }
+              db_res_finalize (targets);
+            }
+        }
+
+      if (personality == SHIP_PERSONALITY_DEFENSIVE)
+        {
+          char defense_key[128];
+          snprintf (defense_key, sizeof defense_key,
+                    "orion:defense:%d:%" PRId64, ship_id, now_s / 3600);
+          int defense_claim = repo_npc_action_claim
+            (ori_db, defense_key, "ORION", "deploy_fighters", ship_id, 0,
+             current_sector, "{}");
+          if (defense_claim == 1)
+            {
+              int defense_rc = npc_deploy_defensive_fighter
+                (ori_db, ship_id, current_sector, ori_owner_id, 0);
+              (void) repo_npc_action_complete
+                (ori_db, defense_key,
+                 defense_rc == 0 ? "completed" : "failed", "{}");
+            }
+          char mine_key[128];
+          snprintf (mine_key, sizeof mine_key,
+                    "orion:mine:%d:%" PRId64, ship_id, now_s / 3600);
+          int mine_claim = repo_npc_action_claim
+            (ori_db, mine_key, "ORION", "deploy_mines", ship_id, 0,
+             current_sector, "{}");
+          if (mine_claim == 1)
+            {
+              int mine_rc = npc_deploy_defensive_mine
+                (ori_db, ship_id, current_sector, ori_owner_id, 0);
+              (void) repo_npc_action_complete
+                (ori_db, mine_key, mine_rc == 0 ? "completed" : "failed",
+                 "{}");
+            }
+        }
 
       /* Move the ship to the new sector */
       if (repo_universe_update_ship_sector (ori_db, ship_id, new_target) == 0)
@@ -342,6 +528,7 @@ ori_move_all_ships (void)
 	  LOGW ("[cron] ori_move: Failed to move ship %d to sector %d.",
 	      ship_id, new_target);
 	}
+      (void) repo_npc_action_complete (ori_db, action_key, "completed", "{}");
       ship_count++;
     }
 
@@ -389,6 +576,9 @@ ori_init_once (db_t *db)
 
   LOGI ("[ori]: Orion Syndicate owner ID is %d, Home Sector is %d",
 	ori_owner_id, ori_home_sector_id);
+  if (repo_universe_ensure_orion_population
+      (db, ori_owner_id, ori_home_sector_id) != 0)
+    LOGW ("[ori]: Could not reconcile configured Orion population");
   ori_initialized = true;
   return 1;
 }
@@ -411,7 +601,7 @@ ori_tick (db_t *db, int64_t now_ms)
       if (!db)
 	return;
     }
-  ori_move_all_ships ();
+  ori_move_all_ships ((int64_t) time (NULL));
 }
 
 
@@ -692,9 +882,12 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
    * through sector scans; clients learn trading details in port context. */
   size_t index;
   json_t *port;
-  json_array_foreach (ports, index, port)
+  if (!holo)
     {
-      json_object_del (port, "type");
+      json_array_foreach (ports, index, port)
+	{
+	  json_object_del (port, "type");
+	}
     }
   json_object_set_new (root, "ports", ports);
   json_t *planets = NULL;
@@ -711,7 +904,86 @@ build_sector_scan_json (db_t *db, int sector_id, int player_id, bool holo)
 
 
   attach_sector_asset_counts (db, sector_id, root);
-  (void) holo;
+  return root;
+}
+
+static int
+ship_has_long_range_scanner (db_t *db, int player_id)
+{
+  if (!db || player_id <= 0)
+    return -1;
+
+  int ship_id = h_get_active_ship_id (db, player_id);
+  if (ship_id <= 0)
+    return -1;
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  if (repo_stardock_get_ship_state (db, ship_id, &res) != 0 || !res)
+    return -1;
+
+  int equipped = 0;
+  if (db_res_step (res, &err))
+    equipped = (int) db_res_col_i64 (res, 9, &err);
+  else
+    equipped = -1;
+  db_res_finalize (res);
+  return equipped > 0 ? 1 : equipped;
+}
+
+static json_t *
+build_holographic_scan_json (db_t *db, int sector_id, int player_id)
+{
+  json_t *adjacent = NULL;
+  if (db_adjacent_sectors_json (db, sector_id, &adjacent) != 0 || !adjacent)
+    {
+      if (adjacent)
+	json_decref (adjacent);
+      return NULL;
+    }
+
+  json_t *sectors = json_array ();
+  json_t *root = json_object ();
+  if (!sectors || !root)
+    {
+      if (sectors)
+	json_decref (sectors);
+      if (root)
+	json_decref (root);
+      json_decref (adjacent);
+      return NULL;
+    }
+
+  size_t index;
+  json_t *value;
+  json_array_foreach (adjacent, index, value)
+    {
+	json_t *jid = json_is_integer (value) ? value :
+	  (json_is_object (value) ? json_object_get (value, "to_sector") : NULL);
+      if (!jid || !json_is_integer (jid))
+	{
+	  json_decref (sectors);
+	  json_decref (root);
+	  json_decref (adjacent);
+	  return NULL;
+	}
+      int adjacent_id = (int) json_integer_value (jid);
+      json_t *scan = build_sector_scan_json (db, adjacent_id, player_id, true);
+      if (!scan || json_array_append_new (sectors, scan) != 0)
+	{
+	  if (scan)
+	    json_decref (scan);
+	  json_decref (sectors);
+	  json_decref (root);
+	  json_decref (adjacent);
+	  return NULL;
+	}
+    }
+  json_decref (adjacent);
+
+  json_object_set_new (root, "sector_id", json_integer (sector_id));
+  json_object_set_new (root, "scanner", json_string ("holographic"));
+  json_object_set_new (root, "sectors", sectors);
   return root;
 }
 
@@ -760,6 +1032,68 @@ cmd_sector_scan (client_ctx_t *ctx, json_t *root)
       return;
     }
   int sid = db_get_ship_sector_id (db, ship_id);
+
+  json_t *data = json_object_get (root, "data");
+  const char *mode = "detailed";
+  if (data && json_is_object (data))
+    {
+      json_t *jmode = json_object_get (data, "mode");
+      if (jmode)
+	{
+	  if (!json_is_string (jmode))
+	    {
+	      send_response_error (ctx, root, ERR_BAD_REQUEST,
+				   "Scan mode must be a string");
+	      return;
+	    }
+	  mode = json_string_value (jmode);
+	}
+    }
+
+  if (strcmp (mode, "holographic") == 0)
+    {
+      int scanner = ship_has_long_range_scanner (db, ctx->player_id);
+      if (scanner < 0)
+	{
+	  send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+				       "Unable to verify holographic scanner");
+	  return;
+	}
+      if (!scanner)
+	{
+	  send_response_error (ctx, root, ERR_BAD_REQUEST,
+				       "Holographic scan requires a long-range scanner");
+	  return;
+	}
+
+      json_t *holo_payload =
+	build_holographic_scan_json (db, sid, ctx->player_id);
+      if (!holo_payload)
+	{
+	  send_response_error (ctx, root, ERR_NOMEM,
+				       "Unable to build holographic scan");
+	  return;
+	}
+
+      TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
+      if (tc != TURN_CONSUME_SUCCESS)
+	{
+	  json_decref (holo_payload);
+	  handle_turn_consumption_error (ctx, tc, "sector.scan", root, NULL);
+	  return;
+	}
+      h_decloak_ship (db, ship_id);
+      send_response_ok_take (ctx, root, "sector.holographic.scan",
+				     &holo_payload);
+      return;
+    }
+  if (strcmp (mode, "detailed") != 0)
+    {
+      send_response_error (ctx, root, ERR_BAD_REQUEST,
+				   "Unknown scan mode");
+      return;
+    }
+
   json_t *payload = build_sector_scan_json (db, sid, ctx->player_id, false);
 
 
@@ -1783,8 +2117,8 @@ cmd_sector_set_beacon (client_ctx_t *ctx, json_t *root)
 
   if (req_sector_id >= 1 && req_sector_id <= 10)
     {
-      send_response_error (ctx, root, REF_TURN_COST_EXCEEDS,
-			   "Cannot set a beacon in FedSpace.");
+      send_response_refused_steal (ctx, root, 1454,
+                                   "Cannot set a beacon in FedSpace.", NULL);
       return 1;
     }
 
@@ -2030,48 +2364,120 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 }
 
 
-/* Ferengi Trading at Port - Core NPC trading logic */
-#if 0
 static int
-ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
-		       int sector_id)
+npc_deploy_defensive_fighter (db_t *db, int ship_id, int sector_id,
+                              int owner_id, int corp_id)
 {
-  (void) trader_id;
+  if (!db || ship_id <= 0 || sector_id <= 10) return ERR_INVALID_ARG;
+  int ship_sector = 0, fighters = 0, max_fighters = 0, ship_corp = 0;
+  if (db_combat_get_ship_fighter_capacity (db, ship_id, &ship_sector,
+                                            &fighters, &max_fighters,
+                                            &ship_corp) != 0 ||
+      ship_sector != sector_id || fighters <= 0)
+    return ERR_BAD_STATE;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err)) return ERR_DB_TX;
+  if (db_combat_lock_sector (db, sector_id) != 0)
+    { db_tx_rollback (db, NULL); return ERR_DB_BUSY; }
+  int total = 0;
+  if (db_combat_sum_sector_fighters (db, sector_id, &total) != 0 ||
+      total >= SECTOR_FIGHTER_CAP ||
+      db_combat_consume_ship_fighters (db, ship_id, 1) != 0 ||
+      db_combat_insert_sector_fighters (db, sector_id, owner_id,
+                                        corp_id > 0 ? corp_id : ship_corp,
+                                        1, 1) != 0 ||
+      !db_tx_commit (db, &err))
+    { db_tx_rollback (db, NULL); return ERR_DB_EXEC_FAILED; }
+  return 0;
+}
+
+static int
+npc_deploy_defensive_mine (db_t *db, int ship_id, int sector_id,
+                           int owner_id, int corp_id)
+{
+  if (!db || ship_id <= 0 || sector_id <= 10) return ERR_INVALID_ARG;
+  int ship_sector = 0, mines = 0, max_mines = 0;
+  if (db_combat_get_ship_mine_capacity (db, ship_id, &ship_sector, &mines,
+                                         &max_mines) != 0 ||
+      ship_sector != sector_id || mines <= 0)
+    return ERR_BAD_STATE;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err)) return ERR_DB_TX;
+  if (db_combat_lock_sector (db, sector_id) != 0)
+    { db_tx_rollback (db, NULL); return ERR_DB_BUSY; }
+  if (db_combat_consume_ship_mines (db, ship_id, 1, 1) != 0 ||
+      db_combat_insert_sector_mines (db, sector_id, owner_id,
+                                     corp_id, 1, 1, 1) != 0 ||
+      !db_tx_commit (db, &err))
+    { db_tx_rollback (db, NULL); return ERR_DB_EXEC_FAILED; }
+  return 0;
+}
+
+/* Ferengi Trading at Port - Core NPC trading logic */
+static int
+npc_trade_at_port (db_t *db, const char *faction, int trader_id, int corp_id,
+                   int ship_id, int port_id, int sector_id, int visit_number)
+{
   if (!db || ship_id <= 0 || port_id <= 0)
     return 1;
 
+  char action_key[128];
+  snprintf (action_key, sizeof action_key, "%s:trade:%d:%d:%d:%d",
+            faction ? faction : "NPC", trader_id, ship_id, port_id,
+            visit_number);
+  int claimed = repo_npc_action_claim (db, action_key,
+                                       faction ? faction : "NPC", "trade",
+                                       ship_id, 0, sector_id, "{}");
+  if (claimed < 0 || claimed == 0)
+    return claimed < 0 ? 1 : 0;
+
   db_error_t err;
+  db_error_clear (&err);
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      (void) repo_npc_action_complete (db, action_key, "failed",
+                                       "{\"reason\":\"transaction\"}");
+      return 1;
+    }
   char tx_group_id[UUID_STR_LEN];
   h_generate_hex_uuid (tx_group_id, sizeof (tx_group_id));
 
   int fer_ore = 0, fer_organics = 0, fer_equipment = 0;
+  int fer_colonists = 0, fer_slaves = 0, fer_weapons = 0, fer_drugs = 0;
   int fer_holds = 0;
 
   if (h_get_ship_cargo_and_holds (db, ship_id,
 				  &fer_ore, &fer_organics, &fer_equipment,
-				  &fer_holds, NULL, NULL, NULL, NULL) != 0)
+                                  &fer_colonists, &fer_slaves, &fer_weapons,
+                                  &fer_drugs, &fer_holds) != 0)
     {
       LOGW ("[fer] Failed to get ship %d cargo", ship_id);
+      db_tx_rollback (db, &err);
+      (void) repo_npc_action_complete (db, action_key, "failed",
+                                       "{\"reason\":\"cargo\"}");
       return 1;
     }
 
-  int fer_current_cargo_total = fer_ore + fer_organics + fer_equipment;
+  int fer_current_cargo_total = fer_ore + fer_organics + fer_equipment
+    + fer_colonists + fer_slaves + fer_weapons + fer_drugs;
   int fer_empty_holds = fer_holds - fer_current_cargo_total;
 
   long long fer_credits = 0;
   db_error_clear (&err);
-  db_get_corp_bank_balance (db, g_fer_corp_id, &fer_credits);
+  db_get_corp_bank_balance (db, corp_id, &fer_credits);
 
   int port_ore_qty = 0, port_org_qty = 0, port_equ_qty = 0;
   int dummy_cap = 0;
-  bool dummy_bool = false;
+  bool dummy_buys = false, dummy_sells = false;
 
   h_get_port_commodity_details (db, port_id, "ORE", &port_ore_qty, &dummy_cap,
-				&dummy_bool, &dummy_bool);
+				&dummy_buys, &dummy_sells);
   h_get_port_commodity_details (db, port_id, "ORG", &port_org_qty, &dummy_cap,
-				&dummy_bool, &dummy_bool);
+				&dummy_buys, &dummy_sells);
   h_get_port_commodity_details (db, port_id, "EQU", &port_equ_qty, &dummy_cap,
-				&dummy_bool, &dummy_bool);
+				&dummy_buys, &dummy_sells);
 
   int port_ore_buy = h_calculate_port_buy_price (db, port_id, "ORE");
   int port_ore_sell = h_calculate_port_sell_price (db, port_id, "ORE");
@@ -2135,7 +2541,7 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
 	  db_error_clear (&err);
 	  rc =
 	    h_bank_transfer_unlocked (db, "port", port_id, "corp",
-				      g_fer_corp_id, total_credits,
+				      corp_id, total_credits,
 				      "TRADE_SELL", tx_group_id);
 	  if (rc == 0)
 	    {
@@ -2181,7 +2587,7 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
 	{
 	  db_error_clear (&err);
 	  rc =
-	    h_bank_transfer_unlocked (db, "corp", g_fer_corp_id, "port",
+				      h_bank_transfer_unlocked (db, "corp", corp_id, "port",
 				      port_id, total_credits, "TRADE_BUY",
 				      tx_group_id);
 	  if (rc == 0)
@@ -2213,9 +2619,23 @@ ferengi_trade_at_port (db_t *db, int trader_id, int ship_id, int port_id,
 	}
     }
 
-  return rc;
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      (void) repo_npc_action_complete (db, action_key, "failed",
+                                       "{\"reason\":\"settlement\"}");
+      return rc;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      (void) repo_npc_action_complete (db, action_key, "failed",
+                                       "{\"reason\":\"commit\"}");
+      return 1;
+    }
+  (void) repo_npc_action_complete (db, action_key, "completed", "{}");
+  return 0;
 }
-#endif
 
 
 int
@@ -2655,7 +3075,104 @@ fer_tick (db_t *db, int64_t now_ms)
             }
           db_res_finalize (players);
         }
-      int next_sector = nav_random_neighbor (db, sector_id);
+      int port_id = 0;
+      if (db_ports_check_port_sector (db, sector_id, &port_id) == 0
+          && port_id > 0)
+        (void) npc_trade_at_port (db, "FERENGI", trader_id, corporation_id,
+                                  ship_id, port_id, sector_id, visit_number);
+
+      /* Ferengi traders remember an attacker briefly.  The attacked trader
+       * escapes first; the strongest surviving Ferengi ship hunts the
+       * attacker.  Both paths use the normal warp/combat helpers and durable
+       * action keys, so duplicate scheduler ticks cannot repeat an action. */
+      int intel_player = 0, intel_sector = 0;
+      char intel_source[64] = {0};
+      int has_intel = repo_npc_intel_get_sector_source
+        (db, ship_id, &intel_player, &intel_sector, intel_source,
+         sizeof intel_source) == 1;
+      int captain_trader = 0, captain_ship = 0;
+      (void) repo_universe_get_ferengi_captain (db, &captain_trader,
+                                                &captain_ship);
+      int next_sector = sector_id;
+      if (has_intel && strcmp (intel_source, "ferengi_escape") == 0)
+        {
+          next_sector = nav_random_neighbor (db, sector_id);
+          if (next_sector > 0 && next_sector != sector_id)
+            {
+              char escape_key[128];
+              snprintf (escape_key, sizeof escape_key,
+                        "ferengi:escape:%d:%d:%" PRId64,
+                        ship_id, intel_player, now_s / 30);
+              int claim = repo_npc_action_claim
+                (db, escape_key, "FERENGI", "escape", ship_id,
+                 intel_player, sector_id, "{}");
+              if (claim == 1)
+                {
+                  int move_rc = repo_universe_advance_ferengi_trader
+                    (db, trader_id, ship_id, next_sector);
+                  (void) repo_npc_action_complete
+                    (db, escape_key, move_rc == 0 ? "completed" : "failed",
+                     "{}");
+                }
+              continue;
+            }
+
+          /* A trader at a dead end may defend itself, but only through the
+           * existing NPC combat implementation and only outside FedSpace. */
+          if (sector_id > 10)
+            {
+              int target_ship = h_get_active_ship_id (db, intel_player);
+              if (target_ship > 0 && target_ship != ship_id)
+                {
+                  char defend_key[128];
+                  snprintf (defend_key, sizeof defend_key,
+                            "ferengi:defend:%d:%d:%" PRId64,
+                            ship_id, intel_player, now_s / 30);
+                  int claim = repo_npc_action_claim
+                    (db, defend_key, "FERENGI", "defend", ship_id,
+                     intel_player, sector_id, "{}");
+                  if (claim == 1)
+                    {
+                      int combat_rc = npc_combat_attack_ship
+                        (db, ship_id, target_ship, sector_id);
+                      (void) repo_npc_action_complete
+                        (db, defend_key,
+                         combat_rc == 0 ? "completed" : "failed", "{}");
+                    }
+                }
+            }
+        }
+      else if (has_intel && strcmp (intel_source, "ferengi_hunt") == 0 &&
+               ship_id == captain_ship)
+        {
+          if (sector_id == intel_sector && sector_id > 10)
+            {
+              int target_ship = h_get_active_ship_id (db, intel_player);
+              if (target_ship > 0 && target_ship != ship_id)
+                {
+                  char hunt_key[128];
+                  snprintf (hunt_key, sizeof hunt_key,
+                            "ferengi:hunt:%d:%d:%" PRId64,
+                            ship_id, intel_player, now_s / 30);
+                  int claim = repo_npc_action_claim
+                    (db, hunt_key, "FERENGI", "hunt", ship_id,
+                     intel_player, sector_id, "{}");
+                  if (claim == 1)
+                    {
+                      int combat_rc = npc_combat_attack_ship
+                        (db, ship_id, target_ship, sector_id);
+                      (void) repo_npc_action_complete
+                        (db, hunt_key,
+                         combat_rc == 0 ? "completed" : "failed", "{}");
+                    }
+                }
+            }
+          else if (intel_sector > 0)
+            next_sector = nav_next_hop (db, sector_id, intel_sector);
+        }
+      else
+        next_sector = nav_random_neighbor (db, sector_id);
+
       if (next_sector > 0 && next_sector != sector_id)
         (void) repo_universe_advance_ferengi_trader (db, trader_id, ship_id,
                                                      next_sector);
@@ -2677,6 +3194,59 @@ fer_attach_db (db_t *db)
   g_fer_db = db;
 }
 
+int
+ferengi_handle_hostile_attack (db_t *db, int attacker_player_id,
+                               int target_ship_id, int sector_id,
+                               int64_t now_s)
+{
+  if (!db || attacker_player_id <= 0 || target_ship_id <= 0 ||
+      sector_id <= 0 || now_s <= 0)
+    return 0;
+
+  int trader_id = 0, corporation_id = 0;
+  int trader_rc = repo_universe_get_ferengi_trader_by_ship
+    (db, target_ship_id, &trader_id, &corporation_id);
+  if (trader_rc != 0)
+    return trader_rc < 0 ? -1 : 0;
+
+  char action_key[128];
+  snprintf (action_key, sizeof action_key, "ferengi:hostile:%d:%d",
+            trader_id, attacker_player_id);
+  int claimed = repo_npc_action_claim
+    (db, action_key, "FERENGI", "wanted_attack", target_ship_id,
+     attacker_player_id, sector_id, "{}");
+  if (claimed != 1)
+    return claimed < 0 ? -1 : 0;
+
+  /* NPC bounties use the existing bounty table.  The action key makes this
+   * wanted-list offence idempotent across duplicate combat processing. */
+  if (db_bounty_create
+        (db, "npc", corporation_id, "player", attacker_player_id, 5000,
+         "Wanted by the Ferengi Empire for attacking a Ferengi trader.") != 0)
+    {
+      (void) repo_npc_action_complete (db, action_key, "failed",
+                                       "{\"reason\":\"bounty\"}");
+      return -1;
+    }
+
+  int captain_trader = 0, captain_ship = 0;
+  if (repo_universe_get_ferengi_captain (db, &captain_trader,
+                                         &captain_ship) == 0)
+    {
+      (void) repo_npc_intel_upsert (db, target_ship_id, attacker_player_id,
+                                    sector_id, "ferengi_escape", now_s + 1800);
+      if (captain_ship != target_ship_id)
+        (void) repo_npc_intel_upsert (db, captain_ship, attacker_player_id,
+                                      sector_id, "ferengi_hunt", now_s + 86400);
+    }
+  else
+    (void) repo_npc_intel_upsert (db, target_ship_id, attacker_player_id,
+                                  sector_id, "ferengi_escape", now_s + 1800);
+
+  (void) repo_npc_action_complete (db, action_key, "completed", "{}");
+  return 1;
+}
+
 
 void
 iss_init (db_t *db)
@@ -2696,6 +3266,9 @@ void
 iss_tick (db_t *db, int64_t now_ms)
 {
   (void) now_ms;
+  int64_t now_s = (int64_t) time (NULL);
+  if (g_iss_last_patrol_s != 0 && now_s - g_iss_last_patrol_s < 30)
+    return;
   if (!g_iss_inited)
     {
       if (!iss_init_once ())
@@ -2705,8 +3278,10 @@ iss_tick (db_t *db, int64_t now_ms)
     }
   if (iss_try_consume_summon (db))
     {
+      g_iss_last_patrol_s = now_s;
       return;
     }
+  g_iss_last_patrol_s = now_s;
   iss_patrol_step (db);
 }
 
@@ -2807,49 +3382,127 @@ h_handle_npc_encounters (db_t *db, client_ctx_t *ctx, int new_sector_id)
     }
 }
 
-/* ============ ISS Helper Stubs (TODO: Full implementation) ============ */
+/* ============ ISS Security Response Helpers ============ */
 
 int
 db_get_stardock_sector (db_t *db)
 {
-  (void) db;
-  /* TODO: Query database for stardock sector */
-  return 1;
+  int *sectors = NULL, count = 0, result = 0;
+  if (!db || db_combat_get_stardock_locations (db, &sectors, &count) != 0)
+    return 0;
+  if (count > 0) result = sectors[0];
+  free (sectors);
+  return result;
 }
 
 int
 db_get_iss_player (db_t *db, int *out_player_id, int *out_sector)
 {
-  (void) db;
-  if (out_player_id)
-    *out_player_id = 1;
-  if (out_sector)
-    *out_sector = 1;
-  /* TODO: Query database for ISS player */
-  return 1;
+  if (!db || !out_player_id || !out_sector) return 0;
+  db_error_t err;
+  db_error_clear (&err);
+  db_res_t *res = NULL;
+  const char *query =
+    "SELECT player_id, COALESCE(sector_id, 0) FROM players "
+    "WHERE lower(name) IN ('iss','interpolar security station',"
+    "'federation security','federation administrator') "
+    "ORDER BY CASE lower(name) WHEN 'iss' THEN 0 "
+    "WHEN 'interpolar security station' THEN 1 "
+    "WHEN 'federation security' THEN 2 ELSE 3 END, player_id LIMIT 1";
+  if (!db_query (db, query, NULL, 0, &res, &err) || !res)
+    return 0;
+  int found = db_res_step (res, &err) ? 1 : 0;
+  if (found)
+    {
+      *out_player_id = db_res_col_i32 (res, 0, &err);
+      *out_sector = db_res_col_i32 (res, 1, &err);
+    }
+  db_res_finalize (res);
+  return found;
 }
 
 void
 iss_move_to (db_t *db, int sector_id, int warp_enabled, const char *reason)
 {
-  (void) db;
-  (void) sector_id;
   (void) warp_enabled;
-  (void) reason;
-  /* TODO: Move ISS to sector */
+  if (!db || sector_id <= 0 || g_iss_id <= 0) return;
+  int ship_id = h_get_active_ship_id (db, g_iss_id);
+  if (ship_id <= 0) return;
+  int next = nav_next_hop (db, g_iss_sector, sector_id);
+  if (next <= 0) return;
+  if (repo_universe_update_ship_sector (db, ship_id, next) == 0)
+    {
+      (void) repo_universe_update_player_sector (db, g_iss_id, next);
+      g_iss_sector = next;
+      LOGI ("[iss] moved ship %d to sector %d (%s)", ship_id, next,
+            reason ? reason : "patrol");
+    }
 }
 
 int
 iss_try_consume_summon (db_t *db)
 {
   (void) db;
-  /* TODO: Check if ISS should respond to summon */
+  /* Security incidents are durable and consumed by iss_patrol_step.  The old
+   * summon stub is intentionally a no-op so transient duplicate scheduler
+   * calls cannot create duplicate dispatches. */
   return 0;
 }
 
 void
 iss_patrol_step (db_t *db)
 {
-  (void) db;
-  /* TODO: ISS patrol movement logic */
+  if (!db) return;
+  db_error_t err;
+  db_error_clear (&err);
+  db_res_t *incidents = NULL;
+  const char *query =
+    "SELECT incident_id, offender_player_id, origin_sector_id "
+    "FROM npc_security_incidents "
+    "WHERE status IN ('open','dispatched','pursuing') "
+    "AND expires_at > CURRENT_TIMESTAMP "
+    "ORDER BY created_at, incident_id LIMIT 16";
+  if (!db_query (db, query, NULL, 0, &incidents, &err) || !incidents)
+    return;
+  int iss_ship = h_get_active_ship_id (db, g_iss_id);
+  while (db_res_step (incidents, &err))
+    {
+      int64_t incident_id = db_res_col_i64 (incidents, 0, &err);
+      int offender = db_res_col_i32 (incidents, 1, &err);
+      int origin = db_res_col_i32 (incidents, 2, &err);
+      if (g_iss_sector != origin)
+        {
+          iss_move_to (db, origin, 1, "security incident");
+          continue;
+        }
+      if (iss_ship > 0)
+        {
+          int target_ship = h_get_active_ship_id (db, offender);
+          if (target_ship > 0 && target_ship != iss_ship)
+            {
+              char action_key[128];
+              snprintf (action_key, sizeof action_key,
+                        "iss:response:%" PRId64 ":%lld", incident_id,
+                        (long long) time (NULL) / 30);
+              if (repo_npc_action_claim (db, action_key, "ISS", "attack",
+                                         iss_ship, offender, origin,
+                                         "{}") == 1)
+                {
+                  int attack_rc = npc_combat_attack_ship
+                    (db, iss_ship, target_ship, origin);
+                  (void) repo_npc_action_complete
+                    (db, action_key,
+                     attack_rc == 0 ? "completed" : "failed", "{}");
+                }
+            }
+        }
+      char sql[512];
+      if (sql_build (db,
+          "UPDATE npc_security_incidents SET status='pursuing' "
+          "WHERE incident_id={1} AND status IN ('open','dispatched','pursuing')",
+          sql, sizeof sql) == 0)
+        (void) db_exec (db, sql, (db_bind_t[]){db_bind_i64(incident_id)}, 1,
+                        &err);
+    }
+  db_res_finalize (incidents);
 }
