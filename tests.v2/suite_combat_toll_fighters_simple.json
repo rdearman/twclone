@@ -6,7 +6,8 @@
   "tests": [
     {
       "name": "Server Health Check - Status",
-      "command": "system.status",
+      "command": "system.hello",
+      "data": { "client_version": "twclone-regression/3" },
       "expect": { "status": "ok" }
     },
     {
@@ -29,7 +30,7 @@
     },
     {
       "name": "Get Player Status",
-      "command": "system.status",
+      "command": "session.ping",
       "user": "toll_test_user",
       "expect": { "status": "ok" }
     }

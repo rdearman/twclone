@@ -44,13 +44,13 @@
     },
     {
       "name": "Test: Toll Collector Account Created",
-      "command": "system.time",
+      "command": "session.ping",
       "user": "toll_collector",
       "expect": { "status": "ok" }
     },
     {
       "name": "Test: Victim Account Created",
-      "command": "system.time",
+      "command": "session.ping",
       "user": "toll_victim",
       "expect": { "status": "ok" }
     }

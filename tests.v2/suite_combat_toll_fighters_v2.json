@@ -41,13 +41,13 @@
     },
     {
       "name": "Test: Verify Toll Collector Online",
-      "command": "system.time",
+      "command": "session.ping",
       "user": "toll_collector",
       "expect": { "status": "ok" }
     },
     {
       "name": "Test: Verify Victim Online",
-      "command": "system.time",
+      "command": "session.ping",
       "user": "toll_victim",
       "expect": { "status": "ok" }
     }
