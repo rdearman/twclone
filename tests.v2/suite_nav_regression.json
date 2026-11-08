@@ -15,7 +15,11 @@
       "command": "move.warp",
       "data": { "to_sector_id": 2 },
       "user": "nav_reg_user",
-      "expect": { "status": "error" } 
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "==", "value": 2 },
+        { "path": "data.to_sector_id", "op": "==", "value": 2 }
+      ]
     }
   ]
 }
