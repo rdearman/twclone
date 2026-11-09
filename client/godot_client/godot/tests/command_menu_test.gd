@@ -115,7 +115,21 @@ func _run() -> void:
 	menu.set_owned_ship_roster({"ships": [{"ship_id": 61, "name": "Hauler", "active": false}]})
 	menu._render_actions()
 	var unavailable_sale := _action_button(menu, "Sell this ship · unavailable")
-	_check(unavailable_sale != null and unavailable_sale.disabled, "unimplemented ship sale was presented as executable")
+	_check(unavailable_sale != null and unavailable_sale.disabled, "ship sale was executable without an owned replacement")
+	menu.set_owned_ship_roster({"ships": [
+		{"ship_id": 61, "name": "Hauler", "active": false},
+		{"ship_id": 62, "name": "Replacement", "active": true},
+	]})
+	menu._render_actions()
+	var sale_button := _action_button(menu, "Sell this ship")
+	_check(sale_button != null and not sale_button.disabled, "ship sale remained unavailable despite an owned replacement")
+	if sale_button != null:
+		sale_button.pressed.emit()
+		if menu._form_fields.has("replacement_ship_id"):
+			(menu._form_fields["replacement_ship_id"] as LineEdit).text = "62"
+		menu._submit_form()
+	_check(not captured.is_empty() and captured.back().get("command") == "ship.sell" \
+		and captured.back().get("data") == {"ship_id": 61, "replacement_ship_id": 62}, "ship sale did not send selected hull and explicit replacement")
 	menu._snapshot["hud"] = {"sector_id": 17, "ship_id": 61}
 	menu._render_actions()
 	await process_frame
@@ -593,10 +607,6 @@ func _run() -> void:
 	(menu._form_fields["topic"] as LineEdit).text = "sector.42"
 	menu._submit_form()
 	_check(captured.back().get("command") == "subscribe.remove" and captured.back().get("data") == {"topic": "sector.42"}, "subscription removal did not send the canonical topic field")
-	var unsupported_ship_commands := ["ship.sell", "shipyard.sell"]
-	for actions in CommandMenu.COMMANDS.values():
-		for action in actions:
-			_check(not unsupported_ship_commands.has(str(action.get("command", ""))), "command menu exposed an unimplemented ship command")
 	menu._selection = {"kind": "ship", "name": "Unidentified vessel", "data": {"ship_id": 61}}
 	menu._active_category = "SHIP"
 	menu._render_actions()

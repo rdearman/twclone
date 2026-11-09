@@ -262,7 +262,7 @@ func set_planet_info(data: Dictionary) -> void:
 	var confirmed_citadel_level: Variant = _authoritative_nonnegative_int(raw_citadel_level)
 	_citadel_level = int(confirmed_citadel_level) if confirmed_citadel_level != null else -1
 	var lines: Array[String] = []
-	for key in ["name", "planet_name", "class", "type_name", "type_description", "owner", "owner_name", "owner_id", "owner_type", "sector_id", "population", "fighters", "citadel_level", "citadel"]:
+	for key in ["name", "planet_name", "class", "type_name", "type_description", "owner", "owner_name", "owner_id", "owner_type", "sector_id", "population", "population_type", "morale_status", "fighters", "citadel_level", "citadel"]:
 		if data.has(key):
 			lines.append("%s: %s" % [key.replace("_", " ").capitalize(), str(data[key])])
 	_labor_max = {"ore": int(data.get("max_colonists_ore", 0)), "organics": int(data.get("max_colonists_organics", 0)), "equipment": int(data.get("max_colonists_equipment", 0)), "weapons": int(data.get("population", 0))}

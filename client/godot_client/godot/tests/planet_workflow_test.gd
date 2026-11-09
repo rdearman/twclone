@@ -23,7 +23,7 @@ func _run() -> void:
 	_check(captured.size() == 2, "opening the landed-planet view did not request authoritative details")
 	_check(captured[0]["command"] == "planet.info" and captured[1]["command"] == "planet.colonists.get", "planet screen requested unexpected operations")
 	workflow.set_planet_info({
-		"planet_id": 77, "name": "Test World", "population": 40, "fighters": 12, "citadel_level": 1,
+		"planet_id": 77, "name": "Test World", "population": 40, "population_type": "SLAVE", "morale_status": "LOW", "fighters": 12, "citadel_level": 1,
 		"colonists_unassigned": 10, "colonists_ore": 8, "colonists_org": 6,
 		"colonists_eq": 4, "colonists_weapons": 12,
 		"max_colonists_ore": 20, "max_colonists_organics": 20,
@@ -35,6 +35,8 @@ func _run() -> void:
 	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": "8", "ship_colonists": 3.0, "ship_holds_available": true})
 	_check(workflow._pickup.disabled and workflow._dropoff.disabled, "malformed colony counts became actionable transfer limits")
 	_check(workflow._info_label.text.to_lower().contains("fighters: 12"), "confirmed planetary fighter count was not displayed")
+	_check(workflow._info_label.text.contains("Population type: SLAVE"), "slave population type was not displayed")
+	_check(workflow._info_label.text.contains("Morale status: LOW"), "permanently low slave morale was not displayed")
 	_check(int(workflow._labor_weapons.value) == 12, "confirmed weapons workforce was not loaded")
 	_check(workflow._labor_status.text.contains("weapons 12"), "weapons assignment was not shown in workforce status")
 	workflow.set_planet_info({"planet_id": 77, "citadel_level": "1"})

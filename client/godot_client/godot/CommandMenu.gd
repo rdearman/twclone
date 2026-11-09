@@ -320,6 +320,20 @@ func set_owned_ship_roster(data: Dictionary) -> void:
 			return
 		_owned_ship_ids[int(ship_id)] = true
 
+func _ship_sale_action() -> Dictionary:
+	var action := {
+		"label": "Sell this ship",
+		"command": "ship.sell",
+		"context_id": "ship_id",
+		"fields": [["replacement_ship_id", FIELD_INT, "Replacement ship ID", ""]],
+		"mutating": true,
+		"tooltip": "Choose another owned ship explicitly; the server validates eligibility, location and settlement."
+	}
+	if _owned_ship_ids.size() < 2:
+		action["label"] = "Sell this ship · unavailable"
+		action["unavailable_reason"] = "A replacement ship must be owned before a hull can be sold."
+	return action
+
 func _ready() -> void:
 	_load_local_command_preferences()
 	custom_minimum_size.x = 260
@@ -1248,6 +1262,7 @@ func _render_actions() -> void:
 			# unavailable.  The server remains authoritative for the returned facts.
 			actions = [
 				{"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"},
+				_ship_sale_action(),
 			]
 		else:
 			var attack_action := {"label": "Attack this ship", "command": "combat.attack", "context_id": "target_ship_id", "mutating": true}
@@ -1255,7 +1270,7 @@ func _render_actions() -> void:
 			actions = [
 				{"label": "Inspect ship details", "command": "ship.inspect", "context_id": "ship_id"},
 				{"label": "Transfer cargo to this ship", "command": "ship.transfer_cargo", "context_id": "target_ship_id", "fields": [["commodity_id", FIELD_INT, "Commodity ID", ""], ["quantity", FIELD_INT, "Quantity", "1"]], "mutating": true},
-				{"label": "Sell this ship · unavailable", "command": "ship.sell", "context_id": "ship_id", "unavailable_reason": "The authoritative server sale handler is not implemented yet; no request was sent."},
+				_ship_sale_action(),
 				{"label": "Transfer this ship", "command": "ship.transfer", "context_id": "ship_id", "fields": [["target_player_id", FIELD_INT, "Recipient player ID", ""]], "mutating": true, "tooltip": "The server validates ownership, recipient eligibility and the atomic ownership transfer."},
 				attack_action,
 				{"label": "Claim this ship · server verifies eligibility", "command": "ship.claim", "context_id": "ship_id", "mutating": true},
