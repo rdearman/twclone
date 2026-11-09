@@ -24,6 +24,13 @@ path exists; end-to-end behavior still needs focused protocol verification.
 
 ## Additional correction in this pass
 
+- Citadel construction now re-locks the planet's current owner and current
+  corporation membership inside the same transaction that reserves upgrade
+  resources and starts construction. Ownership/permission changes between the
+  initial request checks and settlement can no longer spend resources for an
+  unauthorized player. Database-backed concurrency verification remains
+  pending.
+
 - `planet.info` now includes `qCannonSector` and `qCannonAtmosphere` for an
   existing citadel. Nullable database values are exposed as zero; missing
   citadel configuration is distinguishable from a database query failure.

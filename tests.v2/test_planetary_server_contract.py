@@ -10,6 +10,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.planets = (ROOT / "src/server_planets.c").read_text(encoding="utf-8")
+        cls.citadel = (ROOT / "src/server_citadel.c").read_text(encoding="utf-8")
         cls.combat = (ROOT / "src/server_combat.c").read_text(encoding="utf-8")
         cls.loop = (ROOT / "src/server_loop.c").read_text(encoding="utf-8")
         cls.universe = (ROOT / "src/server_universe.c").read_text(encoding="utf-8")
@@ -435,6 +436,18 @@ class PlanetaryServerContractTests(unittest.TestCase):
         )[0]
         self.assertIn("'open', 'filled', 'cancelled', 'expired'", order_schema)
         self.assertNotIn("reserved_credits", order_schema)
+
+    def test_citadel_upgrade_rechecks_planet_control_inside_resource_transaction(self):
+        handler = self.citadel.split("cmd_citadel_upgrade (", 1)[1]
+        transaction = handler.split("// Deduct resources", 1)[0]
+        self.assertIn("db_tx_begin (db, DB_TX_IMMEDIATE", transaction)
+        self.assertIn("db_planets_get_owner_info_for_update", transaction)
+        self.assertIn("repo_corp_lock_member_role", transaction)
+        self.assertLess(
+            transaction.index("db_planets_get_owner_info_for_update"),
+            handler.index("repo_citadel_deduct_resources"),
+        )
+        self.assertIn("db_tx_rollback (db, NULL)", transaction)
 
 
 if __name__ == "__main__":

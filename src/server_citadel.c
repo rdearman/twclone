@@ -1,4 +1,6 @@
 #include "db/repo/repo_citadel.h"
+#include "db/repo/repo_planets.h"
+#include "db/repo/repo_corporation.h"
 #include "db/repo/repo_cmd.h"
 #include "server_citadel.h"
 #include "db/sql_driver.h"
@@ -290,6 +292,40 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Authorization is revalidated under the planet lock in the same
+   * transaction as resource reservation and construction start. A cached
+   * session corporation ID is not an authority source. */
+  int locked_owner_id = 0;
+  char *locked_owner_type = NULL;
+  int lock_rc = db_planets_get_owner_info_for_update
+    (db, planet_id, &locked_owner_id, &locked_owner_type);
+  bool still_authorized = false;
+  if (lock_rc == 0 && locked_owner_type
+      && strcmp (locked_owner_type, "player") == 0)
+    still_authorized = locked_owner_id == ctx->player_id;
+  else if (lock_rc == 0 && locked_owner_type
+           && (strcmp (locked_owner_type, "corp") == 0
+               || strcmp (locked_owner_type, "corporation") == 0))
+    {
+      char role[64] = {0};
+      lock_rc = repo_corp_lock_member_role (db, locked_owner_id,
+                                            ctx->player_id, role,
+                                            sizeof role);
+      still_authorized = lock_rc == 0;
+    }
+  free (locked_owner_type);
+  if (lock_rc != 0 || !still_authorized)
+    {
+      db_tx_rollback (db, NULL);
+      if (lock_rc != 0 && lock_rc != ERR_DB_NOT_FOUND)
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not revalidate planet control.");
+      else
+        send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                     "You no longer control this planet.", NULL);
+      return 0;
+    }
+
   // Deduct resources
   if (repo_citadel_deduct_resources (db, r_colonists, r_ore, r_org, r_equip, planet_id) !=
       0)
@@ -316,6 +352,7 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
 
   if (!db_tx_commit (db, &err))
     {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, err.code, "Commit failed.");
       return 0;
     }
