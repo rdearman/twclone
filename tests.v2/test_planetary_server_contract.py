@@ -104,6 +104,17 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertNotIn("h_apply_terra_sanctions", self.planets)
         self.assertNotIn("seized your assets", terra)
 
+    def test_planet_combat_fails_closed_when_citadel_defenses_cannot_be_loaded(self):
+        attack = self.planets.split(
+            "cmd_combat_attack_planet", 1
+        )[1].split("cmd_planet_", 1)[0]
+        defense_read = attack.index("db_planets_get_citadel_defenses_ex")
+        failure_response = attack.index("Could not load planetary defenses", defense_read)
+        transaction_start = attack.index("db_tx_begin", defense_read)
+        self.assertLess(defense_read, failure_response)
+        self.assertLess(failure_response, transaction_start)
+        self.assertNotIn("db_planets_get_citadel_defenses (", attack)
+
     def test_orion_blockader_holds_home_and_uses_existing_defence_systems(self):
         blockader = self.universe.split(
             "if (personality == SHIP_PERSONALITY_BLOCKADER)", 1

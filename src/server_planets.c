@@ -307,9 +307,16 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   int cit_level = 0;
   int cit_shields = 0;
   int cit_reaction = 0;
-
-  db_planets_get_citadel_defenses (db, planet_id, &cit_level, &cit_shields,
-				   &cit_reaction);
+  bool has_active_citadel_defenses = false;
+  if (db_planets_get_citadel_defenses_ex
+      (db, planet_id, &has_active_citadel_defenses, &cit_level,
+       &cit_shields, &cit_reaction) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not load planetary defenses");
+      return 0;
+    }
+  (void) has_active_citadel_defenses;
 
   int fighters_absorbed = 0;
 

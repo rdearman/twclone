@@ -53,6 +53,9 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
 - **Current batch:** remove Terra's legacy asset-seizure side effect, make
   enforcement fail closed when common destruction settlement fails, and verify
   that escape-pod respawn does not erase unrelated assets.
+- **Completed follow-up:** planet combat now fails closed when citadel defense
+  state cannot be read; it no longer treats a repository error as no defenses.
+  Focused source-contract tests and the ASan/UBSan build pass.
 - **Next action:** inspect insurance payout funding/valuation and planet capture
   asset retention for source-demonstrable policy conflicts, then continue with
   the next independently actionable gap. Preserve Exchange, unrest effects,
