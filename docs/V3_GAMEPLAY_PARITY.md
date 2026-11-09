@@ -30,6 +30,12 @@ path exists; end-to-end behavior still needs focused protocol verification.
   initial request checks and settlement can no longer spend resources for an
   unauthorized player. Database-backed concurrency verification remains
   pending.
+- The citadel completion worker now treats its initial scan as advisory,
+  re-locks and revalidates each due construction inside its completion
+  transaction, checks the conditional state update affected exactly one row,
+  and propagates transaction/commit failures. This preserves the documented
+  due-time completion lifecycle under concurrent workers. Runtime cron
+  verification remains pending.
 
 - `planet.info` now includes `qCannonSector` and `qCannonAtmosphere` for an
   existing citadel. Nullable database values are exposed as zero; missing

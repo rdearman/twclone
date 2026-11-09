@@ -3,6 +3,7 @@
 #include "db/repo/repo_citadel.h"
 #include "db/sql_driver.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int repo_citadel_get_construction_state(db_t *db, int32_t planet_id,
@@ -83,7 +84,7 @@ int repo_citadel_get_onplanet(db_t *db, int32_t ship_id, int32_t *planet_id_out)
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
 
     db_res_t *res = NULL;
-    db_error_t err;
+    db_error_t err = {0};
     if (db_query(db, sql_converted, (db_bind_t[]){ db_bind_i32(ship_id) }, 1, &res, &err)) {
         if (db_res_step(res, &err)) {
             if (planet_id_out) *planet_id_out = db_res_col_i32(res, 0, &err);
@@ -108,7 +109,7 @@ int repo_citadel_get_planet_info(db_t *db, int32_t planet_id, db_res_t **out_res
     char sql_planet_converted[512];
     sql_build(db, sql_planet, sql_planet_converted, sizeof(sql_planet_converted));
 
-    db_error_t err;
+    db_error_t err = {0};
     if (db_query(db, sql_planet_converted, (db_bind_t[]){ db_bind_i32(planet_id) }, 1, out_res, &err)) {
         return 0;
     }
@@ -264,30 +265,82 @@ int repo_citadel_start_construction(db_t *db, int32_t planet_id, int32_t current
 
 int repo_citadel_reap_upgrades(db_t *db, int64_t now_s, int limit)
 {
-    if (!db) return -1;
-    db_error_t err;
+    if (!db || now_s <= 0 || limit <= 0 || limit > 1000)
+        return ERR_INVALID_ARG;
+    db_error_t err = {0};
     db_res_t *res = NULL;
 
-    /* 1. Find citadels due for completion */
-    /* Rule 3.2: No FOR UPDATE SKIP LOCKED directly, use sql_driver helper. */
-    char q_sel_tmpl[512];
-    snprintf(q_sel_tmpl, sizeof(q_sel_tmpl),
-             "SELECT planet_id, target_level FROM citadels "
-             "WHERE construction_status = 'upgrading' AND construction_end_time <= {1} "
-             "LIMIT {2}%s;", sql_for_update_skip_locked(db));
-
+    /* Candidate discovery is advisory only. Each candidate is re-read and
+     * locked inside the transaction that completes it, so concurrent workers
+     * cannot act on stale target levels or lose commit failures. */
+    int32_t *planet_ids = calloc((size_t) limit, sizeof(*planet_ids));
+    if (!planet_ids)
+        return ERR_DB_INTERNAL;
     char q_sel[512];
-    sql_build(db, q_sel_tmpl, q_sel, sizeof(q_sel));
-
+    if (sql_build(db,
+        "SELECT planet_id FROM citadels WHERE construction_status='upgrading' "
+        "AND construction_end_time <= {1} ORDER BY construction_end_time, planet_id "
+        "LIMIT {2}", q_sel, sizeof(q_sel)) != 0) {
+        free(planet_ids);
+        return ERR_DB_QUERY_FAILED;
+    }
     db_bind_t sel_params[] = { db_bind_i64(now_s), db_bind_i32(limit) };
-    if (!db_query(db, q_sel, sel_params, 2, &res, &err)) return -1;
+    db_error_clear(&err);
+    if (!db_query(db, q_sel, sel_params, 2, &res, &err)) {
+        free(planet_ids);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    int candidate_count = 0;
+    while (candidate_count < limit && db_res_step(res, &err))
+        planet_ids[candidate_count++] = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    if (err.code) {
+        free(planet_ids);
+        return err.code;
+    }
 
-    while (db_res_step(res, &err)) {
-        int32_t planet_id = db_res_col_i32(res, 0, &err);
-        int32_t target_level = db_res_col_i32(res, 1, &err);
+    for (int candidate = 0; candidate < candidate_count; candidate++) {
+        int32_t planet_id = planet_ids[candidate];
+        if (!db_tx_begin(db, DB_TX_DEFAULT, &err)) {
+            free(planet_ids);
+            return err.code ? err.code : ERR_DB_EXEC_FAILED;
+        }
 
-        /* 2. Atomic update for this citadel */
-        if (!db_tx_begin(db, DB_TX_DEFAULT, &err)) continue;
+        char q_lock_tmpl[384], q_lock[512];
+        snprintf(q_lock_tmpl, sizeof(q_lock_tmpl),
+                 "SELECT target_level FROM citadels WHERE planet_id={1} "
+                 "AND construction_status='upgrading' AND construction_end_time <= {2}%s",
+                 sql_for_update(db));
+        if (sql_build(db, q_lock_tmpl, q_lock, sizeof(q_lock)) != 0) {
+            db_tx_rollback(db, NULL);
+            free(planet_ids);
+            return ERR_DB_QUERY_FAILED;
+        }
+        res = NULL;
+        db_error_clear(&err);
+        if (!db_query(db, q_lock,
+                      (db_bind_t[]){db_bind_i32(planet_id), db_bind_i64(now_s)},
+                      2, &res, &err)) {
+            db_tx_rollback(db, NULL);
+            free(planet_ids);
+            return err.code ? err.code : ERR_DB_QUERY_FAILED;
+        }
+        if (!db_res_step(res, &err)) {
+            db_res_finalize(res);
+            db_tx_rollback(db, NULL);
+            if (err.code) {
+                free(planet_ids);
+                return err.code;
+            }
+            continue;
+        }
+        int32_t target_level = db_res_col_i32(res, 0, &err);
+        db_res_finalize(res);
+        if (err.code || target_level < 1 || target_level > 6) {
+            db_tx_rollback(db, NULL);
+            free(planet_ids);
+            return err.code ? err.code : ERR_DB_CONSTRAINT;
+        }
 
         /* Apply derived defenses based on level */
         const char *defense_sql = "";
@@ -303,19 +356,27 @@ int repo_citadel_reap_upgrades(db_t *db, int64_t now_s, int limit)
 
         char q_upd_tmpl[1024];
         snprintf(q_upd_tmpl, sizeof(q_upd_tmpl),
-                 "UPDATE citadels SET level = {1}, construction_status = 'idle', target_level = 0, construction_start_time = 0, construction_end_time = 0%s WHERE planet_id = {2} AND construction_status = 'upgrading';",
+                 "UPDATE citadels SET level = {1}, construction_status = 'idle', target_level = 0, construction_start_time = 0, construction_end_time = 0%s WHERE planet_id = {2} AND construction_status = 'upgrading' AND target_level = {3} AND construction_end_time <= {4};",
                  defense_sql);
 
         char sql_upd[1024];
-        sql_build(db, q_upd_tmpl, sql_upd, sizeof(sql_upd));
-        db_bind_t upd_params[] = { db_bind_i32(target_level), db_bind_i32(planet_id) };
-
-        if (db_exec(db, sql_upd, upd_params, 2, &err)) {
-            db_tx_commit(db, &err);
-        } else {
-            db_tx_rollback(db, &err);
+        int64_t affected = 0;
+        if (sql_build(db, q_upd_tmpl, sql_upd, sizeof(sql_upd)) != 0
+            || !db_exec_rows_affected(db, sql_upd,
+                (db_bind_t[]){db_bind_i32(target_level), db_bind_i32(planet_id),
+                              db_bind_i32(target_level), db_bind_i64(now_s)},
+                4, &affected, &err)
+            || affected != 1) {
+            db_tx_rollback(db, NULL);
+            free(planet_ids);
+            return err.code ? err.code : ERR_DB_BUSY;
+        }
+        if (!db_tx_commit(db, &err)) {
+            db_tx_rollback(db, NULL);
+            free(planet_ids);
+            return err.code ? err.code : ERR_DB_EXEC_FAILED;
         }
     }
-    db_res_finalize(res);
+    free(planet_ids);
     return 0;
 }

@@ -26,6 +26,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.cron_repo = (ROOT / "src/db/repo/repo_cron.c").read_text(encoding="utf-8")
         cls.corp_repo = (ROOT / "src/db/repo/repo_corporation.c").read_text(encoding="utf-8")
         cls.planet_repo = (ROOT / "src/db/repo/repo_planets.c").read_text(encoding="utf-8")
+        cls.citadel_repo = (ROOT / "src/db/repo/repo_citadel.c").read_text(encoding="utf-8")
         cls.protocol = (ROOT / "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md").read_text(
             encoding="utf-8"
         )
@@ -448,6 +449,15 @@ class PlanetaryServerContractTests(unittest.TestCase):
             handler.index("repo_citadel_deduct_resources"),
         )
         self.assertIn("db_tx_rollback (db, NULL)", transaction)
+
+    def test_citadel_reaper_rechecks_due_upgrade_under_lock_and_checks_commit(self):
+        reaper = self.citadel_repo.split("repo_citadel_reap_upgrades(", 1)[1]
+        self.assertIn("SELECT target_level FROM citadels", reaper)
+        self.assertIn("construction_end_time <= {2}%s", reaper)
+        self.assertIn("sql_for_update(db)", reaper)
+        self.assertIn("AND target_level = {3}", reaper)
+        self.assertIn("db_exec_rows_affected", reaper)
+        self.assertIn("if (!db_tx_commit(db, &err))", reaper)
 
 
 if __name__ == "__main__":
