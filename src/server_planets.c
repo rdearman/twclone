@@ -2661,6 +2661,33 @@ cmd_planet_genesis_create (client_ctx_t *ctx, json_t *root)
 }
 
 
+static int
+h_planet_market_lock_control (db_t *db, int planet_id, int player_id)
+{
+  int owner_id = 0;
+  char *owner_type = NULL;
+  int rc = db_planets_get_owner_info_for_update (db, planet_id, &owner_id,
+                                                  &owner_type);
+  if (rc != 0)
+    return rc;
+  bool allowed = owner_type && strcmp (owner_type, "player") == 0
+    && owner_id == player_id;
+  if (owner_type && (strcmp (owner_type, "corp") == 0
+                     || strcmp (owner_type, "corporation") == 0))
+    {
+      char role[64] = {0};
+      rc = repo_corp_lock_member_role (db, owner_id, player_id, role,
+                                       sizeof role);
+      allowed = rc == 0;
+    }
+  free (owner_type);
+  if (allowed)
+    return 0;
+  if (rc == ERR_DB_NOT_FOUND)
+    return ERR_PERMISSION_DENIED;
+  return rc != 0 ? rc : ERR_PERMISSION_DENIED;
+}
+
 int
 cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 {
@@ -2742,10 +2769,9 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 							    "corporation") ==
 			    0))
     {
-      if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id)
-	{
-	  allowed = true;
-	}
+      char role[64] = {0};
+      allowed = repo_corp_check_member_role (db, p.owner_id, ctx->player_id,
+                                              role, sizeof role) == 0;
     }
   h_free_planet_t (&p);
 
@@ -2813,6 +2839,19 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_DB,
                            "Could not begin planet market sale.");
+      return 0;
+    }
+  int control_rc = h_planet_market_lock_control (db, planet_id,
+                                                  ctx->player_id);
+  if (control_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      if (control_rc == ERR_PERMISSION_DENIED)
+        send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                     "You do not control this planet.", NULL);
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not revalidate planet ownership.");
       return 0;
     }
   int stock_rc = db_ports_decrement_stock (db, ENTITY_TYPE_PLANET, planet_id,
@@ -2887,6 +2926,12 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 				   "Not authenticated", NULL);
       return 0;
     }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable.");
+      return 0;
+    }
 
   json_t *data = json_object_get (root, "data");
 
@@ -2955,10 +3000,9 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 							    "corporation") ==
 			    0))
     {
-      if (ctx->corp_id > 0 && ctx->corp_id == p.owner_id)
-	{
-	  allowed = true;
-	}
+      char role[64] = {0};
+      allowed = repo_corp_check_member_role (db, p.owner_id, ctx->player_id,
+                                              role, sizeof role) == 0;
     }
   h_free_planet_t (&p);
 
@@ -3086,11 +3130,21 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 	  return 0;
 	}
 
-      int settlement_rc = db_ports_decrement_stock
+      int settlement_rc = h_planet_market_lock_control
+	(db, planet_id, ctx->player_id);
+      int locked_ship_id = 0;
+      if (settlement_rc == 0)
+	locked_ship_id = h_get_active_ship_id (db, ctx->player_id);
+      if (settlement_rc == 0 && locked_ship_id <= 0)
+	settlement_rc = ERR_SHIP_NOT_FOUND;
+      if (settlement_rc == 0 && locked_ship_id != ship_id)
+	settlement_rc = ERR_TARGET_INVALID;
+      if (settlement_rc == 0)
+	settlement_rc = db_ports_decrement_stock
 	(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, quantity_total,
 	 (int64_t) time (NULL));
       if (settlement_rc == 0)
-	settlement_rc = h_update_ship_cargo (db, ship_id, commodity_code,
+	settlement_rc = h_update_ship_cargo (db, locked_ship_id, commodity_code,
 					    quantity_total, NULL);
       if (settlement_rc == 0)
 	settlement_rc = h_deduct_player_petty_cash_unlocked
@@ -3100,8 +3154,15 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       if (settlement_rc != 0)
 	{
 	  db_tx_rollback (db, NULL);
-	  if (settlement_rc == ERR_DB_CONSTRAINT
-	      || settlement_rc == ERR_DB_NOT_FOUND)
+	  if (settlement_rc == ERR_PERMISSION_DENIED)
+	    send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+	                                 "You do not control this planet or active ship.",
+	                                 NULL);
+	  else if (settlement_rc == ERR_TARGET_INVALID
+	           || settlement_rc == ERR_SHIP_NOT_FOUND)
+	    send_response_refused_steal (ctx, root, ERR_TARGET_INVALID,
+	                                 "Active ship changed during purchase.", NULL);
+	  else if (settlement_rc == ERR_DB_CONSTRAINT)
 	    send_response_refused_steal (ctx, root, REF_NO_WARP_LINK,
 					 "Insufficient inventory for immediate illegal purchase.",
 					 NULL);
@@ -3165,14 +3226,54 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  int64_t order_id = 0;
-  if (db_planets_insert_buy_order
-      (db, ctx->player_id, planet_id, commodity_id, quantity_total, max_price,
-       &order_id) != 0)
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &txerr))
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "DB Error inserting order.");
+      send_response_error (ctx, root, ERR_DB, "Database busy.");
+      return 0;
+    }
+  int order_rc = h_planet_market_lock_control (db, planet_id, ctx->player_id);
+  if (order_rc == 0 && h_get_player_petty_cash (db, ctx->player_id,
+                                                 &player_cash) != 0)
+    order_rc = ERR_DB_QUERY_FAILED;
+  if (order_rc == 0 && player_cash < worst_case_cost)
+    order_rc = ERR_DB_CONSTRAINT;
+  if (order_rc == 0)
+    {
+      int fresh_stock = 0, fresh_capacity = 0;
+      if (db_planets_get_market_move_info (db, planet_id, commodity_code,
+                                           &fresh_stock, &fresh_capacity) != 0)
+        order_rc = ERR_DB_NOT_FOUND;
+      else if (quantity_total > fresh_capacity - fresh_stock)
+        order_rc = ERR_DB_CONSTRAINT;
+    }
+  int64_t order_id = 0;
+  if (order_rc == 0)
+    order_rc = db_planets_insert_buy_order
+      (db, ctx->player_id, planet_id, commodity_id, quantity_total, max_price,
+       &order_id);
+  if (order_rc != 0)
+    {
+	  db_tx_rollback (db, NULL);
+	  if (order_rc == ERR_PERMISSION_DENIED)
+	    send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+	                                 "You do not control this planet.", NULL);
+	  else if (order_rc == ERR_DB_CONSTRAINT)
+	    send_response_refused_steal (ctx, root, REF_NO_WARP_LINK,
+	                                 player_cash < worst_case_cost
+	                                   ? "Insufficient credits for max cost."
+	                                   : "The order exceeds planet storage capacity.",
+	                                 NULL);
+	  else
+	    send_response_error (ctx, root, ERR_SERVER_ERROR,
+	                         "DB Error inserting order.");
+      return 0;
+    }
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not commit planet buy order.");
       return 0;
     }
 
@@ -3741,6 +3842,22 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
     {
       return 0;
     }
+  if (delta == INT_MIN)
+    return ERR_INVALID_ARG;
+
+  /* Serialize all stock changes in the same entity-before-stock lock order. */
+  int owner_id = 0;
+  char *owner_type = NULL;
+  if (db_planets_get_owner_info_for_update (db, pid, &owner_id,
+                                             &owner_type) != 0)
+    return ERR_NOT_FOUND;
+  free (owner_type);
+
+  /* Sales must be a conditional decrement; this prevents overselling even
+   * when another transaction has read the same pre-transaction inventory. */
+  if (delta < 0)
+    return db_ports_decrement_stock (db, ENTITY_TYPE_PLANET, pid, code,
+                                     -delta, (int64_t) time (NULL));
 
   // 1. Get current quantity and capacity
   int current_quantity = 0;
@@ -3756,15 +3873,9 @@ h_market_move_planet_stock (db_t *db, int pid, const char *code, int delta)
 
   // 2. Calculate new quantity with overflow and bounds checking
   int new_quantity;
-  if (__builtin_add_overflow (current_quantity, delta, &new_quantity))
-    {
-      /* Overflow: clamp based on delta direction */
-      new_quantity = (delta > 0) ? INT_MAX : 0;
-    }
-
-
-  new_quantity = (new_quantity < 0) ? 0 : new_quantity;
-  new_quantity = (new_quantity > max_capacity) ? max_capacity : new_quantity;
+  if (__builtin_add_overflow (current_quantity, delta, &new_quantity)
+      || new_quantity < 0 || new_quantity > max_capacity)
+    return ERR_DB_CONSTRAINT;
 
   // 3. Update DB
   return db_planets_upsert_stock (db, pid, code, new_quantity);

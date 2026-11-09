@@ -13,6 +13,8 @@ typedef struct
   int id;
   char actor_type[16];          // e.g., "port"
   int actor_id;
+  char location_type[16];       // inventory location, distinct from account actor
+  int location_id;
   int commodity_id;
   char side[8];                 // "buy" or "sell"
   int quantity;
@@ -92,8 +94,12 @@ int db_insert_commodity_trade (db_t *db,
                                int price,
                                const char *buyer_actor_type,
                                int buyer_actor_id,
+                               const char *buyer_location_type,
+                               int buyer_location_id,
                                const char *seller_actor_type,
                                int seller_actor_id,
+                               const char *seller_location_type,
+                               int seller_location_id,
                                int settlement_tx_buy,
                                int settlement_tx_sell);
 

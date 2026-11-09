@@ -18,6 +18,9 @@ int repo_ships_handle_destruction(db_t *db,
                                   int32_t *result_code_out);
 
 int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out);
+/* Lock the player row and return its current active ship within a transaction. */
+int repo_ships_get_active_id_for_update(db_t *db, int32_t player_id,
+                                        int32_t *ship_id_out);
 
 int repo_ships_rename_active(db_t *db, int32_t player_id, int32_t ship_id,
                              const char *name, int64_t *rows_out);

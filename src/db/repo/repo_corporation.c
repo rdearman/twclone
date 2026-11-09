@@ -200,6 +200,35 @@ int repo_corp_check_member_role(db_t *db, int corp_id, int player_id, char *role
     return ERR_DB_NOT_FOUND;
 }
 
+int repo_corp_lock_member_role(db_t *db, int corp_id, int player_id,
+                               char *role_buffer, size_t buffer_size) {
+    if (!db || corp_id <= 0 || player_id <= 0 || !role_buffer
+        || buffer_size == 0 || db->tx_nest_level <= 0)
+        return ERR_INVALID_ARG;
+    role_buffer[0] = '\0';
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    const char *query = "SELECT role FROM corp_members WHERE corporation_id = {1} AND player_id = {2} FOR UPDATE;";
+    char sql[512];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    if (!db_query(db, sql,
+                  (db_bind_t[]){ db_bind_i64(corp_id), db_bind_i64(player_id) },
+                  2, &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    const char *role = db_res_col_text(res, 0, &err);
+    if (role) {
+        strncpy(role_buffer, role, buffer_size - 1);
+        role_buffer[buffer_size - 1] = '\0';
+    }
+    db_res_finalize(res);
+    return err.code;
+}
+
 int repo_corp_get_player_ship_type_name(db_t *db, int player_id, char *name_buffer, size_t buffer_size) {
     db_res_t *res = NULL;
     db_error_t err;

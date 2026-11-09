@@ -53,6 +53,9 @@ int db_planets_get_sector(db_t *db, int planet_id, int *sector_id);
 
 /* Q16: Planet Owner Info */
 int db_planets_get_owner_info(db_t *db, int planet_id, int *owner_id, char **owner_type);
+/* Read and lock planet ownership; requires an active transaction. */
+int db_planets_get_owner_info_for_update(db_t *db, int planet_id,
+                                         int *owner_id, char **owner_type);
 
 /* Q17: Rename Planet */
 int db_planets_rename(db_t *db, int planet_id, const char *new_name);

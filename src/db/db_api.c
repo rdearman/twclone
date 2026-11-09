@@ -230,10 +230,16 @@ bool db_tx_commit(db_t *db, db_error_t *err) {
         return false;
     }
 
-    db->tx_nest_level--;
-    if (db->tx_nest_level == 0) {
-        return db->vt->tx_commit(db, err);
+    if (db->tx_nest_level == 1) {
+        /* Keep the transaction marked active until the backend confirms the
+         * commit. Callers can then roll back if the commit itself fails. */
+        if (!db->vt->tx_commit(db, err)) {
+            return false;
+        }
+        db->tx_nest_level = 0;
+        return true;
     }
+    db->tx_nest_level--;
     return true;
 }
 
@@ -475,4 +481,3 @@ db_ship_repair_atomic(db_t *db,
                                     out_new_credits,
                                     err);
 }
-

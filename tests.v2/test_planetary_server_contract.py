@@ -19,6 +19,12 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.ports_repo = (ROOT / "src/db/repo/repo_ports.c").read_text(
             encoding="utf-8"
         )
+        cls.db_api = (ROOT / "src/db/db_api.c").read_text(encoding="utf-8")
+        cls.market_repo = (ROOT / "src/db/repo/repo_market.c").read_text(encoding="utf-8")
+        cls.cron = (ROOT / "src/server_cron.c").read_text(encoding="utf-8")
+        cls.cron_repo = (ROOT / "src/db/repo/repo_cron.c").read_text(encoding="utf-8")
+        cls.corp_repo = (ROOT / "src/db/repo/repo_corporation.c").read_text(encoding="utf-8")
+        cls.planet_repo = (ROOT / "src/db/repo/repo_planets.c").read_text(encoding="utf-8")
         cls.protocol = (ROOT / "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md").read_text(
             encoding="utf-8"
         )
@@ -334,6 +340,62 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("!illegal_commodity", handler)
         self.assertIn("quantity_total > planet_capacity - capacity_stock", handler)
         self.assertIn("if (illegal_commodity)", handler)
+
+    def test_failed_backend_commit_keeps_transaction_rollback_available(self):
+        commit = self.db_api.split("bool db_tx_commit", 1)[1].split(
+            "bool db_tx_rollback", 1
+        )[0]
+        self.assertLess(commit.index("db->vt->tx_commit(db, err)"),
+                        commit.index("db->tx_nest_level = 0"))
+        self.assertIn("if (!db->vt->tx_commit(db, err))", commit)
+
+    def test_corporate_market_authority_is_revalidated_under_row_locks(self):
+        for command in ("cmd_planet_market_sell", "cmd_planet_market_buy_order"):
+            handler = self.planets.split(command, 1)[1].split("\nint\n", 1)[0]
+            self.assertIn("h_planet_market_lock_control", handler)
+        self.assertIn("SELECT owner_id, owner_type FROM planets WHERE planet_id = {1} FOR UPDATE",
+                      self.planet_repo)
+        self.assertIn("SELECT role FROM corp_members WHERE corporation_id = {1} AND player_id = {2} FOR UPDATE",
+                      self.corp_repo)
+
+    def test_buy_orders_commit_transactionally_after_rechecking_capacity_and_cash(self):
+        handler = self.planets.split("cmd_planet_market_buy_order", 1)[1].split(
+            "\nint\n", 1
+        )[0]
+        self.assertIn("db_tx_begin (db, DB_TX_IMMEDIATE", handler)
+        self.assertIn("h_get_player_petty_cash (db, ctx->player_id", handler)
+        self.assertIn("db_planets_get_market_move_info (db, planet_id, commodity_code,",
+                      handler)
+        self.assertIn("db_tx_commit (db, &txerr)", handler)
+
+    def test_partial_market_fills_remain_open_and_failed_commit_restores_match_state(self):
+        settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
+        self.assertGreaterEqual(settlement.count('? "filled" :'), 2)
+        self.assertGreaterEqual(settlement.count('"open";'), 2)
+        self.assertIn("if (!db_tx_commit (db, &err))", settlement)
+        self.assertIn("buy->filled_quantity = prior_buy_filled", settlement)
+        self.assertIn("sell->filled_quantity = prior_sell_filled", settlement)
+
+    def test_market_settlement_uses_order_location_not_account_actor_for_inventory(self):
+        loader = self.market_repo.split("db_load_open_orders_for_commodity", 1)[1]
+        self.assertIn("location_type, location_id", loader)
+        self.assertIn("o->location_id = (int) db_res_col_i64 (res, 4, &err)", loader)
+        self.assertIn("sell->location_type", self.cron)
+        self.assertIn("buy->location_id", self.cron)
+        trade_insert = self.market_repo.split("db_insert_commodity_trade (", 1)[1]
+        self.assertIn("buyer_location_type", trade_insert)
+        self.assertIn("db_bind_i64 (buyer_location_id)", trade_insert)
+
+    def test_cancel_and_expiry_release_open_partial_orders_without_escrow(self):
+        for query in ("status = 'open'",):
+            self.assertIn(query, self.market_repo)
+        self.assertIn("status='expired' WHERE status='open'", self.cron_repo)
+        schema = (ROOT / "sql/pg/000_tables.sql").read_text(encoding="utf-8")
+        order_schema = schema.split("CREATE TABLE commodity_orders", 1)[1].split(
+            "CREATE TABLE commodity_trades", 1
+        )[0]
+        self.assertIn("'open', 'filled', 'cancelled', 'expired'", order_schema)
+        self.assertNotIn("reserved_credits", order_schema)
 
 
 if __name__ == "__main__":

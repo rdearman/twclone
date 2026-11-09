@@ -147,6 +147,18 @@ int
 cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Authentication required.");
+      return 0;
+    }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable.");
+      return 0;
+    }
   json_t *data = json_object_get (root, "data");
   int commodity_id = 0, quantity = 0, target_ship_id = 0;
   if (!json_is_object (data)
@@ -210,11 +222,41 @@ cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_DB, "Could not start cargo transfer");
       return 0;
     }
+  int locked_source_ship_id = 0;
+  /* Lock hulls in stable order before the player row. This matches cargo
+   * trade settlement's ship -> account lock order. */
+  int rc = repo_cargo_lock_ships_for_update (db, source_ship_id,
+                                              target_ship_id);
+  if (rc == 0)
+    rc = repo_ships_get_active_id_for_update (db, ctx->player_id,
+                                               &locked_source_ship_id);
+  if (rc == 0 && locked_source_ship_id != source_ship_id)
+    rc = ERR_TARGET_INVALID;
+  if (rc == 0)
+    {
+      source_sector = db_get_ship_sector_id (db, source_ship_id);
+      target_sector = db_get_ship_sector_id (db, target_ship_id);
+      if (source_sector <= 0 || target_sector != source_sector)
+        rc = ERR_TARGET_INVALID;
+    }
+  if (rc == 0)
+    {
+      owner_id = 0;
+      owner_corp = 0;
+      if (db_get_ship_owner_id (db, target_ship_id, &owner_id, &owner_corp) != 0
+          || owner_id != ctx->player_id)
+        rc = ERR_SHIP_NOT_FOUND;
+    }
   int64_t source_after = 0, target_after = 0;
-  int rc = repo_cargo_add (db, source_ship_id, commodity, -(int64_t) quantity,
-                           &source_after);
+  if (rc == 0)
+    rc = repo_cargo_add (db, source_ship_id, commodity, -(int64_t) quantity,
+                         &source_after);
   if (rc == 0)
     rc = repo_cargo_add (db, target_ship_id, commodity, quantity, &target_after);
+  if (rc == 0)
+    rc = repo_cargo_sync_legacy_columns (db, source_ship_id);
+  if (rc == 0)
+    rc = repo_cargo_sync_legacy_columns (db, target_ship_id);
   if (rc != 0 || !db_tx_commit (db, &err))
     {
       db_tx_rollback (db, &err);
@@ -224,6 +266,9 @@ cmd_ship_transfer_cargo (client_ctx_t *ctx, json_t *root)
       else if (rc == ERR_DB_MISUSE)
         send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
                                      "Source ship does not have enough cargo.", NULL);
+      else if (rc == ERR_TARGET_INVALID || rc == ERR_SHIP_NOT_FOUND)
+        send_response_refused_steal (ctx, root, REF_TARGET_SHIP_INVALID,
+                                     "Ship ownership or location changed during transfer.", NULL);
       else
         send_response_error (ctx, root, ERR_DB, "Cargo transfer failed");
       return 0;
@@ -1269,7 +1314,11 @@ h_update_ship_cargo (db_t *db,
 
   /* Phase 1: Route through cargo layer (ship_cargo is source of truth) */
   int64_t new_qty = 0;
-  int rc = repo_cargo_add (db, ship_id, commodity_code, (int64_t) delta, &new_qty);
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
+    return txerr.code ? txerr.code : ERR_DB_TX;
+  int rc = repo_cargo_add (db, ship_id, commodity_code, (int64_t) delta,
+                           &new_qty);
 
   /* The cargo table is authoritative, but the legacy ships.* columns are
    * still read by older gameplay handlers and by the public ship status
@@ -1277,6 +1326,17 @@ h_update_ship_cargo (db_t *db,
    * mutation so a subsequent request cannot observe stale cargo. */
   if (rc == 0)
     rc = repo_cargo_sync_legacy_columns (db, ship_id);
+
+  if (rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return rc;
+    }
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      return txerr.code ? txerr.code : ERR_DB_TX;
+    }
 
   if (new_quantity_out)
     {

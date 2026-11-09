@@ -12,6 +12,8 @@ int db_ports_upsert_stock(db_t *db, const char *entity_type, int entity_id, cons
 int db_ports_decrement_stock(db_t *db, const char *entity_type, int entity_id,
                              const char *commodity_code, int quantity,
                              int64_t ts);
+/* Lock a port row before a capacity read/stock increase; requires a transaction. */
+int db_ports_lock_for_update(db_t *db, int port_id);
 
 /* Q2: Port Buy Eligibility Check */
 int db_ports_get_buy_eligibility(db_t *db, int port_id, const char *commodity_code, int *quantity, int *max_capacity);

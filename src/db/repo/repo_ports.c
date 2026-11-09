@@ -60,6 +60,27 @@ int db_ports_decrement_stock(db_t *db, const char *entity_type, int entity_id,
     return rows > 0 ? 0 : ERR_DB_CONSTRAINT;
 }
 
+int db_ports_lock_for_update(db_t *db, int port_id) {
+    if (!db || port_id <= 0 || db->tx_nest_level <= 0)
+        return ERR_INVALID_ARG;
+    const char *query = "SELECT port_id FROM ports WHERE port_id = {1} FOR UPDATE;";
+    char sql[256];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    int found_id = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    return err.code ? err.code : (found_id == port_id ? 0 : ERR_DB_NOT_FOUND);
+}
+
 int db_ports_get_buy_eligibility(db_t *db, int port_id, const char *commodity_code, int *quantity, int *max_capacity) {
     db_res_t *res = NULL;
     db_error_t err;

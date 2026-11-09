@@ -282,6 +282,38 @@ int db_planets_get_owner_info(db_t *db, int planet_id, int *owner_id, char **own
     return -1;
 }
 
+int db_planets_get_owner_info_for_update(db_t *db, int planet_id,
+                                        int *owner_id, char **owner_type) {
+    if (!db || planet_id <= 0 || !owner_id || !owner_type
+        || db->tx_nest_level <= 0)
+        return ERR_INVALID_ARG;
+    *owner_type = NULL;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    const char *query = "SELECT owner_id, owner_type FROM planets WHERE planet_id = {1} FOR UPDATE;";
+    char sql[512];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(planet_id) }, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    *owner_id = db_res_col_i32(res, 0, &err);
+    const char *type = db_res_col_text(res, 1, &err);
+    if (type)
+        *owner_type = strdup(type);
+    db_res_finalize(res);
+    if (err.code != 0 || (type && !*owner_type)) {
+        free(*owner_type);
+        *owner_type = NULL;
+        return err.code ? err.code : ERR_DB_NOMEM;
+    }
+    return 0;
+}
+
 int db_planets_rename(db_t *db, int planet_id, const char *new_name) {
     db_error_t err;
     /* SQL_VERBATIM: Q17 */

@@ -18,6 +18,8 @@ class ShipLifecycleProtocolContractTests(unittest.TestCase):
         cls.schemas_c = (ROOT / "src/schemas.c").read_text(encoding="utf-8")
         cls.loop = (ROOT / "src/server_loop.c").read_text(encoding="utf-8")
         cls.ships = (ROOT / "src/server_ships.c").read_text(encoding="utf-8")
+        cls.cargo_repo = (ROOT / "src/db/repo/repo_cargo.c").read_text(encoding="utf-8")
+        cls.ships_repo = (ROOT / "src/db/repo/repo_ships.c").read_text(encoding="utf-8")
 
     def test_lifecycle_schema_functions_are_declared_and_registered(self):
         for name in ("schema_ship_sell", "schema_ship_transfer",
@@ -53,6 +55,31 @@ class ShipLifecycleProtocolContractTests(unittest.TestCase):
         self.assertIn("ERR_NOT_AUTHENTICATED", body)
         self.assertIn("ERR_SERVICE_UNAVAILABLE", body)
         self.assertNotIn("ERR_SECTOR_NOT_FOUND", body)
+
+    def test_cargo_mutations_lock_ship_and_serialize_capacity_checks(self):
+        wrapper = self.cargo_repo.split("repo_cargo_add (", 1)[1].split(
+            "repo_cargo_sync_legacy_columns", 1
+        )[0]
+        self.assertIn("db_tx_begin", wrapper)
+        self.assertIn("repo_cargo_lock_ship_for_update", wrapper)
+        self.assertIn("repo_cargo_add_unlocked", wrapper)
+        self.assertIn("SELECT ship_id FROM ships WHERE ship_id = {1} FOR UPDATE",
+                      self.cargo_repo)
+        lock_pair = self.cargo_repo.split("repo_cargo_lock_ships_for_update (", 1)[1].split(
+            "repo_cargo_add (", 1
+        )[0]
+        self.assertIn("first_ship_id < second_ship_id", lock_pair)
+
+    def test_cargo_transfer_revalidates_active_ship_and_syncs_both_ship_views(self):
+        transfer = self.ships.split("cmd_ship_transfer_cargo (", 1)[1].split(
+            "\nint\n", 1
+        )[0]
+        self.assertIn("repo_ships_get_active_id_for_update", transfer)
+        self.assertIn("repo_cargo_lock_ships_for_update", transfer)
+        self.assertIn("repo_cargo_sync_legacy_columns (db, source_ship_id)", transfer)
+        self.assertIn("repo_cargo_sync_legacy_columns (db, target_ship_id)", transfer)
+        self.assertIn("SELECT ship_id FROM players WHERE player_id = {1} FOR UPDATE",
+                      self.ships_repo)
 
 
 if __name__ == "__main__":

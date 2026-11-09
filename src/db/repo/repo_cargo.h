@@ -58,6 +58,10 @@ int repo_cargo_get(db_t *db, int32_t ship_id, const char *commodity_code, int64_
  */
 int repo_cargo_add(db_t *db, int32_t ship_id, const char *commodity_code, int64_t delta, int64_t *new_quantity_out);
 
+/* Locks two ships in ascending ID order. Requires an active transaction. */
+int repo_cargo_lock_ships_for_update(db_t *db, int32_t first_ship_id,
+                                     int32_t second_ship_id);
+
 /**
  * repo_cargo_sync_legacy_columns - Sync legacy ships.* columns from ship_cargo
  * @db: database handle

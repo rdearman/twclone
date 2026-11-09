@@ -9,8 +9,8 @@ path exists; end-to-end behavior still needs focused protocol verification.
 |---|---|---|---|---|---|
 | Player lifecycle | Register, authenticate, persist identity/session, recover state | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | Session replay/client recovery and public-player commands need protocol verification | `player.list_online` is an explicit stub; `player.rankings` contract conflicts on ranking key | Partial |
 | Universe and navigation | Generated connected sectors/warps; movement, scans and route assistance | `src/bigbang_pg_main.c`, `src/server_universe.c`, `src/server_autopilot.c` | Transwarp fuel/interdiction and entry-hazard aftermath are unresolved | None established from source alone | Partial; see `V3_STATUS.md` |
-| Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c` | Transfer and shipyard journeys lack full runtime evidence | `ship.sell` / `shipyard.sell` explicitly stubbed; settlement policy unresolved | Partial |
-| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement | `src/server_ports.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Retry/restart conservation and market matching require verification | Haggling and canonical trade-policy details are unresolved | Partial |
+| Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c` | Transfer and shipyard journeys lack full runtime evidence; cargo mutations now serialize by ship row | `ship.sell` / `shipyard.sell` explicitly stubbed; settlement policy unresolved | Partial |
+| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Corporate authorization, partial fills, order location, inventory bounds and commit rollback corrected in source; database-backed matching still needs verification | No order escrow/reservation behavior is specified; Haggling and canonical trade-policy details remain unresolved | Partial |
 | Planets/colonies | Genesis, landing, transfers, worker assignment, production and citadels | `src/server_planets.c`, `src/db/repo/repo_planets.c`, `src/db/repo/repo_cron.c` | Production, treasury, citadel lifecycle and combat aftermath are incomplete/unverified | `planet.harvest` is stubbed; `planet.view` is marked NYI and its morale field has no schema source | Partial |
 | Combat/defences | Ship/planet combat, fighters, mines, shields, destruction and recovery | `src/server_combat.c`, `src/server_planets.c`, `src/db/repo/repo_combat.c` | Combat odds, destruction/podding and hazard aftermath need canonical policy/runtime proof | No general gap declared without resolving issue #396 / `V3-CAN-00` | Partial |
 | Corporations | Membership, roles, shared assets, treasury and governance | `src/server_corporation.c`, `src/db/repo/repo_corporation.c` | Membership events and advanced settlement require verification | Tax/dividend RPCs are explicitly not registered; stock subcommands have a stub fallback | Partial |
@@ -53,6 +53,22 @@ path exists; end-to-end behavior still needs focused protocol verification.
   planet capacity.
   Build and focused source-contract verification pass; database-backed protocol
   verification remains pending.
+- Corporate planet-market commands now revalidate current corporation
+  membership while holding the planet and membership rows in the transaction.
+  Buy-order placement repeats ownership, cash and capacity checks before
+  inserting the order. The current protocol/schema does not escrow funds, so
+  cancellation and expiry have no reserved balance to release.
+- Cargo writes lock the authoritative ship row before validating total holds
+  and mutating `ship_cargo`; two-ship transfers lock both hulls in ascending ID
+  order, revalidate active ship/ownership/location, and sync both legacy cargo
+  views in one transaction. Backend commit failure leaves rollback available.
+- Market matching retains unfinished fills as `open` (the persisted status
+  constraint has no `partial` value), restores in-memory fill counters on
+  rollback, handles commit failures, carries inventory location separately
+  from account actor, and bounds fills by destination capacity. Port/planet
+  stock changes serialize on entity rows; decrements are conditional to prevent
+  overselling. Build and focused contract tests pass; database-backed matching
+  verification remains outstanding.
 
 ## Implemented corrections in this pass
 

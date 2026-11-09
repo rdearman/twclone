@@ -23,19 +23,27 @@ class CargoRepositoryGuardTests(unittest.TestCase):
         get_body = self.source.split("repo_cargo_get (", 1)[1].split(
             "repo_cargo_add (", 1
         )[0]
-        add_body = self.source.split("repo_cargo_add (", 1)[1].split(
-            "repo_cargo_sync_legacy_columns (", 1
+        add_body = self.source.split("repo_cargo_add_unlocked (", 1)[1].split(
+            "repo_cargo_lock_ship_for_update (", 1
         )[0]
         self.assertIn("is_valid_commodity_code (commodity_code)", get_body)
         self.assertIn("is_valid_commodity_code (commodity_code)", add_body)
         self.assertIn("return cargo_rc;", add_body)
 
     def test_capacity_arithmetic_rejects_signed_overflow(self):
-        add_body = self.source.split("repo_cargo_add (", 1)[1].split(
-            "repo_cargo_sync_legacy_columns (", 1
+        add_body = self.source.split("repo_cargo_add_unlocked (", 1)[1].split(
+            "repo_cargo_lock_ship_for_update (", 1
         )[0]
         self.assertIn("__builtin_add_overflow (current_qty, delta, &new_qty)", add_body)
         self.assertIn("__builtin_add_overflow (total_other, new_qty, &total_after)", add_body)
+
+    def test_public_cargo_mutation_locks_ship_inside_transaction(self):
+        wrapper = self.source.split("repo_cargo_add (", 1)[1].split(
+            "\nint\nrepo_cargo_sync_legacy_columns", 1
+        )[0]
+        self.assertIn("db_tx_begin", wrapper)
+        self.assertIn("repo_cargo_add_unlocked", wrapper)
+        self.assertIn("db_tx_commit", wrapper)
 
     def test_ship_repository_checks_sql_build_and_whitelists_cargo_columns(self):
         self.assertNotRegex(self.ships, r"(?m)^\s*sql_build\s*\(")

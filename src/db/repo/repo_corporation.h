@@ -15,6 +15,9 @@ int repo_corp_add_shares(db_t *db, int player_id, int equity_id, int quantity_ch
 int repo_corp_deduct_shares(db_t *db, int player_id, int equity_id, int quantity_change, int64_t *rows_affected);
 int repo_corp_delete_zero_shares(db_t *db);
 int repo_corp_check_member_role(db_t *db, int corp_id, int player_id, char *role_buffer, size_t buffer_size);
+/* Revalidate and lock current membership; requires an active transaction. */
+int repo_corp_lock_member_role(db_t *db, int corp_id, int player_id,
+                               char *role_buffer, size_t buffer_size);
 int repo_corp_get_player_ship_type_name(db_t *db, int player_id, char *name_buffer, size_t buffer_size);
 int repo_corp_demote_ceo(db_t *db, int corp_id, int player_id);
 int repo_corp_insert_member_ignore(db_t *db, int corp_id, int player_id, const char *role);

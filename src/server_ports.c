@@ -1322,6 +1322,18 @@ h_market_move_port_stock (db_t *db,
     {
       return 0;
     }
+  if (quantity_delta == INT_MIN)
+    return ERR_INVALID_ARG;
+
+  /* Serialize all port capacity checks and additions on the port row. */
+  int lock_rc = db_ports_lock_for_update (db, port_id);
+  if (lock_rc != 0)
+    return lock_rc;
+
+  if (quantity_delta < 0)
+    return db_ports_decrement_stock (db, ENTITY_TYPE_PORT, port_id,
+                                     commodity_code, -quantity_delta,
+                                     (int64_t) time (NULL));
 
   /* 1. Get current quantity and port size (for max capacity) */
   int current_quantity = 0;

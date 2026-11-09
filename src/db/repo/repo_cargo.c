@@ -159,8 +159,9 @@ repo_cargo_get (db_t *db, int32_t ship_id, const char *commodity_code, int64_t *
   return 0;
 }
 
-int
-repo_cargo_add (db_t *db, int32_t ship_id, const char *commodity_code, int64_t delta, int64_t *new_quantity_out)
+static int
+repo_cargo_add_unlocked (db_t *db, int32_t ship_id, const char *commodity_code,
+                         int64_t delta, int64_t *new_quantity_out)
 {
   if (!db || ship_id <= 0 || !commodity_code)
     return ERR_DB_MISUSE;
@@ -383,6 +384,69 @@ repo_cargo_add (db_t *db, int32_t ship_id, const char *commodity_code, int64_t d
   if (new_quantity_out)
     *new_quantity_out = new_qty;
 
+  return 0;
+}
+
+static int
+repo_cargo_lock_ship_for_update (db_t *db, int32_t ship_id)
+{
+  const char *query = "SELECT ship_id FROM ships WHERE ship_id = {1} FOR UPDATE;";
+  char sql[256];
+  if (sql_build (db, query, sql, sizeof sql) != 0)
+    return ERR_DB_QUERY_FAILED;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1,
+                 &res, &err))
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      return err.code ? err.code : ERR_SHIP_NOT_FOUND;
+    }
+  int locked_id = db_res_col_i32 (res, 0, &err);
+  db_res_finalize (res);
+  return err.code ? err.code : (locked_id == ship_id ? 0 : ERR_SHIP_NOT_FOUND);
+}
+
+int
+repo_cargo_lock_ships_for_update (db_t *db, int32_t first_ship_id,
+                                  int32_t second_ship_id)
+{
+  if (!db || first_ship_id <= 0 || second_ship_id <= 0
+      || db->tx_nest_level <= 0)
+    return ERR_INVALID_ARG;
+  int32_t low = first_ship_id < second_ship_id ? first_ship_id : second_ship_id;
+  int32_t high = first_ship_id < second_ship_id ? second_ship_id : first_ship_id;
+  int rc = repo_cargo_lock_ship_for_update (db, low);
+  if (rc != 0)
+    return rc;
+  return low == high ? 0 : repo_cargo_lock_ship_for_update (db, high);
+}
+
+int
+repo_cargo_add (db_t *db, int32_t ship_id, const char *commodity_code,
+                int64_t delta, int64_t *new_quantity_out)
+{
+  if (!db || ship_id <= 0)
+    return ERR_DB_MISUSE;
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
+    return txerr.code ? txerr.code : ERR_DB_TX;
+  int rc = repo_cargo_lock_ship_for_update (db, ship_id);
+  if (rc == 0)
+    rc = repo_cargo_add_unlocked (db, ship_id, commodity_code, delta,
+                                  new_quantity_out);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      return rc;
+    }
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      return txerr.code ? txerr.code : ERR_DB_TX;
+    }
   return 0;
 }
 

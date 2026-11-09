@@ -244,6 +244,29 @@ int repo_ships_get_active_id(db_t *db, int32_t player_id, int32_t *ship_id_out)
     return err.code;
 }
 
+int repo_ships_get_active_id_for_update(db_t *db, int32_t player_id,
+                                        int32_t *ship_id_out)
+{
+    if (!db || player_id <= 0 || !ship_id_out || db->tx_nest_level <= 0)
+        return ERR_INVALID_ARG;
+    const char *query = "SELECT ship_id FROM players WHERE player_id = {1} FOR UPDATE;";
+    char sql[256];
+    if (sql_build(db, query, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    *ship_id_out = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    return err.code;
+}
+
 int repo_ships_get_towing_id(db_t *db, int32_t ship_id, int32_t *towing_id_out)
 {
     /* SQL_VERBATIM: Q3 */
