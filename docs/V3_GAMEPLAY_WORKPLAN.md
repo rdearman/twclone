@@ -5,10 +5,11 @@ statuses and per-item evidence are tracked in
 [`V3_GAMEPLAY_COMPLETION_TRACKER.md`](V3_GAMEPLAY_COMPLETION_TRACKER.md).
 Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
-## Active package — reconcile Exchange blocker; advance dormant unrest groundwork
+## Active package — finish independent NPC/planet implementation; preserve policy blockers
 
-- **Requirement IDs:** EXC-001–011 first; POP-010–012/SYS-003 next where
-  independently implementable.
+- **Requirement IDs:** Continue EXC-001–011 only if an existing funded Exchange
+  counterparty/account is found; otherwise advance independent POP, NPC, ship,
+  combat and banking requirements without inventing missing policy.
 - **Dependencies:** Exchange settlement requires an approved, bounded funding
   source and price/counterparty rule. Unrest effect scheduling requires the
   already-approved configurable parameters, but population-loss allocation
@@ -25,7 +26,14 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   `24_Planets_Outposts_Stations.md`, `29_SysOp_Commands.md`.
 - **Tests:** existing market/planet JSON suites and focused contract tests;
   runtime DB verification is unavailable for this execution.
-- **Current position:** source audit confirms immediate planet sales debit
+- **Current position:** persisted unrest configuration is implemented (`5f7bb98c`)
+  but there is no scheduler consumer; effects remain inactive because timing,
+  loss allocation and numeric values are not approved. Ferengi retaliation
+  source previously ignored bounty/intel persistence errors; combat now rolls
+  back on those failures and a focused source-contract test passes. Its bounty
+  amount remains hardcoded without a policy decision. Orion blockader source
+  exists, but eligible hostile-player targeting is not fully specified.
+  Source audit confirms immediate planet sales debit
   planet stock and credit the seller, with neither Exchange inventory receipt
   nor an identified funded Exchange buyer. The current book is bilateral.
   Creating a credit source or allowing goods to disappear would violate the
@@ -35,10 +43,12 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   remains incomplete pending a resale price contract. Universal destruction
   and funded-policy hull insurance are committed (`63169074`, `15821cd8`),
   build/source-tested but not database-runtime verified.
-- **Next action:** continue auditing the Exchange repositories for an existing
-  funded clearing account or bounded buyer. If none exists, preserve EXC-002,
-  EXC-003 and EXC-008/009 as policy-blocked and proceed with SysOp-configurable,
-  dormant daily unrest scheduling groundwork without selecting loss allocation.
+- **Next action:** trace Exchange account/market funding once more only through
+  local source (no DB); if no approved source exists, keep settlement blocked.
+  Then add focused source-level coverage of Orion blockader home-sector and
+  eligible-target behavior, and proceed to a separate independently specified
+  gameplay workflow. Do not add Exchange liquidity, unrest effect defaults,
+  bounty amounts, or alliance-target policy by inference.
 
 ## Subsequent packages
 

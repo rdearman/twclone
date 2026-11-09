@@ -73,6 +73,34 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertLess(settled_slave_guard, buy.index("h_market_move_port_stock"))
         self.assertIn("db_alignment_band_for_value", self.ports)
 
+    def test_ferengi_retaliation_persistence_failure_aborts_combat(self):
+        attack = self.combat.split("int\nhandle_ship_attack (", 1)[1].split(
+            "\nint\ncmd_combat_attack", 1
+        )[0]
+        retaliation = attack.index("ferengi_handle_hostile_attack")
+        rollback = attack.index("db_tx_rollback", retaliation)
+        response = attack.index("Could not persist Ferengi retaliation state", rollback)
+        damage = attack.index("apply_combat_damage", retaliation)
+        self.assertLess(rollback, response)
+        self.assertLess(response, damage)
+        handler = self.universe.split("ferengi_handle_hostile_attack", 1)[1].split(
+            "void\niss_init", 1
+        )[0]
+        self.assertIn("captain_rc < 0", handler)
+        self.assertIn('"ferengi_hunt"', handler)
+        self.assertIn("if (repo_npc_intel_upsert", handler)
+        self.assertIn('repo_npc_action_complete (db, action_key, "completed"', handler)
+
+    def test_orion_blockader_holds_home_and_uses_existing_defence_systems(self):
+        blockader = self.universe.split(
+            "if (personality == SHIP_PERSONALITY_BLOCKADER)", 1
+        )[1].split("if (personality == SHIP_PERSONALITY_OFFENSIVE", 1)[0]
+        self.assertIn("new_target = (ori_home_sector_id > 0)", blockader)
+        self.assertIn("npc_deploy_defensive_fighter", blockader)
+        self.assertIn("npc_deploy_defensive_mine", blockader)
+        self.assertIn("repo_universe_ship_is_orion_owned", blockader)
+        self.assertIn('"orion:blockade:attack:', blockader)
+
     def test_treasury_is_not_authorized_by_landing_alone(self):
         info = self.planets.split("cmd_planet_info", 1)[1].split(
             "cmd_planet_fighters_transfer", 1

@@ -3232,26 +3232,39 @@ ferengi_handle_hostile_attack (db_t *db, int attacker_player_id,
         (db, "npc", corporation_id, "player", attacker_player_id, 5000,
          "Wanted by the Ferengi Empire for attacking a Ferengi trader.") != 0)
     {
-      (void) repo_npc_action_complete (db, action_key, "failed",
-                                       "{\"reason\":\"bounty\"}");
+      if (repo_npc_action_complete (db, action_key, "failed",
+                                   "{\"reason\":\"bounty\"}") != 0)
+        LOGW ("ferengi retaliation: failed to mark bounty action failed");
       return -1;
     }
 
   int captain_trader = 0, captain_ship = 0;
-  if (repo_universe_get_ferengi_captain (db, &captain_trader,
-                                         &captain_ship) == 0)
+  int captain_rc = repo_universe_get_ferengi_captain
+    (db, &captain_trader, &captain_ship);
+  if (captain_rc < 0)
+    return -1;
+  if (captain_rc == 0)
     {
-      (void) repo_npc_intel_upsert (db, target_ship_id, attacker_player_id,
-                                    sector_id, "ferengi_escape", now_s + 1800);
+      if (repo_npc_intel_upsert (db, target_ship_id, attacker_player_id,
+                                 sector_id, "ferengi_escape",
+                                 now_s + 1800) != 0)
+        return -1;
       if (captain_ship != target_ship_id)
-        (void) repo_npc_intel_upsert (db, captain_ship, attacker_player_id,
-                                      sector_id, "ferengi_hunt", now_s + 86400);
+        if (repo_npc_intel_upsert (db, captain_ship, attacker_player_id,
+                                   sector_id, "ferengi_hunt",
+                                   now_s + 86400) != 0)
+          return -1;
     }
   else
-    (void) repo_npc_intel_upsert (db, target_ship_id, attacker_player_id,
-                                  sector_id, "ferengi_escape", now_s + 1800);
+    {
+      if (repo_npc_intel_upsert (db, target_ship_id, attacker_player_id,
+                                 sector_id, "ferengi_escape",
+                                 now_s + 1800) != 0)
+        return -1;
+    }
 
-  (void) repo_npc_action_complete (db, action_key, "completed", "{}");
+  if (repo_npc_action_complete (db, action_key, "completed", "{}") != 0)
+    return -1;
   return 1;
 }
 

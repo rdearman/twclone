@@ -1081,8 +1081,14 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
   int ferengi_rc = ferengi_handle_hostile_attack
     (db, ctx->player_id, target_id, ctx->sector_id, (int64_t) time (NULL));
   if (ferengi_rc < 0)
-    LOGW ("combat.attack: could not record Ferengi hostile-action state for ship %d",
-          target_id);
+    {
+      LOGE ("combat.attack: could not record Ferengi hostile-action state for ship %d",
+            target_id);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_EXEC_FAILED,
+                           "Could not persist Ferengi retaliation state; combat was not applied");
+      return 0;
+    }
 
   /* Outside FedSpace, attacks on explicitly registered Federation assets
    * create a persistent ISS incident.  Captain Z has already handled sectors
