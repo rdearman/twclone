@@ -26,6 +26,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.cron_repo = (ROOT / "src/db/repo/repo_cron.c").read_text(encoding="utf-8")
         cls.corp_repo = (ROOT / "src/db/repo/repo_corporation.c").read_text(encoding="utf-8")
         cls.planet_repo = (ROOT / "src/db/repo/repo_planets.c").read_text(encoding="utf-8")
+        cls.ports = (ROOT / "src/server_ports.c").read_text(encoding="utf-8")
         cls.cargo_repo = (ROOT / "src/db/repo/repo_cargo.c").read_text(encoding="utf-8")
         cls.citadel_repo = (ROOT / "src/db/repo/repo_citadel.c").read_text(encoding="utf-8")
         cls.protocol = (ROOT / "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md").read_text(
@@ -55,6 +56,18 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("You do not control this planet", handler)
         self.assertIn("repo_corp_check_member_role", handler)
         self.assertIn("revalidates ownership, landing, available", handler)
+
+    def test_slave_purchase_requires_evil_alignment_independent_of_neutral_policy(self):
+        buy = self.ports.split("cmd_trade_buy", 1)[1].split(
+            "cmd_", 1
+        )[0]
+        self.assertIn('strcasecmp (commodity, "SLV") == 0', buy)
+        self.assertIn("h_player_is_evil_aligned (db, ctx->player_id)", buy)
+        self.assertLess(
+            buy.index("h_player_is_evil_aligned"),
+            buy.index("h_can_trade_commodity"),
+        )
+        self.assertIn("db_alignment_band_for_value", self.ports)
 
     def test_treasury_is_not_authorized_by_landing_alone(self):
         info = self.planets.split("cmd_planet_info", 1)[1].split(

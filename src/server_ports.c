@@ -1079,6 +1079,23 @@ h_is_illegal_commodity (db_t *db, const char *commodity_code)
   return illegal;
 }
 
+/* Slave acquisition is narrower than generic illegal trading: neutral players
+ * may be allowed other illegal trades by configuration, but only evil players
+ * may acquire slaves under POP-02/POP-003. Fail closed if alignment cannot be
+ * authoritatively resolved. */
+static bool
+h_player_is_evil_aligned (db_t *db, int player_id)
+{
+  int alignment = 0;
+  int is_evil = 0;
+  if (!db || player_id <= 0
+      || db_player_get_alignment (db, player_id, &alignment) != 0
+      || db_alignment_band_for_value (db, alignment, NULL, NULL, NULL,
+                                      NULL, &is_evil, NULL, NULL) != 0)
+    return false;
+  return is_evil != 0;
+}
+
 
 static bool
 h_can_trade_commodity (db_t *db,
@@ -4243,6 +4260,18 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
 				       REF_PORT_OUT_OF_STOCK,
 				       "Port does not sell this commodity.",
 				       NULL);
+	  goto cleanup;
+	}
+
+      /* Neutral illegal-trade configuration must never grant slave purchase
+       * rights. Slave acquisition is explicitly evil-only; ordinary illegal
+       * commodities continue through the existing generic policy below. */
+      if (strcasecmp (commodity, "SLV") == 0
+          && !h_player_is_evil_aligned (db, ctx->player_id))
+	{
+	  send_response_refused_steal (ctx, root, ERR_ALIGNMENT_RESTRICTED,
+	                               "Only evil-aligned players may acquire slaves.",
+	                               NULL);
 	  goto cleanup;
 	}
 
