@@ -49,6 +49,7 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
     {"planet_treasury_interest_rate_bps", CFG_INT, "Planet treasury interest (basis points)", CFG_OFF(planet_treasury_interest_rate_bps)},
     {"bank_alert_threshold_player", CFG_INT64, "Player bank alert threshold", CFG_OFF(bank_alert_threshold_player)},
     {"bank_alert_threshold_corp", CFG_INT64, "Corp bank alert threshold", CFG_OFF(bank_alert_threshold_corp)},
+    {"planet_market.buy_order_expiry_seconds", CFG_INT, "Planet buy-order lifetime in seconds (60-604800)", CFG_OFF(planet_market_buy_order_expiry_seconds)},
 
     {"shipyard_enabled", CFG_INT, "Enable shipyard features", CFG_OFF(shipyard_enabled)},
     {"shipyard_trade_in_factor_bp", CFG_INT, "Trade-in value factor (bp)", CFG_OFF(shipyard_trade_in_factor_bp)},
@@ -203,7 +204,18 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
         return 0;
     }
 
+    if (strcmp(key, "planet_market.buy_order_expiry_seconds") == 0) {
+        char *end = NULL;
+        long expiry = strtol(val_str, &end, 10);
+        if (end == val_str || *end != '\0' || expiry < 60 || expiry > 604800) {
+            send_response_refused(ctx, root, 1407,
+                                  "Refused: buy-order expiry must be 60-604800 seconds", NULL);
+            return 0;
+        }
+    }
+
     // Capture old value for audit
+    int old_planet_market_expiry = g_cfg.planet_market_buy_order_expiry_seconds;
     char old_val_buf[128];
     json_t *j_old = get_config_value_json(def);
     char *j_old_dump = json_dumps(j_old, JSON_ENCODE_ANY);
@@ -236,6 +248,8 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
     // Persist to DB
     db_t *db = game_db_get_handle();
     if (repo_config_set_value(db, key, val_str) != 0) {
+        if (strcmp(key, "planet_market.buy_order_expiry_seconds") == 0)
+            g_cfg.planet_market_buy_order_expiry_seconds = old_planet_market_expiry;
         send_response_error(ctx, root, 1503, "Database Error: could not save config");
         return 0;
     }

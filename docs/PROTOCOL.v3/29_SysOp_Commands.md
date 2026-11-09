@@ -18,7 +18,7 @@ Allows tuning of specific server parameters without a restart.
 
 ### Allowed Keys (v1)
 *   **Game Rules**: `turnsperday`, `neutral_band`, `illegal_allowed_neutral`, `illegal_min_experience`, `max_cloak_duration`, `limpet_ttl_days`
-*   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`
+*   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`, `planet_market.buy_order_expiry_seconds`
 *   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
 
 ### `sysop.config.list`
@@ -33,7 +33,8 @@ List all allowed config keys and their current values.
   "data": {
     "items": [
       { "key": "turnsperday", "value": "1000", "type": "int", "desc": "Turns allocated per day" },
-      { "key": "shipyard_tax_bp", "value": "500", "type": "int", "desc": "Shipyard tax in basis points" }
+      { "key": "shipyard_tax_bp", "value": "500", "type": "int", "desc": "Shipyard tax in basis points" },
+      { "key": "planet_market.buy_order_expiry_seconds", "value": "86400", "type": "int", "desc": "Planet buy-order lifetime in seconds (60-604800)" }
     ]
   }
 }
@@ -75,6 +76,11 @@ Update a config value.
 **Errors**:
 *   `1407 Refused`: Key not allowed, type mismatch, or bounds violation.
 *   `1302 Invalid Argument`: Missing confirmation.
+
+`planet_market.buy_order_expiry_seconds` is an integer from 60 through 604800
+inclusive. Its default is 86400 seconds when unset. Changing it affects newly
+placed planet buy orders only; orders already open retain their persisted
+`expires_at` timestamp.
 
 ### `sysop.config.history`
 View audit history for a key.

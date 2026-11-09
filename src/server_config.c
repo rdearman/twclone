@@ -84,6 +84,7 @@ config_set_defaults (void)
   g_cfg.shipyard_require_shields_fit = 1;
   g_cfg.shipyard_require_hardware_compat = 1;
   g_cfg.shipyard_tax_bp = 1000;
+  g_cfg.planet_market_buy_order_expiry_seconds = 86400;
   g_cfg.illegal_allowed_neutral = 1;
   g_cfg.illegal_min_experience = 400;
   /* --- Internal / Other defaults --- */
@@ -602,6 +603,15 @@ apply_db (db_t *db)
 	  else if (strcmp (key, "shipyard_tax_bp") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.shipyard_tax_bp);
+	    }
+	  else if (strcmp (key, "planet_market.buy_order_expiry_seconds") == 0)
+	    {
+	      int expiry = 86400;
+	      cfg_parse_int (val, type, &expiry);
+	      if (expiry >= 60 && expiry <= 604800)
+	        g_cfg.planet_market_buy_order_expiry_seconds = expiry;
+	      else
+	        LOGW ("[config] Invalid planet market buy order expiry; using 86400 seconds.");
 	    }
 	  else if (strcmp (key, "illegal_allowed_neutral") == 0)
 	    {

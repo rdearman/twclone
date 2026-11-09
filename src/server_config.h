@@ -63,6 +63,7 @@ extern "C"
     int shipyard_require_shields_fit;
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
+    int planet_market_buy_order_expiry_seconds;
     int illegal_min_experience;
     /* Phase 4: Ship Types Configuration */
     char starter_shiptype_name[128];
@@ -217,6 +218,7 @@ extern "C"
     int shipyard_require_shields_fit;
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
+    int planet_market_buy_order_expiry_seconds;
     /* Misc */
     int illegal_allowed_neutral;
     int illegal_min_experience;

@@ -42,6 +42,17 @@ int db_insert_commodity_order (db_t *db,
 int db_update_commodity_order (db_t *db, int order_id, int new_quantity,     // Total quantity of the order (can be less than original if partially filled)
                                int new_filled_quantity,
                                const char *new_status);
+int db_update_commodity_order_state(db_t *db, int order_id,
+                                    int new_quantity,
+                                    int new_filled_quantity,
+                                    const char *new_status,
+                                    const char *cancellation_reason);
+int db_market_lock_planet_buy_order(db_t *db, int order_id,
+                                    int *player_id, int *planet_id,
+                                    int *quantity, int *filled_quantity,
+                                    char status_out[16]);
+int db_market_cancel_open_order(db_t *db, int order_id,
+                                const char *cancellation_reason);
 
 // Helper to cancel open commodity orders for a given port and commodity on a specific side.
 // Returns 0 on success.
@@ -66,6 +77,7 @@ int db_cancel_commodity_orders_for_actor_and_commodity (db_t *db,
 commodity_order_t *db_load_open_orders_for_commodity (db_t *db,
                                                       int commodity_id,
                                                       const char *side,
+                                                      int64_t now_s,
                                                       int *count);
 
 // Helper to get a specific open order for a port.

@@ -1802,7 +1802,7 @@ db_cron_expire_market_orders (db_t *db, int64_t now_s)
 
   char sql[320];
 
-  if (sql_build(db, "UPDATE commodity_orders SET status='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at < {1};", sql, sizeof(sql)) != 0) return -1;
+  if (sql_build(db, "UPDATE commodity_orders SET status='expired', cancellation_reason='expired' WHERE status='open' AND expires_at IS NOT NULL AND expires_at <= {1};", sql, sizeof(sql)) != 0) return -1;
 
   if (!db_exec (db, sql, (db_bind_t[]){ db_bind_timestamp_text (now_s) }, 1, &err)) return -1;
 

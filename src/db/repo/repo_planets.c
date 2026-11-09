@@ -905,17 +905,19 @@ int db_planets_destroy(db_t *db, int player_id, int planet_id) {
     return 0;
 }
 
-int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int commodity_id, int qty, int price, int64_t *order_id) {
+int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id,
+                                int commodity_id, int qty, int price,
+                                int64_t expires_at, int64_t *order_id) {
     db_error_t err;
     int64_t now = (int64_t)time(NULL);
     /* SQL_VERBATIM: Q42 */
-    const char *q42 = "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity) VALUES ({1}, {2}, 'planet', {3}, {4}, 'buy', {5}, {6}, 'open', {7}, {8}, 0)";
+    const char *q42 = "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, price, status, ts, expires_at, filled_quantity, cancellation_reason) VALUES ({1}, {2}, 'planet', {3}, {4}, 'buy', {5}, {6}, 'open', {7}, {8}, 0, NULL)";
     char sql[1024]; sql_build(db, q42, sql, sizeof(sql));
     db_bind_t params[] = {
         db_bind_text("player"), db_bind_i64(player_id),
         db_bind_i64(planet_id), db_bind_i64(commodity_id),
         db_bind_i64(qty), db_bind_i64(price),
-        db_bind_timestamp_text(now), db_bind_null()
+        db_bind_timestamp_text(now), db_bind_timestamp_text(expires_at)
     };
     if (db_exec_insert_id(db, sql, params, 8, "commodity_orders_id", order_id, &err)) return 0;
     return -1;

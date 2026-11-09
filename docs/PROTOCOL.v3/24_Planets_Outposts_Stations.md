@@ -284,7 +284,7 @@ Sell surplus commodities from a player-owned planet to the global market. The pl
 ```
 
 ### `planet.market.buy_order`
-Place a buy order for a commodity on behalf of a player-owned planet. The player must have sufficient credits to cover the maximum potential cost.
+Place an unreserved, best-effort buy order for a commodity on behalf of a player-owned planet. Placement does not debit or reserve credits, nor reserve planet storage. The player need not have enough current credits or free storage for the entire order when placing it. The commodity and order parameters must be valid, and `quantity_total` must not exceed the configured total storage capacity for that commodity on the planet.
 
 **Request:**
 ```json
@@ -308,7 +308,75 @@ Place a buy order for a commodity on behalf of a player-owned planet. The player
     "planet_id": 123,
     "commodity": "EQU",
     "quantity_total": 500,
-    "max_price": 150
+    "filled_quantity": 0,
+    "remaining_quantity": 500,
+    "max_price": 150,
+    "status": "open",
+    "expires_at": 1794230400
   }
 }
 ```
+
+`max_price` is the buyer's per-unit limit. The market matcher may fill the
+order only at an eligible execution price no greater than this limit. Open
+orders do not escrow funds or reserve capacity. Each match must revalidate the
+buyer's then-current available credits and the destination planet's then-current
+free capacity inside the settlement transaction, along with seller stock and
+both orders' remaining quantities. The fill quantity is bounded by every one
+of those limits; a smaller executable quantity is a valid partial fill.
+
+After a partial fill, the order remains open with updated `filled_quantity`
+and `remaining_quantity` while it remains executable and has not expired. If a
+matching attempt cannot fill even one unit because the buyer cannot afford one
+unit at the execution price or the planet has no free capacity, the matcher
+cancels the unfilled remainder and records the cancellation reason. It must not
+leave an order open that cannot execute under the resources available at that
+match. All inventory, credit, order-fill and cancellation changes are
+transactional; a failed settlement must not report or persist a partial state.
+Cancellation reasons are `insufficient_credits`, `no_capacity`,
+`player_requested`, and `expired`.
+
+The order expiry is configured by the integer server setting
+`planet_market.buy_order_expiry_seconds`. If unset or invalid, the default is
+`86400` seconds (24 hours); valid configured values are `60` through `604800`
+seconds (7 days). `expires_at` is the UTC Unix timestamp calculated when the
+order is created. Matching must ignore expired orders, and the market
+maintenance process marks their unfilled remainder `expired` without moving
+credits or inventory. Expiry is evaluated from the persisted timestamp, so it
+remains correct across server restarts.
+
+### `planet.market.buy_order.cancel`
+Cancel an open planet buy order explicitly. Only the player who placed the
+order may cancel it, and the player must still be authorized to control the
+destination planet. Cancellation affects only the unfilled remainder; already
+settled fills are not reversed. No funds or capacity are released because the
+order reserves neither.
+
+**Request:**
+```json
+{
+  "command": "planet.market.buy_order.cancel",
+  "data": { "order_id": 4567 }
+}
+```
+
+**Response:**
+```json
+{
+  "type": "planet.market.buy_order.cancel",
+  "data": {
+    "order_id": 4567,
+    "status": "cancelled",
+    "filled_quantity": 125,
+    "remaining_quantity": 375,
+    "cancellation_reason": "player_requested"
+  }
+}
+```
+
+Only an `open` order can transition to `cancelled` through this command. A
+filled, expired, or already-cancelled order is not changed and returns the
+standard protocol error for an invalid state transition. Missing orders,
+unauthorized players, and players who no longer control the planet return the
+standard not-found or permission error without changing order state. The
+cancel transition and its audit state must be persisted atomically.

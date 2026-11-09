@@ -908,7 +908,8 @@ CREATE TABLE commodity_orders (
     price integer NOT NULL CHECK (price >= 0),
     status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled', 'expired')),
     ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at timestamptz
+    expires_at timestamptz,
+    cancellation_reason text
 );
 
 CREATE TABLE commodity_trades (

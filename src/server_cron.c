@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <math.h>		// For MAX, MIN, etc.
+#include <limits.h>
 
 // local includes
 #include "server_cron.h"
@@ -31,6 +32,27 @@
 #include "db/repo/repo_ports.h"
 #include "db/repo/repo_planets.h"
 #include "db/repo/repo_market_decay.h"	// Phase 10: Market decay & stabilisation
+#include "db/repo/repo_bank.h"
+
+static int
+market_lock_inventory_location (db_t *db, const char *location_type,
+                                int location_id)
+{
+  if (!db || !location_type || location_id <= 0)
+    return ERR_INVALID_ARG;
+  if (strcmp (location_type, "port") == 0)
+    return db_ports_lock_for_update (db, location_id);
+  if (strcmp (location_type, "planet") == 0)
+    {
+      int owner_id = 0;
+      char *owner_type = NULL;
+      int rc = db_planets_get_owner_info_for_update (db, location_id,
+                                                      &owner_id, &owner_type);
+      free (owner_type);
+      return rc;
+    }
+  return ERR_INVALID_ARG;
+}
 
 int iss_init_once (void);
 #define INITIAL_QUEUE_CAPACITY 64
@@ -1482,12 +1504,14 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
     commodity_order_t *buy_orders = db_load_open_orders_for_commodity (db,
 								       commodity_id,
 								       "buy",
+								       now_s,
 								       &buy_count);
 
     int sell_count = 0;
     commodity_order_t *sell_orders = db_load_open_orders_for_commodity (db,
 									commodity_id,
 									"sell",
+									now_s,
 									&sell_count);
 
     // 5. Matching Loop
@@ -1527,36 +1551,9 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		trade_qty = seller_stock;
 	      }
 	    bool buyer_capacity_full = false;
-	    if (trade_qty > 0 && strcmp (buy->location_type, "planet") == 0)
-	      {
-		int current = 0, capacity = 0;
-		if (db_planets_get_market_move_info (db, buy->location_id,
-						     commodity_code, &current,
-						     &capacity) != 0
-			    || current >= capacity)
-		  {
-		    trade_qty = 0;
-		    buyer_capacity_full = true;
-		  }
-		else if (trade_qty > capacity - current)
-		  trade_qty = capacity - current;
-	      }
-	    else if (trade_qty > 0 && strcmp (buy->location_type, "port") == 0)
-	      {
-		int current = 0, capacity = 0;
-		if (db_ports_get_market_move_info (db, buy->location_id,
-						   commodity_code, &current,
-						   &capacity) != 0
-		    || current >= capacity)
-		  {
-		    trade_qty = 0;
-		    buyer_capacity_full = true;
-		  }
-		else if (trade_qty > capacity - current)
-		  trade_qty = capacity - current;
-	      }
-	    /* Note: max_affordable check removed; balance check is atomic in DB */
-
+	    bool buyer_capacity_limited = false;
+	    bool buyer_funds_limited = false;
+	    const char *buyer_cancel_reason = NULL;
 	    if (trade_qty > 0)
 	      {
 	int prior_buy_filled = buy->filled_quantity;
@@ -1574,6 +1571,105 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 
 		bool trade_ok = true;
 		int trade_price = sell->price;
+		if (market_lock_inventory_location (db, sell->location_type,
+		                                    sell->location_id) != 0
+		    || market_lock_inventory_location (db, buy->location_type,
+		                                       buy->location_id) != 0)
+		  trade_ok = false;
+		if (trade_ok && db_ports_get_stock_quantity (db, sell->location_type,
+		                                              sell->location_id,
+		                                              commodity_code,
+		                                              &seller_stock) != 0)
+		  trade_ok = false;
+		trade_qty = qty_buy_rem < qty_sell_rem ? qty_buy_rem : qty_sell_rem;
+		if (trade_ok && seller_stock < trade_qty)
+		  trade_qty = seller_stock;
+		if (trade_ok && strcmp (buy->location_type, "planet") == 0)
+		  {
+		    int current = 0, capacity = 0;
+		    if (db_planets_get_market_move_info (db, buy->location_id,
+		                                         commodity_code, &current,
+		                                         &capacity) != 0)
+		      trade_ok = false;
+		    else if (current >= capacity)
+		      {
+		        trade_qty = 0;
+		        buyer_capacity_full = true;
+		      }
+		    else if (trade_qty > capacity - current)
+		      {
+		        trade_qty = capacity - current;
+		        buyer_capacity_limited = true;
+		      }
+		  }
+		else if (trade_ok && strcmp (buy->location_type, "port") == 0)
+		  {
+		    int current = 0, capacity = 0;
+		    if (db_ports_get_market_move_info (db, buy->location_id,
+		                                      commodity_code, &current,
+		                                      &capacity) != 0)
+		      trade_ok = false;
+		    else if (current >= capacity)
+		      {
+		        trade_qty = 0;
+		        buyer_capacity_full = true;
+		      }
+		    else if (trade_qty > capacity - current)
+		      {
+		        trade_qty = capacity - current;
+		        buyer_capacity_limited = true;
+		      }
+		  }
+		int buyer_acct = 0;
+		long long buyer_balance = 0;
+		if (trade_ok && h_get_account_id_unlocked (db, buy->actor_type,
+		                                           buy->actor_id,
+		                                           &buyer_acct) != 0)
+		  trade_ok = false;
+		if (trade_ok && repo_bank_get_balance_by_account_id_for_update
+		    (db, buyer_acct, &buyer_balance) != 0)
+		  trade_ok = false;
+		if (trade_ok && trade_price > 0 && trade_qty > 0)
+		  {
+		    long long affordable = buyer_balance > 0
+		      ? buyer_balance / trade_price : 0;
+		    if (affordable < trade_qty)
+		      {
+		        trade_qty = affordable > INT_MAX ? INT_MAX : (int) affordable;
+		        buyer_funds_limited = true;
+		      }
+		  }
+		if (!trade_ok)
+		  {
+		    db_tx_rollback (db, &err);
+		    LOGE ("h_daily_market_settlement: failed to lock/revalidate match inputs");
+		    break;
+		  }
+		if (trade_qty <= 0)
+		  {
+		    buyer_cancel_reason = buyer_capacity_full ? "no_capacity"
+		      : (buyer_funds_limited ? "insufficient_credits" : NULL);
+		    if (buyer_cancel_reason)
+		      {
+		        if (db_market_cancel_open_order (db, buy->id,
+		                                          buyer_cancel_reason) != 0
+		            || !db_tx_commit (db, &err))
+		          {
+		            db_tx_rollback (db, &err);
+		            LOGE ("h_daily_market_settlement: unable to cancel unexecutable buy order %d",
+		                  buy->id);
+		            break;
+		          }
+		        snprintf (buy->status, sizeof buy->status, "cancelled");
+		        b_idx++;
+		      }
+		    else
+		      {
+		        db_tx_rollback (db, &err);
+		        s_idx++;
+		      }
+		    continue;
+		  }
 		long long total_cost = (long long) trade_qty * trade_price;
 
 		if (trade_ok && strcmp (sell->location_type, "port") == 0)
@@ -1612,11 +1708,6 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 
 		/* Lock and validate inventory before account rows. This matches the
 		 * player-facing market paths' entity -> cargo/account lock order. */
-		int buyer_acct = 0;
-		if (trade_ok && h_get_account_id_unlocked (db, buy->actor_type,
-							   buy->actor_id,
-							   &buyer_acct) != 0)
-		  trade_ok = false;
 		int seller_acct = 0;
 		if (trade_ok && h_get_account_id_unlocked (db, sell->actor_type,
 							   sell->actor_id,
@@ -1675,14 +1766,18 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		  {
 		    const char *b_status = (buy->filled_quantity >=
 					    buy->quantity) ? "filled" :
-		      "open";
+	              ((buyer_capacity_limited || buyer_funds_limited)
+	               ? "cancelled" : "open");
+	            const char *cancel_reason = buyer_capacity_limited
+	              ? "no_capacity"
+	              : (buyer_funds_limited ? "insufficient_credits" : NULL);
 
 
-		    if (db_update_commodity_order (db,
-						   buy->id,
-						   buy->quantity,
-						   buy->filled_quantity,
-						   b_status) != 0)
+		    if (db_update_commodity_order_state (db,
+						         buy->id,
+						         buy->quantity,
+						         buy->filled_quantity,
+						         b_status, cancel_reason) != 0)
 		      trade_ok = false;
 
 		    const char *s_status = (sell->filled_quantity >=
@@ -1727,9 +1822,19 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		    continue;
 		  }
 
-		if (buy->filled_quantity >= buy->quantity)
+		if (buy->filled_quantity >= buy->quantity
+	            || buyer_capacity_limited || buyer_funds_limited)
 		  {
+	            if (buy->filled_quantity < buy->quantity)
+	              {
+	                snprintf (buy->status, sizeof buy->status, "cancelled");
+	                b_idx++;
+	              }
+	            else
+	              {
+	                snprintf (buy->status, sizeof buy->status, "filled");
 		    b_idx++;
+	              }
 		  }
 		if (sell->filled_quantity >= sell->quantity ||
 		    seller_stock <= 0)
@@ -1737,15 +1842,11 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		    s_idx++;
 		  }
 	      }
-	    else
+	      else
 	      {
 		if (seller_stock <= 0)
 		  {
 		    s_idx++;
-		  }
-		else if (buyer_capacity_full)
-		  {
-		    b_idx++;
 		  }
 		else
 		  {

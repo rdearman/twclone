@@ -3056,11 +3056,10 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 	 "Insufficient inventory for immediate illegal purchase.", NULL);
       return 0;
     }
-  if (!illegal_commodity
-      && quantity_total > planet_capacity - capacity_stock)
+  if (!illegal_commodity && quantity_total > planet_capacity)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
-			   "The order exceeds planet storage capacity.");
+			   "The order exceeds total planet storage capacity.");
       return 0;
     }
 
@@ -3204,54 +3203,32 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  long long worst_case_cost = (long long) quantity_total * max_price;
-  long long player_cash = 0;
-
-
-  if (h_get_player_petty_cash (db, ctx->player_id, &player_cash) != 0)
-    {
-      send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR, "Failed to check credits.");
-      return 0;
-    }
-
-  if (player_cash < worst_case_cost)
-    {
-      send_response_refused_steal (ctx,
-				   root,
-				   REF_NO_WARP_LINK,
-				   "Insufficient credits for max cost.",
-				   NULL);
-      return 0;
-    }
-
   db_error_t txerr = {0};
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &txerr))
     {
       send_response_error (ctx, root, ERR_DB, "Database busy.");
       return 0;
-    }
+  }
   int order_rc = h_planet_market_lock_control (db, planet_id, ctx->player_id);
-  if (order_rc == 0 && h_get_player_petty_cash (db, ctx->player_id,
-                                                 &player_cash) != 0)
-    order_rc = ERR_DB_QUERY_FAILED;
-  if (order_rc == 0 && player_cash < worst_case_cost)
-    order_rc = ERR_DB_CONSTRAINT;
   if (order_rc == 0)
     {
       int fresh_stock = 0, fresh_capacity = 0;
       if (db_planets_get_market_move_info (db, planet_id, commodity_code,
                                            &fresh_stock, &fresh_capacity) != 0)
         order_rc = ERR_DB_NOT_FOUND;
-      else if (quantity_total > fresh_capacity - fresh_stock)
+      else if (quantity_total > fresh_capacity)
         order_rc = ERR_DB_CONSTRAINT;
+      (void) fresh_stock;
     }
+  int expiry_seconds = g_cfg.planet_market_buy_order_expiry_seconds;
+  if (expiry_seconds < 60 || expiry_seconds > 604800)
+    expiry_seconds = 86400;
+  int64_t expires_at = (int64_t) time (NULL) + expiry_seconds;
   int64_t order_id = 0;
   if (order_rc == 0)
     order_rc = db_planets_insert_buy_order
       (db, ctx->player_id, planet_id, commodity_id, quantity_total, max_price,
-       &order_id);
+	       expires_at, &order_id);
   if (order_rc != 0)
     {
 	  db_tx_rollback (db, NULL);
@@ -3260,9 +3237,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 	                                 "You do not control this planet.", NULL);
 	  else if (order_rc == ERR_DB_CONSTRAINT)
 	    send_response_refused_steal (ctx, root, REF_NO_WARP_LINK,
-	                                 player_cash < worst_case_cost
-	                                   ? "Insufficient credits for max cost."
-	                                   : "The order exceeds planet storage capacity.",
+	                                 "The order exceeds total planet storage capacity.",
 	                                 NULL);
 	  else
 	    send_response_error (ctx, root, ERR_SERVER_ERROR,
@@ -3284,9 +3259,124 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
   json_object_set_new (resp, "planet_id", json_integer (planet_id));
   json_object_set_new (resp, "commodity", json_string (commodity_code));
   json_object_set_new (resp, "quantity_total", json_integer (quantity_total));
+  json_object_set_new (resp, "filled_quantity", json_integer (0));
+  json_object_set_new (resp, "remaining_quantity", json_integer (quantity_total));
   json_object_set_new (resp, "max_price", json_integer (max_price));
+  json_object_set_new (resp, "status", json_string ("open"));
+  json_object_set_new (resp, "expires_at", json_integer (expires_at));
 
   send_response_ok_take (ctx, root, "planet.market.buy_order", &resp);
+  return 0;
+}
+
+int
+cmd_planet_market_buy_order_cancel (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable.");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *j_order_id = data ? json_object_get (data, "order_id") : NULL;
+  if (!json_is_integer (j_order_id) || json_integer_value (j_order_id) <= 0
+      || json_integer_value (j_order_id) > INT_MAX)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "A positive order_id is required.");
+      return 0;
+    }
+
+  int order_id = (int) json_integer_value (j_order_id);
+  int creator_id = 0, planet_id = 0, total = 0, filled = 0;
+  char status[16] = {0};
+  int rc = db_market_lock_planet_buy_order (db, order_id, &creator_id,
+                                             &planet_id, &total, &filled,
+                                             status);
+  if (rc != 0)
+    {
+      if (rc == ERR_DB_NOT_FOUND)
+        send_response_error (ctx, root, ERR_NOT_FOUND, "Buy order not found.");
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not read buy order.");
+      return 0;
+    }
+  if (creator_id != ctx->player_id)
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Only the player who placed the order may cancel it.",
+                                   NULL);
+      return 0;
+    }
+  if (strcmp (status, "open") != 0)
+    {
+      send_response_error (ctx, root, ERR_BAD_STATE,
+                           "Only an open buy order can be cancelled.");
+      return 0;
+    }
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &txerr))
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not begin buy-order cancellation.");
+      return 0;
+    }
+  /* Keep the global entity -> order lock order used by settlement. */
+  rc = h_planet_market_lock_control (db, planet_id, ctx->player_id);
+  int locked_creator = 0, locked_planet = 0, locked_total = 0;
+  int locked_filled = 0;
+  char locked_status[16] = {0};
+  if (rc == 0)
+    rc = db_market_lock_planet_buy_order (db, order_id, &locked_creator,
+                                           &locked_planet, &locked_total,
+                                           &locked_filled, locked_status);
+  if (rc == 0 && (locked_creator != ctx->player_id
+                  || locked_planet != planet_id
+                  || strcmp (locked_status, "open") != 0))
+    rc = ERR_BAD_STATE;
+  if (rc == 0)
+    rc = db_market_cancel_open_order (db, order_id, "player_requested");
+  if (rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      if (rc == ERR_PERMISSION_DENIED || rc == ERR_DB_NOT_FOUND)
+        send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                     "You no longer control this planet.", NULL);
+      else if (rc == ERR_BAD_STATE || rc == ERR_DB_CONSTRAINT)
+        send_response_error (ctx, root, ERR_BAD_STATE,
+                             "Buy order is no longer open.");
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not cancel buy order.");
+      return 0;
+    }
+  total = locked_total;
+  filled = locked_filled;
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not commit buy-order cancellation.");
+      return 0;
+    }
+
+  json_t *resp = json_object ();
+  json_object_set_new (resp, "order_id", json_integer (order_id));
+  json_object_set_new (resp, "status", json_string ("cancelled"));
+  json_object_set_new (resp, "filled_quantity", json_integer (filled));
+  json_object_set_new (resp, "remaining_quantity", json_integer (total - filled));
+  json_object_set_new (resp, "cancellation_reason",
+                       json_string ("player_requested"));
+  send_response_ok_take (ctx, root, "planet.market.buy_order.cancel", &resp);
   return 0;
 }
 

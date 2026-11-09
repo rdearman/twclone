@@ -1,0 +1,170 @@
+{
+  "name": "Planet buy-order best-effort matching lifecycle",
+  "description": "JSON protocol acceptance for unreserved placement, matching-time credit and capacity checks, partial fill, and durable cancellation.",
+  "tests": [
+    {
+      "name": "Setup: Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Setup: Planet market buyer",
+      "setup": "macro_auth_user",
+      "username": "planet_market_buyer_v3",
+      "password": "password"
+    },
+    {
+      "name": "Read current planet buy-order expiry configuration",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "planet_market.buy_order_expiry_seconds" },
+      "expect": { "status": "ok", "data": { "type": "int" } },
+      "save": { "original_market_expiry": "data.value" }
+    },
+    {
+      "name": "Set minimum valid buy-order expiry",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet_market.buy_order_expiry_seconds", "value": 60, "confirm": true, "note": "V3 market lifecycle acceptance" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject buy-order expiry below configured range",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet_market.buy_order_expiry_seconds", "value": 59, "confirm": true },
+      "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Reject buy-order expiry above configured range",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet_market.buy_order_expiry_seconds", "value": 604801, "confirm": true },
+      "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Set 24-hour expiry for matching scenario",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet_market.buy_order_expiry_seconds", "value": 86400, "confirm": true, "note": "V3 market lifecycle acceptance" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create buyer-owned planet",
+      "command": "planet.create",
+      "user": "planet_market_buyer_v3",
+      "data": { "sector_id": 11, "name": "Best Effort Market", "owner_entity_type": "player" },
+      "expect": { "status": "ok" },
+      "save": { "market_planet_id": "data.planet_id" }
+    },
+    {
+      "name": "Choose a real port for the sell-side fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT port_id FROM ports ORDER BY port_id LIMIT 1;" },
+      "save": { "market_seller_port_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Set buyer balance to zero before placing the unreserved order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 0 WHERE owner_type = 'player' AND owner_id = @{planet_market_buyer_v3_player_id} AND currency = 'CRD' AND is_active = TRUE;" }
+    },
+    {
+      "name": "Fill planet ORE storage before placing the unreserved order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) SELECT 'planet', @{market_planet_id}, 'ORE', max_capacity FROM planet_goods WHERE planet_id = @{market_planet_id} AND commodity = 'ORE' ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" }
+    },
+    {
+      "name": "Place best-effort order without credits or free storage",
+      "command": "planet.market.buy_order",
+      "user": "planet_market_buyer_v3",
+      "data": { "planet_id": "@{market_planet_id}", "commodity": "ORE", "quantity_total": 10, "max_price": 100 },
+      "expect": { "status": "ok", "type": "planet.market.buy_order", "data": { "filled_quantity": 0, "remaining_quantity": 10, "status": "open" } },
+      "save": { "market_buy_order_id": "data.order_id" }
+    },
+    {
+      "name": "Verify order expiry is persisted using configured lifetime",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT EXTRACT(EPOCH FROM (expires_at - ts))::integer FROM commodity_orders WHERE commodity_orders_id = @{market_buy_order_id};" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 86400 }
+      ]
+    },
+    {
+      "name": "Restore prior buy-order expiry configuration",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet_market.buy_order_expiry_seconds", "value": "@{original_market_expiry}", "confirm": true, "note": "Restore prior setting after acceptance test" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Provide funds and storage only after order placement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 250 WHERE owner_type = 'player' AND owner_id = @{planet_market_buyer_v3_player_id} AND currency = 'CRD' AND is_active = TRUE;" }
+    },
+    {
+      "name": "Free the destination planet storage before matching",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE entity_stock SET quantity = 0 WHERE entity_type = 'planet' AND entity_id = @{market_planet_id} AND commodity_code = 'ORE';" }
+    },
+    {
+      "name": "Seed ten units of seller stock and its account",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', @{market_seller_port_id}, 'ORE', 10) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 10;" }
+    },
+    {
+      "name": "Ensure seller settlement account starts at zero",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('port', @{market_seller_port_id}, 'CRD', 0, TRUE) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 0, is_active = TRUE;" }
+    },
+    {
+      "name": "Create an eligible sell order",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, status, ts, expires_at, cancellation_reason) SELECT 'port', @{market_seller_port_id}, 'port', @{market_seller_port_id}, commodities_id, 'sell', 10, 0, 100, 'open', CURRENT_TIMESTAMP, NULL, NULL FROM commodities WHERE code = 'ORE' RETURNING commodity_orders_id;" },
+      "save": { "market_sell_order_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Make daily market settlement due",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_market_settlement';" }
+    },
+    {
+      "name": "Wait for best-effort market settlement",
+      "command": "delay",
+      "data": { "seconds": 65 }
+    },
+    {
+      "name": "Verify two-unit partial fill and unexecutable remainder cancellation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT status, filled_quantity, quantity - filled_quantity, cancellation_reason FROM commodity_orders WHERE commodity_orders_id = @{market_buy_order_id};" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "cancelled" },
+        { "path": "data.rows.0.1", "op": "==", "value": 2 },
+        { "path": "data.rows.0.2", "op": "==", "value": 8 },
+        { "path": "data.rows.0.3", "op": "==", "value": "insufficient_credits" }
+      ]
+    },
+    {
+      "name": "Verify authoritative stock, credits, and trade settlement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=@{market_planet_id} AND commodity_code='ORE'), (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{planet_market_buyer_v3_player_id} AND currency='CRD' AND is_active=TRUE), (SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=@{market_seller_port_id} AND commodity_code='ORE'), (SELECT balance FROM bank_accounts WHERE owner_type='port' AND owner_id=@{market_seller_port_id} AND currency='CRD' AND is_active=TRUE), (SELECT quantity FROM commodity_trades WHERE buyer_actor_type='player' AND buyer_actor_id=@{planet_market_buyer_v3_player_id} AND buyer_location_type='planet' AND buyer_location_id=@{market_planet_id} AND seller_location_type='port' AND seller_location_id=@{market_seller_port_id} ORDER BY id DESC LIMIT 1);" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 2 },
+        { "path": "data.rows.0.1", "op": "==", "value": 50 },
+        { "path": "data.rows.0.2", "op": "==", "value": 8 },
+        { "path": "data.rows.0.3", "op": "==", "value": 200 },
+        { "path": "data.rows.0.4", "op": "==", "value": 2 }
+      ]
+    }
+  ]
+}

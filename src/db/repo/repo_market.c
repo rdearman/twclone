@@ -2,6 +2,7 @@
 #include "db_int.h"
 #include <string.h>             // For strncpy, strcmp
 #include <stdlib.h>             // For malloc, free
+#include <stdio.h>
 // local includes
 #include "repo_market.h"
 #include "db/repo/repo_database.h"           // For db_get_handle, db_begin, db_commit, db_rollback
@@ -81,20 +82,33 @@ db_update_commodity_order (db_t *db,
                            int new_filled_quantity,
                            const char *new_status)
 {
+  return db_update_commodity_order_state (db, order_id, new_quantity,
+                                          new_filled_quantity, new_status,
+                                          NULL);
+}
+
+int
+db_update_commodity_order_state (db_t *db, int order_id, int new_quantity,
+                                 int new_filled_quantity,
+                                 const char *new_status,
+                                 const char *cancellation_reason)
+{
   db_error_t err;
   db_error_clear (&err);
-  db_bind_t params[4];
+  db_bind_t params[5];
 
 
   params[0] = db_bind_i64 (order_id);
   params[1] = db_bind_i64 (new_quantity);
   params[2] = db_bind_i64 (new_filled_quantity);
   params[3] = db_bind_text (new_status);
+  params[4] = cancellation_reason ? db_bind_text(cancellation_reason)
+                                  : db_bind_null();
 
 
  const char *sql_tmpl =
   "UPDATE commodity_orders "
-  "SET quantity = {2}, filled_quantity = {3}, status = {4} "
+  "SET quantity = {2}, filled_quantity = {3}, status = {4}, cancellation_reason = {5} "
   "WHERE commodity_orders_id = {1};";
 
  char sql[256];
@@ -103,7 +117,7 @@ db_update_commodity_order (db_t *db,
    return ERR_DB;
 
  
-  if (!db_exec (db, sql, params, 4, &err))
+ if (!db_exec (db, sql, params, 5, &err))
     {
       LOGE ("db_update_commodity_order: update failed: %s (code=%d backend=%d)",
             err.message, err.code, err.backend_code);
@@ -111,6 +125,59 @@ db_update_commodity_order (db_t *db,
     }
 
   return 0;
+}
+
+int
+db_market_lock_planet_buy_order (db_t *db, int order_id, int *player_id,
+                                 int *planet_id, int *quantity,
+                                 int *filled_quantity, char status_out[16])
+{
+  if (!db || order_id <= 0 || !player_id || !planet_id || !quantity
+      || !filled_quantity || !status_out)
+    return ERR_INVALID_ARG;
+  db_res_t *res = NULL;
+  db_error_t err;
+  char sql[512];
+  if (sql_build(db,
+      "SELECT actor_id, location_id, quantity, filled_quantity, status "
+      "FROM commodity_orders WHERE commodity_orders_id={1} "
+      "AND actor_type='player' AND location_type='planet' AND side='buy' "
+      "FOR UPDATE", sql, sizeof(sql)) != 0)
+    return ERR_DB_INTERNAL;
+  if (!db_query(db, sql, (db_bind_t[]){db_bind_i32(order_id)}, 1, &res, &err))
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+  if (!db_res_step(res, &err)) {
+    db_res_finalize(res);
+    return ERR_DB_NOT_FOUND;
+  }
+  *player_id = db_res_col_i32(res, 0, &err);
+  *planet_id = db_res_col_i32(res, 1, &err);
+  *quantity = db_res_col_i32(res, 2, &err);
+  *filled_quantity = db_res_col_i32(res, 3, &err);
+  const char *status = db_res_col_text(res, 4, &err);
+  snprintf(status_out, 16, "%s", status ? status : "");
+  db_res_finalize(res);
+  return err.code ? err.code : 0;
+}
+
+int
+db_market_cancel_open_order (db_t *db, int order_id,
+                             const char *cancellation_reason)
+{
+  if (!db || order_id <= 0 || !cancellation_reason)
+    return ERR_INVALID_ARG;
+  char sql[512];
+  db_error_t err;
+  int64_t affected = 0;
+  if (sql_build(db,
+      "UPDATE commodity_orders SET status='cancelled', cancellation_reason={2} "
+      "WHERE commodity_orders_id={1} AND status='open'", sql, sizeof(sql)) != 0)
+    return ERR_DB_INTERNAL;
+  if (!db_exec_rows_affected(db, sql,
+      (db_bind_t[]){db_bind_i32(order_id), db_bind_text(cancellation_reason)},
+      2, &affected, &err))
+    return err.code ? err.code : ERR_DB_EXEC_FAILED;
+  return affected == 1 ? 0 : ERR_DB_CONSTRAINT;
 }
 
 
@@ -314,6 +381,7 @@ commodity_order_t *
 db_load_open_orders_for_commodity (db_t *db,
                                    int commodity_id,
                                    const char *side,
+                                   int64_t now_s,
                                    int *count)
 {
   if (!count || !side)
@@ -327,12 +395,13 @@ db_load_open_orders_for_commodity (db_t *db,
 
   db_error_clear (&err);
 
-  /* Only two binds: $1=commodity_id, $2=side (or swap) */
-  db_bind_t params[2];
+  /* $1=commodity_id, $2=side, $3=matching timestamp */
+  db_bind_t params[3];
 
 
   params[0] = db_bind_i64 (commodity_id);
   params[1] = db_bind_text (side);
+  params[2] = db_bind_timestamp_text (now_s);
 
 
 
@@ -345,6 +414,7 @@ db_load_open_orders_for_commodity (db_t *db,
 	"ts, expires_at, filled_quantity "
 	"FROM commodity_orders "
 	"WHERE commodity_id = {1} AND side = {2} AND status = 'open' "
+	"AND (expires_at IS NULL OR expires_at > {3}) "
 	"ORDER BY price DESC, ts ASC;";
     }
   else if (strcmp(side, "sell") == 0)
@@ -354,6 +424,7 @@ db_load_open_orders_for_commodity (db_t *db,
 	"ts, expires_at, filled_quantity "
 	"FROM commodity_orders "
 	"WHERE commodity_id = {1} AND side = {2} AND status = 'open' "
+	"AND (expires_at IS NULL OR expires_at > {3}) "
 	"ORDER BY price ASC, ts ASC;";
     }
   else
@@ -373,7 +444,7 @@ db_load_open_orders_for_commodity (db_t *db,
   db_res_t *res = NULL;
 
 
-  if (!db_query (db, sql, params, 2, &res, &err))
+  if (!db_query (db, sql, params, 3, &res, &err))
     {
       LOGE (
         "db_load_open_orders_for_commodity: query failed: %s (code=%d backend=%d)",

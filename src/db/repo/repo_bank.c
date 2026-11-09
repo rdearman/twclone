@@ -136,6 +136,27 @@ int repo_bank_get_balance_by_account_id(db_t *db, int account_id, long long *bal
     return ERR_DB_NOT_FOUND;
 }
 
+int repo_bank_get_balance_by_account_id_for_update(db_t *db, int account_id,
+                                                   long long *balance_out) {
+    if (!db || account_id <= 0 || !balance_out) return ERR_INVALID_ARG;
+    db_res_t *res = NULL;
+    db_error_t err;
+    const char *id_column = sql_bank_account_id_column(db);
+    if (!id_column) return ERR_NOT_IMPLEMENTED;
+    char query[320];
+    snprintf(query, sizeof(query), "SELECT balance FROM bank_accounts WHERE %s={1} FOR UPDATE", id_column);
+    char sql[384];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0) return ERR_DB_INTERNAL;
+    if (db_query(db, sql, (db_bind_t[]){db_bind_i32(account_id)}, 1, &res, &err)
+        && db_res_step(res, &err)) {
+        *balance_out = db_res_col_i64(res, 0, &err);
+        db_res_finalize(res);
+        return err.code ? err.code : 0;
+    }
+    if (res) db_res_finalize(res);
+    return err.code ? err.code : ERR_DB_NOT_FOUND;
+}
+
 int repo_bank_create_system_notice(db_t *db, const char *now_ts, int player_id, const char *msg) {
     db_error_t err;
     /* SQL_VERBATIM: Q6 */

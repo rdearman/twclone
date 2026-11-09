@@ -338,7 +338,9 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("bool illegal_commodity = h_is_illegal_commodity", handler)
         self.assertIn("illegal_commodity && capacity_stock < quantity_total", handler)
         self.assertIn("!illegal_commodity", handler)
-        self.assertIn("quantity_total > planet_capacity - capacity_stock", handler)
+        self.assertIn("quantity_total > planet_capacity)", handler)
+        self.assertNotIn("worst_case_cost", handler)
+        self.assertIn("planet_market_buy_order_expiry_seconds", handler)
         self.assertIn("if (illegal_commodity)", handler)
 
     def test_failed_backend_commit_keeps_transaction_rollback_available(self):
@@ -358,20 +360,57 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("SELECT role FROM corp_members WHERE corporation_id = {1} AND player_id = {2} FOR UPDATE",
                       self.corp_repo)
 
-    def test_buy_orders_commit_transactionally_after_rechecking_capacity_and_cash(self):
+    def test_buy_orders_are_unreserved_and_commit_with_expiry(self):
         handler = self.planets.split("cmd_planet_market_buy_order", 1)[1].split(
             "\nint\n", 1
         )[0]
         self.assertIn("db_tx_begin (db, DB_TX_IMMEDIATE", handler)
-        self.assertIn("h_get_player_petty_cash (db, ctx->player_id", handler)
         self.assertIn("db_planets_get_market_move_info (db, planet_id, commodity_code,",
                       handler)
+        self.assertIn("quantity_total > fresh_capacity", handler)
+        self.assertNotIn("worst_case_cost", handler)
+        self.assertIn("expires_at, &order_id", handler)
+        self.assertIn('"expires_at", json_integer (expires_at)', handler)
         self.assertIn("db_tx_commit (db, &txerr)", handler)
+
+    def test_explicit_planet_buy_order_cancel_is_authorized_and_atomic(self):
+        handler = self.planets.split("cmd_planet_market_buy_order_cancel", 1)[1].split(
+            "\nint\n", 1
+        )[0]
+        self.assertIn("db_tx_begin (db, DB_TX_IMMEDIATE", handler)
+        self.assertIn("creator_id != ctx->player_id", handler)
+        self.assertIn("h_planet_market_lock_control", handler)
+        self.assertIn("db_market_lock_planet_buy_order", handler)
+        self.assertIn('"player_requested"', handler)
+        self.assertIn("db_tx_commit (db, &txerr)", handler)
+        self.assertIn('"remaining_quantity"', handler)
+        self.assertIn('"planet.market.buy_order.cancel"', self.loop)
+
+    def test_buy_order_expiry_config_is_bounded_and_expiry_is_persisted(self):
+        config = (ROOT / "src/server_config.c").read_text(encoding="utf-8")
+        sysop = (ROOT / "src/server_sysop.c").read_text(encoding="utf-8")
+        self.assertIn("g_cfg.planet_market_buy_order_expiry_seconds = 86400", config)
+        self.assertIn("expiry >= 60 && expiry <= 604800", config)
+        self.assertIn("expiry < 60 || expiry > 604800", sysop)
+        self.assertIn("expires_at <= {1}", self.cron_repo)
+        self.assertIn("cancellation_reason='expired'", self.cron_repo)
+
+    def test_market_matching_locks_current_capacity_and_buyer_balance(self):
+        settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
+        self.assertIn("market_lock_inventory_location", settlement)
+        self.assertIn("repo_bank_get_balance_by_account_id_for_update", settlement)
+        self.assertIn("buyer_balance / trade_price", settlement)
+        self.assertIn('"cancelled"', settlement)
+        self.assertIn('"no_capacity"', settlement)
+        self.assertIn('"insufficient_credits"', settlement)
+        self.assertIn("AND (expires_at IS NULL OR expires_at > {3})", self.market_repo)
 
     def test_partial_market_fills_remain_open_and_failed_commit_restores_match_state(self):
         settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
-        self.assertGreaterEqual(settlement.count('? "filled" :'), 2)
-        self.assertGreaterEqual(settlement.count('"open";'), 2)
+        self.assertIn('? "filled" :', settlement)
+        self.assertIn('? "cancelled" : "open"', settlement)
+        self.assertIn('"open";', settlement)
+        self.assertIn('"cancelled"', settlement)
         self.assertIn("if (!db_tx_commit (db, &err))", settlement)
         self.assertIn("buy->filled_quantity = prior_buy_filled", settlement)
         self.assertIn("sell->filled_quantity = prior_sell_filled", settlement)
@@ -389,7 +428,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
     def test_cancel_and_expiry_release_open_partial_orders_without_escrow(self):
         for query in ("status = 'open'",):
             self.assertIn(query, self.market_repo)
-        self.assertIn("status='expired' WHERE status='open'", self.cron_repo)
+        self.assertIn("status='expired', cancellation_reason='expired'", self.cron_repo)
         schema = (ROOT / "sql/pg/000_tables.sql").read_text(encoding="utf-8")
         order_schema = schema.split("CREATE TABLE commodity_orders", 1)[1].split(
             "CREATE TABLE commodity_trades", 1

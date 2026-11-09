@@ -574,6 +574,8 @@ static const command_entry_t k_command_registry[] = {
    schema_planet_launch, 0, false, NULL},
   {"planet.market.buy_order", cmd_planet_market_buy_order,
    "Create planet market buy order", schema_placeholder, 0, false, NULL},
+  {"planet.market.buy_order.cancel", cmd_planet_market_buy_order_cancel,
+   "Cancel planet market buy order", schema_placeholder, 0, false, NULL},
   {"planet.market.sell", cmd_planet_market_sell, "Sell to planet market",
    schema_placeholder, 0, false, NULL},
   {"planet.rename", cmd_planet_rename, "Rename a planet",

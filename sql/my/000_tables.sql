@@ -852,6 +852,7 @@ CREATE TABLE commodity_orders (
     status VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled', 'expired')),
     ts TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NULL,
+    cancellation_reason VARCHAR(64) NULL,
     FOREIGN KEY (commodity_id) REFERENCES commodities (commodities_id) ON DELETE CASCADE
 );
 

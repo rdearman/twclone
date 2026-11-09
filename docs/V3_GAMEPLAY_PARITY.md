@@ -10,7 +10,7 @@ path exists; end-to-end behavior still needs focused protocol verification.
 | Player lifecycle | Register, authenticate, persist identity/session, recover state | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | Session replay/client recovery and public-player commands need protocol verification | `player.list_online` is an explicit stub; `player.rankings` contract conflicts on ranking key | Partial |
 | Universe and navigation | Generated connected sectors/warps; movement, scans and route assistance | `src/bigbang_pg_main.c`, `src/server_universe.c`, `src/server_autopilot.c` | Transwarp fuel/interdiction and entry-hazard aftermath are unresolved | None established from source alone | Partial; see `V3_STATUS.md` |
 | Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c` | Transfer and shipyard journeys lack full runtime evidence; cargo mutations now serialize by ship row | `ship.sell` / `shipyard.sell` explicitly stubbed; settlement policy unresolved | Partial |
-| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Corporate authorization, partial fills, order location, inventory bounds and commit rollback corrected in source; database-backed matching still needs verification | No order escrow/reservation behavior is specified; Haggling and canonical trade-policy details remain unresolved | Partial |
+| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Planet buy orders now place without escrow, validate funds/capacity during locked matching, partially fill, cancel unexecutable remainder, support player cancellation and persistent expiry/configuration; database-backed lifecycle verification pending | Haggling and canonical trade-policy details remain unresolved | Implemented in source; runtime unverified |
 | Planets/colonies | Genesis, landing, transfers, worker assignment, production and citadels | `src/server_planets.c`, `src/db/repo/repo_planets.c`, `src/db/repo/repo_cron.c` | Production, treasury, citadel lifecycle and combat aftermath are incomplete/unverified | `planet.harvest` is stubbed; `planet.view` is marked NYI and its morale field has no schema source | Partial |
 | Combat/defences | Ship/planet combat, fighters, mines, shields, destruction and recovery | `src/server_combat.c`, `src/server_planets.c`, `src/db/repo/repo_combat.c` | Combat odds, destruction/podding and hazard aftermath need canonical policy/runtime proof | No general gap declared without resolving issue #396 / `V3-CAN-00` | Partial |
 | Corporations | Membership, roles, shared assets, treasury and governance | `src/server_corporation.c`, `src/db/repo/repo_corporation.c` | Membership events and advanced settlement require verification | Tax/dividend RPCs are explicitly not registered; stock subcommands have a stub fallback | Partial |
@@ -73,6 +73,18 @@ path exists; end-to-end behavior still needs focused protocol verification.
   stock changes serialize on entity rows; decrements are conditional to prevent
   overselling. Build and focused contract tests pass; database-backed matching
   verification remains outstanding.
+- Planet-market buy orders are unreserved, best-effort orders. Placement stores
+  a configured expiry without debiting credits or reserving capacity. Matching
+  locks and revalidates source/destination inventory and buyer balance, limits
+  each fill by stock, price, credits and capacity, settles inventory/credits/
+  fills atomically, permits partial fills, and cancels an unexecutable remainder.
+  Players can cancel their own open orders while retaining control of the
+  destination planet. Expiry is persisted and enforced across restarts. The
+  SysOp setting defaults to 86400 seconds and accepts 60–604800 seconds. Focused
+  source-contract tests and a JSON acceptance scenario cover placement,
+  cancellation, configuration, partial settlement and expiry; database-backed
+  runtime verification remains outstanding because it was explicitly out of
+  scope for this work.
 
 ## Implemented corrections in this pass
 

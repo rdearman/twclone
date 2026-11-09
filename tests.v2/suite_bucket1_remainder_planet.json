@@ -37,6 +37,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Fill Planet ORE Capacity",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE entity_stock es SET quantity = pg.max_capacity FROM planet_goods pg WHERE es.entity_type = 'planet' AND es.entity_id = @{test_planet_id} AND es.commodity_code = 'ORE' AND pg.planet_id = @{test_planet_id} AND pg.commodity = 'ORE';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Seed Citadel",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id) VALUES (@{test_planet_id}, 1, 500, @{trader_player_1_player_id});" },
@@ -57,11 +64,44 @@
       "expect": { "status": "error", "error_code": 401 }
     },
     {
+      "name": "Rig: Remove player credits to prove order placement is unreserved",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 0 WHERE owner_type = 'player' AND owner_id = @{trader_player_1_player_id} AND currency = 'CRD' AND is_active = TRUE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "planet.market.buy_order - Positive",
       "command": "planet.market.buy_order",
       "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity_total": 10, "max_price": 100 },
       "user": "trader_player_1",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok", "type": "planet.market.buy_order", "data": { "quantity_total": 10, "filled_quantity": 0, "remaining_quantity": 10, "status": "open" } },
+      "save": { "test_buy_order_id": "data.order_id" }
+    },
+    {
+      "name": "planet.market.buy_order.cancel - Positive",
+      "command": "planet.market.buy_order.cancel",
+      "data": { "order_id": "@{test_buy_order_id}" },
+      "user": "trader_player_1",
+      "expect": { "status": "ok", "type": "planet.market.buy_order.cancel", "data": { "order_id": "@{test_buy_order_id}", "status": "cancelled", "filled_quantity": 0, "remaining_quantity": 10, "cancellation_reason": "player_requested" } }
+    },
+    {
+      "name": "Verify player cancellation persisted",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT status, cancellation_reason, filled_quantity, quantity - filled_quantity FROM commodity_orders WHERE commodity_orders_id = @{test_buy_order_id};" },
+      "user": "admin",
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "cancelled" },
+        { "path": "data.rows.0.1", "op": "==", "value": "player_requested" },
+        { "path": "data.rows.0.2", "op": "==", "value": 0 },
+        { "path": "data.rows.0.3", "op": "==", "value": 10 }
+      ]
+    },
+    {
+      "name": "planet.market.buy_order.cancel - Negative (No Auth)",
+      "command": "planet.market.buy_order.cancel",
+      "data": { "order_id": "@{test_buy_order_id}" },
+      "expect": { "status": "error", "error_code": 401 }
     },
     {
       "name": "planet.market.buy_order - Negative (No Auth)",

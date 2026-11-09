@@ -144,7 +144,9 @@ int repo_planets_transfer_fighters(db_t *db, int player_id, int ship_id,
 int db_planets_destroy(db_t *db, int player_id, int planet_id);
 
 /* Q42: Insert Commodity Order */
-int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id, int commodity_id, int qty, int price, int64_t *order_id);
+int db_planets_insert_buy_order(db_t *db, int player_id, int planet_id,
+                                int commodity_id, int qty, int price,
+                                int64_t expires_at, int64_t *order_id);
 
 /* Q43: (Dup of Q22) */
 
