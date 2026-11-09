@@ -114,6 +114,15 @@ class PlanetaryServerContractTests(unittest.TestCase):
             npc_attack.index("h_get_ship_cargo_and_holds"),
         )
 
+    def test_lethal_pvp_attack_pods_player_but_not_npc_owned_ship(self):
+        attack = self.combat.split("int\nhandle_ship_attack (", 1)[1].split(
+            "\nint\ncmd_combat_attack", 1
+        )[0]
+        self.assertIn("repo_players_is_npc", attack)
+        self.assertIn("def.hull <= 0 && def.player_id > 0 && !defender_is_npc", attack)
+        self.assertIn("handle_ship_destruction (db, &kill_ctx)", attack)
+        self.assertIn("KILL_CAUSE_COMBAT", attack)
+
     def test_treasury_is_not_authorized_by_landing_alone(self):
         info = self.planets.split("cmd_planet_info", 1)[1].split(
             "cmd_planet_fighters_transfer", 1

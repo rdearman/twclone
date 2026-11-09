@@ -37,7 +37,9 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   A further combat-path trace found that NPC attacks could leave a player ship
   at zero hull without destruction settlement; lethal NPC attacks now use the
   shared pod/insurance/destruction path. Focused tests and sanitized build pass,
-  but no database runtime has verified the nested settlement.
+  but no database runtime has verified the nested settlement. The same bypass
+  in PvP damage is now repaired; lethal PvP checks authoritative NPC ownership
+  before podding and fails closed if ownership classification cannot be read.
   Source audit confirms immediate planet sales debit
   planet stock and credit the seller, with neither Exchange inventory receipt
   nor an identified funded Exchange buyer. The current book is bilateral.
@@ -48,9 +50,9 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   remains incomplete pending a resale price contract. Universal destruction
   and funded-policy hull insurance are committed (`63169074`, `15821cd8`),
   build/source-tested but not database-runtime verified.
-- **Next action:** inspect all remaining lethal combat sources for routes that
-  bypass `handle_ship_destruction`, then continue the explicit requirement audit
-  with insurance payout funding/valuation and planet capture asset retention,
+- **Next action:** inspect the Terra enforcement branch's destruction/sanction
+  error propagation, then continue the explicit requirement audit with
+  insurance payout funding/valuation and planet capture asset retention,
   fixing only source-demonstrable contract violations. Preserve Exchange, unrest effects, used
   resale pricing, bounty amount and alliance-target rules as unresolved where
   their policy is incomplete. Do not infer liquidity, numeric defaults or

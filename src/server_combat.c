@@ -27,6 +27,7 @@
 #include "repo_cmd.h"
 #include "repo_combat.h"
 #include "db/repo/repo_citadel.h"
+#include "db/repo/repo_players.h"
 #include "db/repo/repo_planets.h"
 #include "db/repo/repo_universe.h"
 #include "db/db_api.h"
@@ -1102,7 +1103,28 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
 
   int s_lost = 0, h_lost = 0;
   apply_combat_damage (&def, 10, &s_lost, &h_lost);
-  rc = persist_ship_damage (db, &def, 0);
+  int defender_is_npc = 0;
+  if (def.player_id > 0
+      && repo_players_is_npc (db, def.player_id, &defender_is_npc) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not resolve target ownership for destruction");
+      return 0;
+    }
+  if (def.hull <= 0 && def.player_id > 0 && !defender_is_npc)
+    {
+      ship_kill_context_t kill_ctx = {
+        .victim_player_id = def.player_id,
+        .victim_ship_id = target_id,
+        .killer_player_id = ctx->player_id,
+        .cause = KILL_CAUSE_COMBAT,
+        .sector_id = ctx->sector_id
+      };
+      rc = handle_ship_destruction (db, &kill_ctx);
+    }
+  else
+    rc = persist_ship_damage (db, &def, 0);
   if (rc != 0)
     {
       LOGE ("combat.attack: Failed to persist target ship %d damage (rc=%d)",
