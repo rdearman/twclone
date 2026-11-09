@@ -307,6 +307,24 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("AND quantity >= {1}", self.ports_repo)
         self.assertIn("db_exec_rows_affected", self.ports_repo)
 
+    def test_immediate_planet_purchase_checks_every_settlement_leg(self):
+        handler = self.planets.split("cmd_planet_market_buy_order", 1)[1].split(
+            "cmd_planet_colonists_set", 1
+        )[0]
+        immediate = handler.split("if (h_is_illegal_commodity", 1)[1].split(
+            "long long worst_case_cost", 1
+        )[0]
+        for operation in (
+            "db_ports_decrement_stock",
+            "h_update_ship_cargo",
+            "h_deduct_player_petty_cash_unlocked",
+            "db_planets_add_treasury_buy",
+        ):
+            self.assertIn(operation, immediate)
+        self.assertIn("settlement_rc != 0", immediate)
+        self.assertIn("db_tx_rollback", immediate)
+        self.assertIn("Purchase settlement failed.", immediate)
+
 
 if __name__ == "__main__":
     unittest.main()

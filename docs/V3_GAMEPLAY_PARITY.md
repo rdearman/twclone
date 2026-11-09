@@ -44,11 +44,12 @@ path exists; end-to-end behavior still needs focused protocol verification.
   unavailable database before making repository calls. These paths are covered
   by focused source-contract tests; protocol runtime verification remains
   pending.
-- `planet.market.sell` now uses a guarded atomic inventory decrement and commits
-  the planet stock reduction, player proceeds, and taxable activity together.
-  Insufficient inventory or any settlement failure leaves both stock and
-  credits unchanged and returns an error. Build and focused source-contract
-  verification pass; database-backed protocol verification remains pending.
+- Planet market sales and immediate illegal-commodity purchases now use a
+  guarded atomic inventory decrement. Sale proceeds, purchase cargo/credits,
+  planet treasury changes, and taxable activity are committed together; any
+  failed settlement leg rolls back instead of returning a false success.
+  Build and focused source-contract verification pass; database-backed protocol
+  verification remains pending.
 
 ## Implemented corrections in this pass
 

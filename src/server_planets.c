@@ -3017,10 +3017,7 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 
   if (h_is_illegal_commodity (db, commodity_code))
     {
-      int stock = 0;
-      db_planets_get_stock (db, planet_id, commodity_code, &stock);
-
-      if (stock < quantity_total)
+      if (capacity_stock < quantity_total)
 	{
 	  send_response_refused_steal (ctx,
 				       root,
@@ -3083,13 +3080,33 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
 	  return 0;
 	}
 
-      h_update_entity_stock (db,
-			     ENTITY_TYPE_PLANET,
-			     planet_id,
-			     commodity_code, -quantity_total, NULL);
-      h_update_ship_cargo (db, ship_id, commodity_code, quantity_total, NULL);
-      h_deduct_player_petty_cash_unlocked (db, ctx->player_id, cost, NULL);
-      db_planets_add_treasury_buy (db, planet_id, cost);
+      int settlement_rc = db_ports_decrement_stock
+	(db, ENTITY_TYPE_PLANET, planet_id, commodity_code, quantity_total,
+	 (int64_t) time (NULL));
+      if (settlement_rc == 0)
+	settlement_rc = h_update_ship_cargo (db, ship_id, commodity_code,
+					    quantity_total, NULL);
+      if (settlement_rc == 0)
+	settlement_rc = h_deduct_player_petty_cash_unlocked
+	  (db, ctx->player_id, cost, NULL);
+      if (settlement_rc == 0)
+	settlement_rc = db_planets_add_treasury_buy (db, planet_id, cost);
+      if (settlement_rc != 0)
+	{
+	  db_tx_rollback (db, NULL);
+	  if (settlement_rc == ERR_DB_CONSTRAINT
+	      || settlement_rc == ERR_DB_NOT_FOUND)
+	    send_response_refused_steal (ctx, root, REF_NO_WARP_LINK,
+					 "Insufficient inventory for immediate illegal purchase.",
+					 NULL);
+	  else if (settlement_rc == ERR_HOLD_FULL)
+	    send_response_refused_steal (ctx, root, ERR_HOLD_FULL,
+					 "Insufficient cargo space.", NULL);
+	  else
+	    send_response_error (ctx, root, ERR_DB,
+				 "Purchase settlement failed.");
+	  return 0;
+	}
 
       if (planet_record_taxable_trade (db, planet_id, commodity_code,
                                        quantity_total,
