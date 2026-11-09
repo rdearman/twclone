@@ -113,7 +113,7 @@ No live DB or full JSON regression run has been performed in this work session.
 
 ## Execution evidence log
 
-- `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 44 passed after transactional capture-event change; `make -C bin -j2` — passed with ASan/UBSan; `git diff --check` — passed. No DB/server runtime.
+- `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 49 passed after transactional capture-event change; `make -C bin -j2` — passed with ASan/UBSan; `git diff --check` — passed. No DB/server runtime.
 - `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 48 passed; source/contract tests only, not DB or server runtime.
 - Sanitised server build: `make -C bin -j2` — passed after unrest configuration changes (existing unused-variable warnings remain).
 - Focused tests: `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_pg_bigbang_sql_selection.py` — 41 passed. These are source-contract/manifest selection checks, not database runtime.
