@@ -14,14 +14,23 @@
       "name": "Player List Online",
       "command": "player.list_online",
       "user": "status_player",
+      "data": { "page": 1, "limit": 50 },
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total_online", "op": ">=", "value": 1 },
-        { "path": "data.returned_count", "op": ">=", "value": 1 },
-        { "path": "data.offset", "op": "==", "value": 0 },
+        { "path": "data.total_online", "op": "==", "value": 1 },
+        { "path": "data.returned_count", "op": "==", "value": 1 },
+        { "path": "data.page", "op": "==", "value": 1 },
         { "path": "data.limit", "op": "==", "value": 50 },
-        { "path": "data.players", "op": "contains", "value": "status_player" }
+        { "path": "data.players", "op": "contains", "value": "status_player" },
+        { "path": "data.players.0", "op": "keys_eq", "value": ["player_id", "username", "corporation", "alignment"] }
       ]
+    },
+    {
+      "name": "Reject invalid online-list page",
+      "command": "player.list_online",
+      "user": "status_player",
+      "data": { "page": 0, "limit": 50 },
+      "expect": { "status": "error" }
     },
     {
       "name": "Rig: Damaged ship hull",

@@ -60,21 +60,21 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
     }
 
   json_t *data = json_object_get (root, "data");
-  int64_t offset = 0;
+  int64_t page = 1;
   int limit = 50;
-  json_t *j_offset = json_is_object (data)
-    ? json_object_get (data, "offset") : NULL;
+  json_t *j_page = json_is_object (data)
+    ? json_object_get (data, "page") : NULL;
   json_t *j_limit = json_is_object (data)
     ? json_object_get (data, "limit") : NULL;
-  if (j_offset)
+  if (j_page)
     {
-      if (!json_is_integer (j_offset) || json_integer_value (j_offset) < 0)
+      if (!json_is_integer (j_page) || json_integer_value (j_page) < 1)
         {
           send_response_error (ctx, root, ERR_INVALID_ARG,
-                               "offset must be a nonnegative integer");
+                               "page must be a positive integer");
           return 0;
         }
-      offset = json_integer_value (j_offset);
+      page = json_integer_value (j_page);
     }
   if (j_limit)
     {
@@ -88,41 +88,13 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
       limit = (int) json_integer_value (j_limit);
     }
 
-  bool want_id = true, want_username = true;
-  json_t *fields = json_is_object (data)
-    ? json_object_get (data, "fields") : NULL;
-  if (fields)
+  if (page - 1 > INT64_MAX / limit)
     {
-      if (!json_is_array (fields))
-        {
-          send_response_error (ctx, root, ERR_INVALID_ARG,
-                               "fields must be an array of public field names");
-          return 0;
-        }
-      want_id = want_username = false;
-      size_t field_index;
-      json_t *field;
-      json_array_foreach (fields, field_index, field)
-        {
-          const char *name = json_string_value (field);
-          if (!name)
-            {
-              send_response_error (ctx, root, ERR_INVALID_ARG,
-                                   "fields entries must be strings");
-              return 0;
-            }
-          if (strcmp (name, "id") == 0)
-            want_id = true;
-          else if (strcmp (name, "username") == 0)
-            want_username = true;
-          else
-            {
-              send_response_error (ctx, root, ERR_INVALID_ARG,
-                                   "Only public id and username fields are currently available");
-              return 0;
-            }
-        }
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "page and limit produce an unsupported offset");
+      return 0;
     }
+  int64_t offset = (page - 1) * limit;
 
   /* Snapshot currently authenticated sockets, deduplicating multi-session
    * players. Profile data is fetched only after releasing the registry lock. */
@@ -192,7 +164,11 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
       if ((int64_t) i < offset || (int64_t) json_array_size (players) >= limit)
         continue;
       char sql[256];
-      if (sql_build (db, "SELECT name FROM players WHERE player_id={1}",
+      if (sql_build (db,
+                     "SELECT p.name, c.name, p.alignment FROM players p "
+                     "LEFT JOIN corp_members cm ON cm.player_id = p.player_id "
+                     "LEFT JOIN corporations c ON c.corporation_id = cm.corporation_id "
+                     "WHERE p.player_id={1} ORDER BY cm.corporation_id LIMIT 1",
                      sql, sizeof sql) != 0)
         {
           json_decref (players);
@@ -222,36 +198,33 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
           return 0;
         }
       const char *username = db_res_col_text (res, 0, &err);
+      const char *corporation = db_res_col_text (res, 1, &err);
+      int alignment = db_res_col_i32 (res, 2, &err);
       json_t *player = json_object ();
-      json_t *entry = json_object ();
-      bool allocation_ok = player && entry;
-      if (allocation_ok && want_id)
-        allocation_ok = json_object_set_new (player, "id",
-                                               json_integer (online_ids[i])) == 0;
-      if (allocation_ok && want_username)
-        allocation_ok = username
-          && json_object_set_new (player, "username",
-                                  json_string (username)) == 0;
-      if (allocation_ok)
-        {
-          allocation_ok = json_object_set (entry, "player", player) == 0;
-          json_decref (player);
-        }
-      else if (player)
-        json_decref (player);
+      bool allocation_ok = player && username
+        && json_object_set_new (player, "player_id",
+                                json_integer (online_ids[i])) == 0
+        && json_object_set_new (player, "username",
+                                json_string (username)) == 0
+        && (corporation
+            ? json_object_set_new (player, "corporation",
+                                   json_string (corporation)) == 0
+            : json_object_set_new (player, "corporation", json_null ()) == 0)
+        && json_object_set_new (player, "alignment",
+                                json_integer (alignment)) == 0;
       db_res_finalize (res);
       if (!allocation_ok)
         {
-          if (entry)
-            json_decref (entry);
+          if (player)
+            json_decref (player);
           json_decref (players);
           free (online_ids);
           send_response_error (ctx, root, ERR_SERVER_ERROR,
                                "Unable to construct online-player response");
           return 0;
         }
-      /* The _new API consumes entry even on failure. */
-      if (json_array_append_new (players, entry) != 0)
+      /* The _new API consumes player even on failure. */
+      if (json_array_append_new (players, player) != 0)
         {
           json_decref (players);
           free (online_ids);
@@ -275,8 +248,8 @@ cmd_player_list_online (client_ctx_t *ctx, json_t *root)
                          json_integer ((json_int_t) online_count)) == 0
     && json_object_set_new (payload, "returned_count",
                             json_integer ((json_int_t) json_array_size (players))) == 0
-    && json_object_set_new (payload, "offset",
-                            json_integer ((json_int_t) offset)) == 0
+    && json_object_set_new (payload, "page",
+                            json_integer ((json_int_t) page)) == 0
     && json_object_set_new (payload, "limit", json_integer (limit)) == 0;
   if (!payload_ok)
     {
