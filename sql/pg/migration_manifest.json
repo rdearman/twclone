@@ -68,7 +68,9 @@
       ,"166_v3_orion_population_config.sql"
       ,"167_v3_faction_rosters_and_ferengi_classes.sql"
       ,"168_v3_abandoned_hull_repair.sql",
-      "169_planet_market_order_cancellation.sql"
+      "169_planet_market_order_cancellation.sql",
+      "170_v3_used_ship_sales.sql",
+      "171_v3_planet_population_state.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -645,6 +647,20 @@
     {
       "name": "169_planet_market_order_cancellation.sql",
       "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "170_v3_used_ship_sales.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "171_v3_planet_population_state.sql",
+      "subsystem": "planets",
       "required": true,
       "v3_only": true,
       "diagnostic": false

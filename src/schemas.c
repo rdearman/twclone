@@ -22,6 +22,12 @@
  * --- Helper Functions ---
  * =============================================================================
  */
+static void schema_nav_add_field (json_t *properties, const char *name,
+                                  const char *type, long long minimum);
+static void schema_nav_require (json_t *required, const char *field);
+static json_t *schema_nav_request (const char *id, json_t *properties,
+                                   json_t *required);
+
 static char *
 why_dup (const char *m)
 {
@@ -313,6 +319,7 @@ extern json_t *schema_ship_tow_engaged (void);
 extern json_t *schema_ship_tow_disengaged (void);
 extern json_t *schema_ship_info (void);
 extern json_t *schema_ship_sell (void);
+extern json_t *schema_ship_sold_response (void);
 extern json_t *schema_ship_transfer (void);
 extern json_t *schema_ship_transfer_cargo (void);
 extern json_t *schema_ship_jettison (void);
@@ -361,6 +368,10 @@ extern json_t *schema_sector_scan_density (void);
 extern json_t *schema_sector_scan (void);
 extern json_t *schema_planet_genesis (void);
 extern json_t *schema_planet_info (void);
+extern json_t *schema_planet_emancipate (void);
+extern json_t *schema_planet_view_response (void);
+extern json_t *schema_planet_emancipated_response (void);
+extern json_t *schema_planet_harvest_response (void);
 extern json_t *schema_planet_fighters_transfer (void);
 extern json_t *schema_planet_rename (void);
 extern json_t *schema_planet_land (void);
@@ -475,6 +486,7 @@ static schema_entry_t g_schema_table[] = {
   {"ship.tow.disengaged", NULL, schema_ship_tow_disengaged},
   {"ship.info", NULL, schema_ship_info},
   {"ship.sell", NULL, schema_ship_sell},
+  {"ship.sold_v1", NULL, schema_ship_sold_response},
   {"ship.transfer", NULL, schema_ship_transfer},
   {"ship.transfer_cargo", NULL, schema_ship_transfer_cargo},
   {"ship.jettison", NULL, schema_ship_jettison},
@@ -526,12 +538,16 @@ static schema_entry_t g_schema_table[] = {
   {"sector.scan", NULL, schema_sector_scan},
   {"planet.genesis", NULL, schema_planet_genesis},
   {"planet.info", NULL, schema_planet_info},
+  {"planet.emancipate", NULL, schema_planet_emancipate},
+  {"planet.view_v1", NULL, schema_planet_view_response},
+  {"planet.emancipated_v1", NULL, schema_planet_emancipated_response},
   {"planet.fighters.transfer", NULL, schema_planet_fighters_transfer},
   {"planet.rename", NULL, schema_planet_rename},
   {"planet.land", NULL, schema_planet_land},
   {"planet.launch", NULL, schema_planet_launch},
   {"planet.transfer_ownership", NULL, schema_planet_transfer_ownership},
   {"planet.harvest", NULL, schema_planet_harvest},
+  {"planet.harvest_v1", NULL, schema_planet_harvest_response},
   {"planet.deposit", NULL, schema_planet_deposit},
   {"planet.colonists.allocate", NULL, schema_planet_colonists_allocate},
   {"planet.withdraw", NULL, schema_planet_withdraw},
@@ -3275,6 +3291,105 @@ schema_planet_info (void)
 }
 
 json_t *
+schema_planet_emancipate (void)
+{
+  json_t *schema = schema_planet_info ();
+  if (schema)
+    json_object_set_new (schema, "$id",
+                         json_string ("ge://schema/planet.emancipate.json"));
+  return schema;
+}
+
+json_t *
+schema_planet_view_response (void)
+{
+  json_t *properties = json_object ();
+  json_t *required = json_array ();
+  json_t *root = json_object ();
+  if (!properties || !required || !root)
+    {
+      json_decref (properties);
+      json_decref (required);
+      json_decref (root);
+      return NULL;
+    }
+  schema_nav_add_field (properties, "planet_id", "integer", 1);
+  schema_nav_add_field (properties, "name", "string", 0);
+  schema_nav_add_field (properties, "class", "string", 0);
+  schema_nav_add_field (properties, "population", "integer", 0);
+  schema_nav_add_field (properties, "population_type", "string", 0);
+  schema_nav_add_field (properties, "morale_status", "string", 0);
+  schema_nav_add_field (properties, "goods", "array", 0);
+  json_t *production = json_object ();
+  json_t *production_item = json_object ();
+  json_t *production_item_props = json_object ();
+  json_t *production_item_required = json_array ();
+  if (!production || !production_item || !production_item_props
+      || !production_item_required)
+    {
+      json_decref (production);
+      json_decref (production_item);
+      json_decref (production_item_props);
+      json_decref (production_item_required);
+      json_decref (properties);
+      json_decref (required);
+      json_decref (root);
+      return NULL;
+    }
+  schema_nav_add_field (production_item_props, "commodity", "string", 0);
+  schema_nav_add_field (production_item_props, "gross_per_cycle", "integer", 0);
+  schema_nav_add_field (production_item_props, "consumption_per_cycle", "integer", 0);
+  schema_nav_add_field (production_item_props, "net_per_cycle", "integer", 0);
+  const char *production_fields[] = {"commodity", "gross_per_cycle",
+                                     "consumption_per_cycle", "net_per_cycle"};
+  for (size_t i = 0; i < sizeof production_fields / sizeof production_fields[0]; ++i)
+    schema_nav_require (production_item_required, production_fields[i]);
+  json_object_set_new (production_item, "type", json_string ("object"));
+  json_object_set_new (production_item, "properties", production_item_props);
+  json_object_set_new (production_item, "required", production_item_required);
+  json_object_set_new (production_item, "additionalProperties", json_boolean (0));
+  json_object_set_new (production, "type", json_string ("array"));
+  json_object_set_new (production, "items", production_item);
+  json_object_set_new (properties, "production", production);
+  schema_nav_add_field (properties, "citadel", "object", 0);
+  schema_nav_add_field (properties, "treasury", "integer", 0);
+  schema_nav_require (required, "planet_id");
+  json_object_set_new (root, "$id",
+                       json_string ("ge://schema/planet.view_v1.json"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
+}
+
+json_t *
+schema_planet_emancipated_response (void)
+{
+  json_t *properties = json_object ();
+  json_t *required = json_array ();
+  if (!properties || !required)
+    {
+      json_decref (properties);
+      json_decref (required);
+      return NULL;
+    }
+  schema_nav_add_field (properties, "planet_id", "integer", 1);
+  schema_nav_add_field (properties, "population_type", "string", 0);
+  schema_nav_add_field (properties, "population", "integer", 0);
+  schema_nav_add_field (properties, "turns_charged", "integer", 0);
+  schema_nav_add_field (properties, "credits_charged", "integer", 0);
+  const char *fields[] = {"planet_id", "population_type", "population",
+                          "turns_charged", "credits_charged"};
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+    schema_nav_require (required, fields[i]);
+  return schema_nav_request ("ge://schema/planet.emancipated_v1.json",
+                             properties, required);
+}
+
+json_t *
 schema_planet_fighters_transfer (void)
 {
   json_t *properties = json_object ();
@@ -3467,6 +3582,33 @@ schema_planet_harvest (void)
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
+}
+
+json_t *
+schema_planet_harvest_response (void)
+{
+  json_t *properties = json_object ();
+  json_t *required = json_array ();
+  if (!properties || !required)
+    {
+      json_decref (properties);
+      json_decref (required);
+      return NULL;
+    }
+  schema_nav_add_field (properties, "planet_id", "integer", 1);
+  schema_nav_add_field (properties, "ship_id", "integer", 1);
+  schema_nav_add_field (properties, "ore_harvested", "integer", 0);
+  schema_nav_add_field (properties, "organics_harvested", "integer", 0);
+  schema_nav_add_field (properties, "equipment_harvested", "integer", 0);
+  schema_nav_add_field (properties, "holds_remaining", "integer", 0);
+  schema_nav_add_field (properties, "turns_charged", "integer", 0);
+  const char *fields[] = {"planet_id", "ship_id", "ore_harvested",
+                          "organics_harvested", "equipment_harvested",
+                          "holds_remaining", "turns_charged"};
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+    schema_nav_require (required, fields[i]);
+  return schema_nav_request ("ge://schema/planet.harvest_v1.json",
+                             properties, required);
 }
 
 
@@ -5195,48 +5337,18 @@ json_t *
 schema_player_list_online_request (void)
 {
   json_t *properties = json_object ();
-  json_t *required = json_array ();	// No required fields for flexibility
-
-
-  // offset property
-  json_t *offset_prop = json_object ();
-  json_object_set_new (offset_prop, "type", json_string ("integer"));
-  json_object_set_new (offset_prop, "default", json_integer (0));
-  json_object_set_new (properties, "offset", offset_prop);
-
-
-  // limit property
-  json_t *limit_prop = json_object ();
-
-
-  json_object_set_new (limit_prop, "type", json_string ("integer"));
-  json_object_set_new (limit_prop, "minimum", json_integer (1));
-  json_object_set_new (limit_prop, "maximum", json_integer (1000));
-  json_object_set_new (properties, "limit", limit_prop);
-
-
-  // fields property (array of strings)
-  json_t *fields_items_schema = json_object ();
-
-
-  json_object_set_new (fields_items_schema, "type", json_string ("string"));
-
-
-  json_t *fields_schema = json_object ();
-
-
-  json_object_set_new (fields_schema, "type", json_string ("array"));
-  json_object_set (fields_schema, "items", fields_items_schema);
-  json_object_set_new (fields_schema, "uniqueItems", json_true ());
-  // Note: fields_items_schema refcount is 1 (owned by fields_schema items), so we need to decref our local ref if we used json_object_set (incref)
-  // But wait, json_object_set (not _new) increfs.
-  // Above: json_object_set (fields_schema, "items", fields_items_schema); -> increfs fields_items_schema.
-  // So fields_items_schema refcount is 2 (1 local + 1 array).
-  // We should decref local ref.
-  json_decref (fields_items_schema);
-
-
-  json_object_set_new (properties, "fields", fields_schema);
+  json_t *required = json_array ();
+  json_t *page = json_object ();
+  json_object_set_new (page, "type", json_string ("integer"));
+  json_object_set_new (page, "minimum", json_integer (1));
+  json_object_set_new (page, "default", json_integer (1));
+  json_object_set_new (properties, "page", page);
+  json_t *limit = json_object ();
+  json_object_set_new (limit, "type", json_string ("integer"));
+  json_object_set_new (limit, "minimum", json_integer (1));
+  json_object_set_new (limit, "maximum", json_integer (1000));
+  json_object_set_new (limit, "default", json_integer (50));
+  json_object_set_new (properties, "limit", limit);
 
 
   json_t *data_schema = json_object ();
@@ -5281,13 +5393,10 @@ schema_player_list_online_response (void)
   json_array_append_new (required, json_string ("returned_count"));
 
 
-  // offset property
-  json_t *offset_prop = json_object ();
-
-
-  json_object_set_new (offset_prop, "type", json_string ("integer"));
-  json_object_set_new (properties, "offset", offset_prop);
-  json_array_append_new (required, json_string ("offset"));
+  json_t *page_prop = json_object ();
+  json_object_set_new (page_prop, "type", json_string ("integer"));
+  json_object_set_new (properties, "page", page_prop);
+  json_array_append_new (required, json_string ("page"));
 
 
   // limit property
@@ -5299,8 +5408,31 @@ schema_player_list_online_response (void)
   json_array_append_new (required, json_string ("limit"));
 
 
-  // players property (array of player objects)
-  json_t *player_item_schema = schema_player_info ();	// Reuse existing player info schema
+  // Public allowlist only: no session, address, sector or connection data.
+  json_t *player_props = json_object ();
+  json_t *player_required = json_array ();
+  const char *field_names[] = {"player_id", "username", "corporation", "alignment"};
+  const char *field_types[] = {"integer", "string", NULL, "integer"};
+  for (size_t i = 0; i < 4; ++i)
+    {
+      json_t *field = json_object ();
+      if (i == 2)
+        {
+          json_t *types = json_array ();
+          json_array_append_new (types, json_string ("string"));
+          json_array_append_new (types, json_string ("null"));
+          json_object_set_new (field, "type", types);
+        }
+      else
+        json_object_set_new (field, "type", json_string (field_types[i]));
+      json_object_set_new (player_props, field_names[i], field);
+      json_array_append_new (player_required, json_string (field_names[i]));
+    }
+  json_t *player_item_schema = json_object ();
+  json_object_set_new (player_item_schema, "type", json_string ("object"));
+  json_object_set_new (player_item_schema, "properties", player_props);
+  json_object_set_new (player_item_schema, "required", player_required);
+  json_object_set_new (player_item_schema, "additionalProperties", json_false ());
 
 
   json_t *players_prop = json_object ();
@@ -5418,6 +5550,9 @@ schema_combat_attack_planet (void)
   json_object_set_new (planet_id, "minimum", json_integer (1));
   json_t *properties = json_object ();
   json_object_set_new (properties, "planet_id", planet_id);
+  json_t *enslave = json_object ();
+  json_object_set_new (enslave, "type", json_string ("boolean"));
+  json_object_set_new (properties, "enslave_colonists", enslave);
   json_t *required = json_array ();
   json_array_append_new (required, json_string ("planet_id"));
   json_t *root = json_object ();
@@ -5677,27 +5812,28 @@ schema_player_simple (const char *id, json_t *properties, json_t *required,
   return root;
 }
 
-/* Shared request shape for lifecycle operations that identify an owned ship. */
 static json_t *
-schema_ship_id_request (const char *id)
+schema_ship_sale_request (const char *id)
 {
   json_t *properties = json_object ();
   json_t *required = json_array ();
   schema_nav_add_field (properties, "ship_id", "integer", 1);
+  schema_nav_add_field (properties, "replacement_ship_id", "integer", 1);
   schema_nav_require (required, "ship_id");
+  schema_nav_require (required, "replacement_ship_id");
   return schema_nav_request (id, properties, required);
 }
 
 json_t *
 schema_ship_sell (void)
 {
-  return schema_ship_id_request ("ge://schema/ship.sell.json");
+  return schema_ship_sale_request ("ge://schema/ship.sell.json");
 }
 
 json_t *
 schema_shipyard_sell (void)
 {
-  return schema_ship_id_request ("ge://schema/shipyard.sell.json");
+  return schema_ship_sale_request ("ge://schema/shipyard.sell.json");
 }
 
 json_t *
@@ -5864,6 +6000,35 @@ schema_shipyard_upgraded_response (void)
     schema_nav_require (required, fields[i]);
   return schema_shipyard_response ("ge://schema/shipyard.upgraded_v1.json",
                                   properties, required);
+}
+
+json_t *
+schema_ship_sold_response (void)
+{
+  json_t *properties = json_object ();
+  json_t *required = json_array ();
+  schema_nav_add_field (properties, "ship_id", "integer", 1);
+  schema_nav_add_field (properties, "replacement_ship_id", "integer", 1);
+  schema_nav_add_field (properties, "shipyard_port_id", "integer", 1);
+  schema_nav_add_field (properties, "hull_valuation", "integer", 1);
+  schema_nav_add_field (properties, "installed_equipment_valuation", "integer", 1);
+  schema_nav_add_field (properties, "sale_factor_bp", "integer", 1);
+  schema_nav_add_field (properties, "sale_proceeds", "integer", 1);
+  schema_nav_add_field (properties, "updated_credits", "integer", 1);
+  schema_nav_add_field (properties, "cargo_forfeited", "boolean", 0);
+  schema_nav_add_field (properties, "insurance_terminated", "boolean", 0);
+  schema_nav_add_field (properties, "sale_id", "integer", 1);
+  schema_nav_add_field (properties, "used_inventory_id", "integer", 1);
+  const char *fields[] = {
+    "ship_id", "replacement_ship_id", "shipyard_port_id",
+    "hull_valuation", "installed_equipment_valuation", "sale_factor_bp",
+    "sale_proceeds", "updated_credits", "cargo_forfeited",
+    "insurance_terminated", "sale_id", "used_inventory_id"
+  };
+  for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
+    schema_nav_require (required, fields[i]);
+  return schema_shipyard_response ("ge://schema/ship.sold_v1.json",
+                                   properties, required);
 }
 
 

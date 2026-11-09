@@ -1,0 +1,119 @@
+# V3 Gameplay Completion Tracker
+
+This cumulative tracker covers every requirement ID in the master V3 gameplay
+completion assignment. Status is conservative: source presence is not test
+verification. `VERIFIED` is reserved for tests actually executed against the
+relevant behavior. The policy source is [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md);
+Exchange requirements additionally use [`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_GALACTIC_EXCHANGE_CONTRACT.md).
+
+Status values: `NOT_STARTED`, `PARTIAL`, `IMPLEMENTED_UNVERIFIED`, `VERIFIED`,
+`BLOCKED`. Verification listed here is evidence already executed, not a plan.
+No live DB or full JSON regression run has been performed in this work session.
+
+| ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
+|---|---|---|---|---|---|---|
+| SHIP-001 | Eligible sale locations | IMPLEMENTED_UNVERIFIED | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_stardock.c` | `tests.v2/suite_ship_sale_v3.json` authored; not runtime-run | — | Verify database classifications/police restrictions |
+| SHIP-002 | Integer 60% hull+equipment valuation | IMPLEMENTED_UNVERIFIED | `repo_stardock.c`, `server_config.c` | Ship-sale JSON suite; not runtime-run | — | Runtime valuation verification |
+| SHIP-003 | Cargo forfeiture | IMPLEMENTED_UNVERIFIED | used-sale transaction in `repo_stardock.c` | Ship-sale JSON suite; not runtime-run | — | Verify loss in DB-backed flow |
+| SHIP-004 | Equipment remains with used hull | IMPLEMENTED_UNVERIFIED | `repo_stardock.c`, migration 170/122 | Ship-sale JSON suite; not runtime-run | — | Verify identifiable used-hull contents |
+| SHIP-005 | Used hull is purchasable | PARTIAL | used inventory schema exists; no complete used-hull acquisition contract/path | None executed | — | Implement price/request/purchase settlement; resale policy is required but exact resale price not specified |
+| SHIP-006 | Last/active ship restrictions and replacement | IMPLEMENTED_UNVERIFIED | `server_ships.c`, `server_stardock.c`, `repo_stardock.c` | Ship-sale JSON suite; not runtime-run | — | Runtime ownership/active-state checks |
+| SHIP-007 | Sale terminates insurance without refund | IMPLEMENTED_UNVERIFIED | `repo_stardock.c` | Ship-sale JSON suite; not runtime-run | — | Runtime verify |
+| SHIP-008 | Atomic sale settlement | IMPLEMENTED_UNVERIFIED | `repo_stardock.c`, migration 170/122 | Ship-sale JSON suite; not runtime-run | — | Runtime rollback/concurrency verification |
+| SHIP-009 | `ship.sell`, `shipyard.sell`, separate sale factor | IMPLEMENTED_UNVERIFIED | `server_ships.c`, `server_stardock.c`, `server_config.c` | `test_v3_shipyard_sale_request.py` 2 tests passed; JSON suite not runtime-run | — | End-to-end server verification |
+| HARV-001 | Transfer ORE/ORG/EQU | IMPLEMENTED_UNVERIFIED | `cmd_planet_harvest`, `repo_planets_harvest` | Harvest JSON cases authored; `test_planetary_server_contract.py`: 32 passed; runtime not run | — | Execute protocol scenario and verify DB result |
+| HARV-002 | Only accumulated stock | IMPLEMENTED_UNVERIFIED | repository reads `entity_stock`; conditional decrement | Static contract suite 32 passed; no DB runtime | — | Runtime conservation verification |
+| HARV-003 | Destination is currently landed ship | IMPLEMENTED_UNVERIFIED | repository revalidates active ship, lastplanet, onplanet and sector under locks | Static contract suite 32 passed; no DB runtime | — | Runtime verify stale-ship rejection |
+| HARV-004 | Capacity-aware partial harvest | IMPLEMENTED_UNVERIFIED | deterministic ORE/ORG/EQU allocation to aggregate free holds | JSON case asserts five-hold partial transfer; not runtime-run; static contract suite 32 passed | — | Verify cargo limits and stock remainder against real DB |
+| HARV-005 | Zero turns | IMPLEMENTED_UNVERIFIED | response sets zero; repository does not mutate turns | Static contract suite 32 passed; JSON case authored | — | Runtime verify player turns unchanged |
+| HARV-006 | Existing owner/corporation withdrawal permissions | IMPLEMENTED_UNVERIFIED | owner or corporation Leader/Officer; active landing revalidated | Static contract suite 32 passed | — | Runtime verify permission matrix |
+| HARV-007 | Locking and atomic stock/cargo transfer | IMPLEMENTED_UNVERIFIED | locks planet/player/ship; conditional stock debit and cargo repository updates inside outer transaction | Sanitised build and static contract suite 32 passed; no DB runtime | — | Exercise rollback/concurrency |
+| HARV-008 | Exchange-sold goods unavailable to harvest | PARTIAL | current market sell decrements planet stock; Exchange ring-fencing gap audited | No runtime tests | — | Ensure Exchange inventory receipt, then harvest only remaining planetary stock |
+| VIEW-001 | Read-only overview | IMPLEMENTED_UNVERIFIED | `cmd_planet_view` in `server_planets.c` | Planet suite authored; Python static suite 28 passed (not runtime) | — | Verify read-only response via JSON runtime |
+| VIEW-002 | Keep detailed `planet.info` | IMPLEMENTED_UNVERIFIED | `cmd_planet_info` | Same | — | Verify management fields preserved |
+| VIEW-003 | Population/type/status | IMPLEMENTED_UNVERIFIED | `cmd_planet_view`, `cmd_planet_info` | `suite_planet_fighter_transfers.json`; not runtime-run | — | Runtime verify |
+| VIEW-004 | Current production disclosure | IMPLEMENTED_UNVERIFIED | `db_cron_planet_get_production_overview_json` in `repo_cron.c`; `cmd_planet_view` | Sanitised build; static contract suite 32 passed; no runtime test | — | Runtime compare overview values with production tick |
+| VIEW-005 | Morale representation | IMPLEMENTED_UNVERIFIED | response reports slave `LOW` | Static tests only | — | Runtime verify; no dynamic recovery |
+| VIEW-006 | Treasury privacy in view/info | IMPLEMENTED_UNVERIFIED | owner/corporation authorization in handlers | Static suite 28 passed; no DB runtime | — | Verify unauthorized response redaction |
+| PLAYER-001 | `player.list_online` | IMPLEMENTED_UNVERIFIED | `src/server_players.c` | `suite_player_status.json`; not runtime-run | — | Run protocol case |
+| PLAYER-002 | 1-based page/limit | IMPLEMENTED_UNVERIFIED | `server_players.c`, schema | Static/protocol coverage exists; no runtime here | — | Verify edge pages |
+| PLAYER-003 | Public field allowlist | IMPLEMENTED_UNVERIFIED | `server_players.c`, `schemas.c` | Protocol suite not runtime-run | — | Verify no private fields |
+| PLAYER-004 | Deduplicate authenticated users | IMPLEMENTED_UNVERIFIED | `server_players.c` | Protocol suite not runtime-run | — | Verify multi-session case |
+| PLAYER-005 | Stable order | IMPLEMENTED_UNVERIFIED | `server_players.c` | Protocol suite not runtime-run | — | Runtime verify pagination stability |
+| PLAYER-006 | Include corporation/alignment | IMPLEMENTED_UNVERIFIED | `server_players.c` | Protocol suite not runtime-run | — | Verify representations |
+| BANK-001 | Create/list/cancel | PARTIAL | `src/server_bank.c`, `repo_bank.c` require audit | No execution | — | Trace against current bank contract |
+| BANK-002 | Daily/weekly/monthly | PARTIAL | standing-order code/scheduler needs audit | No execution | — | Verify all frequencies |
+| BANK-003 | Persisted specified UTC time | PARTIAL | bank scheduler/repository | No execution | — | Verify durable schedule |
+| BANK-004 | Any existing-player recipient | PARTIAL | bank order handlers | No execution | — | Ensure no corp-only restriction |
+| BANK-005 | Skip insufficient occurrence | PARTIAL | bank scheduler | No execution | — | Verify next occurrence and no retry/debt |
+| BANK-006 | Monthly last-day adjustment | PARTIAL | bank scheduler | No execution | — | Implement/test leap and short months |
+| BANK-007 | Deleted recipient cancellation | PARTIAL | bank scheduler | No execution | — | Implement/test |
+| BANK-008 | Immediate cancellation | PARTIAL | bank order cancellation | No execution | — | Serialize with executor |
+| BANK-009 | Exactly once per occurrence | PARTIAL | banking ledger/scheduler | No execution | — | Verify durable idempotency/concurrency |
+| BANK-010 | Atomic debit/credit | PARTIAL | banking transaction path | No execution | — | Verify transaction and ledger |
+| BANK-011 | No arbitrary order limit | UNVERIFIED | `server_bank.c`, `repo_bank.c` | No execution | — | Inspect for undocumented cap |
+| POP-001 | Exclusive population type | IMPLEMENTED_UNVERIFIED | migrations 171/123; planet handlers | `test_planetary_server_contract.py`: 28 passed | — | DB migration/runtime constraint verification |
+| POP-002 | Existing population migration | IMPLEMENTED_UNVERIFIED | migrations 171/123 | No DB migration test in this session | — | Validate migration on both backends |
+| POP-003 | Evil acquisition rules | IMPLEMENTED_UNVERIFIED | `server_ports.c` illegal SLV trade; `cmd_planet_deposit`, `repo_planets_deposit_slaves` | Slave delivery JSON scenario authored; static contract suite 32 passed; no DB runtime | — | Runtime verify port purchase + landed transfer and neutral/good refusal |
+| POP-004 | Explicit evil conquest choice | IMPLEMENTED_UNVERIFIED | `cmd_combat_attack_planet`, `db_planets_capture` | Sanitised build passed; combat JSON request updated; static tests passed, no DB runtime | — | Test alignment-specific capture outcomes and rollback |
+| POP-005 | Neutral inheritance/no acquisition | IMPLEMENTED_UNVERIFIED | capture retains existing SLAVE type; delivery requires existing alignment-band evil flag | Static contract suite 32 passed; no runtime | — | Test neutral capture and attempted purchase |
+| POP-006 | Good auto-liberation | IMPLEMENTED_UNVERIFIED | capture transaction conversion | Build passed; no dedicated executed test | — | JSON scenario and runtime validation |
+| POP-007 | Evil may retain slave population | IMPLEMENTED_UNVERIFIED | capture path leaves SLAVE unchanged | No runtime test | — | JSON scenario |
+| POP-008 | Slave production at 50% | IMPLEMENTED_UNVERIFIED | `repo_cron.c` integer production multiplier | Static contract tests not specific; no DB runtime | — | Test exact floor for all three outputs |
+| POP-009 | Permanently low morale, no second penalty | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `repo_cron.c` | Source/static only | — | Verify production and API |
+| POP-010 | Deterministic daily unrest | BLOCKED | state columns/event table migrations only | No execution | — | Trigger, stoppage and loss values await owner policy |
+| POP-011 | No unapproved defaults | PARTIAL | no activated unrest policy | No execution | — | Add validated configurable keys after policy values approved |
+| POP-012 | Restart-safe unrest idempotency | PARTIAL | persisted state/event table only | No execution | — | Scheduler unavailable until policy values approved |
+| POP-013 | Whole-population emancipation | IMPLEMENTED_UNVERIFIED | `cmd_planet_emancipate`, `repo_planets_emancipate` | Sanitised build; static contract suite 32 passed; no DB runtime | — | Test corp roles and transaction |
+| POP-014 | Atomic acquisition/conversion/conquest | PARTIAL | emancipation/capture transactions; purchase missing | No runtime tests | — | Purchase transaction and concurrent cases |
+| EXC-001 | Persistent exchange market | PARTIAL | bilateral `commodity_orders` / trades; no exchange inventory | Source audit in committed contract | — | Resolve/fund exchange inventory model |
+| EXC-002 | Sale into ring-fenced inventory and funded payout | PARTIAL | planet sale decrements stock and credits seller without Exchange receipt | Source audit | — | Implement only with authoritative funded buyer/account |
+| EXC-003 | Exchange purchases to planet/port | NOT_STARTED | No exchange inventory buyer path found | Source audit | — | Depends on exchange inventory and finance model |
+| EXC-004 | Ring-fenced stock | NOT_STARTED | No Exchange-owned stock ledger found | Source audit | — | Add authoritative inventory lifecycle after account source decision |
+| EXC-005 | Virtual transport | IMPLEMENTED_UNVERIFIED | no physical exchange vessels; transaction matching is direct | Source inspection only | — | Ensure no ship dependency in Exchange path |
+| EXC-006 | Open order lifecycle | IMPLEMENTED_UNVERIFIED | `repo_market.c`, `server_cron.c` | Existing tests not executed here | — | Verify partial fills, cancel and expiry |
+| EXC-007 | Port demand purchases | PARTIAL | `h_port_economy_tick` places port buy orders matched bilaterally | Source audit | — | Route port restock through Exchange inventory |
+| EXC-008 | Commodity conservation | PARTIAL | bilateral matching transfers stock; immediate planetary sell loses Exchange ownership record | Source audit | — | Add conservation tests/ledger |
+| EXC-009 | Financial conservation | PARTIAL | bilateral bank transfers; Exchange no funded clearing source | Source audit | — | Specify/implement market liquidity accounting |
+| EXC-010 | Audit named market paths | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `server_cron.c`, `repo_market.c` | Source audit documented; no runtime tests | — | Resolve Exchange gaps |
+| EXC-011 | No loss/duplication/oversell | PARTIAL | conditional stock decrement and bilateral settlement | No DB runtime tests | — | Verify race/retry/restart cases |
+| EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
+| COMBAT-001 | Universal escape pod | PARTIAL | existing destruction helper/repo paths; complete call-site audit outstanding | No tests executed | — | Unify every destruction source |
+| COMBAT-002 | No starter-ship respawn | PARTIAL | destruction implementation audit pending | No tests executed | — | Verify escape pod active assignment |
+| COMBAT-003 | No duplicated hull/pod/loss | PARTIAL | idempotency mechanisms vary by path | No tests executed | — | Transaction/idempotency audit |
+| COMBAT-004 | Cargo/equipment loss | PARTIAL | destruction paths exist | No tests executed | — | Verify all destruction sources |
+| COMBAT-005 | Preserve bank/planet/corporate assets | PARTIAL | existing destruction repository | No tests executed | — | State-transition tests |
+| INS-001 | Hull-only coverage | PARTIAL | existing insurance data and destruction path | No tests executed | — | Trace actual valuation and payout |
+| INS-002 | Qualifying destruction | PARTIAL | existing eligibility path | No tests executed | — | Audit and verify |
+| INS-003 | Credit bank account | PARTIAL | payout destination unverified | No tests executed | — | Implement if absent |
+| INS-004 | Pod independent of policy | PARTIAL | destruction lifecycle audit pending | No tests executed | — | Cover insured/uninsured paths |
+| INS-005 | Exactly-once payout | PARTIAL | loss idempotency needs cross-path audit | No tests executed | — | Durable idempotency test |
+| INS-006 | Sale terminates without refund | IMPLEMENTED_UNVERIFIED | `repo_stardock.c` sale transaction | Ship-sale JSON suite authored, not run | — | DB-backed verify |
+| CAP-001 | Defeat defenses | IMPLEMENTED_UNVERIFIED | `cmd_combat_attack_planet` | Combat JSON suite authored, not run | — | Verify citadel/fighter defenses |
+| CAP-002 | Successful invasion required | IMPLEMENTED_UNVERIFIED | existing fighter comparison determines success | Combat JSON suite authored, not run | — | Validate combat outcome tests |
+| CAP-003 | Ownership transfer | IMPLEMENTED_UNVERIFIED | `db_planets_capture` | Build passed; no DB runtime | — | Concurrency test and event assertion |
+| CAP-004 | Resources/entire treasury remain with planet | IMPLEMENTED_UNVERIFIED | capture updates ownership/population only | Source inspection; no DB runtime | — | Verify associated stock/accounts stay linked |
+| CAP-005 | Unrelated assets stay put | IMPLEMENTED_UNVERIFIED | capture does not mutate external accounts/assets | Source inspection only | — | Verify via JSON/DB journey |
+| CAP-006 | Population transition atomic | IMPLEMENTED_UNVERIFIED | `db_planets_capture` conditional owner/population update in combat tx | Build passed; no runtime test | — | Add full capture population matrix |
+| MOVE-001 | Interrupted transwarp consumes fuel, stays origin | PARTIAL | movement implementation audit pending | No test executed | — | Locate interruption branch and verify |
+| MOVE-002 | Rejected validation does not consume fuel | PARTIAL | movement implementation audit pending | No test executed | — | Add request/state assertions |
+| MOVE-003 | Immediate entry hazards | PARTIAL | movement/hazard handlers exist | No runtime tests | — | Verify normal/transwarp common path |
+| MOVE-004 | Hazard destruction uses common lifecycle | PARTIAL | combat integration audit pending | No runtime tests | — | Unify and test |
+| TRADE-001 | No haggling | IMPLEMENTED_UNVERIFIED | fixed-price ports, dynamic pricing | Port tests not run here | — | Confirm no haggling command path |
+| TRADE-002 | Dynamic pricing retained | IMPLEMENTED_UNVERIFIED | port price repositories | No test executed | — | Verify supply/demand prices |
+| TRADE-003 | Direction, stock, cargo, policing | IMPLEMENTED_UNVERIFIED | `server_ports.c`, repositories | No test executed | — | Runtime contract verification |
+| SYS-001 | 60% ship sale setting | IMPLEMENTED_UNVERIFIED | `server_config.c`, `server_sysop.c` | Build passed, no runtime | — | Confirm default and bounds via protocol |
+| SYS-002 | Fixed 50% slave productivity | IMPLEMENTED_UNVERIFIED | `repo_cron.c` | No DB test | — | Verify exact floor |
+| SYS-003 | Configurable deterministic unrest | BLOCKED | population state/migration only | No test executed | — | Await approved values; never activate defaults |
+| SYS-004 | Existing insurance valuation config | PARTIAL | insurance config/repositories need trace | No test executed | — | Confirm authoritative value or request policy |
+| SYS-005 | Economy config | PARTIAL | current market config | Source audit only | — | Document Exchange settlement parameters after funding decision |
+| SYS-006 | Config documentation | IMPLEMENTED_UNVERIFIED | `docs/SYSOP_MENU.md`, protocol 29 | Docs commit `434d81a6` | `434d81a6` | Ensure new config entries match implementation |
+
+## Execution evidence log
+
+- Sanitised server build: `make -C bin -j2` — passed after current capture changes.
+- Focused Python source-contract tests: `python3 -m pytest -q tests.v2/test_planetary_server_contract.py` — 32 passed.
+- JSON syntax: `python3 -m json.tool tests.v2/suite_combat_advanced.json` and `python3 -m json.tool tests.v2/suite_planet_fighter_transfers.json` — passed.
+- `git diff --check` — passed.
+- A combined pytest command once referenced nonexistent `test_v3_population_contract.py`; that command failed collection and is not counted as a test pass. The valid focused command above was run separately and passed.
+- No PostgreSQL integration, server protocol run, full regression or Godot test was performed.

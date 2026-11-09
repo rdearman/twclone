@@ -31,6 +31,56 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Fixture enslaved population with existing assignments",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE planets SET population=1000, population_type='SLAVE', colonists_unassigned=400, colonists_ore=300, colonists_org=200, colonists_eq=100, colonists_weapons=0 WHERE planet_id=977701;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Prepare exact harvested stocks and a five-hold ship",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM ship_cargo WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set harvest ship capacity",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET ore=0, organics=0, equipment=0, holds=5 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create harvest commodity capacity rows",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planet_goods (planet_id,commodity,quantity,max_capacity,production_rate) VALUES (977701,'ORE',0,100000,0),(977701,'ORG',0,100000,0),(977701,'EQU',0,100000,0) ON CONFLICT (planet_id,commodity) DO UPDATE SET max_capacity=100000;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create accumulated harvest inventory",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity,price) VALUES ('planet',977701,'ORE',2,0),('planet',977701,'ORG',3,0),('planet',977701,'EQU',4,0) ON CONFLICT (entity_type,entity_id,commodity_code) DO UPDATE SET quantity=EXCLUDED.quantity;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Harvest transfers only stock that fits without turns",
+      "command": "planet.harvest", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701 },
+      "expect": { "status": "ok", "type": "planet.harvest_v1" },
+      "asserts": [
+        { "path": "data.ore_harvested", "op": "==", "value": 2 },
+        { "path": "data.organics_harvested", "op": "==", "value": 3 },
+        { "path": "data.equipment_harvested", "op": "==", "value": 0 },
+        { "path": "data.holds_remaining", "op": "==", "value": 0 },
+        { "path": "data.turns_charged", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Harvest state conserves all goods and syncs ship cargo",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=977701 AND commodity_code='ORE')=0 AND (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=977701 AND commodity_code='ORG')=0 AND (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=977701 AND commodity_code='EQU')=4 AND s.ore=2 AND s.organics=3 AND s.equipment=0 FROM ships s JOIN players pl ON pl.ship_id=s.ship_id WHERE pl.player_id=@{planet_fighter_owner_player_id};" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
       "name": "Owner sees current citadel state, defenses, and treasury",
       "command": "planet.info", "user": "planet_fighter_owner", "data": { "planet_id": 977701 },
       "expect": { "status": "ok", "type": "planet.info" },
@@ -41,6 +91,20 @@
         { "path": "data.citadel.military_reaction_level", "op": "==", "value": 1 },
         { "path": "data.citadel.qCannonSector", "op": "==", "value": 50 },
         { "path": "data.citadel.qCannonAtmosphere", "op": "==", "value": 40 }
+      ]
+    },
+    {
+      "name": "Owner overview includes treasury without management internals",
+      "command": "planet.view", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701 },
+      "expect": { "status": "ok", "type": "planet.view_v1" },
+      "asserts": [
+        { "path": "data.planet_id", "op": "==", "value": 977701 },
+        { "path": "data.treasury", "op": "==", "value": 555 },
+        { "path": "data.owner_id", "op": "==", "value": null },
+        { "path": "data.population_type", "op": "==", "value": "SLAVE" },
+        { "path": "data.morale_status", "op": "==", "value": "LOW" },
+        { "path": "data.production", "op": "exists" }
       ]
     },
     {
@@ -126,10 +190,113 @@
       "asserts": [ { "path": "data.citadel.treasury_balance", "op": "==", "value": null } ]
     },
     {
+      "name": "Landed visitor overview omits treasury and ownership data",
+      "command": "planet.view", "user": "planet_fighter_visitor",
+      "data": { "planet_id": 977701 },
+      "expect": { "status": "ok", "type": "planet.view_v1" },
+      "asserts": [
+        { "path": "data.treasury", "op": "==", "value": null },
+        { "path": "data.owner_id", "op": "==", "value": null },
+        { "path": "data.goods", "op": "exists" },
+        { "path": "data.morale_status", "op": "==", "value": "LOW" }
+      ]
+    },
+    {
+      "name": "Unauthorized visitor cannot emancipate",
+      "command": "planet.emancipate", "user": "planet_fighter_visitor",
+      "data": { "planet_id": 977701 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Owner emancipates the whole population without cost",
+      "command": "planet.emancipate", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701 },
+      "expect": { "status": "ok", "type": "planet.emancipated_v1" },
+      "asserts": [
+        { "path": "data.population", "op": "==", "value": 1000 },
+        { "path": "data.population_type", "op": "==", "value": "COLONIST" },
+        { "path": "data.turns_charged", "op": "==", "value": 0 },
+        { "path": "data.credits_charged", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Emancipation preserves assigned and unassigned counts",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT population=1000 AND population_type='COLONIST' AND colonists_unassigned=400 AND colonists_ore=300 AND colonists_org=200 AND colonists_eq=100 FROM planets WHERE planet_id=977701;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
       "name": "Landed visitor cannot transfer planet fighters",
       "command": "planet.fighters.transfer", "user": "planet_fighter_visitor",
       "data": { "planet_id": 977701, "direction": "planet_to_ship", "quantity": 1 },
       "expect": { "status": "error" }
+    },
+    {
+      "name": "Create empty slave-transport planet",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planets (planet_id,sector_id,name,owner_id,owner_type,class,type,created_by,population,colonists_unassigned) VALUES (977702,1,'Slave Transport QA',@{planet_fighter_owner_player_id},'player','M',1,@{admin_player_id},0,0) ON CONFLICT (planet_id) DO UPDATE SET owner_id=EXCLUDED.owner_id,owner_type='player',population=0,colonists_unassigned=0,population_type='UNPOPULATED';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Prepare evil-aligned landed player and SLV cargo",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET alignment=(SELECT min_align FROM alignment_band WHERE is_evil=TRUE ORDER BY min_align LIMIT 1),lastplanet=977702,sector_id=1 WHERE player_id=@{planet_fighter_owner_player_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Load slave cargo and land at destination",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=TRUE,holds=10 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture ship slave cargo",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id,commodity_code,quantity) SELECT ship_id,'SLV',2 FROM players WHERE player_id=@{planet_fighter_owner_player_id} ON CONFLICT (ship_id,commodity_code) DO UPDATE SET quantity=2;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Evil player deposits slaves as slave population",
+      "command": "planet.deposit", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977702, "commodity": "SLV", "quantity": 2 },
+      "expect": { "status": "ok", "type": "planet.deposit" },
+      "asserts": [
+        { "path": "data.population_type", "op": "==", "value": "SLAVE" },
+        { "path": "data.population", "op": "==", "value": 2 },
+        { "path": "data.quantity", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "Slave delivery consumes cargo and does not mix population",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT p.population=2 AND p.population_type='SLAVE' AND p.colonists_unassigned=2 AND COALESCE(sc.quantity,0)=0 FROM planets p JOIN players pl ON pl.player_id=@{planet_fighter_owner_player_id} LEFT JOIN ship_cargo sc ON sc.ship_id=pl.ship_id AND sc.commodity_code='SLV' WHERE p.planet_id=977702;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
+      "name": "Restore fixture alignment",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET alignment=0 WHERE player_id=@{planet_fighter_owner_player_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove slave transport fixture",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM planets WHERE planet_id=977702;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove harvest stock fixtures",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM entity_stock WHERE entity_type='planet' AND entity_id=977701;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove planet goods fixtures",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM planet_goods WHERE planet_id=977701;" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Remove planet fixture",

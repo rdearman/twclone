@@ -1,8 +1,13 @@
 #define TW_DB_INTERNAL 1
 #include "db_int.h"
 #include "repo_planets.h"
+#include "repo_corporation.h"
+#include "repo_cargo.h"
+#include "repo_ships.h"
+#include "repo_ports.h"
 #include "db/sql_driver.h"
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -212,13 +217,50 @@ int db_planets_update_ship_fighters(db_t *db, int ship_id, int loss) {
     return -1;
 }
 
-int db_planets_capture(db_t *db, int planet_id, int new_owner, const char *new_type) {
-    db_error_t err;
-    /* SQL_VERBATIM: Q12 */
-    const char *q12 = "UPDATE planets SET fighters=0, owner_id={1}, owner_type={2} WHERE planet_id={3};";
-    char sql[512]; sql_build(db, q12, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(new_owner), db_bind_text(new_type), db_bind_i64(planet_id) }, 3, &err)) return 0;
-    return -1;
+int db_planets_capture(db_t *db, int planet_id, int new_owner,
+                       const char *new_type, bool enslave_colonists,
+                       bool liberate_slaves,
+                       const char *expected_population_type,
+                       int expected_owner_id,
+                       const char *expected_owner_type) {
+    if (!db || planet_id <= 0 || new_owner <= 0 || !new_type
+        || !expected_population_type || expected_owner_id < 0
+        || !expected_owner_type)
+        return ERR_INVALID_ARG;
+    db_error_t err = {0};
+    int64_t rows = 0;
+    const char *query =
+      "UPDATE planets SET fighters=0, owner_id={1}, owner_type={2}, "
+      "population_type=CASE "
+      "WHEN population_type='SLAVE' AND {3}=TRUE THEN 'COLONIST' "
+      "WHEN population_type='COLONIST' AND {4}=TRUE THEN 'SLAVE' "
+      "ELSE population_type END, "
+      "slave_unrest_stopped=CASE WHEN (population_type='SLAVE' AND {3}=TRUE) "
+      "OR (population_type='COLONIST' AND {4}=TRUE) THEN FALSE "
+      "ELSE slave_unrest_stopped END, "
+      "slave_unrest_next_at=CASE WHEN (population_type='SLAVE' AND {3}=TRUE) "
+      "OR (population_type='COLONIST' AND {4}=TRUE) THEN NULL "
+      "ELSE slave_unrest_next_at END, "
+      "slave_unrest_stoppage_until=CASE WHEN (population_type='SLAVE' AND {3}=TRUE) "
+      "OR (population_type='COLONIST' AND {4}=TRUE) THEN NULL "
+      "ELSE slave_unrest_stoppage_until END, "
+      "slave_unrest_last_event_at=CASE WHEN (population_type='SLAVE' AND {3}=TRUE) "
+      "OR (population_type='COLONIST' AND {4}=TRUE) THEN NULL "
+      "ELSE slave_unrest_last_event_at END "
+      "WHERE planet_id={5} AND population_type={6} "
+      "AND COALESCE(owner_id,0)={7} AND COALESCE(owner_type,'')={8};";
+    char sql[1536];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql,
+          (db_bind_t[]){db_bind_i32(new_owner), db_bind_text(new_type),
+                        db_bind_bool(liberate_slaves),
+                        db_bind_bool(enslave_colonists), db_bind_i32(planet_id),
+                        db_bind_text(expected_population_type),
+                        db_bind_i32(expected_owner_id),
+                        db_bind_text(expected_owner_type)},
+          8, &rows, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    return rows == 1 ? 0 : ERR_DB_NOT_FOUND;
 }
 
 int db_planets_lose_fighters(db_t *db, int planet_id, int loss) {
@@ -312,6 +354,372 @@ int db_planets_get_owner_info_for_update(db_t *db, int planet_id,
         return err.code ? err.code : ERR_DB_NOMEM;
     }
     return 0;
+}
+
+int
+repo_planets_emancipate (db_t *db, int planet_id, int player_id,
+                         int64_t *population_out)
+{
+    if (!db || planet_id <= 0 || player_id <= 0 || !population_out)
+        return ERR_INVALID_ARG;
+    *population_out = 0;
+    db_error_t err = {0};
+    if (!db_tx_begin(db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    int owner_id = 0;
+    char *owner_type = NULL;
+    int rc = db_planets_get_owner_info_for_update(db, planet_id, &owner_id,
+                                                   &owner_type);
+    if (rc != 0) {
+        db_tx_rollback(db, &err);
+        free(owner_type);
+        return rc;
+    }
+    bool authorized = false;
+    if (owner_type && strcmp(owner_type, "player") == 0)
+        authorized = owner_id == player_id;
+    else if (owner_type && (strcmp(owner_type, "corp") == 0
+                            || strcmp(owner_type, "corporation") == 0)) {
+        char role[32] = {0};
+        rc = repo_corp_lock_member_role(db, owner_id, player_id,
+                                        role, sizeof(role));
+        authorized = rc == 0 && (strcasecmp(role, "Leader") == 0
+                                 || strcasecmp(role, "Officer") == 0);
+    }
+    free(owner_type);
+    if (!authorized) {
+        db_tx_rollback(db, &err);
+        return ERR_PERMISSION_DENIED;
+    }
+
+    const char *update =
+      "UPDATE planets SET population_type='COLONIST', slave_unrest_stopped=FALSE, "
+      "slave_unrest_next_at=NULL, slave_unrest_stoppage_until=NULL, "
+      "slave_unrest_last_event_at=NULL "
+      "WHERE planet_id={1} AND population_type='SLAVE';";
+    char sql[512];
+    int64_t rows = 0;
+    if (sql_build(db, update, sql, sizeof(sql)) != 0
+        || !db_exec_rows_affected(db, sql, (db_bind_t[]){db_bind_i32(planet_id)},
+                                  1, &rows, &err)
+        || rows != 1) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_CONSTRAINT;
+    }
+    const char *count_query =
+      "SELECT COALESCE(population,0) FROM planets WHERE planet_id={1};";
+    if (sql_build(db, count_query, sql, sizeof(sql)) != 0) {
+        db_tx_rollback(db, &err);
+        return ERR_DB_QUERY_FAILED;
+    }
+    db_res_t *res = NULL;
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i32(planet_id)}, 1, &res,
+                  &err) || !db_res_step(res, &err)) {
+        if (res) db_res_finalize(res);
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    int64_t population = db_res_col_i64(res, 0, &err);
+    db_res_finalize(res);
+    if (err.code || !db_tx_commit(db, &err)) {
+        db_tx_rollback(db, &err);
+        return err.code ? err.code : ERR_DB_TX;
+    }
+    *population_out = population;
+  return 0;
+}
+
+int
+repo_planets_harvest (db_t *db, int player_id, int ship_id, int planet_id,
+                      int64_t harvested_out[3], int64_t *holds_remaining_out)
+{
+  if (!db || player_id <= 0 || ship_id <= 0 || planet_id <= 0
+      || !harvested_out || !holds_remaining_out)
+    return ERR_INVALID_ARG;
+  memset (harvested_out, 0, sizeof (int64_t) * 3);
+  *holds_remaining_out = 0;
+  db_error_t err = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return err.code ? err.code : ERR_DB_TX;
+
+  const char *select_template =
+    "SELECT p.owner_id, COALESCE(p.owner_type,''), p.sector_id, "
+    "pl.ship_id, COALESCE(pl.lastplanet,0), s.sector_id, COALESCE(s.onplanet,FALSE) "
+    "FROM planets p JOIN players pl ON pl.player_id={1} "
+    "JOIN ships s ON s.ship_id=pl.ship_id "
+    "WHERE p.planet_id={2} AND pl.ship_id={3}";
+  char lock_clause[96], query_template[1024], sql[1024];
+  if (sql_for_update_of (db, "p, pl, s", lock_clause,
+                         sizeof (lock_clause)) != 0
+      || snprintf (query_template, sizeof (query_template), "%s%s;",
+                   select_template, lock_clause) >= (int) sizeof (query_template)
+      || sql_build (db, query_template, sql, sizeof (sql)) != 0)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_DB_QUERY_FAILED;
+    }
+  db_res_t *res = NULL;
+  if (!db_query (db, sql,
+                 (db_bind_t[]){db_bind_i32 (player_id),
+                               db_bind_i32 (planet_id),
+                               db_bind_i32 (ship_id)}, 3, &res, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+  int owner_id = db_res_col_i32 (res, 0, &err);
+  const char *owner_type_text = db_res_col_text (res, 1, &err);
+  char owner_type[24] = {0};
+  if (owner_type_text)
+    snprintf (owner_type, sizeof (owner_type), "%s", owner_type_text);
+  int planet_sector = db_res_col_i32 (res, 2, &err);
+  int active_ship_id = db_res_col_i32 (res, 3, &err);
+  int landed_planet = db_res_col_i32 (res, 4, &err);
+  int ship_sector = db_res_col_i32 (res, 5, &err);
+  bool onplanet = db_res_col_bool (res, 6, &err);
+  db_res_finalize (res);
+  if (err.code)
+    {
+      db_tx_rollback (db, &err);
+      return err.code;
+    }
+  if (active_ship_id != ship_id || landed_planet != planet_id || !onplanet
+      || ship_sector != planet_sector)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_PERMISSION_DENIED;
+    }
+
+  bool authorized = strcmp (owner_type, "player") == 0
+    && owner_id == player_id;
+  if (!authorized && (strcmp (owner_type, "corp") == 0
+                      || strcmp (owner_type, "corporation") == 0))
+    {
+      char role[32] = {0};
+      int role_rc = repo_corp_lock_member_role (db, owner_id, player_id,
+                                                role, sizeof (role));
+      authorized = role_rc == 0 && (strcasecmp (role, "Leader") == 0
+                                     || strcasecmp (role, "Officer") == 0);
+    }
+  if (!authorized)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_PERMISSION_DENIED;
+    }
+
+  int ignored_ore = 0, ignored_org = 0, ignored_equ = 0;
+  int ignored_col = 0, ignored_slv = 0, ignored_wpn = 0, ignored_drg = 0;
+  int holds = 0;
+  int rc = repo_ships_get_cargo_and_holds (db, ship_id, &ignored_ore,
+                                           &ignored_org, &ignored_equ,
+                                           &ignored_col, &ignored_slv,
+                                           &ignored_wpn, &ignored_drg, &holds);
+  int64_t cargo_total = 0;
+  if (rc == 0)
+    rc = repo_cargo_get_total (db, ship_id, &cargo_total);
+  if (rc != 0 || holds < 0 || cargo_total > holds)
+    {
+      db_tx_rollback (db, &err);
+      return rc ? rc : ERR_DB_CONSTRAINT;
+    }
+
+  static const char *codes[] = {"ORE", "ORG", "EQU"};
+  int64_t available_holds = (int64_t) holds - cargo_total;
+  int64_t staged[3] = {0, 0, 0};
+  for (size_t i = 0; i < 3 && available_holds > 0; ++i)
+    {
+      int stock = 0, stock_capacity = 0;
+      rc = db_planets_get_market_move_info (db, planet_id, codes[i],
+                                             &stock, &stock_capacity);
+      if (rc != 0)
+        {
+          db_tx_rollback (db, &err);
+          return ERR_DB_QUERY_FAILED;
+        }
+      (void) stock_capacity;
+      int64_t take = stock < available_holds ? stock : available_holds;
+      if (take <= 0)
+        continue;
+      rc = db_ports_decrement_stock (db, "planet", planet_id, codes[i],
+                                     (int) take, (int64_t) time (NULL));
+      if (rc == 0)
+        rc = repo_cargo_add (db, ship_id, codes[i], take, NULL);
+      if (rc == 0)
+        rc = repo_cargo_sync_legacy_columns (db, ship_id);
+      if (rc != 0)
+        {
+          db_tx_rollback (db, &err);
+          return rc;
+        }
+      staged[i] = take;
+      available_holds -= take;
+    }
+
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_TX;
+    }
+  memcpy (harvested_out, staged, sizeof staged);
+  *holds_remaining_out = available_holds;
+  return 0;
+}
+
+int
+repo_planets_deposit_slaves (db_t *db, int player_id, int ship_id,
+                             int planet_id, int64_t quantity,
+                             int64_t *population_out)
+{
+  if (!db || player_id <= 0 || ship_id <= 0 || planet_id <= 0
+      || quantity <= 0 || !population_out)
+    return ERR_INVALID_ARG;
+  *population_out = 0;
+  db_error_t err = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return err.code ? err.code : ERR_DB_TX;
+
+  const char *select_template =
+    "SELECT p.owner_id, COALESCE(p.owner_type,''), p.sector_id, "
+    "COALESCE(p.population_type,'UNPOPULATED'), pl.ship_id, "
+    "COALESCE(pl.lastplanet,0), s.sector_id, COALESCE(s.onplanet,FALSE), "
+    "COALESCE(ab.is_evil,FALSE), COALESCE(p.population,0), "
+    "COALESCE(p.colonists_unassigned,0)+COALESCE(p.colonists_ore,0)+ "
+    "COALESCE(p.colonists_org,0)+COALESCE(p.colonists_eq,0)+ "
+    "COALESCE(p.colonists_weapons,0) "
+    "FROM planets p JOIN players pl ON pl.player_id={1} "
+    "JOIN ships s ON s.ship_id=pl.ship_id "
+    "LEFT JOIN alignment_band ab ON pl.alignment BETWEEN ab.min_align AND ab.max_align "
+    "WHERE p.planet_id={2} AND pl.ship_id={3}";
+  char lock_clause[96], query_template[1536], sql[1536];
+  if (sql_for_update_of (db, "p, pl, s", lock_clause,
+                         sizeof (lock_clause)) != 0
+      || snprintf (query_template, sizeof (query_template), "%s%s;",
+                   select_template, lock_clause) >= (int) sizeof (query_template)
+      || sql_build (db, query_template, sql, sizeof (sql)) != 0)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_DB_QUERY_FAILED;
+    }
+  db_res_t *res = NULL;
+  if (!db_query (db, sql,
+                 (db_bind_t[]){db_bind_i32 (player_id),
+                               db_bind_i32 (planet_id),
+                               db_bind_i32 (ship_id)}, 3, &res, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+  int owner_id = db_res_col_i32 (res, 0, &err);
+  const char *owner_type_text = db_res_col_text (res, 1, &err);
+  char owner_type[24] = {0};
+  if (owner_type_text)
+    snprintf (owner_type, sizeof (owner_type), "%s", owner_type_text);
+  int planet_sector = db_res_col_i32 (res, 2, &err);
+  const char *population_type_text = db_res_col_text (res, 3, &err);
+  char population_type[24] = {0};
+  if (population_type_text)
+    snprintf (population_type, sizeof (population_type), "%s",
+              population_type_text);
+  int active_ship_id = db_res_col_i32 (res, 4, &err);
+  int landed_planet_id = db_res_col_i32 (res, 5, &err);
+  int ship_sector = db_res_col_i32 (res, 6, &err);
+  bool onplanet = db_res_col_bool (res, 7, &err);
+  bool is_evil = db_res_col_bool (res, 8, &err);
+  int64_t population = db_res_col_i64 (res, 9, &err);
+  int64_t allocated_population = db_res_col_i64 (res, 10, &err);
+  db_res_finalize (res);
+  if (err.code)
+    {
+      db_tx_rollback (db, &err);
+      return err.code;
+    }
+  if (!is_evil)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_PERMISSION_DENIED;
+    }
+  if (!((strcmp (population_type, "SLAVE") == 0)
+        || (strcmp (population_type, "UNPOPULATED") == 0)))
+    {
+      db_tx_rollback (db, &err);
+      return ERR_DB_CONSTRAINT;
+    }
+  if (active_ship_id != ship_id || landed_planet_id != planet_id || !onplanet
+      || ship_sector != planet_sector)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_PERMISSION_DENIED;
+    }
+  bool authorized = strcmp (owner_type, "player") == 0
+    && owner_id == player_id;
+  if (!authorized && (strcmp (owner_type, "corp") == 0
+                      || strcmp (owner_type, "corporation") == 0))
+    {
+      char role[32] = {0};
+      authorized = repo_corp_lock_member_role (db, owner_id, player_id,
+                                                role, sizeof (role)) == 0;
+    }
+  if (!authorized)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_PERMISSION_DENIED;
+    }
+
+  int rc = repo_cargo_add (db, ship_id, "SLV", -quantity, NULL);
+  if (rc == 0)
+    rc = repo_cargo_sync_legacy_columns (db, ship_id);
+  if (rc != 0)
+    {
+      db_tx_rollback (db, &err);
+      return rc;
+    }
+  const char *update =
+    "UPDATE planets SET population=GREATEST(COALESCE(population,0), {1})+{2}, "
+    "colonists_unassigned=COALESCE(colonists_unassigned,0)+{2}, "
+    "population_type='SLAVE' "
+    "WHERE planet_id={3} AND population_type IN ('SLAVE','UNPOPULATED');";
+  if (sql_build (db, update, sql, sizeof (sql)) != 0)
+    {
+      db_tx_rollback (db, &err);
+      return ERR_DB_QUERY_FAILED;
+    }
+  int64_t population_base = population > allocated_population
+    ? population : allocated_population;
+  int64_t next_population = 0;
+  if (__builtin_add_overflow (population_base, quantity, &next_population))
+    {
+      db_tx_rollback (db, &err);
+      return ERR_INVALID_ARG;
+    }
+  int64_t rows = 0;
+  if (!db_exec_rows_affected (db, sql,
+        (db_bind_t[]){db_bind_i64 (allocated_population),
+                      db_bind_i64 (quantity), db_bind_i32 (planet_id)},
+        3, &rows, &err) || rows != 1)
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_CONSTRAINT;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, &err);
+      return err.code ? err.code : ERR_DB_TX;
+    }
+  *population_out = next_population;
+  return 0;
 }
 
 int db_planets_rename(db_t *db, int planet_id, const char *new_name) {
@@ -996,9 +1404,14 @@ int db_planets_get_commodity_id_v2(db_t *db, const char *code, int *id) {
 int db_planets_add_colonists_unassigned(db_t *db, int planet_id, int quantity) {
     db_error_t err;
     /* SQL_VERBATIM: Q90 */
-    const char *q90 = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_weapons) + {1}), colonists_unassigned = GREATEST(0, colonists_unassigned + {1}) WHERE planet_id = {2}";
-    char sql[512]; sql_build(db, q90, sql, sizeof(sql));
-    if (db_exec(db, sql, (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(planet_id) }, 2, &err)) return 0;
+    const char *q90 = "UPDATE planets SET population = GREATEST(0, GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_weapons) + {1}), colonists_unassigned = GREATEST(0, colonists_unassigned + {1}), population_type = CASE WHEN GREATEST(COALESCE(population, 0), colonists_unassigned + colonists_ore + colonists_org + colonists_eq + colonists_weapons) + {1} > 0 THEN 'COLONIST' ELSE 'UNPOPULATED' END WHERE planet_id = {2} AND population_type <> 'SLAVE'";
+    char sql[768]; sql_build(db, q90, sql, sizeof(sql));
+    int64_t affected = 0;
+    if (db_exec_rows_affected(db, sql,
+                              (db_bind_t[]){ db_bind_i64(quantity),
+                                             db_bind_i64(planet_id) },
+                              2, &affected, &err) && affected == 1)
+        return 0;
     return -1;
 }
 

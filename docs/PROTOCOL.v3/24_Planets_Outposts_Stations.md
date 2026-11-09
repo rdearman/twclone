@@ -199,6 +199,18 @@ overview and authorized financial fields are distinct in the response schema.
 
 ### Approved population and labour policy
 
+`combat.attack_planet` uses the existing fighter comparison and invasion
+resolution. When that operation captures a planet, an evil-aligned attacker
+facing a `COLONIST` population must include `enslave_colonists: true` or
+`false`; true converts the entire population to slaves and false retains
+colonists. Other alignments cannot request enslavement. A good-aligned captor
+automatically converts an existing slave population to colonists; neutral and
+evil captors retain it. Ownership and any approved population conversion occur
+in the same transaction as combat settlement. Planetary resources and treasury
+remain attached to the planet. A stale population state aborts the whole
+settlement. See POP-02 and POP-07 in the canonical decision register.
+
+
 A planet has exactly one population type: `COLONIST`, `SLAVE`, or
 `UNPOPULATED`; mixed colonist/slave populations are prohibited. Existing
 population counts and worker allocations are preserved. Slave labour produces
@@ -241,6 +253,43 @@ do not grant unrestricted withdrawal. If the existing withdrawal permission
 path does not resolve an actor, that permission question remains a blocker.
 When capacity is insufficient, transfer only what fits and leave the remainder
 in planetary inventory.
+
+The request is `{ "planet_id": 123 }`. Harvest attempts ORE, then ORG, then
+EQUIPMENT (stored as `EQU`) using remaining aggregate cargo holds. The response
+type is `planet.harvest_v1` and includes `planet_id`, `ship_id`,
+`ore_harvested`, `organics_harvested`, `equipment_harvested`,
+`holds_remaining`, and `turns_charged` (always zero). An authorized player must
+have the active ship landed on this planet. A partial result leaves all
+untransferred stock in planetary inventory.
+
+An evil-aligned owner may deliver `SLV` cargo with `planet.deposit` only while
+the active ship is landed on the destination. The delivery consumes ship cargo
+and adds the same quantity to the planet's unassigned population, setting its
+population type to `SLAVE`. It is rejected for non-evil players and for planets
+with a `COLONIST` population; mixed populations are prohibited. Alignment,
+landing, ownership and population type are revalidated under the transfer
+transaction. Other planet commodity transfer rules are unchanged.
+
+`planet.view` is a read-only allow-listed overview; `planet.info` remains the
+detailed management response. The overview includes population type/count,
+stored goods, morale status, current per-cycle gross production, consumption
+and net production for configured ORE/ORG/EQU lines, and public citadel
+level/status. Production uses the same worker/base-rate formula as the
+authoritative production scheduler; for slave populations the approved 50%
+integer-floor multiplier is applied once, and a persisted unrest stoppage
+reports zero slave gross output. Treasury is included only for the owner or an
+authorized corporation member.
+
+`planet.emancipate` converts the entire slave population to colonists for the
+planet owner or corporation Leader/Officer. It preserves count and allocations,
+has no turn or credit charge, and clears slave-only unrest state atomically.
+
+On a successful `combat.attack_planet` capture, an evil-aligned attacker facing
+colonists must send `enslave_colonists: true|false`; other alignments cannot
+enslave. Good captors automatically liberate a slave population. Neutral and
+evil captors otherwise retain existing slaves. Ownership, population conversion
+and combat fighter settlement share one transaction. A stale owner/population
+snapshot aborts capture.
 
 ### `planet.deposit` / `planet.withdraw`
 Transfer cargo/colonists between ship and planet.

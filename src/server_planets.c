@@ -17,6 +17,7 @@
 #include "server_log.h"
 #include "db/repo/repo_database.h"
 #include "db/repo/repo_planets.h"
+#include "db/repo/repo_cron.h"
 #include "db/repo/repo_clusters.h"
 #include "db/repo/repo_commodities.h"
 #include "db/repo/repo_ships.h"
@@ -187,6 +188,72 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Capture population policy is derived from the authoritative alignment
+   * bands and population state, never from client-supplied faction claims. */
+  int player_alignment = 0, is_good = 0, is_evil = 0;
+  if (db_player_get_alignment (db, ctx->player_id, &player_alignment) != 0
+      || db_alignment_band_for_value (db, player_alignment, NULL, NULL, NULL,
+                                      &is_good, &is_evil, NULL, NULL) != 0)
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not determine capture alignment policy");
+      return 0;
+    }
+  json_t *planet_details = NULL;
+  if (db_planet_get_details_json (db, planet_id, &planet_details) != 0
+      || !planet_details)
+    {
+      json_decref (planet_details);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not determine planetary population");
+      return 0;
+    }
+  json_t *population_type_value = json_object_get (planet_details,
+                                                    "population_type");
+  const char *population_type_value_text = json_is_string (population_type_value)
+    ? json_string_value (population_type_value) : NULL;
+  char population_type[24] = {0};
+  char population_owner_type[32] = {0};
+  json_t *owner_type_value = json_object_get (planet_details, "owner_type");
+  const char *owner_type_text = json_is_string (owner_type_value)
+    ? json_string_value (owner_type_value) : "";
+  if (strlen (owner_type_text) >= sizeof population_owner_type)
+    {
+      json_decref (planet_details);
+      send_response_error (ctx, root, ERR_DB,
+                           "Planet ownership state is invalid");
+      return 0;
+    }
+  snprintf (population_owner_type, sizeof population_owner_type, "%s",
+            owner_type_text);
+  if (!population_type_value_text
+      || strlen (population_type_value_text) >= sizeof population_type)
+    {
+      json_decref (planet_details);
+      send_response_error (ctx, root, ERR_DB,
+                           "Planet population type is unavailable");
+      return 0;
+    }
+  snprintf (population_type, sizeof population_type, "%s",
+            population_type_value_text);
+  json_decref (planet_details);
+  json_t *enslave_value = json_object_get (data, "enslave_colonists");
+  if (is_evil && strcmp (population_type, "COLONIST") == 0
+      && !json_is_boolean (enslave_value))
+    {
+      send_response_error (ctx, root, ERR_MISSING_FIELD,
+                           "Choose whether to retain or enslave the colonists");
+      return 0;
+    }
+  if (json_is_true (enslave_value)
+      && (!is_evil || strcmp (population_type, "COLONIST") != 0))
+    {
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "This attacker cannot enslave this population");
+      return 0;
+    }
+  bool requested_enslavement = is_evil && json_is_true (enslave_value);
+
   /* Only registered Federation assets are enforceable.  The generic
    * incident repository deliberately makes this a no-op for ordinary
    * planets, and Captain Z has already returned for sectors 1-10. */
@@ -228,6 +295,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_DB, "Failed to load ship");
       return 0;
     }
+  int initial_ship_fighters = s_fighters;
 
   if (s_fighters <= 0)
     {
@@ -252,9 +320,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       int absorbed = (s_fighters < cit_shields) ? s_fighters : cit_shields;
       s_fighters -= absorbed;
       fighters_absorbed = absorbed;
-      int new_shields = cit_shields - absorbed;
-
-      db_planets_update_citadel_shields (db, planet_id, new_shields);
+      /* Shield consumption is deferred until the combat transaction below. */
     }
 
   /* CCC military reaction (level >= 2) */
@@ -289,6 +355,10 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       captured = false;
     }
 
+  bool enslave_colonists = captured && requested_enslavement;
+  bool liberate_slaves = captured && is_good
+    && strcmp (population_type, "SLAVE") == 0;
+
   ship_loss += fighters_absorbed;
 
   /* Update database in transaction */
@@ -299,8 +369,27 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  int shields_remaining = cit_shields;
+  if (fighters_absorbed > 0
+      && db_planets_consume_citadel_shields (db, planet_id, cit_shields,
+                                              fighters_absorbed,
+                                              &shields_remaining) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not settle citadel shield losses");
+      return 0;
+    }
+  (void) shields_remaining;
+
   /* Update attacker ship fighters */
-  db_planets_update_ship_fighters (db, ship_id, ship_loss);
+  if (db_planets_update_ship_fighters (db, ship_id, ship_loss) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not settle attacking ship fighters");
+      return 0;
+    }
 
   /* Update planet */
   if (captured)
@@ -309,23 +398,54 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       const char *new_type = (corp_id > 0) ? "corporation" : "player";
       int new_owner = (corp_id > 0) ? corp_id : ctx->player_id;
 
-      db_planets_capture (db, planet_id, new_owner, new_type);
-
-      json_t *cap_evt = json_object ();
-      json_object_set_new (cap_evt, "planet_id", json_integer (planet_id));
-      json_object_set_new (cap_evt, "previous_owner",
-			   json_integer (p_owner_id));
-      db_log_engine_event ((long long) time (NULL),
-			   "player.capture_planet.v1", "player",
-			   ctx->player_id, current_sector, cap_evt, NULL);
-      json_decref (cap_evt);
+      if (db_planets_capture (db, planet_id, new_owner, new_type,
+                              enslave_colonists, liberate_slaves,
+                              population_type, p_owner_id,
+                              population_owner_type) != 0)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_DB_BUSY,
+                               "Planet state changed during invasion; no capture was committed");
+          return 0;
+        }
     }
   else
     {
-      db_planets_lose_fighters (db, planet_id, planet_loss);
+      if (db_planets_lose_fighters (db, planet_id, planet_loss) != 0)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_DB,
+                               "Could not settle planetary fighter losses");
+          return 0;
+        }
     }
 
-  db_tx_commit (db, &err);
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Combat settlement failed; no changes were committed");
+      return 0;
+    }
+
+  if (captured)
+    {
+      json_t *cap_evt = json_object ();
+      if (cap_evt)
+        {
+          json_object_set_new (cap_evt, "planet_id", json_integer (planet_id));
+          json_object_set_new (cap_evt, "previous_owner",
+                               json_integer (p_owner_id));
+          json_object_set_new (cap_evt, "enslaved_colonists",
+                               json_boolean (enslave_colonists));
+          json_object_set_new (cap_evt, "liberated_slaves",
+                               json_boolean (liberate_slaves));
+          db_log_engine_event ((long long) time (NULL),
+                               "player.capture_planet.v1", "player",
+                               ctx->player_id, current_sector, cap_evt, NULL);
+          json_decref (cap_evt);
+        }
+    }
 
   /* Log attack */
   json_t *atk_evt = json_object ();
@@ -344,7 +464,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
   json_t *resp = json_object ();
   json_object_set_new (resp, "planet_id", json_integer (planet_id));
   json_object_set_new (resp, "attacker_remaining_fighters",
-		       json_integer (s_fighters - ship_loss));
+		       json_integer (initial_ship_fighters - ship_loss));
   json_object_set_new (resp, "defender_remaining_fighters",
 		       json_integer (p_fighters - planet_loss));
   json_object_set_new (resp, "captured", json_boolean (captured));
@@ -538,6 +658,160 @@ h_refuse_terra_mutation (db_t *db, client_ctx_t *ctx, json_t *root,
 
 
 int
+cmd_planet_view (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Not authenticated");
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_DB, "Database connection failed");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *planet_value = json_is_object (data)
+    ? json_object_get (data, "planet_id") : NULL;
+  if (!json_is_integer (planet_value) || json_integer_value (planet_value) <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Missing or invalid planet_id");
+      return 0;
+    }
+  int pid = (int) json_integer_value (planet_value);
+  int sector = 0, owner_id = 0;
+  char *owner_type = NULL;
+  if (db_planets_get_land_info (db, pid, &sector, &owner_id, &owner_type) != 0)
+    {
+      free (owner_type);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Planet not found");
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  int landed_planet = 0;
+  bool landed = ship_id > 0
+    && repo_citadel_get_onplanet (db, ship_id, &landed_planet) == 0
+    && landed_planet == pid;
+  bool owner_or_corp = false;
+  if (owner_type && strcmp (owner_type, "player") == 0)
+    owner_or_corp = owner_id == ctx->player_id;
+  else if (owner_type
+           && (strcmp (owner_type, "corp") == 0
+               || strcmp (owner_type, "corporation") == 0)
+           && owner_id > 0)
+    {
+      char role[64] = {0};
+      owner_or_corp = repo_corp_check_member_role
+        (db, owner_id, ctx->player_id, role, sizeof role) == 0;
+    }
+  bool visible = landed || h_is_terra (pid, sector) || owner_or_corp;
+  free (owner_type);
+  if (!visible)
+    {
+      send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
+                           "Planet overview requires landing or ownership authorization");
+      return 0;
+    }
+
+  json_t *details = NULL;
+  if (db_planet_get_details_json (db, pid, &details) != 0 || !details)
+    {
+      json_decref (details);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not retrieve planetary overview");
+      return 0;
+    }
+  json_t *overview = json_object ();
+  if (!overview)
+    {
+      json_decref (details);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not allocate planetary overview");
+      return 0;
+    }
+
+  /* Construct an allow-listed overview rather than copying p.* from the
+   * management query. This keeps ownership IDs and operational fields private. */
+  const char *public_fields[] = {
+    "name", "class", "population", "population_type", "goods"
+  };
+  json_object_set_new (overview, "planet_id", json_integer (pid));
+  for (size_t i = 0; i < sizeof public_fields / sizeof public_fields[0]; ++i)
+    {
+      json_t *value = json_object_get (details, public_fields[i]);
+      if (value)
+        json_object_set (overview, public_fields[i], value);
+    }
+  json_t *population_type = json_object_get (details, "population_type");
+  if (json_is_string (population_type)
+      && strcmp (json_string_value (population_type), "SLAVE") == 0)
+    json_object_set_new (overview, "morale_status", json_string ("LOW"));
+
+  int32_t level = 0, target_level = 0;
+  char construction_status[32] = {0};
+  int64_t started = 0, completes = 0;
+  int citadel_rc = repo_citadel_get_construction_state
+    (db, pid, &level, construction_status, sizeof construction_status,
+     &target_level, &started, &completes);
+  if (citadel_rc == 0)
+    {
+      json_t *citadel = json_object ();
+      if (!citadel)
+        {
+          json_decref (overview);
+          json_decref (details);
+          send_response_error (ctx, root, ERR_SERVER_ERROR,
+                               "Could not allocate citadel overview");
+          return 0;
+        }
+      json_object_set_new (citadel, "level", json_integer (level));
+      json_object_set_new (citadel, "status",
+                           json_string (construction_status));
+      json_object_set_new (overview, "citadel", citadel);
+    }
+  else if (citadel_rc != ERR_DB_NOT_FOUND)
+    {
+      json_decref (overview);
+      json_decref (details);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not retrieve citadel overview");
+      return 0;
+    }
+  if (owner_or_corp)
+    {
+      long long treasury = 0;
+      if (db_planets_get_treasury (db, pid, &treasury) != 0)
+        {
+          json_decref (overview);
+          json_decref (details);
+          send_response_error (ctx, root, ERR_DB,
+                               "Could not retrieve planet treasury");
+          return 0;
+        }
+      json_object_set_new (overview, "treasury", json_integer (treasury));
+    }
+  json_t *production = NULL;
+  if (db_cron_planet_get_production_overview_json (db, pid, &production) != 0
+      || !production)
+    {
+      json_decref (overview);
+      json_decref (details);
+      json_decref (production);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not retrieve planetary production overview");
+      return 0;
+    }
+  json_object_set_new (overview, "production", production);
+  json_decref (details);
+  send_response_ok_take (ctx, root, "planet.view_v1", &overview);
+  return 0;
+}
+
+int
 cmd_planet_info (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
@@ -624,6 +898,19 @@ cmd_planet_info (client_ctx_t *ctx, json_t *root)
        * explicitly so schema/column naming differences cannot disable the
        * launch and colonist controls after a successful landing. */
       json_object_set_new (info, "planet_id", json_integer (pid));
+      json_t *population_type = json_object_get (info, "population_type");
+      if (json_is_string (population_type)
+          && strcmp (json_string_value (population_type), "SLAVE") == 0)
+        json_object_set_new (info, "morale_status", json_string ("LOW"));
+      if (!treasury_authorized)
+        {
+          /* Scheduling controls are management data, not public overview
+           * fields; never leak these through a landed non-owner's details. */
+          json_object_del (info, "slave_unrest_stopped");
+          json_object_del (info, "slave_unrest_next_at");
+          json_object_del (info, "slave_unrest_stoppage_until");
+          json_object_del (info, "slave_unrest_last_event_at");
+        }
       /* Existing detail JSON includes the planetary fighter count.  Add the
        * current citadel lifecycle and its already-supported defensive state. */
       json_t *citadel = json_object ();
@@ -1762,10 +2049,118 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
 int
 cmd_planet_harvest (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-		       "Not implemented: planet.harvest");
+  if (!require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *planet_value = json_is_object (data)
+    ? json_object_get (data, "planet_id") : NULL;
+  if (!json_is_integer (planet_value) || json_integer_value (planet_value) <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Missing or invalid planet_id");
+      return 0;
+    }
+  int planet_id = (int) json_integer_value (planet_value);
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NO_ACTIVE_SHIP,
+                           "No active ship is available to harvest into");
+      return 0;
+    }
+  int64_t harvested[3] = {0, 0, 0};
+  int64_t holds_remaining = 0;
+  int rc = repo_planets_harvest (db, ctx->player_id, ship_id, planet_id,
+                                  harvested, &holds_remaining);
+  if (rc != 0)
+    {
+      int code = rc == ERR_PERMISSION_DENIED ? ERR_PERMISSION_DENIED
+        : rc == ERR_DB_NOT_FOUND || rc == ERR_SHIP_NOT_FOUND
+          ? ERR_NOT_FOUND : rc == ERR_DB_CONSTRAINT ? ERR_INVALID_ARG : ERR_DB;
+      send_response_error (ctx, root, code,
+                           rc == ERR_PERMISSION_DENIED
+                           ? "Harvest requires an authorized owner or corporation manager landed on the planet"
+                           : "Planetary harvest could not be completed");
+      return 0;
+    }
+  json_t *response = json_object ();
+  if (!response)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not allocate harvest response");
+      return 0;
+    }
+  json_object_set_new (response, "planet_id", json_integer (planet_id));
+  json_object_set_new (response, "ship_id", json_integer (ship_id));
+  json_object_set_new (response, "ore_harvested", json_integer (harvested[0]));
+  json_object_set_new (response, "organics_harvested", json_integer (harvested[1]));
+  json_object_set_new (response, "equipment_harvested", json_integer (harvested[2]));
+  json_object_set_new (response, "holds_remaining", json_integer (holds_remaining));
+  json_object_set_new (response, "turns_charged", json_integer (0));
+  send_response_ok_take (ctx, root, "planet.harvest_v1", &response);
+  return 0;
+}
+
+int
+cmd_planet_emancipate (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root))
+    return 0;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *planet_value = json_is_object (data)
+    ? json_object_get (data, "planet_id") : NULL;
+  if (!json_is_integer (planet_value) || json_integer_value (planet_value) <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Missing or invalid planet_id");
+      return 0;
+    }
+  int planet_id = (int) json_integer_value (planet_value);
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
+  int64_t population = 0;
+  int rc = repo_planets_emancipate (db, planet_id, ctx->player_id,
+                                     &population);
+  if (rc != 0)
+    {
+      int code = rc == ERR_PERMISSION_DENIED ? ERR_PERMISSION_DENIED
+        : rc == ERR_DB_NOT_FOUND ? ERR_NOT_FOUND
+        : rc == ERR_DB_CONSTRAINT ? ERR_INVALID_ARG : ERR_DB;
+      send_response_error (ctx, root, code,
+                           rc == ERR_DB_CONSTRAINT
+                           ? "Planet has no enslaved population"
+                           : "Could not emancipate planetary population");
+      return 0;
+    }
+  json_t *response = json_object ();
+  if (!response)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not allocate emancipation response");
+      return 0;
+    }
+  json_object_set_new (response, "planet_id", json_integer (planet_id));
+  json_object_set_new (response, "population_type", json_string ("COLONIST"));
+  json_object_set_new (response, "population", json_integer (population));
+  json_object_set_new (response, "turns_charged", json_integer (0));
+  json_object_set_new (response, "credits_charged", json_integer (0));
+  send_response_ok_take (ctx, root, "planet.emancipated_v1", &response);
   return 0;
 }
 
@@ -1934,6 +2329,44 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
        return 0;
     }
 
+  if (commodity && (strcasecmp (commodity, "SLV") == 0
+                    || strcasecmp (commodity, "SLAVES") == 0))
+    {
+      int64_t population = 0;
+      int slave_rc = repo_planets_deposit_slaves (db, ctx->player_id,
+                                                   ship_id, planet_id,
+                                                   quantity, &population);
+      if (slave_rc != 0)
+        {
+          int code = slave_rc == ERR_PERMISSION_DENIED
+            ? ERR_PERMISSION_DENIED
+            : slave_rc == ERR_DB_CONSTRAINT ? ERR_INVALID_ARG
+            : slave_rc == ERR_DB_NOT_FOUND ? ERR_NOT_FOUND : slave_rc;
+          const char *message = slave_rc == ERR_DB_CONSTRAINT
+            ? "A colonist population must be removed or converted before slaves can be added"
+            : slave_rc == ERR_PERMISSION_DENIED
+              ? "Slave delivery requires evil alignment, ownership permission, and the active ship landed here"
+              : "Could not transfer slave cargo to the planet";
+          send_response_error (ctx, root, code, message);
+          return 0;
+        }
+      json_t *slave_response = json_object ();
+      if (!slave_response)
+        {
+          send_response_error (ctx, root, ERR_SERVER_ERROR,
+                               "Could not allocate population response");
+          return 0;
+        }
+      json_object_set_new (slave_response, "planet_id", json_integer (planet_id));
+      json_object_set_new (slave_response, "commodity", json_string ("SLV"));
+      json_object_set_new (slave_response, "quantity", json_integer (quantity));
+      json_object_set_new (slave_response, "population_type",
+                           json_string ("SLAVE"));
+      json_object_set_new (slave_response, "population", json_integer (population));
+      send_response_ok_take (ctx, root, "planet.deposit", &slave_response);
+      return 0;
+    }
+
   db_error_t err;
   if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
     {
@@ -1976,12 +2409,6 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
   }
 
   const char *target_commodity = commodity;
-  /* Slave -> Colonist conversion for evil players */
-  if ((strcasecmp (commodity, "SLAVES") == 0 || strcasecmp (commodity, "SLV") == 0) && alignment < 0)
-    {
-      target_commodity = "COLONISTS";
-    }
-
   if (strcasecmp(target_commodity, "ORGANICS") == 0) target_commodity = "ORG";
   if (strcasecmp(target_commodity, "EQUIPMENT") == 0) target_commodity = "EQU";
   if (strcasecmp(target_commodity, "COLONISTS") != 0) {
@@ -3669,7 +4096,8 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
     "SELECT p.owner_id, p.owner_type, p.colonists_unassigned, p.colonists_ore, p.colonists_org, p.colonists_eq, p.colonists_weapons, "
     "COALESCE((SELECT pt.maxColonist_ore FROM planettypes pt WHERE pt.planettypes_id=p.type),0), "
     "COALESCE((SELECT pt.maxColonist_organics FROM planettypes pt WHERE pt.planettypes_id=p.type),0), "
-    "COALESCE((SELECT pt.maxColonist_equipment FROM planettypes pt WHERE pt.planettypes_id=p.type),0) "
+    "COALESCE((SELECT pt.maxColonist_equipment FROM planettypes pt WHERE pt.planettypes_id=p.type),0), "
+    "p.population_type "
     "FROM planets p WHERE p.planet_id={1} FOR UPDATE;";
   sql_build (db, query, sql, sizeof sql);
   db_res_t *res = NULL;
@@ -3692,7 +4120,17 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
   int max_ore = db_res_col_i32 (res, 7, &err);
   int max_org = db_res_col_i32 (res, 8, &err);
   int max_eq = db_res_col_i32 (res, 9, &err);
+  const char *population_type_db = db_res_col_text (res, 10, &err);
+  bool is_slave_population = population_type_db
+    && strcmp (population_type_db, "SLAVE") == 0;
   db_res_finalize (res);
+  if (is_slave_population)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Colonist work assignments cannot be applied to a slave population.", NULL);
+      return 0;
+    }
   if (!weapons_value)
     weapons = (int) old_weapons;
 
@@ -3738,7 +4176,7 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
                                    "There are not enough unassigned colonists for these jobs.", NULL);
       return 0;
     }
-  const char *update = "UPDATE planets SET population=GREATEST(COALESCE(population,0), {1}+{2}+{3}+{4}+{5}), colonists_ore={1}, colonists_org={2}, colonists_eq={3}, colonists_weapons={4}, colonists_unassigned={5} WHERE planet_id={6};";
+  const char *update = "UPDATE planets SET population=GREATEST(COALESCE(population,0), {1}+{2}+{3}+{4}+{5}), population_type=CASE WHEN {1}+{2}+{3}+{4}+{5}>0 THEN 'COLONIST' ELSE 'UNPOPULATED' END, colonists_ore={1}, colonists_org={2}, colonists_eq={3}, colonists_weapons={4}, colonists_unassigned={5} WHERE planet_id={6} AND population_type <> 'SLAVE';";
   sql_build (db, update, sql, sizeof sql);
   if (!db_exec (db, sql,
                 (db_bind_t[]){db_bind_i64 (ore), db_bind_i64 (organics),

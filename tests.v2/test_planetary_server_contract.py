@@ -26,6 +26,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.cron_repo = (ROOT / "src/db/repo/repo_cron.c").read_text(encoding="utf-8")
         cls.corp_repo = (ROOT / "src/db/repo/repo_corporation.c").read_text(encoding="utf-8")
         cls.planet_repo = (ROOT / "src/db/repo/repo_planets.c").read_text(encoding="utf-8")
+        cls.cargo_repo = (ROOT / "src/db/repo/repo_cargo.c").read_text(encoding="utf-8")
         cls.citadel_repo = (ROOT / "src/db/repo/repo_citadel.c").read_text(encoding="utf-8")
         cls.protocol = (ROOT / "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md").read_text(
             encoding="utf-8"
@@ -240,6 +241,80 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertLess(transaction, consume)
         self.assertIn("json_decref (defense_results);", land)
 
+    def test_harvest_is_registered_and_moves_only_existing_stock_atomically(self):
+        handler = self.planets.split("cmd_planet_harvest", 1)[1].split(
+            "cmd_planet_emancipate", 1
+        )[0]
+        repository = self.planet_repo.split("repo_planets_harvest", 1)[1].split(
+            "db_planets_rename", 1
+        )[0]
+        self.assertIn('"planet.harvest", cmd_planet_harvest', self.loop)
+        self.assertNotIn("ERR_NOT_IMPLEMENTED", handler)
+        self.assertIn("repo_planets_harvest", handler)
+        self.assertIn("turns_charged", handler)
+        self.assertIn("repo_corp_lock_member_role", repository)
+        self.assertIn('"ORE", "ORG", "EQU"', repository)
+        self.assertIn("db_ports_decrement_stock", repository)
+        self.assertIn("repo_cargo_add", repository)
+        self.assertIn("repo_cargo_sync_legacy_columns", repository)
+        self.assertIn("available_holds", repository)
+        self.assertIn("db_tx_commit", repository)
+        self.assertIn("db_tx_rollback", repository)
+
+    def test_capture_population_choice_is_server_validated_and_atomic(self):
+        handler = self.planets.split("cmd_combat_attack_planet", 1)[1].split(
+            "h_is_illegal_commodity", 1
+        )[0]
+        repository = self.planet_repo.split("db_planets_capture", 1)[1].split(
+            "db_planets_lose_fighters", 1
+        )[0]
+        schema_c = (ROOT / "src/schemas.c").read_text(encoding="utf-8")
+        capture_schema = schema_c.split("schema_combat_attack_planet (void)", 1)[1].split(
+            "schema_bank_balance", 1
+        )[0]
+        self.assertIn('"enslave_colonists"', capture_schema)
+        self.assertIn("db_alignment_band_for_value", handler)
+        self.assertIn("is_evil && strcmp (population_type, \"COLONIST\")", handler)
+        self.assertIn("liberate_slaves", handler)
+        self.assertIn("db_tx_rollback", handler)
+        self.assertIn("expected_population_type", repository)
+        self.assertIn("expected_owner_id", repository)
+        self.assertIn("population_type=CASE", repository)
+        self.assertIn("slave_unrest_stopped=CASE", repository)
+
+    def test_planet_view_production_uses_scheduler_formula_and_slave_policy(self):
+        view = self.planets.split("cmd_planet_view", 1)[1].split(
+            "cmd_planet_info", 1
+        )[0]
+        production = self.cron_repo.split(
+            "db_cron_planet_get_production_overview_json", 1
+        )[1]
+        self.assertIn("db_cron_planet_get_production_overview_json", view)
+        self.assertIn("WHEN 'ORG' THEN COALESCE(p.colonists_org,0)*COALESCE(pt.organicsProduction,0)", production)
+        self.assertIn("WHEN 'EQU' THEN COALESCE(p.colonists_eq,0)*COALESCE(pt.equipmentProduction,0)", production)
+        self.assertIn('strcmp (code, "ORE") == 0', production)
+        self.assertIn('strcmp (code, "ORG") == 0', production)
+        self.assertIn('strcmp (code, "EQU") == 0', production)
+        self.assertIn("normal_output / 2", production)
+        self.assertIn("unrest_stopped", production)
+
+    def test_slave_deposit_uses_real_cargo_and_prevents_mixed_populations(self):
+        deposit = self.planets.split("cmd_planet_deposit", 1)[1].split(
+            "cmd_planet_withdraw", 1
+        )[0]
+        repository = self.planet_repo.split(
+            "repo_planets_deposit_slaves", 1
+        )[1].split("db_planets_rename", 1)[0]
+        self.assertIn("repo_planets_deposit_slaves", deposit)
+        self.assertIn('strcasecmp (commodity, "SLV")', deposit)
+        self.assertIn("alignment_band ab", repository)
+        self.assertIn('population_type IN (\'SLAVE\',\'UNPOPULATED\')', repository)
+        self.assertIn("repo_cargo_add", repository)
+        self.assertIn('"SLV", -quantity', repository)
+        self.assertIn("colonists_unassigned=COALESCE(colonists_unassigned,0)+{2}", repository)
+        self.assertIn("sql_for_update_of (db, \"p, pl, s\"", repository)
+        self.assertIn("db_tx_commit", repository)
+        self.assertIn("db_tx_rollback", repository)
     def test_citadel_lookup_does_not_treat_query_failure_as_no_defense(self):
         self.assertIn("load_landing_citadel_defenses", self.planets)
         self.assertIn("rc == ERR_DB_NOT_FOUND", self.planets)

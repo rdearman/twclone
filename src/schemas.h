@@ -125,6 +125,7 @@ json_t *schema_sector_scan_density (void);
 json_t *schema_sector_scan (void);
 json_t *schema_planet_genesis (void);
 json_t *schema_planet_info (void);
+json_t *schema_planet_emancipate (void);
 json_t *schema_planet_fighters_transfer (void);
 json_t *schema_planet_rename (void);
 json_t *schema_planet_land (void);

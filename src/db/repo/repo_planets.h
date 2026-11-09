@@ -40,7 +40,12 @@ int db_planets_consume_citadel_shields(db_t *db, int planet_id,
 int db_planets_update_ship_fighters(db_t *db, int ship_id, int loss);
 
 /* Q12: Capture Planet */
-int db_planets_capture(db_t *db, int planet_id, int new_owner, const char *new_type);
+int db_planets_capture(db_t *db, int planet_id, int new_owner,
+                       const char *new_type, bool enslave_colonists,
+                       bool liberate_slaves,
+                       const char *expected_population_type,
+                       int expected_owner_id,
+                       const char *expected_owner_type);
 
 /* Q13: Defend Planet (Lose Fighters) */
 int db_planets_lose_fighters(db_t *db, int planet_id, int loss);
@@ -56,6 +61,13 @@ int db_planets_get_owner_info(db_t *db, int planet_id, int *owner_id, char **own
 /* Read and lock planet ownership; requires an active transaction. */
 int db_planets_get_owner_info_for_update(db_t *db, int planet_id,
                                          int *owner_id, char **owner_type);
+int repo_planets_emancipate(db_t *db, int planet_id, int player_id,
+                            int64_t *population_out);
+int repo_planets_harvest(db_t *db, int player_id, int ship_id, int planet_id,
+                         int64_t harvested_out[3], int64_t *holds_remaining_out);
+int repo_planets_deposit_slaves(db_t *db, int player_id, int ship_id,
+                                int planet_id, int64_t quantity,
+                                int64_t *population_out);
 
 /* Q17: Rename Planet */
 int db_planets_rename(db_t *db, int planet_id, const char *new_name);

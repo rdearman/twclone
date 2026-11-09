@@ -147,7 +147,7 @@
     {
       "name": "Attack Planet",
       "command": "combat.attack_planet",
-      "data": { "planet_id": "@{target_planet_id}" },
+      "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": false },
       "user": "combat_ace",
       "expect": { "status": "ok" },
       "asserts": [

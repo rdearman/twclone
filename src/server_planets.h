@@ -15,6 +15,8 @@ typedef struct
 } planet_t;
 
 int cmd_planet_info (client_ctx_t * ctx, json_t * root);
+int cmd_planet_view (client_ctx_t * ctx, json_t * root);
+int cmd_planet_emancipate (client_ctx_t * ctx, json_t * root);
 int cmd_planet_fighters_transfer (client_ctx_t * ctx, json_t * root);
 int cmd_planet_rename (client_ctx_t * ctx, json_t * root);
 int cmd_planet_land (client_ctx_t * ctx, json_t * root);
