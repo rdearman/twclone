@@ -2903,6 +2903,10 @@ ferengi_settle_deal (db_t *db, client_ctx_t *ctx, ferengi_deal_t *deal)
   int64_t total = deal->unit_price * deal->quantity;
   int player_ship = h_get_active_ship_id (db, ctx->player_id);
   if (player_ship <= 0 || player_ship == deal->ship_id) return ERR_NO_ACTIVE_SHIP;
+  int lock_rc = repo_cargo_lock_ships_for_update (db, player_ship,
+                                                   deal->ship_id);
+  if (lock_rc != 0)
+    return lock_rc;
   int account_id = repo_corp_get_bank_account_id (db, deal->corporation_id);
   if (account_id <= 0) return ERR_DB_NOT_FOUND;
   int rc;

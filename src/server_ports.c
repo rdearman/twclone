@@ -647,6 +647,9 @@ trade_offer_settle (db_t *db, const trade_offer_t *offer)
   int seller_ship = h_get_active_ship_id (db, seller_id);
   if (buyer_ship <= 0 || seller_ship <= 0 || buyer_ship == seller_ship)
     return ERR_NO_ACTIVE_SHIP;
+  int lock_rc = repo_cargo_lock_ships_for_update (db, buyer_ship, seller_ship);
+  if (lock_rc != 0)
+    return lock_rc;
 
   if (offer->quantity <= 0 || offer->unit_price < 0
       || (offer->unit_price > 0

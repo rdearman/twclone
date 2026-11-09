@@ -20,6 +20,8 @@ class ShipLifecycleProtocolContractTests(unittest.TestCase):
         cls.ships = (ROOT / "src/server_ships.c").read_text(encoding="utf-8")
         cls.cargo_repo = (ROOT / "src/db/repo/repo_cargo.c").read_text(encoding="utf-8")
         cls.ships_repo = (ROOT / "src/db/repo/repo_ships.c").read_text(encoding="utf-8")
+        cls.ports = (ROOT / "src/server_ports.c").read_text(encoding="utf-8")
+        cls.universe = (ROOT / "src/server_universe.c").read_text(encoding="utf-8")
 
     def test_lifecycle_schema_functions_are_declared_and_registered(self):
         for name in ("schema_ship_sell", "schema_ship_transfer",
@@ -80,6 +82,14 @@ class ShipLifecycleProtocolContractTests(unittest.TestCase):
         self.assertIn("repo_cargo_sync_legacy_columns (db, target_ship_id)", transfer)
         self.assertIn("SELECT ship_id FROM players WHERE player_id = {1} FOR UPDATE",
                       self.ships_repo)
+
+    def test_two_ship_settlements_take_pair_locks_in_repository_order(self):
+        for source, function, end in (
+            (self.ports, "trade_offer_settle (", "cmd_trade_accept ("),
+            (self.universe, "ferengi_settle_deal (", "ferengi_deal_action ("),
+        ):
+            body = source.split(function, 1)[1].split(end, 1)[0]
+            self.assertIn("repo_cargo_lock_ships_for_update", body)
 
 
 if __name__ == "__main__":

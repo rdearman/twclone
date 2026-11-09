@@ -59,9 +59,10 @@ path exists; end-to-end behavior still needs focused protocol verification.
   inserting the order. The current protocol/schema does not escrow funds, so
   cancellation and expiry have no reserved balance to release.
 - Cargo writes lock the authoritative ship row before validating total holds
-  and mutating `ship_cargo`; two-ship transfers lock both hulls in ascending ID
-  order, revalidate active ship/ownership/location, and sync both legacy cargo
-  views in one transaction. Backend commit failure leaves rollback available.
+  and mutating `ship_cargo`; ship transfers, player trade offers and Ferengi
+  deals lock both hulls in ascending ID order. Cargo transfers revalidate
+  active ship/ownership/location and sync both legacy cargo views in one
+  transaction. Backend commit failure leaves rollback available.
 - Market matching retains unfinished fills as `open` (the persisted status
   constraint has no `partial` value), restores in-memory fill counters on
   rollback, handles commit failures, carries inventory location separately
