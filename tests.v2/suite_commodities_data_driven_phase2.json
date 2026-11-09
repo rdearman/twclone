@@ -65,7 +65,7 @@
       "description": "T3.2 verifies evil alignment bypasses illegal commodity restrictions",
       "db_setup": {
         "sql": [
-          "UPDATE players SET alignment = -1000 WHERE player_id = (SELECT player_id FROM players WHERE username = 'comm_test_evil');"
+          "UPDATE players SET alignment = -1000 WHERE player_id = (SELECT player_id FROM players WHERE name = 'comm_test_evil');"
         ]
       },
       "command": "port.trade.buy",
@@ -99,7 +99,7 @@
       "user": "comm_test_good",
       "data": {
         "ship_id": "@comm_test_good_active_ship_id",
-        "planet_id": "@test_planet_deposit",
+        "planet_id": "@{test_planet_deposit}",
         "commodity": "ORE",
         "quantity": 1
       },
@@ -111,7 +111,7 @@
       "user": "comm_test_good",
       "data": {
         "ship_id": "@comm_test_good_active_ship_id",
-        "planet_id": "@test_planet_deposit",
+        "planet_id": "@{test_planet_deposit}",
         "commodity": "DRG",
         "quantity": 1
       },
@@ -121,14 +121,14 @@
       "name": "T4.4: Evil player deposits DRG (illegal) - alignment allows it",
       "db_setup": {
         "sql": [
-          "UPDATE ship_cargo SET quantity = 5 WHERE commodity_code = 'DRG' AND ship_id = (SELECT ship_id FROM ships WHERE owner_id = (SELECT player_id FROM players WHERE username = 'comm_test_evil') LIMIT 1);"
+          "UPDATE ship_cargo SET quantity = 5 WHERE commodity_code = 'DRG' AND ship_id = (SELECT ship_id FROM players WHERE name = 'comm_test_evil');"
         ]
       },
       "command": "planet.deposit",
       "user": "comm_test_evil",
       "data": {
         "ship_id": "@comm_test_evil_active_ship_id",
-        "planet_id": "@test_planet_deposit",
+        "planet_id": "@{test_planet_deposit}",
         "commodity": "DRG",
         "quantity": 1
       },

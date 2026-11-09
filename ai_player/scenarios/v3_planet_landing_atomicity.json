@@ -1,0 +1,51 @@
+{
+  "scenario_id": "V3-PLAN-01-ordinary-landing-atomicity",
+  "simulation_fixture": false,
+  "requirement": "V3-PLAN-01",
+  "title": "Ordinary-player planet landing and refusal atomicity",
+  "canonical_requirements": {
+    "source": "docs/reports/V3_TW2002_CANONICAL_PARITY_AUDIT.md section 19",
+    "event_required": true,
+    "database_must_change": true,
+    "restart_required": true,
+    "positive": [
+      "A valid same-sector landing returns planet.land.success and persists landed planet state.",
+      "A successful landing consumes the selected canonical turn cost exactly once."
+    ],
+    "negative": [
+      "Malformed, remote, unauthorized, defense-refused, zero-turn and persistence-failure attempts do not consume a turn or mutate landing state.",
+      "Responses, event journal entries and before/after database snapshots agree."
+    ],
+    "policy_gates": [
+      "Edition-specific defense and turn-cost rules must come from V3-CAN-00.",
+      "This fixture does not decide whether insurance, market orders or harvest are canonical."
+    ]
+  },
+  "ai_policy": {
+    "strategy_mode": "deterministic",
+    "ordinary_player": true,
+    "retries": "never replay an ambiguous mutation",
+    "provisioning": "none",
+    "stop_on": ["identity mismatch", "unexpected universe", "service loss", "ambiguous mutation"]
+  },
+  "cases": [
+    {"id": "malformed-refusal", "expected": "refusal", "purpose": "malformed landing request preserves turn and state"},
+    {"id": "valid-owned", "expected": "success", "purpose": "owner landing bypasses own defense"},
+    {"id": "valid-unowned", "expected": "success", "purpose": "ordinary player lands on an unowned same-sector planet"},
+    {"id": "valid-reland", "expected": "success", "purpose": "ordinary player relands on the same owned planet with one cost per request"},
+    {"id": "remote-refusal", "expected": "refusal", "purpose": "remote landing preserves turn and state"},
+    {"id": "unauthorized-refusal", "expected": "refusal", "purpose": "foreign planet preserves turn and state"},
+    {"id": "zero-turn-refusal", "expected": "refusal", "purpose": "zero-turn request preserves landing state"},
+    {"id": "defense-refusal", "expected": "refusal", "database_must_be_unchanged": false, "purpose": "defense outcome may damage the ship and records events, but must not consume a turn or set landed state"},
+    {"id": "persistence-failure-refusal", "expected": "refusal", "purpose": "database failure rolls back turn and landing mutation"}
+  ],
+  "deferred_catalog": [
+    "V3-SHIP-01 ship ownership",
+    "V3-ECO-01 trade settlement",
+    "V3-ECO-02 bank interest",
+    "V3-VIS-01 visibility",
+    "V3-HAZ-01 hazards",
+    "V3-PLAN-02 planet production and citadel lifecycle",
+    "V3-INS-01 insurance"
+  ]
+}

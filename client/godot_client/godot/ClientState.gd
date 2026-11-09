@@ -243,6 +243,8 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 	_copy_int(source, result, "holds")
 	_copy_int(source, result, "fighters")
 	_copy_int(source, result, "shields")
+	if source.has("has_long_range_scanner") and typeof(source["has_long_range_scanner"]) == TYPE_BOOL:
+		result["has_long_range_scanner"] = source["has_long_range_scanner"]
 	if source.has("hull") and _is_integral_number(source["hull"]) and source["hull"] >= 0 and source["hull"] <= 100:
 		result["hull"] = int(source["hull"])
 	_copy_int(source, result, "onplanet")

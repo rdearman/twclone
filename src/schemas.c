@@ -432,10 +432,8 @@ extern json_t *schema_mail_read (void);
 extern json_t *schema_mail_delete (void);
 extern json_t *schema_sys_notice_create (void);
 extern json_t *schema_notice_list (void);
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
 extern json_t *schema_events_resume (void);
 extern json_t *schema_events_resume_response (void);
-#endif
 extern json_t *schema_notice_ack (void);
 extern json_t *schema_insurance_policies_list (void);
 extern json_t *schema_insurance_policies_buy (void);
@@ -626,10 +624,8 @@ static schema_entry_t g_schema_table[] = {
   {"sys.cron.planet_tick_once", NULL, schema_placeholder},
   {"sys.cron.citadel_reap_once", NULL, schema_placeholder},
   {"notice.list", NULL, schema_notice_list},
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
   {"events.resume", NULL, schema_events_resume},
   {"events.resume.response", NULL, schema_events_resume_response},
-#endif
   {"notice.ack", NULL, schema_notice_ack},
   {"insurance.policies_list", NULL, schema_insurance_policies_list},
   {"insurance.policies_buy", NULL, schema_insurance_policies_buy},
@@ -3206,6 +3202,10 @@ schema_sector_scan_density (void)
 json_t *
 schema_sector_scan (void)
 {
+  json_t *props = json_object ();
+  json_t *mode = json_object ();
+  json_object_set_new (mode, "type", json_string ("string"));
+  json_object_set_new (props, "mode", mode);
   json_t *root = json_object ();
   json_object_set_new (root, "$id",
 		       json_string ("ge://schema/sector.scan.json"));
@@ -3213,7 +3213,7 @@ schema_sector_scan (void)
 		       json_string
 		       ("https://json-schema.org/draft/2020-12/schema"));
   json_object_set_new (root, "type", json_string ("object"));
-  json_object_set_new (root, "properties", json_object ());
+  json_object_set_new (root, "properties", props);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }

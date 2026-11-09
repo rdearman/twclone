@@ -104,8 +104,26 @@ func _ready() -> void:
 	_load_local_preferences()
 	_build()
 	_render_snapshot(_snapshot)
-	resized.connect(_update_responsive_layout)
+	resized.connect(_on_gameplay_resized)
 	_update_responsive_layout()
+	call_deferred("_move_port_workflow_to_window_overlay")
+
+func _on_gameplay_resized() -> void:
+	print("[PORT_UI] gameplay_resized size=%s workflow=%s" % [str(size), str(port_workflow) if is_instance_valid(port_workflow) else "invalid"])
+	if is_instance_valid(port_workflow):
+		port_workflow._ui_trace("gameplay_resized gameplay_size=%s workflow_size=%s workflow_parent=%s" % [str(size), str(port_workflow.size), str(port_workflow.get_parent())])
+	_update_responsive_layout()
+
+func _move_port_workflow_to_window_overlay() -> void:
+	if not is_instance_valid(port_workflow):
+		return
+	var window_root := get_parent()
+	if window_root == null or port_workflow.get_parent() == window_root:
+		return
+	remove_child(port_workflow)
+	window_root.add_child(port_workflow)
+	port_workflow.z_index = 1000
+	port_workflow.move_to_front()
 
 func set_snapshot(snapshot: Dictionary) -> void:
 	var previous_sector = _snapshot.get("hud", {}).get("sector_id", null)
@@ -535,7 +553,11 @@ func _build() -> void:
 	port_workflow.back_requested.connect(func() -> void:
 		command_menu.set_tavern_access(false)
 	)
+	port_workflow.visibility_changed.connect(_on_port_workflow_visibility_changed)
+	# It starts here so its controls receive _ready() normally. It is moved to
+	# the fixed window overlay after GameplayView has finished building.
 	add_child(port_workflow)
+	sector_view.set_interaction_enabled(true)
 	planet_workflow = PlanetWorkflowScript.new()
 	planet_workflow.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
 		command_requested.emit(command, data, label, mutating)
@@ -1344,8 +1366,13 @@ func enter_port_workflow(data: Dictionary) -> void:
 	if sector_id <= 0:
 		show_notification("Port information arrived, but the current sector is unavailable.")
 		return
-	port_workflow.set_player_hold(_snapshot.get("ship", {}))
+	port_workflow.set_player_hold(_snapshot.get("ship", {}), _snapshot.get("hud", {}).get("credits", null))
 	port_workflow.show_port(data, sector_id)
+	sector_view.set_interaction_enabled(false)
+
+func _on_port_workflow_visibility_changed() -> void:
+	if is_instance_valid(sector_view) and is_instance_valid(port_workflow):
+		sector_view.set_interaction_enabled(not port_workflow.visible)
 
 func enter_planet_workflow(planet_id: int) -> void:
 	_planet_mode = true
@@ -2002,3 +2029,9 @@ func _update_responsive_layout() -> void:
 		context_action_list.visible = true
 		details_button.visible = true
 		toast_panel.visible = notification_label.visible and not _route_panel.visible
+	# The port workflow is an input overlay over the spatial workspace.  A
+	# maximise/restore changes the responsive child layout and can otherwise
+	# leave a later sibling above the workflow in the GUI hit-test order.
+	if is_instance_valid(port_workflow) and port_workflow.visible:
+		port_workflow.z_index = 1000
+		port_workflow.move_to_front()

@@ -23,6 +23,34 @@ Get detailed info about the current sector or a directly adjacent sector.
 `sector.scan`: Detailed scan (objects, resources).
 `sector.scan.density`: Density scan of surrounding sectors.
 
+`sector.scan` accepts an optional mode:
+
+```json
+{ "mode": "holographic" }
+```
+
+Holographic scans reveal detailed contents for each directly adjacent sector
+without moving the ship. They require the active ship to have a long-range
+(holographic) scanner and consume one turn. The server verifies the hardware;
+clients cannot claim scanner ownership.
+
+The response type is `sector.holographic.scan`:
+
+```json
+{
+  "sector_id": 1,
+  "scanner": "holographic",
+  "sectors": [ { "sector_id": 2, "ports": [], "ships_present": [], "celestial_objects": [] } ]
+}
+```
+
+Without the mode, `sector.scan` retains its existing detailed current-sector
+behavior. A missing scanner returns an error and does not consume a turn.
+
+The Godot client exposes density scanning normally. When `ship.status` reports
+`has_long_range_scanner: true`, Sector and Navigation also expose holographic
+scanning; the shortcuts are Alt+S for density and Alt+H for holographic.
+
 Detailed sector information and scans omit port class and trade-mode details.
 
 ### `sector.search`

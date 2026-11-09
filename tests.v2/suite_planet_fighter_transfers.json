@@ -1,0 +1,139 @@
+{
+  "name": "Planet Fighter Transfer and Citadel Read Regression",
+  "version": "3.0.0",
+  "protocol_category": "24_Planets_Outposts_Stations",
+  "description": "Ownership, capacity, atomic fighter accounting, and treasury visibility for planetary APIs.",
+  "tests": [
+    { "name": "Create owner", "setup": "macro_auth_user", "username": "planet_fighter_owner", "password": "qa-password" },
+    { "name": "Create visitor", "setup": "macro_auth_user", "username": "planet_fighter_visitor", "password": "qa-password" },
+    {
+      "name": "Fixture planet and citadel",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planets (planet_id, sector_id, name, owner_id, owner_type, class, type, created_by, population, colonists_unassigned, fighters, citadel_level) VALUES (977701, 1, 'Fighter Transfer QA', @{planet_fighter_owner_player_id}, 'player', 'M', 1, @{admin_player_id}, 0, 0, 50, 1) ON CONFLICT (planet_id) DO UPDATE SET owner_id=EXCLUDED.owner_id, owner_type='player', fighters=50, citadel_level=1;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture citadel defenses and treasury",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id, construction_status, target_level, construction_start_time, construction_end_time, planetaryShields, militaryReactionLevel, qCannonSector, qCannonAtmosphere) VALUES (977701, 1, 555, @{planet_fighter_owner_player_id}, 'idle', 0, 0, 0, 100, 1, 0, 0) ON CONFLICT (planet_id) DO UPDATE SET level=1, treasury=555, construction_status='idle', target_level=0, construction_start_time=0, construction_end_time=0, planetaryShields=100, militaryReactionLevel=1;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set owner location",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id=1, lastplanet=977701 WHERE player_id=@{planet_fighter_owner_player_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Land owner ship and set fighters",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id=1, onplanet=TRUE, fighters=100 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Owner sees current citadel state, defenses, and treasury",
+      "command": "planet.info", "user": "planet_fighter_owner", "data": { "planet_id": 977701 },
+      "expect": { "status": "ok", "type": "planet.info" },
+      "asserts": [
+        { "path": "data.fighters", "op": "==", "value": 50 },
+        { "path": "data.citadel.construction_status", "op": "==", "value": "idle" },
+        { "path": "data.citadel.treasury_balance", "op": "==", "value": 555 },
+        { "path": "data.citadel.military_reaction_level", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Transfer fighters from ship to planet",
+      "command": "planet.fighters.transfer", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701, "direction": "ship_to_planet", "quantity": 25 },
+      "expect": { "status": "ok", "type": "planet.fighters.transferred_v1" },
+      "asserts": [
+        { "path": "data.planet_fighters", "op": "==", "value": 75 },
+        { "path": "data.ship_fighters", "op": "==", "value": 75 }
+      ]
+    },
+    {
+      "name": "Transfer fighters from planet to ship",
+      "command": "planet.fighters.transfer", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701, "direction": "planet_to_ship", "quantity": 5 },
+      "expect": { "status": "ok", "type": "planet.fighters.transferred_v1" },
+      "asserts": [
+        { "path": "data.planet_fighters", "op": "==", "value": 70 },
+        { "path": "data.ship_fighters", "op": "==", "value": 80 }
+      ]
+    },
+    {
+      "name": "Reject zero quantity",
+      "command": "planet.fighters.transfer", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701, "direction": "ship_to_planet", "quantity": 0 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Capacity refusal preserves fighter counts",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships s SET fighters=st.maxfighters FROM shiptypes st WHERE s.type_id=st.shiptypes_id AND s.ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject transfer above ship capacity",
+      "command": "planet.fighters.transfer", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701, "direction": "planet_to_ship", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Assert capacity refusal did not change fighter counts",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT p.fighters=70 AND s.fighters=st.maxfighters FROM planets p JOIN players pl ON pl.player_id=@{planet_fighter_owner_player_id} JOIN ships s ON s.ship_id=pl.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE p.planet_id=977701;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
+      "name": "Set source fighters to zero",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject transfer exceeding available ship fighters",
+      "command": "planet.fighters.transfer", "user": "planet_fighter_owner",
+      "data": { "planet_id": 977701, "direction": "ship_to_planet", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Assert insufficient-source rejection preserved quantities",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT p.fighters=70 AND s.fighters=0 FROM planets p JOIN players pl ON pl.player_id=@{planet_fighter_owner_player_id} JOIN ships s ON s.ship_id=pl.ship_id WHERE p.planet_id=977701;" },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "t" } ]
+    },
+    {
+      "name": "Set visitor location",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id=1, lastplanet=977701 WHERE player_id=@{planet_fighter_visitor_player_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Land visitor ship",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE ships SET sector_id=1, onplanet=TRUE WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_fighter_visitor_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Landed visitor does not receive treasury balance",
+      "command": "planet.info", "user": "planet_fighter_visitor", "data": { "planet_id": 977701 },
+      "expect": { "status": "ok", "type": "planet.info" },
+      "asserts": [ { "path": "data.citadel.treasury_balance", "op": "==", "value": null } ]
+    },
+    {
+      "name": "Landed visitor cannot transfer planet fighters",
+      "command": "planet.fighters.transfer", "user": "planet_fighter_visitor",
+      "data": { "planet_id": 977701, "direction": "planet_to_ship", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Remove planet fixture",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "DELETE FROM planets WHERE planet_id=977701;" },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

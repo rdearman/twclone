@@ -40,6 +40,7 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
     {"turnsperday", CFG_INT, "Turns allocated per day", CFG_OFF(turnsperday)},
     {"neutral_band", CFG_INT, "Alignment band range considered neutral", CFG_OFF(combat.neutral_band)},
     {"illegal_allowed_neutral", CFG_INT, "Allow illegal acts in neutral sectors", CFG_OFF(illegal_allowed_neutral)},
+    {"illegal_min_experience", CFG_INT, "Minimum experience for illegal goods", CFG_OFF(illegal_min_experience)},
     {"max_cloak_duration", CFG_INT, "Max cloak duration in seconds", CFG_OFF(death.max_cloak_duration)},
     {"limpet_ttl_days", CFG_INT, "Limpet time-to-live in days", CFG_OFF(mines.limpet.limpet_ttl_days)},
 

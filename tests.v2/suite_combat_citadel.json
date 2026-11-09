@@ -64,6 +64,7 @@
       "name": "Positive: Citadel Build",
       "command": "citadel.build",
       "user": "planet_gov",
+      "data": { "planet_id": "@{target_planet_id}" },
       "expect": { "status": "ok" }
     },
     {
@@ -88,6 +89,7 @@
       "name": "Positive: Citadel Upgrade",
       "command": "citadel.upgrade",
       "user": "planet_gov",
+      "data": { "planet_id": "@{target_planet_id}" },
       "expect": { "status": "ok" }
     }
   ]

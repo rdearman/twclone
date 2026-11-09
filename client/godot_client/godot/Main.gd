@@ -891,6 +891,10 @@ func _refresh_after_warp_attempt() -> void:
 		gameplay_view.show_notification("Could not refresh your location. The displayed sector may be stale.")
 
 func _on_command_requested(command: String, data: Dictionary, label: String, mutating: bool) -> void:
+	# Once the port workflow is open, clicks must never reopen the docking
+	# request behind it. This is a final guard against leaked UI mouse events.
+	if command == "port.info" and is_instance_valid(gameplay_view.port_workflow) and gameplay_view.port_workflow.visible:
+		return
 	if command == "move.warp":
 		_on_warp_requested(data.get("to_sector_id", null))
 		return
@@ -910,6 +914,19 @@ func _on_command_requested(command: String, data: Dictionary, label: String, mut
 			gameplay_view.show_notification("Transwarp unavailable · refresh the confirmed sector before moving.")
 			return
 		data = {"to_sector_id": transwarp_destination}
+	if command == "move.pathfind":
+		var pathfind_destination := _authoritative_positive_id(data.get("to_sector_id", null))
+		var pathfind_origin := _authoritative_positive_id(gameplay_view._snapshot.get("hud", {}).get("sector_id", null))
+		if pathfind_destination <= 0 or pathfind_origin <= 0 or not _sector_snapshot_is_fresh():
+			gameplay_view.show_notification("Pathfinding unavailable · refresh the confirmed current sector first.")
+			return
+		data = {"from_sector_id": pathfind_origin, "to_sector_id": pathfind_destination}
+	if command == "move.intercept":
+		var intercept_target := _authoritative_positive_id(data.get("target_ship_id", data.get("ship_id", null)))
+		if intercept_target <= 0 or not _sector_snapshot_is_fresh():
+			gameplay_view.show_notification("Interception unavailable · select a valid target in the confirmed current sector.")
+			return
+		data = {"ship_id": intercept_target}
 	if _route_running and command in ["move.autopilot.start", "move.autopilot.control", "move.autopilot.stop"]:
 		gameplay_view.show_notification("Use the route bar to stop safely after the current confirmed warp; change saved-route controls when idle.")
 		return
@@ -1277,6 +1294,23 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 				gameplay_view.set_command_busy(false)
 				gameplay_view.show_planned_route(_planned_route, _route_destination)
 				gameplay_view.show_notification("Route plotted · review it, then engage Autonav to move.")
+			return
+		if command_name == "move.pathfind":
+			var pathfind_path := _validated_route_from_response(data)
+			if pathfind_path.is_empty():
+				gameplay_view.set_command_busy(false)
+				gameplay_view.show_notification("Pathfinder returned no usable route. No movement was made.")
+				return
+			var pathfind_destination := _authoritative_positive_id(operation.get("data", {}).get("to_sector_id", 0))
+			gameplay_view.set_command_busy(false)
+			gameplay_view.show_planned_route(pathfind_path, pathfind_destination)
+			gameplay_view.show_notification("Path found · review the route, then engage Autonav if you want to move.")
+			return
+		if command_name == "move.intercept":
+			gameplay_view.set_command_busy(false)
+			gameplay_view.show_command_result(label, data)
+			gameplay_view.show_notification("Interception confirmed · refreshing authoritative movement state.")
+			_refresh_after_command(["player", "ship", "sector"])
 			return
 		if command_name == "move.autopilot.control":
 			_autopilot_mode = str(data.get("action", "continue"))
@@ -2092,6 +2126,18 @@ func _route_from_response(data: Dictionary) -> Array:
 	var path = data.get("path", data.get("steps", data.get("sectors", [])))
 	if not (path is Array):
 		return []
+	return path
+
+func _validated_route_from_response(data: Dictionary) -> Array:
+	var raw_path := _route_from_response(data)
+	if raw_path.is_empty():
+		return []
+	var path: Array = []
+	for value in raw_path:
+		var sector_id := _authoritative_positive_id(value)
+		if sector_id <= 0:
+			return []
+		path.append(sector_id)
 	return path
 
 func _request_autopilot_status() -> void:

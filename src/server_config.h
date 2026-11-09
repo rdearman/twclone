@@ -63,6 +63,7 @@ extern "C"
     int shipyard_require_shields_fit;
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
+    int illegal_min_experience;
     /* Phase 4: Ship Types Configuration */
     char starter_shiptype_name[128];
   };
@@ -218,6 +219,7 @@ extern "C"
     int shipyard_tax_bp;
     /* Misc */
     int illegal_allowed_neutral;
+    int illegal_min_experience;
     int max_ship_name_length;	/* Used in stardock */
     int num_sectors;		/* Added to match DB config */
     int density;		/* Added to match bigbang.json */

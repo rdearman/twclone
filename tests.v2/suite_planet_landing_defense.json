@@ -66,7 +66,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO citadels (planet_id, level, qCannonAtmosphere, militaryReactionLevel, planetaryShields, owner_id) VALUES (977710,3,100,0,0,@{landing_planet_owner_player_id}),(977711,3,100,0,0,@{landing_planet_owner_player_id}),(977712,3,100,0,0,@{landing_planet_owner_player_id}),(977713,3,200,0,0,@{landing_planet_owner_player_id}),(977714,1,0,0,0,@{landing_planet_owner_player_id}),(977715,5,0,0,20,@{landing_planet_owner_player_id}) ON CONFLICT (planet_id) DO UPDATE SET level=EXCLUDED.level, qCannonAtmosphere=EXCLUDED.qCannonAtmosphere, militaryReactionLevel=0, planetaryShields=EXCLUDED.planetaryShields;"
+        "sql": "INSERT INTO citadels (planet_id, level, qCannonAtmosphere, militaryReactionLevel, planetaryShields, owner_id) VALUES (977710,3,100,0,0,@{landing_planet_owner_player_id}),(977711,3,100,0,0,@{landing_planet_owner_player_id}),(977712,3,30,0,0,@{landing_planet_owner_player_id}),(977713,3,200,0,0,@{landing_planet_owner_player_id}),(977714,1,0,0,0,@{landing_planet_owner_player_id}),(977715,5,0,0,20,@{landing_planet_owner_player_id}) ON CONFLICT (planet_id) DO UPDATE SET level=EXCLUDED.level, qCannonAtmosphere=EXCLUDED.qCannonAtmosphere, militaryReactionLevel=0, planetaryShields=EXCLUDED.planetaryShields;"
       },
       "expect": {
         "status": "ok"
@@ -236,7 +236,7 @@
         {
           "path": "data.rows.0.2",
           "op": "==",
-          "value": "977710"
+          "value": 977710
         },
         {
           "path": "data.rows.0.3",
@@ -381,7 +381,7 @@
         {
           "path": "error.data.combat.0.hull_lost",
           "op": "==",
-          "value": 100
+          "value": 30
         }
       ]
     },
@@ -390,7 +390,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT s.hull=100 AND s.onplanet=FALSE AND EXISTS (SELECT 1 FROM engine_events WHERE type='combat.hit.quasar' AND actor_player_id=@{landing_planet_outsider_player_id}) FROM ships s WHERE s.ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+        "sql": "SELECT s.hull=70 AND s.onplanet=FALSE AND s.destroyed=FALSE AND EXISTS (SELECT 1 FROM engine_events WHERE type='combat.hit.quasar' AND actor_player_id=@{landing_planet_outsider_player_id}) FROM ships s WHERE s.ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
       },
       "expect": {
         "status": "ok"
@@ -429,12 +429,12 @@
         {
           "path": "error.data.combat.0.shields_lost",
           "op": "==",
-          "value": 40
+          "value": 30
         },
         {
           "path": "error.data.combat.0.hull_lost",
           "op": "==",
-          "value": 60
+          "value": 0
         }
       ]
     },
@@ -443,7 +443,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT shields=0 AND hull=140 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+        "sql": "SELECT shields=10 AND hull=100 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
       },
       "expect": {
         "status": "ok"
@@ -493,17 +493,17 @@
         {
           "path": "error.data.combat.0.damage",
           "op": "==",
-          "value": 125
+          "value": 37
         },
         {
           "path": "error.data.combat.0.shields_lost",
           "op": "==",
-          "value": 40
+          "value": 37
         },
         {
           "path": "error.data.combat.0.hull_lost",
           "op": "==",
-          "value": 85
+          "value": 0
         }
       ]
     },
@@ -512,7 +512,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT shields=0 AND hull=115 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
+        "sql": "SELECT shields=3 AND hull=100 AND onplanet=FALSE FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{landing_planet_outsider_player_id});"
       },
       "expect": {
         "status": "ok"

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "run": {
+    "status": "last_completed_run; subsequent_run_blocked",
+    "executed": 2096,
+    "passed": 1985,
+    "failed": 111,
+    "blocked": 1,
+    "unsupported": 2,
+    "server_crashes": 0,
+    "response_artifact": "/tmp/twclone-v3-regression-8rk9qywp/responses.jsonl",
+    "response_rows": 1986,
+    "report_status": "tests.v2/regression_report.json was overwritten by the later PostgreSQL-blocked attempt and contains no completed per-case verdicts"
+  },
+  "classification_counts": {
+    "IMPLEMENTATION_DEFECT": 0,
+    "FIXTURE_DEFECT": 0,
+    "OBSOLETE_V2_TEST": 0,
+    "PROTOCOL_SCHEMA_MISMATCH": 0,
+    "MISSING_IMPLEMENTATION": 0,
+    "SPECIFICATION_BLOCKER": 0,
+    "INFRASTRUCTURE": 0,
+    "UNCLASSIFIED": 111
+  },
+  "blocked_cases": 1,
+  "unsupported_cases": 2,
+  "cases": [],
+  "evidence_gaps": [
+    "The retained responses.jsonl records suite, stable ID, test name, command and actual response, but not runner verdict, expected response or assertions.",
+    "The current suite definitions include edits made after the completed run, so recomputing verdicts from them would not reliably reproduce that run.",
+    "The later regression attempt failed before database setup because the configured PostgreSQL listener was unavailable; its report replaced the previous complete report.",
+    "The checkpoint records several aggregate failure clusters but does not enumerate the stable IDs belonging to those clusters."
+  ],
+  "classification_note": "All 111 failures remain UNCLASSIFIED rather than assigning identities or causes by inference. This total is exact, but per-case inventory is blocked until a completed runner report with expected/actual verdicts is recovered or a new full run can safely execute.",
+  "known_aggregate_clusters_from_checkpoint": [
+    {"group": "planet landing/defense", "count": 12, "case_ids": null, "confidence": "probable", "note": "Checkpoint summary only; not safe to treat as the complete current cluster."},
+    {"group": "tavern/trade", "count": 11, "case_ids": null, "confidence": "probable", "note": "Checkpoint summary only; not safe to treat as the complete current cluster."},
+    {"group": "FedSpace MSL asset enforcement", "count": 10, "case_ids": null, "confidence": "probable", "note": "Includes tests blocked on unregistered internal cron invocation; exact failed IDs unavailable."},
+    {"group": "police D1", "count": 8, "case_ids": null, "confidence": "probable", "note": "Known fixture/API mismatch described in checkpoint; exact verdict membership unavailable."},
+    {"group": "ship cargo", "count": 8, "case_ids": null, "confidence": "probable", "note": "Suite has since been edited; current edits are unverified."},
+    {"group": "phase-3 port trading", "count": 6, "case_ids": null, "confidence": "probable", "note": "Aggregate checkpoint finding; current membership unavailable."},
+    {"group": "combat advanced", "count": 6, "case_ids": null, "confidence": "probable", "note": "Aggregate checkpoint finding; current membership unavailable."},
+    {"group": "event journal", "count": 6, "case_ids": null, "confidence": "probable", "note": "Includes unregistered events.resume coverage; exact membership unavailable."}
+  ],
+  "next_action": "When the isolated PostgreSQL test cluster is available, run make regression-full with a durable JSON report path and per-case expected/actual capture; then replace this provisional aggregate classification with one record per failed stable case ID."
+}

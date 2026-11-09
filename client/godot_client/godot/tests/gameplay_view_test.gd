@@ -21,16 +21,17 @@ func _run() -> void:
 	view.port_workflow.trade_requested.emit("sell", 7, 17, "ORG", 2, 1)
 	_check(trades == [{"direction": "buy", "port_id": 7, "sector_id": 17, "commodity": "ORE", "quantity": 3, "account": 0}, {"direction": "sell", "port_id": 7, "sector_id": 17, "commodity": "ORG", "quantity": 2, "account": 1}], "port trade signal lost its account or trade context")
 	view.confirm_trade_quote("buy", "ORE", 3, 1, {"total_buy_price": 120, "buy_price": 40})
-	_check(view.trade_quote_dialog.dialog_text.contains("120") and view.trade_quote_dialog.dialog_text.contains("Bank") and view.trade_quote_dialog.dialog_text.contains("Fees are not included"), "trade confirmation did not disclose the selected account and quote limitations")
+	_check(view.port_workflow._quoted_prices.get("ORE", {}).get("buy", null) == 40, "authoritative quote price was not returned to the port row")
 	view.dismiss_trade_quote()
-	_check(not view.trade_quote_dialog.visible, "disconnect did not dismiss the pending trade quote")
+	_check(not view.trade_quote_dialog.visible, "ordinary trade unexpectedly opened a confirmation dialog")
 	_check(commands is PanelContainer, "general commands are not a docked panel")
-	_check(commands.get_parent() == view.gameplay_body and view.gameplay_body.get_child(0) == commands, "command panel is not persistently placed on the left")
+	_check(commands.get_parent() == view.workspace_stack, "command panel is not placed in the viewport command column")
 	_check(view.primary_tabs.tab_count == 5, "primary gameplay workspaces were not created")
 	view._on_workspace_tab_changed(1)
 	_check(view._active_workspace == "NAVIGATION" and commands._active_category == "NAVIGATION", "Navigation workspace did not select the existing navigation command category")
 	view._on_workspace_tab_changed(0)
 	_check(view._active_workspace == "SECTOR" and not commands.visible, "Sector workspace did not prioritise the graphical sector view")
+	_check(view.center_split.visible and view.workspace_stack.get_parent() == view.center_split, "Sector workspace did not preserve the two-column viewport layout")
 	_check(is_equal_approx(view.toast_panel.anchor_left, 0.5) and is_equal_approx(view.toast_panel.anchor_right, 0.5), "notification ribbon is not centered at the bottom")
 	view.set_snapshot({
 		"authenticated": true,
@@ -217,7 +218,8 @@ func _run() -> void:
 		_check(route_detail.text.contains("Price estimate unavailable") and route_plot.text == "PLOT TO 18", "legacy route response did not explain missing estimates or offer a usable plot target")
 	view.show_restored_autopilot_route([18, 21, 24], 24, "stopped", "manual")
 	_check(view._route_panel.visible and view._route_label.text.contains("SAVED ROUTE · STOPPED") and view._route_label.text.contains("18 → 21 → 24"), "reconnected persisted autopilot route was not presented with its authoritative state")
-	_check(view._route_express_button.visible and not view._route_express_button.disabled and view._route_single_step_button.visible and not view._route_single_step_button.disabled and command_calls == 0, "restoring a saved route moved the ship or did not expose explicit Express/Single Step engagement")
+	_check(command_calls == 0, "restoring a saved route moved the ship unexpectedly")
+	_check(view._route_panel.get_child_count() == 1, "route status panel still contains redundant execution buttons")
 	view.queue_free()
 	await process_frame
 	if failures.is_empty():

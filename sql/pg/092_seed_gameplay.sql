@@ -541,6 +541,11 @@ INSERT INTO config (key, value, type)
 VALUES ('death.escape_pod_shiptype_id', '0', 'int')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, type = EXCLUDED.type;
 
+INSERT INTO config (key, value, type)
+VALUES ('illegal_allowed_neutral', '1', 'bool'),
+       ('illegal_min_experience', '400', 'int')
+ON CONFLICT (key) DO NOTHING;
+
 -- Cron Tasks
 INSERT INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) VALUES
 ('daily_turn_reset', 'daily@03:00Z', NULL, now(), TRUE, NULL),

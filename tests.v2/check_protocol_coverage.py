@@ -93,7 +93,10 @@ def command_cases(value, result: dict[str, list[str]], source: str):
 def json_coverage() -> dict[str, list[str]]:
     result: dict[str, list[str]] = {}
     for path in sorted(SUITES.glob("*.json")):
-        if path.name in {"regression_report.json", DEFAULT_REPORT.name}:
+        if path.name in {
+            "regression_report.json", "regression_previous.json",
+            "regression_failures.json", DEFAULT_REPORT.name,
+        }:
             continue
         try:
             payload = json.loads(path.read_text())

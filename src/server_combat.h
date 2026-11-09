@@ -7,6 +7,8 @@
 #include "db/db_api.h"
 
 int cmd_combat_attack (client_ctx_t * ctx, json_t * root);
+int npc_combat_attack_ship (db_t *db, int attacker_ship_id,
+                            int target_ship_id, int sector_id);
 int cmd_combat_status (client_ctx_t * ctx, json_t * root);
 int cmd_combat_deploy_fighters (client_ctx_t * ctx, json_t * root);
 int cmd_fighters_recall (client_ctx_t * ctx, json_t * root);

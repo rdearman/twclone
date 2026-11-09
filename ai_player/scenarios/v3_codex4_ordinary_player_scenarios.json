@@ -1,0 +1,132 @@
+{
+  "catalog_id": "V3-CODEX4-490-ordinary-player-scenarios-20261031",
+  "source": "docs/reports/V3_TW2002_CANONICAL_PARITY_AUDIT.md section 19",
+  "execution_mode": "disposable-live-adapter-only",
+  "simulation_fixture": false,
+  "evidence_contract": {
+    "each_command": ["sanitized request", "response", "event batch", "state before/after", "database snapshot before/after"],
+    "journey": ["authoritative state before", "authoritative state after", "database snapshot before", "database snapshot after"],
+    "restart": "Required when the scenario declares restart_required; the adapter performs no restart.",
+    "safety": ["read-only database snapshots", "no provisioning or direct row writes", "never replay an ambiguous mutation"]
+  },
+  "ai_policy": {
+    "strategy_mode": "deterministic",
+    "ordinary_player": true,
+    "retries": "never replay an ambiguous mutation",
+    "stop_on": ["identity mismatch", "unexpected universe", "service loss", "ambiguous mutation"]
+  },
+  "scenarios": [
+    {
+      "requirement_id": "V3-PLAN-01",
+      "title": "Planet landing and refusal atomicity",
+      "execution_status": "next-unblocked",
+      "dependency_note": "Run after QA-INT-01 migration classification is repaired; canonical turn/defense policy remains supplied by V3-CAN-00.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "refusal_state_atomic": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "malformed-refusal", "commands": [{"command": "planet.land", "data": {}}], "expected": "refusal", "assertions": ["malformed request is refused", "turn and landing state unchanged", "database unchanged"]},
+        {"id": "valid-owned", "commands": [{"command": "planet.land", "data": {"planet_id": "owned_same_sector"}}], "expected": "success", "assertions": ["planet.land.success", "landed planet persists", "canonical turn cost occurs once", "landing event and database delta agree"]},
+        {"id": "valid-unowned", "commands": [{"command": "planet.land", "data": {"planet_id": "unowned_same_sector"}}], "expected": "success", "assertions": ["planet.land.success", "unowned landing persists", "canonical turn cost occurs once", "landing event and database delta agree"]},
+        {"id": "valid-owned-readback", "commands": [{"command": "planet.land", "data": {"planet_id": "owned_same_sector"}}, {"command": "player.my_info", "data": {}}], "expected": "success", "assertions": ["landing response succeeds", "ordinary-player readback confirms landed planet and turns", "each command has response/event/database boundaries"]},
+        {"id": "valid-reland", "commands": [{"command": "planet.land", "data": {"planet_id": "owned_same_sector"}}, {"command": "planet.land", "data": {"planet_id": "owned_same_sector"}}], "expected": "success", "assertions": ["both landing responses succeed", "each landing has one canonical turn cost", "landing state remains on the selected planet", "two distinct landing events and database deltas are recorded"]},
+        {"id": "remote-refusal", "commands": [{"command": "planet.land", "data": {"planet_id": "remote"}}], "expected": "refusal", "assertions": ["turn unchanged", "landing state unchanged", "database unchanged"]},
+        {"id": "unauthorized-refusal", "commands": [{"command": "planet.land", "data": {"planet_id": "foreign_same_sector"}}], "expected": "refusal", "assertions": ["turn unchanged", "landing state unchanged"]},
+        {"id": "zero-turn-refusal", "commands": [{"command": "planet.land", "data": {"planet_id": "owned_same_sector"}}], "expected": "refusal", "assertions": ["zero-turn player is refused", "turn and landing state unchanged", "database unchanged"]},
+        {"id": "defense-refusal", "commands": [{"command": "planet.land", "data": {"planet_id": "defended"}}], "expected": "refusal", "assertions": ["turn and landing state unchanged", "permitted damage/events recorded separately"]},
+        {"id": "persistence-failure-refusal", "commands": [{"command": "planet.land", "data": {"planet_id": "owned_same_sector"}}], "expected": "refusal", "assertions": ["turn rollback", "landing rollback", "no duplicate event"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-SHIP-01",
+      "title": "Ship ownership and lifecycle settlement",
+      "execution_status": "deferred",
+      "dependency_note": "Blocked until CODEX 2/3 provide sale/transfer handlers, lifecycle invariants, and ECO-01 settlement contract.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "ownership_singleton": true, "restart_readback": true, "settlement_idempotent": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "owner-list", "commands": [{"command": "ship.list", "data": {}}], "expected": "success", "assertions": ["one primary owner", "active flag is authoritative"]},
+        {"id": "foreign-transfer-refusal", "commands": [{"command": "ship.transfer", "data": {"ship_id": "foreign", "recipient": "ordinary_player"}}], "expected": "refusal", "assertions": ["owner, credits and cargo unchanged"]},
+        {"id": "authorized-transfer", "commands": [{"command": "ship.transfer", "data": {"ship_id": "owned_inactive", "recipient": "ordinary_player_2"}}], "expected": "success", "assertions": ["single owner after restart", "no duplicate credits or cargo"]},
+        {"id": "duplicate-transfer", "commands": [{"command": "ship.transfer", "data": {"ship_id": "owned_inactive", "recipient": "ordinary_player_2"}}, {"command": "ship.transfer", "data": {"ship_id": "owned_inactive", "recipient": "ordinary_player_2"}}], "expected": "mixed", "assertions": ["one settlement and one ownership transition"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-ECO-01",
+      "title": "Trade settlement and idempotent retry",
+      "execution_status": "deferred",
+      "dependency_note": "Blocked by QA-INT-01 and the missing live settlement proof; market-order scope remains V3-CAN-00 gated.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "conserve": ["credits", "cargo", "stock", "turns"], "receipt_idempotent": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "fixed-port-buy", "commands": [{"command": "trade.buy", "data": {"commodity": "core", "quantity": 1}}], "expected": "success", "assertions": ["credits, cargo, stock and turns conserve", "one receipt"]},
+        {"id": "wrong-direction-refusal", "commands": [{"command": "trade.sell", "data": {"commodity": "core", "quantity": 1}}], "expected": "refusal", "assertions": ["no credits, cargo, stock or turn mutation"]},
+        {"id": "ambiguous-retry", "commands": [{"command": "trade.buy", "data": {"commodity": "core", "quantity": 1}}], "expected": "success", "assertions": ["operator must inspect receipt/state before any retry", "at most one settlement"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-ECO-02",
+      "title": "Bank interest runtime",
+      "execution_status": "deferred",
+      "dependency_note": "Blocked until CODEX 3/2 wire one authoritative scheduler path and prove live same-day/restart behavior.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "one_daily_application": true, "same_day_idempotent": true, "ledger_reconciles": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "eligible-daily-accrual", "commands": [{"command": "player.my_info", "data": {}}], "expected": "success", "assertions": ["one bounded interest credit", "one bank ledger entry"]},
+        {"id": "same-day-replay", "commands": [{"command": "player.my_info", "data": {}}], "expected": "success", "assertions": ["no second same-day credit or ledger entry"]},
+        {"id": "below-minimum", "commands": [{"command": "player.my_info", "data": {}}], "expected": "success", "assertions": ["balance and ledger unchanged"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-VIS-01",
+      "title": "Visibility and scan boundaries",
+      "execution_status": "deferred",
+      "dependency_note": "Blocked pending server disclosure policy and live observer/location matrix; do not infer policy from AI behavior.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "refusal_side_effect_free": true, "no_hidden_object_leakage": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "current-scan", "commands": [{"command": "sector.scan", "data": {"sector_id": "current"}}], "expected": "success", "assertions": ["permitted disclosure", "no unexpected turn or cloak mutation"]},
+        {"id": "remote-refusal", "commands": [{"command": "sector.scan", "data": {"sector_id": "remote"}}], "expected": "refusal", "assertions": ["no decloak", "no knowledge write", "no hidden object leakage"]},
+        {"id": "zero-turn-refusal", "commands": [{"command": "sector.scan", "data": {"sector_id": "adjacent"}}], "expected": "refusal", "assertions": ["turn and visit state unchanged"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-HAZ-01",
+      "title": "Sector-entry hazards",
+      "execution_status": "deferred",
+      "dependency_note": "Blocked pending NAV-01/SHIP-02 ordering and live atomic movement evidence.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "hazard_asset_depletion_once": true, "final_state_event_consistent": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "mine-entry", "commands": [{"command": "move.warp", "data": {"sector_id": "mine_sector"}}], "expected": "success", "assertions": ["damage event matches final ship state", "mine depletion occurs once"]},
+        {"id": "limpet-entry", "commands": [{"command": "move.warp", "data": {"sector_id": "limpet_sector"}}], "expected": "success", "assertions": ["tow/limpet state and event agree"]},
+        {"id": "destructive-entry-replay", "commands": [{"command": "move.warp", "data": {"sector_id": "destructive_sector"}}], "expected": "mixed", "assertions": ["final sector, ship, tow, assets and event state agree", "replay does not apply hazard twice"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-PLAN-02",
+      "title": "Planet production and citadel lifecycle",
+      "execution_status": "decision-gated",
+      "dependency_note": "Do not execute until V3-CAN-00 pins whether harvest and the selected production/citadel formulas are canonical.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "balances_and_ownership_persist": true, "unauthorized_refusal_atomic": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "production-tick", "commands": [{"command": "planet.info", "data": {"planet_id": "owned"}}], "expected": "success", "assertions": ["production and balances persist"]},
+        {"id": "unauthorized-withdrawal", "commands": [{"command": "planet.withdraw", "data": {"planet_id": "foreign", "amount": 1}}], "expected": "refusal", "assertions": ["balances and ownership unchanged"]},
+        {"id": "citadel-upgrade", "commands": [{"command": "planet.upgrade", "data": {"planet_id": "owned"}}], "expected": "success", "assertions": ["authorized level transition persists"]}
+      ]
+    },
+    {
+      "requirement_id": "V3-INS-01",
+      "title": "Insurance purchase and loss settlement",
+      "execution_status": "decision-gated",
+      "dependency_note": "Do not execute until V3-CAN-00 decides insurance is included; if excluded, verify explicit unavailable responses instead.",
+      "canonical_requirements": {"evidence": ["response", "events", "state_before_after", "database_before_after"], "disposition_required": true, "no_fabricated_success": true, "restart_readback": true},
+      "restart_required": true,
+      "cases": [
+        {"id": "policy-list", "commands": [{"command": "insurance.policies.list", "data": {}}], "expected": "deferred", "assertions": ["included: authoritative policies; excluded: explicit unavailable, never fabricated success"]},
+        {"id": "owned-purchase", "commands": [{"command": "insurance.policies.buy", "data": {"ship_id": "owned"}}], "expected": "deferred", "assertions": ["if included, funded policy and ledger entry persist"]},
+        {"id": "duplicate-claim", "commands": [{"command": "insurance.claim.file", "data": {"ship_id": "owned_loss"}}, {"command": "insurance.claim.file", "data": {"ship_id": "owned_loss"}}], "expected": "deferred", "assertions": ["if included, one funded payout; otherwise explicit unavailable"]}
+      ]
+    }
+  ]
+}

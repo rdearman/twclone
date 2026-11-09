@@ -1486,7 +1486,6 @@ main (int argc, char **argv)
   snprintf (buf, sizeof (buf), "SELECT generate_planets(%d)", max_planets);
   exec_sql (app, buf, "generate_planets");
 
-  exec_sql (app, "SELECT spawn_initial_fleet()", "spawn_fleet");
   exec_sql (app, "SELECT apply_game_defaults()", "apply_game_defaults");
 
   // 5) Graph Brain
@@ -1502,6 +1501,7 @@ main (int argc, char **argv)
   exec_sql (app, "SELECT setup_npc_homeworlds()", "setup_homeworlds");
   exec_sql (app, "SELECT setup_ferringhi_alliance()", "setup_ferringhi");
   exec_sql (app, "SELECT setup_orion_syndicate()", "setup_orion");
+  exec_sql (app, "SELECT spawn_initial_fleet()", "spawn_fleet");
 
   /* These seed functions assign fixed planet_id values. Keep the serial
      sequence ahead of all seeded rows before later gameplay inserts. */

@@ -1,6 +1,6 @@
 {
   "test_suite_name": "Ship Cargo - Dynamic (Phase 1)",
-  "description": "Tests ship_cargo table and commodity-agnostic cargo handling",
+  "description": "Exercises authoritative cargo changes through V3 trading, planet transfer and jettison requests.",
   "tests": [
     {
       "name": "Setup: Auth user for cargo tests",
@@ -9,155 +9,241 @@
       "password": "testpass123"
     },
     {
-      "name": "T1.1: Get initial ship state (no cargo)",
-      "command": "ship.inspect",
-      "user": "cargo_test_user",
-      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "name": "Rig: Find an existing port outside protected FedSpace",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT port_id, sector_id FROM ports WHERE sector_id > 10 ORDER BY port_id LIMIT 1" },
+      "save": { "cargo_port_id": "data.rows.0.0", "cargo_sector_id": "data.rows.0.1" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T1.2: Attempt to add cargo - mixed commodities capacity enforcement",
-      "command": "port.trade.buy",
-      "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "ORE",
-        "quantity": 5
-      },
+      "name": "Rig: Configure the disposable port's stock and trade rows",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ports SET type = 1, size = 1000, petty_cash = 1000000 WHERE port_id = @{cargo_port_id}" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T1.3: Verify cargo added to ship_cargo table",
-      "command": "ship.inspect",
-      "user": "cargo_test_user",
-      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
-      "expect": { "status": "ok", "ore_gte": 1 }
-    },
-    {
-      "name": "T1.4: Add different commodity",
-      "command": "port.trade.buy",
-      "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "ORG",
-        "quantity": 3
-      },
+      "name": "Rig: Replace target port commodity directions",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM port_trade WHERE port_id = @{cargo_port_id}" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T1.5: Verify mixed cargo (ORE + ORG) both present",
-      "command": "ship.inspect",
-      "user": "cargo_test_user",
-      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "name": "Rig: Seed legal and illegal port inventory",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO port_trade (port_id, commodity, mode, maxproduct) VALUES (@{cargo_port_id}, 'ORE', 'sell', 5000), (@{cargo_port_id}, 'ORG', 'sell', 5000), (@{cargo_port_id}, 'EQU', 'sell', 5000), (@{cargo_port_id}, 'SLV', 'sell', 5000)" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T2.1: Verify illegal commodities count towards holds",
-      "comment": "Illegal commodities (SLV, WPN, DRG) must count against holds capacity like legal ones",
-      "command": "port.trade.buy",
-      "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "SLV",
-        "quantity": 2
-      },
+      "name": "Rig: Seed authoritative port stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', @{cargo_port_id}, 'ORE', 100, 10, 0), ('port', @{cargo_port_id}, 'ORG', 100, 10, 0), ('port', @{cargo_port_id}, 'EQU', 100, 10, 0), ('port', @{cargo_port_id}, 'SLV', 100, 10, 0) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity, price = EXCLUDED.price" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T2.2: Verify illegal commodity in cargo",
-      "command": "ship.inspect",
-      "user": "cargo_test_user",
-      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "name": "Rig: Clear active ship cargo and legacy cargo columns",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ship_cargo WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{cargo_test_user_player_id})" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T3.1: Attempt to remove more cargo than present",
-      "comment": "Removing more than present should fail, not result in negative quantity",
-      "command": "port.trade.sell",
+      "name": "Rig: Place player and active ship at the port with permitted illegal-trade credentials",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "WITH moved_ship AS (UPDATE ships SET sector_id = @{cargo_sector_id}, onplanet = FALSE, ore = 0, organics = 0, equipment = 0, slaves = 0, drugs = 0, weapons = 0, colonists = 0 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{cargo_test_user_player_id}) RETURNING ship_id) UPDATE players SET sector_id = @{cargo_sector_id}, alignment = -501, experience = 100000, credits = 100000 WHERE player_id = @{cargo_test_user_player_id} AND EXISTS (SELECT 1 FROM moved_ship)" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Create an owned test planet at the port sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, population, type, creator, created_by) VALUES (@{cargo_sector_id}, 'Cargo Test Planet', @{cargo_test_user_player_id}, 'player', 'M', 0, (SELECT planettypes_id FROM planettypes ORDER BY planettypes_id LIMIT 1), 'cargo-regression', @{cargo_test_user_player_id}) RETURNING planet_id" },
+      "save": { "cargo_planet_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Configure planet ORE storage",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) VALUES (@{cargo_planet_id}, 'ORE', 0, 1000, 0)" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Resolve canonical ORE commodity ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT commodities_id FROM commodities WHERE code = 'ORE'" },
+      "save": { "cargo_ore_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T1.1: New active ship begins with empty cargo",
+      "command": "ship.status",
       "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "ORE",
-        "quantity": 100
-      },
+      "expect": { "status": "ok", "type": "ship.status" },
+      "asserts": [{ "path": "data.ship.cargo", "op": "==", "value": [] }]
+    },
+    {
+      "name": "T1.2: Buy ORE through the V3 port trade contract",
+      "command": "trade.buy",
+      "user": "cargo_test_user",
+      "data": { "sector_id": "@{cargo_sector_id}", "port_id": "@{cargo_port_id}", "idempotency_key": "cargo-buy-ore-1", "items": [{ "commodity": "ORE", "quantity": 2 }] },
+      "expect": { "status": "ok", "type": "trade.buy_receipt_v1" }
+    },
+    {
+      "name": "T1.3: Ship status confirms persisted ORE cargo",
+      "command": "ship.status",
+      "user": "cargo_test_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.cargo.0.commodity", "op": "==", "value": "ore" },
+        { "path": "data.ship.cargo.0.quantity", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "T1.4: Buy a second commodity",
+      "command": "trade.buy",
+      "user": "cargo_test_user",
+      "data": { "sector_id": "@{cargo_sector_id}", "port_id": "@{cargo_port_id}", "idempotency_key": "cargo-buy-org-1", "items": [{ "commodity": "ORG", "quantity": 1 }] },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T1.5: Ship status exposes mixed cargo",
+      "command": "ship.status",
+      "user": "cargo_test_user",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.ship.cargo", "op": "contains", "value": "organics" }]
+    },
+    {
+      "name": "T2.1: Buy an illegal commodity with eligible alignment and experience",
+      "command": "trade.buy",
+      "user": "cargo_test_user",
+      "data": { "sector_id": "@{cargo_sector_id}", "port_id": "@{cargo_port_id}", "idempotency_key": "cargo-buy-slaves-1", "items": [{ "commodity": "SLV", "quantity": 1 }] },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T2.2: Ship status confirms illegal cargo",
+      "command": "ship.status",
+      "user": "cargo_test_user",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.ship.cargo", "op": "contains", "value": "slaves" }]
+    },
+    {
+      "name": "T3.1: Selling more ORE than held is rejected",
+      "command": "trade.sell",
+      "user": "cargo_test_user",
+      "data": { "sector_id": "@{cargo_sector_id}", "port_id": "@{cargo_port_id}", "idempotency_key": "cargo-sell-ore-too-many", "items": [{ "commodity": "ORE", "quantity": 100 }] },
       "expect": { "status": "error" }
     },
     {
-      "name": "T3.2: Verify cargo unchanged after failed removal",
-      "command": "ship.inspect",
+      "name": "T3.2: Rejected sale leaves cargo unchanged",
+      "command": "ship.status",
       "user": "cargo_test_user",
-      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.cargo.0.commodity", "op": "==", "value": "ore" },
+        { "path": "data.ship.cargo.0.quantity", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "T4.1: Buy EQU and verify cargo state",
+      "command": "trade.buy",
+      "user": "cargo_test_user",
+      "data": { "sector_id": "@{cargo_sector_id}", "port_id": "@{cargo_port_id}", "idempotency_key": "cargo-buy-equ-1", "items": [{ "commodity": "EQU", "quantity": 1 }] },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T4.1: Port trade buy updates ship_cargo",
-      "comment": "Buying at port should write to ship_cargo, not just legacy columns",
-      "command": "port.trade.buy",
-      "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "EQU",
-        "quantity": 1
-      },
+      "name": "Rig: Configure port to buy EQU from player",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE port_trade SET mode = 'buy' WHERE port_id = @{cargo_port_id} AND commodity = 'EQU'" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T4.2: Verify port trade sell updates ship_cargo",
-      "command": "port.trade.sell",
+      "name": "T4.2: Sell the EQU back to the port",
+      "command": "trade.sell",
       "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "EQU",
-        "quantity": 1
-      },
+      "data": { "sector_id": "@{cargo_sector_id}", "port_id": "@{cargo_port_id}", "idempotency_key": "cargo-sell-equ-1", "items": [{ "commodity": "EQU", "quantity": 1 }] },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T5.1: Planet deposit/withdraw updates ship_cargo",
-      "comment": "Planet operations should use ship_cargo as source of truth",
+      "name": "T4.3: EQU sale removes cargo from the public ship status",
+      "command": "ship.status",
+      "user": "cargo_test_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.cargo", "op": "contains", "value": "ore" },
+        { "path": "data.ship.cargo", "op": "contains", "value": "organics" },
+        { "path": "data.ship.cargo", "op": "contains", "value": "slaves" }
+      ]
+    },
+    {
+      "name": "T5.1: Land on owned planet before depositing cargo",
+      "command": "planet.land",
+      "user": "cargo_test_user",
+      "data": { "planet_id": "@{cargo_planet_id}" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "T5.2: Deposit ORE into the planet",
       "command": "planet.deposit",
       "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "ORE",
-        "quantity": 2
-      },
+      "data": { "planet_id": "@{cargo_planet_id}", "commodity": "ORE", "quantity": 1 },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T5.2: Verify planet withdraw",
+      "name": "T5.3: Deposit reduces ship ORE cargo",
+      "command": "ship.status",
+      "user": "cargo_test_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.cargo.0.commodity", "op": "==", "value": "ore" },
+        { "path": "data.ship.cargo.0.quantity", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "T5.4: Withdraw ORE from the planet",
       "command": "planet.withdraw",
       "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "ORE",
-        "quantity": 1
-      },
+      "data": { "planet_id": "@{cargo_planet_id}", "commodity": "ORE", "quantity": 1 },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T6.1: Empty cargo consistency check",
-      "comment": "Ship with no cargo should return zero for all commodities, not missing rows",
+      "name": "T5.5: Withdraw restores ship ORE cargo",
+      "command": "ship.status",
+      "user": "cargo_test_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.cargo.0.commodity", "op": "==", "value": "ore" },
+        { "path": "data.ship.cargo.0.quantity", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "T6.1: Jettison one ORE by canonical commodity ID",
       "command": "ship.jettison",
       "user": "cargo_test_user",
-      "data": {
-        "ship_id": "@cargo_test_user_active_ship_id",
-        "commodity_code": "ORE"
-      },
+      "data": { "commodity_id": "@{cargo_ore_id}", "quantity": 1 },
       "expect": { "status": "ok" }
     },
     {
-      "name": "T6.2: Verify empty cargo returns zero",
-      "command": "ship.inspect",
+      "name": "T6.2: Jettison removes exactly one ORE from ship status",
+      "command": "ship.status",
       "user": "cargo_test_user",
-      "data": { "ship_id": "@cargo_test_user_active_ship_id" },
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.ship.cargo.0.commodity", "op": "==", "value": "ore" },
+        { "path": "data.ship.cargo.0.quantity", "op": "==", "value": 1 }
+      ]
     },
     {
-      "name": "T7.1: New commodity works without schema/code changes",
-      "comment": "This test validates commodity-agnostic design: if a new commodity exists in DB, cargo ops work",
+      "name": "T7.1: Runtime-added commodity behavior remains deferred",
       "skip": "true",
-      "reason": "Phase 2: Requires new commodity in commodities table"
+      "reason": "The canonical commodities table and port_trade CHECK constraint permit only the approved V3 commodity codes; runtime ALT insertion is not a supported contract."
     }
   ]
 }

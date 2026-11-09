@@ -22,6 +22,7 @@
 #include "db/repo/repo_ships.h"
 #include "db/repo/repo_citadel.h"
 #include "db/repo/repo_corporation.h"
+#include "db/repo/repo_universe.h"
 #include "game_db.h"
 #include "errors.h"
 #include "server_cmds.h"
@@ -155,8 +156,9 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
                                               "combat.attack_planet");
       if (enforcement_rc == 1)
         {
-          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
-                               "Captain Z intervenes: aggression in FedSpace is forbidden.");
+          send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                       "Captain Z intervenes: aggression in FedSpace is forbidden.",
+                                       NULL);
           return 0;
         }
       if (enforcement_rc < 0)
@@ -182,6 +184,20 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, REF_NOT_IN_SECTOR,
 			   "Planet not in current sector");
       return 0;
+    }
+
+  /* Only registered Federation assets are enforceable.  The generic
+   * incident repository deliberately makes this a no-op for ordinary
+   * planets, and Captain Z has already returned for sectors 1-10. */
+  if (current_sector > 10)
+    {
+      char incident_key[128];
+      snprintf (incident_key, sizeof incident_key,
+                "iss:attack:planet:%d:%d:%lld", ctx->player_id, planet_id,
+                (long long) time (NULL) / 60);
+      (void) repo_npc_security_incident_claim
+        (db, incident_key, ctx->player_id, "planet", planet_id,
+         current_sector, (int64_t) time (NULL) + 86400);
     }
 
   /* Terra protection: instant destruction + sanctions */
@@ -407,6 +423,13 @@ h_planet_check_trade_legality (db_t *db,
       return 0;			// Illegal or error
     }
 
+  int player_xp = db_get_player_xp (db, player_id);
+  int minimum_illegal_xp = db_get_config_int (db, "illegal_min_experience", 400);
+  if (player_xp < minimum_illegal_xp)
+    {
+      return 0;
+    }
+
   // 2. Check Cluster Alignment
   int cluster_band = 0;
 
@@ -432,21 +455,22 @@ h_planet_check_trade_legality (db_t *db,
 
   db_player_get_alignment (db, player_id, &p_align);
 
-  int neutral_band = db_get_config_int (db, "neutral_band", 75);
-
-
-  if (p_align > neutral_band)
-    {
-      return 0;			// Good players banned
-    }
-
-  // 4. Check Neutral Config
+  // 3. Check alignment band: good players are blocked; neutral and evil may
+  // proceed subject to the neutral setting below.
+  int p_good = 0;
   int p_evil = 0;
 
 
   db_alignment_band_for_value (db,
 			       p_align,
-			       NULL, NULL, NULL, NULL, &p_evil, NULL, NULL);
+		       NULL, NULL, NULL, &p_good, &p_evil, NULL, NULL);
+
+  if (p_good)
+    {
+      return 0;
+    }
+
+  // 4. Check Neutral Config
 
   if (!p_evil && !db_get_config_bool (db, "illegal_allowed_neutral", true))
     {
@@ -475,6 +499,40 @@ h_free_planet_t (planet_t *p)
     {
       free (p->owner_type);
     }
+}
+
+/* Terra is a public Federation facility. It is identified by its canonical
+ * seeded identity: players may inspect and land on it, but landing never
+ * grants ownership. */
+static bool
+h_is_terra (int planet_id, int planet_sector)
+{
+  return planet_id == 1 && planet_sector == 1;
+}
+
+bool
+h_planet_is_terra (db_t *db, int planet_id)
+{
+  int planet_sector = 0;
+  int owner_id = 0;
+  char *owner_type = NULL;
+  bool terra = db && planet_id > 0
+    && db_planets_get_land_info (db, planet_id, &planet_sector, &owner_id,
+                                 &owner_type) == 0
+    && h_is_terra (planet_id, planet_sector);
+  free (owner_type);
+  return terra;
+}
+
+static int
+h_refuse_terra_mutation (db_t *db, client_ctx_t *ctx, json_t *root,
+                         int planet_id)
+{
+  if (!h_planet_is_terra (db, planet_id))
+    return 0;
+  send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                       "Terra is a Federation colonist source; this action is not permitted.");
+  return 1;
 }
 
 
@@ -520,7 +578,9 @@ cmd_planet_info (client_ctx_t *ctx, json_t *root)
   bool landed = ship_id > 0
     && repo_citadel_get_onplanet (db, ship_id, &landed_planet) == 0
     && landed_planet == pid;
-  bool authorized = landed;
+  /* Terra's public information is readable without landing or ownership.
+   * This does not authorize treasury access and does not make it claimable. */
+  bool authorized = landed || h_is_terra (pid, planet_sector);
   bool treasury_authorized = false;
   if (!authorized && owner_type && strcmp (owner_type, "player") == 0
       && owner_id == ctx->player_id)
@@ -548,7 +608,6 @@ cmd_planet_info (client_ctx_t *ctx, json_t *root)
         (db, owner_id, ctx->player_id, role, sizeof role) == 0;
     }
   free (owner_type);
-  (void) planet_sector;
   if (!authorized)
     {
       send_response_error (ctx, root, ERR_FORBIDDEN_IN_SECTOR,
@@ -559,6 +618,11 @@ cmd_planet_info (client_ctx_t *ctx, json_t *root)
   json_t *info = NULL;
   if (db_planet_get_details_json (db, pid, &info) == 0)
     {
+      /* The repository row normally contains this identity, but the client
+       * correlates every landed-surface refresh strictly by planet_id. Set it
+       * explicitly so schema/column naming differences cannot disable the
+       * launch and colonist controls after a successful landing. */
+      json_object_set_new (info, "planet_id", json_integer (pid));
       /* Existing detail JSON includes the planetary fighter count.  Add the
        * current citadel lifecycle and its already-supported defensive state. */
       json_t *citadel = json_object ();
@@ -681,6 +745,8 @@ cmd_planet_fighters_transfer (client_ctx_t *ctx, json_t *root)
                            "planet_id, positive quantity, and a supported direction are required.");
       return 0;
     }
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
 
   planet_t planet = {0};
   if (h_get_planet_owner_info (db, planet_id, &planet) != 0)
@@ -767,6 +833,8 @@ cmd_planet_rename (client_ctx_t *ctx, json_t *root)
 			   "Missing or invalid 'planet_id'.");
       return 0;
     }
+  if (h_refuse_terra_mutation (game_db_get_handle (), ctx, root, planet_id))
+    return 0;
 
   /* The command schema and protocol contract expose the planet name as
      `name`; keep the handler aligned with that authoritative contract. */
@@ -883,14 +951,22 @@ resolve_landing_fighter_defense (db_t *db, client_ctx_t *ctx, int planet_id,
       || db_planets_get_attack_info (db, planet_id, &sector, &owner,
                                      &planet_fighters) != 0
       || db_planets_get_ship_fighters (db, ship_id, &ship_fighters) != 0)
-    return -1;
+    {
+      LOGE ("planet landing defense: failed to load planet/ship state (planet=%d ship=%d)",
+            planet_id, ship_id);
+      return -1;
+    }
   (void) sector;
   (void) owner;
   int q_sector = 0, q_atmosphere = 0;
   if (load_landing_citadel_defenses (db, planet_id, &citadel_level,
                                      &q_sector, &q_atmosphere,
                                      &citadel_shields, &reaction) != 0)
-    return -1;
+    {
+      LOGE ("planet landing defense: failed to load citadel state (planet=%d)",
+            planet_id);
+      return -1;
+    }
 
   bool shield_grid_active = citadel_level >= 5 && citadel_shields > 0;
   if (planet_fighters <= 0 && !shield_grid_active)
@@ -926,16 +1002,30 @@ resolve_landing_fighter_defense (db_t *db, client_ctx_t *ctx, int planet_id,
   db_error_t err;
   db_error_clear (&err);
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
-    return -1;
-  if ((ship_loss > 0
-       && db_planets_update_ship_fighters (db, ship_id, ship_loss) != 0)
-      || (planet_loss > 0
-          && db_planets_lose_fighters (db, planet_id, planet_loss) != 0)
-      || (shield_absorbed > 0
-          && db_planets_consume_citadel_shields
-              (db, planet_id, citadel_shields, shield_absorbed,
-               &shields_after) != 0))
     {
+      LOGE ("planet landing defense: transaction begin failed (planet=%d code=%d message=%s)",
+            planet_id, err.code, err.message);
+      return -1;
+    }
+  int update_rc = 0;
+  const char *failed_stage = NULL;
+  if (ship_loss > 0
+      && (update_rc = db_planets_update_ship_fighters
+          (db, ship_id, ship_loss)) != 0)
+    failed_stage = "ship fighters";
+  else if (planet_loss > 0
+           && (update_rc = db_planets_lose_fighters
+               (db, planet_id, planet_loss)) != 0)
+    failed_stage = "planet fighters";
+  else if (shield_absorbed > 0
+           && (update_rc = db_planets_consume_citadel_shields
+               (db, planet_id, citadel_shields, shield_absorbed,
+                &shields_after)) != 0)
+    failed_stage = "citadel shields";
+  if (failed_stage)
+    {
+      LOGE ("planet landing defense: %s update failed (planet=%d ship=%d code=%d)",
+            failed_stage, planet_id, ship_id, update_rc);
       db_tx_rollback (db, NULL);
       return -1;
     }
@@ -965,12 +1055,16 @@ resolve_landing_fighter_defense (db_t *db, client_ctx_t *ctx, int planet_id,
                               "player", ctx->player_id, ctx->sector_id,
                               event, db) != 0)
     {
+      LOGE ("planet landing defense: combat event insert failed (planet=%d player=%d)",
+            planet_id, ctx->player_id);
       json_decref (event);
       db_tx_rollback (db, NULL);
       return -1;
     }
   if (!db_tx_commit (db, &err))
     {
+      LOGE ("planet landing defense: transaction commit failed (planet=%d code=%d message=%s)",
+            planet_id, err.code, err.message);
       json_decref (event);
       db_tx_rollback (db, NULL);
       return -1;
@@ -1078,7 +1172,13 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   bool can_land = false;
 
 
-  if (owner_id == 0)
+  /* Terra is public Federation territory. This is a landing exception only:
+   * the landing write records the ship location and does not change ownership. */
+  if (h_is_terra (planet_id, planet_sector))
+    {
+      can_land = true;
+    }
+  else if (owner_id == 0)
     {				// unowned
       can_land = true;
     }
@@ -1142,6 +1242,8 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
                            "Could not determine alignment for landing.");
       return 0;
     }
+  /* Terra is publicly inspectable and landable for ordinary/neutral players,
+   * but classic TradeWars still refuses landing to evil players. */
   if (alignment < 0 && planet_sector == 1)
     {
       free (owner_type);
@@ -1200,27 +1302,39 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
   if (!can_land)
     {
       free (owner_type);
+      json_t *error_data = NULL;
       if (defense_rc == 2)
-        send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
-                                  "Planetary Quasar defenses destroyed your ship; landing refused.",
-                                  json_pack ("{s:i,s:o,s:b,s:b}", "planet_id", planet_id,
-                                             "combat", defense_results,
-                                             "landing_allowed", false,
-                                             "ship_remains_in_sector", false));
+        {
+          error_data = json_pack ("{s:i,s:O,s:b,s:b}", "planet_id", planet_id,
+                                  "combat", defense_results,
+                                  "landing_allowed", false,
+                                  "ship_remains_in_sector", false);
+          send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
+                                    "Planetary Quasar defenses destroyed your ship; landing refused.",
+                                    error_data);
+        }
       else if (defense_rc == 1)
-        send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
-                                  "Planetary defenses engaged your ship; landing refused.",
-                                  json_pack ("{s:i,s:o,s:b,s:b}", "planet_id", planet_id,
-                                             "combat", defense_results,
-                                             "landing_allowed", false,
-                                             "ship_remains_in_sector", true));
+        {
+          error_data = json_pack ("{s:i,s:O,s:b,s:b}", "planet_id", planet_id,
+                                  "combat", defense_results,
+                                  "landing_allowed", false,
+                                  "ship_remains_in_sector", true);
+          send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
+                                    "Planetary defenses engaged your ship; landing refused.",
+                                    error_data);
+        }
       else
-        send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
-                                  "You do not have permission to land on this planet.",
-                                  json_pack ("{s:i,s:o,s:b,s:b}", "planet_id", planet_id,
-                                             "combat", defense_results,
-                                             "landing_allowed", false,
-                                             "ship_remains_in_sector", true));
+        {
+          error_data = json_pack ("{s:i,s:O,s:b,s:b}", "planet_id", planet_id,
+                                  "combat", defense_results,
+                                  "landing_allowed", false,
+                                  "ship_remains_in_sector", true);
+          send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
+                                    "You do not have permission to land on this planet.",
+                                    error_data);
+        }
+      if (error_data)
+        json_decref (error_data);
       json_decref (defense_results);
       return 0;
     }
@@ -1261,7 +1375,9 @@ cmd_planet_land (client_ctx_t *ctx, json_t *root)
       return 0;
     }
   bool tx_can_land = false;
-  if (tx_owner_id == 0)
+  if (h_is_terra (planet_id, tx_planet_sector))
+    tx_can_land = true;
+  else if (tx_owner_id == 0)
     tx_can_land = true;
   else if (tx_owner_type && strcmp (tx_owner_type, "player") == 0)
     tx_can_land = tx_owner_id == ctx->player_id;
@@ -1520,6 +1636,8 @@ cmd_planet_transfer_ownership (client_ctx_t *ctx, json_t *root)
 			   "Missing or invalid 'planet_id'.");
       return 0;
     }
+  if (h_refuse_terra_mutation (game_db_get_handle (), ctx, root, planet_id))
+    return 0;
   if (!json_get_int_flexible (data, "target_id", &target_id)
       || target_id <= 0)
     {
@@ -1678,6 +1796,8 @@ cmd_planet_deposit (client_ctx_t *ctx, json_t *root)
 			   ERR_INVALID_ARG, "Invalid planet_id.");
       return 0;
     }
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
 
   planet_t p = { 0 };
 
@@ -1953,6 +2073,8 @@ cmd_planet_withdraw (client_ctx_t *ctx, json_t *root)
 			   ERR_INVALID_ARG, "Invalid planet_id.");
       return 0;
     }
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
 
   planet_t p = { 0 };
 
@@ -2560,6 +2682,8 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid parameters.");
       return 0;
     }
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
 
   planet_t p = { 0 };
 
@@ -2759,6 +2883,8 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid parameters.");
       return 0;
     }
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
 
   planet_t p = { 0 };
 
@@ -3036,6 +3162,31 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  /* Terra may only be used as a colonist source. Pickup is the sole
+   * persistent action permitted there; drop-off and all other planet
+   * mutations are refused below or by their respective handlers. */
+  if (h_planet_is_terra (db, planet_id) && strcmp (action, "pickup") != 0)
+    {
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "Terra accepts colonist pickup only.");
+      return 0;
+    }
+
+  if (h_planet_is_terra (db, planet_id) && strcmp (action, "pickup") == 0)
+    {
+      int landed_planet = 0;
+      int ship_id_for_landing = h_get_active_ship_id (db, ctx->player_id);
+      if (ship_id_for_landing <= 0
+          || repo_citadel_get_onplanet (db, ship_id_for_landing,
+                                        &landed_planet) != 0
+          || landed_planet != planet_id)
+        {
+          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                               "You must be landed on Terra to pick up colonists.");
+          return 0;
+        }
+    }
+
   /* Get active ship */
   int ship_id = h_get_active_ship_id (db, ctx->player_id);
   if (ship_id <= 0)
@@ -3235,6 +3386,8 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
                            "Provide planet_id and non-negative ore, organics, and equipment worker targets.");
       return 0;
     }
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    return 0;
   json_t *weapons_value = json_object_get (data, "weapons");
   if (weapons_value
       && (!json_is_integer (weapons_value)
@@ -3264,8 +3417,10 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
   char sql[1024];
   const char *query =
     "SELECT p.owner_id, p.owner_type, p.colonists_unassigned, p.colonists_ore, p.colonists_org, p.colonists_eq, p.colonists_weapons, "
-    "COALESCE(pt.maxColonist_ore,0), COALESCE(pt.maxColonist_organics,0), COALESCE(pt.maxColonist_equipment,0) "
-    "FROM planets p LEFT JOIN planettypes pt ON pt.planettypes_id=p.type WHERE p.planet_id={1};";
+    "COALESCE((SELECT pt.maxColonist_ore FROM planettypes pt WHERE pt.planettypes_id=p.type),0), "
+    "COALESCE((SELECT pt.maxColonist_organics FROM planettypes pt WHERE pt.planettypes_id=p.type),0), "
+    "COALESCE((SELECT pt.maxColonist_equipment FROM planettypes pt WHERE pt.planettypes_id=p.type),0) "
+    "FROM planets p WHERE p.planet_id={1} FOR UPDATE;";
   sql_build (db, query, sql, sizeof sql);
   db_res_t *res = NULL;
   if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (planet_id)}, 1, &res, &err)
@@ -3291,10 +3446,20 @@ cmd_planet_colonists_allocate (client_ctx_t *ctx, json_t *root)
   if (!weapons_value)
     weapons = (int) old_weapons;
 
-  bool allowed = owner_type &&
-    ((strcmp (owner_type, "player") == 0 && owner_id == ctx->player_id)
-     || ((strcmp (owner_type, "corp") == 0 || strcmp (owner_type, "corporation") == 0)
-         && ctx->corp_id > 0 && owner_id == ctx->corp_id));
+  bool allowed = owner_type && strcmp (owner_type, "player") == 0
+    && owner_id == ctx->player_id;
+  if (owner_type
+      && (strcmp (owner_type, "corp") == 0
+          || strcmp (owner_type, "corporation") == 0)
+      && owner_id > 0)
+    {
+      char role[64] = {0};
+      /* The session's cached corp_id can be stale after a kick or leave.
+       * Recheck membership against PostgreSQL inside the allocation
+       * transaction instead of trusting that cached identifier. */
+      allowed = repo_corp_check_member_role (db, owner_id, ctx->player_id,
+                                             role, sizeof role) == 0;
+    }
   free (owner_type);
   if (!allowed)
     {

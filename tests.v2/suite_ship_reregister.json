@@ -21,28 +21,27 @@
       "name": "Test ship.reregister command with new name",
       "user": "rereg_user",
       "command": "ship.reregister",
-      "data": { "ship_id": "${ship_id}", "new_name": "New Awesome Name" },
+      "data": { "name": "New Awesome Name" },
       "expect": { "status": "ok", "type": "ship.renamed" },
       "asserts": [
-        { "path": "data.ship_id", "op": "==", "value": "${ship_id}" },
         { "path": "data.name", "op": "==", "value": "New Awesome Name" }
       ]
     },
     {
       "name": "Verify new ship name",
       "user": "rereg_user",
-      "command": "player.my_info",
+      "command": "ship.status",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.player.ship.name", "op": "==", "value": "New Awesome Name" }
+        { "path": "data.ship.name", "op": "==", "value": "New Awesome Name" }
       ]
     },
     {
       "name": "Test ship.reregister with empty name (should refuse)",
       "user": "rereg_user",
       "command": "ship.reregister",
-      "data": { "ship_id": "${ship_id}", "new_name": "" },
-      "expect": { "status": "refused", "error_code": 1300 }
+      "data": { "name": "" },
+      "expect": { "status": "refused", "error_code": 1452 }
     }
   ]
 }

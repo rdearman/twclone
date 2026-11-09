@@ -43,14 +43,14 @@
     {
       "name": "Positive: Rob Port Credits",
       "command": "port.rob",
-      "data": { "sector_id": "@target_sector_id", "port_id": "@target_port_id", "mode": "credits" },
+      "data": { "sector_id": "@target_sector_id", "port_id": "@target_port_id", "mode": "credits", "idempotency_key": "combat-port-rob-positive" },
       "user": "combat_ace",
       "expect": { "status": "ok" }
     },
     {
       "name": "Negative: Rob Port Missing Auth",
       "command": "port.rob",
-      "data": { "sector_id": "@target_sector_id", "port_id": "@target_port_id", "mode": "credits" },
+      "data": { "sector_id": "@target_sector_id", "port_id": "@target_port_id", "mode": "credits", "idempotency_key": "combat-port-rob-negative" },
       "expect": { "status": "error", "error_code": 401 }
     }
   ]

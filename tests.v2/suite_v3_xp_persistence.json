@@ -1,0 +1,117 @@
+{
+  "name": "V3 persistent idempotent player experience",
+  "tests": [
+    {
+      "name": "Setup: Admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Save player progression state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT experience, alignment, commission_id FROM players WHERE player_id = @{admin_player_id};" },
+      "save": {
+        "xp_original": "data.rows.0.0",
+        "alignment_original": "data.rows.0.1",
+        "commission_original": "data.rows.0.2"
+      }
+    },
+    {
+      "name": "Set deterministic positive-alignment threshold fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET experience = 90, alignment = 1000 WHERE player_id = @{admin_player_id};" }
+    },
+    {
+      "name": "Insert profitable trade source event",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO engine_events (ts,type,actor_player_id,sector_id,payload,idem_key) SELECT CURRENT_TIMESTAMP,'player.trade.v1',player_id,sector_id,json_build_object('player_id',player_id,'type','player.trade.v1','credits_delta',100,'is_illegal',FALSE,'sector_id',sector_id)::text,'v3-xp-ledger:' || to_char(clock_timestamp(),'YYYYMMDDHH24MISSUS') FROM players WHERE player_id = @{admin_player_id} RETURNING engine_events_id;" },
+      "save": { "xp_event_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Wait for engine XP award",
+      "command": "delay",
+      "data": { "seconds": 90 }
+    },
+    {
+      "name": "Verify XP, title threshold, and source ledger",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.experience,p.commission_id,(SELECT COUNT(*) FROM player_progress_adjustments a WHERE a.source_key='engine_event:' || @{xp_event_id}::text AND a.player_id=p.player_id AND a.xp_delta=10),(SELECT COUNT(*) FROM engine_offset WHERE key='game_engine' AND last_event_id >= @{xp_event_id}) FROM players p WHERE p.player_id=@{admin_player_id};" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 100 },
+        { "path": "data.rows.0.1", "op": "==", "value": 3 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Replay persisted trade event",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE engine_offset SET last_event_id = @{xp_event_id} - 1, last_event_ts = CURRENT_TIMESTAMP WHERE key = 'game_engine';" }
+    },
+    {
+      "name": "Wait for replay",
+      "command": "delay",
+      "data": { "seconds": 90 }
+    },
+    {
+      "name": "Verify replay does not award XP twice",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.experience,(SELECT COUNT(*) FROM player_progress_adjustments a WHERE a.source_key='engine_event:' || @{xp_event_id}::text AND a.player_id=p.player_id) FROM players p WHERE p.player_id=@{admin_player_id};" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 100 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Switch alignment path to evil",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET alignment = -2000 WHERE player_id = @{admin_player_id};" }
+    },
+    {
+      "name": "Insert zero-XP event to refresh alignment title",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO engine_events (ts,type,actor_player_id,sector_id,payload,idem_key) SELECT CURRENT_TIMESTAMP,'player.trade.v1',player_id,sector_id,json_build_object('player_id',player_id,'type','player.trade.v1','credits_delta',0,'is_illegal',FALSE,'sector_id',sector_id)::text,'v3-xp-ledger-title:' || to_char(clock_timestamp(),'YYYYMMDDHH24MISSUS') FROM players WHERE player_id = @{admin_player_id} RETURNING engine_events_id;" },
+      "save": { "title_event_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Wait for alignment title refresh",
+      "command": "delay",
+      "data": { "seconds": 90 }
+    },
+    {
+      "name": "Verify evil title path at existing XP threshold",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT experience,commission_id FROM players WHERE player_id=@{admin_player_id};" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 100 },
+        { "path": "data.rows.0.1", "op": "==", "value": 4 }
+      ]
+    },
+    {
+      "name": "Restore player progression state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET experience=@{xp_original},alignment=@{alignment_original},commission_id=@{commission_original} WHERE player_id=@{admin_player_id};" }
+    },
+    {
+      "name": "Remove isolated XP fixture ledger rows",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM player_progress_adjustments WHERE source_key IN (SELECT 'engine_event:' || engine_events_id::text FROM engine_events WHERE idem_key LIKE 'v3-xp-ledger:%' OR idem_key LIKE 'v3-xp-ledger-title:%');" }
+    },
+    {
+      "name": "Remove isolated XP fixture events",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM engine_events WHERE idem_key LIKE 'v3-xp-ledger:%' OR idem_key LIKE 'v3-xp-ledger-title:%';" }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "Bank single-balance-authority regression",
+  "protocol_category": "26_Banking",
+  "description": "A bank mutation must update the account exactly once; the receipt and subsequent balance read must agree.",
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "username": "bank_authority_player",
+      "password": "password"
+    },
+    {
+      "name": "Deposit receipt and persisted balance agree",
+      "command": "bank.deposit",
+      "user": "bank_authority_player",
+      "data": { "amount": 100 },
+      "save": { "bank_authority_new_balance": "data.new_balance" },
+      "asserts": [
+        {
+          "path": "data.new_balance",
+          "op": "==",
+          "value": { "sql_int": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='bank_authority_player') AND currency='CRD' AND is_active=TRUE" }
+        }
+      ]
+    },
+    {
+      "name": "Balance read matches the committed receipt",
+      "command": "bank.balance",
+      "user": "bank_authority_player",
+      "asserts": [
+        {
+          "path": "data.balance",
+          "op": "==",
+          "value": { "sql_int": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='bank_authority_player') AND currency='CRD' AND is_active=TRUE" }
+        }
+      ]
+    }
+  ]
+}

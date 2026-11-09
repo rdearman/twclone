@@ -2141,6 +2141,7 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   json_t *data = json_object_get (root, "data");
   json_t *payload = NULL;
   const char *commodity = NULL;
+  char commodity_code[16] = { 0 };
   int quantity = 0;
   int player_ship_id = 0;
   int rc = 0;
@@ -2170,12 +2171,49 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  json_t *jcommodity = json_object_get (data, "commodity");
-
-
-  if (json_is_string (jcommodity))
+  /* ship.jettison's V3 request schema uses the canonical commodity ID,
+   * whereas the legacy trade.jettison alias uses a commodity code. Resolve
+   * the ID through the catalogue so both contracts use the same cargo path. */
+  json_t *jcommodity_id = json_object_get (data, "commodity_id");
+  if (json_is_integer (jcommodity_id))
     {
-      commodity = json_string_value (jcommodity);
+      db_res_t *commodity_res = NULL;
+      db_error_t commodity_err;
+      char commodity_sql[256];
+      if (sql_build (db,
+                     "SELECT code FROM commodities WHERE commodities_id = {1};",
+                     commodity_sql, sizeof commodity_sql) != 0
+          || !db_query (db, commodity_sql,
+                        (db_bind_t[]){ db_bind_i64 (json_integer_value (jcommodity_id)) },
+                        1, &commodity_res, &commodity_err))
+        {
+          if (commodity_res)
+            db_res_finalize (commodity_res);
+          send_response_error (ctx, root, ERR_DB,
+                               "Unable to resolve cargo commodity.");
+          return 0;
+        }
+      if (db_res_step (commodity_res, &commodity_err))
+        {
+          const char *resolved = db_res_col_text (commodity_res, 0,
+                                                   &commodity_err);
+          if (resolved)
+            snprintf (commodity_code, sizeof commodity_code, "%s", resolved);
+        }
+      db_res_finalize (commodity_res);
+      if (commodity_code[0] == '\0')
+        {
+          send_response_error (ctx, root, ERR_COMMODITY_UNKNOWN,
+                               "Unknown commodity ID.");
+          return 0;
+        }
+      commodity = commodity_code;
+    }
+  else
+    {
+      json_t *jcommodity = json_object_get (data, "commodity");
+      if (json_is_string (jcommodity))
+        commodity = json_string_value (jcommodity);
     }
 
   json_t *jquantity = json_object_get (data, "quantity");
@@ -2286,7 +2324,10 @@ cmd_trade_jettison (client_ctx_t *ctx, json_t *root)
   int new_qty = 0;
 
 
-  rc = h_update_ship_cargo (db, ctx->ship_id, commodity, -quantity, &new_qty);
+  /* The session's cached ship_id can lag after a ship switch. The cargo read
+   * above uses the authoritative active ship, so the write must target that
+   * same ship or a successful jettison can mutate a different hull. */
+  rc = h_update_ship_cargo (db, player_ship_id, commodity, -quantity, &new_qty);
 
   LOGD ("cmd_trade_jettison: Ship cargo updated. new_qty=%d", new_qty);
 
@@ -2526,8 +2567,9 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
                                                   "port.rob");
           if (enforcement_rc == 1)
             {
-              send_response_error (ctx, root, ERR_PERMISSION_DENIED,
-                                   "Captain Z intervenes: aggression in FedSpace is forbidden.");
+              send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                           "Captain Z intervenes: aggression in FedSpace is forbidden.",
+                                           NULL);
               return 0;
             }
           if (enforcement_rc < 0)

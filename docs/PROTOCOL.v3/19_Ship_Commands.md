@@ -98,8 +98,9 @@ or their corporation, and not currently piloted or towed.
 ### `ship.inspect`
 Inspect a visible ship in the player's current sector. Supply a positive
 integer `ship_id`. The `ship.inspect` response contains `ship`, an object
-with `ship_id` and `name`; it does not expose cargo or other private ship
-state. A cloaked ship is inspectable only by its primary owner. Remote,
+with `ship_id`, `name`, and `is_derelict`. `is_derelict` is true when the
+visible ship has no ownership record. It does not expose cargo or other
+private ship state. A cloaked ship is inspectable only by its primary owner. Remote,
 cloaked foreign, and nonexistent ships return the same not-found error.
 Clients that previously consumed the sector-wide `ships` list must instead
 send the selected `ship_id` and render `data.ship`; treat a refusal as an
@@ -128,6 +129,16 @@ keys are not supported for this command.
 
 ### `ship.jettison`
 Dump cargo into space.
+
+`ship.jettison` and the legacy `trade.jettison` command accept all ship cargo
+types, including `COL` and `SLV`. Jettisoning one colonist or slave reduces the
+player's alignment by one point; the penalty is linear in the quantity, applies
+at every starting alignment, and has no alignment floor, daily cap, cooldown,
+or diminishing returns. Rank bands may stop changing below their lowest
+configured range, but the underlying alignment value continues to decrease.
+Ordinary commodities do not change alignment. Cargo removal, the
+normal one-turn cost, and the population alignment penalty are committed
+atomically. A successful response includes the player's updated `alignment`.
 
 ### `ship.self_destruct`
 Destroy your own ship (irreversible).

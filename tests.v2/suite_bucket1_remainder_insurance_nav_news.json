@@ -35,14 +35,14 @@
     {
       "name": "nav.avoid.set - Positive",
       "command": "nav.avoid.set",
-      "data": { "sectors": [10, 20] },
+      "data": { "avoid": [10, 20] },
       "user": "trader_player_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "nav.avoid.set - Negative (No Auth)",
       "command": "nav.avoid.set",
-      "data": { "sectors": [10, 20] },
+      "data": { "avoid": [10, 20] },
       "expect": { "status": "error", "error_code": 401 }
     },
     {

@@ -12,6 +12,7 @@
     "suite_police_phase_c_resolution.json",
     "suite_police_phase_d1_enforcement.json",
     "suite_npc_ferengi_init.json",
+    "suite_v3_npc_federation_phases.json",
     "suite_tls_smoke.json",
     "suite_ship_cargo_dynamic.json",
     "suite_commodities_data_driven_phase2.json",
@@ -48,4 +49,3 @@
     ]
   }
 }
-

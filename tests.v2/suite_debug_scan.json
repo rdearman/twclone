@@ -13,7 +13,7 @@
       "user": "mover_user",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.adjacent_sectors.0", "op": "==", "value": -1 }
+        { "path": "data.sector_id", "op": "==", "value": 1 }
       ]
     }
   ]

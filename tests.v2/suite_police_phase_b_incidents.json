@@ -103,7 +103,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET alignment = 80 WHERE player_id = @{phase_b_player_player_id};"
+        "sql": "UPDATE players SET alignment = -300 WHERE player_id = @{phase_b_player_player_id};"
       },
       "expect": { "status": "ok" }
     },

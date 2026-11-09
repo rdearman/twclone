@@ -26,6 +26,13 @@
       "user": "@username",
       "save": { "session": "data.session_token", "@{username}_player_id": "data.player_id" },
       "stop_on_fail": true
+    },
+    {
+      "name": "Macro: Read Active Ship",
+      "command": "player.my_info",
+      "user": "@username",
+      "save": { "@{username}_active_ship_id": "data.player.ship_id" },
+      "stop_on_fail": true
     }
   ]
 }

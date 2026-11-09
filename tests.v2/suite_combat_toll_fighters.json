@@ -46,7 +46,7 @@
     {
       "name": "Victim Warps to Toll Sector (Should Auto-Pay)",
       "command": "move.warp",
-      "data": { "sector_id": 2 },
+      "data": { "to_sector_id": 2 },
       "user": "toll_victim",
       "expect": { "status": "ok" },
       "asserts": [

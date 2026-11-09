@@ -305,7 +305,6 @@
       "nyi": false,
       "json_cases": [
         "suite_bank_negative.json",
-        "suite_corporations.json",
         "suite_economy_and_bank.json"
       ],
       "protocol_covered": true,
@@ -598,6 +597,7 @@
       "nyi": false,
       "json_cases": [
         "suite_corp_negative.json",
+        "suite_corporations.json",
         "suite_economy_corp_funds.json"
       ],
       "protocol_covered": true,
@@ -643,6 +643,7 @@
       "json_cases": [
         "suite_corp_advanced.json",
         "suite_corp_negative.json",
+        "suite_corp_perms.json",
         "suite_corporations.json"
       ],
       "protocol_covered": true,
@@ -689,6 +690,7 @@
       "json_cases": [
         "suite_corp_advanced.json",
         "suite_corp_negative.json",
+        "suite_corp_perms.json",
         "suite_corporations.json"
       ],
       "protocol_covered": true,
@@ -1658,6 +1660,7 @@
         "suite_planet_landing_defense.json",
         "suite_planet_negative.json",
         "suite_police_phase_c_resolution.json",
+        "suite_ship_cargo_dynamic.json",
         "suite_v3_command_coverage.json"
       ],
       "protocol_covered": true,
@@ -2226,7 +2229,6 @@
       "json_cases": [
         "suite_commodities_data_driven_phase2.json",
         "suite_phase3_port_dynamic_trading.json",
-        "suite_ship_cargo_dynamic.json",
         "suite_ship_negative.json",
         "suite_ship_operations.json"
       ],
@@ -2337,8 +2339,10 @@
       "nyi": false,
       "json_cases": [
         "suite_player_status.json",
+        "suite_ship_cargo_dynamic.json",
         "suite_ship_negative.json",
         "suite_ship_repair.json",
+        "suite_ship_reregister.json",
         "suite_ship_status_hull.json"
       ],
       "protocol_covered": true,
@@ -2852,6 +2856,7 @@
         "suite_auth_negative.json",
         "suite_auth_session.json",
         "suite_combat_functions_validation.json",
+        "suite_combat_toll_fighters_simple.json",
         "suite_session_lifecycle.json",
         "suite_smoke.json",
         "suite_system_admin.json"
@@ -2919,6 +2924,7 @@
       "nyi": false,
       "json_cases": [
         "suite_port_fixed_modes.json",
+        "suite_ship_cargo_dynamic.json",
         "suite_trade_market.json"
       ],
       "protocol_covered": true,
@@ -2941,7 +2947,8 @@
       "nyi": false,
       "json_cases": [
         "suite_bucket1_remainder_tavern_trade.json",
-        "suite_port_fixed_modes.json"
+        "suite_port_fixed_modes.json",
+        "suite_ship_cargo_dynamic.json"
       ],
       "protocol_covered": true,
       "classification": "covered"

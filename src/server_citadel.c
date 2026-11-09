@@ -15,6 +15,7 @@
 #include <jansson.h>
 #include <strings.h>
 #include "server_corporation.h"
+#include "server_planets.h"
 #include "db/sql_driver.h"
 #include "game_db.h"
 #include "db/sql_driver.h"
@@ -85,6 +86,12 @@ cmd_citadel_upgrade (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
 			   "A valid planet_id is required.");
+      return 0;
+    }
+  if (h_planet_is_terra (db, requested_planet_id))
+    {
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "Terra is a Federation colonist source; citadel changes are not permitted.");
       return 0;
     }
   // 1. Get Player Location & Planet Info

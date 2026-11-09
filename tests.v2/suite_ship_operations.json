@@ -18,7 +18,7 @@
     {
       "name": "ship.rename - Rename ship",
       "command": "ship.rename",
-      "data": { "ship_id": "@ship_ops_user_player_id", "new_name": "NewName" },
+      "data": { "name": "NewName" },
       "user": "ship_ops_user",
       "expect": { "status": "ok" }
     },

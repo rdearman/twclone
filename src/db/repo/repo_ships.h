@@ -56,4 +56,7 @@ int repo_ships_get_cargo_and_holds(db_t *db,
 
 int repo_ships_update_cargo_column(db_t *db, int32_t ship_id, const char *col_name, int32_t new_qty);
 
+/* Clear a ship's active cloak marker. The caller controls transaction scope. */
+int repo_ships_decloak(db_t *db, int32_t ship_id);
+
 #endif

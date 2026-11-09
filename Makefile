@@ -176,9 +176,8 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/autoconf.h.in \
-	AUTHORS COPYING ChangeLog INSTALL NEWS README.md THANKS TODO \
-	ar-lib compile config.guess config.sub depcomp install-sh \
-	missing
+	AUTHORS COPYING ChangeLog INSTALL NEWS README.md TODO ar-lib \
+	compile config.guess config.sub depcomp install-sh missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -232,7 +231,7 @@ AUTOMAKE = ${SHELL} '/home/rick/Development/Active/twclone/missing' automake-1.1
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2 -I/usr/include/postgresql -I/usr/include/mysql 
+CFLAGS = -g -O2
 CPPFLAGS = 
 CSCOPE = cscope
 CTAGS = ctags
@@ -249,14 +248,14 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-11-01
-LDFLAGS =  -L/usr/lib/x86_64-linux-gnu
+ISODATE = 2026-11-08
+LDFLAGS = 
 LIBOBJS = 
-LIBS = -L/usr/lib/x86_64-linux-gnu -lmysqlclient -lz  -lzstd -lssl -lcrypto -lresolv -lm -lpq -lhistory -lreadline -lpthread -lm 
+LIBS = -lhistory -lreadline -lpthread -lm 
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} '/home/rick/Development/Active/twclone/missing' makeinfo
 MKDIR_P = /usr/bin/mkdir -p
-MYSQL_CONFIG = /usr/bin/mysql_config
+MYSQL_CONFIG = 
 OBJEXT = o
 PACKAGE = twclone
 PACKAGE_BUGREPORT = 
@@ -266,7 +265,7 @@ PACKAGE_TARNAME = twclone
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.0.2
 PATH_SEPARATOR = :
-PG_CONFIG = /usr/bin/pg_config
+PG_CONFIG = 
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 
@@ -812,7 +811,19 @@ db-gates:
 architecture-check:
 	@python3 $(top_srcdir)/tools/check_architecture_boundaries.py
 
-check-local: architecture-check
+.PHONY: regression-static regression-full
+regression-static:
+	@python3 -m pytest -q \
+		tests.v2/test_qa_runner_config.py \
+		tests.v2/test_bigbang_sql_selection.py \
+		tests.v2/test_server_visibility_contract.py \
+		tests.v2/test_ship_transfer_error_contract.py \
+		tests.v2/test_issue_490_ship02_contract.py
+
+regression-full:
+	@python3 tests.v2/run_regression_instance.py --pg-port "$${QA_PGPORT:-55438}" --report tests.v2/regression_report.json
+
+check-local: architecture-check regression-static
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

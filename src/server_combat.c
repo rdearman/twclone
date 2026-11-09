@@ -1032,8 +1032,9 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
                                           "ship.attack");
   if (enforcement_rc == 1)
     {
-      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
-                           "Captain Z intervenes: aggression in FedSpace is forbidden.");
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Captain Z intervenes: aggression in FedSpace is forbidden.",
+                                   NULL);
       return 0;
     }
   if (enforcement_rc < 0)
@@ -1383,9 +1384,10 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int player_id)
 int
 h_decloak_ship (db_t *db, int ship_id)
 {
-  (void) db;
-  (void) ship_id;
-  return 0;
+  int rc = repo_ships_decloak (db, ship_id);
+  if (rc != 0)
+    LOGE ("Could not decloak ship %d (db error %d)", ship_id, rc);
+  return rc;
 }
 
 static int
@@ -1634,8 +1636,11 @@ h_trigger_atmosphere_quasar_report (db_t *db, client_ctx_t *ctx, int planet_id,
     return -1;
   if (level < 3)
     return 0;
-  if (db_combat_get_planet_atmosphere_quasar
-      (db, planet_id, &owner, type, &base, &react) != 0)
+  int quasar_rc = db_combat_get_planet_atmosphere_quasar
+    (db, planet_id, &owner, type, &base, &react);
+  if (quasar_rc == ERR_DB_NOT_FOUND)
+    return 0;
+  if (quasar_rc != 0)
     return -1;
   int corp_id = (strcasecmp (type, "corp") == 0
                  || strcasecmp (type, "corporation") == 0) ? owner : 0;

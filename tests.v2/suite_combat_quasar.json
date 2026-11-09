@@ -55,7 +55,7 @@
     {
       "name": "Victim Warps to Quasar Sector (Should Take Damage)",
       "command": "move.warp",
-      "data": { "sector_id": "@target_sector_id" },
+      "data": { "to_sector_id": "@target_sector_id" },
       "user": "victim_user",
       "expect": { "status": "ok" },
       "asserts": [
@@ -74,14 +74,14 @@
     {
       "name": "Victim Warps Away",
       "command": "move.warp",
-      "data": { "sector_id": 1 },
+      "data": { "to_sector_id": 1 },
       "user": "victim_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Victim Warps Back to Quasar Sector (Should Take Damage Again)",
       "command": "move.warp",
-      "data": { "sector_id": "@target_sector_id" },
+      "data": { "to_sector_id": "@target_sector_id" },
       "user": "victim_user",
       "expect": { "status": "ok" }
     },

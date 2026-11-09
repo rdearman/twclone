@@ -19,7 +19,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE planets SET owner_id = @{planet_lord_player_id}, owner_type = 'player' WHERE planet_id = 1;"
+        "sql": "UPDATE planets SET owner_id = @{planet_lord_player_id}, owner_type = 'player' WHERE planet_id = 200;"
       },
       "expect": { "status": "ok" }
     },
@@ -28,7 +28,7 @@
       "command": "planet.rename",
       "user": "planet_lord",
       "data": {
-        "planet_id": 1,
+        "planet_id": 200,
         "name": "Arrakis"
       },
       "expect": {
@@ -40,7 +40,7 @@
       "command": "planet.transfer_ownership",
       "user": "planet_lord",
       "data": {
-        "planet_id": 1,
+        "planet_id": 200,
         "target_id": "@planet_heir_player_id",
         "target_type": "player"
       },

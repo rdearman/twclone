@@ -1,0 +1,58 @@
+{
+  "requirement_id": "V3-VIS-01",
+  "scenario_id": "VIS-01-VISIBILITY",
+  "role": "CODEX 4",
+  "policy": {
+    "ordinary_player_commands_only": true,
+    "admin_sql_fixture_and_read_only_evidence_only": true,
+    "loopback_disposable_qa_only": true,
+    "no_migrations_or_resets": true
+  },
+  "cases": [
+    {
+      "id": "current-sector",
+      "steps": ["sector.info", "sector.scan", "sector.scan_density"],
+      "expected": "permitted current-sector information is returned",
+      "invariants": ["turns unchanged for information requests", "port class is not exposed by sector.scan"]
+    },
+    {
+      "id": "outgoing-adjacent",
+      "steps": ["sector.info", "move.pathfind"],
+      "expected": "an outgoing adjacent sector may be queried",
+      "invariants": ["query does not create a visited-sector row unless policy allows it"]
+    },
+    {
+      "id": "incoming-only",
+      "steps": ["sector.info", "move.describe_sector"],
+      "expected": "an incoming-only sector is refused from the observer location",
+      "invariants": ["turns unchanged", "cloak unchanged", "visited-sector rows unchanged"]
+    },
+    {
+      "id": "remote-entity",
+      "steps": ["port.info", "trade.port_info", "planet.info"],
+      "expected": "remote port and planet details are refused or redacted",
+      "invariants": ["known-port rows unchanged", "no hidden entity details in response"]
+    },
+    {
+      "id": "unvisited-path",
+      "steps": ["move.pathfind"],
+      "expected": "a route through an undiscovered intermediate sector is refused",
+      "invariants": ["intermediate sector is not discovered by refusal", "turns unchanged"]
+    },
+    {
+      "id": "restart-readback",
+      "steps": ["auth.login", "sector.info", "sector.scan"],
+      "expected": "the same visibility boundary remains after reconnect",
+      "invariants": ["cloak, visited sectors and known ports match the pre-reconnect snapshot"]
+    }
+  ],
+  "evidence": {
+    "before_after_queries": [
+      "players.sector_id, turns.turns_remaining, ships.cloaked",
+      "player_visited_sectors and player_known_ports",
+      "engine_events filtered by observer player_id and queried entity"
+    ],
+    "response_capture": "one redacted JSONL record per ordinary-player RPC",
+    "restart_required": true
+  }
+}

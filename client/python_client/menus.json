@@ -727,6 +727,41 @@
       "title": "--- Bank Menu ---",
       "options": [
         {
+          "key": "b",
+          "label": "(B) Balance",
+          "action": {
+            "rpc": {
+              "command": "bank.balance",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "s",
+          "label": "(S) Statement",
+          "action": {
+            "rpc": {
+              "command": "bank.statement",
+              "data": {
+                "limit": "<prompt:int:Number of entries: [20]>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "o",
+          "label": "(O) Standing orders",
+          "action": {
+            "rpc": {
+              "command": "bank.orders.list",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
           "key": "d",
           "label": "(D) Deposit",
           "action": {
@@ -1542,6 +1577,46 @@
           "label": "(S) Subscriptions",
           "action": {
             "submenu": "SUBSCRIPTIONS"
+          }
+        },
+        {
+          "key": "n",
+          "label": "(N) List notes",
+          "action": {
+            "rpc": {
+              "command": "notes.list",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "w",
+          "label": "(W) Save note",
+          "action": {
+            "rpc": {
+              "command": "notes.set",
+              "data": {
+                "scope": "<prompt:str:Scope: [player]>",
+                "key": "<prompt:str:Note key>",
+                "note": "<prompt:str:Note text>"
+              }
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
+          "key": "x",
+          "label": "(X) Delete note",
+          "action": {
+            "rpc": {
+              "command": "notes.delete",
+              "data": {
+                "scope": "<prompt:str:Scope: [player]>",
+                "key": "<prompt:str:Note key>"
+              }
+            },
+            "post": "print_last_rpc"
           }
         },
         {

@@ -16,6 +16,7 @@ var _warp_markers: Dictionary = {}
 var _hovered_key := ""
 var _sector_identity := "0"
 var _asset_debug_enabled := false
+var _interaction_enabled := true
 var _beacon_panel: PanelContainer
 var _beacon_label: Label
 
@@ -38,8 +39,14 @@ func _ready() -> void:
 	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(wash)
 	_beacon_panel = PanelContainer.new()
-	_beacon_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_beacon_panel.position = Vector2(-360, 18)
+	# Warp-sector buttons occupy the top edge; keep the beacon notice at the
+	# bottom of the viewport so the two kinds of location information do not
+	# compete for the same space.
+	_beacon_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_beacon_panel.offset_left = -360
+	_beacon_panel.offset_top = -82
+	_beacon_panel.offset_right = -18
+	_beacon_panel.offset_bottom = -18
 	_beacon_panel.custom_minimum_size = Vector2(330, 0)
 	_beacon_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_beacon_panel.add_theme_stylebox_override("panel", _beacon_style())
@@ -319,6 +326,8 @@ func _update_highlight() -> void:
 		marker.add_theme_stylebox_override("normal", _marker_style(active))
 
 func _on_object_input(_viewport: Node, event: InputEvent, _shape_index: int, key: String) -> void:
+	if not _interaction_enabled:
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
 		select_object(key, "artwork")
 		if event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
@@ -331,12 +340,13 @@ func _on_object_input(_viewport: Node, event: InputEvent, _shape_index: int, key
 		get_viewport().set_input_as_handled()
 
 func _input(event: InputEvent) -> void:
+	if not _interaction_enabled:
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
 		if OS.is_debug_build():
 			_asset_debug_enabled = not _asset_debug_enabled
 			_update_highlight()
 			get_viewport().set_input_as_handled()
-		return
 	# Area2D is the normal path, but a Control parent or a renderer/input
 	# backend can prevent physics picking from reaching a child Node2D. Use the
 	# same object geometry as a deterministic fallback hit test on the artwork
@@ -351,6 +361,10 @@ func _input(event: InputEvent) -> void:
 				object_activated.emit(key)
 			grab_focus()
 			get_viewport().set_input_as_handled()
+
+func set_interaction_enabled(enabled: bool) -> void:
+	_interaction_enabled = enabled
+	set_process_input(enabled)
 
 func _object_at_position(position: Vector2) -> Dictionary:
 	var best := {}

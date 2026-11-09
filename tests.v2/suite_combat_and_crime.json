@@ -52,7 +52,16 @@
       "command": "combat.attack",
       "data": { "target_ship_id": 1013 },
       "user": "attacker_player",
-      "expect": { "status": "ok" } 
+      "expect": { "status": "refused", "error_code": 402 }
+    },
+    {
+      "name": "Captain Z destruction and podding persist",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "SELECT 1 FROM players p JOIN ships s ON s.ship_id=1012 WHERE p.player_id=@{attacker_player_player_id} AND p.ship_id IS NULL AND s.destroyed=TRUE AND s.hull=0 AND EXISTS (SELECT 1 FROM podded_status ps WHERE ps.player_id=p.player_id AND ps.status='active');"
+      },
+      "user": "admin",
+      "expect": { "status": "ok", "data": { "rows": [[1]] } }
     }
   ]
 }

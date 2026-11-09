@@ -19,6 +19,20 @@ Trade commodities.
 port's stock and trading details only when the player is in that port's
 sector. Supplying a remote sector or port ID does not grant port knowledge.
 
+Each commodity in the returned port inventory includes the server-calculated
+player-facing `buy_price` and `sell_price` values. `buy_price` is the unit
+price when the player buys from the port; `sell_price` is the unit price when
+the player sells to the port. These are distinct from the legacy generic
+`price` stock field and must not be inferred from it. The `buys` and `sells`
+boolean fields identify whether the port's configured trade direction permits
+each action; stock, capacity, legality, and the authoritative `trade.quote`
+response can still refuse a transaction.
+
+Illegal commodities (`SLV`, `WPN`, and `DRG`) are visible and tradeable only
+when the player meets the configured `illegal_min_experience` threshold and
+is neutral or evil aligned. Neutral access is controlled by
+`illegal_allowed_neutral`; both settings are live SysOp configuration values.
+
 For port classes 1–8, each commodity's buy/sell direction is fixed by its
 `port_trade` mode. Inventory and capacity can prevent an otherwise valid
 transaction, but changing stock does not change the port's direction. Stardock

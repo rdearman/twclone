@@ -81,7 +81,7 @@
     {
       "name": "Bank Transfer rejects non-positive amount",
       "command": "bank.transfer",
-      "data": { "recipient_id": "@bank_target_player_id", "amount": 0 },
+      "data": { "recipient_type": "player", "recipient_id": "@bank_target_player_id", "amount": 0 },
       "user": "bank_user",
       "expect": { "status": "error", "error_code": 400 }
     },

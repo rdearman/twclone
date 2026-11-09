@@ -75,13 +75,13 @@
     {"ship_id": 1004, "name": "USS Genesis", "type_id": 1, "owner_username": "planet_tester_1", "sector_id": 1, "holds": 50, "genesis": 20},
     {"ship_id": 1005, "name": "TraderShip", "type_id": 1, "owner_username": "econ_trader", "sector_id": 1, "holds": 50, "ore": 5},
     {"ship_id": 1006, "name": "StatusShip", "type_id": 1, "owner_username": "status_player", "sector_id": 1, "holds": 50, "ore": 5},
-    {"ship_id": 1007, "name": "AttackerShip", "type_id": 1, "owner_username": "attacker", "sector_id": 300, "holds": 100, "fighters": 1000, "shields": 1000, "hull": 1000},
-    {"ship_id": 1008, "name": "DefenderShip", "type_id": 1, "owner_username": "defender", "sector_id": 300, "holds": 100, "fighters": 100, "shields": 1000, "hull": 1000},
+    {"ship_id": 1007, "name": "AttackerShip", "type_id": 1, "owner_username": "attacker", "sector_id": 300, "holds": 100, "fighters": 1000, "shields": 1000, "hull": 100},
+    {"ship_id": 1008, "name": "DefenderShip", "type_id": 1, "owner_username": "defender", "sector_id": 300, "holds": 100, "fighters": 100, "shields": 1000, "hull": 100},
     {"ship_id": 1009, "name": "QuasarTargetShip", "type_id": 1, "owner_username": "quasar_target", "sector_id": 1, "fighters": 50, "shields": 80, "hull": 100},
     {"ship_id": 1010, "name": "HazardMasterShip", "type_id": 1, "owner_username": "hazard_master", "sector_id": 555, "fighters": 200, "shields": 100, "hull": 100, "mines": 50},
     {"ship_id": 1011, "name": "CaptainShip", "type_id": 1, "owner_username": "captain_crunch", "sector_id": 1, "hull": 50},
     {"ship_id": 1012, "name": "AttackerShipV2", "type_id": 1, "owner_username": "attacker_player", "sector_id": 300, "fighters": 50},
-    {"ship_id": 1013, "name": "DefenderShipV2", "type_id": 1, "owner_username": "defender_player", "sector_id": 300, "fighters": 100, "hull": 500, "shields": 500},
+    {"ship_id": 1013, "name": "DefenderShipV2", "type_id": 1, "owner_username": "defender_player", "sector_id": 300, "fighters": 100, "hull": 100, "shields": 500},
     {"ship_id": 1014, "name": "AceShip", "type_id": 1, "owner_username": "combat_ace", "sector_id": 1, "fighters": 100, "mines": 10, "holds": 100},
     {"ship_id": 1015, "name": "MineTesterShip", "type_id": 1, "owner_username": "mine_tester", "sector_id": 200, "mines": 1000, "fighters": 500},
     {"ship_id": 1016, "name": "VictimShipV2", "type_id": 1, "owner_username": "hazard_victim", "sector_id": 1, "fighters": 50, "shields": 80, "hull": 100},
@@ -90,7 +90,9 @@
     {"ship_id": 1019, "name": "ObserverShip", "type_id": 1, "owner_username": "observer_user", "sector_id": 1},
       {"ship_id": 1020, "name": "ActorShip", "type_id": 1, "owner_username": "actor_user", "sector_id": 2},
       {"ship_id": 1021, "name": "TraderOneShip", "type_id": 1, "owner_username": "trader_player_1", "sector_id": 2, "genesis": 5},
-      {"ship_id": 9001, "name": "CLAIMShip", "type_id": 1, "owner_username": "", "sector_id": 2, "ore": 5}
+      {"ship_id": 1022, "name": "PlanetGovShip", "type_id": 1, "owner_username": "planet_gov", "sector_id": 1, "holds": 50},
+      {"ship_id": 1023, "name": "PlanetLordShip", "type_id": 1, "owner_username": "planet_lord", "sector_id": 1, "holds": 50},
+      {"ship_id": 9001, "name": "CLAIMShip", "type_id": 1, "owner_username": "", "sector_id": 1, "ore": 5}
   ],
   "deployed_assets": [
     {"sector_id": 2, "owner_username": "toll_collector", "asset_type": 2, "quantity": 30, "offensive_setting": 3},

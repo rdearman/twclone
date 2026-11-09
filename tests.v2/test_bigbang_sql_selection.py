@@ -44,6 +44,19 @@ class BigBangSqlSelectionTest(unittest.TestCase):
         self.assertIn("load_sql_manifest", SOURCE.read_text(encoding="utf-8"))
         self.assertIn('"include-v3-migrations"', SOURCE.read_text(encoding="utf-8"))
 
+    def test_abandoned_hulls_are_player_owned_classes_and_idempotent(self):
+        sql = (ROOT / "sql/pg/040_functions.sql").read_text(encoding="utf-8")
+        function = sql[sql.index("CREATE OR REPLACE FUNCTION spawn_initial_fleet"):sql.index("CREATE OR REPLACE FUNCTION apply_game_defaults")]
+        self.assertIn("WHERE enabled = TRUE AND can_purchase = TRUE", function)
+        self.assertIn("NOT EXISTS (", function)
+        self.assertIn("FROM ship_ownership", function)
+        self.assertIn("FROM sectors", function)
+        repair = (ROOT / "sql/pg/168_v3_abandoned_hull_repair.sql").read_text(encoding="utf-8")
+        self.assertIn("enabled = TRUE AND can_purchase = TRUE", repair)
+        self.assertIn("pg_advisory_xact_lock", repair)
+        self.assertIn("UPDATE players SET ship_id", repair)
+        self.assertIn("INSERT INTO ship_ownership", repair)
+
     def test_missing_required_script_fails_before_database_connection(self):
         if not BIGBANG.is_file():
             self.skipTest("build bin/bigbang before running selection CLI regressions")

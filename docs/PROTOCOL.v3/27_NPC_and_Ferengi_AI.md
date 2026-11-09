@@ -1,5 +1,25 @@
 # 27. NPC & Ferengi AI
 
+## V3 runtime status
+
+The recurring NPC loop is authoritative and idempotent.  Ferengi and Orion
+market actions use the normal port stock, account and cargo settlement helpers;
+Orion offensive/looter ships can attack and take one unit of real cargo in an
+unprotected sector, while defensive ships can deploy persistent fighters.
+Each action is recorded in `npc_action_log` with a durable idempotency key.
+
+Federation topology is not rebuilt by the runtime.  `msl_sectors` is generated
+by BigBang and remains fixed until a new universe is created.  The
+`fedspace_cleanup` task performs one MSL asset sweep per UTC day at 06:00,
+using `fedspace_sweep_runs` to prevent duplicate runs.  Captain Z remains the
+immediate enforcement path for sectors 1--10.
+
+Attacks against assets registered in `federation_protected_assets` create
+expiring `npc_security_incidents` outside sectors 1--10.  ISS advances through
+the warp graph toward active incidents and uses the shared NPC combat path.
+Same-sector observations are retained in `npc_intelligence` only until their
+configured expiry.
+
 ## 1. NPC Commands (Engine Enqueued)
 
 These are primarily Engine-driven commands executed by the Server.
@@ -309,6 +329,5 @@ When `cluster_player_status.banned == true` for a cluster:
 - Unbanning procedures (deferred to Phase D)
 - Cluster-tuned bribe thresholds (Phase D)
 - Record wiping outside Federation (Phase D)
-
 
 

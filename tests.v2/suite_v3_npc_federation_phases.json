@@ -1,0 +1,86 @@
+{
+  "name": "V3 NPC and Federation phases",
+  "version": "3.0.0",
+  "protocol_category": "23_Combat",
+  "description": "Runtime contract checks for the immutable MSL, daily sweep and durable NPC state.",
+  "tests": [
+    {
+      "name": "Phase 1: MSL sweep state exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'fedspace_sweep_runs';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Phase 1: BigBang MSL remains populated",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM msl_sectors;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": ">", "value": 0 }]
+    },
+    {
+      "name": "Phase 2: NPC action log exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'npc_action_log';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Phase 3: Ferengi tick is idempotent",
+      "command": "sys.run_cron_handler",
+      "data": { "handler_name": "npc_step" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Phase 3: Ferengi traders remain persistent",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM ferengi_traders WHERE active = TRUE;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": ">", "value": 0 }]
+    },
+    {
+      "name": "Phase 4: Orion tick is idempotent",
+      "command": "sys.run_cron_handler",
+      "data": { "handler_name": "npc_step" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Phase 4: Orion ships remain persistent",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM ships s JOIN ship_ownership so ON so.ship_id = s.ship_id JOIN corp_members cm ON cm.player_id = so.player_id JOIN corporations c ON c.corporation_id = cm.corporation_id WHERE c.tag = 'ORION';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": ">", "value": 0 }]
+    },
+    {
+      "name": "Phase 6: Security incident state exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'npc_security_incidents';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Phase 7: Intelligence state exists",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'npc_intelligence';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Phase 8: Sweep schedule is daily at 06:00 UTC",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT schedule FROM cron_tasks WHERE name = 'fedspace_cleanup';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": "daily@06:00Z" }]
+    }
+  ]
+}

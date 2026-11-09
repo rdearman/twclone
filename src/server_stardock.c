@@ -2712,6 +2712,7 @@ cmd_tavern_round_buy (client_ctx_t *ctx, json_t *root)
 
   server_broadcast_to_sector (ctx->sector_id, "tavern.round.bought",
 			      broadcast_payload);
+  json_decref (broadcast_payload);
   json_t *response_data = json_object ();
 
 

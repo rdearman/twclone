@@ -18,19 +18,64 @@ To ensure consistent and deterministic test results, the database must be "rigge
 
 2.  **`rig_db.py`**: The python script that reads `test_rig.json` and applies it to the database using `psql`. It performs "upserts" (INSERT ... ON CONFLICT UPDATE) to ensure idempotency. It can also reset the test data if the `--reset` flag is used (currently implemented as upserts/overwrites).
 
-3.  **`run_suites_all.py`**: The main test runner. It automatically calls `rig_db.py` before executing the test suites.
+3.  **`run_suites_all.py`**: The canonical all-JSON runner. Database rigging is
+    explicit and requires an isolated QA database; the runner never guesses a
+    database target.
 
 ## How to Run Tests
 
-Simply run the main test runner:
+The normal entry point provisions a disposable PostgreSQL database, runs the
+real BigBang binary, loads this fixture, starts the real V3 server on a
+dedicated port, executes the JSON suites, and tears the server and database
+down afterward:
 
 ```bash
-python3 tests.v2/run_suites_all.py
+make regression-full
 ```
 
-This will:
-1.  Run `rig_db.py` to set up the database state.
-2.  Execute all `suite_*.json` and `suite_*.py` tests in alphabetical order.
+`make regression-full` uses `tests.v2/run_regression_instance.py`. It runs the
+checked-in `bin/bigbang` and `bin/server` binaries against PostgreSQL; there is
+no mock server or substitute database. The generated database name must begin
+with `twclone_v3qa_` and is dropped after the run. Regression database access
+defaults to the dedicated QA cluster on loopback port `55438`; port `5432` is
+explicitly rejected to prevent accidental use of the live/default instance.
+Set `QA_PGPORT` only to another verified disposable QA endpoint, never to 5432.
+
+The instance runner accepts `--keep-artifacts` when logs and its temporary
+bootstrap configuration need to be retained for diagnosis. Configure the
+PostgreSQL administrator connection with `TWCLONE_TEST_PG_ADMIN` when the
+default `bin/bigbang.json` connection is not appropriate.
+
+The JSON runner then:
+1. Discovers every direct `suite_*.json` suite.
+2. Executes every suite compatible with `json_runner.py` in alphabetical order.
+3. Records per-case responses, failures, infrastructure blocks and unsupported
+   suite definitions in the JSON report.
+
+The two intentionally non-direct JSON files are reported as unsupported:
+`suite_regression_full.json` is a historical manifest, while
+`suite_phase10_market_decay.json` uses a nested DSL not understood by the
+authoritative runner. Python, PostgreSQL and C tests are separate checks.
+
+To rig a disposable database explicitly before running suites:
+
+```bash
+python3 tests.v2/run_suites_all.py --rig \
+  --dbname twclone_v3qa_<unique_name> \
+  --pg-host 127.0.0.1 --pg-port 55439 --pg-user <user> \
+  --host 127.0.0.1 --port 12483
+```
+
+The `--rig` guard accepts only database names beginning with `twclone_qa_` or
+`twclone_v3qa_` and only loopback PostgreSQL hosts.
+
+Normal verification is split as follows:
+
+```bash
+make check                 # static/architecture checks; no database reset
+make regression-full       # all compatible JSON suites; server must be running
+./tests.v2/run_engine_regressions.sh  # existing C regression checks
+```
 
 ## How to Add New Test Data
 

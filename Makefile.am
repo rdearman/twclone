@@ -31,4 +31,16 @@ db-gates:
 architecture-check:
 	@python3 $(top_srcdir)/tools/check_architecture_boundaries.py
 
-check-local: architecture-check
+.PHONY: regression-static regression-full
+regression-static:
+	@python3 -m pytest -q \
+		tests.v2/test_qa_runner_config.py \
+		tests.v2/test_bigbang_sql_selection.py \
+		tests.v2/test_server_visibility_contract.py \
+		tests.v2/test_ship_transfer_error_contract.py \
+		tests.v2/test_issue_490_ship02_contract.py
+
+regression-full:
+	@python3 tests.v2/run_regression_instance.py --pg-port "$${QA_PGPORT:-55438}" --report tests.v2/regression_report.json
+
+check-local: architecture-check regression-static

@@ -21,7 +21,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1, has_transwarp = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'mover_transwarp');"
+        "sql": "UPDATE ships SET sector_id = 1, has_transwarp = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'mover_transwarp');"
       },
       "expect": { "status": "ok" }
     },

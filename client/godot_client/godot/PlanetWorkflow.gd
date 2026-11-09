@@ -41,6 +41,7 @@ var _labor_save: Button
 var _fighter_quantity: SpinBox
 var _fighter_to_planet: Button
 var _fighter_to_ship: Button
+var _management_controls: Array[Control] = []
 var _labor_max := {"ore": 0, "organics": 0, "equipment": 0, "weapons": 0}
 var _dim: ColorRect
 
@@ -156,6 +157,7 @@ func _ready() -> void:
 	_dropoff.pressed.connect(_confirm_transfer.bind("dropoff"))
 	transfer_row.add_child(_dropoff)
 	_build_management_controls(column)
+	_apply_terra_surface_policy()
 	resized.connect(_update_responsive_layout)
 	call_deferred("_update_responsive_layout")
 
@@ -205,6 +207,7 @@ func open_planet(planet_id: Variant) -> void:
 		visible = false
 		return
 	_planet_id = int(planet_id)
+	_apply_terra_surface_policy()
 	_surface_identity_confirmed = false
 	_sector_id = 0
 	_citadel_level = -1
@@ -242,13 +245,16 @@ func set_planet_info(data: Dictionary) -> void:
 		_development_status.text = "Planet development records are unavailable until the confirmed planet is refreshed."
 		return
 	var reported_sector_id: Variant = data.get("sector_id")
-	if typeof(reported_sector_id) != TYPE_INT or int(reported_sector_id) <= 0:
+	var sector_id_valid: bool = (typeof(reported_sector_id) == TYPE_INT and int(reported_sector_id) > 0) \
+		or (typeof(reported_sector_id) == TYPE_FLOAT and is_finite(reported_sector_id) and reported_sector_id > 0.0 and reported_sector_id == floor(reported_sector_id))
+	if not sector_id_valid:
 		_set_surface_identity_confirmed(false)
 		_info_label.text = "Planet information was not applied because the server returned an invalid sector ID."
 		_development_status.text = "Planet development records are unavailable until the confirmed planet is refreshed."
 		return
 	_sector_id = int(reported_sector_id)
 	_set_surface_identity_confirmed(true)
+	_apply_terra_surface_policy()
 	# Development actions must remain unavailable unless the server supplied a
 	# real non-negative integer level.  Coercing strings/bools here could enable
 	# a build/upgrade against stale or schema-mismatched state.
@@ -335,19 +341,32 @@ func _authoritative_planet_id(data: Dictionary) -> int:
 	for key in ["planet_id", "id"]:
 		if data.has(key):
 			var value: Variant = data.get(key)
-			return int(value) if typeof(value) == TYPE_INT and int(value) > 0 else 0
+			if typeof(value) == TYPE_INT and int(value) > 0:
+				return int(value)
+			if typeof(value) == TYPE_FLOAT and is_finite(value) and value > 0.0 and value == floor(value):
+				return int(value)
+			return 0
 	var nested: Variant = data.get("planet", null)
 	if nested is Dictionary:
 		for key in ["planet_id", "id"]:
 			if nested.has(key):
 				var nested_value: Variant = nested.get(key)
-				return int(nested_value) if typeof(nested_value) == TYPE_INT and int(nested_value) > 0 else 0
+				if typeof(nested_value) == TYPE_INT and int(nested_value) > 0:
+					return int(nested_value)
+				if typeof(nested_value) == TYPE_FLOAT and is_finite(nested_value) and nested_value > 0.0 and nested_value == floor(nested_value):
+					return int(nested_value)
+				return 0
 	return 0
 
 func _authoritative_nonnegative_int(value: Variant) -> Variant:
 	# JSON booleans, strings, floats and negative values are not authoritative
-	# integer measurements. Preserve unavailable state instead of coercing them.
-	return value if typeof(value) == TYPE_INT and int(value) >= 0 else null
+	# integer measurements. Integral JSON floats are valid because the server's
+	# JSON encoder commonly emits database numeric values that way.
+	if typeof(value) == TYPE_INT and int(value) >= 0:
+		return int(value)
+	if typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value):
+		return int(value)
+	return null
 
 func set_busy(busy: bool) -> void:
 	_busy = busy
@@ -367,7 +386,7 @@ func set_busy(busy: bool) -> void:
 
 func _update_transfer_buttons() -> void:
 	_pickup.disabled = _busy or not _surface_identity_confirmed or _pickup_limit <= 0
-	_dropoff.disabled = _busy or not _surface_identity_confirmed or _dropoff_limit <= 0
+	_dropoff.disabled = _is_terra() or _busy or not _surface_identity_confirmed or _dropoff_limit <= 0
 
 func _confirm_transfer(action: String) -> void:
 	if _planet_id <= 0 or not _surface_identity_confirmed or _busy or _quantity.value < 1:
@@ -394,6 +413,7 @@ func _launch_now() -> void:
 		command_requested.emit("planet.launch", {}, "Launch from planet", true)
 
 func _build_management_controls(column: VBoxContainer) -> void:
+	var management_start := column.get_child_count()
 	var separator := HSeparator.new()
 	column.add_child(separator)
 	var title := Label.new()
@@ -526,6 +546,20 @@ func _build_management_controls(column: VBoxContainer) -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.add_theme_color_override("font_color", Color(0.59, 0.68, 0.7))
 	column.add_child(note)
+	for index in range(management_start, column.get_child_count()):
+		_management_controls.append(column.get_child(index))
+
+func _is_terra() -> bool:
+	return _planet_id == 1
+
+func _apply_terra_surface_policy() -> void:
+	var terra := _is_terra()
+	for control in _management_controls:
+		if is_instance_valid(control):
+			control.visible = not terra
+	if is_instance_valid(_dropoff):
+		_dropoff.visible = not terra
+		_dropoff.disabled = terra or _busy or not _surface_identity_confirmed or _dropoff_limit <= 0
 
 func _stock_row_layout(compact: bool) -> void:
 	if not is_instance_valid(_stock_commodity):

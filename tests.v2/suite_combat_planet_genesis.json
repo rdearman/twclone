@@ -30,14 +30,14 @@
     },
     {
       "name": "Positive: Planet Genesis",
-      "command": "planet.genesis",
+      "command": "planet.genesis_create",
       "data": { "sector_id": 500, "name": "NewWorld", "owner_entity_type": "player" },
       "user": "planet_tester_1",
       "expect": { "status": "ok" }
     },
     {
       "name": "Negative: Planet Genesis Missing Auth",
-      "command": "planet.genesis",
+      "command": "planet.genesis_create",
       "data": { "sector_id": 500, "name": "FailWorld", "owner_entity_type": "player" },
       "expect": { "status": "error", "error_code": 401 }
     }

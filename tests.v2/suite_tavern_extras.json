@@ -6,7 +6,7 @@
   "tests": [
     {
       "name": "Setup: User at Tavern",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "tavern_reg_player",
       "password": "password"
     },

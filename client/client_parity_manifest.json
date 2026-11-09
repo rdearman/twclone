@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "required_player_commands": [
+    "bank.balance",
+    "bank.statement",
+    "bank.orders.list",
+    "move.pathfind",
+    "move.intercept",
+    "trade.offer",
+    "trade.accept",
+    "trade.cancel",
+    "fighters.recall",
+    "mines.recall",
+    "notice.list",
+    "notice.ack",
+    "bounty.list",
+    "police.status",
+    "police.bribe",
+    "police.surrender",
+    "notes.list",
+    "notes.set",
+    "notes.delete"
+  ],
+  "intentionally_unavailable": [
+    "insurance.policies.list",
+    "insurance.policies.buy",
+    "insurance.claim.file",
+    "planet.harvest",
+    "ship.sell"
+  ],
+  "client_specific_debug": [
+    "bulk.execute",
+    "system.capabilities",
+    "system.describe_schema",
+    "system.schema_list",
+    "system.disconnect"
+  ]
+}

@@ -60,7 +60,7 @@
       "user": "attacker_captainz_1",
       "expect": { "status": "refused", "error_code": 402 },
       "asserts": [
-        { "path": "error_message", "op": "contains", "value": "Captain Z" }
+        { "path": "error.message", "op": "contains", "value": "Captain Z" }
       ]
     },
     {
@@ -70,7 +70,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": true }
+        { "path": "data.rows.0.0", "op": "==", "value": "t" }
       ]
     },
     {
@@ -90,7 +90,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": false }
+        { "path": "data.rows.0.0", "op": "==", "value": "f" }
       ]
     },
     {
@@ -164,7 +164,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": false }
+        { "path": "data.rows.0.0", "op": "==", "value": "f" }
       ]
     },
     {
@@ -227,7 +227,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": false }
+        { "path": "data.rows.0.0", "op": "==", "value": "f" }
       ]
     }
   ]

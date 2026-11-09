@@ -1210,6 +1210,12 @@ DECLARE
     v_ship_id integer;
     v_exists boolean;
 BEGIN
+    -- Serialize repeated or concurrent initialization calls so the
+    -- ownerless-hull check and insert remain one idempotent operation.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended('spawn-initial-fleet', 0)
+    );
+
     -- 1. Seed npc_shipnames if empty
     SELECT EXISTS (SELECT 1 FROM npc_shipnames) INTO v_exists;
     IF NOT v_exists THEN
@@ -1230,8 +1236,25 @@ BEGIN
 
     -- 3. Iterate Ship Types and Create Derelicts
     FOR v_st_rec IN
-        SELECT shiptypes_id, name FROM shiptypes WHERE enabled = TRUE
+        SELECT shiptypes_id, name, initialholds, maxholds, maxfighters, maxshields
+        FROM shiptypes
+        WHERE enabled = TRUE AND can_purchase = TRUE
     LOOP
+        -- Re-running BigBang support code must not create a second abandoned
+        -- hull for the same player-ownable class.  Owned, NPC and destroyed
+        -- ships do not satisfy this derelict slot.
+        IF EXISTS (
+            SELECT 1
+            FROM ships s
+            WHERE s.type_id = v_st_rec.shiptypes_id
+              AND COALESCE(s.destroyed, FALSE) = FALSE
+              AND NOT EXISTS (
+                  SELECT 1 FROM ship_ownership so WHERE so.ship_id = s.ship_id
+              )
+        ) THEN
+            CONTINUE;
+        END IF;
+
         -- Pick random name
         SELECT name INTO v_name FROM npc_shipnames ORDER BY random() LIMIT 1;
         IF v_name IS NULL THEN
@@ -1239,7 +1262,14 @@ BEGIN
         END IF;
 
         -- Pick random sector > 10 (avoid FedSpace)
-        v_sector_id := 11 + floor(random() * (v_sector_count - 10));
+        SELECT sector_id INTO v_sector_id
+        FROM sectors
+        WHERE sector_id > 10
+        ORDER BY random()
+        LIMIT 1;
+        IF v_sector_id IS NULL THEN
+            CONTINUE;
+        END IF;
 
         -- Insert Ship (Ownerless by default as we don't insert into ship_ownership)
         INSERT INTO ships (name, type_id, sector_id, holds, mines, limpets,
@@ -1247,8 +1277,15 @@ BEGIN
                            shields, installed_shields, beacons, colonists,
                            equipment, organics, ore, slaves, weapons, drugs,
                            cloaking_devices, destroyed, hull)
-        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id, 10, 0, 0, 1,
-                0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
+        VALUES (v_name, v_st_rec.shiptypes_id, v_sector_id,
+                GREATEST(1, LEAST(COALESCE(v_st_rec.initialholds, 1),
+                                  COALESCE(v_st_rec.maxholds, COALESCE(v_st_rec.initialholds, 1)))),
+                0, 0,
+                LEAST(1, COALESCE(v_st_rec.maxfighters, 0)),
+                0, 0, 0, 0, 0,
+                LEAST(1, COALESCE(v_st_rec.maxshields, 0)),
+                LEAST(1, COALESCE(v_st_rec.maxshields, 0)),
+                0, 0, 0, 0, 0, 0, 0, 0, 0, FALSE, 100)
         RETURNING ship_id INTO v_ship_id;
 
         -- Optional: Add random cargo? (Old code didn't, but we could)

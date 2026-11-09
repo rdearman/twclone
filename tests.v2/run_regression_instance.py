@@ -19,11 +19,35 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests.v2"))
+from rig_db import QA_DEFAULT_PGPORT, validate_qa_target
 
 
 def conninfo_value(conninfo, key):
     match = re.search(rf"(?:^|\s){re.escape(key)}=(?:'([^']*)'|([^\s]+))", conninfo)
     return (match.group(1) or match.group(2)) if match else None
+
+
+def build_qa_conninfos(dbname, host, port, user, password=None, admin_conn=None):
+    """Build DB connections that are provably scoped to the disposable QA host."""
+    validate_qa_target(dbname, host, port)
+    auth = f" user={user} host={host} port={port}"
+    if password:
+        escaped = password.replace("\\", "\\\\").replace("'", "\\'")
+        auth += f" password='{escaped}'"
+    app_conn = f"dbname=%DB%{auth}"
+
+    if admin_conn:
+        admin_host = conninfo_value(admin_conn, "host") or host
+        admin_port = conninfo_value(admin_conn, "port") or str(port)
+        admin_db = conninfo_value(admin_conn, "dbname")
+        if admin_host not in ("localhost", "127.0.0.1", "::1"):
+            raise ValueError("explicit QA admin connection must target loopback")
+        if str(admin_port) != str(port) or admin_db != "postgres":
+            raise ValueError("explicit QA admin connection must target postgres on the configured QA port")
+        return admin_conn, app_conn
+
+    return f"dbname=postgres{auth}", app_conn
 
 
 def wait_for_port(host, port, process, timeout=30):
@@ -66,7 +90,7 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=12483)
     parser.add_argument("--s2s-port", type=int, default=43218)
     parser.add_argument("--pg-host", default=os.environ.get("QA_PGHOST", "127.0.0.1"))
-    parser.add_argument("--pg-port", type=int, default=int(os.environ.get("QA_PGPORT", "5432")))
+    parser.add_argument("--pg-port", type=int, default=int(os.environ.get("QA_PGPORT", str(QA_DEFAULT_PGPORT))))
     parser.add_argument("--pg-user", default=os.environ.get("QA_PGUSER"))
     parser.add_argument("--admin-conn", default=os.environ.get("TWCLONE_TEST_PG_ADMIN"))
     parser.add_argument("--template", default=str(ROOT / "bin" / "bigbang.json"))
@@ -75,19 +99,28 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     template = json.load(open(args.template, encoding="utf-8"))
-    admin_conn = args.admin_conn or template.get("admin")
     app_conn = template.get("app")
-    if not admin_conn or not app_conn:
-        parser.error("an admin connection and PostgreSQL app connection are required")
+    if not app_conn:
+        parser.error("a PostgreSQL app connection template is required")
 
     pg_user = args.pg_user or conninfo_value(app_conn, "user")
     if not pg_user:
         parser.error("--pg-user or an app connection user is required")
-    password = conninfo_value(app_conn, "password")
+    password = os.environ.get("QA_PGPASSWORD") or conninfo_value(
+        args.admin_conn or "", "password"
+    )
 
     dbname = f"twclone_v3qa_regression_{os.getpid()}_{int(time.time())}"
     if not dbname.startswith("twclone_v3qa_"):
         raise RuntimeError("internal database safety guard failed")
+
+    try:
+        admin_conn, qa_app_conn = build_qa_conninfos(
+            dbname, args.pg_host, args.pg_port, pg_user, password,
+            args.admin_conn,
+        )
+    except ValueError as error:
+        parser.error(str(error))
 
     artifact_dir = Path(tempfile.mkdtemp(prefix="twclone-v3-regression-"))
     config_path = artifact_dir / "bigbang.json"
@@ -101,15 +134,8 @@ def main(argv=None):
     # on that disposable PostgreSQL endpoint.  The checked-in template points
     # at the production-style host; inheriting it would defeat the isolation
     # contract of regression-full.
-    qa_password = os.environ.get("QA_PGPASSWORD")
-    qa_user = args.pg_user or pg_user
-    qa_host = args.pg_host
-    qa_port = args.pg_port
-    qa_auth = f" user={qa_user} host={qa_host} port={qa_port}"
-    if qa_password:
-        qa_auth += f" password='{qa_password}'"
-    config["admin"] = f"dbname=postgres{qa_auth}"
-    config["app"] = f"dbname=%DB%{qa_auth}"
+    config["admin"] = admin_conn
+    config["app"] = qa_app_conn
     config.update({
         "db": dbname,
         "sql_dir": str(ROOT / "sql" / "pg"),
@@ -123,6 +149,9 @@ def main(argv=None):
     env = os.environ.copy()
     if password:
         env["PGPASSWORD"] = password
+    else:
+        # Never inherit a password from the production-style BigBang template.
+        env.pop("PGPASSWORD", None)
 
     server = None
     result_code = 2
@@ -159,7 +188,8 @@ def main(argv=None):
         result_code = subprocess.run(runner, cwd=ROOT, env=env, check=False).returncode
     except Exception as error:
         print(f"REGRESSION BLOCKED: {error}", file=sys.stderr)
-        report_path.write_text(json.dumps({
+        blocked_path = report_path.with_name(report_path.name + ".tmp")
+        blocked_path.write_text(json.dumps({
             "status": "blocked",
             "database": dbname,
             "artifacts": str(artifact_dir),

@@ -1,0 +1,70 @@
+{
+  "name": "Live ship towing journey",
+  "tests": [
+    {
+      "name": "Setup: tow operator",
+      "setup": "macro_auth_user",
+      "username": "tow_operator_v3",
+      "password": "password"
+    },
+    {
+      "name": "Rig: create owned unpiloted target and align sectors",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "WITH moved_player AS (UPDATE players SET sector_id = 1 WHERE name = 'tow_operator_v3' RETURNING player_id, ship_id), moved_active AS (UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM moved_player)), new_ship AS (INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields) VALUES ('Tow Target V3', 2, 1, 10, 1, 1) RETURNING ship_id), new_owner AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT n.ship_id, p.player_id, 1, TRUE FROM new_ship n CROSS JOIN moved_player p RETURNING ship_id) SELECT ship_id FROM new_owner;" },
+      "expect": { "status": "ok" },
+      "save": { "tow_target_ship_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Engage valid tow",
+      "command": "ship.tow",
+      "user": "tow_operator_v3",
+      "data": { "target_ship_id": "@tow_target_ship_id" },
+      "expect": { "status": "ok", "type": "ship.tow.engaged" }
+    },
+    {
+      "name": "Tow status reports reciprocal relationship",
+      "command": "ship.tow.status",
+      "user": "tow_operator_v3",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.towing_ship_id", "op": "==", "value": "@tow_target_ship_id" }
+      ]
+    },
+    {
+      "name": "Release tow",
+      "command": "ship.tow",
+      "user": "tow_operator_v3",
+      "data": {},
+      "expect": { "status": "ok", "type": "ship.tow.disengaged" }
+    },
+    {
+      "name": "Tow status is clear after release",
+      "command": "ship.tow.status",
+      "user": "tow_operator_v3",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.towing_ship_id", "op": "==", "value": null },
+        { "path": "data.towed_by_ship_id", "op": "==", "value": null }
+      ]
+    },
+    {
+      "name": "Invalid tow target is refused without changing state",
+      "command": "ship.tow",
+      "user": "tow_operator_v3",
+      "data": { "target_ship_id": 999999 },
+      "expect": { "status": "refused" }
+    },
+    {
+      "name": "Persistence confirms detached tow links",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT towing_ship_id, is_being_towed_by FROM ships WHERE ship_id = @{tow_target_ship_id};" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 0 },
+        { "path": "data.rows.0.1", "op": "==", "value": 0 }
+      ]
+    }
+  ]
+}

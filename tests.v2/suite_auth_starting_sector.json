@@ -1,0 +1,31 @@
+{
+  "name": "Canonical starting sector and starter ship location",
+  "tests": [
+    {
+      "name": "Register a fresh player",
+      "setup": "macro_auth_user",
+      "username": "spawn_sector_v3",
+      "password": "password"
+    },
+    {
+      "name": "Fresh player starts in sector 1",
+      "command": "player.my_info",
+      "user": "spawn_sector_v3",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.player.sector", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Starter ship shares the starting sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.sector_id, s.sector_id FROM players p JOIN ships s ON s.ship_id = p.ship_id WHERE p.player_id = @{spawn_sector_v3_player_id};" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

@@ -176,9 +176,8 @@ am__define_uniq_tagged_files = \
   done | $(am__uniquify_input)`
 DIST_SUBDIRS = $(SUBDIRS)
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/autoconf.h.in \
-	AUTHORS COPYING ChangeLog INSTALL NEWS README.md THANKS TODO \
-	ar-lib compile config.guess config.sub depcomp install-sh \
-	missing
+	AUTHORS COPYING ChangeLog INSTALL NEWS README.md TODO ar-lib \
+	compile config.guess config.sub depcomp install-sh missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -812,7 +811,19 @@ db-gates:
 architecture-check:
 	@python3 $(top_srcdir)/tools/check_architecture_boundaries.py
 
-check-local: architecture-check
+.PHONY: regression-static regression-full
+regression-static:
+	@python3 -m pytest -q \
+		tests.v2/test_qa_runner_config.py \
+		tests.v2/test_bigbang_sql_selection.py \
+		tests.v2/test_server_visibility_contract.py \
+		tests.v2/test_ship_transfer_error_contract.py \
+		tests.v2/test_issue_490_ship02_contract.py
+
+regression-full:
+	@python3 tests.v2/run_regression_instance.py --pg-port "$${QA_PGPORT:-55438}" --report tests.v2/regression_report.json
+
+check-local: architecture-check regression-static
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

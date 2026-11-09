@@ -1,0 +1,6 @@
+{
+  "status": "blocked",
+  "database": "twclone_v3qa_regression_3_1794132729",
+  "artifacts": "/tmp/twclone-v3-regression-oc8j0ppp",
+  "error": "BigBang failed with status 1; see /tmp/twclone-v3-regression-oc8j0ppp"
+}

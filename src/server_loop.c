@@ -766,10 +766,8 @@ static const command_entry_t k_command_registry[] = {
     {"stock.exchange.orders.create", cmd_equity, "Create a stock order (DEPRECATED: use equity.exchange.order.create)", schema_placeholder, 0, true, "equity.exchange.order.create"},
     {"stock.ipo.register", cmd_equity_ipo_register, "Register corporation for IPO (DEPRECATED: use equity.ipo_register)", schema_placeholder, 0, true, "equity.ipo_register"},
     {"stock.portfolio.list", cmd_equity, "List stock portfolio (DEPRECATED: use equity.portfolio.list)", schema_placeholder, 0, true, "equity.portfolio.list"},
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
     {"events.resume", cmd_events_resume, "Resume the player's event stream",
      schema_events_resume, 0, false, NULL},
-#endif
     {"subscribe.add", cmd_subscribe_add, "Add a subscription",
    schema_subscribe_add, 0, false, NULL},
   {"subscribe.catalog", cmd_subscribe_catalog, "Subscription catalog",
@@ -1094,7 +1092,6 @@ server_deliver_to_player_topic (int player_id, const char *topic,
 
   int replayable = 0;
   char timestamp[32] = {0};
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
   char stream_id[37] = {0};
   int64_t sequence = 0;
   db_t *db = game_db_get_handle ();
@@ -1111,10 +1108,8 @@ server_deliver_to_player_topic (int player_id, const char *topic,
               player_id, event_type);
       free (payload);
     }
-#endif
 
   char cursor[96];
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
   if (replayable)
     snprintf (cursor, sizeof cursor, "v1.%s.%" PRId64, stream_id, sequence);
   else
@@ -1126,10 +1121,6 @@ server_deliver_to_player_topic (int player_id, const char *topic,
       if (!event_id)
         return -1;
     }
-#else
-  (void) topic;
-  cursor[0] = '\0';
-#endif
 
   int delivered = 0;
   pthread_mutex_lock (&g_clients_mu);
@@ -1710,7 +1701,6 @@ server_loop (volatile sig_atomic_t *running)
 	    (void) broadcast_sweep_once (game_db_get_handle (), 64);
 	    last_broadcast_ms = now_ms;
 	  }
-#ifdef TWCLONE_ENABLE_V3_PLAYER_EVENT_JOURNAL
 	if (now_ms - last_event_prune_ms >= 60000)
 	  {
 	    int64_t deleted = 0;
@@ -1722,10 +1712,7 @@ server_loop (volatile sig_atomic_t *running)
 	      LOGI ("player event retention removed %" PRId64 " expired rows",
 	            deleted);
 	    last_event_prune_ms = now_ms;
-	  }
-#else
-        (void) last_event_prune_ms;
-#endif
+	}
       }
 
       if (rc < 0)

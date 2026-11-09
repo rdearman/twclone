@@ -130,7 +130,7 @@ int repo_cmds_get_bounties(db_t *db, int alignment, db_res_t **out_res)
             "SELECT b.bounties_id, b.target_id, p.name, b.reward, b.posted_by_type "
             "FROM bounties b "
             "JOIN players p ON b.target_id = p.player_id "
-            "WHERE b.status = 'open' AND p.alignment < 0 "
+            "WHERE b.status = 'open' AND (p.alignment < 0 OR b.posted_by_type = 'npc') "
             "ORDER BY b.reward DESC LIMIT 20;";
     } else {
         /* SQL_VERBATIM: Q6 */
@@ -138,7 +138,7 @@ int repo_cmds_get_bounties(db_t *db, int alignment, db_res_t **out_res)
             "SELECT b.bounties_id, b.target_id, p.name, b.reward, b.posted_by_type "
             "FROM bounties b "
             "JOIN players p ON b.target_id = p.player_id "
-            "WHERE b.status = 'open' AND (p.alignment > 0 OR b.posted_by_type = 'gov') "
+            "WHERE b.status = 'open' AND (p.alignment > 0 OR b.posted_by_type IN ('gov','npc')) "
             "ORDER BY b.reward DESC LIMIT 20;";
     }
 

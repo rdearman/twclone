@@ -17,6 +17,7 @@ var ship_name_input: LineEdit
 var ui_locale_input: LineEdit
 var ui_timezone_input: LineEdit
 var status_label: Label
+var caps_lock_warning: Label
 var connect_button: Button
 var cancel_button: Button
 var mode_toggle_button: Button
@@ -31,10 +32,19 @@ var _selected_profile_index := -1
 var _editing_profile_index := -1
 var _loading_profile := false
 var _registration_mode := false
+var _caps_lock_state := false
 var _registration_fields: VBoxContainer
 
 func _ready() -> void:
 	_build()
+
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
+	var key_event := event as InputEventKey
+	if key_event.pressed and not key_event.echo and key_event.keycode == KEY_CAPSLOCK:
+		_caps_lock_state = not _caps_lock_state
+		caps_lock_warning.text = "CAPS LOCK IS ON · Passwords are case-sensitive." if _caps_lock_state else "Passwords are case-sensitive · Check Caps Lock if login fails."
 
 func set_status(message: String, busy: bool = false) -> void:
 	status_label.text = message
@@ -153,6 +163,8 @@ func _build() -> void:
 	form.add_child(_labeled_field("PORT *", port_input))
 	form.add_child(_labeled_field("USERNAME *", username_input))
 	form.add_child(_labeled_field("PASSWORD *", password_input))
+	caps_lock_warning = _label("Passwords are case-sensitive · Check Caps Lock if login fails.", 11, Color(1.0, 0.62, 0.35))
+	form.add_child(caps_lock_warning)
 	confirm_password_input = _field("Confirm password")
 	confirm_password_input.secret = true
 	ship_name_input = _field("Ship name (optional)")
@@ -274,7 +286,9 @@ func _sync_selected_profile() -> void:
 	if _selected_profile_index < 0 or _selected_profile_index >= _profiles.size():
 		return
 	var profile: Dictionary = _profiles[_selected_profile_index]
-	if str(profile.get("host", "")) != host_input.text or int(profile.get("port", 0)) != int(port_input.text) or str(profile.get("username", "")) != username_input.text:
+	# A server profile identifies a connection endpoint. Captains may change
+	# without making the saved local endpoint disappear from the selector.
+	if str(profile.get("host", "")) != host_input.text or int(profile.get("port", 0)) != int(port_input.text):
 		_selected_profile_index = -1
 		profile_selector.select(0)
 		remove_profile_button.disabled = true

@@ -55,23 +55,23 @@
       }
     },
     {
-      "name": "Test FedSpace: police.surrender should return not-implemented",
+      "name": "Test FedSpace: police.surrender without an incident returns no-incident error",
       "command": "police.surrender",
       "data": {},
       "user": "police_test_player",
       "expect": {
         "status": "error",
-        "error_code": 502
+        "error_code": 1413
       }
     },
     {
-      "name": "Test FedSpace: police.surrender error should mention Phase A",
+      "name": "Test FedSpace: police.surrender explains there is no active incident",
       "command": "police.surrender",
       "data": {},
       "user": "police_test_player",
       "expect": {
         "status": "error",
-        "error_msg_contains": "Phase A"
+        "error_msg_contains": "nothing to surrender"
       }
     },
     {
@@ -171,43 +171,43 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Test RANDOM cluster: police.bribe should return not-implemented",
+      "name": "Test RANDOM cluster: police.bribe without an incident returns no-incident error",
       "command": "police.bribe",
       "data": { "amount": 1000 },
       "user": "police_test_player",
       "expect": {
         "status": "error",
-        "error_code": 502
+        "error_code": 1413
       }
     },
     {
-      "name": "Test RANDOM cluster: police.bribe error should mention Phase A",
+      "name": "Test RANDOM cluster: police.bribe explains there is no active incident",
       "command": "police.bribe",
       "data": { "amount": 1000 },
       "user": "police_test_player",
       "expect": {
         "status": "error",
-        "error_msg_contains": "not yet implemented"
+        "error_msg_contains": "No active incident"
       }
     },
     {
-      "name": "Test RANDOM cluster: police.surrender should return not-implemented",
+      "name": "Test RANDOM cluster: police.surrender without an incident returns no-incident error",
       "command": "police.surrender",
       "data": {},
       "user": "police_test_player",
       "expect": {
         "status": "error",
-        "error_code": 502
+        "error_code": 1413
       }
     },
     {
-      "name": "Test RANDOM cluster: police.surrender error should mention Phase A",
+      "name": "Test RANDOM cluster: police.surrender explains there is no active incident",
       "command": "police.surrender",
       "data": {},
       "user": "police_test_player",
       "expect": {
         "status": "error",
-        "error_msg_contains": "not yet implemented"
+        "error_msg_contains": "nothing to surrender"
       }
     }
   ]

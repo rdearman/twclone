@@ -5,14 +5,14 @@
     {
       "name": "Setup: User",
       "setup": "macro_auth_user",
-      "username": "planet_creator",
+      "username": "planet_gov",
       "password": "password"
     },
     {
       "name": "planet.info - Get planet information",
       "command": "planet.info",
       "data": { "planet_id": 700 },
-      "user": "planet_creator",
+      "user": "planet_gov",
       "expect": { "status": "ok" }
     }
   ]

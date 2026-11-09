@@ -84,7 +84,8 @@ config_set_defaults (void)
   g_cfg.shipyard_require_shields_fit = 1;
   g_cfg.shipyard_require_hardware_compat = 1;
   g_cfg.shipyard_tax_bp = 1000;
-  g_cfg.illegal_allowed_neutral = 0;
+  g_cfg.illegal_allowed_neutral = 1;
+  g_cfg.illegal_min_experience = 400;
   /* --- Internal / Other defaults --- */
   g_cfg.engine.tick_ms = 50;
   g_cfg.engine.daily_align_sec = 0;
@@ -605,6 +606,10 @@ apply_db (db_t *db)
 	  else if (strcmp (key, "illegal_allowed_neutral") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.illegal_allowed_neutral);
+	    }
+	  else if (strcmp (key, "illegal_min_experience") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.illegal_min_experience);
 	    }
 	  else if (strcmp (key, "max_cloak_duration") == 0)
 	    {

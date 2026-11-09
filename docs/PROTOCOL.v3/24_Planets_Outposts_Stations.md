@@ -22,7 +22,16 @@ response includes `error.data.planet_id`, `error.data.landing_allowed`,
 `error.data.ship_remains_in_sector`, and `error.data.combat[]`. A surviving
 attacker remains in the sector; a destroyed ship has no active assignment.
 Unguarded planets retain the normal permission response, and an unowned planet
-retains its existing landing behavior.
+retains its existing landing behavior. Terra (planet 1 in sector 1) is public
+Federation territory: ordinary and neutral players may land there to collect
+colonists, while evil-aligned players are refused by FedLaw. Landing on Terra
+never changes its owner and does not make it claimable.
+For Terra, `planet.colonists.set` accepts only `action: "pickup"`, and the
+ship must be landed on Terra. Drop-off, stock transfer, fighter transfer,
+worker assignment, citadel changes, renaming, market operations, and ownership
+operations are refused server-side. `planet.info` and
+`planet.colonists.get` remain read-only disclosures; launching remains available
+so a ship can leave after collecting colonists.
 
 ### `planet.launch`
 Launch from a planet.
@@ -30,7 +39,9 @@ Launch from a planet.
 
 ### `planet.info`
 Get detailed information about a planet after landing or when authorized as its
-player/corporation owner. Remote and unowned unlanded planet details are refused.
+player/corporation owner. Terra (planet 1 in sector 1) is a public exception and
+may be inspected by any authenticated player. Remote and unowned unlanded
+planet details are otherwise refused.
 **Args**: `{ "planet_id": 123 }`
 **Response** (existing planet fields are retained):
 ```json
@@ -69,6 +80,8 @@ those settings while distinguishing absent configuration from query failure
 is still required.
 `treasury_balance` is included only for the planet owner or a member of its
 owning corporation; landing on the planet alone does not grant treasury access.
+Terra's public-information exception does not grant treasury or ownership
+authority.
 
 Errors: `401` when unauthenticated, `400` for a missing or invalid
 `planet_id`, `403` (`ERR_NOT_FOUND`) when the planet does not exist, `402`

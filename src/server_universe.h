@@ -12,6 +12,9 @@ void universe_shutdown (void);
 void fer_attach_db (db_t * db);
 int fer_init_once (db_t * db);
 void fer_tick (db_t * db, int64_t now_ms);
+int ferengi_handle_hostile_attack (db_t *db, int attacker_player_id,
+                                   int target_ship_id, int sector_id,
+                                   int64_t now_s);
 int cmd_ferengi_traders (client_ctx_t *ctx, json_t *root);
 int cmd_ferengi_deal_accept (client_ctx_t *ctx, json_t *root);
 int cmd_ferengi_deal_reject (client_ctx_t *ctx, json_t *root);

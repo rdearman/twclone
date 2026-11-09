@@ -306,7 +306,14 @@ int db_ports_get_commodities(db_t *db, int port_id, json_t **commodities_array) 
     db_error_clear(&err);
     *commodities_array = json_array();
     /* SQL_VERBATIM: Q16 */
-    const char *q16 = "SELECT es.commodity_code, es.quantity, es.price, c.illegal FROM entity_stock es JOIN commodities c ON es.commodity_code = c.code WHERE es.entity_type = 'port' AND es.entity_id = {1};";
+    const char *q16 = "SELECT es.commodity_code, es.quantity, es.price, c.illegal, "
+                      "       MAX(CASE WHEN pt.mode = 'buy' THEN 1 ELSE 0 END) AS buys, "
+                      "       MAX(CASE WHEN pt.mode = 'sell' THEN 1 ELSE 0 END) AS sells "
+                      "FROM entity_stock es "
+                      "JOIN commodities c ON es.commodity_code = c.code "
+                      "LEFT JOIN port_trade pt ON pt.port_id = es.entity_id AND pt.commodity = es.commodity_code "
+                      "WHERE es.entity_type = 'port' AND es.entity_id = {1} "
+                      "GROUP BY es.commodity_code, es.quantity, es.price, c.illegal;";
     char sql[1024]; sql_build(db, q16, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err)) {
         while (db_res_step(res, &err)) {
@@ -316,6 +323,8 @@ int db_ports_get_commodities(db_t *db, int port_id, json_t **commodities_array) 
             json_object_set_new(obj, "quantity", json_integer(db_res_col_i32(res, 1, &err)));
             json_object_set_new(obj, "price", json_integer(db_res_col_i32(res, 2, &err)));
             json_object_set_new(obj, "illegal", json_integer(db_res_col_i32(res, 3, &err)));
+            json_object_set_new(obj, "buys", json_boolean(db_res_col_i32(res, 4, &err) != 0));
+            json_object_set_new(obj, "sells", json_boolean(db_res_col_i32(res, 5, &err) != 0));
             json_array_append_new(*commodities_array, obj);
         }
         db_res_finalize(res);

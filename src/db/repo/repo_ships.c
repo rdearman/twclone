@@ -437,3 +437,22 @@ int repo_ships_update_cargo_column(db_t *db, int32_t ship_id, const char *col_na
      * changed-row count is zero when the value already equals new_qty. */
     return 0;
 }
+
+int
+repo_ships_decloak (db_t *db, int32_t ship_id)
+{
+    if (!db || ship_id <= 0)
+        return ERR_DB_MISUSE;
+
+    const char *sql_template =
+        "UPDATE ships SET cloaked = NULL WHERE ship_id = {1} "
+        "AND cloaked IS NOT NULL;";
+    char sql[256];
+    if (sql_build (db, sql_template, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+
+    db_error_t err = {0};
+    if (!db_exec (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &err))
+        return err.code ? err.code : ERR_DB_EXEC_FAILED;
+    return 0;
+}

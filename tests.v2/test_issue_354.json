@@ -38,7 +38,7 @@
     {
       "name": "Attach limpet via SQL",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO limpet_attached (ship_id, owner_player_id, created_ts) VALUES ((SELECT ship_id FROM players WHERE player_id = @{limpet_user_player_id}), 1, NOW());" },
+      "data": { "sql": "INSERT INTO limpet_attached (ship_id, owner_player_id, created_ts) VALUES ((SELECT ship_id FROM players WHERE player_id = @{limpet_user_player_id}), @{limpet_user_player_id}, NOW());" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

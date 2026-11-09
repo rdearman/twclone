@@ -2,7 +2,7 @@
   "tests": [
     {
       "name": "Setup: Trader Player",
-      "setup": "macro_bootstrap_admin",
+      "setup": "macro_auth_user",
       "username": "trader_player_1",
       "password": "password"
     },

@@ -1,0 +1,94 @@
+{
+  "test_suite_name": "Population Jettison Alignment",
+  "description": "Population cargo jettison applies one alignment point per COL or SLV, regardless of starting alignment.",
+  "tests": [
+    {
+      "name": "Setup positive-alignment player",
+      "setup": "macro_auth_user",
+      "username": "jettison_positive",
+      "password": "testpass123"
+    },
+    {
+      "name": "Setup zero-alignment player",
+      "setup": "macro_auth_user",
+      "username": "jettison_zero",
+      "password": "testpass123"
+    },
+    {
+      "name": "Setup negative-alignment player",
+      "setup": "macro_auth_user",
+      "username": "jettison_negative",
+      "password": "testpass123"
+    },
+    {
+      "name": "Seed population and ordinary cargo",
+      "db_setup": {
+        "sql": [
+          "UPDATE players SET alignment = 10 WHERE name = 'jettison_positive';",
+          "UPDATE players SET alignment = 0 WHERE name = 'jettison_zero';",
+          "UPDATE players SET alignment = -2000 WHERE name = 'jettison_negative';",
+          "DELETE FROM ship_cargo WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('jettison_positive','jettison_zero','jettison_negative'));",
+          "UPDATE ships SET colonists = 2, slaves = 2, ore = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'jettison_positive');",
+          "UPDATE ships SET colonists = 1, slaves = 1, ore = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'jettison_zero');",
+          "UPDATE ships SET colonists = 2, slaves = 2, ore = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'jettison_negative');",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'COL', 2 FROM players WHERE name = 'jettison_positive' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'SLV', 2 FROM players WHERE name = 'jettison_positive' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 1 FROM players WHERE name = 'jettison_positive' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'COL', 1 FROM players WHERE name = 'jettison_zero' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'SLV', 1 FROM players WHERE name = 'jettison_zero' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 1 FROM players WHERE name = 'jettison_zero' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'COL', 2 FROM players WHERE name = 'jettison_negative' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'SLV', 2 FROM players WHERE name = 'jettison_negative' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;",
+          "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 1 FROM players WHERE name = 'jettison_negative' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;"
+        ]
+      }
+    },
+    {
+      "name": "Positive alignment: jettison two colonists",
+      "command": "trade.jettison",
+      "user": "jettison_positive",
+      "data": { "commodity": "COL", "quantity": 2 },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.alignment", "op": "==", "value": 8 } ]
+    },
+    {
+      "name": "Positive alignment: repeated jettison one slave",
+      "command": "trade.jettison",
+      "user": "jettison_positive",
+      "data": { "commodity": "SLV", "quantity": 1 },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.alignment", "op": "==", "value": 7 } ]
+    },
+    {
+      "name": "Positive alignment: ordinary cargo has no penalty",
+      "command": "trade.jettison",
+      "user": "jettison_positive",
+      "data": { "commodity": "ORE", "quantity": 1 },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.alignment", "op": "==", "value": 7 } ]
+    },
+    {
+      "name": "Zero alignment: jettison one colonist",
+      "command": "trade.jettison",
+      "user": "jettison_zero",
+      "data": { "commodity": "COL", "quantity": 1 },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.alignment", "op": "==", "value": -1 } ]
+    },
+    {
+      "name": "Negative alignment: jettison two slaves",
+      "command": "trade.jettison",
+      "user": "jettison_negative",
+      "data": { "commodity": "SLV", "quantity": 2 },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.alignment", "op": "==", "value": -2002 } ]
+    },
+    {
+      "name": "Insufficient population cargo is refused",
+      "command": "trade.jettison",
+      "user": "jettison_zero",
+      "data": { "commodity": "COL", "quantity": 99 },
+      "expect": { "status": "error" }
+    }
+  ]
+}

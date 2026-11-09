@@ -1,0 +1,60 @@
+{
+  "scenario_id": "V3-ECO-02-ordinary-bank-interest",
+  "requirement_id": "V3-ECO-02",
+  "execution_status": "deferred-until-engine-wiring",
+  "simulation_fixture": false,
+  "canonical_requirements": {
+    "source": "docs/reports/V3_TW2002_CANONICAL_PARITY_AUDIT.md section 19",
+    "positive": [
+      "An eligible account receives one bounded daily interest credit.",
+      "The credit has exactly one authoritative bank-ledger entry."
+    ],
+    "negative": [
+      "A same-day replay does not credit again or append another ledger entry.",
+      "Below-minimum or frozen accounts remain unchanged.",
+      "A ledger failure rolls back the balance and ledger mutation."
+    ],
+    "persistence": [
+      "Balance and ledger readbacks agree before and after restart.",
+      "Concurrent scheduler invocations settle at most once for the day."
+    ],
+    "evidence": [
+      "Each command records response and event batch.",
+      "Each command records authoritative state and read-only database snapshots before and after."
+    ]
+  },
+  "ai_policy": {
+    "strategy_mode": "deterministic",
+    "ordinary_player": true,
+    "retries": "never replay an ambiguous mutation",
+    "provisioning": "none",
+    "stop_on": ["identity mismatch", "unexpected universe", "service loss", "ambiguous mutation"]
+  },
+  "dependency_note": "Do not execute against a live server until CODEX 2/3 select and wire one authoritative scheduler path and QA-INT-01 permits disposable bootstrap.",
+  "cases": [
+    {
+      "id": "eligible-daily-accrual",
+      "commands": [{"command": "player.my_info", "data": {}}],
+      "expected": "success",
+      "assertions": ["one bounded balance increase", "one bank ledger entry", "interest event is present"]
+    },
+    {
+      "id": "same-day-replay",
+      "commands": [{"command": "player.my_info", "data": {}}],
+      "expected": "success",
+      "assertions": ["balance unchanged", "ledger count unchanged", "no duplicate interest event"]
+    },
+    {
+      "id": "below-minimum",
+      "commands": [{"command": "player.my_info", "data": {}}],
+      "expected": "success",
+      "assertions": ["balance unchanged", "ledger unchanged"]
+    },
+    {
+      "id": "ledger-failure-rollback",
+      "commands": [{"command": "player.my_info", "data": {}}],
+      "expected": "refusal",
+      "assertions": ["error captured", "balance unchanged", "ledger unchanged", "no duplicate event"]
+    }
+  ]
+}

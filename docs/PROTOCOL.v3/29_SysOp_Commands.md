@@ -17,7 +17,7 @@ Allows tuning of specific server parameters without a restart.
 **Scope**: Strictly limited to the **Allowed Key List**. All others are `1407 Refused`.
 
 ### Allowed Keys (v1)
-*   **Game Rules**: `turnsperday`, `neutral_band`, `illegal_allowed_neutral`, `max_cloak_duration`, `limpet_ttl_days`
+*   **Game Rules**: `turnsperday`, `neutral_band`, `illegal_allowed_neutral`, `illegal_min_experience`, `max_cloak_duration`, `limpet_ttl_days`
 *   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`
 *   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
 

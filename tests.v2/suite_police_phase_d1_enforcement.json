@@ -13,7 +13,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN clusters c ON s.cluster_id = c.clusters_id WHERE c.law_severity > 0 AND c.role != 'FED' AND s.sector_id NOT BETWEEN 1 AND 10 LIMIT 1;"
+        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN cluster_sectors cs ON cs.sector_id = s.sector_id JOIN clusters c ON cs.cluster_id = c.clusters_id WHERE c.law_severity > 0 AND c.role != 'FED' AND s.sector_id NOT BETWEEN 1 AND 10 LIMIT 1;"
       },
       "expect": { "status": "ok" },
       "save": { "lawful_sector": "data.rows.0.0", "lawful_cluster_id": "data.rows.0.1" }
@@ -143,7 +143,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN clusters c ON s.cluster_id = c.clusters_id WHERE c.law_severity = 0 LIMIT 1;"
+        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN cluster_sectors cs ON cs.sector_id = s.sector_id JOIN clusters c ON cs.cluster_id = c.clusters_id WHERE c.law_severity = 0 LIMIT 1;"
       },
       "expect": { "status": "ok" },
       "save": { "lawless_sector": "data.rows.0.0", "lawless_cluster_id": "data.rows.0.1" }

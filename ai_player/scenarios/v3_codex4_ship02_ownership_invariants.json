@@ -1,0 +1,88 @@
+{
+  "catalog_id": "V3-CODEX4-490-ship02-ownership-invariants-20261031",
+  "requirement_id": "V3-SHIP-02",
+  "source": "docs/reports/V3_TW2002_CANONICAL_PARITY_AUDIT.md section 19",
+  "execution_mode": "disposable-live-adapter-only",
+  "execution_status": "next-unblocked-qa-preparation",
+  "simulation_fixture": false,
+  "dependency_note": "Run the read-only roster, status, inspect and refusal checks against a disposable QA universe after QA-INT-01 restores the socket server. Ownership transfer remains excluded because V3-CAN-00 has not pinned the lifecycle contract.",
+  "evidence_contract": {
+    "each_command": [
+      "sanitized request",
+      "response",
+      "event batch",
+      "state before/after",
+      "database snapshot before/after"
+    ],
+    "restart": "The adapter must provide post-restart state and database readback; the harness never restarts a service.",
+    "safety": [
+      "loopback disposable endpoint only",
+      "read-only database snapshots",
+      "no provisioning, migration, reset, or direct row writes",
+      "never replay an ambiguous mutation"
+    ]
+  },
+  "ai_policy": {
+    "strategy_mode": "deterministic",
+    "ordinary_player": true,
+    "retries": "never replay an ambiguous mutation",
+    "stop_on": ["identity mismatch", "unexpected universe", "service loss", "ambiguous mutation"]
+  },
+  "canonical_requirements": {
+    "evidence": ["response", "events", "state_before_after", "database_before_after"],
+    "one_primary_owner_per_ship": true,
+    "active_ship_reference_is_consistent": true,
+    "foreign_object_refusal_is_side_effect_free": true,
+    "restart_readback": true
+  },
+  "restart_required": true,
+  "cases": [
+    {
+      "id": "owner-roster",
+      "commands": [{"command": "ship.list", "data": {}}],
+      "expected": "success",
+      "assertions": [
+        "ordinary player receives the authoritative owned-ship roster",
+        "each returned ship has one primary owner",
+        "active ship and player active-ship reference agree",
+        "response, events, state and database evidence are captured"
+      ]
+    },
+    {
+      "id": "selected-owned-status",
+      "commands": [
+        {"command": "ship.status", "data": {"ship_id": "owned_active"}},
+        {"command": "ship.inspect", "data": {"ship_id": "owned_active"}}
+      ],
+      "expected": "success",
+      "assertions": [
+        "status and inspect identify the same authoritative ship",
+        "owner, sector, active flag and resource bounds are consistent",
+        "read-only commands do not change turns, ownership or cargo"
+      ]
+    },
+    {
+      "id": "foreign-inspect-refusal",
+      "commands": [{"command": "ship.inspect", "data": {"ship_id": "foreign_ship"}}],
+      "expected": "refusal",
+      "assertions": [
+        "foreign ship disclosure is refused or redacted by the selected policy",
+        "turns, active ship, ownership, cargo and credits are unchanged",
+        "no knowledge or ownership row is written"
+      ]
+    },
+    {
+      "id": "restart-readback",
+      "commands": [
+        {"command": "ship.list", "data": {}},
+        {"command": "ship.status", "data": {"ship_id": "owned_active"}}
+      ],
+      "expected": "success",
+      "assertions": [
+        "post-restart roster equals the immediate authoritative readback after transfer",
+        "primary owner count and active reference remain consistent",
+        "no duplicate ship or ownership event appears after reconnect"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import glob
+import json
 import os
 import sys
 from json_runner import JsonSuiteRunner
@@ -10,28 +12,17 @@ import subprocess
 HOST = "localhost"
 PORT = 1234
 
-SUITES = [
-    "tests.v2/suite_smoke.json",
-    "tests.v2/suite_planets.json",
-    "tests.v2/suite_trade_market.json",
-    "tests.v2/suite_shipyard_and_ships.json",
-    "tests.v2/suite_corporations.json",
-    "tests.v2/suite_combat_and_crime.json",
-    "tests.v2/suite_movement_parity.py",
-    "tests.v2/suite_subscriptions_e2e.py",
-    "tests.v2/suite_v3_player_event_journal.json",
-    "tests.v2/suite_trade_offers_e2e.json",
-    "tests.v2/suite_planet_taxable_activity_e2e.json",
-    # "tests.v2/suite_concurrency.py",  # Uncomment when ready to run
-    # "tests.v2/suite_auth_and_settings.json",
-    # "tests.v2/suite_economy_and_bank.json",
-    # "tests.v2/suite_trade_market.json",
-    # "tests.v2/suite_shipyard_and_ships.json",
-    # "tests.v2/suite_corporations.json",
-    # "tests.v2/suite_combat_and_crime.json",
-    # "tests.v2/suite_navigation.json",
-    # "tests.v2/suite_admin_sysop.json",
-]
+def discover_suites(base_dir):
+    """Use the canonical JSON directory, not a hand-maintained subset."""
+    suites = []
+    for path in sorted(glob.glob(os.path.join(base_dir, "suite_*.json"))):
+        if os.path.basename(path) == "suite_regression_full.json":
+            continue
+        with open(path, encoding="utf-8") as source:
+            data = json.load(source)
+        if isinstance(data.get("tests"), list):
+            suites.append(path)
+    return suites
 
 def run_all():
     parser = argparse.ArgumentParser()
@@ -45,7 +36,7 @@ def run_all():
     runner = JsonSuiteRunner(args.host, args.port,
                              capture_responses=args.capture_responses)
     
-    suites_to_run = SUITES
+    suites_to_run = discover_suites(os.path.dirname(os.path.abspath(__file__)))
     if args.suite:
         suites_to_run = [args.suite]
 

@@ -1,0 +1,77 @@
+{
+  "catalog_id": "V3-CODEX4-490-ordinary-player",
+  "simulation_fixture": false,
+  "requirement_source": "docs/reports/V3_TW2002_CANONICAL_PARITY_AUDIT.md section 19",
+  "execution_mode": "disposable-live-adapter-only",
+  "ai_policy": {
+    "strategy_mode": "deterministic",
+    "ordinary_player": true,
+    "retries": "never replay an ambiguous mutation",
+    "provisioning": "none",
+    "stop_on": ["identity mismatch", "unexpected universe", "service loss", "ambiguous mutation"]
+  },
+  "evidence_contract": {
+    "per_command": ["sanitized request", "response", "event batch"],
+    "journey": ["authoritative state before", "authoritative state after", "database snapshot before", "database snapshot after"],
+    "secrets": "redact credentials and session material before writing evidence",
+    "database": "read-only snapshots from an explicitly disposable QA database; no direct row mutation"
+  },
+  "scenarios": [
+    {
+      "id": "V3-PLAN-01",
+      "title": "Planet landing and refusal atomicity",
+      "status": "next-unblocked",
+      "cases": ["valid owned landing", "valid unowned landing", "valid reland", "remote refusal", "unauthorized refusal", "zero-turn refusal", "defense refusal", "persistence-failure refusal"],
+      "assertions": ["successful landing persists landed planet and consumes canonical cost once", "refusal preserves turns and landing state", "response, events and DB snapshots agree"]
+    },
+    {
+      "id": "V3-SHIP-01",
+      "title": "Ship ownership and lifecycle settlement",
+      "status": "deferred-until-server-contract",
+      "cases": ["owner ship list", "foreign-owner refusal", "authorized transfer", "duplicate transfer", "sale settlement"],
+      "assertions": ["one authoritative owner", "no duplicate credits or cargo", "restart preserves ownership"]
+    },
+    {
+      "id": "V3-ECO-01",
+      "title": "Trade settlement and idempotent retry",
+      "status": "deferred-until-server-contract",
+      "cases": ["buy", "sell", "wrong port direction", "insufficient credits", "full holds", "ambiguous retry"],
+      "assertions": ["credits, cargo, stock and turns conserve", "one receipt per mutation", "remote trade is refused"]
+    },
+    {
+      "id": "V3-ECO-02",
+      "title": "Bank interest runtime",
+      "status": "deferred-until-engine-wiring",
+      "cases": ["eligible daily accrual", "same-day replay", "below-minimum account", "restart"],
+      "assertions": ["one bounded accrual", "one ledger entry", "same-day replay is idempotent"]
+    },
+    {
+      "id": "V3-VIS-01",
+      "title": "Visibility and scan boundaries",
+      "status": "deferred-until-server-policy",
+      "cases": ["current sector", "adjacent sector", "remote sector", "zero-turn scan", "cloaked refusal"],
+      "assertions": ["refusal does not decloak or write knowledge", "remote data is redacted or refused"]
+    },
+    {
+      "id": "V3-HAZ-01",
+      "title": "Sector-entry hazards",
+      "status": "deferred-until-atomic-movement",
+      "cases": ["mine damage", "fighter damage", "limpet attachment", "environmental hazard", "destruction", "replay"],
+      "assertions": ["hazard event and final ship/sector/tow state agree", "asset depletion occurs once"]
+    },
+    {
+      "id": "V3-PLAN-02",
+      "title": "Planet production and citadel lifecycle",
+      "status": "decision-gated",
+      "cases": ["colonist allocation", "production tick", "withdrawal", "citadel upgrade", "defended landing", "ownership loss"],
+      "assertions": ["balances and ownership persist", "unauthorized operations are refused"]
+    },
+    {
+      "id": "V3-INS-01",
+      "title": "Insurance purchase and loss settlement",
+      "status": "decision-gated",
+      "cases": ["policy list", "owned purchase", "foreign refusal", "claim", "duplicate claim", "restart"],
+      "assertions": ["if enabled by V3-CAN-00, payout is funded and idempotent", "if excluded, protocol reports unavailable without fabricated success"]
+    }
+  ]
+}

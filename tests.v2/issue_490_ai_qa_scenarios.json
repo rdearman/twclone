@@ -1,0 +1,158 @@
+{
+  "name": "CODEX 4 issue #490 ordinary-player scenario catalog",
+  "requirement_id": "V3-PLAN-01",
+  "role": "CODEX 4",
+  "policy": {
+    "ordinary_player_commands_only": true,
+    "admin_sql_is_fixture_and_evidence_only": true,
+    "production_or_shared_database_forbidden": true,
+    "response_capture_required": true,
+    "event_and_database_snapshots_required": true
+  },
+  "contract_version": "1.1",
+  "scenarios": [
+    {
+      "id": "PLAN-01-LANDING",
+      "requirement_id": "V3-PLAN-01",
+      "execution_status": "next-unblocked",
+      "title": "Planet landing refusal and success preserve/consume turns correctly",
+      "gameplay_commands": ["planet.info", "planet.land", "planet.launch"],
+      "required_cases": ["malformed", "remote", "unauthorized", "defended refusal", "valid landing", "retry"],
+      "before_after_queries": [
+        "players.player_id, players.sector_id, turns.turns_remaining, ships.onplanet, players.lastplanet",
+        "engine_events for the actor and target planet"
+      ],
+      "ordinary_player_flow": ["planet.info", "planet.land", "planet.launch", "retry the same landing"],
+      "refusal_invariants": ["turns_remaining unchanged", "sector/onplanet/lastplanet unchanged", "no defensive side effect on refusal"],
+      "success_invariants": ["selected planet is persisted and exactly one canonical turn is consumed"],
+      "event_filters": ["actor player_id", "target planet_id", "planet.land.success or refusal outcome"],
+      "restart_required": true
+    },
+    {
+      "id": "SHIP-02-OWNERSHIP",
+      "requirement_id": "V3-SHIP-02",
+      "execution_status": "deferred",
+      "title": "Ordinary owner sees only valid primary ships and rejects foreign lifecycle mutation",
+      "gameplay_commands": ["ship.list", "ship.status", "ship.inspect"],
+      "required_cases": ["owner list", "foreign ship refusal", "active-ship consistency", "restart snapshot"],
+      "before_after_queries": [
+        "ship_ownership grouped by ship_id with primary-owner count",
+        "players.ship_id and ships.owner/sector/active state",
+        "engine_events for rejected mutation attempts"
+      ],
+      "ordinary_player_flow": ["ship.list", "ship.status", "ship.inspect", "reconnect/reload"],
+      "refusal_invariants": ["foreign ship remains unchanged", "primary-owner count remains one", "active ship reference remains valid"],
+      "success_invariants": ["owner sees only authoritative ships and active state"],
+      "event_filters": ["actor player_id", "ship_id", "ownership or refusal outcome"],
+      "restart_required": true
+    },
+    {
+      "id": "ECO-01-TRADE",
+      "requirement_id": "V3-ECO-01",
+      "execution_status": "deferred",
+      "title": "Port settlement conserves credits, cargo, stock, turns and receipts",
+      "gameplay_commands": ["trade.buy", "trade.sell", "trade.port_info"],
+      "required_cases": ["valid buy", "valid sell", "wrong direction", "insufficient credits", "duplicate retry", "remote port refusal"],
+      "before_after_queries": [
+        "players.credits and turns.turns_remaining",
+        "ship_cargo quantities and entity_stock quantity",
+        "trade_receipts/trade_log rows and engine_events for the actor"
+      ],
+      "ordinary_player_flow": ["trade.port_info", "trade.buy", "trade.sell", "retry the same request"],
+      "refusal_invariants": ["credits/cargo/stock/turns unchanged on refusal", "remote port does not settle"],
+      "success_invariants": ["credits, cargo, stock, turns and one receipt reconcile atomically"],
+      "event_filters": ["actor player_id", "port_id", "trade settlement or refusal outcome"],
+      "restart_required": true
+    },
+    {
+      "id": "ECO-02-BANK-INTEREST",
+      "requirement_id": "V3-ECO-02",
+      "execution_status": "deferred",
+      "title": "Bank interest applies once per eligible day and is ledger-reconciled",
+      "gameplay_commands": ["bank.balance", "bank.history"],
+      "required_cases": ["eligible account", "below minimum", "same-day replay", "restart replay"],
+      "before_after_queries": [
+        "bank/account balance",
+        "bank ledger rows grouped by transaction type and day",
+        "engine_events for interest application"
+      ],
+      "ordinary_player_flow": ["bank.balance", "bank.history", "replay same-day query", "restart/replay"],
+      "refusal_invariants": ["below-minimum/frozen account unchanged", "same-day replay adds no balance or ledger row"],
+      "success_invariants": ["eligible account receives one bounded interest ledger entry"],
+      "event_filters": ["actor player_id", "bank account", "interest application outcome"],
+      "restart_required": true
+    },
+    {
+      "id": "VIS-01-VISIBILITY",
+      "requirement_id": "V3-VIS-01",
+      "execution_status": "deferred",
+      "title": "Visibility refusals do not decloak or write knowledge",
+      "gameplay_commands": ["sector.info", "sector.scan", "sector.scan_density", "port.info", "planet.info", "move.pathfind"],
+      "required_cases": ["current", "outgoing adjacent", "incoming-only", "remote", "zero-turn/no-turn", "visited path"],
+      "before_after_queries": [
+        "ships.cloaked and turns.turns_remaining",
+        "player_visited_sectors and player_known_ports",
+        "engine_events for refused scans"
+      ],
+      "ordinary_player_flow": ["sector.info", "sector.scan", "sector.scan_density", "port.info", "planet.info", "move.pathfind"],
+      "refusal_invariants": ["cloak and turns unchanged", "knowledge tables unchanged", "remote entities are not disclosed"],
+      "success_invariants": ["only policy-permitted current/adjacent/visited information is returned"],
+      "event_filters": ["observer player_id", "queried sector/entity", "refusal or redacted response"],
+      "restart_required": true
+    },
+    {
+      "id": "HAZ-01-ENTRY",
+      "requirement_id": "V3-HAZ-01",
+      "execution_status": "deferred",
+      "title": "Warp, transwarp, launch and tow entry hazards agree with persisted state",
+      "gameplay_commands": ["move.warp", "move.transwarp", "planet.launch"],
+      "required_cases": ["damage", "asset depletion", "limpet attachment", "destruction", "duplicate/replay"],
+      "before_after_queries": [
+        "ship sector/hull/shields/fighters/tow state",
+        "sector asset/hazard counts",
+        "engine_events ordered by event_id"
+      ],
+      "ordinary_player_flow": ["move.warp", "move.transwarp", "planet.launch", "retry/replay entry"],
+      "refusal_invariants": ["invalid movement preserves sector/turns/tow state", "hazard is applied at most once per request"],
+      "success_invariants": ["final sector, damage/assets/tow state and ordered events agree"],
+      "event_filters": ["actor player_id", "ship_id and sector_id", "hazard application/destruction outcome"],
+      "restart_required": true
+    },
+    {
+      "id": "PLAN-02-PLANET-LIFECYCLE",
+      "requirement_id": "V3-PLAN-02",
+      "execution_status": "decision-gated",
+      "title": "Planet ownership, colonists, production and citadel evidence remain explicit",
+      "gameplay_commands": ["planet.info", "planet.land", "planet.launch"],
+      "required_cases": ["owned landing", "unauthorized access", "production snapshot", "citadel defense", "loss/capture disposition"],
+      "before_after_queries": [
+        "planets owner/owner_type/colonists/inventory",
+        "citadels level/defense fields",
+        "engine_events for production and defense"
+      ],
+      "ordinary_player_flow": ["planet.info", "planet.land", "planet.launch", "reload lifecycle state"],
+      "refusal_invariants": ["unauthorized operations preserve ownership and inventories", "invalid production/citadel changes do not debit resources"],
+      "success_invariants": ["ownership, colonists, production and citadel state persist according to selected policy"],
+      "event_filters": ["actor player_id", "planet_id", "production/defense/ownership outcome"],
+      "restart_required": true
+    },
+    {
+      "id": "INS-01-INSURANCE",
+      "requirement_id": "V3-INS-01",
+      "execution_status": "decision-gated",
+      "title": "Insurance is either ledger-reconciled or explicitly unavailable",
+      "gameplay_commands": ["insurance.policies.list", "insurance.policies.buy", "insurance.claim.file"],
+      "required_cases": ["ordinary owner", "foreign ship refusal", "insufficient funds", "duplicate claim", "restart"],
+      "before_after_queries": [
+        "insurance policies and claim state",
+        "player/bank balances and ledger transaction type",
+        "engine_events for purchase and claim"
+      ],
+      "ordinary_player_flow": ["insurance.policies.list", "insurance.policies.buy", "insurance.claim.file", "restart/replay"],
+      "refusal_invariants": ["foreign/underfunded/duplicate claim does not debit or pay", "claim cannot pay twice"],
+      "success_invariants": ["if enabled, policy purchase and claim reconcile to one ledger settlement; otherwise explicit unavailable response"],
+      "event_filters": ["actor player_id", "insured ship/policy", "purchase/claim/unavailable outcome"],
+      "restart_required": true
+    }
+  ]
+}

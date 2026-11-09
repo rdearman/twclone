@@ -590,6 +590,58 @@ db_cron_cleanse_msl_assets (db_t *db, json_t **out_removed_array)
   return -1;
 }
 
+int
+db_cron_claim_fedspace_sweep (db_t *db, int64_t now_s)
+{
+  if (!db || now_s <= 0) return -1;
+  char sql[768];
+  if (sql_build (db,
+                 "INSERT INTO fedspace_sweep_runs "
+                 "(sweep_date_utc, started_at, status) "
+                 "VALUES ((to_timestamp({1}) AT TIME ZONE 'UTC')::date, "
+                 "CURRENT_TIMESTAMP, 'running') "
+                 "ON CONFLICT (sweep_date_utc) DO UPDATE SET "
+                 "started_at=CURRENT_TIMESTAMP, status='running' "
+                 "WHERE fedspace_sweep_runs.status='running' "
+                 "AND fedspace_sweep_runs.started_at < CURRENT_TIMESTAMP - "
+                 "INTERVAL '1 hour' "
+                 "RETURNING sweep_date_utc;",
+                 sql, sizeof sql) != 0)
+    return -1;
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i64 (now_s) }, 1,
+                 &res, &err))
+    return -1;
+  int claimed = db_res_step (res, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return claimed;
+}
+
+int
+db_cron_complete_fedspace_sweep (db_t *db, int64_t now_s,
+                                 int fighters, int mines, int beacons)
+{
+  if (!db || now_s <= 0) return -1;
+  char sql[1024];
+  if (sql_build (db,
+                 "UPDATE fedspace_sweep_runs SET completed_at=CURRENT_TIMESTAMP, "
+                 "status='completed', removed_fighters={2}, removed_mines={3}, "
+                 "removed_beacons={4} WHERE sweep_date_utc = "
+                 "(to_timestamp({1}) AT TIME ZONE 'UTC')::date "
+                 "AND status='running';",
+                 sql, sizeof sql) != 0)
+    return -1;
+  db_error_t err;
+  db_error_clear (&err);
+  return db_exec (db, sql,
+                  (db_bind_t[]){ db_bind_i64 (now_s), db_bind_i32 (fighters),
+                                 db_bind_i32 (mines), db_bind_i32 (beacons) },
+                  4, &err) ? 0 : -1;
+}
+
 
 
 int

@@ -1,0 +1,60 @@
+{
+  "requirement_id": "V3-PLAN-01",
+  "scenario_id": "PLAN-01-LANDING",
+  "source_suite": "tests.v2/suite_planet_landing_defense.json",
+  "ordinary_player_commands_only": true,
+  "cases": [
+    {
+      "id": "malformed",
+      "acceptance_status": "not-covered",
+      "required_command": "planet.land",
+      "evidence": ["response", "state_before_after", "database_before_after", "events"],
+      "note": "The current JSON suite has no malformed planet.land request. Do not infer coverage from static handler checks."
+    },
+    {
+      "id": "remote",
+      "acceptance_status": "not-covered",
+      "required_command": "planet.land",
+      "evidence": ["response", "state_before_after", "database_before_after", "events"],
+      "note": "The current suite positions players at the target sector; a remote-planet refusal journey is still needed."
+    },
+    {
+      "id": "unauthorized",
+      "acceptance_status": "covered",
+      "required_command": "planet.land",
+      "evidence": ["response", "state_before_after", "database_before_after", "events"],
+      "matching_test_names": ["Undefended outsider landing is refused without damage"]
+    },
+    {
+      "id": "defended refusal",
+      "acceptance_status": "covered",
+      "required_command": "planet.land",
+      "evidence": ["response", "state_before_after", "database_before_after", "events"],
+      "matching_test_names": ["Defended outsider landing is refused after Quasar damage"]
+    },
+    {
+      "id": "valid landing",
+      "acceptance_status": "covered",
+      "required_command": "planet.land",
+      "evidence": ["response", "state_before_after", "database_before_after", "events"],
+      "matching_test_names": [
+        "Planet owner bypasses its armed Quasar defense",
+        "Authorized corporation member bypasses armed defense"
+      ]
+    },
+    {
+      "id": "retry",
+      "acceptance_status": "not-covered",
+      "required_command": "planet.land",
+      "evidence": ["response", "state_before_after", "database_before_after", "events"],
+      "note": "No same-request replay or reland-after-reconnect step is present in the current suite."
+    },
+    {
+      "id": "restart readback",
+      "acceptance_status": "not-covered",
+      "required_command": "planet.land",
+      "evidence": ["state_after_restart", "database_after_restart", "events"],
+      "note": "The JSON runner does not restart the server; a disposable operator adapter must supply this boundary."
+    }
+  ]
+}

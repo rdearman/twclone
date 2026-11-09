@@ -47,7 +47,9 @@ def check_ship_inspection(conn, host, port, account, password):
         for ship_id in (own_ship, other_ship):
             response = inspect(ship_id)
             ship = response.get('data', {}).get('ship', {})
-            if not status_ok(response) or ship.get('ship_id') != ship_id or set(ship) != {'ship_id', 'name'}:
+            if (not status_ok(response) or ship.get('ship_id') != ship_id
+                    or set(ship) != {'ship_id', 'name', 'is_derelict'}
+                    or ship.get('is_derelict') is not False):
                 raise AssertionError(f'visible ship {ship_id} returned {response!r}')
         with conn.cursor() as cur:
             cur.execute('UPDATE ships SET cloaked=CURRENT_TIMESTAMP WHERE ship_id=%s', (other_ship,))

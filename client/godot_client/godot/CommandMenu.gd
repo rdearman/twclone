@@ -96,9 +96,9 @@ const COMMANDS := {
 	"NEWS & RECORDS": [
 		{"label": "News feed", "command": "news.get_feed"},
 		{"label": "Mark news read", "command": "news.mark_feed_read", "mutating": true},
-		{"label": "Insurance policies", "command": "insurance.policies.list"},
-		{"label": "Buy insurance", "command": "insurance.policies.buy", "fields": [["subject_type", FIELD_TEXT, "Subject type", "ship"], ["subject_id", FIELD_INT, "Subject ID", ""], ["duration", FIELD_INT, "Duration", ""], ["premium", FIELD_INT, "Premium", ""], ["payout", FIELD_INT, "Payout", ""], ["fund_id", FIELD_INT, "Insurance fund ID", ""]], "mutating": true},
-		{"label": "File insurance claim", "command": "insurance.claim.file", "fields": [["claim_id", FIELD_INT, "Claim ID", ""], ["event_id", FIELD_TEXT, "Event ID", ""], ["amount", FIELD_INT, "Claim amount", ""]], "mutating": true},
+		{"label": "Insurance policies · server stub", "unavailable_reason": "Insurance persistence is not available from the authoritative server handler yet; no request will be sent."},
+		{"label": "Buy insurance · server stub", "unavailable_reason": "Insurance persistence is not available from the authoritative server handler yet; no request will be sent."},
+		{"label": "File insurance claim · server stub", "unavailable_reason": "Insurance persistence is not available from the authoritative server handler yet; no request will be sent."},
 		{"label": "Subscriptions", "command": "subscribe.list"},
 	],
 	"CORPORATION": [
@@ -142,6 +142,7 @@ const COMMANDS := {
 	"NAVIGATION": [
 		{"label": "Warp to sector number", "command": "move.warp", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "mutating": true},
 		{"label": "Transwarp to sector", "command": "move.transwarp", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true, "mutating": true, "tooltip": "Refresh the confirmed sector first; the server checks transwarp equipment, destination and turn cost."},
+		{"label": "Pathfind to sector", "command": "move.pathfind", "fields": [["to_sector_id", FIELD_INT, "Destination sector", ""]], "requires_fresh_sector": true, "tooltip": "Ask the server for a route without moving the ship."},
 		{"label": "Bookmarks", "command": "nav.bookmark.list"},
 		{"label": "Add current sector bookmark", "command": "nav.bookmark.add", "fields": [["name", FIELD_TEXT, "Bookmark name", ""]], "context_sector": true, "mutating": true},
 		{"label": "Remove bookmark", "command": "nav.bookmark.remove", "fields": [["name", FIELD_TEXT, "Bookmark name", ""]], "mutating": true},
@@ -1259,6 +1260,7 @@ func _render_actions() -> void:
 				attack_action,
 				{"label": "Claim this ship · server verifies eligibility", "command": "ship.claim", "context_id": "ship_id", "mutating": true},
 				{"label": "Tow this ship · requires owned, unpiloted vessel", "command": "ship.tow", "context_id": "target_ship_id", "mutating": true},
+				{"label": "Intercept this ship", "command": "move.intercept", "context_id": "target_ship_id", "mutating": true, "requires_fresh_sector": true, "tooltip": "The server validates the target, location, turns, and interception outcome."},
 			]
 			if current_sector_id >= 1 and current_sector_id <= 10:
 				attack_action["unavailable_reason"] = "Attacks are disabled in protected FedSpace sectors 1–10."

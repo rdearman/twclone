@@ -2,6 +2,7 @@
 #include "db_int.h"
 #include "repo_universe.h"
 #include "repo_engine.h"
+#include "server_log.h"
 #include "db/sql_driver.h"
 #include <string.h>
 #include <stdio.h>
@@ -177,11 +178,142 @@ db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err)
                      "JOIN ship_ownership so ON s.ship_id = so.ship_id "
                      "JOIN corp_members cm ON so.player_id = cm.player_id "
                      "JOIN corporations c ON cm.corporation_id = c.corporation_id "
-                     "WHERE c.tag = 'ORION';";
+                     "WHERE c.tag = 'ORION' AND COALESCE(s.destroyed,FALSE)=FALSE;";
     char sql[1024]; sql_build(db, q7, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){}, 0, &res, err);
     return res;
+}
+
+int
+repo_universe_ensure_orion_population (db_t *db, int corporation_id,
+                                       int home_sector)
+{
+    if (!db || corporation_id <= 0 || home_sector <= 0) return -1;
+    db_error_t err;
+    db_res_t *res = NULL;
+    int sector_count = 0, density_bp = 50, minimum = 5;
+    if (!db_query (db, "SELECT COUNT(*) FROM sectors", NULL, 0, &res, &err))
+        return err.code ? err.code : -1;
+    if (db_res_step (res, &err)) sector_count = db_res_col_i32 (res, 0, &err);
+    db_res_finalize (res);
+    res = NULL;
+    if (db_query (db, "SELECT key,value FROM config WHERE key IN "
+                     "('orion.population.basis_points','orion.population.minimum')",
+                  NULL, 0, &res, &err))
+      {
+        while (db_res_step (res, &err))
+          {
+            const char *key = db_res_col_text (res, 0, &err);
+            const char *value = db_res_col_text (res, 1, &err);
+            int parsed = value ? atoi (value) : 0;
+            if (key && strcmp (key, "orion.population.basis_points") == 0 &&
+                parsed > 0 && parsed <= 10000) density_bp = parsed;
+            if (key && strcmp (key, "orion.population.minimum") == 0 &&
+                parsed > 0 && parsed <= 1000) minimum = parsed;
+          }
+        db_res_finalize (res);
+        res = NULL;
+      }
+    int target = minimum;
+    if (sector_count > 0)
+      {
+        target = (sector_count * density_bp + 9999) / 10000;
+        if (target < minimum) target = minimum;
+      }
+
+    const char *count_sql =
+      "SELECT COUNT(*) FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id "
+      "JOIN corp_members cm ON cm.player_id=so.player_id "
+      "JOIN corporations c ON c.corporation_id=cm.corporation_id "
+      "WHERE c.tag='ORION' AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE";
+    if (!db_query (db, count_sql, NULL, 0, &res, &err))
+        return err.code ? err.code : -1;
+    int current = 0;
+    if (db_res_step (res, &err)) current = db_res_col_i32 (res, 0, &err);
+    db_res_finalize (res);
+
+    static const char *const personalities[] =
+      {"offensive", "defensive", "looter", "blockader", "balanced"};
+    while (current < target)
+      {
+        const char *personality = personalities[current % 5];
+        int type_id = 0;
+        char type_sql[512];
+        if (sql_build (db,
+                       "SELECT shiptypes_id FROM shiptypes WHERE enabled=TRUE "
+                       "AND default_personality={1} ORDER BY shiptypes_id LIMIT 1",
+                       type_sql, sizeof type_sql) != 0 ||
+            !db_query (db, type_sql, (db_bind_t[]){db_bind_text (personality)},
+                       1, &res, &err))
+            return err.code ? err.code : -1;
+        if (db_res_step (res, &err)) type_id = db_res_col_i32 (res, 0, &err);
+        db_res_finalize (res);
+        if (type_id <= 0) return -1;
+
+        int64_t player_id = 0, ship_id = 0;
+        char name[96] = {0};
+        char roster_sql[768];
+        sql_build (db,
+          "SELECT p.player_id,p.name FROM players p "
+          "JOIN corp_members cm ON cm.player_id=p.player_id "
+          "JOIN corporations c ON c.corporation_id=cm.corporation_id "
+          "WHERE c.tag='ORION' AND p.is_npc=TRUE AND p.ship_id IS NULL "
+          "ORDER BY p.player_id LIMIT 1",
+          roster_sql, sizeof roster_sql);
+        if (!db_query (db, roster_sql, NULL, 0, &res, &err))
+            return err.code ? err.code : -1;
+        if (db_res_step (res, &err))
+          {
+            player_id = db_res_col_i64 (res, 0, &err);
+            snprintf (name, sizeof name, "%s", db_res_col_text (res, 1, &err));
+          }
+        db_res_finalize (res);
+        res = NULL;
+        if (player_id <= 0 || name[0] == '\0') return -1;
+
+        db_error_t tx_err;
+        if (!db_tx_begin (db, DB_TX_DEFAULT, &tx_err)) return tx_err.code;
+        int spawn_sector = home_sector;
+        (void) repo_universe_get_random_unprotected_sector (db, &spawn_sector);
+        if (spawn_sector <= 10) spawn_sector = home_sector;
+
+        char ship_sql[1024];
+        sql_build (db,
+          "INSERT INTO ships (name,type_id,sector_id,holds,fighters,mines,shields,hull,personality) "
+          "SELECT {1},{2},{3},COALESCE(initialholds,10),COALESCE(maxfighters,0),"
+          "COALESCE(maxmines,0),COALESCE(maxshields,100),100,{4} "
+          "FROM shiptypes WHERE shiptypes_id={2} RETURNING ship_id",
+          ship_sql, sizeof ship_sql);
+        if (!db_exec_insert_id (db, ship_sql,
+              (db_bind_t[]){db_bind_text (name), db_bind_i64 (type_id),
+                             db_bind_i64 (spawn_sector), db_bind_text (personality)},
+              4, "ship_id", &ship_id, &err))
+          { db_tx_rollback (db, &tx_err); return err.code ? err.code : -1; }
+
+        char ownership_sql[512], member_sql[512], update_sql[512];
+        sql_build (db,
+          "INSERT INTO ship_ownership (ship_id,player_id,role_id,is_primary) "
+          "VALUES ({1},{2},1,TRUE)", ownership_sql, sizeof ownership_sql);
+        sql_build (db,
+          "INSERT INTO corp_members (corporation_id,player_id,role) "
+          "VALUES ({1},{2},'Officer') ON CONFLICT DO NOTHING",
+          member_sql, sizeof member_sql);
+        sql_build (db, "UPDATE players SET ship_id={1} WHERE player_id={2}",
+                   update_sql, sizeof update_sql);
+        if (!db_exec (db, ownership_sql,
+                      (db_bind_t[]){db_bind_i64 (ship_id), db_bind_i64 (player_id)},
+                      2, &err) ||
+            !db_exec (db, member_sql,
+                      (db_bind_t[]){db_bind_i64 (corporation_id), db_bind_i64 (player_id)},
+                      2, &err) ||
+            !db_exec (db, update_sql,
+                      (db_bind_t[]){db_bind_i64 (ship_id), db_bind_i64 (player_id)},
+                      2, &err) || !db_tx_commit (db, &tx_err))
+          { db_tx_rollback (db, &tx_err); return err.code ? err.code : -1; }
+        current++;
+      }
+    return 0;
 }
 
 int repo_universe_get_random_unprotected_sector(db_t *db, int *sector_out) {
@@ -487,10 +619,50 @@ repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id,
     if (!db || corporation_id <= 0 || home_sector <= 0) return -1;
     db_error_t err;
     db_res_t *res = NULL;
+    int sector_count = 0;
+    int population_percent = 2;
+    int target_population = 3;
+
+    /* The roster is deliberately separate from the instantiated population.
+     * Read the density from config, but retain the documented minimum when a
+     * deployment has not yet added the optional setting. */
+    if (!db_query(db, "SELECT COUNT(*) FROM sectors", NULL, 0, &res, &err))
+        return err.code ? err.code : -1;
+    if (db_res_step(res, &err))
+        sector_count = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    res = NULL;
+    if (db_query(db, "SELECT value FROM config WHERE key='ferengi.population.percent' LIMIT 1",
+                 NULL, 0, &res, &err))
+      {
+        if (db_res_step(res, &err))
+          {
+            const char *value = db_res_col_text(res, 0, &err);
+            if (value && *value)
+              {
+                int parsed = atoi(value);
+                if (parsed > 0 && parsed <= 100)
+                    population_percent = parsed;
+              }
+          }
+        db_res_finalize(res);
+        res = NULL;
+      }
+    if (sector_count > 0)
+      {
+        target_population = (sector_count * population_percent + 99) / 100;
+        if (target_population < 3) target_population = 3;
+      }
     if (!db_query(db,
-          "SELECT trader_code, display_name, ship_type_id, active FROM ferengi_trader_definitions ORDER BY trader_code",
+          "SELECT trader_code, display_name, ship_type_id, active "
+          "FROM ferengi_trader_definitions "
+          "ORDER BY EXISTS (SELECT 1 FROM ferengi_traders ft "
+          "WHERE ft.trader_code=ferengi_trader_definitions.trader_code) DESC, "
+          "CASE WHEN trader_code IN ('gaila','moogie','vek') THEN 0 ELSE 1 END, "
+          "trader_code",
           NULL, 0, &res, &err)) return err.code ? err.code : -1;
 
+    int roster_rank = 0;
     while (db_res_step(res, &err)) {
         char trader_code[96], display_name[128];
         ferengi_copy_text(trader_code, sizeof trader_code, db_res_col_text(res, 0, &err));
@@ -512,19 +684,23 @@ repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id,
         }
         int exists = db_res_step(existing, &err);
         db_res_finalize(existing);
+        bool desired_active = active;
+        if (active)
+          desired_active = roster_rank++ < target_population;
+
         if (exists) {
             char rename_sql[512];
             sql_build(db, "UPDATE ferengi_traders SET display_name = {1}, active = {2} WHERE trader_code = {3}",
                       rename_sql, sizeof rename_sql);
             if (!db_exec(db, rename_sql,
-                         (db_bind_t[]){db_bind_text(display_name), db_bind_bool(active),
+                         (db_bind_t[]){db_bind_text(display_name), db_bind_bool(desired_active),
                                        db_bind_text(trader_code)}, 3, &err)) {
                 db_res_finalize(res);
                 return err.code ? err.code : -1;
             }
             continue;
         }
-        if (!active) continue;
+        if (!desired_active) continue;
 
         db_error_t tx_err;
         if (!db_tx_begin(db, DB_TX_DEFAULT, &tx_err)) {
@@ -532,14 +708,24 @@ repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id,
             return tx_err.code;
         }
         int64_t ship_id = 0;
+        int spawn_sector = home_sector;
+        (void) repo_universe_get_random_unprotected_sector (db, &spawn_sector);
+        if (spawn_sector <= 10) spawn_sector = home_sector;
         char insert_ship[512];
         sql_build(db,
-          "INSERT INTO ships (name, type_id, holds, fighters, shields, sector_id, hull) VALUES ({1}, {2}, 100, 0, 100, {3}, 100)",
+          "INSERT INTO ships (name, type_id, holds, fighters, mines, shields, sector_id, hull) "
+          "SELECT {1}, {2}, GREATEST(COALESCE(initialholds,10), COALESCE((SELECT SUM(quantity) "
+          "FROM ferengi_trader_definition_cargo WHERE trader_code={4}),0)), "
+          "COALESCE(maxfighters,0), COALESCE(maxmines,0), "
+          "COALESCE(maxshields,100), {3}, 100 FROM shiptypes WHERE shiptypes_id={2}",
           insert_ship, sizeof insert_ship);
         if (!db_exec_insert_id(db, insert_ship,
               (db_bind_t[]){db_bind_text(display_name),
-                            db_bind_i64(ship_type_id), db_bind_i64(home_sector)},
-              3, "ship_id", &ship_id, &err)) {
+                            db_bind_i64(ship_type_id), db_bind_i64(spawn_sector),
+                            db_bind_text(trader_code)},
+            4, "ship_id", &ship_id, &err)) {
+            LOGE ("[fer] failed to create trader ship code=%s type_id=%d sector=%d db_code=%d message=%s",
+                  trader_code, ship_type_id, spawn_sector, err.code, err.message);
             db_tx_rollback(db, &tx_err);
             db_res_finalize(res);
             return err.code ? err.code : -1;
@@ -553,6 +739,8 @@ repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id,
                             db_bind_text(display_name),
                             db_bind_i64(corporation_id), db_bind_i64(ship_id)},
               4, &err)) {
+            LOGE ("[fer] failed to create trader row code=%s ship_id=%lld db_code=%d message=%s",
+                  trader_code, (long long) ship_id, err.code, err.message);
             db_tx_rollback(db, &tx_err);
             db_res_finalize(res);
             return err.code ? err.code : -1;
@@ -565,6 +753,9 @@ repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id,
                      (db_bind_t[]){db_bind_i64(ship_id), db_bind_text(trader_code)},
                      2, &err)
             || !db_tx_commit(db, &tx_err)) {
+            LOGE ("[fer] failed to create trader cargo/commit code=%s ship_id=%lld db_code=%d message=%s",
+                  trader_code, (long long) ship_id, err.code,
+                  err.message);
             db_tx_rollback(db, &tx_err);
             db_res_finalize(res);
             return err.code ? err.code : -1;
@@ -581,10 +772,96 @@ repo_universe_get_all_ferengi_traders(db_t *db, db_error_t *err)
     const char *query =
       "SELECT ft.ferengi_trader_id, ft.trader_code, ft.display_name, ft.ship_id, "
       "ft.corporation_id, s.sector_id, ft.visit_number FROM ferengi_traders ft "
-      "JOIN ships s ON s.ship_id=ft.ship_id WHERE ft.active=TRUE ORDER BY ft.ferengi_trader_id";
+      "JOIN ships s ON s.ship_id=ft.ship_id "
+      "WHERE ft.active=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE "
+      "AND COALESCE(s.hull,0)>0 "
+      "ORDER BY ft.ferengi_trader_id";
     db_res_t *res = NULL;
     if (!db_query(db, query, NULL, 0, &res, err)) return NULL;
     return res;
+}
+
+int
+repo_universe_get_ferengi_trader_by_ship(db_t *db, int ship_id,
+                                         int *trader_id_out,
+                                         int *corporation_id_out)
+{
+    if (!db || ship_id <= 0 || !trader_id_out || !corporation_id_out)
+        return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_res_t *res = NULL;
+    const char *query =
+      "SELECT ferengi_trader_id, corporation_id FROM ferengi_traders "
+      "WHERE ship_id={1} AND active=TRUE LIMIT 1";
+    char sql[256];
+    if (sql_build (db, query, sql, sizeof sql) != 0 ||
+        !db_query (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1,
+                   &res, &err))
+        return err.code ? err.code : -1;
+    int found = db_res_step (res, &err) ? 1 : 0;
+    if (found)
+      {
+        *trader_id_out = db_res_col_i32 (res, 0, &err);
+        *corporation_id_out = db_res_col_i32 (res, 1, &err);
+      }
+    db_res_finalize (res);
+    return found ? 0 : 1;
+}
+
+int
+repo_universe_get_ferengi_captain(db_t *db, int *trader_id_out,
+                                  int *ship_id_out)
+{
+    if (!db || !trader_id_out || !ship_id_out) return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_res_t *res = NULL;
+    const char *query =
+      "SELECT ft.ferengi_trader_id, ft.ship_id "
+      "FROM ferengi_traders ft JOIN ships s ON s.ship_id=ft.ship_id "
+      "JOIN shiptypes st ON st.shiptypes_id=s.type_id "
+      "WHERE ft.active=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE "
+      "AND COALESCE(s.hull,0)>0 "
+      "ORDER BY COALESCE(st.maxattack,0) DESC, COALESCE(s.hull,0) DESC, "
+      "COALESCE(s.shields,0) DESC, ft.ferengi_trader_id LIMIT 1";
+    if (!db_query (db, query, NULL, 0, &res, &err) || !res)
+        return err.code ? err.code : -1;
+    int found = db_res_step (res, &err) ? 1 : 0;
+    if (found)
+      {
+        *trader_id_out = db_res_col_i32 (res, 0, &err);
+        *ship_id_out = db_res_col_i32 (res, 1, &err);
+      }
+    db_res_finalize (res);
+    return found ? 0 : 1;
+}
+
+int
+repo_universe_ship_is_orion_owned(db_t *db, int ship_id, int *is_orion_out)
+{
+    if (!db || ship_id <= 0 || !is_orion_out) return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_res_t *res = NULL;
+    const char *query =
+      "SELECT EXISTS (SELECT 1 FROM ship_ownership so "
+      "JOIN corp_members cm ON cm.player_id=so.player_id "
+      "JOIN corporations c ON c.corporation_id=cm.corporation_id "
+      "WHERE so.ship_id={1} AND so.is_primary=TRUE AND c.tag='ORION')";
+    char sql[512];
+    if (sql_build (db, query, sql, sizeof sql) != 0 ||
+        !db_query (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1,
+                   &res, &err))
+        return err.code ? err.code : -1;
+    if (!db_res_step (res, &err))
+      {
+        db_res_finalize (res);
+        return err.code ? err.code : -1;
+      }
+    *is_orion_out = db_res_col_bool (res, 0, &err) ? 1 : 0;
+    db_res_finalize (res);
+    return err.code ? err.code : 0;
 }
 
 db_res_t *
@@ -958,4 +1235,178 @@ int repo_universe_relocate_orion_base(db_t *db, int sector_id, int port_id, int 
     }
 
     return 0;
+}
+
+int
+repo_npc_action_claim (db_t *db, const char *idempotency_key,
+                       const char *faction, const char *action_type,
+                       int npc_ship_id, int target_player_id,
+                       int sector_id, const char *payload)
+{
+    if (!db || !idempotency_key || !*idempotency_key || !faction ||
+        !action_type) return -1;
+    const char *ignore = sql_insert_ignore_clause (db);
+    char sql_tmpl[1536];
+    char sql[1536];
+    const char *tmpl =
+        "INSERT INTO npc_action_log "
+        "(idempotency_key,faction,action_type,npc_ship_id,target_player_id,sector_id,payload) "
+        "VALUES ({1},{2},{3},{4},{5},{6},{7}) %s;";
+    snprintf (sql_tmpl, sizeof sql_tmpl, tmpl, ignore ? ignore : "");
+    if (sql_build (db, sql_tmpl, sql, sizeof sql) != 0) return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_bind_t binds[] = {
+        db_bind_text (idempotency_key), db_bind_text (faction),
+        db_bind_text (action_type),
+        npc_ship_id > 0 ? db_bind_i64 (npc_ship_id) : db_bind_null (),
+        target_player_id > 0 ? db_bind_i64 (target_player_id) : db_bind_null (),
+        sector_id > 0 ? db_bind_i64 (sector_id) : db_bind_null (),
+        db_bind_text (payload ? payload : "{}")
+    };
+    if (!db_exec (db, sql, binds, 7, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) return 0;
+        return -1;
+    }
+    return 1;
+}
+
+int
+repo_npc_action_complete (db_t *db, const char *idempotency_key,
+                          const char *status, const char *payload)
+{
+    if (!db || !idempotency_key || !status) return -1;
+    char sql[768];
+    if (sql_build (db,
+                   "UPDATE npc_action_log SET status={1}, payload={2}, "
+                   "completed_at=CURRENT_TIMESTAMP WHERE idempotency_key={3};",
+                   sql, sizeof sql) != 0) return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    return db_exec (db, sql,
+                    (db_bind_t[]){ db_bind_text (status),
+                                   db_bind_text (payload ? payload : "{}"),
+                                   db_bind_text (idempotency_key) },
+                    3, &err) ? 0 : -1;
+}
+
+int
+repo_npc_intel_upsert (db_t *db, int npc_ship_id, int target_player_id,
+                       int sector_id, const char *source, int64_t expires_at)
+{
+    if (!db || npc_ship_id <= 0 || target_player_id <= 0 || sector_id <= 0 ||
+        !source || expires_at <= 0) return -1;
+    char sql[1024];
+    if (sql_build (db,
+                   "INSERT INTO npc_intelligence "
+                   "(npc_ship_id,target_player_id,last_known_sector_id,source,observed_at,expires_at) "
+                   "VALUES ({1},{2},{3},{4},CURRENT_TIMESTAMP,{5}) "
+                   "ON CONFLICT (npc_ship_id,target_player_id) DO UPDATE SET "
+                   "last_known_sector_id=EXCLUDED.last_known_sector_id, "
+                   "source=EXCLUDED.source, observed_at=CURRENT_TIMESTAMP, "
+                   "expires_at=EXCLUDED.expires_at;",
+                   sql, sizeof sql) != 0) return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    return db_exec (db, sql,
+                    (db_bind_t[]){ db_bind_i64 (npc_ship_id),
+                                   db_bind_i64 (target_player_id),
+                                   db_bind_i64 (sector_id), db_bind_text (source),
+                                   db_bind_timestamp_text (expires_at) },
+                    5, &err) ? 0 : -1;
+}
+
+int
+repo_npc_security_incident_claim (db_t *db, const char *idempotency_key,
+                                  int offender_player_id,
+                                  const char *asset_kind, int asset_id,
+                                  int sector_id, int64_t expires_at)
+{
+    if (!db || !idempotency_key || offender_player_id <= 0 ||
+        !asset_kind || asset_id <= 0 || sector_id <= 0 || expires_at <= 0)
+        return -1;
+    char sql[1536];
+    /* Add the backend's conflict clause so concurrent observations are safe. */
+    const char *ignore = sql_insert_ignore_clause (db);
+    char tmpl[1536];
+    snprintf (tmpl, sizeof tmpl,
+              "INSERT INTO npc_security_incidents "
+              "(idempotency_key,offender_player_id,protected_asset_kind,protected_asset_id,"
+              "origin_sector_id,expires_at) "
+              "SELECT {1},{2},{3},{4},{5},{6} "
+              "WHERE EXISTS (SELECT 1 FROM federation_protected_assets "
+              "WHERE asset_kind={3} AND asset_id={4} AND enabled=TRUE) %s;",
+              ignore ? ignore : "");
+    if (sql_build (db, tmpl, sql, sizeof sql) != 0) return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_bind_t binds[] = { db_bind_text(idempotency_key),
+                          db_bind_i64(offender_player_id),
+                          db_bind_text(asset_kind), db_bind_i64(asset_id),
+                          db_bind_i64(sector_id),
+                          db_bind_timestamp_text(expires_at) };
+    if (!db_exec (db, sql, binds, 6, &err)) {
+        if (err.code == ERR_DB_CONSTRAINT) return 0;
+        return -1;
+    }
+    return 1;
+}
+
+int
+repo_npc_intel_get_sector (db_t *db, int npc_ship_id, int *player_id_out,
+                           int *sector_id_out)
+{
+    if (!db || npc_ship_id <= 0 || !player_id_out || !sector_id_out)
+        return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_res_t *res = NULL;
+    const char *query =
+        "SELECT target_player_id, last_known_sector_id FROM npc_intelligence "
+        "WHERE npc_ship_id={1} AND expires_at > CURRENT_TIMESTAMP "
+        "ORDER BY observed_at DESC LIMIT 1";
+    char sql[512];
+    if (sql_build (db, query, sql, sizeof sql) != 0) return -1;
+    if (!db_query (db, sql, (db_bind_t[]){db_bind_i64(npc_ship_id)}, 1,
+                   &res, &err) || !res) return -1;
+    int found = db_res_step (res, &err) ? 1 : 0;
+    if (found)
+    {
+        *player_id_out = db_res_col_i32 (res, 0, &err);
+        *sector_id_out = db_res_col_i32 (res, 1, &err);
+    }
+    db_res_finalize (res);
+    return found;
+}
+
+int
+repo_npc_intel_get_sector_source (db_t *db, int npc_ship_id,
+                                  int *player_id_out, int *sector_id_out,
+                                  char *source_out, size_t source_size)
+{
+    if (!db || npc_ship_id <= 0 || !player_id_out || !sector_id_out ||
+        !source_out || source_size == 0)
+        return -1;
+    db_error_t err;
+    db_error_clear (&err);
+    db_res_t *res = NULL;
+    const char *query =
+        "SELECT target_player_id, last_known_sector_id, source "
+        "FROM npc_intelligence WHERE npc_ship_id={1} "
+        "AND expires_at > CURRENT_TIMESTAMP ORDER BY observed_at DESC LIMIT 1";
+    char sql[512];
+    if (sql_build (db, query, sql, sizeof sql) != 0 ||
+        !db_query (db, sql, (db_bind_t[]){db_bind_i64(npc_ship_id)}, 1,
+                   &res, &err) || !res)
+        return -1;
+    int found = db_res_step (res, &err) ? 1 : 0;
+    if (found)
+    {
+        *player_id_out = db_res_col_i32 (res, 0, &err);
+        *sector_id_out = db_res_col_i32 (res, 1, &err);
+        const char *source = db_res_col_text (res, 2, &err);
+        snprintf (source_out, source_size, "%s", source ? source : "");
+    }
+    db_res_finalize (res);
+    return found;
 }

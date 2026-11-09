@@ -21,6 +21,7 @@ Only the following keys are exposed via `sysop.config.*` commands.
 *   `turnsperday`
 *   `neutral_band`
 *   `illegal_allowed_neutral`
+*   `illegal_min_experience`
 *   `max_cloak_duration`
 *   `limpet_ttl_days`
 *   `bank_min_balance_for_interest`

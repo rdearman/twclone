@@ -685,7 +685,11 @@ int db_combat_get_planet_atmosphere_quasar(db_t *db, int planet_id, int *owner_i
         found = 1;
     }
     db_res_finalize(res);
-    return (found && err.code == 0) ? 0 : -1;
+    if (err.code != 0)
+        return err.code;
+    /* No row is the ordinary case for a planet without an active
+     * atmosphere Quasar (including a citadel below level 3). */
+    return found ? 0 : ERR_DB_NOT_FOUND;
 }
 
 /* Mines Recall */

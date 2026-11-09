@@ -12,7 +12,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('player', (SELECT player_id FROM players WHERE name='wall_street_wolf'), 'CRD', 1000000, 1) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 1000000 RETURNING bank_accounts_id;"
+        "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('player', (SELECT player_id FROM players WHERE name='wall_street_wolf'), 'CRD', 1000000, TRUE) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 1000000 RETURNING bank_accounts_id;"
       },
       "expect": { "status": "ok" }
     },
@@ -21,7 +21,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('corp', 100, 'CRD', 1000000, 1) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 1000000 RETURNING bank_accounts_id;"
+        "sql": "INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, is_active) VALUES ('corp', 100, 'CRD', 1000000, TRUE) ON CONFLICT (owner_type, owner_id, currency) DO UPDATE SET balance = 1000000 RETURNING bank_accounts_id;"
       },
       "expect": { "status": "ok" }
     },

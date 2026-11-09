@@ -70,7 +70,7 @@
     {
       "name": "Setup: Reset for Sweep (Seed)",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (200, 1, 1, 10, now());" },
+      "data": { "sql": "INSERT INTO sector_assets (sector_id, owner_id, asset_type, quantity, deployed_at) VALUES (200, @{mine_tester_player_id}, 1, 10, now());" },
       "user": "admin",
       "expect": { "status": "ok" }
     },

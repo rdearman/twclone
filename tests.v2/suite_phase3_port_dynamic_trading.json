@@ -55,7 +55,7 @@
       "name": "T2.3: Ensure ALT has stock in entity_stock for port 1",
       "db_setup": {
         "sql": [
-          "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', 1, 'ALT', 100, 100, NOW()) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 100, price = 100;"
+          "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity, price, last_updated_ts) VALUES ('port', 1, 'ALT', 100, 100, EXTRACT(EPOCH FROM NOW())::integer) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 100, price = 100;"
         ]
       },
       "command": "port.get_trade_info",

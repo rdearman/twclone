@@ -11,17 +11,27 @@
       "password": "password"
     },
     {
+      "name": "Rig: Select a known outgoing route",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.sector_id, sw.to_sector FROM players p JOIN sector_warps sw ON sw.from_sector = p.sector_id WHERE p.player_id = @{nav_basic_user_player_id} ORDER BY sw.to_sector LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "route_from": "data.rows.0.0", "route_to": "data.rows.0.1" }
+    },
+    {
       "name": "Get Route",
       "command": "move.pathfind",
-      "data": { "to": 2 },
+      "data": { "from_sector_id": "@{route_from}", "to_sector_id": "@{route_to}" },
       "user": "nav_basic_user",
       "expect": { "status": "ok" }
     },
     {
       "name": "Status Ready",
-      "command": "player.status",
+      "command": "player.my_info",
       "user": "nav_basic_user",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok", "type": "player.info" }
     }
   ]
 }

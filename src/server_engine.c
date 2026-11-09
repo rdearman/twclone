@@ -440,16 +440,12 @@ h_player_progress_from_event_payload (json_t *ev_payload)
     }
   json_t *j_player_id = json_object_get (ev_payload, "player_id");
   json_t *j_event_type = json_object_get (ev_payload, "type");	// Event type from engine_events
-#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
   json_t *j_source_event_id = json_object_get (ev_payload, "source_event_id");
-#endif
 
 
   if (!json_is_integer (j_player_id) || !json_is_string (j_event_type)
-#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
       || !json_is_integer (j_source_event_id)
       || json_integer_value (j_source_event_id) <= 0
-#endif
       )
     {
       LOGE
@@ -457,9 +453,7 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       return -1;
     }
   int player_id = json_integer_value (j_player_id);
-#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
   int64_t source_event_id = json_integer_value (j_source_event_id);
-#endif
   const char *event_type = json_string_value (j_event_type);
   long long xp_delta = 0;
   int align_delta = 0;
@@ -516,17 +510,12 @@ h_player_progress_from_event_payload (json_t *ev_payload)
       reason = "trade";
     }
   // TODO: Add more event types (player.destroy_ship.v1, etc.) here
-#ifdef TWCLONE_ENABLE_V3_PROGRESS_LEDGER
   char source_key[64];
   snprintf (source_key, sizeof source_key, "engine_event:%" PRId64,
             source_event_id);
   (void) reason;
   return db_player_apply_progress_event (db, player_id, event_type, source_key,
                                          xp_delta, align_delta, 1);
-#else
-  return h_player_apply_progress (db, player_id, xp_delta, align_delta,
-				  reason);
-#endif
 }
 
 

@@ -1,0 +1,645 @@
+{
+  "manifest_version": 1,
+  "schema": "twclone-postgresql-v3",
+  "policy": "Every sql/pg/*.sql file must appear exactly once. required entries are validated before any database connection. diagnostic entries are recognised but excluded from the runtime fresh-install bundle.",
+  "fresh_install": {
+    "base": [
+      "000_tables.sql",
+      "005_namegen.sql",
+      "010_indexes.sql",
+      "020_views.sql",
+      "040_functions.sql",
+      "088_generate_tunnels.sql",
+      "090_seed_lookup.sql",
+      "091_seed_essential.sql",
+      "091_seed_fedspace_warps.sql",
+      "092_seed_gameplay.sql",
+      "094_gameplay_procs.sql",
+      "095_player_registration.sql",
+      "100_init_ship_cargo.sql",
+      "101_phase4_shiptypes_restrictions.sql",
+      "102_phase5_porttypes.sql",
+      "103_phase6_items_legality.sql",
+      "104_phase8_port_behaviour.sql",
+      "105_phase9_dynamic_pricing.sql",
+      "106_phase9_2_cluster_pressure.sql",
+      "107_seed_illegal_commodities.sql",
+      "108_planet_entity_stock.sql",
+      "109_v2_sector_notices_trade_offers.sql",
+      "110_sector_environmental_hazards.sql",
+      "111_ship_personalities.sql",
+      "112_v2_economy_commerce.sql",
+      "113_ferengi_trader_configuration.sql",
+      "114_planet_fighter_production.sql",
+      "115_v3_xp_tax_persistence.sql",
+      "116_player_event_journal.sql",
+      "119_password_hash_enforcement.sql"
+    ],
+    "v3_runtime": [
+      "120_ship_claim_location_guard.sql",
+      "121_bank_debit_lock.sql",
+      "122_bank_interest_atomic.sql",
+      "123_ship_resource_constraints.sql",
+      "124_insurance_settlement.sql",
+      "125_trade_settlement_invariants.sql",
+      "126_ship_primary_ownership.sql",
+      "127_ship_lifecycle_invariants.sql",
+      "128_ship_relationship_invariants.sql",
+      "129_bank_interest_ledger_invariants.sql",
+      "132_ship_active_reference_invariants.sql",
+      "135_ship_cargo_quantity_invariant.sql",
+      "136_ship_destroyed_active_invariant.sql",
+      "137_ship_active_owner_invariant.sql",
+      "140_ship_lifecycle_legacy_race_guards.sql",
+      "141_bank_interest_utc_idempotency.sql",
+      "142_ship_legacy_cargo_capacity.sql",
+      "143_ship_tow_invariants.sql",
+      "145_ship_active_sector_invariant.sql",
+      "146_ship_tow_delete_invariant.sql",
+      "149_bank_interest_balance_ledger.sql",
+      "152_bank_interest_balance_after_guard.sql",
+      "153_ship_primary_flag_invariant.sql",
+      "158_bank_interest_balance_reconciliation.sql",
+      "159_ship_ownership_role_invariant.sql"
+      ,"162_v3_federation_msl_daily_sweep.sql"
+      ,"163_v3_npc_action_and_security_state.sql"
+      ,"164_v3_ferengi_population.sql"
+      ,"165_v3_ferengi_roster_correction.sql"
+      ,"166_v3_orion_population_config.sql"
+      ,"167_v3_faction_rosters_and_ferengi_classes.sql"
+      ,"168_v3_abandoned_hull_repair.sql"
+    ],
+    "diagnostics": [
+      "130_insurance_ledger_invariants.sql",
+      "131_ship_cargo_invariant_snapshot.sql",
+      "133_planet_landing_invariants.sql",
+      "134_ship_lifecycle_state_snapshot.sql",
+      "138_ship_ownership_invariant_snapshot.sql",
+      "139_ship_lifecycle_acceptance_snapshot.sql",
+      "144_ship_lifecycle_composite_snapshot.sql",
+      "147_ship_lifecycle_current_snapshot.sql",
+      "148_ship_primary_owner_semantics_snapshot.sql",
+      "150_ship_lifecycle_release_snapshot.sql",
+      "151_ship_lifecycle_totals_snapshot.sql",
+      "154_ship_lifecycle_settlement_snapshot.sql",
+      "155_ship_lifecycle_conservation_snapshot.sql",
+      "156_ship_lifecycle_settlement_release_snapshot.sql",
+      "157_ship_list_invariant_snapshot.sql"
+    ]
+  },
+  "scripts": [
+    {
+      "name": "000_tables.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "005_namegen.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "010_indexes.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "020_views.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "040_functions.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "088_generate_tunnels.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "090_seed_lookup.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "091_seed_essential.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "091_seed_fedspace_warps.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "092_seed_gameplay.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "094_gameplay_procs.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "095_player_registration.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "100_init_ship_cargo.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "101_phase4_shiptypes_restrictions.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "102_phase5_porttypes.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "103_phase6_items_legality.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "104_phase8_port_behaviour.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "105_phase9_dynamic_pricing.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "106_phase9_2_cluster_pressure.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "107_seed_illegal_commodities.sql",
+      "subsystem": "core",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "108_planet_entity_stock.sql",
+      "subsystem": "planets",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "109_v2_sector_notices_trade_offers.sql",
+      "subsystem": "navigation_hazards",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "110_sector_environmental_hazards.sql",
+      "subsystem": "navigation_hazards",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "111_ship_personalities.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "112_v2_economy_commerce.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "113_ferengi_trader_configuration.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "114_planet_fighter_production.sql",
+      "subsystem": "planets",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "115_v3_xp_tax_persistence.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "116_player_event_journal.sql",
+      "subsystem": "accounts_communications",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "119_password_hash_enforcement.sql",
+      "subsystem": "accounts_communications",
+      "required": true,
+      "v3_only": false,
+      "diagnostic": false
+    },
+    {
+      "name": "120_ship_claim_location_guard.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "121_bank_debit_lock.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "122_bank_interest_atomic.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "123_ship_resource_constraints.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "124_insurance_settlement.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "125_trade_settlement_invariants.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "126_ship_primary_ownership.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "127_ship_lifecycle_invariants.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "128_ship_relationship_invariants.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "129_bank_interest_ledger_invariants.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "130_insurance_ledger_invariants.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "131_ship_cargo_invariant_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "132_ship_active_reference_invariants.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "133_planet_landing_invariants.sql",
+      "subsystem": "planets",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "134_ship_lifecycle_state_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "135_ship_cargo_quantity_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "136_ship_destroyed_active_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "137_ship_active_owner_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "138_ship_ownership_invariant_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "139_ship_lifecycle_acceptance_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "140_ship_lifecycle_legacy_race_guards.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "141_bank_interest_utc_idempotency.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "142_ship_legacy_cargo_capacity.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "143_ship_tow_invariants.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "144_ship_lifecycle_composite_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "145_ship_active_sector_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "146_ship_tow_delete_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "147_ship_lifecycle_current_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "148_ship_primary_owner_semantics_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "149_bank_interest_balance_ledger.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "150_ship_lifecycle_release_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "151_ship_lifecycle_totals_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "152_bank_interest_balance_after_guard.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "153_ship_primary_flag_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "154_ship_lifecycle_settlement_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "155_ship_lifecycle_conservation_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "156_ship_lifecycle_settlement_release_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "157_ship_list_invariant_snapshot.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": true
+    },
+    {
+      "name": "158_bank_interest_balance_reconciliation.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "159_ship_ownership_role_invariant.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "160_bank_single_balance_authority.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "161_illegal_goods_access.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "162_v3_federation_msl_daily_sweep.sql",
+      "subsystem": "federation",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "163_v3_npc_action_and_security_state.sql",
+      "subsystem": "npc",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "164_v3_ferengi_population.sql",
+      "subsystem": "npc",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "165_v3_ferengi_roster_correction.sql",
+      "subsystem": "npc",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "166_v3_orion_population_config.sql",
+      "subsystem": "npc",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "167_v3_faction_rosters_and_ferengi_classes.sql",
+      "subsystem": "npc",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "168_v3_abandoned_hull_repair.sql",
+      "subsystem": "ships",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    }
+  ]
+}
