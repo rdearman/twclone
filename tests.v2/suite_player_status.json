@@ -14,7 +14,14 @@
       "name": "Player List Online",
       "command": "player.list_online",
       "user": "status_player",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.total_online", "op": ">=", "value": 1 },
+        { "path": "data.returned_count", "op": ">=", "value": 1 },
+        { "path": "data.offset", "op": "==", "value": 0 },
+        { "path": "data.limit", "op": "==", "value": 50 },
+        { "path": "data.players", "op": "contains", "value": "status_player" }
+      ]
     },
     {
       "name": "Rig: Damaged ship hull",

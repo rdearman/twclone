@@ -7,7 +7,7 @@ path exists; end-to-end behavior still needs focused protocol verification.
 
 | Subsystem | Required | Implemented | Partial | Missing | Status |
 |---|---|---|---|---|---|
-| Player lifecycle | Register, authenticate, persist identity/session, recover state | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | Session replay/client recovery and public-player commands need protocol verification | `player.list_online` is an explicit stub; `player.rankings` contract conflicts on ranking key | Partial |
+| Player lifecycle | Register, authenticate, persist identity/session, recover state; list currently connected players | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | `player.list_online` now snapshots authenticated sessions and returns public id/username with offset pagination; session replay/client recovery needs protocol verification | Ranking key and online-list pagination/field allowlist prose conflict with executable schemas | Partial; online listing runtime verification pending |
 | Universe and navigation | Generated connected sectors/warps; movement, scans and route assistance | `src/bigbang_pg_main.c`, `src/server_universe.c`, `src/server_autopilot.c` | Transwarp fuel/interdiction and entry-hazard aftermath are unresolved | None established from source alone | Partial; see `V3_STATUS.md` |
 | Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c` | Transfer and shipyard journeys lack full runtime evidence; cargo mutations now serialize by ship row | `ship.sell` / `shipyard.sell` explicitly stubbed; settlement policy unresolved | Partial |
 | Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Planet buy orders now place without escrow, validate funds/capacity during locked matching, partially fill, cancel unexecutable remainder, support player cancellation and persistent expiry/configuration; database-backed lifecycle verification pending | Haggling and canonical trade-policy details remain unresolved | Implemented in source; runtime unverified |
@@ -140,3 +140,30 @@ contracts.
 - `player.list_online` prose and schemas disagree about pagination/fields.
 - `bank.orders.*` is only described as “manage recurring payments”; schedule,
   recipient authorization, execution timing and failure semantics are absent.
+
+## Gameplay contract amendments awaiting approval
+
+- **Ship sales — AWAITING APPROVAL:** Define sale location and price/fee formula;
+  treatment of cargo and installed equipment; whether active/last ships may be
+  sold; whether sale destroys the hull or returns it to stock; and insurance or
+  ownership-record consequences. Until then, the existing sale stubs cannot
+  safely settle credits or ship state.
+- **Planet harvesting — AWAITING APPROVAL:** Define harvestable resources,
+  amount/yield formula, costs/turns, storage destination and capacity rules,
+  eligibility, and whether harvesting changes planet production or ownership.
+  `planet.harvest` currently supplies only `planet_id`; canon #491/V3-CAN-00
+  does not resolve these rules.
+- **`planet.view` — AWAITING APPROVAL:** Define morale source and production
+  units/meaning, and resolve whether landing grants access to treasury fields
+  that `planet.info` currently restricts to owners/corporation members. The
+  existing NYI example does not settle these visibility semantics.
+- **Online-player listing — AWAITING APPROVAL:** Reconcile prose `{page,limit}`
+  and `{players,pagination}` with executable `{offset,limit,fields}` and
+  `{total_online,returned_count,offset,limit,players}` schemas. Define the
+  allowed `fields` values and which profile/location/economic details are
+  public. The implemented listing therefore exposes only session presence,
+  player id and username pending that decision.
+- **Bank standing orders — AWAITING APPROVAL:** Define schedule representation
+  and timezone, permitted recipients and authorization, execution cadence,
+  failure/retry/cancellation semantics, and idempotency. The existing table
+  and processing TODO do not define these player-visible rules.
