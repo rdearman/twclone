@@ -1156,7 +1156,22 @@ npc_combat_attack_ship (db_t *db, int attacker_ship_id, int target_ship_id,
     }
   int shields_lost = 0, hull_lost = 0;
   apply_combat_damage (&target, 10, &shields_lost, &hull_lost);
-  if (persist_ship_damage (db, &target, 0) != 0)
+  if (target.hull <= 0 && target.player_id > 0)
+    {
+      ship_kill_context_t kill_ctx = {
+        .victim_player_id = target.player_id,
+        .victim_ship_id = target_ship_id,
+        .killer_player_id = 0,
+        .cause = KILL_CAUSE_COMBAT,
+        .sector_id = sector_id
+      };
+      if (handle_ship_destruction (db, &kill_ctx) != 0)
+        {
+          db_tx_rollback (db, NULL);
+          return ERR_DB_EXEC_FAILED;
+        }
+    }
+  else if (persist_ship_damage (db, &target, 0) != 0)
     {
       db_tx_rollback (db, NULL);
       return ERR_DB_EXEC_FAILED;

@@ -102,6 +102,18 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("repo_universe_ship_is_orion_owned", blockader)
         self.assertIn('"orion:blockade:attack:', blockader)
 
+    def test_lethal_npc_player_attack_uses_universal_destruction_path(self):
+        npc_attack = self.combat.split(
+            "npc_combat_attack_ship (", 1
+        )[1].split("\nint\ncmd_combat_status", 1)[0]
+        self.assertIn("target.hull <= 0 && target.player_id > 0", npc_attack)
+        self.assertIn("handle_ship_destruction (db, &kill_ctx)", npc_attack)
+        self.assertIn("KILL_CAUSE_COMBAT", npc_attack)
+        self.assertLess(
+            npc_attack.index("handle_ship_destruction"),
+            npc_attack.index("h_get_ship_cargo_and_holds"),
+        )
+
     def test_treasury_is_not_authorized_by_landing_alone(self):
         info = self.planets.split("cmd_planet_info", 1)[1].split(
             "cmd_planet_fighters_transfer", 1
