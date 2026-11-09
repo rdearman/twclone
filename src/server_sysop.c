@@ -53,6 +53,7 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
 
     {"shipyard_enabled", CFG_INT, "Enable shipyard features", CFG_OFF(shipyard_enabled)},
     {"shipyard_trade_in_factor_bp", CFG_INT, "Trade-in value factor (bp)", CFG_OFF(shipyard_trade_in_factor_bp)},
+    {"shipyard_sale_factor_bp", CFG_INT, "Standalone ship sale value factor in basis points (0-10000)", CFG_OFF(shipyard_sale_factor_bp)},
     {"shipyard_require_cargo_fit", CFG_INT, "Require cargo fit check", CFG_OFF(shipyard_require_cargo_fit)},
     {"shipyard_require_fighters_fit", CFG_INT, "Require fighters fit check", CFG_OFF(shipyard_require_fighters_fit)},
     {"shipyard_require_shields_fit", CFG_INT, "Require shields fit check", CFG_OFF(shipyard_require_shields_fit)},
@@ -213,9 +214,19 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             return 0;
         }
     }
+    if (strcmp(key, "shipyard_sale_factor_bp") == 0) {
+        char *end = NULL;
+        long factor = strtol(val_str, &end, 10);
+        if (end == val_str || *end != '\0' || factor < 0 || factor > 10000) {
+            send_response_refused(ctx, root, 1407,
+                                  "Refused: shipyard sale factor must be 0-10000 basis points", NULL);
+            return 0;
+        }
+    }
 
     // Capture old value for audit
     int old_planet_market_expiry = g_cfg.planet_market_buy_order_expiry_seconds;
+    int old_shipyard_sale_factor = g_cfg.shipyard_sale_factor_bp;
     char old_val_buf[128];
     json_t *j_old = get_config_value_json(def);
     char *j_old_dump = json_dumps(j_old, JSON_ENCODE_ANY);
@@ -250,6 +261,8 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
     if (repo_config_set_value(db, key, val_str) != 0) {
         if (strcmp(key, "planet_market.buy_order_expiry_seconds") == 0)
             g_cfg.planet_market_buy_order_expiry_seconds = old_planet_market_expiry;
+        if (strcmp(key, "shipyard_sale_factor_bp") == 0)
+            g_cfg.shipyard_sale_factor_bp = old_shipyard_sale_factor;
         send_response_error(ctx, root, 1503, "Database Error: could not save config");
         return 0;
     }

@@ -1,9 +1,471 @@
 #define TW_DB_INTERNAL 1
 #include "db_int.h"
 #include "db/repo/repo_stardock.h"
+#include "db/repo/repo_clusters.h"
 #include "db/sql_driver.h"
+#include "errors.h"
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
+
+static int
+ship_sale_abort (db_t *db, int code, db_error_t *err)
+{
+    (void) db_tx_rollback (db, err);
+    return code;
+}
+
+static int
+ship_sale_lock_ship (db_t *db, int32_t ship_id, db_error_t *err)
+{
+    char sql[256];
+    db_res_t *res = NULL;
+    if (sql_build (db, "SELECT ship_id FROM ships WHERE ship_id = {1} FOR UPDATE",
+                   sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, err))
+        return err->code ? err->code : ERR_DB_QUERY_FAILED;
+    bool found = db_res_step (res, err);
+    db_res_finalize (res);
+    if (!found && err->code)
+        return err->code;
+    return found ? 0 : ERR_SHIP_NOT_FOUND;
+}
+
+static int
+ship_sale_require_exclusive_owner (db_t *db, int32_t ship_id,
+                                   int32_t player_id, db_error_t *err)
+{
+    char sql[512];
+    db_res_t *res = NULL;
+    if (sql_build (db,
+                   "SELECT player_id, role_id, is_primary FROM ship_ownership "
+                   "WHERE ship_id = {1} ORDER BY player_id, role_id FOR UPDATE",
+                   sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &res, err))
+        return err->code ? err->code : ERR_DB_QUERY_FAILED;
+    int row_count = 0;
+    bool valid_owner = false;
+    while (db_res_step (res, err))
+      {
+        row_count++;
+        valid_owner = row_count == 1
+          && db_res_col_i32 (res, 0, err) == player_id
+          && db_res_col_i32 (res, 1, err) == 1
+          && db_res_col_bool (res, 2, err);
+      }
+    db_res_finalize (res);
+    if (err->code)
+        return err->code;
+    return row_count == 1 && valid_owner
+      ? 0 : ERR_PERMISSION_DENIED;
+}
+
+typedef struct
+{
+    int32_t ship_id;
+    int32_t sector_id;
+    int32_t ported;
+    int32_t type_id;
+    bool destroyed;
+    bool onplanet;
+    bool cloaked;
+    int32_t towing_ship_id;
+    int32_t towed_by_ship_id;
+    int64_t hull;
+    int64_t holds;
+    int64_t installed_shields;
+    int64_t mines;
+    int64_t limpets;
+    int64_t fighters;
+    int64_t genesis;
+    int64_t detonators;
+    int64_t probes;
+    int64_t photons;
+    int64_t beacons;
+    int64_t cloaks;
+    bool has_transwarp;
+    bool has_planet_scanner;
+    bool has_long_range_scanner;
+    int64_t base_price;
+    int64_t initial_holds;
+} ship_sale_state_t;
+
+static bool
+ship_sale_add_equipment_value (int64_t quantity, int64_t unit_price,
+                               int64_t *total)
+{
+    int64_t value = 0;
+    return quantity >= 0 && unit_price >= 0
+      && !__builtin_mul_overflow (quantity, unit_price, &value)
+      && !__builtin_add_overflow (*total, value, total);
+}
+
+int
+repo_stardock_sell_ship (db_t *db, int32_t player_id, int32_t ship_id,
+                         int32_t replacement_ship_id, int sale_factor_bp,
+                         repo_ship_sale_result_t *out_result)
+{
+    if (!db || player_id <= 0 || ship_id <= 0 || replacement_ship_id <= 0
+        || ship_id == replacement_ship_id || !out_result
+        || sale_factor_bp < 0 || sale_factor_bp > 10000)
+        return ERR_INVALID_ARG;
+    memset (out_result, 0, sizeof (*out_result));
+
+    db_error_t err = {0};
+    if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+
+    char sql[2048];
+    db_res_t *res = NULL;
+    int32_t active_ship_id = 0;
+    int32_t player_sector_id = 0;
+    int64_t credits = 0;
+    if (sql_build (db,
+                   "SELECT ship_id, sector_id, credits FROM players "
+                   "WHERE player_id = {1} FOR UPDATE",
+                   sql, sizeof sql) != 0
+        || !db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1,
+                      &res, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+    if (!db_res_step (res, &err))
+      {
+        db_res_finalize (res);
+        return ship_sale_abort (db, err.code ? err.code : ERR_NOT_FOUND, &err);
+      }
+    active_ship_id = db_res_col_i32 (res, 0, &err);
+    player_sector_id = db_res_col_i32 (res, 1, &err);
+    credits = db_res_col_i64 (res, 2, &err);
+    db_res_finalize (res);
+    if (active_ship_id <= 0 || player_sector_id <= 0)
+        return ship_sale_abort (db, ERR_SHIP_NOT_FOUND, &err);
+
+    /* Use one global ship lock order (ascending IDs) after locking the player. */
+    int32_t lock_ids[3] = {active_ship_id, ship_id, replacement_ship_id};
+    for (int i = 0; i < 3; i++)
+      for (int j = i + 1; j < 3; j++)
+        if (lock_ids[j] < lock_ids[i])
+          {
+            int32_t tmp = lock_ids[i];
+            lock_ids[i] = lock_ids[j];
+            lock_ids[j] = tmp;
+          }
+    int32_t previous_lock = 0;
+    for (int i = 0; i < 3; i++)
+      if (lock_ids[i] != previous_lock)
+        {
+          int rc = ship_sale_lock_ship (db, lock_ids[i], &err);
+          if (rc != 0)
+              return ship_sale_abort (db, rc, &err);
+          previous_lock = lock_ids[i];
+        }
+
+    int owned_ship_count = 0;
+    if (sql_build (db,
+                   "SELECT COUNT(*) FROM ship_ownership WHERE player_id = {1} "
+                   "AND role_id = 1 AND is_primary = {2}",
+                   sql, sizeof sql) != 0
+        || !db_query (db, sql,
+                      (db_bind_t[]){db_bind_i32 (player_id), db_bind_bool (true)},
+                      2, &res, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+    if (db_res_step (res, &err))
+        owned_ship_count = db_res_col_i32 (res, 0, &err);
+    else
+      {
+        db_res_finalize (res);
+        return ship_sale_abort (db, ERR_DB_QUERY_FAILED, &err);
+      }
+    db_res_finalize (res);
+    if (owned_ship_count <= 1)
+        return ship_sale_abort (db, ERR_PERMISSION_DENIED, &err);
+
+    int32_t port_id = 0;
+    int location_rc = repo_stardock_check_shipyard_location
+      (db, player_sector_id, player_id, &port_id);
+    if (location_rc != 0)
+        return ship_sale_abort (db, location_rc == 1
+                                ? ERR_NOT_AT_SHIPYARD : location_rc, &err);
+    if (sql_build (db,
+                   "SELECT p.port_id FROM ports p JOIN porttypes pt "
+                   "ON pt.porttype_id = p.porttype_id WHERE p.port_id = {1} "
+                   "AND p.sector_id = {2} AND (pt.is_stardock = {3} "
+                   "OR pt.is_black_market = {3} OR EXISTS (SELECT 1 "
+                   "FROM shipyard_inventory si WHERE si.port_id = p.port_id "
+                   "AND si.enabled = {3})) FOR UPDATE",
+                   sql, sizeof sql) != 0
+        || !db_query (db, sql,
+                      (db_bind_t[]){db_bind_i32 (port_id),
+                                    db_bind_i32 (player_sector_id),
+                                    db_bind_bool (true)}, 3, &res, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+    bool authorized_shipyard = db_res_step (res, &err);
+    db_res_finalize (res);
+    if (!authorized_shipyard)
+        return ship_sale_abort (db, ERR_NOT_AT_SHIPYARD, &err);
+
+    int32_t cluster_id = 0;
+    int banned = 0;
+    if (repo_clusters_get_cluster_for_sector (db, player_sector_id,
+                                               &cluster_id) != 0)
+        return ship_sale_abort (db, ERR_DB_QUERY_FAILED, &err);
+    if (cluster_id > 0)
+      {
+        if (sql_build (db,
+                       "SELECT banned FROM cluster_player_status "
+                       "WHERE cluster_id = {1} AND player_id = {2} FOR UPDATE",
+                       sql, sizeof sql) != 0
+            || !db_query (db, sql,
+                          (db_bind_t[]){db_bind_i32 (cluster_id),
+                                        db_bind_i32 (player_id)}, 2, &res, &err))
+            return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                    &err);
+        if (db_res_step (res, &err))
+            banned = db_res_col_bool (res, 0, &err) ? 1 : 0;
+        db_res_finalize (res);
+      }
+    if (banned)
+        return ship_sale_abort (db, ERR_BANNED_FROM_JURISDICTION, &err);
+
+    int owner_rc = ship_sale_require_exclusive_owner (db, ship_id, player_id,
+                                                      &err);
+    if (owner_rc == 0)
+        owner_rc = ship_sale_require_exclusive_owner (db, replacement_ship_id,
+                                                      player_id, &err);
+    if (owner_rc != 0)
+        return ship_sale_abort (db, owner_rc, &err);
+
+    if (sql_build (db,
+                   "SELECT s.ship_id, s.sector_id, s.ported, s.type_id, "
+                   "s.destroyed, s.onplanet, (s.cloaked IS NOT NULL), "
+                   "s.towing_ship_id, s.is_being_towed_by, s.hull, s.holds, "
+                   "s.fighters, s.installed_shields, s.mines, s.limpets, "
+                   "s.genesis, s.detonators, s.probes, s.photons, s.beacons, "
+                   "s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, "
+                   "s.has_long_range_scanner, st.basecost, st.initialholds "
+                   "FROM ships s JOIN shiptypes st ON st.shiptypes_id = s.type_id "
+                   "WHERE s.ship_id IN ({1}, {2}) ORDER BY s.ship_id",
+                   sql, sizeof sql) != 0
+        || !db_query (db, sql,
+                      (db_bind_t[]){db_bind_i32 (ship_id),
+                                    db_bind_i32 (replacement_ship_id)},
+                      2, &res, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+    ship_sale_state_t sold = {0}, replacement = {0};
+    int state_count = 0;
+    while (db_res_step (res, &err))
+      {
+        ship_sale_state_t state = {0};
+        state.ship_id = db_res_col_i32 (res, 0, &err);
+        state.sector_id = db_res_col_i32 (res, 1, &err);
+        state.ported = db_res_col_i32 (res, 2, &err);
+        state.type_id = db_res_col_i32 (res, 3, &err);
+        state.destroyed = db_res_col_bool (res, 4, &err);
+        state.onplanet = db_res_col_bool (res, 5, &err);
+        state.cloaked = db_res_col_bool (res, 6, &err);
+        state.towing_ship_id = db_res_col_i32 (res, 7, &err);
+        state.towed_by_ship_id = db_res_col_i32 (res, 8, &err);
+        state.hull = db_res_col_i64 (res, 9, &err);
+        state.holds = db_res_col_i64 (res, 10, &err);
+        state.fighters = db_res_col_i64 (res, 11, &err);
+        state.installed_shields = db_res_col_i64 (res, 12, &err);
+        state.mines = db_res_col_i64 (res, 13, &err);
+        state.limpets = db_res_col_i64 (res, 14, &err);
+        state.genesis = db_res_col_i64 (res, 15, &err);
+        state.detonators = db_res_col_i64 (res, 16, &err);
+        state.probes = db_res_col_i64 (res, 17, &err);
+        state.photons = db_res_col_i64 (res, 18, &err);
+        state.beacons = db_res_col_i64 (res, 19, &err);
+        state.cloaks = db_res_col_i64 (res, 20, &err);
+        state.has_transwarp = db_res_col_bool (res, 21, &err);
+        state.has_planet_scanner = db_res_col_bool (res, 22, &err);
+        state.has_long_range_scanner = db_res_col_bool (res, 23, &err);
+        state.base_price = db_res_col_i64 (res, 24, &err);
+        state.initial_holds = db_res_col_i64 (res, 25, &err);
+        if (state.ship_id == ship_id)
+            sold = state;
+        else if (state.ship_id == replacement_ship_id)
+            replacement = state;
+        state_count++;
+      }
+    db_res_finalize (res);
+    if (err.code)
+        return ship_sale_abort (db, err.code, &err);
+    if (state_count != 2 || sold.ship_id != ship_id
+        || replacement.ship_id != replacement_ship_id)
+        return ship_sale_abort (db, ERR_SHIP_NOT_FOUND, &err);
+
+    if (sold.destroyed || sold.hull <= 0 || sold.onplanet || sold.cloaked
+        || sold.towing_ship_id > 0 || sold.towed_by_ship_id > 0
+        || sold.sector_id != player_sector_id || sold.ported != port_id)
+        return ship_sale_abort (db, ERR_PERMISSION_DENIED, &err);
+    if (replacement.destroyed || replacement.hull <= 0 || replacement.onplanet
+        || replacement.cloaked || replacement.towing_ship_id > 0
+        || replacement.towed_by_ship_id > 0
+        || (active_ship_id == ship_id
+            && replacement.sector_id != player_sector_id))
+        return ship_sale_abort (db, ERR_TARGET_INVALID, &err);
+    if (sold.base_price < 0 || sold.initial_holds < 0)
+        return ship_sale_abort (db, ERR_DB_QUERY_FAILED, &err);
+
+    const char *price_sql =
+      "SELECT (SELECT price FROM hardware_items WHERE code = 'FIGHTERS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'SHIELDS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'HOLDS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'GENESIS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'DETONATOR'), "
+      "(SELECT price FROM hardware_items WHERE code = 'PROBE'), "
+      "(SELECT price FROM hardware_items WHERE code = 'MINES'), "
+      "(SELECT price FROM hardware_items WHERE code = 'LIMPETS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'PHOTONS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'BEACONS'), "
+      "(SELECT price FROM hardware_items WHERE code = 'CLOAK'), "
+      "(SELECT price FROM hardware_items WHERE code = 'LSCANNER'), "
+      "(SELECT price FROM hardware_items WHERE code = 'PSCANNER'), "
+      "(SELECT price FROM hardware_items WHERE code = 'TWARP')";
+    if (!db_query (db, price_sql, NULL, 0, &res, &err)
+        || !db_res_step (res, &err))
+      {
+        if (res) db_res_finalize (res);
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+      }
+    int64_t quantities[14] = {
+      sold.fighters, sold.installed_shields,
+      sold.holds > sold.initial_holds ? sold.holds - sold.initial_holds : 0,
+      sold.genesis, sold.detonators, sold.probes, sold.mines, sold.limpets,
+      sold.photons, sold.beacons, sold.cloaks,
+      sold.has_long_range_scanner ? 1 : 0,
+      sold.has_planet_scanner ? 1 : 0,
+      sold.has_transwarp ? 1 : 0
+    };
+    int64_t equipment_value = 0;
+    bool value_ok = true;
+    for (int i = 0; i < 14; i++)
+      {
+        if (db_res_col_is_null (res, i))
+          {
+            if (quantities[i] != 0) value_ok = false;
+            continue;
+          }
+        int64_t unit_price = db_res_col_i64 (res, i, &err);
+        if (!ship_sale_add_equipment_value (quantities[i], unit_price,
+                                             &equipment_value))
+            value_ok = false;
+      }
+    db_res_finalize (res);
+    if (!value_ok)
+        return ship_sale_abort (db, ERR_DB_QUERY_FAILED, &err);
+
+    int64_t subtotal = 0, scaled = 0;
+    if (__builtin_add_overflow (sold.base_price, equipment_value, &subtotal)
+        || __builtin_mul_overflow (subtotal, (int64_t) sale_factor_bp, &scaled))
+        return ship_sale_abort (db, ERR_INVALID_ARG, &err);
+    int64_t proceeds = scaled / 10000;
+    if (credits < 0 || proceeds > INT64_MAX - credits)
+        return ship_sale_abort (db, ERR_INVALID_ARG, &err);
+
+    int rc = 0;
+    int64_t rows = 0;
+    const char *credit_sql =
+      "UPDATE players SET credits = credits + {1}, "
+      "ship_id = CASE WHEN ship_id = {2} THEN {3} ELSE ship_id END "
+      "WHERE player_id = {4} AND ship_id = {5} AND credits <= {6}";
+    if (sql_build (db, credit_sql, sql, sizeof sql) != 0
+        || !db_exec_rows_affected
+          (db, sql,
+           (db_bind_t[]){db_bind_i64 (proceeds), db_bind_i32 (ship_id),
+                         db_bind_i32 (replacement_ship_id), db_bind_i32 (player_id),
+                         db_bind_i32 (active_ship_id),
+                         db_bind_i64 (INT64_MAX - proceeds)},
+           6, &rows, &err))
+        rc = err.code ? err.code : ERR_DB_QUERY_FAILED;
+    else if (rows != 1)
+        rc = ERR_DB_BUSY;
+    if (rc != 0)
+        return ship_sale_abort (db, rc, &err);
+
+    const char *clear_cargo = "DELETE FROM ship_cargo WHERE ship_id = {1}";
+    if (sql_build (db, clear_cargo, sql, sizeof sql) != 0
+        || !db_exec (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+    const char *clear_legacy_cargo =
+      "UPDATE ships SET colonists = 0, ore = 0, organics = 0, equipment = 0, "
+      "slaves = 0, weapons = 0, drugs = 0 WHERE ship_id = {1}";
+    if (sql_build (db, clear_legacy_cargo, sql, sizeof sql) != 0
+        || !db_exec_rows_affected
+          (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &rows, &err)
+        || rows != 1)
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_BUSY, &err);
+
+    const char *insurance_sql =
+      "UPDATE insurance_policies SET active = {1} WHERE subject_type = {2} "
+      "AND subject_id = {3} AND active = {4}";
+    if (sql_build (db, insurance_sql, sql, sizeof sql) != 0
+        || !db_exec (db, sql,
+                     (db_bind_t[]){db_bind_bool (false), db_bind_text ("ship"),
+                                   db_bind_i32 (ship_id), db_bind_bool (true)},
+                     4, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+
+    const char *delete_owner = "DELETE FROM ship_ownership WHERE ship_id = {1}";
+    if (sql_build (db, delete_owner, sql, sizeof sql) != 0
+        || !db_exec_rows_affected
+          (db, sql, (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &rows, &err)
+        || rows < 1)
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_BUSY, &err);
+
+    int64_t sale_id = 0;
+    const char *audit_sql =
+      "INSERT INTO ship_sale_audit (ship_id, seller_player_id, "
+      "replacement_ship_id, port_id, hull_valuation, equipment_valuation, "
+      "sale_factor_bp, proceeds) VALUES ({1},{2},{3},{4},{5},{6},{7},{8})";
+    if (sql_build (db, audit_sql, sql, sizeof sql) != 0
+        || !db_exec_insert_id
+          (db, sql,
+           (db_bind_t[]){db_bind_i32 (ship_id), db_bind_i32 (player_id),
+                         db_bind_i32 (replacement_ship_id), db_bind_i32 (port_id),
+                         db_bind_i64 (sold.base_price),
+                         db_bind_i64 (equipment_value), db_bind_i32 (sale_factor_bp),
+                         db_bind_i64 (proceeds)},
+           8, "sale_id", &sale_id, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+    int64_t inventory_id = 0;
+    const char *inventory_sql =
+      "INSERT INTO shipyard_used_inventory (sale_id, ship_id, port_id) "
+      "VALUES ({1},{2},{3})";
+    if (sql_build (db, inventory_sql, sql, sizeof sql) != 0
+        || !db_exec_insert_id
+          (db, sql,
+           (db_bind_t[]){db_bind_i64 (sale_id), db_bind_i32 (ship_id),
+                         db_bind_i32 (port_id)},
+           3, "used_inventory_id", &inventory_id, &err))
+        return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
+                                &err);
+
+    if (!db_tx_commit (db, &err))
+      {
+        (void) db_tx_rollback (db, &err);
+        return err.code ? err.code : ERR_DB_TX;
+      }
+    out_result->sale_id = sale_id;
+    out_result->used_inventory_id = inventory_id;
+    out_result->hull_valuation = sold.base_price;
+    out_result->equipment_valuation = equipment_value;
+    out_result->proceeds = proceeds;
+    out_result->updated_credits = credits + proceeds;
+    out_result->port_id = port_id;
+    out_result->sold_active_ship = active_ship_id == ship_id;
+    return 0;
+}
 
 int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_port_id, int32_t *out_porttype_id)
 {
@@ -282,7 +744,10 @@ int repo_stardock_check_shipyard_location(db_t *db, int32_t sector_id, int32_t p
                       "JOIN ships s ON s.ported = p.port_id "
                       "JOIN players pl ON pl.ship_id = s.ship_id "
                       "JOIN porttypes pt ON p.porttype_id = pt.porttype_id "
-                      "WHERE p.sector_id = {1} AND pl.player_id = {2} AND (pt.is_stardock = true OR pt.is_black_market = true);";
+                      "WHERE p.sector_id = {1} AND pl.player_id = {2} "
+                      "AND (pt.is_stardock = true OR pt.is_black_market = true "
+                      "OR EXISTS (SELECT 1 FROM shipyard_inventory si "
+                      "WHERE si.port_id = p.port_id AND si.enabled = true));";
     char sql_converted[512];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_res_t *res = NULL;

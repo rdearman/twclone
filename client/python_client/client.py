@@ -5692,7 +5692,7 @@ def enter_ship_menu(ctx: Context):
         print(f" Target: #{target_idx+1} \"{nm}\" [{tp}] (ship_id={ship_id})")
         print(" (I) Show visible sector data")
         print(" (C) Claim")
-        print(" (V) Sell this ship · unavailable")
+        print(" (V) Sell this ship")
         print(" (T) Transfer this ship")
         #print(" (R) Rename / Re-register")
         if ctx.state.get("debug"):
@@ -5794,7 +5794,10 @@ def enter_ship_menu(ctx: Context):
                 print(f"⚠ {err}")
 
         elif cmd == "v":
-            print("Ship sale unavailable: the authoritative server handler is not implemented; no request was sent.")
+            if authoritative_ship_id <= 0:
+                print("Ship sale unavailable: the selected ship has no authoritative server ID.")
+                continue
+            shipyard_sell_flow(ctx, selected_ship_id=authoritative_ship_id)
 
         elif cmd == "t":
             if authoritative_ship_id <= 0:
@@ -6803,7 +6806,8 @@ def _print_planet_overview(planet: dict) -> None:
     fields = (
         ("name", "Name"), ("class", "Class"), ("sector_id", "Sector"),
         ("owner_type", "Owner type"), ("owner_id", "Owner ID"),
-        ("population", "Population"), ("colonists_unassigned", "Unassigned colonists"),
+        ("population", "Population"), ("population_type", "Population type"),
+        ("morale_status", "Morale status"), ("colonists_unassigned", "Unassigned colonists"),
         ("colonists_ore", "Ore workers"), ("colonists_org", "Organics workers"),
         ("colonists_eq", "Equipment workers"), ("colonists_weapons", "Weapons workers"),
         ("fighters", "Planet fighters"), ("citadel_level", "Citadel level"),
@@ -8091,17 +8095,51 @@ def target_info_flow(ctx: Context):
 # Shipyard flows
 # ---------------------------
 @register("shipyard_sell_flow")
-def shipyard_sell_flow(ctx: Context):
-    """Submit the canonical shipyard sale request without inventing settlement."""
-    ship_id = get_my_ship_id(ctx.conn, ctx)
-    if ship_id is None:
+def shipyard_sell_flow(ctx: Context, selected_ship_id: Optional[int] = None):
+    """Sell an owned hull after explicitly selecting its replacement."""
+    active_ship_id = get_my_ship_id(ctx.conn, ctx)
+    ship_id = selected_ship_id if selected_ship_id is not None else active_ship_id
+    if type(ship_id) is not int or ship_id <= 0 or active_ship_id is None:
         print("Shipyard sale requires an authoritative active-ship ID; no request was sent.")
+        return
+    try:
+        roster = ctx.conn.rpc("ship.list", {})
+    except (ConnectionError, OSError) as exc:
+        print(f"Shipyard sale cannot choose a replacement without the current ship roster: {exc}")
+        return
+    roster_data = roster.get("data") if isinstance(roster, dict) else None
+    if (not isinstance(roster, dict) or roster.get("status") != "ok"
+            or roster.get("type") != "ship.list.response"
+            or not isinstance(roster_data, dict)
+            or not isinstance(roster_data.get("ships"), list)):
+        print("Shipyard sale requires a valid server-authoritative ship roster; no sale request was sent.")
+        return
+    replacements = [item for item in roster_data["ships"]
+                    if isinstance(item, dict) and type(item.get("ship_id")) is int
+                    and item["ship_id"] > 0 and item["ship_id"] != ship_id]
+    if not replacements:
+        print("Your last ship cannot be sold; no eligible replacement ship is owned.")
+        return
+    print("Eligible owned replacement ships:")
+    for item in replacements:
+        print(f"  {item['ship_id']}: {item.get('name', 'Unnamed ship')}")
+    replacement_text = input("Replacement ship ID: ").strip()
+    try:
+        replacement_ship_id = int(replacement_text)
+    except ValueError:
+        print("A numeric replacement ship ID is required; no sale request was sent.")
+        return
+    if not any(item["ship_id"] == replacement_ship_id for item in replacements):
+        print("Select an owned replacement ship from the list; no sale request was sent.")
         return
     if input(f"Sell ship {ship_id} at the shipyard? [y/N]: ").strip().lower() != "y":
         print("Shipyard sale cancelled.")
         return
     try:
-        response = ctx.conn.rpc("shipyard.sell", {"ship_id": ship_id})
+        response = ctx.conn.rpc("shipyard.sell", {
+            "ship_id": ship_id,
+            "replacement_ship_id": replacement_ship_id,
+        })
     except (ConnectionError, OSError) as exc:
         ctx.state["last_rpc"] = None
         print(f"Shipyard sale outcome is uncertain after connection loss: {exc}")
@@ -8116,10 +8154,16 @@ def shipyard_sell_flow(ctx: Context):
         _refresh_ship_after_move(ctx)
         _refresh_sector_after_shipyard(ctx)
         return
-    # No sale receipt schema is published yet.  A success-shaped envelope is
-    # therefore not evidence of settlement; refresh and leave the outcome
-    # unconfirmed until the server publishes the canonical response contract.
-    print("Shipyard sale was not confirmed: the server returned no published sale receipt.")
+    receipt = response.get("data")
+    if (response.get("type") != "ship.sold_v1" or not isinstance(receipt, dict)
+            or receipt.get("ship_id") != ship_id
+            or receipt.get("replacement_ship_id") != replacement_ship_id
+            or type(receipt.get("sale_proceeds")) is not int):
+        print("Sale response did not match the published receipt; reconciling authoritative state.")
+    else:
+        print(f"Ship sale confirmed: {present_money(receipt['sale_proceeds'])} credits received.")
+        print(f"  Cargo forfeited: {bool(receipt.get('cargo_forfeited'))}; "
+              f"insurance terminated: {bool(receipt.get('insurance_terminated'))}.")
     _hud_rpc(ctx, "player.my_info", {})
     _refresh_ship_after_move(ctx)
     _refresh_sector_after_shipyard(ctx)
@@ -8300,8 +8344,8 @@ def downgrade_ship_flow(ctx: Context):
 
 @register("sell_ship_flow")
 def sell_ship_flow(ctx: Context):
-    """ Placeholder for selling ships. """
-    print("Selling ships is not yet implemented.")
+    """Compatibility menu alias for the authoritative shipyard sale flow."""
+    shipyard_sell_flow(ctx)
 
 
 

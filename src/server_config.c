@@ -79,6 +79,7 @@ config_set_defaults (void)
   g_cfg.genesis_class_weight_U = 5;
   g_cfg.shipyard_enabled = 1;
   g_cfg.shipyard_trade_in_factor_bp = 5000;
+  g_cfg.shipyard_sale_factor_bp = 6000;
   g_cfg.shipyard_require_cargo_fit = 1;
   g_cfg.shipyard_require_fighters_fit = 1;
   g_cfg.shipyard_require_shields_fit = 1;
@@ -579,9 +580,18 @@ apply_db (db_t *db)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.shipyard_enabled);
 	    }
-	  else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
+          else if (strcmp (key, "shipyard_trade_in_factor_bp") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.shipyard_trade_in_factor_bp);
+	    }
+          else if (strcmp (key, "shipyard_sale_factor_bp") == 0)
+	    {
+	      int sale_factor = 6000;
+	      cfg_parse_int (val, type, &sale_factor);
+	      if (sale_factor >= 0 && sale_factor <= 10000)
+	        g_cfg.shipyard_sale_factor_bp = sale_factor;
+	      else
+	        LOGW ("[config] Invalid shipyard sale factor; using 6000 basis points.");
 	    }
 	  else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
 	    {
@@ -1043,6 +1053,7 @@ config_load (void)
   c->startingfighters = g_cfg.startingfighters;
   c->startingholds = g_cfg.startingholds;
   c->max_ship_name_length = g_cfg.max_ship_name_length;
+  c->shipyard_sale_factor_bp = g_cfg.shipyard_sale_factor_bp;
   /* Keep the runtime starter-ship policy in the legacy config view used by
    * player provisioning.  Without this copy, spawn_starter_ship() receives
    * an empty type name even though g_cfg has the configured value. */

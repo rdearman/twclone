@@ -58,6 +58,7 @@ extern "C"
     /* Shipyard Configuration */
     int shipyard_enabled;
     int shipyard_trade_in_factor_bp;
+    int shipyard_sale_factor_bp;
     int shipyard_require_cargo_fit;
     int shipyard_require_fighters_fit;
     int shipyard_require_shields_fit;
@@ -213,6 +214,7 @@ extern "C"
     /* Shipyard Config */
     int shipyard_enabled;
     int shipyard_trade_in_factor_bp;
+    int shipyard_sale_factor_bp;
     int shipyard_require_cargo_fit;
     int shipyard_require_fighters_fit;
     int shipyard_require_shields_fit;

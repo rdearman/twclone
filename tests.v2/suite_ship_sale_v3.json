@@ -1,0 +1,168 @@
+{
+  "name": "V3 standalone ship sale lifecycle",
+  "tests": [
+    {
+      "name": "Setup SysOp config access",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Setup seller",
+      "setup": "macro_auth_user",
+      "username": "ship_sale_v3",
+      "password": "password"
+    },
+    {
+      "name": "Read standalone sale factor",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "shipyard_sale_factor_bp" },
+      "expect": { "status": "ok" },
+      "save": { "sale_factor_original": "data.value" }
+    },
+    {
+      "name": "Accept configured 60 percent standalone sale factor",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "shipyard_sale_factor_bp", "value": 6000, "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject sale factor above the allowed range",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "shipyard_sale_factor_bp", "value": 10001, "confirm": true },
+      "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Locate real Stardock and prepare active ship plus replacement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH yard AS (SELECT p.port_id, p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1), moved AS (UPDATE players SET sector_id = (SELECT sector_id FROM yard) WHERE name = 'ship_sale_v3' RETURNING player_id, ship_id), active AS (UPDATE ships SET sector_id = (SELECT sector_id FROM yard), ported = (SELECT port_id FROM yard), ore = 1 WHERE ship_id = (SELECT ship_id FROM moved) RETURNING ship_id, type_id, sector_id), replacement AS (INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields) SELECT 'Sale replacement V3', type_id, sector_id, 10, 0, 0 FROM active RETURNING ship_id), ownership AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT replacement.ship_id, moved.player_id, 1, TRUE FROM replacement CROSS JOIN moved RETURNING ship_id) SELECT yard.port_id, active.ship_id, ownership.ship_id FROM yard CROSS JOIN active CROSS JOIN ownership;"
+      },
+      "expect": { "status": "ok" },
+      "save": {
+        "sale_test_port_id": "data.rows.0.0",
+        "sale_test_active_ship_id": "data.rows.0.1",
+        "sale_test_replacement_ship_id": "data.rows.0.2"
+      }
+    },
+    {
+      "name": "Reject sale without explicit replacement",
+      "command": "ship.sell",
+      "user": "ship_sale_v3",
+      "data": { "ship_id": "@sale_test_active_ship_id" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Sell active hull and settle sale atomically",
+      "command": "ship.sell",
+      "user": "ship_sale_v3",
+      "data": {
+        "ship_id": "@sale_test_active_ship_id",
+        "replacement_ship_id": "@sale_test_replacement_ship_id"
+      },
+      "expect": { "status": "ok", "type": "ship.sold_v1" },
+      "asserts": [
+        { "path": "data.ship_id", "op": "==", "value": "@sale_test_active_ship_id" },
+        { "path": "data.replacement_ship_id", "op": "==", "value": "@sale_test_replacement_ship_id" },
+        { "path": "data.shipyard_port_id", "op": "==", "value": "@sale_test_port_id" },
+        { "path": "data.sale_factor_bp", "op": "==", "value": 6000 },
+        { "path": "data.cargo_forfeited", "op": "==", "value": true },
+        { "path": "data.insurance_terminated", "op": "==", "value": true },
+        { "path": "data.used_inventory_id", "op": ">", "value": 0 }
+      ],
+      "save": {
+        "sale_test_sale_id": "data.sale_id",
+        "sale_test_proceeds": "data.sale_proceeds",
+        "sale_test_updated_credits": "data.updated_credits"
+      }
+    },
+    {
+      "name": "Verify active replacement, cargo forfeiture and used inventory persistence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN p.ship_id = @{sale_test_replacement_ship_id} THEN 1 ELSE 0 END, s.ore, (SELECT COUNT(*) FROM ship_cargo c WHERE c.ship_id = @{sale_test_active_ship_id}), (SELECT COUNT(*) FROM shipyard_used_inventory u WHERE u.ship_id = @{sale_test_active_ship_id} AND u.port_id = @{sale_test_port_id}), (SELECT COUNT(*) FROM ship_ownership o WHERE o.ship_id = @{sale_test_active_ship_id}), CASE WHEN p.credits = @{sale_test_updated_credits} THEN 1 ELSE 0 END, CASE WHEN (SELECT proceeds FROM ship_sale_audit WHERE sale_id = @{sale_test_sale_id}) = @{sale_test_proceeds} THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id = @{sale_test_active_ship_id} WHERE p.name = 'ship_sale_v3';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 0 },
+        { "path": "data.rows.0.2", "op": "==", "value": 0 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 },
+        { "path": "data.rows.0.4", "op": "==", "value": 0 },
+        { "path": "data.rows.0.5", "op": "==", "value": 1 },
+        { "path": "data.rows.0.6", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Sale proceeds use the integer-floor approved valuation formula",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ((hull_valuation + equipment_valuation) * sale_factor_bp) / 10000 FROM ship_sale_audit WHERE sale_id = @{sale_test_sale_id};"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": { "sql_int": "SELECT @{sale_test_proceeds};" } }
+      ]
+    },
+    {
+      "name": "Used inventory hull cannot be taken through abandoned-hull claim",
+      "command": "ship.claim",
+      "user": "ship_sale_v3",
+      "data": { "ship_id": "@sale_test_active_ship_id" },
+      "expect": { "status": "refused" }
+    },
+    {
+      "name": "Create second hull for shipyard.sell alias",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH player AS (SELECT player_id, ship_id FROM players WHERE name = 'ship_sale_v3'), active AS (SELECT s.type_id, s.sector_id FROM ships s JOIN player p ON p.ship_id = s.ship_id), yard AS (SELECT p.port_id, p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1), hull AS (INSERT INTO ships (name, type_id, sector_id, ported, holds, fighters, shields) SELECT 'Alias sale hull V3', active.type_id, yard.sector_id, yard.port_id, 10, 0, 0 FROM active CROSS JOIN yard RETURNING ship_id), owner AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT hull.ship_id, player.player_id, 1, TRUE FROM hull CROSS JOIN player RETURNING ship_id) SELECT ship_id FROM owner;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "sale_test_alias_ship_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Sell inactive hull through shipyard.sell alias",
+      "command": "shipyard.sell",
+      "user": "ship_sale_v3",
+      "data": {
+        "ship_id": "@sale_test_alias_ship_id",
+        "replacement_ship_id": "@sale_test_replacement_ship_id"
+      },
+      "expect": { "status": "ok", "type": "ship.sold_v1" },
+      "asserts": [
+        { "path": "data.ship_id", "op": "==", "value": "@sale_test_alias_ship_id" },
+        { "path": "data.replacement_ship_id", "op": "==", "value": "@sale_test_replacement_ship_id" },
+        { "path": "data.cargo_forfeited", "op": "==", "value": true },
+        { "path": "data.insurance_terminated", "op": "==", "value": true },
+        { "path": "data.used_inventory_id", "op": ">", "value": 0 }
+      ]
+    },
+    {
+      "name": "Repeated sale cannot pay twice",
+      "command": "shipyard.sell",
+      "user": "ship_sale_v3",
+      "data": {
+        "ship_id": "@sale_test_active_ship_id",
+        "replacement_ship_id": "@sale_test_replacement_ship_id"
+      },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Restore prior standalone sale factor",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": {
+        "key": "shipyard_sale_factor_bp",
+        "value": "@sale_factor_original",
+        "confirm": true,
+        "note": "Restore pre-test value"
+      },
+      "expect": { "status": "ok" }
+    }
+  ]
+}

@@ -809,10 +809,7 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
 int
 cmd_shipyard_sell (client_ctx_t *ctx, json_t *root)
 {
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED, "Not implemented: shipyard.sell");
-  return 0;
+  return cmd_ship_sell (ctx, root);
 }
 
 

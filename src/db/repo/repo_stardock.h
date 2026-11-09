@@ -24,6 +24,22 @@ int repo_stardock_update_ship_hardware(db_t *db, const char *col_name, int32_t q
 
 int repo_stardock_check_shipyard_location(db_t *db, int32_t sector_id, int32_t player_id, int32_t *out_port_id);
 
+typedef struct {
+    int64_t sale_id;
+    int64_t used_inventory_id;
+    int64_t hull_valuation;
+    int64_t equipment_valuation;
+    int64_t proceeds;
+    int64_t updated_credits;
+    int32_t port_id;
+    bool sold_active_ship;
+} repo_ship_sale_result_t;
+
+/* Atomically settle and list an owned, docked hull for resale. */
+int repo_stardock_sell_ship(db_t *db, int32_t player_id, int32_t ship_id,
+                            int32_t replacement_ship_id, int sale_factor_bp,
+                            repo_ship_sale_result_t *out_result);
+
 int repo_stardock_get_player_ship_info(db_t *db, int32_t player_id, db_res_t **out_res);
 
 int repo_stardock_get_shipyard_inventory(db_t *db, int32_t port_id, db_res_t **out_res);

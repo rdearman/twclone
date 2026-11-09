@@ -1179,13 +1179,91 @@ cmd_ship_list (client_ctx_t *ctx, json_t *root)
 int
 cmd_ship_sell (client_ctx_t *ctx, json_t *root)
 {
-  /* V3-SHIP-01 remains decision-gated: sale price and cargo disposition are
-   * not pinned by the canonical policy record.  Keep this refusal explicit
-   * until the domain settlement contract is selected. */
-  send_response_error (ctx,
-		       root,
-		       ERR_NOT_IMPLEMENTED,
-                       "ship.sell unavailable pending canonical settlement policy");
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_AUTHENTICATED,
+                           "Authentication required");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  int ship_id = 0, replacement_ship_id = 0;
+  if (!json_is_object (data)
+      || !json_get_int_flexible (data, "ship_id", &ship_id)
+      || !json_get_int_flexible (data, "replacement_ship_id",
+                                 &replacement_ship_id)
+      || ship_id <= 0 || replacement_ship_id <= 0
+      || ship_id == replacement_ship_id)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "ship_id and a different replacement_ship_id are required");
+      return 0;
+    }
+  if (!g_cfg.shipyard_enabled)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Shipyard services are disabled");
+      return 0;
+    }
+  int sale_factor_bp = g_cfg.shipyard_sale_factor_bp;
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable");
+      return 0;
+    }
+  repo_ship_sale_result_t result = {0};
+  int rc = repo_stardock_sell_ship (db, ctx->player_id, ship_id,
+                                    replacement_ship_id,
+                                    sale_factor_bp, &result);
+  if (rc != 0)
+    {
+      if (rc == ERR_NOT_AT_SHIPYARD)
+        send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
+                             "Your active ship must be docked at an authorized shipyard");
+      else if (rc == ERR_BANNED_FROM_JURISDICTION)
+        send_response_error (ctx, root, rc,
+                             "Local authorities prohibit this shipyard transaction");
+      else if (rc == ERR_PERMISSION_DENIED)
+        send_response_error (ctx, root, rc,
+                             "Ship ownership, replacement eligibility, or last-ship rule prevents sale");
+      else if (rc == ERR_TARGET_INVALID)
+        send_response_error (ctx, root, rc,
+                             "The selected replacement ship is not eligible");
+      else if (rc == ERR_SHIP_NOT_FOUND)
+        send_response_error (ctx, root, rc, "Ship not found");
+      else if (rc == ERR_DB_BUSY)
+        send_response_error (ctx, root, rc,
+                             "Ship state changed concurrently; retry the sale");
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Ship sale transaction failed");
+      return 0;
+    }
+  if (result.sold_active_ship)
+    ctx->ship_id = replacement_ship_id;
+  json_t *payload = json_pack
+    ("{s:I,s:I,s:i,s:I,s:I,s:i,s:I,s:I,s:b,s:b,s:I,s:I}",
+     "ship_id", (json_int_t) ship_id,
+     "replacement_ship_id", (json_int_t) replacement_ship_id,
+     "shipyard_port_id", result.port_id,
+     "hull_valuation", (json_int_t) result.hull_valuation,
+     "installed_equipment_valuation", (json_int_t) result.equipment_valuation,
+     "sale_factor_bp", sale_factor_bp,
+     "sale_proceeds", (json_int_t) result.proceeds,
+     "updated_credits", (json_int_t) result.updated_credits,
+     "cargo_forfeited", true,
+     "insurance_terminated", true,
+     "sale_id", (json_int_t) result.sale_id,
+     "used_inventory_id", (json_int_t) result.used_inventory_id);
+  if (!payload)
+    {
+      /* Settlement is committed; the durable sale record is authoritative. */
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Sale completed, but response construction failed; query shipyard records");
+      return 0;
+    }
+  send_response_ok_take (ctx, root, "ship.sold_v1", &payload);
   return 0;
 }
 
