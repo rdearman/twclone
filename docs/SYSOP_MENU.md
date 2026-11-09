@@ -37,6 +37,13 @@ Only the following keys are exposed via `sysop.config.*` commands.
 *   `shipyard_require_shields_fit`
 *   `shipyard_require_hardware_compat`
 *   `shipyard_tax_bp`
+*   `planet.slave_unrest_interval_days` (days; 0 means unset/disabled)
+*   `planet.slave_unrest_stoppage_cycles` (production cycles; 0 means unset/disabled)
+*   `planet.slave_unrest_population_loss` (fixed population units; 0 means unset/disabled)
+
+Slave-unrest values are configuration groundwork only. No gameplay defaults
+are selected, no scheduler currently consumes them, and unrest remains inactive
+until the deterministic population-loss allocation policy is approved.
 
 ## 3. Command Allow-List
 

@@ -14,6 +14,7 @@ Do not run migrations against a shared database during validation.
 4. Apply `sql/my/092_seed_gameplay.sql` and `sql/my/093_seed_cron.sql`.
 5. Apply migrations 101–106 in numeric order. After clusters and their sector
    assignments exist, apply 107. Apply 108 after planets have been populated.
+6. After gameplay seed data exists, apply 109–125 in numeric order.
 
 Fresh installs already have session timestamps, normalized key columns, and
 `ship_cargo` from the base schema, so skip 098, 099, and 100. MySQL seed 092
@@ -37,6 +38,10 @@ command-line client, in this order:
 9. `sql/my/106_phase9_2_cluster_pressure.sql`.
 10. Populate `cluster_sectors`, then run `sql/my/107_seed_illegal_commodities.sql`.
 11. `sql/my/108_planet_entity_stock.sql`.
+12. Apply `sql/my/109_v2_sector_notices_trade_offers.sql` through
+    `sql/my/125_v3_slave_unrest_policy_config.sql` in numeric order, including
+    the V3 used-ship sales, planet population, standing-order and unset
+    slave-unrest policy configuration migrations.
 
 Example: `mysql --database=twclone < sql/my/099_mysql_key_portability.sql`.
 Migration 099 checks key lengths before narrowing, then repairs key types and

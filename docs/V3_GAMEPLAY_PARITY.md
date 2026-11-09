@@ -158,6 +158,14 @@ approved protocol. Runtime verification of recent transactions remains pending.
   the existing planetary JSON suite; actual protocol/database execution is
   pending.
 
+- SysOp can persist the three deterministic unrest parameters through the
+  existing configuration API. The zero value is an unset/disabled sentinel,
+  not a gameplay default; negative values are rejected. PG migration 173 and
+  MySQL migration 125 seed only this sentinel. No daily unrest scheduler
+  consumes the values, and no unrest effects are active. A sanitized build,
+  41 focused source/manifest tests and JSON syntax validation passed; protocol
+  and migration runtime verification remain outstanding.
+
 ## Gameplay contract amendments awaiting approval
 
 - **Used-hull purchase — SPECIFICATION REQUIRED:** Define request, price,

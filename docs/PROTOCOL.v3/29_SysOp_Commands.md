@@ -22,16 +22,19 @@ Allows tuning of specific server parameters without a restart.
 *   **Game Rules**: `turnsperday`, `neutral_band`, `illegal_allowed_neutral`, `illegal_min_experience`, `max_cloak_duration`, `limpet_ttl_days`
 *   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`, `planet_market.buy_order_expiry_seconds`
 *   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_sale_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
+*   **Planet population**: `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss`
 
 ### Planet slave unrest policy
 
-The engine requires explicit SysOp values for the deterministic slave-unrest
-interval, stoppage duration and fixed population loss. These values have no
-implicit defaults: absent/incomplete values leave unrest inactive. Values must
-be positive integer durations/losses; no additional ranges are specified.
-Because the deterministic rule for allocating losses across unassigned and
-working population is not yet defined, activating unrest remains blocked until
-that policy is approved as well.
+The engine policy fields are `planet.slave_unrest_interval_days` (days),
+`planet.slave_unrest_stoppage_cycles` (production cycles), and
+`planet.slave_unrest_population_loss` (fixed number of population units). Each
+accepts a nonnegative integer. `0` is an explicit unset/disabled sentinel, not
+a gameplay default. No active gameplay interval or loss value is selected.
+Unrest processing remains inactive unless all three are configured positive.
+Even with values present, production/loss activation remains blocked until the
+deterministic rule for allocating losses across unassigned and working
+population is approved. No scheduler currently consumes these settings.
 
 ### `sysop.config.list`
 List all allowed config keys and their current values.

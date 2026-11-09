@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -50,6 +51,9 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
     {"bank_alert_threshold_player", CFG_INT64, "Player bank alert threshold", CFG_OFF(bank_alert_threshold_player)},
     {"bank_alert_threshold_corp", CFG_INT64, "Corp bank alert threshold", CFG_OFF(bank_alert_threshold_corp)},
     {"planet_market.buy_order_expiry_seconds", CFG_INT, "Planet buy-order lifetime in seconds (60-604800)", CFG_OFF(planet_market_buy_order_expiry_seconds)},
+    {"planet.slave_unrest_interval_days", CFG_INT64, "Slave unrest recurrence interval in days; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_interval_days)},
+    {"planet.slave_unrest_stoppage_cycles", CFG_INT64, "Production cycles stopped per unrest event; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_stoppage_cycles)},
+    {"planet.slave_unrest_population_loss", CFG_INT64, "Fixed slave population loss per unrest event; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_population_loss)},
 
     {"shipyard_enabled", CFG_INT, "Enable shipyard features", CFG_OFF(shipyard_enabled)},
     {"shipyard_trade_in_factor_bp", CFG_INT, "Trade-in value factor (bp)", CFG_OFF(shipyard_trade_in_factor_bp)},
@@ -223,10 +227,25 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             return 0;
         }
     }
+    if (strcmp(key, "planet.slave_unrest_interval_days") == 0
+        || strcmp(key, "planet.slave_unrest_stoppage_cycles") == 0
+        || strcmp(key, "planet.slave_unrest_population_loss") == 0) {
+        char *end = NULL;
+        errno = 0;
+        long long value = strtoll(val_str, &end, 10);
+        if (errno == ERANGE || end == val_str || *end != '\0' || value < 0) {
+            send_response_refused(ctx, root, 1407,
+                                  "Refused: unrest policy values must be nonnegative integers; 0 disables the unset policy", NULL);
+            return 0;
+        }
+    }
 
     // Capture old value for audit
     int old_planet_market_expiry = g_cfg.planet_market_buy_order_expiry_seconds;
     int old_shipyard_sale_factor = g_cfg.shipyard_sale_factor_bp;
+    int64_t old_slave_unrest_interval = g_cfg.planet_slave_unrest_interval_days;
+    int64_t old_slave_unrest_stoppage = g_cfg.planet_slave_unrest_stoppage_cycles;
+    int64_t old_slave_unrest_loss = g_cfg.planet_slave_unrest_population_loss;
     char old_val_buf[128];
     json_t *j_old = get_config_value_json(def);
     char *j_old_dump = json_dumps(j_old, JSON_ENCODE_ANY);
@@ -263,6 +282,12 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             g_cfg.planet_market_buy_order_expiry_seconds = old_planet_market_expiry;
         if (strcmp(key, "shipyard_sale_factor_bp") == 0)
             g_cfg.shipyard_sale_factor_bp = old_shipyard_sale_factor;
+        if (strcmp(key, "planet.slave_unrest_interval_days") == 0)
+            g_cfg.planet_slave_unrest_interval_days = old_slave_unrest_interval;
+        if (strcmp(key, "planet.slave_unrest_stoppage_cycles") == 0)
+            g_cfg.planet_slave_unrest_stoppage_cycles = old_slave_unrest_stoppage;
+        if (strcmp(key, "planet.slave_unrest_population_loss") == 0)
+            g_cfg.planet_slave_unrest_population_loss = old_slave_unrest_loss;
         send_response_error(ctx, root, 1503, "Database Error: could not save config");
         return 0;
     }

@@ -699,6 +699,24 @@ apply_db (db_t *db)
 	      cfg_parse_int64 (val, type,
 			       &g_cfg.bank_max_daily_interest_per_account);
 	    }
+	  else if (strcmp (key, "planet.slave_unrest_interval_days") == 0)
+	    {
+	      int64_t setting = 0;
+	      if (cfg_parse_int64 (val, type, &setting) == 0 && setting >= 0)
+		g_cfg.planet_slave_unrest_interval_days = setting;
+	    }
+	  else if (strcmp (key, "planet.slave_unrest_stoppage_cycles") == 0)
+	    {
+	      int64_t setting = 0;
+	      if (cfg_parse_int64 (val, type, &setting) == 0 && setting >= 0)
+		g_cfg.planet_slave_unrest_stoppage_cycles = setting;
+	    }
+	  else if (strcmp (key, "planet.slave_unrest_population_loss") == 0)
+	    {
+	      int64_t setting = 0;
+	      if (cfg_parse_int64 (val, type, &setting) == 0 && setting >= 0)
+		g_cfg.planet_slave_unrest_population_loss = setting;
+	    }
 	  else if (strcmp (key, "starter_shiptype_name") == 0)
 	    {
 	      snprintf (g_cfg.starter_shiptype_name, sizeof (g_cfg.starter_shiptype_name), "%s", val);

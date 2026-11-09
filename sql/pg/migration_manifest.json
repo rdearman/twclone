@@ -70,7 +70,9 @@
       ,"168_v3_abandoned_hull_repair.sql",
       "169_planet_market_order_cancellation.sql",
       "170_v3_used_ship_sales.sql",
-      "171_v3_planet_population_state.sql"
+      "171_v3_planet_population_state.sql",
+      "172_v3_bank_standing_orders.sql",
+      "173_v3_slave_unrest_policy_config.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -668,6 +670,13 @@
     {
       "name": "172_v3_bank_standing_orders.sql",
       "subsystem": "banking",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "173_v3_slave_unrest_policy_config.sql",
+      "subsystem": "planets",
       "required": true,
       "v3_only": true,
       "diagnostic": false

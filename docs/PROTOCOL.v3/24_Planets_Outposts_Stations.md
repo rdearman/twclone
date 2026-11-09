@@ -227,6 +227,12 @@ state, never random rolls or random loss quantities. Unrest interval, stoppage
 duration and population-loss parameters are not assigned defaults here; no
 unrest event may be activated until SysOp policy values and deterministic
 allocation of losses across assigned/unassigned population are configured.
+SysOps can persist the interval (`planet.slave_unrest_interval_days`),
+stoppage duration (`planet.slave_unrest_stoppage_cycles`) and fixed loss
+(`planet.slave_unrest_population_loss`). A value of zero means unset/disabled;
+it is not an active rule. No scheduler currently consumes these settings, and
+the loss-allocation policy remains unresolved. See
+`29_SysOp_Commands.md` and `V3_GAMEPLAY_DECISIONS.md`.
 
 Evil-aligned players may purchase slaves or enslave colonists during a
 successful planetary conquest. Neutral players may inherit slaves through

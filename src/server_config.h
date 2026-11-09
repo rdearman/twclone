@@ -221,6 +221,10 @@ extern "C"
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
     int planet_market_buy_order_expiry_seconds;
+    /* Zero means unrest policy has not been configured; effects stay dormant. */
+    int64_t planet_slave_unrest_interval_days;
+    int64_t planet_slave_unrest_stoppage_cycles;
+    int64_t planet_slave_unrest_population_loss;
     /* Misc */
     int illegal_allowed_neutral;
     int illegal_min_experience;

@@ -1,0 +1,80 @@
+{
+  "name": "V3 slave unrest policy configuration groundwork",
+  "description": "Tests SysOp persistence and numeric validation only; these settings do not activate unrest processing.",
+  "tests": [
+    { "name": "Setup: Admin", "setup": "macro_bootstrap_admin" },
+    {
+      "name": "Read unset interval sentinel",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_interval_days" },
+      "expect": { "status": "ok", "data": { "type": "int" } },
+      "save": { "old_unrest_interval": "data.value" }
+    },
+    {
+      "name": "Read unset stoppage sentinel",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_stoppage_cycles" },
+      "expect": { "status": "ok", "data": { "type": "int" } },
+      "save": { "old_unrest_stoppage": "data.value" }
+    },
+    {
+      "name": "Read unset population-loss sentinel",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_population_loss" },
+      "expect": { "status": "ok", "data": { "type": "int" } },
+      "save": { "old_unrest_loss": "data.value" }
+    },
+    {
+      "name": "Persist configured daily recurrence interval",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_interval_days", "value": 30, "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Persist configured stoppage cycles",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_stoppage_cycles", "value": 2, "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Persist configured fixed population loss",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_population_loss", "value": 1, "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject negative unrest interval",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_interval_days", "value": -1, "confirm": true },
+      "expect": { "status": "error", "error_code": 1407 }
+    },
+    {
+      "name": "Restore interval sentinel",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_interval_days", "value": "@old_unrest_interval", "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore stoppage sentinel",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_stoppage_cycles", "value": "@old_unrest_stoppage", "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore population-loss sentinel",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "planet.slave_unrest_population_loss", "value": "@old_unrest_loss", "confirm": true },
+      "expect": { "status": "ok" }
+    }
+  ]
+}
