@@ -45,6 +45,35 @@ int repo_citadel_get_construction_state(db_t *db, int32_t planet_id,
     return err.code;
 }
 
+int repo_citadel_get_qcannon_state(db_t *db, int32_t planet_id,
+                                   int32_t *sector_level,
+                                   int32_t *atmosphere_level)
+{
+    if (!db || planet_id <= 0 || !sector_level || !atmosphere_level)
+        return ERR_INVALID_ARG;
+    *sector_level = 0;
+    *atmosphere_level = 0;
+    const char *query =
+        "SELECT COALESCE(qCannonSector, 0), COALESCE(qCannonAtmosphere, 0) "
+        "FROM citadels WHERE planet_id = {1};";
+    char sql[384];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i32(planet_id)}, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+    *sector_level = db_res_col_i32(res, 0, &err);
+    *atmosphere_level = db_res_col_i32(res, 1, &err);
+    db_res_finalize(res);
+    return err.code;
+}
+
 int repo_citadel_get_onplanet(db_t *db, int32_t ship_id, int32_t *planet_id_out)
 {
     /* SQL_VERBATIM: Q1 */

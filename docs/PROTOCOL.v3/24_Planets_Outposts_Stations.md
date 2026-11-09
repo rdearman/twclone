@@ -65,6 +65,8 @@ planet details are otherwise refused.
     "expected_completion_time": 1793217600,
     "planetary_shields": 500,
     "military_reaction_level": 1,
+    "qCannonSector": 50,
+    "qCannonAtmosphere": 40,
     "treasury_balance": 25000
   }
 }
@@ -74,10 +76,10 @@ planet details are otherwise refused.
 `construction_status`, `planetary_shields`, and `military_reaction_level` are
 included when a citadel row exists and its defensive state can be read. The
 upgrade target and Unix epoch start/completion timestamps are included when
-the construction-state repository query is available. Quantum Cannon settings
-are not currently returned by `planet.info`; a repository read that exposes
-those settings while distinguishing absent configuration from query failure
-is still required.
+the construction-state repository query is available. When a citadel row is
+present, `qCannonSector` and `qCannonAtmosphere` expose its Quantum Cannon
+settings; NULL values are reported as `0`. An absent citadel row is distinct
+from a failed settings query.
 `treasury_balance` is included only for the planet owner or a member of its
 owning corporation; landing on the planet alone does not grant treasury access.
 Terra's public-information exception does not grant treasury or ownership

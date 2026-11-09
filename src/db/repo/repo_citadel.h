@@ -17,6 +17,12 @@ int repo_citadel_get_construction_state(db_t *db, int32_t planet_id,
                                         int64_t *start_time,
                                         int64_t *completion_time);
 
+/* Read Quantum Cannon levels. Returns ERR_DB_NOT_FOUND when the citadel row
+ * is absent, and a database error for a failed query. NULL settings read as 0. */
+int repo_citadel_get_qcannon_state(db_t *db, int32_t planet_id,
+                                   int32_t *sector_level,
+                                   int32_t *atmosphere_level);
+
 int repo_citadel_get_upgrade_reqs(db_t *db, int target_level, int32_t planet_type_id, db_res_t **out_res);
 
 int repo_citadel_deduct_resources(db_t *db, int64_t colonists, int64_t ore, int64_t org, int64_t equip, int32_t planet_id);

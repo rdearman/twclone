@@ -53,6 +53,20 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("db_planets_get_treasury", info)
         self.assertIn("repo_corp_check_member_role", info)
 
+    def test_planet_info_returns_qcannon_settings_from_repository(self):
+        info = self.planets.split("cmd_planet_info", 1)[1].split(
+            "cmd_planet_fighters_transfer", 1
+        )[0]
+        citadel_repo = (ROOT / "src/db/repo/repo_citadel.c").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("repo_citadel_get_qcannon_state", info)
+        self.assertIn('"qCannonSector"', info)
+        self.assertIn('"qCannonAtmosphere"', info)
+        self.assertIn("qcannon_rc != ERR_DB_NOT_FOUND", info)
+        self.assertIn("COALESCE(qCannonSector, 0)", citadel_repo)
+        self.assertIn("COALESCE(qCannonAtmosphere, 0)", citadel_repo)
+
     def test_landing_defense_fires_before_denial_and_reports_persistence_failure(self):
         land = self.planets.split("cmd_planet_land", 1)[1].split(
             "cmd_planet_launch", 1

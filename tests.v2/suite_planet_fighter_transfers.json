@@ -15,7 +15,7 @@
     {
       "name": "Fixture citadel defenses and treasury",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id, construction_status, target_level, construction_start_time, construction_end_time, planetaryShields, militaryReactionLevel, qCannonSector, qCannonAtmosphere) VALUES (977701, 1, 555, @{planet_fighter_owner_player_id}, 'idle', 0, 0, 0, 100, 1, 0, 0) ON CONFLICT (planet_id) DO UPDATE SET level=1, treasury=555, construction_status='idle', target_level=0, construction_start_time=0, construction_end_time=0, planetaryShields=100, militaryReactionLevel=1;" },
+      "data": { "sql": "INSERT INTO citadels (planet_id, level, treasury, owner_id, construction_status, target_level, construction_start_time, construction_end_time, planetaryShields, militaryReactionLevel, qCannonSector, qCannonAtmosphere) VALUES (977701, 1, 555, @{planet_fighter_owner_player_id}, 'idle', 0, 0, 0, 100, 1, 50, 40) ON CONFLICT (planet_id) DO UPDATE SET level=1, treasury=555, construction_status='idle', target_level=0, construction_start_time=0, construction_end_time=0, planetaryShields=100, militaryReactionLevel=1, qCannonSector=50, qCannonAtmosphere=40;" },
       "expect": { "status": "ok" }
     },
     {
@@ -38,7 +38,9 @@
         { "path": "data.fighters", "op": "==", "value": 50 },
         { "path": "data.citadel.construction_status", "op": "==", "value": "idle" },
         { "path": "data.citadel.treasury_balance", "op": "==", "value": 555 },
-        { "path": "data.citadel.military_reaction_level", "op": "==", "value": 1 }
+        { "path": "data.citadel.military_reaction_level", "op": "==", "value": 1 },
+        { "path": "data.citadel.qCannonSector", "op": "==", "value": 50 },
+        { "path": "data.citadel.qCannonAtmosphere", "op": "==", "value": 40 }
       ]
     },
     {

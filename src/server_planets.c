@@ -682,6 +682,24 @@ cmd_planet_info (client_ctx_t *ctx, json_t *root)
                                json_integer (shields));
           json_object_set_new (citadel, "military_reaction_level",
                                json_integer (reaction));
+          int32_t qcannon_sector = 0, qcannon_atmosphere = 0;
+          int qcannon_rc = repo_citadel_get_qcannon_state
+            (db, pid, &qcannon_sector, &qcannon_atmosphere);
+          if (qcannon_rc != 0 && qcannon_rc != ERR_DB_NOT_FOUND)
+            {
+              json_decref (citadel);
+              json_decref (info);
+              send_response_error (ctx, root, ERR_DB,
+                                   "Could not retrieve Quantum Cannon settings.");
+              return 0;
+            }
+          if (qcannon_rc == 0)
+            {
+              json_object_set_new (citadel, "qCannonSector",
+                                   json_integer (qcannon_sector));
+              json_object_set_new (citadel, "qCannonAtmosphere",
+                                   json_integer (qcannon_atmosphere));
+            }
         }
       if (treasury_authorized && citadel_exists)
         {

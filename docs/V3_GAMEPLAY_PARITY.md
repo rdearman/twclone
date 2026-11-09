@@ -22,6 +22,15 @@ path exists; end-to-end behavior still needs focused protocol verification.
 | Turns/progression | Turn costs, experience, alignment, daily work and durable progression | `src/server_universe.c`, `src/server_players.c`, `src/server_engine.c`, `src/db/repo/repo_cron.c` | XP/turn restart and idempotency need end-to-end verification | No separate victory condition is established by the available V3 authority | Partial |
 | Events/persistence | Atomic state transitions, durable ledger/events and restart recovery | Domain handlers plus `src/db/repo/` and `src/server_engine.c` | Event replay/ACK/resume and several multi-step journeys lack runtime evidence | No universal gap asserted without a protocol-specific trace | Partial |
 
+## Additional correction in this pass
+
+- `planet.info` now includes `qCannonSector` and `qCannonAtmosphere` for an
+  existing citadel. Nullable database values are exposed as zero; missing
+  citadel configuration is distinguishable from a database query failure.
+  See `repo_citadel_get_qcannon_state` and `cmd_planet_info`. Build and source
+  contract tests are the available verification here; database-backed runtime
+  verification remains outstanding.
+
 ## Implemented corrections in this pass
 
 - `ship.jettison` now updates cargo on the authoritative active ship ID used by
