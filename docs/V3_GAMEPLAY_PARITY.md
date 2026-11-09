@@ -56,8 +56,10 @@ path exists; end-to-end behavior still needs focused protocol verification.
   remains outstanding (`0e81209c`, `5195480b`, `1f24988f`).
 - Planet attack and capture journal events now commit atomically with fighter,
   ownership and population changes; event-write failure rolls back the entire
-  combat settlement. Focused planetary/hazard tests and ASan/UBSan build pass;
-  DB runtime remains outstanding (`0abc2c09`).
+  combat settlement. Capture also conditionally validates the observed owner,
+  population type and defender fighter count, so stale calculations cannot
+  capture over concurrent reinforcements. Focused planetary/hazard tests and
+  ASan/UBSan build pass; DB runtime remains outstanding (`0abc2c09`, pending).
 
 - Police bribe and surrender now lock the current incident row inside a
   transaction, fail closed on read/write/commit errors, and include banned-only

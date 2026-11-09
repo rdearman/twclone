@@ -643,6 +643,19 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("Could not persist planet capture event", attack)
         self.assertIn("Could not persist planet combat event", attack)
 
+    def test_capture_rejects_stale_planetary_defence_count(self):
+        capture = self.planet_repo.split("int db_planets_capture(", 1)[1].split(
+            "int db_planets_lose_fighters", 1
+        )[0]
+        self.assertIn("expected_fighters", capture)
+        self.assertIn("COALESCE(fighters,0)={9}", capture)
+        self.assertIn("db_bind_i32(expected_fighters)", capture)
+        attack = self.planets.split("cmd_combat_attack_planet", 1)[1].split(
+            "cmd_planet_", 1
+        )[0]
+        self.assertIn("population_owner_type, p_fighters", attack)
+        self.assertIn("Planet state changed during invasion", attack)
+
 
 if __name__ == "__main__":
     unittest.main()

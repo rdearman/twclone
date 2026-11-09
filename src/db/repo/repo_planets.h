@@ -42,7 +42,8 @@ int db_planets_capture(db_t *db, int planet_id, int new_owner,
                        bool liberate_slaves,
                        const char *expected_population_type,
                        int expected_owner_id,
-                       const char *expected_owner_type);
+                       const char *expected_owner_type,
+                       int expected_fighters);
 
 /* Q13: Defend Planet (Lose Fighters) */
 int db_planets_lose_fighters(db_t *db, int planet_id, int loss);

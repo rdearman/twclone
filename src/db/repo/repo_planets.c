@@ -190,10 +190,11 @@ int db_planets_capture(db_t *db, int planet_id, int new_owner,
                        bool liberate_slaves,
                        const char *expected_population_type,
                        int expected_owner_id,
-                       const char *expected_owner_type) {
+                       const char *expected_owner_type,
+                       int expected_fighters) {
     if (!db || planet_id <= 0 || new_owner <= 0 || !new_type
         || !expected_population_type || expected_owner_id < 0
-        || !expected_owner_type)
+        || !expected_owner_type || expected_fighters < 0)
         return ERR_INVALID_ARG;
     db_error_t err = {0};
     int64_t rows = 0;
@@ -216,7 +217,8 @@ int db_planets_capture(db_t *db, int planet_id, int new_owner,
       "OR (population_type='COLONIST' AND {4}=TRUE) THEN NULL "
       "ELSE slave_unrest_last_event_at END "
       "WHERE planet_id={5} AND population_type={6} "
-      "AND COALESCE(owner_id,0)={7} AND COALESCE(owner_type,'')={8};";
+      "AND COALESCE(owner_id,0)={7} AND COALESCE(owner_type,'')={8} "
+      "AND COALESCE(fighters,0)={9};";
     char sql[1536];
     if (sql_build(db, query, sql, sizeof(sql)) != 0
         || !db_exec_rows_affected(db, sql,
@@ -225,8 +227,9 @@ int db_planets_capture(db_t *db, int planet_id, int new_owner,
                         db_bind_bool(enslave_colonists), db_bind_i32(planet_id),
                         db_bind_text(expected_population_type),
                         db_bind_i32(expected_owner_id),
-                        db_bind_text(expected_owner_type)},
-          8, &rows, &err))
+                        db_bind_text(expected_owner_type),
+                        db_bind_i32(expected_fighters)},
+          9, &rows, &err))
         return err.code ? err.code : ERR_DB_QUERY_FAILED;
     return rows == 1 ? 0 : ERR_DB_NOT_FOUND;
 }

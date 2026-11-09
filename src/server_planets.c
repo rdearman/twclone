@@ -410,7 +410,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       if (db_planets_capture (db, planet_id, new_owner, new_type,
                               enslave_colonists, liberate_slaves,
                               population_type, p_owner_id,
-                              population_owner_type) != 0)
+                              population_owner_type, p_fighters) != 0)
         {
           db_tx_rollback (db, NULL);
           send_response_error (ctx, root, ERR_DB_BUSY,

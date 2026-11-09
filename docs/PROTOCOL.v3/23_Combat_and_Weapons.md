@@ -18,6 +18,9 @@ Successful attacks are recorded as `player.attack_planet.v1` with `planet_id`,
 `player.capture_planet.v1` with `planet_id` and `previous_owner`.
 Both events are persisted in the same transaction as fighter losses, ownership,
 and population conversion; event-write failure aborts the combat settlement.
+A capture also compares the observed owner, population type and planetary
+fighter count at settlement; concurrent changes abort rather than bypassing
+reinforced defenses or overwriting a newer capture.
 
 ### `combat.attack.port`
 Attack a port.
