@@ -626,6 +626,23 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("db_exec_rows_affected", reaper)
         self.assertIn("if (!db_tx_commit(db, &err))", reaper)
 
+    def test_planet_attack_and_capture_events_commit_with_combat_state(self):
+        attack = self.planets.split("cmd_combat_attack_planet", 1)[1].split(
+            "cmd_planet_", 1
+        )[0]
+        commit = attack.index("db_tx_commit")
+        for event_type in (
+            '"player.capture_planet.v1"',
+            '"player.attack_planet.v1"',
+        ):
+            event_at = attack.index(event_type)
+            self.assertLess(event_at, commit)
+            call_start = attack.rfind("db_log_engine_event", 0, event_at)
+            call_end = attack.index(";", event_at)
+            self.assertIn(", db)", attack[call_start:call_end])
+        self.assertIn("Could not persist planet capture event", attack)
+        self.assertIn("Could not persist planet combat event", attack)
+
 
 if __name__ == "__main__":
     unittest.main()

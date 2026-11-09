@@ -54,6 +54,10 @@ path exists; end-to-end behavior still needs focused protocol verification.
   another worker advances the locked order. Focused source-contract tests and
   an ASan/UBSan server build passed; database runtime/concurrency verification
   remains outstanding (`0e81209c`, `5195480b`, `1f24988f`).
+- Planet attack and capture journal events now commit atomically with fighter,
+  ownership and population changes; event-write failure rolls back the entire
+  combat settlement. Focused planetary/hazard tests and ASan/UBSan build pass;
+  DB runtime remains outstanding.
 
 - Police bribe and surrender now lock the current incident row inside a
   transaction, fail closed on read/write/commit errors, and include banned-only

@@ -429,6 +429,66 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
         }
     }
 
+  /* Combat state and its authoritative journal entries are one settlement.
+   * If event persistence fails, do not leave a capture or fighter loss that
+   * cannot be reconstructed from the event stream. */
+  if (captured)
+    {
+      json_t *cap_evt = json_object ();
+      if (!cap_evt)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_NOMEM,
+                               "Could not build capture event");
+          return 0;
+        }
+      json_object_set_new (cap_evt, "planet_id", json_integer (planet_id));
+      json_object_set_new (cap_evt, "previous_owner",
+                           json_integer (p_owner_id));
+      json_object_set_new (cap_evt, "enslaved_colonists",
+                           json_boolean (enslave_colonists));
+      json_object_set_new (cap_evt, "liberated_slaves",
+                           json_boolean (liberate_slaves));
+      int event_rc = db_log_engine_event ((long long) time (NULL),
+                                          "player.capture_planet.v1", "player",
+                                          ctx->player_id, current_sector,
+                                          cap_evt, db);
+      json_decref (cap_evt);
+      if (event_rc != 0)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_DB,
+                               "Could not persist planet capture event");
+          return 0;
+        }
+    }
+
+  json_t *atk_evt = json_object ();
+  if (!atk_evt)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_NOMEM,
+                           "Could not build planet combat event");
+      return 0;
+    }
+  json_object_set_new (atk_evt, "planet_id", json_integer (planet_id));
+  json_object_set_new (atk_evt, "result",
+                       json_string (attacker_wins ? "win" : "loss"));
+  json_object_set_new (atk_evt, "ship_loss", json_integer (ship_loss));
+  json_object_set_new (atk_evt, "planet_loss", json_integer (planet_loss));
+  int attack_event_rc = db_log_engine_event ((long long) time (NULL),
+                                             "player.attack_planet.v1",
+                                             "player", ctx->player_id,
+                                             current_sector, atk_evt, db);
+  json_decref (atk_evt);
+  if (attack_event_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not persist planet combat event");
+      return 0;
+    }
+
   if (!db_tx_commit (db, &err))
     {
       db_tx_rollback (db, NULL);
@@ -436,38 +496,6 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
                            "Combat settlement failed; no changes were committed");
       return 0;
     }
-
-  if (captured)
-    {
-      json_t *cap_evt = json_object ();
-      if (cap_evt)
-        {
-          json_object_set_new (cap_evt, "planet_id", json_integer (planet_id));
-          json_object_set_new (cap_evt, "previous_owner",
-                               json_integer (p_owner_id));
-          json_object_set_new (cap_evt, "enslaved_colonists",
-                               json_boolean (enslave_colonists));
-          json_object_set_new (cap_evt, "liberated_slaves",
-                               json_boolean (liberate_slaves));
-          db_log_engine_event ((long long) time (NULL),
-                               "player.capture_planet.v1", "player",
-                               ctx->player_id, current_sector, cap_evt, NULL);
-          json_decref (cap_evt);
-        }
-    }
-
-  /* Log attack */
-  json_t *atk_evt = json_object ();
-  json_object_set_new (atk_evt, "planet_id", json_integer (planet_id));
-  json_object_set_new (atk_evt, "result",
-		       json_string (attacker_wins ? "win" : "loss"));
-  json_object_set_new (atk_evt, "ship_loss", json_integer (ship_loss));
-  json_object_set_new (atk_evt, "planet_loss", json_integer (planet_loss));
-  db_log_engine_event ((long long) time (NULL),
-		       "player.attack_planet.v1",
-		       "player", ctx->player_id, current_sector, atk_evt,
-		       NULL);
-  json_decref (atk_evt);
 
   /* Send response */
   json_t *resp = json_object ();

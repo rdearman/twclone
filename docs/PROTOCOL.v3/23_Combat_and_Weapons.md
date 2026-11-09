@@ -16,6 +16,8 @@ Attack a planet in the current sector.
 Successful attacks are recorded as `player.attack_planet.v1` with `planet_id`,
 `result`, `ship_loss`, and `planet_loss`; captures are recorded as
 `player.capture_planet.v1` with `planet_id` and `previous_owner`.
+Both events are persisted in the same transaction as fighter losses, ownership,
+and population conversion; event-write failure aborts the combat settlement.
 
 ### `combat.attack.port`
 Attack a port.
