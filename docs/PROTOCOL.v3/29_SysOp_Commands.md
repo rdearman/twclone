@@ -1,5 +1,7 @@
 # 29. SysOp Commands (v1)
 
+Canonical gameplay/configuration decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md).
+
 ## Overview
 
 This document defines the **SysOp (System Operator)** RPC commands.
@@ -19,7 +21,17 @@ Allows tuning of specific server parameters without a restart.
 ### Allowed Keys (v1)
 *   **Game Rules**: `turnsperday`, `neutral_band`, `illegal_allowed_neutral`, `illegal_min_experience`, `max_cloak_duration`, `limpet_ttl_days`
 *   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`, `planet_market.buy_order_expiry_seconds`
-*   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
+*   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_sale_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
+
+### Planet slave unrest policy
+
+The engine requires explicit SysOp values for the deterministic slave-unrest
+interval, stoppage duration and fixed population loss. These values have no
+implicit defaults: absent/incomplete values leave unrest inactive. Values must
+be positive integer durations/losses; no additional ranges are specified.
+Because the deterministic rule for allocating losses across unassigned and
+working population is not yet defined, activating unrest remains blocked until
+that policy is approved as well.
 
 ### `sysop.config.list`
 List all allowed config keys and their current values.
@@ -81,6 +93,10 @@ Update a config value.
 inclusive. Its default is 86400 seconds when unset. Changing it affects newly
 placed planet buy orders only; orders already open retain their persisted
 `expires_at` timestamp.
+
+`shipyard_sale_factor_bp` is an integer from 0 through 10000 inclusive, default
+6000. It sets the standalone ship-sale percentage in basis points and does not
+change `shipyard_trade_in_factor_bp` used by ship upgrades.
 
 ### `sysop.config.history`
 View audit history for a key.

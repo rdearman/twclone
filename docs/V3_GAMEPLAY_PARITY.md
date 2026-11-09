@@ -1,5 +1,7 @@
 # V3 gameplay parity checklist
 
+Canonical product decisions: [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md); Galactic Exchange contract: [`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_GALACTIC_EXCHANGE_CONTRACT.md).
+
 Scope: approved twclone V3 requirements and the project's pinned TradeWars
 player-facing scope (see `docs/V3_STATUS.md` and issue #491). This is a source
 and contract inventory, not runtime certification. “Implemented” means a code
@@ -7,15 +9,15 @@ path exists; end-to-end behavior still needs focused protocol verification.
 
 | Subsystem | Required | Implemented | Partial | Missing | Status |
 |---|---|---|---|---|---|
-| Player lifecycle | Register, authenticate, persist identity/session, recover state; list currently connected players | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | `player.list_online` now snapshots authenticated sessions and returns public id/username with offset pagination; session replay/client recovery needs protocol verification | Ranking key and online-list pagination/field allowlist prose conflict with executable schemas | Partial; online listing runtime verification pending |
-| Universe and navigation | Generated connected sectors/warps; movement, scans and route assistance | `src/bigbang_pg_main.c`, `src/server_universe.c`, `src/server_autopilot.c` | Transwarp fuel/interdiction and entry-hazard aftermath are unresolved | None established from source alone | Partial; see `V3_STATUS.md` |
-| Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c` | Transfer and shipyard journeys lack full runtime evidence; cargo mutations now serialize by ship row | `ship.sell` / `shipyard.sell` explicitly stubbed; settlement policy unresolved | Partial |
-| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Planet buy orders now place without escrow, validate funds/capacity during locked matching, partially fill, cancel unexecutable remainder, support player cancellation and persistent expiry/configuration; database-backed lifecycle verification pending | Haggling and canonical trade-policy details remain unresolved | Implemented in source; runtime unverified |
-| Planets/colonies | Genesis, landing, transfers, worker assignment, production and citadels | `src/server_planets.c`, `src/db/repo/repo_planets.c`, `src/db/repo/repo_cron.c` | Production, treasury, citadel lifecycle and combat aftermath are incomplete/unverified | `planet.harvest` is stubbed; `planet.view` is marked NYI and its morale field has no schema source | Partial |
-| Combat/defences | Ship/planet combat, fighters, mines, shields, destruction and recovery | `src/server_combat.c`, `src/server_planets.c`, `src/db/repo/repo_combat.c` | Combat odds, destruction/podding and hazard aftermath need canonical policy/runtime proof | No general gap declared without resolving issue #396 / `V3-CAN-00` | Partial |
+| Player lifecycle | Register, authenticate, persist identity/session, recover state; list currently connected players | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | Online listing deduplicates authenticated players, orders by player ID and exposes only ID/username/corporation/alignment via page/limit; runtime verification pending | Session replay/client recovery remains unverified | Partial |
+| Universe and navigation | Generated connected sectors/warps; movement, scans and route assistance | `src/bigbang_pg_main.c`, `src/server_universe.c`, `src/server_autopilot.c` | Interrupted-transwarp fuel/origin/no-destination-hazard rule is approved; implementation/runtime verification outstanding | No new policy blocker | Partial; see `V3_STATUS.md` |
+| Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow, sale | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c`, `src/db/repo/repo_stardock.c` | Standalone sale now atomically settles credits, cargo forfeiture, insurance termination, active replacement, audit and persistent used-hull inventory; runtime verification pending | Used-hull purchase has no approved request, valuation or settlement contract | Partial |
+| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Planet buy orders use unreserved best-effort matching, revalidate funds/capacity, permit partial fills, cancel unexecutable remainder and support cancellation/expiry; fixed current authoritative port prices | Price haggling is explicitly not part of V3; configured dynamic pricing remains authoritative | Implemented in source; runtime unverified |
+| Planets/colonies | Genesis, landing, transfers, worker assignment, production, harvest, population, slavery, emancipation and citadels | `src/server_planets.c`, `src/db/repo/repo_planets.c`, `src/db/repo/repo_cron.c` | Read-only `planet.view_v1` uses an allowlist and owner/corporation-only treasury; `planet.emancipate` converts all slaves transactionally for owner/Leader/Officer; population-type persistence and once-per-tick production groundwork added; slave output is half after normal production calculation; harvest partial-capacity rule approved | Harvest permission, deterministic unrest parameters, slave acquisition and capture conversion remain incomplete | Partial |
+| Combat/defences | Ship/planet combat, fighters, mines, shields, destruction and recovery | `src/server_combat.c`, `src/server_planets.c`, `src/db/repo/repo_combat.c` | Mandatory pod respawn, asset loss and planet capture/population/treasury policies are approved; implementation/runtime verification outstanding | Pin TradeWars edition only for remaining parity rules not set by V3 | Partial |
 | Corporations | Membership, roles, shared assets, treasury and governance | `src/server_corporation.c`, `src/db/repo/repo_corporation.c` | Membership events and advanced settlement require verification | Tax/dividend RPCs are explicitly not registered; stock subcommands have a stub fallback | Partial |
-| Banking/finance | Balances, deposits, withdrawals, transfers, statements and interest | `src/server_bank.c`, `src/db/repo/repo_bank.c`, `src/server_engine.c` | Interest schedule/replay and ledger/restart invariants unresolved | Standing-order processing is a TODO (`db_bank_process_orders`); no CRUD RPC is registered | Partial |
-| Stations/services | StarDock, shipyard, tavern, hardware and police interactions | `src/server_stardock.c`, `src/server_police.c`, `src/server_communication.c` | Tavern rules and police/station journeys need verified end-to-end evidence | Shipyard sale is stubbed; police interaction runtime evidence remains pending | Partial |
+| Banking/finance | Balances, deposits, withdrawals, transfers, statements, interest and standing orders | `src/server_bank.c`, `src/db/repo/repo_bank.c`, `src/server_engine.c` | Daily/weekly/monthly UTC standing-order rules, including month-end clamp and invalid-recipient cancellation, approved; durable scheduler and settlement implementation remain outstanding | No arbitrary active-order limit; remaining edge behavior is specified | Partial |
+| Stations/services | StarDock, shipyard, tavern, hardware and police interactions | `src/server_stardock.c`, `src/server_police.c`, `src/server_communication.c` | Atomic sale persists the used hull and audit; runtime verification pending; police/station journeys need end-to-end evidence | Used-hull purchase lifecycle awaits request and valuation contract | Partial |
 | Federation/law | Alignment, protected space/assets, penalties and enforcement | `src/server_combat.c`, `src/server_police.c`, `src/server_cron.c` | Police bribe/surrender rules are implemented; Captain Z/MSL jurisdiction and daily sweep still need approved-contract runtime verification | Do not infer pursuit or enforcement outside explicit contracts | Partial; decisions in `docs/design/V3_NPC_FEDERATION_PHASES.md` |
 | NPC universe | Persistent faction ships, trading, movement, combat and consequences | `src/server_engine.c`, `src/server_cron.c`, `src/db/repo/repo_cron.c` | Ferengi/Orion autonomous behavior and security responses are incomplete/unverified | Blockade, hunting and pursuit claims require behavior-level verification | Partial; see `docs/PROTOCOL.v3/27_NPC_and_Ferengi_AI.md` |
 | Computer/intelligence | Scanning, plots, recommendations and information boundaries | `src/server_universe.c`, `src/server_players.c`, `src/server_autopilot.c` | Knowledge persistence and deterministic route recommendations need runtime verification | Ranking/information scope has open issue #423 | Partial |
@@ -125,45 +127,50 @@ No database startup, migration, fixture load, or regression suite was run.
 
 ## Next actionable correction
 
-Continue with the next source-confirmed defect whose behavior is explicit in the
-approved protocol; do not implement the ambiguously specified sale, harvest,
-standing-order, or `planet.view` policies below without resolving their
-contracts.
+Continue with source-confirmed gameplay gaps whose behavior is explicit in the
+approved protocol. Runtime verification of recent transactions remains pending.
 
 ## Explicit specification blockers
 
-- `V3-CAN-00` / issue #491: canonical edition and SysOp policy needed before
-  finalizing haggling, insurance, harvest, combat odds, capture, or planet
-  destruction rules.
-- `planet.view` describes morale but `planets` has no morale field; its
-  response and relation to the existing `planet.info` command need resolution.
-- `player.list_online` prose and schemas disagree about pagination/fields.
-- `bank.orders.*` is only described as “manage recurring payments”; schedule,
-  recipient authorization, execution timing and failure semantics are absent.
+- `V3-CAN-00` / issue #491 still requires a pinned TradeWars edition for any
+  parity question not resolved by approved V3 policy. V3 has now explicitly
+  ruled out haggling and defined hull-only insurance, escape-pod destruction,
+  planet-capture population policy and interrupted-transwarp behavior.
+- Planet harvest permission for landed non-owners remains unspecified; partial
+  transfer to available ship capacity is approved.
+- Slave unrest interval, stoppage duration and fixed loss values require
+  explicit SysOp configuration; deterministic allocation of losses among
+  unassigned/working populations is still undefined. Unrest must remain
+  inactive until resolved.
+- Used-hull acquisition request, price and settlement remain undefined.
+
+## Implemented in the current work batch
+
+- `planet.view` is registered as a read-only, allow-listed overview. It reuses
+  existing visibility/landing authorization; only the owner or an authorized
+  corporation member receives the planet treasury. JSON acceptance cases
+  cover owner treasury visibility and landed-visitor redaction. Runtime
+  verification remains pending.
+- `planet.emancipate` performs an owner/authorized corporation management
+  conversion under a locked planet row and locked membership role, preserves
+  population/allocation columns, and clears outstanding slave unrest fields in
+  the same transaction. Focused behavioral contract assertions were added to
+  the existing planetary JSON suite; actual protocol/database execution is
+  pending.
 
 ## Gameplay contract amendments awaiting approval
 
-- **Ship sales — AWAITING APPROVAL:** Define sale location and price/fee formula;
-  treatment of cargo and installed equipment; whether active/last ships may be
-  sold; whether sale destroys the hull or returns it to stock; and insurance or
-  ownership-record consequences. Until then, the existing sale stubs cannot
-  safely settle credits or ship state.
-- **Planet harvesting — AWAITING APPROVAL:** Define harvestable resources,
-  amount/yield formula, costs/turns, storage destination and capacity rules,
-  eligibility, and whether harvesting changes planet production or ownership.
-  `planet.harvest` currently supplies only `planet_id`; canon #491/V3-CAN-00
-  does not resolve these rules.
-- **`planet.view` — AWAITING APPROVAL:** Define morale source and production
-  units/meaning, and resolve whether landing grants access to treasury fields
-  that `planet.info` currently restricts to owners/corporation members. The
-  existing NYI example does not settle these visibility semantics.
-- **Online-player listing — AWAITING APPROVAL:** Reconcile prose `{page,limit}`
-  and `{players,pagination}` with executable `{offset,limit,fields}` and
-  `{total_online,returned_count,offset,limit,players}` schemas. Define the
-  allowed `fields` values and which profile/location/economic details are
-  public. The implemented listing therefore exposes only session presence,
-  player id and username pending that decision.
-- **Bank standing orders — AWAITING APPROVAL:** Define schedule representation
-  and timezone, permitted recipients and authorization, execution cadence,
-  failure/retry/cancellation semantics, and idempotency. The existing table
-  and processing TODO do not define these player-visible rules.
+- **Used-hull purchase — SPECIFICATION REQUIRED:** Define request, price,
+  eligibility and settlement before used inventory can be acquired.
+- **Planet harvesting — PARTIAL CONTRACT:** Resources, landed-ship destination,
+  zero turns, conservation, atomicity and partial transfer up to available
+  ship capacity are approved. Permission for landed non-owner/corporation
+  actors remains unspecified and must follow existing authorization rules.
+- **Slave unrest — POLICY VALUES/LOSS ALLOCATION REQUIRED:** No interval,
+  stoppage duration or fixed loss quantity is selected. The deterministic rule
+  for reducing assigned versus unassigned workers is also unspecified; keep
+  unrest inactive.
+- **Planet morale display — PARTIAL CONTRACT:** Slave morale is permanently
+  low, but numeric encoding and colonist morale source are not defined. Do not
+  invent numeric morale. Planet overview treasury visibility is owner or
+  authorized corporation-member only.

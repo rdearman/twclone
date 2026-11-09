@@ -47,20 +47,30 @@ variants.
 
 ## Confirmed outstanding functionality
 
-- `ship.sell` and `shipyard.sell` explicitly refuse as not implemented;
+- `ship.sell` and `shipyard.sell` now share an atomic sale settlement and
+  persist identifiable used hulls; used-hull acquisition remains undefined
+  because V3 has no purchase request or pricing/settlement contract.
   `ship.transfer` has source-level transactional code but lacks accepted live
   two-player settlement and lifecycle evidence. See `src/server_ships.c`,
-  `src/server_stardock.c`, and `tests.v2/suite_ship_tow_live.json` plus ship
+  `src/server_stardock.c`, and `tests.v2/suite_ship_sale_v3.json` plus ship
   lifecycle tests.
-- `planet.harvest` explicitly refuses as not implemented. Planet production,
-  positive treasury settlement, citadel lifecycle, landing/launch rollback, and
-  destruction/capture remain incomplete or unverified. See `src/server_planets.c`
-  and `tests.v2/suite_planet_landing_defense.json`.
-- Transwarp canonical fuel, interdiction/lock rules, and full entry-hazard
-  aftermath remain unresolved. Warp/transwarp/launch/flee/tow need one accepted
-  hazard transaction and destruction/pod/respawn matrix.
+- `planet.harvest` remains unimplemented. Its resource, landed-ship destination,
+  zero-turn, no-generation, atomicity and partial-capacity rules are approved;
+  authorization for a landed non-owner remains unresolved. `planet.view` and
+  `planet.emancipate` now have source handlers, but runtime verification is
+  pending. Population-type and slave-production groundwork exists; conquest
+  conversion, slave acquisition and deterministic unrest remain incomplete.
+- Mandatory escape-pod respawn, cargo/equipment loss, interrupted-transwarp
+  and immediate entry-hazard policies are approved in protocol 21/23;
+  implementation across every destruction/movement path remains outstanding.
 - Full trade settlement, retries, restart conservation, market-order matching,
-  haggling, and the trade-account preference contract remain unresolved.
+  and the trade-account preference contract remain unresolved. V3 excludes
+  haggling and retains authoritative dynamic port prices.
+- The Galactic Exchange source audit found that immediate planetary sales
+  remove stock and credit the seller without recording Exchange inventory or
+  an Exchange-funded buyer; scheduled order matching instead transfers goods
+  directly between seller and buyer locations. Exchange ownership/funding
+  integration is required. See `V3_GALACTIC_EXCHANGE_CONTRACT.md`.
 - Bank-interest runtime wiring is unresolved: isolated SQL exists, but one
   authoritative scheduler path, ledger classification, idempotency, rollback,
   and restart evidence are still required.
@@ -72,9 +82,10 @@ variants.
 
 ## Known blockers and issue references
 
-- `V3-CAN-00`: pin the TW2002 edition and SysOp policy before accepting haggling,
-  insurance, harvest, market orders, combat odds, capture, or planetary-destruction
-  behavior as canonical.
+- `V3-CAN-00`: pin the TW2002 edition for parity questions not settled by
+  approved V3 policies. V3 has explicit rules for fixed-price trade, hull-only
+  insurance, harvest, destruction/respawn, capture and interrupted transwarp;
+  these do not assert edition-specific parity.
 - Issue `#491`: original player-facing parity authority; federation and other
   noncanonical expansions are outside that release authority.
 - Issue `#423`: computer/intelligence, scans, rankings, and information scope.

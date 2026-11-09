@@ -1,5 +1,7 @@
 # 21. Sector & Movement Commands
 
+Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md).
+
 ## 1. Sector Information
 
 ### `sector.info` (Alias: `move.describe_sector`)
@@ -93,6 +95,12 @@ Long-range jump (requires equipment).
 **Hazard Trigger**: Triggers all entry hazards (fighters, mines, limpets) at the destination sector.
 The same persistence and event behavior applies to transwarp entry. A refused
 movement does not invoke the entry resolver or consume sector assets.
+
+If an initiated transwarp is interrupted, required fuel remains consumed, the
+ship remains at its origin, and destination-entry hazards do not run. Record
+the interrupted movement using existing movement-event conventions. A request
+rejected before initiation is not an interruption; existing validation and
+turn rules remain in force.
 
 ### `move.pathfind`
 Calculate a route through the current sector and sectors the player has visited.

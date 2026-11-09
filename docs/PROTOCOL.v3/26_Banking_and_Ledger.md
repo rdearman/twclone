@@ -1,5 +1,7 @@
 # 26. Banking & Ledger
 
+Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md); Exchange settlement: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+
 ## 1. Personal Banking
 
 Commands typically available at Stardock or banking ports.
@@ -34,7 +36,17 @@ List wealthiest players.
 ## 2. Standing Orders
 
 ### `bank.orders.list` / `create` / `cancel`
-Manage recurring payments (e.g., salaries).
+Standing orders support daily, weekly and monthly schedules at an explicitly
+specified UTC execution time. Recipients may be any existing player. If funds
+are insufficient for a due occurrence, skip that occurrence without debt or
+later retry; keep the order active for its next scheduled occurrence. A
+successful cancellation prevents future payments immediately, while completed
+payments remain final in the ledger. Schedule state is durable, each occurrence
+settles at most once, and cancellation serializes with execution. If a monthly
+scheduled day does not exist, execute on that month's last day while retaining
+the configured day for subsequent months. If the recipient no longer exists,
+cancel the order without reversing completed payments. No arbitrary active
+order limit is imposed.
 
 ## 3. Engine Events
 
@@ -49,3 +61,12 @@ settles an existing `claim_id` with `event_id` and `amount`; PostgreSQL locks
 the claim, policy, fund and holder account, and repeated settlement is
 idempotent. No server-side balance or claim updates are performed outside
 those routines.
+
+V3 insurance covers hull replacement only. On qualifying ship destruction it
+settles automatically to the player's bank account under existing eligibility,
+premium, policy-lifecycle and claim rules. Cargo and installed equipment are
+not covered, insurance does not directly replace the ship, and it does not
+alter mandatory escape-pod respawn. Selling an insured ship terminates its
+policy without refund. Use the existing authoritative insured-hull valuation;
+if that valuation cannot be determined from current policy/configuration,
+record the exact valuation gap instead of inventing a formula.

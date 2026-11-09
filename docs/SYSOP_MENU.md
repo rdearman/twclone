@@ -31,6 +31,7 @@ Only the following keys are exposed via `sysop.config.*` commands.
 *   `bank_alert_threshold_corp`
 *   `shipyard_enabled`
 *   `shipyard_trade_in_factor_bp`
+*   `shipyard_sale_factor_bp` (integer, 0–10000; default 6000; standalone sale only)
 *   `shipyard_require_cargo_fit`
 *   `shipyard_require_fighters_fit`
 *   `shipyard_require_shields_fit`

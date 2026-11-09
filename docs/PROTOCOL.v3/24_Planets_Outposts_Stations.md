@@ -1,5 +1,7 @@
 # 24. Planets, Outposts, & Stations
 
+Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md); Exchange accounting: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+
 ## 1. Planet Interaction
 
 ### `planet.land`
@@ -156,8 +158,13 @@ ownership and landing, rejects insufficient source fighters or ship capacity,
 and returns authoritative post-transfer quantities only after commit. It does
 not charge turns.
 
-### `planet.view` [NYI]
-View detailed planet information after landing (includes colonists, production, citadel status, treasury).
+### `planet.view`
+Read-only planetary overview (`planet.view_v1`). `planet.info` remains the
+detailed management response. The overview follows existing planet visibility
+and landing access rules and is built from an explicit public-field allowlist;
+it does not expose owner IDs or management/scheduling internals. Treasury is
+included only for the owner or an authorized corporation member. Public
+overview and authorized financial fields are distinct in the response schema.
 **Availability**: After successful `planet.land`
 **Response**:
 ```json
@@ -166,7 +173,7 @@ View detailed planet information after landing (includes colonists, production, 
   "name": "Terra II",
   "class": "M",
   "colonists": 5000,
-  "morale": 85,
+  "population_type": "COLONIST",
   "production": {
     "ore": 100,
     "equipment": 50,
@@ -189,6 +196,51 @@ View detailed planet information after landing (includes colonists, production, 
   "treasury": 100000
 }
 ```
+
+### Approved population and labour policy
+
+A planet has exactly one population type: `COLONIST`, `SLAVE`, or
+`UNPOPULATED`; mixed colonist/slave populations are prohibited. Existing
+population counts and worker allocations are preserved. Slave labour produces
+exactly half the otherwise-computed output, rounded down with integer
+arithmetic after the existing authoritative production calculation. There is
+no additional permanent morale multiplier. During a persisted unrest
+stoppage, slave production output is zero; colonist production continues under
+existing rules.
+
+Slave morale is permanently low and cannot be improved by treatment or
+management. Unrest is deterministic, may stop production and reduce slave
+population, and cannot change ownership. It must be driven by persisted engine
+state, never random rolls or random loss quantities. Unrest interval, stoppage
+duration and population-loss parameters are not assigned defaults here; no
+unrest event may be activated until SysOp policy values and deterministic
+allocation of losses across assigned/unassigned population are configured.
+
+Evil-aligned players may purchase slaves or enslave colonists during a
+successful planetary conquest. Neutral players may inherit slaves through
+capture but may not purchase or enslave additional slaves. Good-aligned
+players automatically liberate all slaves when capturing a planet. Evil or
+neutral capture may preserve existing slaves. An authorized owner or
+corporation manager may explicitly emancipate the entire slave population;
+partial emancipation is unsupported and the conversion preserves counts and
+production allocations. Emancipation is atomic and costs no turns or credits.
+
+Slave purchases use the existing illegal-commodity/black-market path only
+where a port is configured to sell them and remain subject to normal access,
+alignment, stock, credit and cargo-capacity checks. Colonists cannot be added
+to a slave planet, nor slaves to a colonist planet, without a complete
+conversion/removal operation. Slave acquisition must use a safe, authoritative
+transport path; it must not create population directly on a remote planet.
+
+`planet.harvest` transfers accumulated ore, organics and equipment production
+to the player's currently landed ship, without generating resources or
+consuming turns. Planet stock decreases by exactly what the ship receives;
+ship capacity is authoritative and the complete transfer is atomic. Harvest
+authorization remains subject to existing ownership/corporation permissions;
+do not grant unrestricted withdrawal. If the existing withdrawal permission
+path does not resolve an actor, that permission question remains a blocker.
+When capacity is insufficient, transfer only what fits and leave the remainder
+in planetary inventory.
 
 ### `planet.deposit` / `planet.withdraw`
 Transfer cargo/colonists between ship and planet.

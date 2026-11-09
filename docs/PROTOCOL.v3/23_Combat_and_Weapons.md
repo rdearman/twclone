@@ -1,5 +1,7 @@
 # 23. Combat & Weapons
 
+Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md).
+
 ## 1. Combat Commands
 
 ### `combat.attack.ship`
@@ -33,6 +35,35 @@ Attack a port.
 - **Enforcement**: Attacker's ship is instantly destroyed and attacker is podded
 - **No Mitigation**: Intervention occurs regardless of target type; action does not proceed
 - **Effect**: Attack attempt returns status `refused` with error code 402 and message "Captain Z intervenes"
+
+### Ship destruction and respawn
+
+Every player ship destruction results in escape-pod respawn. This does not
+depend on pod equipment. The destroyed ship's cargo and equipment are lost;
+bank credits, planets and corporate assets survive. No basic replacement ship
+is issued, and the player has exactly one valid active pod ship after
+settlement. All destruction sources use the same idempotent loss/respawn
+settlement. Eligible insurance pays the applicable hull replacement value to
+the player's bank account automatically; it covers neither cargo nor installed
+equipment, does not directly replace the ship, and cannot pay twice for one
+destruction. Selling an insured ship ends that ship's policy without refund.
+Use existing policy eligibility and valuation rules; do not invent missing
+valuation details.
+
+### Planet capture and population
+
+A planet may be captured only after its defences are defeated and the existing
+invasion succeeds. Capture transfers planet ownership while the planet's
+resources and treasury remain with the planet; it does not transfer the
+previous owner's personal bank balance or unrelated corporate funds. Preserve
+other planet assets unless an explicit combat rule destroys them.
+
+Population conversion is part of the same capture transaction. An evil captor
+must explicitly choose whether to enslave a colonist population. A good
+captor automatically liberates a slave population. Neutral captors retain an
+existing slave population; evil captors may also retain it. A good captor's
+liberation converts the full population to colonists. Capture does not itself
+permit partial population conversion. Do not invent corporate-capture rules.
 
 ### Major Space Lanes (MSL Sectors > 10)
 - **Deployment**: Fighters, mines, and beacons may be deployed normally

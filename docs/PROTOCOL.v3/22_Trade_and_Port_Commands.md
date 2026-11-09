@@ -1,5 +1,7 @@
 # 22. Trade & Port Commands
 
+Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md); Galactic Exchange lifecycle: [`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+
 ## 1. Port Interaction
 
 ### `port.dock`
@@ -102,6 +104,18 @@ The server enforces two optional quantity restrictions on trades:
 
 **Events**: Emits `player.trade.v1` and `trade.deal.matched`.
 
+### Galactic Exchange settlement
+
+Planet and port inventory traded through the Galactic Exchange follows the
+authoritative ownership, funding, matching and conservation contract in
+[`../V3_GALACTIC_EXCHANGE_CONTRACT.md`](../V3_GALACTIC_EXCHANGE_CONTRACT.md).
+An order is not a completed trade. Executed transfers are immediate virtual
+inventory movements, recorded and settled atomically; no physical Exchange
+transport ship or travel delay is involved. No trade may create or discard
+commodities, and the Exchange may not pay sellers from invented/unlimited
+liquidity. Price haggling is not part of V3; current configured dynamic prices
+remain authoritative.
+
 ### Player trade offers
 
 `trade.offer` creates a persisted offer addressed to `to_player_id`. Required
@@ -182,6 +196,11 @@ Rejection records a declined deal. Both outcomes update per-player reputation
 and interaction history. Actions are idempotent for already-settled,
 declined, or expired deals. Open offers expire on the NPC cron pass and are
 also checked when acted on. No haggling or price negotiation is defined.
+
+V3 trading is fixed-price: there is no haggling or random negotiation outcome.
+The fixed price is still the server's current authoritative quote, including
+applicable port-class, stock, supply/demand and black-market pricing rules; it
+is not one universal static commodity price.
 
 ## 3. Events
 

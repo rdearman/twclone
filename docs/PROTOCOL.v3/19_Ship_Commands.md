@@ -155,6 +155,46 @@ Upgrade the active ship while docked at a shipyard. Args:
 On success, `shipyard.upgraded_v1` acknowledges `ship_id`, `new_type_id`,
 `new_ship_name`, and `credits_spent`. Failures retain the existing error codes.
 
+### `ship.sell` and `shipyard.sell`
+These command names invoke the same standalone sale operation. The authenticated
+player must be docked at a StarDock, an enabled shipyard, or an authorized
+black-market yard, and the sold hull must be docked at that same facility.
+Shipyard eligibility is read from the database-backed port classification and
+inventory, not from a numeric port type. Existing local jurisdiction bans apply
+at black-market yards.
+
+Request:
+`{ "ship_id": 12, "replacement_ship_id": 14 }`.
+Both fields are required. The replacement must be a different, eligible
+primary-owned ship. The player cannot sell their last primary-owned ship. If
+the sold hull is active, the selected replacement becomes active in the same
+transaction.
+
+The sale proceeds are
+`floor((shiptypes.basecost + installed equipment value) * factor_bp / 10000)`.
+Equipment unit values come from the hardware catalogue. The standalone factor
+defaults to 6000 basis points and is controlled by the SysOp key
+`shipyard_sale_factor_bp` (0–10000); it is separate from the upgrade trade-in
+factor. Cargo is forfeited without compensation. Installed equipment and the
+ship's hull identity/condition remain with the used hull. Any active insurance
+policy on that ship is terminated without refund.
+
+Success returns `ship.sold_v1` with `ship_id`, `replacement_ship_id`,
+`shipyard_port_id`, `hull_valuation`, `installed_equipment_valuation`,
+`sale_factor_bp`, `sale_proceeds`, `updated_credits`, `cargo_forfeited`,
+`insurance_terminated`, `sale_id`, and `used_inventory_id`. The sale, cargo
+forfeiture, insurance termination, ownership removal, active-ship replacement,
+credit settlement, audit record, and used-inventory entry commit atomically.
+Repeating a completed sale cannot pay twice because the sold hull is no longer
+owned by the seller. A used-inventory hull is not an abandoned hull and cannot
+be acquired through `ship.claim`.
+
+The used hull is persisted as identifiable shipyard inventory. V3 does not yet
+define a used-hull purchase request, valuation/price rule, or acquisition
+settlement contract; listing a used hull as purchasable is therefore not
+implemented by this contract. New-hull purchasing and shipyard upgrades are
+unchanged.
+
 ---
 
 ## 3. Cargo System Invariants (Phase 1+)

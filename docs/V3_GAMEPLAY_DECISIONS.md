@@ -1,0 +1,98 @@
+# V3 Gameplay Decision Register
+
+Canonical product-owner decisions for V3 gameplay. These decisions supersede
+conflicting legacy prose and implementation assumptions. Detailed command
+contracts are in `docs/PROTOCOL.v3/`; economic settlement is specified in
+[`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_GALACTIC_EXCHANGE_CONTRACT.md). The
+parity checklist is [`V3_GAMEPLAY_PARITY.md`](V3_GAMEPLAY_PARITY.md).
+
+Status vocabulary: **APPROVED** means policy is decided; **EXISTING** means
+source currently has a corresponding path (not proof it is correct); **REQUIRED**
+means approved behavior is not fully implemented; **UNRESOLVED** means a
+specific policy value/choice is still needed; **VERIFIED** is reserved for
+behavior actually demonstrated by executed tests. Source inspection and
+compilation alone never qualify as VERIFIED.
+
+## Planet population, labour and capture
+
+| ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references | Status / verification / unresolved details |
+|---|---|---|---|---|---|
+| POP-01 | Population | A planet is `COLONIST`, `SLAVE`, or `UNPOPULATED`; never mixed. Preserve counts and allocations. Existing populated planets migrate as colonists; empty planets remain unpopulated. | Migrations `171_v3_planet_population_state.sql`, `123_v3_planet_population_state.sql`; `src/server_planets.c`; `src/db/repo/repo_planets.c` | `24_Planets_Outposts_Stations.md` | APPROVED; persistence groundwork EXISTING; complete acquisition/capture transitions REQUIRED; runtime UNVERIFIED. |
+| POP-02 | Acquisition | Evil players may buy slaves or choose enslavement on successful conquest. Neutral may inherit but cannot buy/enslave. Good cannot retain slaves after qualifying capture. Never create remote planetary population without safe transport. | `src/server_ports.c`, `src/server_planets.c`, `src/server_combat.c` | `22_Trade_and_Port_Commands.md`, `23_Combat_and_Weapons.md`, `24_Planets_Outposts_Stations.md` | APPROVED; purchase and conquest integration REQUIRED; commodity availability must be configured per port. |
+| POP-03 | Slave productivity | Ore, organics and equipment output is `floor(normal_output * 50 / 100)`, once after normal authoritative calculation; no second morale penalty. | `src/db/repo/repo_cron.c` | `24_Planets_Outposts_Stations.md` | APPROVED; code path EXISTING, but production tick implementation needs focused verification; not runtime VERIFIED. |
+| POP-04 | Morale | Slave morale is permanently low and cannot improve. No additional continuous output modifier. Preserve existing colonist rules; invent no dynamic colonist morale. | `src/server_planets.c` | `24_Planets_Outposts_Stations.md` | APPROVED; LOW status exposed in detail source; no numeric morale encoding approved. |
+| POP-05 | Unrest | Evaluate daily; deterministic, persisted, restart/idempotency-safe. May stop production and reduce slave population; may not change ownership, destroy planets, liberate or convert population. | Migrations `171_v3_planet_population_state.sql`, `123_v3_planet_population_state.sql`; `src/db/repo/repo_cron.c`, `src/server_engine.c` | `24_Planets_Outposts_Stations.md`, `29_SysOp_Commands.md` | APPROVED; dormant infrastructure REQUIRED. UNRESOLVED: trigger/recurrence, stoppage cycles, fixed loss amount/percentage and deterministic allocation between workers/unassigned. No implicit defaults; no effect may activate until configured. |
+| POP-06 | Emancipation | Owner or authorized corporation management (Leader/Officer) converts all slaves to colonists atomically, preserving population and allocations; no turn/credit cost; no partial conversion. | `src/server_planets.c`, `src/db/repo/repo_planets.c` | `24_Planets_Outposts_Stations.md` | APPROVED; source handler/repository present in working tree; runtime UNVERIFIED. |
+| POP-07 | Capture conversion | Capture requires defeated defenses and successful invasion. Evil explicitly chooses retain/enslave colonists; good automatically liberates slaves; neutral retains inherited slaves; evil may retain them. Planet resources/treasury remain with captured planet. No corporation-capture rule is inferred. | `src/server_combat.c`, `src/db/repo/repo_planets.c` | `23_Combat_and_Weapons.md`, `24_Planets_Outposts_Stations.md` | APPROVED; atomic population conversion REQUIRED; corporate ownership policy UNRESOLVED only if existing model needs a new rule. |
+| HARV-01 | Harvest capacity | `planet.harvest` transfers accumulated ore/organics/equipment only to currently landed ship, capped to available holds; remainder stays on planet; zero turns; no generation; atomic. | `src/server_planets.c`, `src/db/repo/repo_planets.c` | `24_Planets_Outposts_Stations.md` | APPROVED; handler currently stub; REQUIRED; runtime UNVERIFIED. |
+| HARV-02 | Harvest permission | Use existing authoritative ownership/corporation permissions; no unrestricted withdrawal. | `src/server_planets.c` | `24_Planets_Outposts_Stations.md` | APPROVED; whether landed non-owner may harvest is UNRESOLVED. Implement only once existing permission contract resolves it. |
+| HARV-03 | Exchange/harvest | Planet surplus may be sold directly to Exchange; sale immediately removes available planetary stock, so sold goods cannot later be harvested. | `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_market.c` | `22_Trade_and_Port_Commands.md`; Galactic Exchange contract | APPROVED; Exchange ownership accounting REQUIRED. |
+
+## Galactic Exchange and economy
+
+| ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references | Status / verification / unresolved details |
+|---|---|---|---|---|---|
+| EXC-01 | Participants | Planets buy/sell Exchange goods; ports buy from Exchange; preserve compatible port, order and NPC trade paths. | `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_market.c` | `22_Trade_and_Port_Commands.md` | APPROVED; source audit confirms current book is bilateral, with no Exchange participant; runtime UNVERIFIED. |
+| EXC-02 | Settlement | Validate source stock and destination funds/capacity, transfer inventory and credits, record durable transaction atomically; completed goods arrive immediately. | `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_market.c` | `22_Trade_and_Port_Commands.md` | APPROVED; immediate planet sale is a confirmed gap (stock decrement + seller credit, no Exchange receipt/funded buyer); matched order paths do direct bilateral settlement. |
+| EXC-03 | Ring-fencing | Sold goods leave seller ownership and cannot be harvested, resold, built with, consumed or counted twice. | `src/db/repo/repo_market.c`, market migrations | Galactic Exchange contract | APPROVED; no Exchange inventory representation found in inspected order/trade schema; REQUIRED. |
+| EXC-04 | Virtual transport | Deliveries are immediate economic transfers; no physical NPC ships, movement, fuel, holds, docking or delay. | `src/server_cron.c` | Galactic Exchange contract | APPROVED; no virtual vessel entities are to be created. |
+| EXC-05 | Orders | Keep placement, reservation, execution and settlement distinct. Open orders wait for matches; partial fills preserve remainder; no duplicate settlement. | `src/server_cron.c`, `src/db/repo/repo_market.c` | `22_Trade_and_Port_Commands.md` | APPROVED; current order lifecycle EXISTING; verify atomic accounting. |
+| EXC-06 | Port demand | Port demand follows current target/pricing/capacity rules; ports purchase Exchange goods to replenish. Do not bypass Exchange with artificial supply unless a separate source is documented. | `src/server_cron.c` | `22_Trade_and_Port_Commands.md` | APPROVED; current shortage BUY orders match directly against seller location orders, not Exchange inventory; REQUIRED. |
+| EXC-07 | Conservation | Every trade has a source and destination; seller decrease equals exchange increase or buyer increase; no trade creates/destroys goods. Production/consumption are separate. | `src/db/repo/repo_market.c`, `src/server_cron.c` | Galactic Exchange contract | APPROVED; tests REQUIRED. |
+| EXC-08 | Finance | Atomic credits, no unauthorized negative balances, durable records, retry/idempotency/concurrency safety, no stale/cancelled settlement. No invented unlimited Exchange liquidity. | `src/db/repo/repo_market.c`, `src/server_bank.c` | Galactic Exchange contract, `26_Banking_and_Ledger.md` | APPROVED; no funded Exchange account found in inspected sources; identify/implement existing funded mechanism before Exchange-funded purchases. |
+| TRADE-01 | Pricing | No haggling. Existing fixed-at-quote authoritative price and configured dynamic supply/demand/black-market pricing remain. | `src/server_ports.c`, `src/db/repo/repo_ports.c` | `22_Trade_and_Port_Commands.md` | APPROVED; no negotiation mechanic. |
+
+## Banking and player visibility
+
+| ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references | Status / verification / unresolved details |
+|---|---|---|---|---|---|
+| BANK-01 | Standing-order schedule | Daily, weekly, monthly at specified UTC time; any existing player may be recipient. | `src/server_bank.c`, `src/db/repo/repo_bank.c`, `src/server_engine.c` | `26_Banking_and_Ledger.md` | APPROVED; durable scheduler REQUIRED. |
+| BANK-02 | Insufficient funds | Skip that occurrence without debt or same-occurrence retry; next occurrence remains active. | Banking repository/engine | `26_Banking_and_Ledger.md` | APPROVED; REQUIRED. |
+| BANK-03 | Monthly edge | If configured day is absent, run last day of month and retain original configured day. | Banking scheduler | `26_Banking_and_Ledger.md` | APPROVED by this register; implementation REQUIRED. |
+| BANK-04 | Invalid recipient | If recipient no longer exists, cancel order automatically; completed transfers remain final. | Banking repository/engine | `26_Banking_and_Ledger.md` | APPROVED; REQUIRED. |
+| BANK-05 | Settlement | Create/list/cancel; durable exact-once occurrence, atomic bank debit/credit/ledger; cancellation serializes with execution; no arbitrary order cap. | `src/server_bank.c`, `src/db/repo/repo_bank.c`, `src/server_engine.c` | `26_Banking_and_Ledger.md` | APPROVED; existing order lifecycle/source must be audited; runtime UNVERIFIED. |
+| PLAYER-01 | Online list | 1-based page/limit; deduplicate authenticated players before pagination; deterministic ordering; return only ID, username, corporation (null if none), alignment. | `src/server_players.c`, `src/schemas.c` | `20_Player_Commands.md` | APPROVED; implementation source present; runtime UNVERIFIED. |
+| PLANET-01 | Overview | `planet.view` read-only; `planet.info` detailed management; appropriate population/production/morale; treasury only owner/authorized corporation member. | `src/server_planets.c`, `src/schemas.c` | `24_Planets_Outposts_Stations.md` | APPROVED; allow-listed view present in working tree; runtime verification pending; production fields must use authoritative calculations. |
+
+## NPC population and Federation jurisdiction
+
+| ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references | Status / verification / unresolved details |
+|---|---|---|---|---|---|
+| NPC-POP-01 | Ferengi population | Active target is 2% of universe sectors, minimum 3; canonical roster has at least 250 stable, individually named identities; reconciliation is idempotent and preserves established NPC state. | `src/db/repo/repo_cron.c`, Ferengi seed migrations | `27_NPC_and_Ferengi_AI.md` | APPROVED; database population distribution requires runtime verification. |
+| NPC-POP-02 | Orion population | Active target is 0.5% of sectors, minimum 5; canonical roster has at least 100 distinct stable names; existing personalities and ship classes remain. | `src/db/repo/repo_cron.c`, Orion seed migrations | `27_NPC_and_Ferengi_AI.md` | APPROVED; runtime distribution UNVERIFIED. |
+| NPC-POP-03 | Ferengi fleet | Five NPC-only classes: Trade Master/Cruiser/Interceptor/Warship/Dreadnought; allocation 40/30/16/10/4 percent with deterministic counts summing exactly to target population; retain existing Warship values. | Ship-type migrations and Ferengi reconciler | NPC protocol and ship catalogue | APPROVED; assignment/runtime verification pending. |
+| FED-01 | Captain Z | Overt aggression in sectors 1–10 triggers immediate Captain Z intervention, destroying attacker ship and podding player; no travel delay or duplicate ISS dispatch. | `src/server_combat.c` | `23_Combat_and_Weapons.md` | APPROVED; preserve existing immediate enforcement. |
+| FED-02 | MSL | BigBang-generated `msl_sectors` is authoritative and unchanged during game; outside sectors 1–10, deployable assets are cleared by the once-daily UTC Federation sweep. Geography comes from generated warp topology, never sector numbering. | BigBang MSL generation, `src/server_cron.c` | `23_Combat_and_Weapons.md`, `29_SysOp_Commands.md` | APPROVED; verify sweep frequency/idempotency; do not regenerate universe. |
+| FED-03 | ISS | ISS is distinct from Captain Z and may act only under explicit Federation jurisdiction/protected-asset rules; Captain Z violations do not also dispatch ISS. ISS pursuit is not part of the bounded approved work. | `src/server_combat.c`, `src/server_engine.c`, security repositories | `27_NPC_and_Ferengi_AI.md` | APPROVED boundaries; do not broaden territory without an explicit contract. |
+| NPC-FER-01 | Ferengi retaliation | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty; the most powerful Ferengi captain hunts that offender. | Ferengi/security handlers and bounty repositories | `27_NPC_and_Ferengi_AI.md` | APPROVED; bounty/hunting persistence and behavior REQUIRED/UNVERIFIED. |
+| NPC-ORI-01 | Orion blockade | Blockader holds assigned home sector, respects target/faction/deployment restrictions, attacks eligible hostile ships and may reinforce using existing fighter/mine systems; other personalities retain behavior. | Orion scheduler and deployment handlers | `27_NPC_and_Ferengi_AI.md` | APPROVED bounded behavior; implementation/runtime verification REQUIRED. |
+
+## Ships, combat, movement and insurance
+
+| ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references | Status / verification / unresolved details |
+|---|---|---|---|---|---|
+| SHIP-01 | Sale locations | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules. | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_stardock.c` | `19_Ship_Commands.md` | APPROVED; source implementation present; runtime UNVERIFIED. |
+| SHIP-02 | Valuation | `floor((hull base + installed equipment) * percentage)`; default 60%, integer basis points. Cargo excluded. | `src/server_config.c`, `src/db/repo/repo_stardock.c` | `19_Ship_Commands.md`, `29_SysOp_Commands.md` | APPROVED; `shipyard_sale_factor_bp` separate from upgrade trade-in; runtime UNVERIFIED. |
+| SHIP-03 | Sale effects | Cargo forfeited, equipment accompanies hull, insurance ends without refund, persistent used inventory, atomic credit/ownership/audit. | `src/db/repo/repo_stardock.c`, migrations 170 | `19_Ship_Commands.md` | APPROVED; used-hull purchase contract remains incomplete; resale workflow not complete. |
+| SHIP-04 | Active/last ship | Cannot sell last eligible ship. Selling active hull requires explicit eligible replacement; switch and sale atomic. | `src/server_ships.c`, `src/db/repo/repo_stardock.c` | `19_Ship_Commands.md` | APPROVED; source implementation present; runtime UNVERIFIED. |
+| COMBAT-01 | Destruction | Every player ship destruction yields escape-pod respawn, independent of installed pod; no starter ship. Cargo/equipment lost; bank, planets and corporate assets persist; exactly one valid active ship; idempotent loss. | `src/server_combat.c`, destruction callers/repositories | `23_Combat_and_Weapons.md` | APPROVED; all destruction paths require common lifecycle audit; REQUIRED/UNVERIFIED. |
+| COMBAT-02 | Capture | Defeated defenses plus successful invasion; planet resources and entire treasury stay with transferred planet; personal/corporate unrelated assets remain. | `src/server_combat.c`, `src/db/repo/repo_planets.c` | `23_Combat_and_Weapons.md` | APPROVED; population rules POP-07 also apply; atomic behavior REQUIRED. |
+| INS-01 | Insurance | Hull replacement only; automatic payout on qualifying destruction to player's bank; no cargo/equipment cover, no direct ship replacement, no duplicate payout; sale terminates policy without refund. | `src/server_combat.c`, insurance repository | `26_Banking_and_Ledger.md`, `23_Combat_and_Weapons.md` | APPROVED; existing eligibility/lifecycle retained. Exact hull replacement valuation must follow existing authoritative coverage/valuation; if no rule exists, UNRESOLVED (do not invent). |
+| MOVE-01 | Interrupted transwarp | After initiation, consume required fuel and remain at origin if interrupted; rejected pre-initiation request does not consume fuel absent existing rule; no destination hazards if not entered. | `src/server_universe.c`, movement repositories | `21_Sector_and_Movement_Commands.md` | APPROVED; implementation/runtime verification REQUIRED. |
+| MOVE-02 | Entry hazards | Apply hazards immediately on normal/transwarp sector entry; persist damage/destruction, trigger pod lifecycle; no disconnect/prompt bypass. | `src/server_universe.c`, `src/server_combat.c` | `21_Sector_and_Movement_Commands.md`, `23_Combat_and_Weapons.md` | APPROVED; common entry processing REQUIRED/UNVERIFIED. |
+
+## Configuration and verification ledger
+
+| ID | Subsystem | Approved configuration | Source / protocol | Status |
+|---|---|---|---|---|
+| CFG-01 | Ship sale | `shipyard_sale_factor_bp`, integer 0–10000, default 6000; distinct from trade-in. | `src/server_config.c`; `29_SysOp_Commands.md` | APPROVED; source present; runtime UNVERIFIED. |
+| CFG-02 | Slave output | Fixed 50%; not an adjustable setting under current policy. | `src/db/repo/repo_cron.c`; `24_Planets_Outposts_Stations.md` | APPROVED; source path exists; focused runtime verification absent. |
+| CFG-03 | Slave unrest | Daily evaluation; recurrence/trigger, stoppage cycles, losses configured; no implicit numeric defaults; effects dormant while incomplete. | `src/server_engine.c`, `src/server_config.c`; `29_SysOp_Commands.md` | APPROVED; policy parameter definitions REQUIRED; unresolved values listed at POP-05. |
+| CFG-04 | Insurance | Existing eligibility and coverage parameters retained; hull-only payout to bank. | Insurance config/repository; `26_Banking_and_Ledger.md` | APPROVED; payout amount formula unresolved only if existing valuation cannot answer. |
+
+### Verification rule
+
+Mark a requirement **VERIFIED** only when the named test was actually executed
+against the relevant implementation. Build success and source inspection are
+recorded separately. At this writing, this register is a policy baseline, not
+a claim that every listed workflow has runtime verification.
