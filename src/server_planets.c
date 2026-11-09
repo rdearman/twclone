@@ -274,6 +274,9 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
 
       json_t *evt = json_object ();
       json_object_set_new (evt, "planet_id", json_integer (planet_id));
+      /* Retain the existing event field for consumers; the sanction is the
+       * ordinary destruction consequence, not seizure of unrelated assets. */
+      json_object_set_new (evt, "sanctioned", json_true ());
       json_object_set_new (evt, "ship_destroyed", json_true ());
       json_object_set_new (evt, "escape_pod_spawned", json_true ());
       db_log_engine_event ((long long) time (NULL),

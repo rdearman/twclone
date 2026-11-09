@@ -100,6 +100,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
             terra,
         )
         self.assertIn("Could not settle ship destruction", terra)
+        self.assertIn('"sanctioned", json_true ()', terra)
         self.assertIn('"escape_pod_spawned", json_true ()', terra)
         self.assertNotIn("h_apply_terra_sanctions", self.planets)
         self.assertNotIn("seized your assets", terra)
