@@ -95,14 +95,6 @@ require_auth (client_ctx_t *ctx, json_t *root)
   return 0;
 }
 
-/* Apply Terra sanctions (destroy all assets and zero credits) */
-static void
-h_apply_terra_sanctions (db_t *db, int player_id)
-{
-  db_planets_apply_terra_sanctions (db, player_id);
-}
-
-
 int
 cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
 {
@@ -268,15 +260,22 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
          current_sector, (int64_t) time (NULL) + 86400);
     }
 
-  /* Terra protection: instant destruction + sanctions */
+  /* Terra protection destroys the active hull through the common loss
+   * transaction. Approved destruction policy preserves the player's pod,
+   * bank balance, planets, corporate assets and unrelated ships. */
   if (planet_id == 1 || p_sector == 1)
     {
-      destroy_ship_and_handle_side_effects (ctx, ctx->player_id);
-      h_apply_terra_sanctions (db, ctx->player_id);
+      if (destroy_ship_and_handle_side_effects (ctx, ctx->player_id) != 0)
+        {
+          send_response_error (ctx, root, ERR_DB,
+                               "Could not settle ship destruction");
+          return 0;
+        }
 
       json_t *evt = json_object ();
       json_object_set_new (evt, "planet_id", json_integer (planet_id));
-      json_object_set_new (evt, "sanctioned", json_true ());
+      json_object_set_new (evt, "ship_destroyed", json_true ());
+      json_object_set_new (evt, "escape_pod_spawned", json_true ());
       db_log_engine_event ((long long) time (NULL),
 			   "player.terra_attack_sanction.v1",
 			   "player", ctx->player_id, current_sector, evt,
@@ -284,7 +283,7 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
       json_decref (evt);
 
       send_response_error (ctx, root, 403,
-			   "You have attacked Terra! Federation forces have destroyed your ship and seized your assets.");
+			   "You have attacked Terra! Federation forces destroyed your ship; you have been placed in an escape pod.");
       return 0;
     }
 

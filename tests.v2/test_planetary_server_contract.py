@@ -91,6 +91,19 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("if (repo_npc_intel_upsert", handler)
         self.assertIn('repo_npc_action_complete (db, action_key, "completed"', handler)
 
+    def test_terra_enforcement_uses_shared_destruction_without_asset_seizure(self):
+        terra = self.planets.split("/* Terra protection", 1)[1].split(
+            "/* Get attacker ship fighters */", 1
+        )[0]
+        self.assertIn(
+            "destroy_ship_and_handle_side_effects (ctx, ctx->player_id) != 0",
+            terra,
+        )
+        self.assertIn("Could not settle ship destruction", terra)
+        self.assertIn('"escape_pod_spawned", json_true ()', terra)
+        self.assertNotIn("h_apply_terra_sanctions", self.planets)
+        self.assertNotIn("seized your assets", terra)
+
     def test_orion_blockader_holds_home_and_uses_existing_defence_systems(self):
         blockader = self.universe.split(
             "if (personality == SHIP_PERSONALITY_BLOCKADER)", 1

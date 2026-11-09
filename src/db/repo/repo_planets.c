@@ -38,38 +38,6 @@ int db_planets_sync_id_sequence(db_t *db) {
     return 0;
 }
 
-int db_planets_apply_terra_sanctions(db_t *db, int player_id) {
-    db_error_t err;
-    db_bind_t params[] = { db_bind_i64 (player_id) };
-
-    /* SQL_VERBATIM: Q1 */
-    const char *q1 = "DELETE FROM ships WHERE ship_id IN (  SELECT ship_id FROM ship_ownership WHERE player_id = {1});";
-    char sql1[1024]; sql_build(db, q1, sql1, sizeof(sql1));
-    db_exec(db, sql1, params, 1, &err);
-
-    /* SQL_VERBATIM: Q2 */
-    const char *q2 = "UPDATE players SET credits = 0 WHERE player_id = {1};";
-    char sql2[512]; sql_build(db, q2, sql2, sizeof(sql2));
-    db_exec(db, sql2, params, 1, &err);
-
-    /* SQL_VERBATIM: Q3 */
-    const char *q3 = "UPDATE bank_accounts SET balance = 0 WHERE owner_type = 'player' AND owner_id = {1};";
-    char sql3[512]; sql_build(db, q3, sql3, sizeof(sql3));
-    db_exec(db, sql3, params, 1, &err);
-
-    /* SQL_VERBATIM: Q4 */
-    const char *q4 = "DELETE FROM sector_assets WHERE player = {1};";
-    char sql4[512]; sql_build(db, q4, sql4, sizeof(sql4));
-    db_exec(db, sql4, params, 1, &err);
-
-    /* SQL_VERBATIM: Q5 */
-    const char *q5 = "DELETE FROM limpet_attached WHERE owner_player_id = {1};";
-    char sql5[512]; sql_build(db, q5, sql5, sizeof(sql5));
-    db_exec(db, sql5, params, 1, &err);
-
-    return 0;
-}
-
 int db_planets_get_ship_sector(db_t *db, int ship_id, int *sector_id) {
     db_res_t *res = NULL;
     db_error_t err;

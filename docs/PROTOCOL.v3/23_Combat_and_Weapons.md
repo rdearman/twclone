@@ -38,6 +38,13 @@ Attack a port.
 
 ### Ship destruction and respawn
 
+An attack on Terra (planet 1 or a planet in sector 1) is refused after the
+attacker's active hull is settled through the universal destruction path. The
+attacker is assigned an escape pod. This enforcement does not seize unrelated
+ships, credits, bank balances, planets or corporate assets; ordinary losses
+for the destroyed hull still apply. If destruction settlement fails, the
+server returns a database error and does not claim enforcement succeeded.
+
 Every player ship destruction results in escape-pod respawn. This does not
 depend on pod equipment. The destroyed ship's cargo and equipment are lost;
 bank credits, planets and corporate assets survive. No basic replacement ship

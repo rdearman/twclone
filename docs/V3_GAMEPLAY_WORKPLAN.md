@@ -50,13 +50,15 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   remains incomplete pending a resale price contract. Universal destruction
   and funded-policy hull insurance are committed (`63169074`, `15821cd8`),
   build/source-tested but not database-runtime verified.
-- **Next action:** inspect the Terra enforcement branch's destruction/sanction
-  error propagation, then continue the explicit requirement audit with
-  insurance payout funding/valuation and planet capture asset retention,
-  fixing only source-demonstrable contract violations. Preserve Exchange, unrest effects, used
-  resale pricing, bounty amount and alliance-target rules as unresolved where
-  their policy is incomplete. Do not infer liquidity, numeric defaults or
-  eligibility policy.
+- **Current batch:** remove Terra's legacy asset-seizure side effect, make
+  enforcement fail closed when common destruction settlement fails, and verify
+  that escape-pod respawn does not erase unrelated assets.
+- **Next action:** inspect insurance payout funding/valuation and planet capture
+  asset retention for source-demonstrable policy conflicts, then continue with
+  the next independently actionable gap. Preserve Exchange, unrest effects,
+  used resale pricing, bounty amount and alliance-target rules as unresolved
+  where their policy is incomplete. Do not infer liquidity, numeric defaults
+  or eligibility policy.
 
 ## Subsequent packages
 
