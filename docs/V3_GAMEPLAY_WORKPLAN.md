@@ -5,47 +5,53 @@ statuses and per-item evidence are tracked in
 [`V3_GAMEPLAY_COMPLETION_TRACKER.md`](V3_GAMEPLAY_COMPLETION_TRACKER.md).
 Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
-## Active package — universal destruction settlement and insurance
+## Active package — reconcile Exchange blocker; advance dormant unrest groundwork
 
-- **Requirement IDs:** COMBAT-001–005, INS-001–006.
-- **Dependencies:** canonical Escape Pod ship type and sector-1 spawn convention;
-  existing insurance policies, claims, funded insurance account and bank ledger.
-- **Source:** `src/db/repo/repo_ships.c`, `src/server_ships.c`,
-  `src/server_combat.c`, `src/engine_consumer.c`, `src/server_loop.c`,
-  `sql/pg/124_insurance_settlement.sql`.
-- **Migrations:** none in the current destruction change.
-- **Protocol:** `ship.self_destruct`, combat/hazard responses and automatic
-  insurance in protocol 23/26.
-- **Tests:** `tests.v2/suite_combat_and_crime.json`,
-  `suite_fedspace_aggression_captainz.json`, `suite_combat_sector_hazards.json`;
-  `test_sector_entry_server_contract.py`.
-- **Completion criteria:** all destruction paths atomically lose hull/cargo/
-  equipment, assign exactly one Escape Pod, preserve unrelated assets, persist
-  an idempotent loss event, and settle eligible hull insurance to bank.
-- **Current position:** common destruction transaction and call-site
-  consolidation are implemented; ASan/UBSan build and 35 focused source-contract
-  tests pass. Captain Z JSON state assertion now checks active owned Escape Pod.
-  No JSON server/database runtime run. Automatic insurance remains missing;
-  policy payout valuation, overlapping policies and insufficient-fund behavior
-  need reconciliation before settlement is safe.
-- **Next action:** complete insurance source/policy reconciliation and implement
-  the unambiguous funded player-policy payout path; then verify destruction
-  paths and proceed to movement/hazards.
+- **Requirement IDs:** EXC-001–011 first; POP-010–012/SYS-003 next where
+  independently implementable.
+- **Dependencies:** Exchange settlement requires an approved, bounded funding
+  source and price/counterparty rule. Unrest effect scheduling requires the
+  already-approved configurable parameters, but population-loss allocation
+  among unassigned and working population is not specified.
+- **Source:** `src/server_planets.c`, `src/server_cron.c`,
+  `src/db/repo/repo_market.c`, `src/db/repo/repo_market_dynamic.c`,
+  `src/db/repo/repo_cron.c`, `src/server_engine.c`, and existing population
+  state migrations 171/123.
+- **Migrations:** do not add Exchange inventory/account tables until its
+  accounting source is decided. Unrest may need only config/migration additions;
+  keep destructive effects disabled while values or allocation policy are
+  missing.
+- **Protocol:** `22_Trade_and_Port_Commands.md`,
+  `24_Planets_Outposts_Stations.md`, `29_SysOp_Commands.md`.
+- **Tests:** existing market/planet JSON suites and focused contract tests;
+  runtime DB verification is unavailable for this execution.
+- **Current position:** source audit confirms immediate planet sales debit
+  planet stock and credit the seller, with neither Exchange inventory receipt
+  nor an identified funded Exchange buyer. The current book is bilateral.
+  Creating a credit source or allowing goods to disappear would violate the
+  approved contract. Separately, POP-003 now has an explicit evil-only SLV
+  purchase guard (`477bc1ed`); build and 37 focused source-contract tests pass.
+  Ship-sale workflow has been committed (`bcaf3e93`) but used-hull acquisition
+  remains incomplete pending a resale price contract. Universal destruction
+  and funded-policy hull insurance are committed (`63169074`, `15821cd8`),
+  build/source-tested but not database-runtime verified.
+- **Next action:** continue auditing the Exchange repositories for an existing
+  funded clearing account or bounded buyer. If none exists, preserve EXC-002,
+  EXC-003 and EXC-008/009 as policy-blocked and proceed with SysOp-configurable,
+  dormant daily unrest scheduling groundwork without selecting loss allocation.
 
 ## Subsequent packages
 
 | Order | Package | Requirement IDs | Dependencies / exit criteria |
 |---|---|---|---|
-| 1 | Finish planetary overview and view data | VIEW-001–006 | Overview is allow-listed and now includes production values; validate runtime treasury privacy/read-only behavior. |
-| 2 | Population purchase/transport and exclusivity | POP-001–003, POP-005, POP-014 | SLV cargo delivery path added; validate port purchase, alignment/stock/capacity and mixed-type rejection. |
-| 3 | Production/unrest policy groundwork | POP-008–013, SYS-002–003 | Slave 50% path exists; implement daily persisted evaluation infrastructure, but keep effects dormant until all three numeric rules have approved values. |
-| 4 | Galactic Exchange settlement | EXC-001–011, HARV-008, SYS-005 | Do not pay from an unfunded account. First identify approved, bounded clearing-fund/price/accounting mechanism; no commodity sink or money minting. |
-| 5 | Used ship resale completion | SHIP-001–009 | Sale path exists; sale policy lacks subsequent used-hull purchase price/request details. Keep SHIP-005 partial until a purchase rule is approved. |
-| 6 | Bank standing orders | BANK-001–011 | Source implementation and JSON coverage are present; verify runtime calendar, exactly-once, cancellation, failure and ledger behavior when an isolated DB runtime is available. |
-| 7 | Universal destruction and insurance | COMBAT-001–005, INS-001–006 | Next source package; audit every destruction caller and unify pod/loss settlement, then hull-only bank payout. |
-| 8 | Movement hazards/transwarp | MOVE-001–004 | Common lethal-entry pod lifecycle is source implemented; MOVE-001 awaits a specified interrupting event/path. Validate normal/transwarp runtime results and no-charge pre-initiation rejection. |
-| 9 | Online listing/trading/SysOp closeout | PLAYER-001–006, TRADE-001–003, SYS-001–006 | Online listing and sale config source need protocol verification; preserve dynamic prices and validate configuration bounds. |
-| 10 | End-to-end requirements reconciliation | All IDs | Use available focused tests; full suite/runtime verification only in an already authorized disposable environment. Every ID needs implementation and executed evidence or a precise blocker. |
+| 1 | Galactic Exchange settlement | EXC-001–011, HARV-008, SYS-005 | Audit confirms no Exchange-owned inventory or funded buyer source. Implement only after a valid existing clearing/funding mechanism is located; no minting or commodity sink. |
+| 2 | Planet population and production completion | POP-001–014, SYS-002–003 | Evil-only slave purchase restriction is now source implemented; verify port trade/deposit and mixed-population transactions. Implement dormant daily unrest/config without selecting unapproved destructive values or allocation policy. |
+| 3 | Used ship resale completion | SHIP-001–009 | Sale commands/schema/migrations committed at `bcaf3e93`; SHIP-005 remains partial until used-hull purchase contract and resale price are approved. |
+| 4 | Insurance/destruction verification | COMBAT-001–005, INS-001–006 | Common destruction and funded hull-policy payout committed at `63169074`, `15821cd8`; runtime and concurrency verification remain outstanding; insolvency handling needs policy. |
+| 5 | Movement hazards/transwarp | MOVE-001–004 | Lethal entry uses common pod lifecycle; MOVE-001 awaits defined interruption event/path. Runtime hazard and validation/no-charge tests remain outstanding. |
+| 6 | Banking standing orders | BANK-001–011 | Durable scheduler/source and JSON scenarios committed; verify calendar, exactly-once, cancellation, deletion and ledger behavior with available isolated runtime. |
+| 7 | Online listing and trading | PLAYER-001–006, TRADE-001–003 | Source for online pagination/public fields exists; verify client protocol and dynamic fixed-price trade behavior. |
+| 8 | End-to-end requirements reconciliation | All IDs | Use available focused tests; do not count unavailable runtime as pass. Every ID needs implementation/test evidence or an exact policy blocker. |
 
 ## Permanent execution constraints
 
