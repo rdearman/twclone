@@ -31,8 +31,9 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   loss allocation and numeric values are not approved. Ferengi retaliation
   source previously ignored bounty/intel persistence errors; combat now rolls
   back on those failures and a focused source-contract test passes. Its bounty
-  amount remains hardcoded without a policy decision. Orion blockader source
-  exists, but eligible hostile-player targeting is not fully specified.
+  amount remains hardcoded without a policy decision. Orion blockaders now
+  return to the assigned post without blockade actions in an off-post sector;
+  target eligibility beyond excluding Orion-owned ships remains unresolved.
   Source audit confirms immediate planet sales debit
   planet stock and credit the seller, with neither Exchange inventory receipt
   nor an identified funded Exchange buyer. The current book is bilateral.
@@ -43,12 +44,12 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   remains incomplete pending a resale price contract. Universal destruction
   and funded-policy hull insurance are committed (`63169074`, `15821cd8`),
   build/source-tested but not database-runtime verified.
-- **Next action:** trace Exchange account/market funding once more only through
-  local source (no DB); if no approved source exists, keep settlement blocked.
-  Then add focused source-level coverage of Orion blockader home-sector and
-  eligible-target behavior, and proceed to a separate independently specified
-  gameplay workflow. Do not add Exchange liquidity, unrest effect defaults,
-  bounty amounts, or alliance-target policy by inference.
+- **Next action:** continue the explicit requirement audit with insurance payout
+  funding/valuation and planet capture asset retention, fixing only source-
+  demonstrable contract violations. Preserve Exchange, unrest effects, used
+  resale pricing, bounty amount and alliance-target rules as unresolved where
+  their policy is incomplete. Do not infer liquidity, numeric defaults or
+  eligibility policy.
 
 ## Subsequent packages
 

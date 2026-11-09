@@ -96,6 +96,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
             "if (personality == SHIP_PERSONALITY_BLOCKADER)", 1
         )[1].split("if (personality == SHIP_PERSONALITY_OFFENSIVE", 1)[0]
         self.assertIn("new_target = (ori_home_sector_id > 0)", blockader)
+        self.assertIn("current_sector == ori_home_sector_id", blockader)
         self.assertIn("npc_deploy_defensive_fighter", blockader)
         self.assertIn("npc_deploy_defensive_mine", blockader)
         self.assertIn("repo_universe_ship_is_orion_owned", blockader)

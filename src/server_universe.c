@@ -372,7 +372,12 @@ ori_move_all_ships (int64_t now_s)
           new_target = (ori_home_sector_id > 0)
             ? ori_home_sector_id : current_sector;
 
-          if (current_sector > 10)
+          /* A blockader can be displaced by legacy state or a prior failed
+           * move.  Return it to its assigned post first; never lay assets or
+           * attack from a sector other than that post. */
+          if (current_sector > 10
+              && (ori_home_sector_id <= 0
+                  || current_sector == ori_home_sector_id))
             {
               char defense_key[128];
               snprintf (defense_key, sizeof defense_key,
