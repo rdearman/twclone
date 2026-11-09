@@ -22,6 +22,7 @@
 #include "db/repo/repo_ships.h"
 #include "db/repo/repo_citadel.h"
 #include "db/repo/repo_corporation.h"
+#include "db/repo/repo_ports.h"
 #include "db/repo/repo_universe.h"
 #include "game_db.h"
 #include "errors.h"
@@ -837,7 +838,6 @@ cmd_planet_rename (client_ctx_t *ctx, json_t *root)
 				   "Not authenticated", NULL);
       return 0;
     }
-
   json_t *data = json_object_get (root, "data");
   int planet_id = 0;
 
@@ -2673,6 +2673,12 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 				   "Not authenticated", NULL);
       return 0;
     }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+			   "Database unavailable.");
+      return 0;
+    }
 
   json_t *data = json_object_get (root, "data");
 
@@ -2782,18 +2788,6 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       return 0;
   }
 
-  int current_stock = 0;
-  db_planets_get_stock (db, planet_id, commodity_code, &current_stock);
-
-  if (current_stock < quantity)
-    {
-      send_response_refused_steal (ctx,
-				   root,
-				   REF_NO_WARP_LINK,
-				   "Insufficient inventory on planet.", NULL);
-      return 0;
-    }
-
   int unit_price = 0;
   if (db_planets_get_commodity_price (db, commodity_code, &unit_price) != 0)
     {
@@ -2814,33 +2808,57 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
     }
 
   long long total_credits = (long long) quantity * unit_price;
-
-
-  if (h_update_entity_stock (db,
-			     ENTITY_TYPE_PLANET,
-			     planet_id, commodity_code, -quantity, NULL) != 0)
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
     {
-      send_response_error (ctx,
-			   root,
-			   ERR_SERVER_ERROR,
-			   "Failed to update planet inventory.");
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not begin planet market sale.");
       return 0;
     }
-
+  int stock_rc = db_ports_decrement_stock (db, ENTITY_TYPE_PLANET, planet_id,
+                                           commodity_code, quantity,
+                                           (int64_t) time (NULL));
+  if (stock_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      if (stock_rc == ERR_DB_CONSTRAINT || stock_rc == ERR_DB_NOT_FOUND)
+        send_response_refused_steal (ctx, root, REF_NO_WARP_LINK,
+                                     "Insufficient inventory on planet.", NULL);
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Failed to update planet inventory.");
+      return 0;
+    }
   long long new_balance = 0;
-
-
   if (h_add_player_petty_cash (db, ctx->player_id, total_credits,
 			       &new_balance) != 0)
     {
-      LOGE ("cmd_planet_market_sell: Failed to credit player %d.",
-	    ctx->player_id);
+	  db_tx_rollback (db, NULL);
+	  LOGE ("cmd_planet_market_sell: Failed to credit player %d.",
+		ctx->player_id);
+	  send_response_error (ctx, root, ERR_DB,
+			       "Failed to credit sale proceeds.");
+	  return 0;
     }
 
   if (planet_record_taxable_trade (db, planet_id, commodity_code, quantity,
                                    unit_price, "sell", root) != 0)
-    LOGE ("cmd_planet_market_sell: failed to record taxable activity for planet %d",
-          planet_id);
+    {
+      db_tx_rollback (db, NULL);
+      LOGE ("cmd_planet_market_sell: failed to record taxable activity for planet %d",
+	    planet_id);
+      send_response_error (ctx, root, ERR_DB,
+			   "Failed to record planet sale.");
+      return 0;
+    }
+
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+			   "Could not commit planet market sale.");
+      return 0;
+    }
 
   json_t *resp = json_object ();
 

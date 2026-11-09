@@ -8,6 +8,10 @@
 
 /* Q1: Update Entity Stock */
 int db_ports_upsert_stock(db_t *db, const char *entity_type, int entity_id, const char *commodity_code, int quantity, int64_t ts);
+/* Atomically decrements entity stock only when sufficient quantity exists. */
+int db_ports_decrement_stock(db_t *db, const char *entity_type, int entity_id,
+                             const char *commodity_code, int quantity,
+                             int64_t ts);
 
 /* Q2: Port Buy Eligibility Check */
 int db_ports_get_buy_eligibility(db_t *db, int port_id, const char *commodity_code, int *quantity, int *max_capacity);

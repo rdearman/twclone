@@ -16,6 +16,9 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.universe_repo = (ROOT / "src/db/repo/repo_universe.c").read_text(
             encoding="utf-8"
         )
+        cls.ports_repo = (ROOT / "src/db/repo/repo_ports.c").read_text(
+            encoding="utf-8"
+        )
         cls.protocol = (ROOT / "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md").read_text(
             encoding="utf-8"
         )
@@ -289,6 +292,20 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("977712,20,", fixture["data"]["sql"])
         self.assertIn("protected_sector", self.planets)
         self.assertIn("ERR_DB_NOT_FOUND", self.planets)
+
+    def test_planet_market_sale_is_atomic_and_stock_decrement_is_guarded(self):
+        handler = self.planets.split("cmd_planet_market_sell", 1)[1].split(
+            "cmd_planet_market_buy_order", 1
+        )[0]
+        self.assertLess(handler.index("db_tx_begin"),
+                        handler.index("db_ports_decrement_stock"))
+        self.assertLess(handler.index("db_ports_decrement_stock"),
+                        handler.index("h_add_player_petty_cash"))
+        self.assertIn("db_tx_rollback", handler)
+        self.assertIn("db_tx_commit", handler)
+        self.assertIn("Failed to credit sale proceeds.", handler)
+        self.assertIn("AND quantity >= {1}", self.ports_repo)
+        self.assertIn("db_exec_rows_affected", self.ports_repo)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,32 @@ int db_ports_upsert_stock(db_t *db, const char *entity_type, int entity_id, cons
     return 0;
 }
 
+int db_ports_decrement_stock(db_t *db, const char *entity_type, int entity_id,
+                             const char *commodity_code, int quantity,
+                             int64_t ts) {
+    if (!db || !entity_type || !*entity_type || entity_id <= 0
+        || !commodity_code || !*commodity_code || quantity <= 0)
+        return ERR_INVALID_ARG;
+
+    db_error_t err;
+    db_error_clear(&err);
+    int64_t rows = 0;
+    const char *query =
+        "UPDATE entity_stock SET quantity = quantity - {1}, last_updated_ts = {2} "
+        "WHERE entity_type = {3} AND entity_id = {4} AND commodity_code = {5} "
+        "AND quantity >= {1};";
+    char sql[1024];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    if (!db_exec_rows_affected(db, sql,
+            (db_bind_t[]){ db_bind_i64(quantity), db_bind_i64(ts),
+                           db_bind_text(entity_type), db_bind_i64(entity_id),
+                           db_bind_text(commodity_code) },
+            5, &rows, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    return rows > 0 ? 0 : ERR_DB_CONSTRAINT;
+}
+
 int db_ports_get_buy_eligibility(db_t *db, int port_id, const char *commodity_code, int *quantity, int *max_capacity) {
     db_res_t *res = NULL;
     db_error_t err;
