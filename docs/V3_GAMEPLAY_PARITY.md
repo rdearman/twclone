@@ -56,8 +56,11 @@ path exists; end-to-end behavior still needs focused protocol verification.
 - Corporate planet-market commands now revalidate current corporation
   membership while holding the planet and membership rows in the transaction.
   Buy-order placement repeats ownership, cash and capacity checks before
-  inserting the order. The current protocol/schema does not escrow funds, so
-  cancellation and expiry have no reserved balance to release.
+  inserting the order. The current protocol/schema does not escrow funds or
+  reserve planet capacity; settlement rechecks destination capacity, so
+  cancellation and expiry have no reserved balance or space to release. There
+  is no client-facing commodity-order cancellation request in the V3 protocol;
+  existing cancellation is the internal market-profile cleanup path.
 - Cargo writes lock the authoritative ship row before validating total holds
   and mutating `ship_cargo`; ship transfers, player trade offers and Ferengi
   deals lock both hulls in ascending ID order. Cargo transfers revalidate
