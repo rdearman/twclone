@@ -46,6 +46,15 @@ path exists; end-to-end behavior still needs focused protocol verification.
   contract tests are the available verification here; database-backed runtime
   verification remains outstanding.
 
+- Terra attack enforcement now routes through the universal destruction
+  transaction without deleting unrelated ships/assets or zeroing personal and
+  bank credits; it checks settlement failure and preserves the existing
+  sanction-event field. Planet combat also fails closed if citadel defense
+  state cannot be read. Standing-order workers skip a stale due snapshot after
+  another worker advances the locked order. Focused source-contract tests and
+  an ASan/UBSan server build passed; database runtime/concurrency verification
+  remains outstanding (`0e81209c`, `5195480b`, `1f24988f`).
+
 - Police bribe and surrender now lock the current incident row inside a
   transaction, fail closed on read/write/commit errors, and include banned-only
   incidents in the active-state check. Rejected bribes preserve their
