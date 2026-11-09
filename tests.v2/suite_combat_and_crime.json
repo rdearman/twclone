@@ -48,6 +48,35 @@
       "user": "admin"
     },
     {
+      "name": "Rig: Ensure attacker bank account",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO bank_accounts (owner_type,owner_id,currency,balance,is_active) SELECT 'player',@{attacker_player_player_id},'CRD',0,TRUE WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type='player' AND owner_id=@{attacker_player_player_id} AND currency='CRD' AND is_active=TRUE);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Fund insurer",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO insurance_funds (owner_type,balance) VALUES ('system',100000);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Insure attacker's ship for hull-only payout",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO insurance_policies (holder_type,holder_id,subject_type,subject_id,premium,payout,fund_id,start_ts,expiry_ts,active) SELECT 'player',@{attacker_player_player_id},'ship',1012,0,1000,(SELECT MAX(fund_id) FROM insurance_funds),EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint::text,(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint+86400)::text,TRUE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Save attacker bank balance before insured destruction",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{attacker_player_player_id} AND currency='CRD' AND is_active=TRUE;" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "save": { "attacker_bank_before": "data.rows.0.0" }
+    },
+    {
       "name": "Guard: Attack in FedSpace (Should Fail)",
       "command": "combat.attack",
       "data": { "target_ship_id": 1013 },
@@ -62,6 +91,13 @@
       },
       "user": "admin",
       "expect": { "status": "ok", "data": { "rows": [[1]] } }
+    },
+    {
+      "name": "Insured ship destruction credits bank once",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{attacker_player_player_id} AND currency='CRD' AND is_active=TRUE)=@{attacker_bank_before}+1000 AND (SELECT COUNT(*) FROM insurance_claims c JOIN insurance_policies p ON p.insurance_policies_id=c.policy_id WHERE p.subject_id=1012 AND c.status='paid' AND c.event_id='ship-destruction-1012')=1 AND (SELECT COUNT(*) FROM bank_transactions WHERE idempotency_key='insurance-auto-1012-'||(SELECT insurance_policies_id::text FROM insurance_policies WHERE subject_id=1012 ORDER BY insurance_policies_id DESC LIMIT 1))=1;" },
+      "user": "admin",
+      "expect": { "status": "ok", "data": { "rows": [["t"]] } }
     }
   ]
 }

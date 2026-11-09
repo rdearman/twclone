@@ -6,6 +6,205 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <limits.h>
+
+typedef struct
+{
+  int64_t policy_id;
+  int64_t payout;
+  int64_t fund_id;
+} destruction_policy_t;
+
+/* Settle every currently eligible player-held hull policy as part of the
+ * destruction transaction. The policy's configured payout is the coverage
+ * amount; aggregate payouts are capped at the ship type's base replacement
+ * value. An insolvent/missing fund leaves a durable open claim rather than
+ * minting funds or preventing the destruction itself. */
+static int
+settle_destruction_insurance (db_t *db, int64_t player_id, int64_t ship_id,
+                              int64_t hull_value, int64_t now_ts,
+                              const char *event_key, db_error_t *err)
+{
+  if (hull_value <= 0) return 0;
+  const char *policy_query_pg =
+    "SELECT insurance_policies_id,payout,COALESCE(fund_id,0) "
+    "FROM insurance_policies WHERE holder_type='player' AND holder_id={1} "
+    "AND subject_type='ship' AND subject_id={2} AND active=TRUE "
+    "AND COALESCE(NULLIF(start_ts,'')::bigint,0)<={3} "
+    "AND (expiry_ts IS NULL OR expiry_ts='' OR NULLIF(expiry_ts,'')::bigint>{3}) "
+    "ORDER BY insurance_policies_id FOR UPDATE";
+  const char *policy_query_my =
+    "SELECT insurance_policies_id,payout,COALESCE(fund_id,0) "
+    "FROM insurance_policies WHERE holder_type='player' AND holder_id={1} "
+    "AND subject_type='ship' AND subject_id={2} AND active=TRUE "
+    "AND COALESCE(CAST(NULLIF(start_ts,'') AS SIGNED),0)<={3} "
+    "AND (expiry_ts IS NULL OR expiry_ts='' OR "
+    "CAST(NULLIF(expiry_ts,'') AS SIGNED)>{3}) "
+    "ORDER BY insurance_policies_id FOR UPDATE";
+  char sql[1024];
+  const char *policy_query = db_backend(db) == DB_BACKEND_POSTGRES
+    ? policy_query_pg : policy_query_my;
+  if (sql_build(db, policy_query, sql, sizeof sql) != 0)
+    return ERR_DB_QUERY_FAILED;
+  db_res_t *res = NULL;
+  if (!db_query(db, sql,
+                (db_bind_t[]){db_bind_i64(player_id), db_bind_i64(ship_id),
+                              db_bind_i64(now_ts)}, 3, &res, err))
+    return err->code ? err->code : ERR_DB_QUERY_FAILED;
+
+  destruction_policy_t *policies = NULL;
+  size_t count = 0;
+  while (db_res_step(res, err))
+    {
+      destruction_policy_t *next = realloc(policies,
+        (count + 1) * sizeof(*policies));
+      if (!next)
+        {
+          db_res_finalize(res);
+          free(policies);
+          return ERR_DB_QUERY_FAILED;
+        }
+      policies = next;
+      policies[count].policy_id = db_res_col_i64(res, 0, err);
+      policies[count].payout = db_res_col_i64(res, 1, err);
+      policies[count].fund_id = db_res_col_i64(res, 2, err);
+      if (err->code)
+        {
+          db_res_finalize(res);
+          free(policies);
+          return err->code;
+        }
+      count++;
+    }
+  db_res_finalize(res);
+  if (err->code)
+    { free(policies); return err->code; }
+  if (count == 0)
+    { free(policies); return 0; }
+
+  int64_t account_id = 0;
+  int64_t account_balance = 0;
+  const char *account_query =
+    "SELECT bank_accounts_id,balance FROM bank_accounts WHERE "
+    "owner_type='player' AND owner_id={1} AND currency='CRD' "
+    "AND is_active=TRUE ORDER BY bank_accounts_id LIMIT 1 FOR UPDATE";
+  if (sql_build(db, account_query, sql, sizeof sql) != 0)
+    { free(policies); return ERR_DB_QUERY_FAILED; }
+  res = NULL;
+  if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(player_id)}, 1, &res, err))
+    { free(policies); return err->code ? err->code : ERR_DB_QUERY_FAILED; }
+  int has_account = db_res_step(res, err);
+  if (has_account)
+    {
+      account_id = db_res_col_i64(res, 0, err);
+      account_balance = db_res_col_i64(res, 1, err);
+    }
+  db_res_finalize(res);
+  if (err->code)
+    { free(policies); return err->code; }
+
+  int64_t remaining = hull_value;
+  for (size_t i = 0; i < count && remaining > 0; i++)
+    {
+      int64_t amount = policies[i].payout;
+      if (amount <= 0) continue;
+      if (amount > remaining) amount = remaining;
+      remaining -= amount;
+
+      char claim_key[96];
+      snprintf(claim_key, sizeof claim_key, "%s", event_key);
+      const char *claim_sql =
+        "INSERT INTO insurance_claims(policy_id,event_id,amount,status) "
+        "VALUES({1},{2},{3},'open')";
+      if (sql_build(db, claim_sql, sql, sizeof sql) != 0)
+        { free(policies); return ERR_DB_QUERY_FAILED; }
+      int64_t claim_id = 0;
+      if (!db_exec_insert_id(db, sql,
+            (db_bind_t[]){db_bind_i64(policies[i].policy_id),
+                          db_bind_text(claim_key), db_bind_i64(amount)},
+            3, "insurance_claims_id", &claim_id, err))
+        { free(policies); return err->code ? err->code : ERR_DB_EXEC_FAILED; }
+      if (claim_id <= 0)
+        { free(policies); return ERR_DB_EXEC_FAILED; }
+
+      /* A valid policy purchase normally guarantees both account and fund.
+       * Preserve the claim as open if either was administratively removed or
+       * the fund is temporarily unable to cover it. */
+      if (!has_account || policies[i].fund_id <= 0
+          || account_balance > INT64_MAX - amount)
+        continue;
+      const char *fund_lock =
+        "SELECT balance FROM insurance_funds WHERE fund_id={1} FOR UPDATE";
+      if (sql_build(db, fund_lock, sql, sizeof sql) != 0)
+        { free(policies); return ERR_DB_QUERY_FAILED; }
+      res = NULL;
+      if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(policies[i].fund_id)},
+                    1, &res, err))
+        { free(policies); return err->code ? err->code : ERR_DB_QUERY_FAILED; }
+      int has_fund = db_res_step(res, err);
+      int64_t fund_balance = has_fund ? db_res_col_i64(res, 0, err) : 0;
+      db_res_finalize(res);
+      if (err->code)
+        { free(policies); return err->code; }
+      if (!has_fund || fund_balance < amount)
+        continue;
+
+      const char *fund_debit =
+        "UPDATE insurance_funds SET balance=balance-{1} "
+        "WHERE fund_id={2} AND balance>={1}";
+      int64_t rows = 0;
+      if (sql_build(db, fund_debit, sql, sizeof sql) != 0
+          || !db_exec_rows_affected(db, sql,
+                (db_bind_t[]){db_bind_i64(amount),
+                              db_bind_i64(policies[i].fund_id)}, 2,
+                &rows, err))
+        { free(policies); return err->code ? err->code : ERR_DB_EXEC_FAILED; }
+      if (rows != 1) continue;
+
+      const char *account_credit =
+        "UPDATE bank_accounts SET balance=balance+{1} "
+        "WHERE bank_accounts_id={2} AND is_active=TRUE";
+      rows = 0;
+      if (sql_build(db, account_credit, sql, sizeof sql) != 0
+          || !db_exec_rows_affected(db, sql,
+                (db_bind_t[]){db_bind_i64(amount), db_bind_i64(account_id)},
+                2, &rows, err))
+        { free(policies); return err->code ? err->code : ERR_DB_EXEC_FAILED; }
+      if (rows != 1)
+        { free(policies); return ERR_DB_CONSTRAINT; }
+      account_balance += amount;
+
+      char tx_group[96], tx_idem[128];
+      snprintf(tx_group, sizeof tx_group, "insurance-claim-%lld",
+               (long long)claim_id);
+      snprintf(tx_idem, sizeof tx_idem, "insurance-auto-%lld-%lld",
+               (long long)ship_id, (long long)policies[i].policy_id);
+      const char *ledger =
+        "INSERT INTO bank_transactions(account_id,tx_type,direction,amount,"
+        "currency,tx_group_id,description,ts,balance_after,idempotency_key) "
+        "VALUES({1},'ADJUSTMENT','CREDIT',{2},'CRD',{3},'automatic hull insurance',"
+        "{4},{5},{6})";
+      int64_t tx_id = 0;
+      if (sql_build(db, ledger, sql, sizeof sql) != 0
+          || !db_exec_insert_id(db, sql,
+                (db_bind_t[]){db_bind_i64(account_id), db_bind_i64(amount),
+                              db_bind_text(tx_group), db_bind_i64(now_ts),
+                              db_bind_i64(account_balance), db_bind_text(tx_idem)},
+                6, "bank_transactions_id", &tx_id, err))
+        { free(policies); return err->code ? err->code : ERR_DB_EXEC_FAILED; }
+      if (tx_id <= 0)
+        { free(policies); return ERR_DB_EXEC_FAILED; }
+      const char *paid_update =
+        "UPDATE insurance_claims SET status='paid',paid_bank_tx={1} "
+        "WHERE insurance_claims_id={2} AND status='open'";
+      if (sql_build(db, paid_update, sql, sizeof sql) != 0
+          || !db_exec(db, sql,
+                (db_bind_t[]){db_bind_i64(tx_id), db_bind_i64(claim_id)}, 2, err))
+        { free(policies); return err->code ? err->code : ERR_DB_EXEC_FAILED; }
+    }
+  free(policies);
+  return 0;
+}
 
 int repo_ships_handle_destruction(db_t *db,
                                   int64_t victim_pid,
@@ -53,7 +252,9 @@ int repo_ships_handle_destruction(db_t *db,
       { rc = ERR_DB_CONSTRAINT; goto fail; }
 
     const char *ship_lock =
-      "SELECT type_id,COALESCE(sector_id,0),destroyed FROM ships "
+      "SELECT type_id,COALESCE(sector_id,0),destroyed,"
+      "COALESCE((SELECT basecost FROM shiptypes st WHERE "
+      "st.shiptypes_id=ships.type_id),0) FROM ships "
       "WHERE ship_id={1} FOR UPDATE";
     if (sql_build(db, ship_lock, sql, sizeof sql) != 0
         || !db_query(db, sql, (db_bind_t[]){db_bind_i64(victim_sid)}, 1,
@@ -64,6 +265,7 @@ int repo_ships_handle_destruction(db_t *db,
     int ship_type = db_res_col_i32(res, 0, &err);
     int ship_sector = db_res_col_i32(res, 1, &err);
     int destroyed = db_res_col_bool(res, 2, &err);
+    int64_t hull_value = db_res_col_i64(res, 3, &err);
     db_res_finalize(res); res = NULL;
     if (err.code) { rc = err.code; goto fail; }
     if (destroyed || ship_type <= 0)
@@ -79,6 +281,12 @@ int repo_ships_handle_destruction(db_t *db,
       }
     if (xp_loss < 0) xp_loss = 0;
     if (xp_loss > experience) xp_loss = experience;
+    char destruction_key[64];
+    snprintf(destruction_key, sizeof destruction_key,
+             "ship-destruction-%lld", (long long)victim_sid);
+    if (settle_destruction_insurance(db, victim_pid, victim_sid, hull_value,
+                                     now_ts, destruction_key, &err) != 0)
+      goto fail;
     const char *lose_ship =
       "UPDATE ships SET destroyed=TRUE,hull=0,fighters=0,shields=0,"
       "installed_shields=0,mines=0,limpets=0,genesis=0,detonators=0,"
@@ -216,15 +424,12 @@ int repo_ships_handle_destruction(db_t *db,
     const char *event_sql =
       "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload,idem_key) "
       "VALUES({1},'ship.destroyed',{2},{3},{4},{5})";
-    char idem_key[64];
-    snprintf(idem_key, sizeof idem_key, "ship-destruction-%lld",
-             (long long)victim_sid);
     if (sql_build(db, event_sql, sql, sizeof sql) != 0
         || !db_exec(db, sql, (db_bind_t[]){db_bind_timestamp_text(now_ts),
                                            db_bind_i64(victim_pid),
                                            db_bind_i64(sector_id),
                                            db_bind_text(payload),
-                                           db_bind_text(idem_key)}, 5, &err))
+                                           db_bind_text(destruction_key)}, 5, &err))
       goto fail;
 
     if (!db_tx_commit(db, &err))

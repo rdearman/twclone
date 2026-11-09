@@ -1477,6 +1477,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
             }
           json_t *data = json_object ();
           json_object_set_new (data, "sector_id", json_integer (to));
+          json_object_set_new (data, "current_sector_id",
+                               json_integer (ctx->sector_id));
           json_object_set_new (data, "ship_destroyed", json_true ());
           json_object_set_new (data, "hazards",
                                hazard_report ? hazard_report : json_array ());
@@ -2330,6 +2332,8 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
         }
       json_t *data = json_object ();
       json_object_set_new (data, "sector_id", json_integer (to_sector_id));
+      json_object_set_new (data, "current_sector_id",
+                           json_integer (ctx->sector_id));
       json_object_set_new (data, "ship_destroyed", json_true ());
       json_object_set_new (data, "hazards",
                            hazard_report ? hazard_report : json_array ());

@@ -57,9 +57,9 @@ static int load_ship_combat_stats_locked (db_t * db, int ship_id,
 static int h_apply_quasar_damage (client_ctx_t * ctx, int damage,
 				  const char *source_desc, int planet_id,
 				  json_t **outcome);
-static int destroy_ship_in_transaction (db_t *db, int player_id, int ship_id,
-                                        ship_kill_cause_t cause,
-                                        int sector_id);
+static int destroy_ship_in_transaction (db_t *db, client_ctx_t *ctx,
+                                        int player_id, int ship_id,
+                                        ship_kill_cause_t cause, int sector_id);
 static int persist_ship_damage (db_t * db, combat_ship_t * ship,
 				int fighters_lost);
 static int cmd_deploy_assets_list_internal (client_ctx_t * ctx, json_t * root,
@@ -125,6 +125,7 @@ fedspace_enforce_no_aggression_hard (client_ctx_t *ctx, int attacker_ship_id,
       db_tx_rollback (db, NULL);
       return -ERR_DB_EXEC_FAILED;
     }
+  ctx->sector_id = 1;
 
   if (!db_tx_commit (db, &err))
     {
@@ -283,7 +284,7 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
       json_decref (evt);
       if (ship.hull <= 0)
 	{
-          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id,
+          if (destroy_ship_in_transaction (db, ctx, ctx->player_id, ship_id,
                                            KILL_CAUSE_COMBAT, sector_id) != 0)
             result = -1;
           else
@@ -533,7 +534,7 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
         }
       if (ship_stats.hull <= 0)
         {
-          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id,
+          if (destroy_ship_in_transaction (db, ctx, ctx->player_id, ship_id,
                                            KILL_CAUSE_MINES, new_sector_id) != 0)
             result = -1;
           else
@@ -674,10 +675,12 @@ handle_combat_flee (client_ctx_t *ctx, json_t *root)
 				       "Flee succeeded, but entry defenses could not be resolved.");
 		  return 0;
 		}
-	      if (hazard_rc == 1)
-		{
-		  json_t *data = json_pack ("{s:i,s:b}", "to_sector", dest,
-					    "ship_destroyed", true);
+      if (hazard_rc == 1)
+	{
+	  json_t *data = json_pack ("{s:i,s:b}", "to_sector", dest,
+				    "ship_destroyed", true);
+	  json_object_set_new (data, "current_sector_id",
+	                       json_integer (ctx->sector_id));
 		  send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
 				    "Ship destroyed by defenses in the flee destination.", data);
 		  json_decref (data);
@@ -1238,7 +1241,7 @@ h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc,
     }
   bool destroyed = ship.hull <= 0;
   if (destroyed
-      && destroy_ship_in_transaction (db, ctx->player_id, ship_id,
+      && destroy_ship_in_transaction (db, ctx, ctx->player_id, ship_id,
                                       KILL_CAUSE_QUASAR, ctx->sector_id) != 0)
     {
       db_tx_rollback (db, NULL);
@@ -1338,10 +1341,11 @@ db_get_stardock_sectors (void)
 }
 
 static int
-destroy_ship_in_transaction (db_t *db, int player_id, int ship_id,
+destroy_ship_in_transaction (db_t *db, client_ctx_t *ctx,
+                             int player_id, int ship_id,
                              ship_kill_cause_t cause, int sector_id)
 {
-  if (!db || player_id <= 0 || ship_id <= 0)
+  if (!db || !ctx || player_id <= 0 || ship_id <= 0)
     return -1;
   ship_kill_context_t kill_ctx = {
     .victim_player_id = player_id,
@@ -1350,7 +1354,10 @@ destroy_ship_in_transaction (db_t *db, int player_id, int ship_id,
     .cause = cause,
     .sector_id = sector_id
   };
-  return handle_ship_destruction (db, &kill_ctx);
+  int rc = handle_ship_destruction (db, &kill_ctx);
+  if (rc == 0)
+    ctx->sector_id = 1;
+  return rc;
 }
 
 int
@@ -1368,7 +1375,7 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int player_id)
   db_error_clear (&err);
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     return -1;
-  if (destroy_ship_in_transaction (db, player_id, ship_id,
+  if (destroy_ship_in_transaction (db, ctx, player_id, ship_id,
                                    KILL_CAUSE_OTHER, ctx->sector_id) != 0)
     {
       db_tx_rollback (db, NULL);
@@ -1524,21 +1531,21 @@ server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int secto
   if (quasar_rc < 0)
     return -1;
   if (quasar_rc == 1)
-    return 1;                   /* Ship destroyed */
+    { ctx->sector_id = 1; return 1; } /* Ship destroyed and podded. */
 
   /* 2. Mines detonate next */
   int mine_rc = apply_armid_mines_on_entry (ctx, sector_id, &enc);
   if (mine_rc < 0)
     return -1;
   if (enc.destroyed)
-    return 1;
+    { ctx->sector_id = 1; return 1; }
 
   /* 3. Fighters engage */
   int fighters_rc = apply_sector_fighters_on_entry (ctx, sector_id);
   if (fighters_rc < 0)
     return -1;
   if (fighters_rc == 1)
-    return 1;
+    { ctx->sector_id = 1; return 1; }
 
   /* 4. Limpets attach last */
   if (apply_limpet_mines_on_entry (ctx, sector_id, &enc) < 0)
@@ -1550,7 +1557,7 @@ server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int secto
   if (environment_rc < 0)
     return -1;
   if (environment_rc == 1)
-    return 1;
+    { ctx->sector_id = 1; return 1; }
 
   return 0;
 }

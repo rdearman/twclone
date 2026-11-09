@@ -88,11 +88,17 @@ the claim, policy, fund and holder account, and repeated settlement is
 idempotent. No server-side balance or claim updates are performed outside
 those routines.
 
-V3 insurance covers hull replacement only. On qualifying ship destruction it
-settles automatically to the player's bank account under existing eligibility,
-premium, policy-lifecycle and claim rules. Cargo and installed equipment are
-not covered, insurance does not directly replace the ship, and it does not
-alter mandatory escape-pod respawn. Selling an insured ship terminates its
-policy without refund. Use the existing authoritative insured-hull valuation;
-if that valuation cannot be determined from current policy/configuration,
-record the exact valuation gap instead of inventing a formula.
+V3 insurance covers hull replacement only. On qualifying ship destruction the
+shared ship-loss transaction selects active player-held ship policies whose
+epoch `start_ts`/`expiry_ts` cover the destruction time. It uses each policy's
+configured payout, capped in aggregate at shiptype `basecost`, and credits the
+player's CRD bank account with an `ADJUSTMENT/CREDIT` ledger entry. Policy
+claims, insurer-fund debits, bank credits and ship destruction are one
+transaction and are keyed to that destroyed hull. Cargo and installed
+equipment are not covered; insurance does not directly replace the ship and
+does not alter mandatory escape-pod respawn. Multiple policies apply by policy
+ID until the replacement-value cap is reached. If a policy fund/account is
+missing or a fund cannot cover its allocated payout, destruction completes
+and its claim remains open for the existing claim workflow. Guaranteed payout
+under insurer insolvency remains unresolved. Selling an insured ship ends its
+policy without refund.

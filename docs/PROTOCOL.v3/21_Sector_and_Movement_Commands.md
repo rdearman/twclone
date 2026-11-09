@@ -88,6 +88,9 @@ response includes a `hazards` array. Each reported hazard uses `hazard_type`
 `shields_lost`, `fighters_lost`, `hull_lost`, and a `message`. `hazard_type` is
 the protocol field name for the hazard kind; it is distinct from the event
 envelope's `type`.
+If an entry hazard destroys the ship, the error data preserves `sector_id` as
+the hazardous destination and includes `current_sector_id` for the Escape Pod's
+authoritative respawn sector (sector 1).
 
 ### `move.transwarp`
 Long-range jump (requires equipment).
@@ -95,6 +98,9 @@ Long-range jump (requires equipment).
 **Hazard Trigger**: Triggers all entry hazards (fighters, mines, limpets) at the destination sector.
 The same persistence and event behavior applies to transwarp entry. A refused
 movement does not invoke the entry resolver or consume sector assets.
+If destination-entry damage destroys the transwarping ship, the response
+includes both the attempted destination (`sector_id`) and the pod's actual
+`current_sector_id`.
 
 If an initiated transwarp is interrupted, required fuel remains consumed, the
 ship remains at its origin, and destination-entry hazards do not run. Record

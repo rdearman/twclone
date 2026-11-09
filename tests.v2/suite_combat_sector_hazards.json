@@ -470,6 +470,55 @@
           "value": 100
         }
       ]
+    },
+    {
+      "name": "Rig: Record victim hull before lethal transwarp entry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ship_id FROM players WHERE player_id=@{hazard_victim_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "save": { "lethal_victim_ship_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: Set low hull for lethal entry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=679,hull=10,shields=0,fighters=0 WHERE ship_id=@{lethal_victim_ship_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Place lethal hostile fighter asset",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES (680,@{hazard_master_player_id},0,1,100,1,0);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Lethal transwarp entry reports attempted and respawn sectors",
+      "command": "move.transwarp",
+      "user": "hazard_victim",
+      "data": { "to_sector_id": 680 },
+      "expect": { "status": "error" },
+      "asserts": [
+        { "path": "error.data.sector_id", "op": "==", "value": 680 },
+        { "path": "error.data.current_sector_id", "op": "==", "value": 1 },
+        { "path": "error.data.ship_destroyed", "op": "==", "value": true }
+      ]
+    },
+    {
+      "name": "Verify lethal transwarp leaves exactly an active owned Escape Pod",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT old.destroyed=TRUE AND old.hull=0 AND p.sector_id=1 AND pod.sector_id=1 AND pod.destroyed=FALSE AND st.name='Escape Pod' AND (SELECT COUNT(*) FROM ship_ownership own WHERE own.player_id=p.player_id AND own.ship_id=pod.ship_id AND own.is_primary=TRUE)=1 AND ps.status='podded' FROM players p JOIN ships old ON old.ship_id=@{lethal_victim_ship_id} JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id JOIN podded_status ps ON ps.player_id=p.player_id WHERE p.player_id=@{hazard_victim_player_id};"
+      },
+      "expect": { "status": "ok", "data": { "rows": [["t"]] } }
     }
   ]
 }

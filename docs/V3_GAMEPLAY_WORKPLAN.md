@@ -43,7 +43,7 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
 | 5 | Used ship resale completion | SHIP-001–009 | Sale path exists; sale policy lacks subsequent used-hull purchase price/request details. Keep SHIP-005 partial until a purchase rule is approved. |
 | 6 | Bank standing orders | BANK-001–011 | Source implementation and JSON coverage are present; verify runtime calendar, exactly-once, cancellation, failure and ledger behavior when an isolated DB runtime is available. |
 | 7 | Universal destruction and insurance | COMBAT-001–005, INS-001–006 | Next source package; audit every destruction caller and unify pod/loss settlement, then hull-only bank payout. |
-| 8 | Movement hazards/transwarp | MOVE-001–004 | Trace initiation/interruption and normal/transwarp entry processing; use common destruction lifecycle. |
+| 8 | Movement hazards/transwarp | MOVE-001–004 | Common lethal-entry pod lifecycle is source implemented; MOVE-001 awaits a specified interrupting event/path. Validate normal/transwarp runtime results and no-charge pre-initiation rejection. |
 | 9 | Online listing/trading/SysOp closeout | PLAYER-001–006, TRADE-001–003, SYS-001–006 | Online listing and sale config source need protocol verification; preserve dynamic prices and validate configuration bounds. |
 | 10 | End-to-end requirements reconciliation | All IDs | Use available focused tests; full suite/runtime verification only in an already authorized disposable environment. Every ID needs implementation and executed evidence or a precise blocker. |
 
