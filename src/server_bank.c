@@ -930,9 +930,15 @@ db_bank_process_orders (db_t *db)
       int month_day = db_res_col_i32 (order, 6, &err);
       int64_t occurrence = db_res_col_i64 (order, 7, &err);
       db_res_finalize (order);
-      if (err.code || occurrence <= 0 || occurrence > now_s
+      if (err.code || occurrence <= 0
           || payer <= 0 || recipient <= 0 || amount <= 0)
         { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+      /* Another scheduler worker may have settled this order after the due-ID
+       * snapshot but before this worker acquired the row lock. Its next
+       * occurrence is then in the future; it is stale work, not a processing
+       * error and must not interrupt the rest of this batch. */
+      if (occurrence > now_s)
+        { db_tx_rollback (db, NULL); continue; }
 
       char occurrence_group[96];
       snprintf (occurrence_group, sizeof occurrence_group,
