@@ -5,33 +5,32 @@ statuses and per-item evidence are tracked in
 [`V3_GAMEPLAY_COMPLETION_TRACKER.md`](V3_GAMEPLAY_COMPLETION_TRACKER.md).
 Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
-## Active package — bank standing-order workflow audit and completion
+## Active package — universal destruction settlement and insurance
 
-- **Requirement IDs:** BANK-001–011.
-- **Dependencies:** existing bank-order schema, transaction/ledger path and
-  durable cron scheduling.
-- **Source:** `src/server_bank.c`, `src/db/repo/repo_bank.c`, `src/server_cron.c`,
-  bank migrations and protocol schemas.
-- **Migrations:** only if current durable schema cannot represent normalized
-  frequency, UTC execution time, original monthly day and per-occurrence state.
-- **Protocol:** `bank.orders.create`, `bank.orders.list`,
-  `bank.orders.cancel`.
-- **Tests:** existing banking JSON/contract suites; no QA/database work is
-  authorized as part of this package.
-- **Completion criteria:** durable daily/weekly/monthly recurrence, month-end
-  adjustment, idempotent occurrence settlement, atomic ledger-backed transfer,
-  skip-on-insufficient-funds, invalid-recipient cancellation and serialized
-  cancellation/execution.
-- **Current position:** authenticated create/list/cancel commands and a durable
-  occurrence processor are now implemented in the working tree. Migrations add
-  recurrence fields, a unique occurrence journal and a one-minute cron task.
-  Daily/weekly/monthly recurrence, monthly last-day clamping, insufficient-funds
-  skip, recipient deletion cancellation, ordered bank-row locking and transfer
-  ledger writes are source implemented. Sanitised build passes; JSON cases are
-  authored but not run against a server/database. No migration test has run.
-- **Next action:** finish source review, rerun the build and syntax checks, then
-  commit this bank package with status `IMPLEMENTED_UNVERIFIED`; after that
-  begin the universal ship-destruction/escape-pod lifecycle and insurance audit.
+- **Requirement IDs:** COMBAT-001–005, INS-001–006.
+- **Dependencies:** canonical Escape Pod ship type and sector-1 spawn convention;
+  existing insurance policies, claims, funded insurance account and bank ledger.
+- **Source:** `src/db/repo/repo_ships.c`, `src/server_ships.c`,
+  `src/server_combat.c`, `src/engine_consumer.c`, `src/server_loop.c`,
+  `sql/pg/124_insurance_settlement.sql`.
+- **Migrations:** none in the current destruction change.
+- **Protocol:** `ship.self_destruct`, combat/hazard responses and automatic
+  insurance in protocol 23/26.
+- **Tests:** `tests.v2/suite_combat_and_crime.json`,
+  `suite_fedspace_aggression_captainz.json`, `suite_combat_sector_hazards.json`;
+  `test_sector_entry_server_contract.py`.
+- **Completion criteria:** all destruction paths atomically lose hull/cargo/
+  equipment, assign exactly one Escape Pod, preserve unrelated assets, persist
+  an idempotent loss event, and settle eligible hull insurance to bank.
+- **Current position:** common destruction transaction and call-site
+  consolidation are implemented; ASan/UBSan build and 35 focused source-contract
+  tests pass. Captain Z JSON state assertion now checks active owned Escape Pod.
+  No JSON server/database runtime run. Automatic insurance remains missing;
+  policy payout valuation, overlapping policies and insufficient-fund behavior
+  need reconciliation before settlement is safe.
+- **Next action:** complete insurance source/policy reconciliation and implement
+  the unambiguous funded player-policy payout path; then verify destruction
+  paths and proceed to movement/hazards.
 
 ## Subsequent packages
 

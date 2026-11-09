@@ -10,6 +10,8 @@ class SectorEntryServerContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.combat = (ROOT / "src/server_combat.c").read_text(encoding="utf-8")
+        cls.ship_repo = (ROOT / "src/db/repo/repo_ships.c").read_text(encoding="utf-8")
+        cls.engine_consumer = (ROOT / "src/engine_consumer.c").read_text(encoding="utf-8")
         cls.universe = (ROOT / "src/server_universe.c").read_text(encoding="utf-8")
         cls.suite = json.loads(
             (ROOT / "tests.v2/suite_combat_sector_hazards.json").read_text(
@@ -31,9 +33,17 @@ class SectorEntryServerContractTests(unittest.TestCase):
         destroy = self.combat.split(
             "static int\ndestroy_ship_in_transaction", 1
         )[1].split("int\nh_decloak_ship", 1)[0]
-        self.assertIn("db_tx_begin", destroy)
-        self.assertIn("db_destroy_ship", destroy)
-        self.assertIn('"active"', destroy)
+        self.assertIn("handle_ship_destruction (db, &kill_ctx)", destroy)
+        self.assertIn("KILL_CAUSE_OTHER", destroy)
+        self.assertNotIn("db_destroy_ship", destroy)
+
+    def test_all_destruction_uses_shared_pod_settlement(self):
+        self.assertIn("handle_ship_destruction (db, &kill_ctx)", self.combat)
+        self.assertIn("handle_ship_destruction (db, &kill_ctx)", self.engine_consumer)
+        self.assertIn("WHERE ship_id={1} AND destroyed=FALSE", self.ship_repo)
+        self.assertIn("INSERT INTO ships (name,type_id,sector_id,holds,fighters,shields,", self.ship_repo)
+        self.assertIn('"ship-destruction-%lld"', self.ship_repo)
+        self.assertIn("DELETE FROM ship_ownership WHERE ship_id={1}", self.ship_repo)
 
     def test_hazard_suite_uses_movement_and_suite_owned_assets(self):
         names = [test.get("name", "") for test in self.suite["tests"]]

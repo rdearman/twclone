@@ -57,7 +57,9 @@ static int load_ship_combat_stats_locked (db_t * db, int ship_id,
 static int h_apply_quasar_damage (client_ctx_t * ctx, int damage,
 				  const char *source_desc, int planet_id,
 				  json_t **outcome);
-static int destroy_ship_in_transaction (db_t *db, int player_id, int ship_id);
+static int destroy_ship_in_transaction (db_t *db, int player_id, int ship_id,
+                                        ship_kill_cause_t cause,
+                                        int sector_id);
 static int persist_ship_damage (db_t * db, combat_ship_t * ship,
 				int fighters_lost);
 static int cmd_deploy_assets_list_internal (client_ctx_t * ctx, json_t * root,
@@ -110,25 +112,16 @@ fedspace_enforce_no_aggression_hard (client_ctx_t *ctx, int attacker_ship_id,
       return -ERR_DB_TX;
     }
 
-  /* 1. Destroy attacker's ship using existing DB primitive */
-  if (db_destroy_ship (db, attacker_player_id, attacker_ship_id) != 0)
+  ship_kill_context_t kill_ctx = {
+    .victim_player_id = attacker_player_id,
+    .victim_ship_id = attacker_ship_id,
+    .killer_player_id = 0,
+    .cause = KILL_CAUSE_OTHER,
+    .sector_id = ctx->sector_id
+  };
+  if (handle_ship_destruction (db, &kill_ctx) != 0)
     {
       LOGE ("Failed to destroy attacker ship %d", attacker_ship_id);
-      db_tx_rollback (db, NULL);
-      return -ERR_DB_EXEC_FAILED;
-    }
-
-  /* 2. Pod attacker using existing DB primitive */
-  if (db_create_podded_status_entry (db, attacker_player_id) != 0)
-    {
-      LOGE ("Failed to create podded status for player %d",
-            attacker_player_id);
-      db_tx_rollback (db, NULL);
-      return -ERR_DB_EXEC_FAILED;
-    }
-  if (db_update_player_podded_status (db, attacker_player_id, "active", 0) != 0)
-    {
-      LOGE ("Failed to update podded status for player %d", attacker_player_id);
       db_tx_rollback (db, NULL);
       return -ERR_DB_EXEC_FAILED;
     }
@@ -290,7 +283,8 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
       json_decref (evt);
       if (ship.hull <= 0)
 	{
-          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id) != 0)
+          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id,
+                                           KILL_CAUSE_COMBAT, sector_id) != 0)
             result = -1;
           else
             result = 1;
@@ -539,7 +533,8 @@ apply_armid_mines_on_entry (client_ctx_t *ctx, int new_sector_id,
         }
       if (ship_stats.hull <= 0)
         {
-          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id) != 0)
+          if (destroy_ship_in_transaction (db, ctx->player_id, ship_id,
+                                           KILL_CAUSE_MINES, new_sector_id) != 0)
             result = -1;
           else
             {
@@ -1243,7 +1238,8 @@ h_apply_quasar_damage (client_ctx_t *ctx, int damage, const char *source_desc,
     }
   bool destroyed = ship.hull <= 0;
   if (destroyed
-      && destroy_ship_in_transaction (db, ctx->player_id, ship_id) != 0)
+      && destroy_ship_in_transaction (db, ctx->player_id, ship_id,
+                                      KILL_CAUSE_QUASAR, ctx->sector_id) != 0)
     {
       db_tx_rollback (db, NULL);
       return -1;
@@ -1342,15 +1338,19 @@ db_get_stardock_sectors (void)
 }
 
 static int
-destroy_ship_in_transaction (db_t *db, int player_id, int ship_id)
+destroy_ship_in_transaction (db_t *db, int player_id, int ship_id,
+                             ship_kill_cause_t cause, int sector_id)
 {
   if (!db || player_id <= 0 || ship_id <= 0)
     return -1;
-  if (db_destroy_ship (db, player_id, ship_id) != 0
-      || db_create_podded_status_entry (db, player_id) != 0
-      || db_update_player_podded_status (db, player_id, "active", 0) != 0)
-    return -1;
-  return 0;
+  ship_kill_context_t kill_ctx = {
+    .victim_player_id = player_id,
+    .victim_ship_id = ship_id,
+    .killer_player_id = 0,
+    .cause = cause,
+    .sector_id = sector_id
+  };
+  return handle_ship_destruction (db, &kill_ctx);
 }
 
 int
@@ -1368,7 +1368,8 @@ destroy_ship_and_handle_side_effects (client_ctx_t *ctx, int player_id)
   db_error_clear (&err);
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     return -1;
-  if (destroy_ship_in_transaction (db, player_id, ship_id) != 0)
+  if (destroy_ship_in_transaction (db, player_id, ship_id,
+                                   KILL_CAUSE_OTHER, ctx->sector_id) != 0)
     {
       db_tx_rollback (db, NULL);
       return -1;

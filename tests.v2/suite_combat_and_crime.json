@@ -58,7 +58,7 @@
       "name": "Captain Z destruction and podding persist",
       "command": "sys.raw_sql_exec",
       "data": {
-        "sql": "SELECT 1 FROM players p JOIN ships s ON s.ship_id=1012 WHERE p.player_id=@{attacker_player_player_id} AND p.ship_id IS NULL AND s.destroyed=TRUE AND s.hull=0 AND EXISTS (SELECT 1 FROM podded_status ps WHERE ps.player_id=p.player_id AND ps.status='active');"
+        "sql": "SELECT 1 FROM players p JOIN ships lost ON lost.ship_id=1012 JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id WHERE p.player_id=@{attacker_player_player_id} AND lost.destroyed=TRUE AND lost.hull=0 AND st.name='Escape Pod' AND pod.destroyed=FALSE AND pod.sector_id=1 AND EXISTS (SELECT 1 FROM ship_ownership o WHERE o.ship_id=pod.ship_id AND o.player_id=p.player_id AND o.is_primary=TRUE) AND EXISTS (SELECT 1 FROM podded_status ps WHERE ps.player_id=p.player_id AND ps.status='podded');"
       },
       "user": "admin",
       "expect": { "status": "ok", "data": { "rows": [[1]] } }

@@ -43,12 +43,16 @@ depend on pod equipment. The destroyed ship's cargo and equipment are lost;
 bank credits, planets and corporate assets survive. No basic replacement ship
 is issued, and the player has exactly one valid active pod ship after
 settlement. All destruction sources use the same idempotent loss/respawn
-settlement. Eligible insurance pays the applicable hull replacement value to
-the player's bank account automatically; it covers neither cargo nor installed
-equipment, does not directly replace the ship, and cannot pay twice for one
-destruction. Selling an insured ship ends that ship's policy without refund.
-Use existing policy eligibility and valuation rules; do not invent missing
-valuation details.
+settlement. The current C repository transaction writes the destroyed hull,
+loss state, pod ownership/active-ship assignment, podded status and one
+per-hull destruction event atomically. Eligible insurance must pay the
+applicable hull replacement value to the player's bank account automatically;
+it covers neither cargo nor installed equipment, does not directly replace the
+ship, and cannot pay twice for one destruction. Automatic payout is not yet
+implemented. Existing policy rows expose a configured payout and an insurance
+fund, but valuation equivalence, overlapping policies, and behavior when a
+fund lacks sufficient balance have not yet been reconciled. Selling an insured
+ship ends that ship's policy without refund.
 
 ### Planet capture and population
 

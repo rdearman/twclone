@@ -14,6 +14,7 @@
 #include "server_config.h"
 #include "game_db.h"
 #include "repo_cmd.h"
+#include "repo_ships.h"
 #include "repo_planets.h"
 #include "repo_universe.h"
 #include "server_log.h"
@@ -1140,30 +1141,27 @@ db_planet_update_goods_on_hand (db_t *db,
 int
 db_mark_ship_destroyed (db_t *db, int ship_id)
 {
-  if (!db)
-    {
-      return ERR_DB_CLOSED;
-    }
-  db_res_t *res = NULL;
+  if (!db || ship_id <= 0) return ERR_INVALID_ARG;
+  const char *sql = "SELECT player_id FROM ship_ownership WHERE ship_id={1} "
+                    "AND is_primary=TRUE ORDER BY player_id LIMIT 1";
+  char converted[256];
+  if (sql_build(db, sql, converted, sizeof converted) != 0)
+    return ERR_DB_QUERY_FAILED;
   db_error_t err = {0};
-  int rc = ERR_DB;
-  /* Use stored procedure */
-  const char *sql = "SELECT * FROM ship_destroy({1});";
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-
-  if (!db_query (db, sql_converted, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &res, &err))
+  db_res_t *res = NULL;
+  if (!db_query(db, converted, (db_bind_t[]){db_bind_i64(ship_id)}, 1,
+                &res, &err))
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+  if (!db_res_step(res, &err))
     {
-      rc = err.code;
-      goto cleanup;
+      db_res_finalize(res);
+      return err.code ? err.code : ERR_DB_NOT_FOUND;
     }
-  rc = 0;
-
-cleanup:
-  if (res)
-    db_res_finalize (res);
-  return rc;
+  int player_id = db_res_col_i32(res, 0, &err);
+  db_res_finalize(res);
+  if (err.code) return err.code;
+  return repo_ships_handle_destruction(db, player_id, ship_id, 0, "other", 0,
+                                       0, 0, 0, 0, (int64_t)time(NULL), NULL);
 }
 
 
@@ -2567,30 +2565,9 @@ db_apply_lock_policy_for_pilot (db_t *db, int ship_id, int pilot_id)
 int
 db_destroy_ship (db_t *db, int pid, int sid)
 {
-  if (!db)
-    {
-      return ERR_DB_CLOSED;
-    }
-  db_res_t *res = NULL;
-  db_error_t err = {0};
-  int rc = 0;
-  const char *sql = "SELECT * FROM ship_destroy({1});";
-  char sql_converted[256];
-  sql_build(db, sql, sql_converted, sizeof(sql_converted));
-
-
-  if (db_query (db, sql_converted, (db_bind_t[]){db_bind_i64 (sid)}, 1, &res, &err))
-    {
-      (void)pid;
-      rc = 0;
-      goto cleanup;
-    }
-  rc = err.code;
-
-cleanup:
-  if (res)
-    db_res_finalize (res);
-  return rc;
+  if (!db || pid <= 0 || sid <= 0) return ERR_INVALID_ARG;
+  return repo_ships_handle_destruction(db, pid, sid, 0, "other", 0,
+                                       0, 0, 0, 0, (int64_t)time(NULL), NULL);
 }
 
 

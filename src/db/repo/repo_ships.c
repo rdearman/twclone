@@ -4,6 +4,8 @@
 #include "db/sql_driver.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
 
 int repo_ships_handle_destruction(db_t *db,
                                   int64_t victim_pid,
@@ -18,43 +20,223 @@ int repo_ships_handle_destruction(db_t *db,
                                   int64_t now_ts,
                                   int32_t *result_code_out)
 {
-    /* SQL_VERBATIM: Q1 */
-    const char *sql =
-        "SELECT result_code "
-        "FROM public.handle_ship_destruction("
-        "{1},{2},{3},{4},{5},"
-        "{6},{7},{8},{9},{10},{11}"
-        ");";
+    (void) killer_pid;
+    (void) max_per_day; /* V3 destruction always pods; no daily pod cap. */
+    (void) big_sleep;   /* Big Sleep is superseded by universal pod respawn. */
+    if (!db || victim_pid <= 0 || victim_sid <= 0 || !cause)
+        return ERR_INVALID_ARG;
 
-    db_bind_t params[] = {
-        db_bind_i64(victim_pid),
-        db_bind_i64(victim_sid),
-        db_bind_i64(killer_pid),
-        db_bind_text(cause),
-        db_bind_i64(sector_id),
-        db_bind_i64(xp_loss_flat),
-        db_bind_i64(xp_loss_percent),
-        db_bind_i64(max_per_day),
-        db_bind_i64(big_sleep),
-        db_bind_i64(now_ts),
-        db_bind_i64(0)
-    };
-
+    db_error_t err = {0};
+    if (!db_tx_begin(db, DB_TX_IMMEDIATE, &err))
+        return err.code ? err.code : ERR_DB_TX;
+    char sql[1024];
     db_res_t *res = NULL;
-    db_error_t err;
-    char sql_converted[1024];
-    if (sql_build(db, sql, sql_converted, sizeof(sql_converted)) != 0)
-        return ERR_DB_QUERY_FAILED;
+    int rc = ERR_DB_QUERY_FAILED;
+    int active_ship = 0;
+    long long experience = 0;
+    int player_sector = 0;
+    const char *player_lock =
+      "SELECT COALESCE(ship_id,0),COALESCE(experience,0),COALESCE(sector_id,1) "
+      "FROM players WHERE player_id={1} FOR UPDATE";
+    if (sql_build(db, player_lock, sql, sizeof sql) != 0
+        || !db_query(db, sql, (db_bind_t[]){db_bind_i64(victim_pid)}, 1,
+                     &res, &err))
+        goto fail;
+    if (!db_res_step(res, &err))
+      { db_res_finalize(res); res = NULL; rc = ERR_DB_NOT_FOUND; goto fail; }
+    active_ship = db_res_col_i32(res, 0, &err);
+    experience = db_res_col_i64(res, 1, &err);
+    player_sector = db_res_col_i32(res, 2, &err);
+    db_res_finalize(res); res = NULL;
+    if (err.code) { rc = err.code; goto fail; }
+    if (active_ship != victim_sid)
+      { rc = ERR_DB_CONSTRAINT; goto fail; }
 
-    if (!db_query(db, sql_converted, params, 11, &res, &err)) {
-        return err.code;
-    }
+    const char *ship_lock =
+      "SELECT type_id,COALESCE(sector_id,0),destroyed FROM ships "
+      "WHERE ship_id={1} FOR UPDATE";
+    if (sql_build(db, ship_lock, sql, sizeof sql) != 0
+        || !db_query(db, sql, (db_bind_t[]){db_bind_i64(victim_sid)}, 1,
+                     &res, &err))
+        goto fail;
+    if (!db_res_step(res, &err))
+      { db_res_finalize(res); res = NULL; rc = ERR_DB_NOT_FOUND; goto fail; }
+    int ship_type = db_res_col_i32(res, 0, &err);
+    int ship_sector = db_res_col_i32(res, 1, &err);
+    int destroyed = db_res_col_bool(res, 2, &err);
+    db_res_finalize(res); res = NULL;
+    if (err.code) { rc = err.code; goto fail; }
+    if (destroyed || ship_type <= 0)
+      { rc = ERR_DB_CONSTRAINT; goto fail; }
+    if (sector_id <= 0) sector_id = ship_sector > 0 ? ship_sector : player_sector;
 
-    if (db_res_step(res, &err)) {
-        if (result_code_out) *result_code_out = db_res_col_i32(res, 0, &err);
-    }
-    db_res_finalize(res);
+    int64_t xp_loss = xp_loss_flat;
+    if (xp_loss_percent > 0 && experience > 0)
+      {
+        __int128 pct = (__int128) experience * xp_loss_percent / 100;
+        if (pct > INT64_MAX) pct = INT64_MAX;
+        xp_loss += (int64_t) pct;
+      }
+    if (xp_loss < 0) xp_loss = 0;
+    if (xp_loss > experience) xp_loss = experience;
+    const char *lose_ship =
+      "UPDATE ships SET destroyed=TRUE,hull=0,fighters=0,shields=0,"
+      "installed_shields=0,mines=0,limpets=0,genesis=0,detonators=0,"
+      "probes=0,photons=0,beacons=0,cloaking_devices=0,has_transwarp=FALSE,"
+      "has_planet_scanner=FALSE,has_long_range_scanner=FALSE,cloaked=NULL,"
+      "ore=0,organics=0,equipment=0,colonists=0,slaves=0,weapons=0,drugs=0 "
+      "WHERE ship_id={1} AND destroyed=FALSE";
+    int64_t affected = 0;
+    if (sql_build(db, lose_ship, sql, sizeof sql) != 0
+        || !db_exec_rows_affected(db, sql, (db_bind_t[]){db_bind_i64(victim_sid)},
+                                  1, &affected, &err))
+      goto fail;
+    if (affected != 1) { rc = ERR_DB_CONSTRAINT; goto fail; }
+    const char *delete_ownership = "DELETE FROM ship_ownership WHERE ship_id={1}";
+    if (sql_build(db, delete_ownership, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(victim_sid)}, 1, &err))
+      goto fail;
+
+    const char *progress =
+      "UPDATE players SET times_blown_up=COALESCE(times_blown_up,0)+1,"
+      "experience={1},ship_id=NULL,lastplanet=NULL WHERE player_id={2}";
+    if (sql_build(db, progress, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(experience-xp_loss),
+                                          db_bind_i64(victim_pid)}, 2, &err))
+      goto fail;
+
+    /* Prefer the configured canonical type, but recover the existing canonical
+       Escape Pod definition if an old seed left the setting at its placeholder 0. */
+    int pod_type = 0;
+    /* Use a scalar subquery so the canonical ship type remains a fallback if
+       an older installation does not yet contain the configuration row. */
+    const char *pod_type_query = db_backend(db) == DB_BACKEND_POSTGRES
+      ? "SELECT CASE WHEN COALESCE(NULLIF((SELECT value FROM config WHERE key="
+        "'death.escape_pod_shiptype_id' AND type='int'),'')::bigint,0)>0 "
+        "THEN (SELECT value::bigint FROM config WHERE key="
+        "'death.escape_pod_shiptype_id' AND type='int') ELSE "
+        "(SELECT shiptypes_id FROM shiptypes WHERE name='Escape Pod' "
+        "AND enabled=TRUE ORDER BY shiptypes_id LIMIT 1) END"
+      : "SELECT CASE WHEN COALESCE(CAST(NULLIF((SELECT value FROM config WHERE `key`="
+        "'death.escape_pod_shiptype_id' AND type='int'),'') AS SIGNED),0)>0 "
+        "THEN (SELECT CAST(value AS SIGNED) FROM config WHERE `key`="
+        "'death.escape_pod_shiptype_id' AND type='int') ELSE "
+        "(SELECT shiptypes_id FROM shiptypes WHERE name='Escape Pod' "
+        "AND enabled=TRUE ORDER BY shiptypes_id LIMIT 1) END";
+    if (sql_build(db, pod_type_query, sql, sizeof sql) != 0
+        || !db_query(db, sql, NULL, 0, &res, &err))
+      goto fail;
+    if (db_res_step(res, &err)) pod_type = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res); res = NULL;
+    if (err.code || pod_type <= 0)
+      { rc = err.code ? err.code : ERR_DB_NOT_FOUND; goto fail; }
+
+    const char *sector_check = "SELECT sector_id FROM sectors WHERE sector_id={1} FOR UPDATE";
+    if (sql_build(db, sector_check, sql, sizeof sql) != 0
+        || !db_query(db, sql, (db_bind_t[]){db_bind_i32(1)}, 1, &res, &err))
+      goto fail;
+    if (!db_res_step(res, &err))
+      { db_res_finalize(res); res=NULL; rc=ERR_DB_NOT_FOUND; goto fail; }
+    db_res_finalize(res); res = NULL;
+
+    int64_t pod_id = 0;
+    const char *insert_pod =
+      "INSERT INTO ships (name,type_id,sector_id,holds,fighters,shields,"
+      "installed_shields,hull,destroyed) VALUES ('Escape Pod',{1},1,0,0,0,0,100,FALSE)";
+    if (sql_build(db, insert_pod, sql, sizeof sql) != 0
+        || !db_exec_insert_id(db, sql, (db_bind_t[]){db_bind_i32(pod_type)},
+                              1, "ship_id", &pod_id, &err))
+      goto fail;
+    if (pod_id <= 0) { rc = ERR_DB_EXEC_FAILED; goto fail; }
+
+    int owner_role = 0;
+    const char *role_query = "SELECT role_id FROM ship_roles WHERE role='owner' ORDER BY role_id LIMIT 1";
+    if (sql_build(db, role_query, sql, sizeof sql) != 0
+        || !db_query(db, sql, NULL, 0, &res, &err))
+      goto fail;
+    if (db_res_step(res, &err)) owner_role = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res); res = NULL;
+    if (owner_role <= 0 || err.code)
+      { rc = err.code ? err.code : ERR_DB_NOT_FOUND; goto fail; }
+    const char *own_pod =
+      "INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) "
+      "VALUES({1},{2},{3},TRUE)";
+    if (sql_build(db, own_pod, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(pod_id),
+                                           db_bind_i64(victim_pid),
+                                           db_bind_i32(owner_role)}, 3, &err))
+      goto fail;
+    const char *assign_pod =
+      "UPDATE players SET ship_id={1},sector_id=1,lastplanet=NULL WHERE player_id={2}";
+    if (sql_build(db, assign_pod, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(pod_id),
+                                           db_bind_i64(victim_pid)}, 2, &err))
+      goto fail;
+
+    const char *status_lock =
+      "SELECT podded_count_today,podded_last_reset FROM podded_status "
+      "WHERE player_id={1} FOR UPDATE";
+    if (sql_build(db, status_lock, sql, sizeof sql) != 0
+        || !db_query(db, sql, (db_bind_t[]){db_bind_i64(victim_pid)}, 1,
+                     &res, &err))
+      goto fail;
+    int pod_count = 0;
+    int64_t last_reset = 0;
+    int has_status = db_res_step(res, &err);
+    if (has_status)
+      {
+        pod_count = db_res_col_i32(res, 0, &err);
+        last_reset = db_res_col_i64(res, 1, &err);
+      }
+    db_res_finalize(res); res = NULL;
+    if (err.code) goto fail;
+    if (has_status && (last_reset <= 0 || now_ts-last_reset >= 86400))
+      { pod_count = 0; last_reset = now_ts; }
+    if (!has_status) last_reset = now_ts;
+    const char *status_upsert = db_backend(db) == DB_BACKEND_POSTGRES
+      ? "INSERT INTO podded_status(player_id,status,podded_count_today,podded_last_reset) "
+        "VALUES({1},'podded',{2},{3}) ON CONFLICT(player_id) DO UPDATE SET "
+        "status='podded',big_sleep_until=NULL,reason=NULL,"
+        "podded_count_today=EXCLUDED.podded_count_today,podded_last_reset=EXCLUDED.podded_last_reset"
+      : "INSERT INTO podded_status(player_id,status,podded_count_today,podded_last_reset) "
+        "VALUES({1},'podded',{2},{3}) ON DUPLICATE KEY UPDATE status='podded',"
+        "big_sleep_until=NULL,reason=NULL,podded_count_today=VALUES(podded_count_today),"
+        "podded_last_reset=VALUES(podded_last_reset)";
+    if (sql_build(db, status_upsert, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_i64(victim_pid),
+                                          db_bind_i32(pod_count+1),
+                                          db_bind_i64(last_reset)}, 3, &err))
+      goto fail;
+
+    char payload[512];
+    snprintf(payload, sizeof payload,
+      "{\"victim_player_id\":%lld,\"victim_ship_id\":%lld,\"killer_player_id\":%lld,\"cause\":\"%s\",\"sector_id\":%d,\"decision\":\"podded\",\"escape_pod_ship_id\":%lld,\"xp_lost\":%lld}",
+      (long long)victim_pid, (long long)victim_sid, (long long)killer_pid,
+      cause, (int)sector_id, (long long)pod_id, (long long)xp_loss);
+    const char *event_sql =
+      "INSERT INTO engine_events(ts,type,actor_player_id,sector_id,payload,idem_key) "
+      "VALUES({1},'ship.destroyed',{2},{3},{4},{5})";
+    char idem_key[64];
+    snprintf(idem_key, sizeof idem_key, "ship-destruction-%lld",
+             (long long)victim_sid);
+    if (sql_build(db, event_sql, sql, sizeof sql) != 0
+        || !db_exec(db, sql, (db_bind_t[]){db_bind_timestamp_text(now_ts),
+                                           db_bind_i64(victim_pid),
+                                           db_bind_i64(sector_id),
+                                           db_bind_text(payload),
+                                           db_bind_text(idem_key)}, 5, &err))
+      goto fail;
+
+    if (!db_tx_commit(db, &err))
+      { db_tx_rollback(db, NULL); return err.code ? err.code : ERR_DB_TX; }
+    if (result_code_out) *result_code_out = 0;
     return 0;
+
+fail:
+    rc = err.code ? err.code : rc;
+    if (res) db_res_finalize(res);
+    db_tx_rollback(db, NULL);
+    return rc;
 }
 
 int repo_ships_rename_active(db_t *db, int32_t player_id, int32_t ship_id,

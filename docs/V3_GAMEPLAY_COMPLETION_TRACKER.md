@@ -78,16 +78,16 @@ No live DB or full JSON regression run has been performed in this work session.
 | EXC-010 | Audit named market paths | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `server_cron.c`, `repo_market.c` | Source audit documented; no runtime tests | — | Resolve Exchange gaps |
 | EXC-011 | No loss/duplication/oversell | PARTIAL | conditional stock decrement and bilateral settlement | No DB runtime tests | — | Verify race/retry/restart cases |
 | EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
-| COMBAT-001 | Universal escape pod | PARTIAL | existing destruction helper/repo paths; complete call-site audit outstanding | No tests executed | — | Unify every destruction source |
-| COMBAT-002 | No starter-ship respawn | PARTIAL | destruction implementation audit pending | No tests executed | — | Verify escape pod active assignment |
-| COMBAT-003 | No duplicated hull/pod/loss | PARTIAL | idempotency mechanisms vary by path | No tests executed | — | Transaction/idempotency audit |
-| COMBAT-004 | Cargo/equipment loss | PARTIAL | destruction paths exist | No tests executed | — | Verify all destruction sources |
-| COMBAT-005 | Preserve bank/planet/corporate assets | PARTIAL | existing destruction repository | No tests executed | — | State-transition tests |
-| INS-001 | Hull-only coverage | PARTIAL | existing insurance data and destruction path | No tests executed | — | Trace actual valuation and payout |
-| INS-002 | Qualifying destruction | PARTIAL | existing eligibility path | No tests executed | — | Audit and verify |
-| INS-003 | Credit bank account | PARTIAL | payout destination unverified | No tests executed | — | Implement if absent |
-| INS-004 | Pod independent of policy | PARTIAL | destruction lifecycle audit pending | No tests executed | — | Cover insured/uninsured paths |
-| INS-005 | Exactly-once payout | PARTIAL | loss idempotency needs cross-path audit | No tests executed | — | Durable idempotency test |
+| COMBAT-001 | Universal escape-pod respawn | IMPLEMENTED_UNVERIFIED | `repo_ships_handle_destruction`; command, combat/Captain Z, engine self-destruct and legacy repository entry points converge via `handle_ship_destruction` | `test_sector_entry_server_contract.py`; 35 focused tests passed | — | Execute JSON destruction paths and verify runtime schema |
+| COMBAT-002 | No starter-ship respawn | IMPLEMENTED_UNVERIFIED | shared repository creates canonical Escape Pod at sector 1 and assigns it active | Source contract only; sanitised build passed | — | JSON state assertion / runtime test |
+| COMBAT-003 | No duplicate hull/pod/loss | IMPLEMENTED_UNVERIFIED | player/hull locking, conditional destroyed update, ownership removal, one pod and per-hull event key | Source contract only; no concurrency/runtime test | — | Verify retries and simultaneous lethal paths |
+| COMBAT-004 | Cargo/equipment loss | IMPLEMENTED_UNVERIFIED | shared destruction update zeroes cargo and ship equipment/defence quantities | Source inspection/build only | — | Protocol/database assertion |
+| COMBAT-005 | Preserve bank/planet/corporate assets | IMPLEMENTED_UNVERIFIED | shared transaction mutates ship, active/sector/XP/blown-up state, ownership, pod status and event; no other asset tables | Source inspection/build only | — | Runtime state-preservation assertion |
+| INS-001 | Hull-only coverage | PARTIAL | policy schema has configured payout; no destruction settlement | No automatic payout test | — | Resolve payout-vs-replacement-value and policy-overlap semantics |
+| INS-002 | Qualifying destruction | PARTIAL | active policy subject/start/expiry fields exist; not wired to shared destruction transaction | No execution | — | Implement after eligibility semantics are traced |
+| INS-003 | Credit bank account | PARTIAL | existing claim routine can credit holder account; destruction does not create/settle claim | No execution | — | Automatic player-bank settlement after policy decisions |
+| INS-004 | Pod independent of policy | IMPLEMENTED_UNVERIFIED | unconditional pod creation does not inspect insurance | Source contract/build only | — | Verify insured and uninsured runtime cases |
+| INS-005 | Exactly-once payout | PARTIAL | existing claim unique policy/event index; not integrated with destruction event | No execution | — | Integrate stable event settlement and test retries |
 | INS-006 | Sale terminates without refund | IMPLEMENTED_UNVERIFIED | `repo_stardock.c` sale transaction | Ship-sale JSON suite authored, not run | — | DB-backed verify |
 | CAP-001 | Defeat defenses | IMPLEMENTED_UNVERIFIED | `cmd_combat_attack_planet` | Combat JSON suite authored, not run | — | Verify citadel/fighter defenses |
 | CAP-002 | Successful invasion required | IMPLEMENTED_UNVERIFIED | existing fighter comparison determines success | Combat JSON suite authored, not run | — | Validate combat outcome tests |
