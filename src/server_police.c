@@ -1,17 +1,9 @@
 /*
- * server_police.c — Police interaction RPCs (Phase A stub)
+ * server_police.c — Jurisdiction-aware police interactions
  *
- * Provides:
- *   - police.bribe: jurisdiction-aware stub (Phase A not implemented)
- *   - police.surrender: jurisdiction-aware stub (Phase A not implemented)
- *
- * Phase A behavior:
- *   - Lawless clusters (law_severity == 0): no police presence
- *   - Federation cluster: bribe refused; surrender not implemented
- *   - Other clusters: both not implemented
- *
- * NOTE: This is a Phase A implementation. Full gameplay (bribery probability,
- * sentencing, confiscation, record wipes) is deferred to later phases.
+ * The Phase C bribe and surrender rules are deterministic and jurisdiction
+ * aware. Their incident reads, state transitions, and response generation are
+ * kept fail-closed and transactional.
  */
 
 #include <stdio.h>
@@ -108,7 +100,9 @@ handle_police_status (client_ctx_t *ctx, json_t *root)
   /* Read banned status */
   if (repo_clusters_get_player_banned (db, cluster_id, ctx->player_id, &banned) != 0)
     {
-      banned = 0;
+      send_response_error (ctx, root, ERR_DB,
+                           "Database error reading ban status.");
+      return -1;
     }
 
   /* Build response */
@@ -136,19 +130,19 @@ handle_police_status (client_ctx_t *ctx, json_t *root)
 /*
  * cmd_police_bribe()
  *
- * Jurisdiction-aware stub for bribery mechanic.
+ * Deterministic, jurisdiction-aware bribe mechanic.
  *
  * Request payload:
- *   { "amount": <int> }  (optional in Phase A; reserved for Phase B)
+ *   { "amount": <int> }  (positive integer)
  *
  * Response:
  *   On error: standard error response with code + message
  *   On not-implemented: standard error with specific code
  *
- * Rules (Phase A):
+ * Rules:
  *   - Lawless clusters (law_severity == 0): ERR_NO_POLICE_PRESENCE
  *   - Federation cluster (role == 'FED'): ERR_POLICE_BRIBE_REFUSED
- *   - Other clusters: ERR_NOT_IMPLEMENTED (Phase A stub)
+ *   - Other lawful clusters: Phase C deterministic bribe resolution
  */
 int
 cmd_police_bribe(client_ctx_t *ctx, json_t *root)
@@ -248,22 +242,29 @@ cmd_police_bribe(client_ctx_t *ctx, json_t *root)
 
   /* Check if active incident exists */
   int suspicion = 0, wanted_level = 0;
-  int incident_active = 0;
-  if (repo_clusters_get_player_suspicion_wanted(db, cluster_info.cluster_id,
-                                                ctx->player_id,
-                                                &suspicion, &wanted_level) == 0)
+  int banned = 0;
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
     {
-      if (suspicion > 0 || wanted_level > 0)
-        {
-          incident_active = 1;
-        }
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB, "Could not begin police transaction.");
+      return 0;
     }
-  
-  if (!incident_active)
+  int state_rc = repo_clusters_get_player_incident_for_update
+    (db, cluster_info.cluster_id, ctx->player_id, &suspicion, &wanted_level,
+     &banned);
+  if (state_rc != 0)
     {
+      db_tx_rollback (db, NULL);
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB, "Could not read police incident state.");
+      return 0;
+    }
+  if (suspicion <= 0 && wanted_level <= 0 && banned == 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_error(ctx, root, ERR_NOTHING_TO_SURRENDER,
                           "No active incident to bribe away");
-      json_object_clear(response_data);
       json_decref(response_data);
       return 0;
     }
@@ -279,40 +280,51 @@ cmd_police_bribe(client_ctx_t *ctx, json_t *root)
 
   if (bribe_success)
     {
-      /* Apply bribe success: clear suspicion, reduce wanted_level */
-      repo_clusters_apply_bribe_success(db, cluster_info.cluster_id, ctx->player_id);
-      
-      /* Query updated state */
-      repo_clusters_get_player_suspicion_wanted(db, cluster_info.cluster_id,
-                                                ctx->player_id,
-                                                &suspicion, &wanted_level);
-      
-      json_object_set_new(response_data, "suspicion_after", json_integer(suspicion));
-      json_object_set_new(response_data, "wanted_level_after", json_integer(wanted_level));
-      json_object_set_new(response_data, "message",
-                          json_string("Bribe accepted. Your record has been partially cleared."));
-      
-      send_response_ok_take(ctx, root, "police.bribe", &response_data);
+      state_rc = repo_clusters_apply_bribe_success
+        (db, cluster_info.cluster_id, ctx->player_id);
     }
   else
     {
-      /* Apply bribe failure: increment suspicion, possibly promote wanted_level */
-      repo_clusters_apply_bribe_failure(db, cluster_info.cluster_id, ctx->player_id);
-      
-      /* Query updated state */
-      repo_clusters_get_player_suspicion_wanted(db, cluster_info.cluster_id,
-                                                ctx->player_id,
-                                                &suspicion, &wanted_level);
-      
-      json_object_set_new(response_data, "suspicion_after", json_integer(suspicion));
-      json_object_set_new(response_data, "wanted_level_after", json_integer(wanted_level));
-      json_object_set_new(response_data, "message",
-                          json_string("Bribe rejected. Suspicion increased!"));
-      
-      send_response_error(ctx, root, 201,
-                          "Bribe rejected. Suspicion increased.");
-      json_object_clear(response_data);
-      json_decref(response_data);
+      state_rc = repo_clusters_apply_bribe_failure
+        (db, cluster_info.cluster_id, ctx->player_id);
+    }
+
+  if (state_rc == 0)
+    state_rc = repo_clusters_get_player_suspicion_wanted
+      (db, cluster_info.cluster_id, ctx->player_id, &suspicion, &wanted_level);
+  if (state_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not resolve police bribe.");
+      return 0;
+    }
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not commit police bribe.");
+      return 0;
+    }
+
+  json_object_set_new (response_data, "suspicion_after",
+                       json_integer (suspicion));
+  json_object_set_new (response_data, "wanted_level_after",
+                       json_integer (wanted_level));
+  json_object_set_new (response_data, "message",
+                       json_string (bribe_success
+                         ? "Bribe accepted. Your record has been partially cleared."
+                         : "Bribe rejected. Suspicion increased!"));
+  if (bribe_success)
+    send_response_ok_take (ctx, root, "police.bribe", &response_data);
+  else
+    {
+      send_response_error_payload (ctx, root, 201,
+                                   "Bribe rejected. Suspicion increased.",
+                                   response_data);
+      json_decref (response_data);
     }
 
   return 0;
@@ -326,18 +338,18 @@ cmd_police_bribe(client_ctx_t *ctx, json_t *root)
 /*
  * cmd_police_surrender()
  *
- * Jurisdiction-aware stub for surrender mechanic.
+ * Deterministic, jurisdiction-aware surrender mechanic.
  *
  * Request payload:
- *   { }  (optional: "reason" string in Phase B+)
+ *   { }
  *
  * Response:
  *   On error: standard error response with code + message
  *   On not-implemented: standard error with specific code
  *
- * Rules (Phase A):
+ * Rules:
  *   - Lawless clusters (law_severity == 0): ERR_NO_POLICE_PRESENCE
- *   - All other clusters: ERR_NOT_IMPLEMENTED (Phase A stub)
+ *   - Federation: clear the incident; other lawful clusters: reduce one tier
  */
 int
 cmd_police_surrender(client_ctx_t *ctx, json_t *root)
@@ -408,22 +420,29 @@ cmd_police_surrender(client_ctx_t *ctx, json_t *root)
 
   /* Check if active incident exists */
   int suspicion = 0, wanted_level = 0;
-  int incident_active = 0;
-  if (repo_clusters_get_player_suspicion_wanted(db, cluster_info.cluster_id,
-                                                ctx->player_id,
-                                                &suspicion, &wanted_level) == 0)
+  int banned = 0;
+  db_error_t txerr = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
     {
-      if (suspicion > 0 || wanted_level > 0)
-        {
-          incident_active = 1;
-        }
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB, "Could not begin police transaction.");
+      return 0;
     }
-  
-  if (!incident_active)
+  int state_rc = repo_clusters_get_player_incident_for_update
+    (db, cluster_info.cluster_id, ctx->player_id, &suspicion, &wanted_level,
+     &banned);
+  if (state_rc != 0)
     {
+      db_tx_rollback (db, NULL);
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB, "Could not read police incident state.");
+      return 0;
+    }
+  if (suspicion <= 0 && wanted_level <= 0 && banned == 0)
+    {
+      db_tx_rollback (db, NULL);
       send_response_error(ctx, root, ERR_NOTHING_TO_SURRENDER,
                           "You have nothing to surrender for");
-      json_object_clear(response_data);
       json_decref(response_data);
       return 0;
     }
@@ -433,38 +452,43 @@ cmd_police_surrender(client_ctx_t *ctx, json_t *root)
 
   if (strcmp(cluster_info.role, "FED") == 0)
     {
-      /* Federation cluster: full incident wipe */
-      repo_clusters_clear_incident_state(db, cluster_info.cluster_id, ctx->player_id);
-      
-      /* Query updated state */
-      repo_clusters_get_player_suspicion_wanted(db, cluster_info.cluster_id,
-                                                ctx->player_id,
-                                                &suspicion, &wanted_level);
-      
-      json_object_set_new(response_data, "suspicion_after", json_integer(suspicion));
-      json_object_set_new(response_data, "wanted_level_after", json_integer(wanted_level));
-      json_object_set_new(response_data, "message",
-                          json_string("You have surrendered to the Federation. Your record has been cleared."));
-      
-      send_response_ok_take(ctx, root, "police.surrender", &response_data);
+      state_rc = repo_clusters_clear_incident_state
+        (db, cluster_info.cluster_id, ctx->player_id);
     }
   else
     {
-      /* Local cluster: reduce incident by one tier */
-      repo_clusters_reduce_incident_by_tier(db, cluster_info.cluster_id, ctx->player_id);
-      
-      /* Query updated state */
-      repo_clusters_get_player_suspicion_wanted(db, cluster_info.cluster_id,
-                                                ctx->player_id,
-                                                &suspicion, &wanted_level);
-      
-      json_object_set_new(response_data, "suspicion_after", json_integer(suspicion));
-      json_object_set_new(response_data, "wanted_level_after", json_integer(wanted_level));
-      json_object_set_new(response_data, "message",
-                          json_string("You have surrendered to local authorities. Your enforcement level has been reduced."));
-      
-      send_response_ok_take(ctx, root, "police.surrender", &response_data);
+      state_rc = repo_clusters_reduce_incident_by_tier
+        (db, cluster_info.cluster_id, ctx->player_id);
     }
+
+  if (state_rc == 0)
+    state_rc = repo_clusters_get_player_suspicion_wanted
+      (db, cluster_info.cluster_id, ctx->player_id, &suspicion, &wanted_level);
+  if (state_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not resolve police surrender.");
+      return 0;
+    }
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      json_decref (response_data);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not commit police surrender.");
+      return 0;
+    }
+  json_object_set_new (response_data, "suspicion_after",
+                       json_integer (suspicion));
+  json_object_set_new (response_data, "wanted_level_after",
+                       json_integer (wanted_level));
+  json_object_set_new (response_data, "message",
+                       json_string (strcmp (cluster_info.role, "FED") == 0
+                         ? "You have surrendered to the Federation. Your record has been cleared."
+                         : "You have surrendered to local authorities. Your enforcement level has been reduced."));
+  send_response_ok_take (ctx, root, "police.surrender", &response_data);
 
   return 0;
 }

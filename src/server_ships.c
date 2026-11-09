@@ -661,12 +661,18 @@ int
 cmd_ship_status (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
-  if (ctx->player_id <= 0)
+  if (!ctx || ctx->player_id <= 0)
     {
       send_response_refused_steal (ctx,
 				   root,
-				   ERR_SECTOR_NOT_FOUND,
+				   ERR_NOT_AUTHENTICATED,
 				   "Not authenticated", NULL);
+      return 0;
+    }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable.");
       return 0;
     }
   json_t *player_info = NULL;

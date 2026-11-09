@@ -827,6 +827,51 @@ send_response_error_data (client_ctx_t *ctx, json_t *req, int code,
   json_decref (resp);
 }
 
+void
+send_response_error_payload (client_ctx_t *ctx, json_t *req, int code,
+                             const char *msg, json_t *payload)
+{
+  if (!ctx)
+    return;
+  json_t *resp = json_object ();
+  json_t *err = json_object ();
+  if (!resp || !err)
+    {
+      if (resp) json_decref (resp);
+      if (err) json_decref (err);
+      return;
+    }
+  if (req && json_is_object (req))
+    {
+      json_t *jid = json_object_get (req, "id");
+      if (json_is_string (jid))
+        json_object_set_new (resp, "reply_to",
+                             json_string (json_string_value (jid)));
+    }
+  char tsbuf[32];
+  iso8601_utc (tsbuf);
+  json_object_set_new (resp, "ts", json_string (tsbuf));
+  json_object_set_new (resp, "status", json_string ("error"));
+  json_object_set_new (resp, "type", json_string ("error"));
+  json_object_set_new (err, "code", json_integer (code));
+  json_object_set_new (err, "message", json_string (msg ? msg : ""));
+  json_object_set_new (resp, "error", err);
+  if (payload)
+    json_object_set (resp, "data", payload);
+  else
+    json_object_set_new (resp, "data", json_null ());
+  json_object_set_new (resp, "meta", make_default_meta ());
+  sanitize_json_strings (resp);
+  if (ctx == g_ctx_for_send && ctx->captured_envelopes_valid
+      && ctx->captured_envelopes)
+    json_array_append_new (ctx->captured_envelopes, resp);
+  else
+    {
+      send_all_json (ctx->fd, resp);
+      json_decref (resp);
+    }
+}
+
 
 void
 send_response_refused (client_ctx_t *ctx,

@@ -38,6 +38,13 @@ int repo_clusters_update_commodity_index(db_t *db, int cluster_id, const char *c
 int repo_clusters_drift_port_prices(db_t *db, int mid_price, const char *commodity, int cluster_id);
 int repo_clusters_get_player_banned(db_t *db, int cluster_id, int player_id, int *banned_out);
 int repo_clusters_get_player_suspicion_wanted(db_t *db, int cluster_id, int player_id, int *suspicion_out, int *wanted_out);
+/* Requires an active transaction; locks the incident row and also returns the
+ * banned flag. Missing rows are returned as zero-valued state. */
+int repo_clusters_get_player_incident_for_update(db_t *db, int cluster_id,
+                                                  int player_id,
+                                                  int *suspicion_out,
+                                                  int *wanted_out,
+                                                  int *banned_out);
 int repo_clusters_upsert_player_status(db_t *db, int cluster_id, int player_id, int susp_inc, int busted);
 int repo_clusters_check_incident_active(db_t *db, int cluster_id, int player_id, int *has_incident_out);
 int repo_clusters_promote_wanted_from_suspicion(db_t *db, int cluster_id, int player_id);

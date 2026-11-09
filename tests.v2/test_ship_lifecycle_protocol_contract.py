@@ -17,6 +17,7 @@ class ShipLifecycleProtocolContractTests(unittest.TestCase):
         cls.schemas_h = (ROOT / "src/schemas.h").read_text(encoding="utf-8")
         cls.schemas_c = (ROOT / "src/schemas.c").read_text(encoding="utf-8")
         cls.loop = (ROOT / "src/server_loop.c").read_text(encoding="utf-8")
+        cls.ships = (ROOT / "src/server_ships.c").read_text(encoding="utf-8")
 
     def test_lifecycle_schema_functions_are_declared_and_registered(self):
         for name in ("schema_ship_sell", "schema_ship_transfer",
@@ -44,6 +45,14 @@ class ShipLifecycleProtocolContractTests(unittest.TestCase):
         self.assertIn('"target_player_id"', body)
         self.assertIn('schema_nav_require (required, "ship_id")', body)
         self.assertIn('schema_nav_require (required, "target_player_id")', body)
+
+    def test_ship_status_uses_auth_and_database_errors_not_unrelated_codes(self):
+        start = self.ships.index("cmd_ship_status (client_ctx_t *ctx")
+        end = self.ships.index("cmd_ship_info_compat", start)
+        body = self.ships[start:end]
+        self.assertIn("ERR_NOT_AUTHENTICATED", body)
+        self.assertIn("ERR_SERVICE_UNAVAILABLE", body)
+        self.assertNotIn("ERR_SECTOR_NOT_FOUND", body)
 
 
 if __name__ == "__main__":

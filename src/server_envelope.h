@@ -77,6 +77,9 @@ void send_response_error (client_ctx_t * ctx,
                           json_t * req, int code, const char *msg);
 void send_response_error_data (client_ctx_t *ctx, json_t *req, int code,
                                const char *msg, json_t *data_opt);
+/* Error envelope variant whose gameplay details are at the root `data` key. */
+void send_response_error_payload (client_ctx_t *ctx, json_t *req, int code,
+                                  const char *msg, json_t *payload);
 void send_response_refused (client_ctx_t * ctx,
 			    json_t * req,
 			    int code, const char *msg, json_t * data_opt);

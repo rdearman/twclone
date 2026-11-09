@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 int repo_clusters_get_sector_count(db_t *db, int *count_out) {
     db_res_t *res = NULL;
@@ -228,24 +229,57 @@ int repo_clusters_get_player_banned(db_t *db, int cluster_id, int player_id, int
     return err.code;
 }
 
-int repo_clusters_get_player_suspicion_wanted(db_t *db, int cluster_id, int player_id, int *suspicion_out, int *wanted_out) {
+static int repo_clusters_read_incident(db_t *db, int cluster_id, int player_id,
+                                       int *suspicion_out, int *wanted_out,
+                                       int *banned_out, bool for_update) {
+    if (!db || cluster_id <= 0 || player_id <= 0)
+        return ERR_INVALID_ARG;
     db_res_t *res = NULL;
-    db_error_t err;
-    /* SQL_VERBATIM: Q17 */
-    const char *q17 = "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
-    char sql[512]; sql_build(db, q17, sql, sizeof(sql));
+    db_error_t err = {0};
+    const char *query = for_update
+        ? "SELECT suspicion, wanted_level, banned FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2} FOR UPDATE"
+        : "SELECT suspicion, wanted_level, banned FROM cluster_player_status WHERE cluster_id = {1} AND player_id = {2}";
+    char sql[512];
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
     if (db_query (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id) }, 2, &res, &err)) {
         if (db_res_step (res, &err)) {
-            *suspicion_out = db_res_col_i32 (res, 0, &err);
-            *wanted_out = db_res_col_i32 (res, 1, &err);
+            if (suspicion_out)
+                *suspicion_out = db_res_col_i32 (res, 0, &err);
+            if (wanted_out)
+                *wanted_out = db_res_col_i32 (res, 1, &err);
+            if (banned_out)
+                *banned_out = db_res_col_i32 (res, 2, &err);
         } else {
-            *suspicion_out = 0;
-            *wanted_out = 0;
+            if (suspicion_out) *suspicion_out = 0;
+            if (wanted_out) *wanted_out = 0;
+            if (banned_out) *banned_out = 0;
         }
         db_res_finalize (res);
-        return 0;
+        return err.code;
     }
-    return err.code;
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+}
+
+int repo_clusters_get_player_suspicion_wanted(db_t *db, int cluster_id,
+                                               int player_id,
+                                               int *suspicion_out,
+                                               int *wanted_out) {
+    return repo_clusters_read_incident(db, cluster_id, player_id,
+                                       suspicion_out, wanted_out, NULL, false);
+}
+
+int repo_clusters_get_player_incident_for_update(db_t *db, int cluster_id,
+                                                  int player_id,
+                                                  int *suspicion_out,
+                                                  int *wanted_out,
+                                                  int *banned_out) {
+    if (!suspicion_out || !wanted_out || !banned_out)
+        return ERR_INVALID_ARG;
+    *suspicion_out = *wanted_out = *banned_out = 0;
+    return repo_clusters_read_incident(db, cluster_id, player_id,
+                                       suspicion_out, wanted_out, banned_out,
+                                       true);
 }
 
 int repo_clusters_upsert_player_status(db_t *db, int cluster_id, int player_id, int susp_inc, int busted) {
@@ -581,5 +615,3 @@ int repo_clusters_record_crime(db_t *db, int player_id, int sector_id,
   /* Check if suspicion >= 3 and promote to wanted_level */
   return repo_clusters_promote_wanted_from_suspicion(db, cluster_info.cluster_id, player_id);
 }
-
-

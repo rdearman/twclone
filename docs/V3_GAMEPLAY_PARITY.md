@@ -15,8 +15,8 @@ path exists; end-to-end behavior still needs focused protocol verification.
 | Combat/defences | Ship/planet combat, fighters, mines, shields, destruction and recovery | `src/server_combat.c`, `src/server_planets.c`, `src/db/repo/repo_combat.c` | Combat odds, destruction/podding and hazard aftermath need canonical policy/runtime proof | No general gap declared without resolving issue #396 / `V3-CAN-00` | Partial |
 | Corporations | Membership, roles, shared assets, treasury and governance | `src/server_corporation.c`, `src/db/repo/repo_corporation.c` | Membership events and advanced settlement require verification | Tax/dividend RPCs are explicitly not registered; stock subcommands have a stub fallback | Partial |
 | Banking/finance | Balances, deposits, withdrawals, transfers, statements and interest | `src/server_bank.c`, `src/db/repo/repo_bank.c`, `src/server_engine.c` | Interest schedule/replay and ledger/restart invariants unresolved | Standing-order processing is a TODO (`db_bank_process_orders`); no CRUD RPC is registered | Partial |
-| Stations/services | StarDock, shipyard, tavern, hardware and police interactions | `src/server_stardock.c`, `src/server_police.c`, `src/server_communication.c` | Tavern/police service rules and station journeys need verified end-to-end evidence | Shipyard sale is stubbed; some police actions are phase stubs | Partial |
-| Federation/law | Alignment, protected space/assets, penalties and enforcement | `src/server_combat.c`, `src/server_police.c`, `src/server_cron.c` | Captain Z/MSL jurisdiction and daily sweep runtime behavior need approved-contract verification | Do not infer pursuit or enforcement outside explicit contracts | Partial; decisions in `docs/design/V3_NPC_FEDERATION_PHASES.md` |
+| Stations/services | StarDock, shipyard, tavern, hardware and police interactions | `src/server_stardock.c`, `src/server_police.c`, `src/server_communication.c` | Tavern rules and police/station journeys need verified end-to-end evidence | Shipyard sale is stubbed; police interaction runtime evidence remains pending | Partial |
+| Federation/law | Alignment, protected space/assets, penalties and enforcement | `src/server_combat.c`, `src/server_police.c`, `src/server_cron.c` | Police bribe/surrender rules are implemented; Captain Z/MSL jurisdiction and daily sweep still need approved-contract runtime verification | Do not infer pursuit or enforcement outside explicit contracts | Partial; decisions in `docs/design/V3_NPC_FEDERATION_PHASES.md` |
 | NPC universe | Persistent faction ships, trading, movement, combat and consequences | `src/server_engine.c`, `src/server_cron.c`, `src/db/repo/repo_cron.c` | Ferengi/Orion autonomous behavior and security responses are incomplete/unverified | Blockade, hunting and pursuit claims require behavior-level verification | Partial; see `docs/PROTOCOL.v3/27_NPC_and_Ferengi_AI.md` |
 | Computer/intelligence | Scanning, plots, recommendations and information boundaries | `src/server_universe.c`, `src/server_players.c`, `src/server_autopilot.c` | Knowledge persistence and deterministic route recommendations need runtime verification | Ranking/information scope has open issue #423 | Partial |
 | Turns/progression | Turn costs, experience, alignment, daily work and durable progression | `src/server_universe.c`, `src/server_players.c`, `src/server_engine.c`, `src/db/repo/repo_cron.c` | XP/turn restart and idempotency need end-to-end verification | No separate victory condition is established by the available V3 authority | Partial |
@@ -30,6 +30,20 @@ path exists; end-to-end behavior still needs focused protocol verification.
   See `repo_citadel_get_qcannon_state` and `cmd_planet_info`. Build and source
   contract tests are the available verification here; database-backed runtime
   verification remains outstanding.
+
+- Police bribe and surrender now lock the current incident row inside a
+  transaction, fail closed on read/write/commit errors, and include banned-only
+  incidents in the active-state check. Rejected bribes preserve their
+  documented response payload. See `src/server_police.c`,
+  `src/db/repo/repo_clusters.c`, and `src/server_envelope.c`. Sanitized build
+  and focused source-contract tests pass; socket/database runtime verification
+  remains pending.
+- `police.status` now reports a database error instead of incorrectly returning
+  `banned: false` when the ban-state read fails. `ship.status` now returns the
+  documented authentication error for unauthenticated callers and reports an
+  unavailable database before making repository calls. These paths are covered
+  by focused source-contract tests; protocol runtime verification remains
+  pending.
 
 ## Implemented corrections in this pass
 
