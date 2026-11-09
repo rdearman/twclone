@@ -35,18 +35,44 @@ List wealthiest players.
 
 ## 2. Standing Orders
 
-### `bank.orders.list` / `create` / `cancel`
-Standing orders support daily, weekly and monthly schedules at an explicitly
-specified UTC execution time. Recipients may be any existing player. If funds
-are insufficient for a due occurrence, skip that occurrence without debt or
-later retry; keep the order active for its next scheduled occurrence. A
-successful cancellation prevents future payments immediately, while completed
-payments remain final in the ledger. Schedule state is durable, each occurrence
-settles at most once, and cancellation serializes with execution. If a monthly
-scheduled day does not exist, execute on that month's last day while retaining
-the configured day for subsequent months. If the recipient no longer exists,
-cancel the order without reversing completed payments. No arbitrary active
-order limit is imposed.
+### `bank.orders.create` / `bank.orders.list` / `bank.orders.cancel`
+
+`bank.orders.create` request fields:
+
+```json
+{
+  "recipient_player_id": 123,
+  "amount": 250,
+  "frequency": "daily | weekly | monthly",
+  "time_utc": "HH:MM",
+  "weekday": 1,
+  "day_of_month": 31
+}
+```
+
+`weekday` is required only for weekly schedules and uses ISO-8601 numbering
+(Monday=1 through Sunday=7). `day_of_month` is required only for monthly
+schedules (1–31); it is retained as configured even when a month is shorter.
+`time_utc` is a 24-hour UTC time with minute precision. `amount` must be a
+positive integer number of CRD credits. The recipient must be an existing
+player. Creation does not reserve or debit funds.
+
+`bank.orders.list` accepts an optional `page` (1-based, default 1) and `limit`
+(default 50); it returns only the authenticated player's orders. `bank.orders.cancel`
+requires `order_id` belonging to the authenticated player. A successful create
+returns `order_id`, normalized schedule, and next execution time; list returns
+the same public order fields; cancel returns `order_id` and `cancelled: true`.
+
+Standing orders support daily, weekly and monthly schedules at the specified
+UTC execution time. If funds are insufficient for a due occurrence, skip that
+occurrence without debt or later retry; keep the order active for its next
+scheduled occurrence. A successful cancellation prevents future payments
+immediately, while completed payments remain final in the ledger. Schedule
+state is durable, each occurrence settles at most once, and cancellation
+serializes with execution. If a monthly scheduled day does not exist, execute
+on that month's last day while retaining the configured day for subsequent
+months. If the recipient no longer exists, cancel the order without reversing
+completed payments. No arbitrary active-order limit is imposed.
 
 ## 3. Engine Events
 

@@ -65,6 +65,7 @@ static const int64_t CRON_LOCK_STALE_MS = 120000;	/* reclaim after 2 min */
 int h_daily_bank_interest_tick (db_t * db, int64_t now_s);
 static int h_market_shock_tick (db_t *db, int64_t now_s);
 static int h_daily_planet_tax_tick (db_t *db, int64_t now_s);
+static int h_bank_orders_tick (db_t *db, int64_t now_s);
 static int engine_notice_ttl_sweep (db_t * db, int64_t now_ms);
 static int sweeper_engine_deadletter_retry (db_t * db, int64_t now_ms);
 static int h_planet_id_sequence_reconcile (db_t * db, int64_t now_s);
@@ -102,6 +103,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"cleanup_old_news", h_cleanup_old_news},
   {"limpet_ttl_cleanup", cron_limpet_ttl_cleanup},
   {"daily_bank_interest_tick", h_daily_bank_interest_tick},
+  {"bank_standing_orders_tick", h_bank_orders_tick},
   {"daily_lottery_draw", h_daily_lottery_draw},
   {"deadpool_resolution_cron", h_deadpool_resolution_cron},
   {"tavern_notice_expiry_cron", h_tavern_notice_expiry_cron},
@@ -1357,5 +1359,17 @@ h_daily_bank_interest_tick (db_t *db, int64_t now_s)
   if (rc != 0)
     LOGE ("daily_bank_interest_tick: bank settlement failed: %d", rc);
   unlock (db, "daily_bank_interest_tick");
+  return rc;
+}
+
+static int
+h_bank_orders_tick (db_t *db, int64_t now_s)
+{
+  if (!try_lock (db, "bank_standing_orders_tick", now_s))
+    return 0;
+  int rc = db_bank_process_orders (db);
+  if (rc != 0)
+    LOGE ("bank_standing_orders_tick: settlement failed: %d", rc);
+  unlock (db, "bank_standing_orders_tick");
   return rc;
 }

@@ -22,12 +22,16 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
   adjustment, idempotent occurrence settlement, atomic ledger-backed transfer,
   skip-on-insufficient-funds, invalid-recipient cancellation and serialized
   cancellation/execution.
-- **Current position:** harvest, production overview, emancipation, slave cargo
-  delivery and capture population transitions are implemented in source; build
-  and 32 focused source-contract tests passed. Database-backed behavior remains
-  unverified. No bank audit has yet been completed in this checkpoint.
-- **Next action:** inspect handler, repository, migrations and scheduler to map
-  BANK-001–011 to real code and identify the first incomplete behavior.
+- **Current position:** authenticated create/list/cancel commands and a durable
+  occurrence processor are now implemented in the working tree. Migrations add
+  recurrence fields, a unique occurrence journal and a one-minute cron task.
+  Daily/weekly/monthly recurrence, monthly last-day clamping, insufficient-funds
+  skip, recipient deletion cancellation, ordered bank-row locking and transfer
+  ledger writes are source implemented. Sanitised build passes; JSON cases are
+  authored but not run against a server/database. No migration test has run.
+- **Next action:** finish source review, rerun the build and syntax checks, then
+  commit this bank package with status `IMPLEMENTED_UNVERIFIED`; after that
+  begin the universal ship-destruction/escape-pod lifecycle and insurance audit.
 
 ## Subsequent packages
 
@@ -38,8 +42,8 @@ Approved policy remains in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md
 | 3 | Production/unrest policy groundwork | POP-008–013, SYS-002–003 | Slave 50% path exists; implement daily persisted evaluation infrastructure, but keep effects dormant until all three numeric rules have approved values. |
 | 4 | Galactic Exchange settlement | EXC-001–011, HARV-008, SYS-005 | Do not pay from an unfunded account. First identify approved, bounded clearing-fund/price/accounting mechanism; no commodity sink or money minting. |
 | 5 | Used ship resale completion | SHIP-001–009 | Sale path exists; sale policy lacks subsequent used-hull purchase price/request details. Keep SHIP-005 partial until a purchase rule is approved. |
-| 6 | Bank standing orders | BANK-001–011 | Current active package; audit and complete UTC scheduling, month-end adjustment, cancellation serialization, recipient deletion and exactly-once settlement. |
-| 7 | Universal destruction and insurance | COMBAT-001–005, INS-001–006 | Audit every destruction caller; use one idempotent pod/loss settlement and bank-only hull payout without inventing valuation. |
+| 6 | Bank standing orders | BANK-001–011 | Source implementation and JSON coverage are present; verify runtime calendar, exactly-once, cancellation, failure and ledger behavior when an isolated DB runtime is available. |
+| 7 | Universal destruction and insurance | COMBAT-001–005, INS-001–006 | Next source package; audit every destruction caller and unify pod/loss settlement, then hull-only bank payout. |
 | 8 | Movement hazards/transwarp | MOVE-001–004 | Trace initiation/interruption and normal/transwarp entry processing; use common destruction lifecycle. |
 | 9 | Online listing/trading/SysOp closeout | PLAYER-001–006, TRADE-001–003, SYS-001–006 | Online listing and sale config source need protocol verification; preserve dynamic prices and validate configuration bounds. |
 | 10 | End-to-end requirements reconciliation | All IDs | Use available focused tests; full suite/runtime verification only in an already authorized disposable environment. Every ID needs implementation and executed evidence or a precise blocker. |

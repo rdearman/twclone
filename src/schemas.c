@@ -419,6 +419,9 @@ extern json_t *schema_shipyard_list_response (void);
 extern json_t *schema_shipyard_upgraded_response (void);
 extern json_t *schema_bank_history (void);
 extern json_t *schema_bank_leaderboard (void);
+extern json_t *schema_bank_orders_created_response (void);
+extern json_t *schema_bank_orders_list_response (void);
+extern json_t *schema_bank_orders_cancelled_response (void);
 extern json_t *schema_player_list_online_request (void);
 extern json_t *schema_player_list_online_response (void);
 extern json_t *schema_port_update (void);
@@ -613,6 +616,9 @@ static schema_entry_t g_schema_table[] = {
   {"bank.withdraw", NULL, schema_bank_withdraw},
   {"bank.history", NULL, schema_bank_history},
   {"bank.leaderboard", NULL, schema_bank_leaderboard},
+  {"bank.orders.created", NULL, schema_bank_orders_created_response},
+  {"bank.orders.list_v1", NULL, schema_bank_orders_list_response},
+  {"bank.orders.cancelled", NULL, schema_bank_orders_cancelled_response},
   {"player.list_online_request", NULL, schema_player_list_online_request},
   {"player.list_online_response", NULL, schema_player_list_online_response},
   {"port.update", NULL, schema_port_update},
@@ -6152,6 +6158,92 @@ schema_bank_leaderboard (void)
   json_object_set_new (data_schema, "required", json_array ());
   json_object_set_new (data_schema, "additionalProperties", json_boolean (0));
   return data_schema;
+}
+
+json_t *
+schema_bank_orders_create (void)
+{
+  return json_loads (
+    "{\"$id\":\"ge://schema/bank.orders.create.json\","
+    "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+    "\"type\":\"object\",\"properties\":{"
+    "\"recipient_player_id\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"amount\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"frequency\":{\"enum\":[\"daily\",\"weekly\",\"monthly\"]},"
+    "\"time_utc\":{\"type\":\"string\",\"pattern\":\"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$\"},"
+    "\"weekday\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":7},"
+    "\"day_of_month\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":31}},"
+    "\"required\":[\"recipient_player_id\",\"amount\",\"frequency\",\"time_utc\"],"
+    "\"additionalProperties\":false}", 0, NULL);
+}
+
+json_t *
+schema_bank_orders_list (void)
+{
+  return json_loads (
+    "{\"$id\":\"ge://schema/bank.orders.list.json\","
+    "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+    "\"type\":\"object\",\"properties\":{"
+    "\"page\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}},"
+    "\"additionalProperties\":false}", 0, NULL);
+}
+
+json_t *
+schema_bank_orders_cancel (void)
+{
+  return json_loads (
+    "{\"$id\":\"ge://schema/bank.orders.cancel.json\","
+    "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+    "\"type\":\"object\",\"properties\":{"
+    "\"order_id\":{\"type\":\"integer\",\"minimum\":1}},"
+    "\"required\":[\"order_id\"],\"additionalProperties\":false}",
+    0, NULL);
+}
+
+json_t *
+schema_bank_orders_created_response (void)
+{
+  return json_loads (
+    "{\"$id\":\"ge://schema/bank.orders.created.json\","
+    "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+    "\"type\":\"object\",\"properties\":{"
+    "\"order_id\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"recipient_player_id\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"amount\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"frequency\":{\"enum\":[\"daily\",\"weekly\",\"monthly\"]},"
+    "\"time_utc\":{\"type\":\"string\"},"
+    "\"next_run_at\":{\"type\":\"integer\"}},"
+    "\"required\":[\"order_id\",\"recipient_player_id\",\"amount\","
+    "\"frequency\",\"time_utc\",\"next_run_at\"],"
+    "\"additionalProperties\":false}", 0, NULL);
+}
+
+json_t *
+schema_bank_orders_list_response (void)
+{
+  return json_loads (
+    "{\"$id\":\"ge://schema/bank.orders.list_v1.json\","
+    "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+    "\"type\":\"object\",\"properties\":{"
+    "\"orders\":{\"type\":\"array\",\"items\":{\"type\":\"object\"}},"
+    "\"page\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"limit\":{\"type\":\"integer\",\"minimum\":1}},"
+    "\"required\":[\"orders\",\"page\",\"limit\"],"
+    "\"additionalProperties\":false}", 0, NULL);
+}
+
+json_t *
+schema_bank_orders_cancelled_response (void)
+{
+  return json_loads (
+    "{\"$id\":\"ge://schema/bank.orders.cancelled.json\","
+    "\"$schema\":\"https://json-schema.org/draft/2020-12/schema\","
+    "\"type\":\"object\",\"properties\":{"
+    "\"order_id\":{\"type\":\"integer\",\"minimum\":1},"
+    "\"cancelled\":{\"type\":\"boolean\"}},"
+    "\"required\":[\"order_id\",\"cancelled\"],"
+    "\"additionalProperties\":false}", 0, NULL);
 }
 
 

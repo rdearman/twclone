@@ -86,6 +86,83 @@
       "expect": { "status": "error", "error_code": 400 }
     },
     {
+      "name": "Create a daily standing order",
+      "command": "bank.orders.create",
+      "data": { "recipient_player_id": "@bank_target_player_id", "amount": 25, "frequency": "daily", "time_utc": "23:59" },
+      "user": "bank_user",
+      "extract": { "bank_order_id": "data.order_id" },
+      "asserts": [
+        { "path": "data.amount", "op": "==", "value": 25 },
+        { "path": "data.frequency", "op": "==", "value": "daily" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "List only the authenticated player's standing order",
+      "command": "bank.orders.list",
+      "data": { "page": 1, "limit": 20 },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.orders.0.order_id", "op": "==", "value": "@bank_order_id" },
+        { "path": "data.orders.0.recipient_player_id", "op": "==", "value": "@bank_target_player_id" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Cancel the standing order",
+      "command": "bank.orders.cancel",
+      "data": { "order_id": "@bank_order_id" },
+      "user": "bank_user",
+      "asserts": [ { "path": "data.cancelled", "op": "==", "value": true } ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Another player cannot cancel a standing order",
+      "command": "bank.orders.cancel",
+      "data": { "order_id": "@bank_order_id" },
+      "user": "bank_target",
+      "expect": { "status": "error", "error_code": 404 }
+    },
+    {
+      "name": "Create a weekly standing order at the requested UTC time",
+      "command": "bank.orders.create",
+      "data": { "recipient_player_id": "@bank_target_player_id", "amount": 10, "frequency": "weekly", "time_utc": "12:30", "weekday": 1 },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.frequency", "op": "==", "value": "weekly" },
+        { "path": "data.time_utc", "op": "==", "value": "12:30" }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create a monthly standing order retaining day 31",
+      "command": "bank.orders.create",
+      "data": { "recipient_player_id": "@bank_target_player_id", "amount": 10, "frequency": "monthly", "time_utc": "08:15", "day_of_month": 31 },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.frequency", "op": "==", "value": "monthly" },
+        { "path": "data.next_run_at", "op": ">", "value": 0 }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Unauthenticated standing-order listing is refused",
+      "command": "bank.orders.list",
+      "expect": { "status": "error", "error_code": 401 }
+    },
+    {
+      "name": "Standing-order create request schema is discoverable",
+      "command": "system.describe_schema",
+      "data": { "name": "bank.orders.create", "type": "command" },
+      "user": "bank_user",
+      "asserts": [
+        { "path": "data.schema.properties.frequency.enum.0", "op": "==", "value": "daily" },
+        { "path": "data.schema.properties.time_utc.type", "op": "==", "value": "string" },
+        { "path": "data.schema.properties.day_of_month.maximum", "op": "==", "value": 31 }
+      ],
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Bank History",
       "command": "bank.history",
       "user": "bank_user",

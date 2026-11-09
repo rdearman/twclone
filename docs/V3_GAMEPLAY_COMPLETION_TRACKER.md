@@ -41,17 +41,17 @@ No live DB or full JSON regression run has been performed in this work session.
 | PLAYER-004 | Deduplicate authenticated users | IMPLEMENTED_UNVERIFIED | `server_players.c` | Protocol suite not runtime-run | — | Verify multi-session case |
 | PLAYER-005 | Stable order | IMPLEMENTED_UNVERIFIED | `server_players.c` | Protocol suite not runtime-run | — | Runtime verify pagination stability |
 | PLAYER-006 | Include corporation/alignment | IMPLEMENTED_UNVERIFIED | `server_players.c` | Protocol suite not runtime-run | — | Verify representations |
-| BANK-001 | Create/list/cancel | PARTIAL | `src/server_bank.c`, `repo_bank.c` require audit | No execution | — | Trace against current bank contract |
-| BANK-002 | Daily/weekly/monthly | PARTIAL | standing-order code/scheduler needs audit | No execution | — | Verify all frequencies |
-| BANK-003 | Persisted specified UTC time | PARTIAL | bank scheduler/repository | No execution | — | Verify durable schedule |
-| BANK-004 | Any existing-player recipient | PARTIAL | bank order handlers | No execution | — | Ensure no corp-only restriction |
-| BANK-005 | Skip insufficient occurrence | PARTIAL | bank scheduler | No execution | — | Verify next occurrence and no retry/debt |
-| BANK-006 | Monthly last-day adjustment | PARTIAL | bank scheduler | No execution | — | Implement/test leap and short months |
-| BANK-007 | Deleted recipient cancellation | PARTIAL | bank scheduler | No execution | — | Implement/test |
-| BANK-008 | Immediate cancellation | PARTIAL | bank order cancellation | No execution | — | Serialize with executor |
-| BANK-009 | Exactly once per occurrence | PARTIAL | banking ledger/scheduler | No execution | — | Verify durable idempotency/concurrency |
-| BANK-010 | Atomic debit/credit | PARTIAL | banking transaction path | No execution | — | Verify transaction and ledger |
-| BANK-011 | No arbitrary order limit | UNVERIFIED | `server_bank.c`, `repo_bank.c` | No execution | — | Inspect for undocumented cap |
+| BANK-001 | Create/list/cancel | IMPLEMENTED_UNVERIFIED | `cmd_bank_orders_create/list/cancel`, registry and request/response schemas | `suite_economy_and_bank.json` cases added; runtime not run | — | Run protocol flow and verify persistence/ownership |
+| BANK-002 | Daily/weekly/monthly | IMPLEMENTED_UNVERIFIED | `bank_order_first_run`, recurrence advancement in `db_bank_process_orders` | Daily/weekly/monthly JSON cases added; scheduler runtime not run | — | Verify calendar edges and overdue occurrences |
+| BANK-003 | Persisted specified UTC time | IMPLEMENTED_UNVERIFIED | migrations 172/124; UTC fields and `next_run_at`; one-minute durable cron task | Build passed; no database migration/runtime | — | Verify scheduler time behavior and restart |
+| BANK-004 | Any existing-player recipient | IMPLEMENTED_UNVERIFIED | create command locks and validates player row; processor rechecks and locks recipient | JSON uses an existing non-corporate player; not runtime-run | — | Verify recipient eligibility and deletion race |
+| BANK-005 | Skip insufficient occurrence | IMPLEMENTED_UNVERIFIED | processor records `skipped_insufficient_funds`, advances next run and uses no debt | No DB test | — | Verify account and next occurrence state |
+| BANK-006 | Monthly last-day adjustment | IMPLEMENTED_UNVERIFIED | monthly recurrence clamps execution date and retains configured `month_day` | No leap/non-leap DB test | — | Verify 28/29/30-day month boundaries |
+| BANK-007 | Deleted recipient cancellation | IMPLEMENTED_UNVERIFIED | processor disables order and records cancellation outcome when recipient absent | No DB test | — | Verify deleted-recipient scenario |
+| BANK-008 | Immediate cancellation | IMPLEMENTED_UNVERIFIED | cancel and processor serialize on order row in transaction | JSON cancellation and wrong-owner cases added; not runtime-run | — | Verify concurrent cancel/execute order |
+| BANK-009 | Exactly once per occurrence | IMPLEMENTED_UNVERIFIED | occurrence table unique `(bank_orders_id,scheduled_for)`; transfer and advancement in same transaction | Build passed; no database retry/restart test | — | Verify concurrent workers and restart |
+| BANK-010 | Atomic debit/credit | IMPLEMENTED_UNVERIFIED | locked bank accounts, existing debit/credit ledger functions within order transaction | No DB test | — | Verify rollback and ledger pair |
+| BANK-011 | No arbitrary order limit | IMPLEMENTED_UNVERIFIED | create has no active-order cap | Source inspection; no protocol execution | — | Keep limit absent; validate large-account list pagination |
 | POP-001 | Exclusive population type | IMPLEMENTED_UNVERIFIED | migrations 171/123; planet handlers | `test_planetary_server_contract.py`: 28 passed | — | DB migration/runtime constraint verification |
 | POP-002 | Existing population migration | IMPLEMENTED_UNVERIFIED | migrations 171/123 | No DB migration test in this session | — | Validate migration on both backends |
 | POP-003 | Evil acquisition rules | IMPLEMENTED_UNVERIFIED | `server_ports.c` illegal SLV trade; `cmd_planet_deposit`, `repo_planets_deposit_slaves` | Slave delivery JSON scenario authored; static contract suite 32 passed; no DB runtime | — | Runtime verify port purchase + landed transfer and neutral/good refusal |
@@ -113,7 +113,10 @@ No live DB or full JSON regression run has been performed in this work session.
 
 - Sanitised server build: `make -C bin -j2` — passed after current capture changes.
 - Focused Python source-contract tests: `python3 -m pytest -q tests.v2/test_planetary_server_contract.py` — 32 passed.
+- Migration selection tests: `python3 -m pytest -q tests.v2/test_bigbang_sql_selection.py tests.v2/test_pg_bigbang_sql_selection.py tests.v2/test_v3_faction_rosters.py` — 8 passed; these validate manifest/selection only, not applying migration 172.
+- Bank order JSON acceptance cases were added to `suite_economy_and_bank.json`; JSON syntax passed, but cases have not been run against a server.
 - JSON syntax: `python3 -m json.tool tests.v2/suite_combat_advanced.json` and `python3 -m json.tool tests.v2/suite_planet_fighter_transfers.json` — passed.
+- Banking source audit found the previous state had no `bank.orders.*` registrations and `db_bank_process_orders` was a no-op. Those gaps are now addressed in uncommitted source and migrations 172/124. Final build/test is pending; no runtime or migration test has been performed. Do not count this as VERIFIED.
 - `git diff --check` — passed.
 - A combined pytest command once referenced nonexistent `test_v3_population_contract.py`; that command failed collection and is not counted as a test pass. The valid focused command above was run separately and passed.
 - No PostgreSQL integration, server protocol run, full regression or Godot test was performed.

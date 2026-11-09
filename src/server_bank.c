@@ -712,6 +712,61 @@ db_bank_apply_interest (db_t *db)
   return server_bank_apply_interest (db, (int64_t) time (NULL));
 }
 
+static int64_t
+bank_order_first_run (int64_t now_s, const char *frequency, int hour,
+                      int minute, int weekday, int month_day)
+{
+  time_t value = (time_t) now_s;
+  struct tm utc;
+  if (!gmtime_r (&value, &utc) || hour < 0 || hour > 23
+      || minute < 0 || minute > 59)
+    return 0;
+  utc.tm_hour = hour;
+  utc.tm_min = minute;
+  utc.tm_sec = 0;
+  if (strcmp (frequency, "daily") == 0)
+    {
+      time_t candidate = timegm (&utc);
+      if (candidate <= value) candidate += 86400;
+      return (int64_t) candidate;
+    }
+  if (strcmp (frequency, "weekly") == 0 && weekday >= 1 && weekday <= 7)
+    {
+      int today = utc.tm_wday == 0 ? 7 : utc.tm_wday;
+      int delta = (weekday - today + 7) % 7;
+      time_t candidate = timegm (&utc) + (time_t) delta * 86400;
+      if (candidate <= value) candidate += 7 * 86400;
+      return (int64_t) candidate;
+    }
+  if (strcmp (frequency, "monthly") == 0 && month_day >= 1
+      && month_day <= 31)
+    {
+      int month_days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+      int days = month_days[utc.tm_mon];
+      int year = utc.tm_year + 1900;
+      if (utc.tm_mon == 1 && (year % 4 == 0)
+          && (year % 100 != 0 || year % 400 == 0)) days = 29;
+      utc.tm_mday = month_day < days ? month_day : days;
+      time_t candidate = timegm (&utc);
+      if (candidate <= value)
+        {
+          utc.tm_mday = 1;
+          utc.tm_mon += 1;
+          time_t first = timegm (&utc);
+          if (!gmtime_r (&first, &utc)) return 0;
+          days = month_days[utc.tm_mon];
+          year = utc.tm_year + 1900;
+          if (utc.tm_mon == 1 && (year % 4 == 0)
+              && (year % 100 != 0 || year % 400 == 0)) days = 29;
+          utc.tm_mday = month_day < days ? month_day : days;
+          utc.tm_hour = hour; utc.tm_min = minute; utc.tm_sec = 0;
+          candidate = timegm (&utc);
+        }
+      return (int64_t) candidate;
+    }
+  return 0;
+}
+
 /* Banking owns the balance and ledger mutation; the engine only schedules it. */
 int
 server_bank_apply_interest (db_t *db, int64_t now_s)
@@ -818,7 +873,192 @@ db_bank_process_orders (db_t *db)
     {
       return ERR_DB_CLOSED;
     }
-  /* TODO: implement processing of bank_orders into bank_transactions */
+  int64_t now_s = (int64_t) time (NULL);
+  char idcol[32];
+  snprintf (idcol, sizeof idcol, "%s",
+            db_backend (db) == DB_BACKEND_MYSQL ? "id" : "bank_orders_id");
+  char due_sql_tmpl[512], due_sql[768];
+  snprintf (due_sql_tmpl, sizeof due_sql_tmpl,
+            "SELECT %s FROM bank_orders WHERE enabled=TRUE "
+            "AND frequency IN ('daily','weekly','monthly') AND next_run_at <= {1} "
+            "ORDER BY next_run_at, %s LIMIT 100;", idcol, idcol);
+  if (sql_build (db, due_sql_tmpl, due_sql, sizeof due_sql) != 0)
+    return ERR_DB_QUERY_FAILED;
+  db_error_t err = {0};
+  db_res_t *due = NULL;
+  if (!db_query (db, due_sql, (db_bind_t[]){db_bind_timestamp_text (now_s)},
+                 1, &due, &err))
+    return err.code ? err.code : ERR_DB_QUERY_FAILED;
+  int ids[100];
+  size_t count = 0;
+  while (count < 100 && db_res_step (due, &err))
+    ids[count++] = db_res_col_i32 (due, 0, &err);
+  db_res_finalize (due);
+  if (err.code)
+    return err.code;
+
+  char epoch_expr[128];
+  if (sql_ts_to_epoch_expr (db, "next_run_at", epoch_expr,
+                            sizeof epoch_expr) != 0)
+    return ERR_DB_QUERY_FAILED;
+  for (size_t i = 0; i < count; ++i)
+    {
+      if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+        return err.code ? err.code : ERR_DB_TX;
+      char order_sql_tmpl[768], order_sql[1024];
+      snprintf (order_sql_tmpl, sizeof order_sql_tmpl,
+        "SELECT player_id,to_id,amount,frequency,utc_hour,utc_minute,"
+        "COALESCE(month_day,0),%s AS due_epoch "
+        "FROM bank_orders WHERE %s={1} AND enabled=TRUE FOR UPDATE",
+        epoch_expr, idcol);
+      if (sql_build (db, order_sql_tmpl, order_sql, sizeof order_sql) != 0)
+        { db_tx_rollback (db, NULL); return ERR_DB_QUERY_FAILED; }
+      db_res_t *order = NULL;
+      if (!db_query (db, order_sql, (db_bind_t[]){db_bind_i32 (ids[i])},
+                     1, &order, &err))
+        { db_tx_rollback (db, NULL); return err.code; }
+      if (!db_res_step (order, &err))
+        { db_res_finalize (order); db_tx_rollback (db, NULL); continue; }
+      int payer = db_res_col_i32 (order, 0, &err);
+      int recipient = db_res_col_i32 (order, 1, &err);
+      long long amount = db_res_col_i64 (order, 2, &err);
+      const char *frequency_col = db_res_col_text (order, 3, &err);
+      char frequency[16] = {0};
+      if (frequency_col) snprintf (frequency, sizeof frequency, "%s", frequency_col);
+      int hour = db_res_col_i32 (order, 4, &err);
+      int minute = db_res_col_i32 (order, 5, &err);
+      int month_day = db_res_col_i32 (order, 6, &err);
+      int64_t occurrence = db_res_col_i64 (order, 7, &err);
+      db_res_finalize (order);
+      if (err.code || occurrence <= 0 || occurrence > now_s
+          || payer <= 0 || recipient <= 0 || amount <= 0)
+        { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+
+      char occurrence_group[96];
+      snprintf (occurrence_group, sizeof occurrence_group,
+                "bank-order-%d-%lld", ids[i], (long long) occurrence);
+      int recipient_exists = 0;
+      db_res_t *player = NULL;
+      char recipient_sql[192];
+      if (sql_build (db, "SELECT player_id FROM players WHERE player_id={1} FOR UPDATE",
+                     recipient_sql, sizeof recipient_sql) != 0
+          || !db_query (db, recipient_sql,
+                        (db_bind_t[]){db_bind_i32 (recipient)}, 1,
+                        &player, &err))
+        { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+      recipient_exists = db_res_step (player, &err);
+      db_res_finalize (player);
+      const char *outcome = "paid";
+      if (!recipient_exists)
+        {
+          char disable_tmpl[160], disable_sql[256];
+          snprintf (disable_tmpl, sizeof disable_tmpl,
+                    "UPDATE bank_orders SET enabled=FALSE WHERE %s={1}", idcol);
+          if (sql_build (db, disable_tmpl, disable_sql, sizeof disable_sql) != 0
+              || !db_exec (db, disable_sql,
+                           (db_bind_t[]){db_bind_i32 (ids[i])}, 1, &err))
+            { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+          outcome = "cancelled_invalid_recipient";
+        }
+      else
+        {
+          int payer_account = 0, recipient_account = 0;
+          int rc = repo_bank_get_account_id (db, "player", payer,
+                                             &payer_account);
+          if (rc == ERR_DB_NOT_FOUND)
+            outcome = "skipped_insufficient_funds";
+          else if (rc != 0)
+            { db_tx_rollback (db, NULL); return rc; }
+          else
+            {
+              rc = repo_bank_create_account_if_not_exists (db, "player",
+                                                            recipient, 0);
+              if (rc == 0)
+                rc = repo_bank_get_account_id (db, "player", recipient,
+                                               &recipient_account);
+              if (rc != 0)
+                { db_tx_rollback (db, NULL); return rc; }
+              int lock_ids[2] = {payer_account, recipient_account};
+              if (lock_ids[0] > lock_ids[1])
+                { int tmp = lock_ids[0]; lock_ids[0] = lock_ids[1]; lock_ids[1] = tmp; }
+              long long locked_balance = 0;
+              for (int lock_index = 0; lock_index < 2; ++lock_index)
+                if (repo_bank_get_balance_by_account_id_for_update
+                    (db, lock_ids[lock_index], &locked_balance) != 0)
+                  { db_tx_rollback (db, NULL); return ERR_DB_QUERY_FAILED; }
+              rc = h_deduct_credits (db, "player", payer, amount,
+                                     "TRANSFER", occurrence_group, NULL);
+              if (rc == ERR_INSUFFICIENT_FUNDS || rc == ERR_DB_NOT_FOUND)
+                outcome = "skipped_insufficient_funds";
+              else if (rc != 0)
+                { db_tx_rollback (db, NULL); return rc; }
+              else if ((rc = h_add_credits (db, "player", recipient, amount,
+                                             "TRANSFER", occurrence_group, NULL)) != 0)
+                { db_tx_rollback (db, NULL); return rc; }
+            }
+        }
+
+      struct tm scheduled;
+      time_t occurrence_time = (time_t) occurrence;
+      if (!gmtime_r (&occurrence_time, &scheduled))
+        { db_tx_rollback (db, NULL); return ERR_INVALID_ARG; }
+      time_t next = (time_t) occurrence;
+      if (strcmp (frequency, "daily") == 0)
+        next += 86400;
+      else if (strcmp (frequency, "weekly") == 0)
+        next += 7 * 86400;
+      else if (strcmp (frequency, "monthly") == 0)
+        {
+          scheduled.tm_mday = 1;
+          scheduled.tm_mon += 1;
+          scheduled.tm_hour = hour;
+          scheduled.tm_min = minute;
+          scheduled.tm_sec = 0;
+          time_t month_start = timegm (&scheduled);
+          struct tm next_month;
+          if (!gmtime_r (&month_start, &next_month))
+            { db_tx_rollback (db, NULL); return ERR_INVALID_ARG; }
+          int month_days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+          int days = month_days[next_month.tm_mon];
+          if (next_month.tm_mon == 1
+              && ((next_month.tm_year + 1900) % 4 == 0)
+              && (((next_month.tm_year + 1900) % 100 != 0)
+                  || ((next_month.tm_year + 1900) % 400 == 0))) days = 29;
+          next_month.tm_mday = month_day < days ? month_day : days;
+          next_month.tm_hour = hour; next_month.tm_min = minute;
+          next_month.tm_sec = 0;
+          next = timegm (&next_month);
+        }
+      else
+        { db_tx_rollback (db, NULL); return ERR_INVALID_ARG; }
+
+      char occurrence_insert[512], occurrence_insert_sql[768];
+      snprintf (occurrence_insert, sizeof occurrence_insert,
+        "INSERT INTO bank_order_occurrences (bank_orders_id,scheduled_for,outcome,amount) "
+        "VALUES ({1},{2},{3},{4})");
+      if (sql_build (db, occurrence_insert, occurrence_insert_sql,
+                     sizeof occurrence_insert_sql) != 0
+          || !db_exec (db, occurrence_insert_sql,
+            (db_bind_t[]){db_bind_i32 (ids[i]),
+                          db_bind_timestamp_text (occurrence),
+                          db_bind_text (outcome), db_bind_i64 (amount)},
+            4, &err))
+        { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+      if (strcmp (outcome, "cancelled_invalid_recipient") != 0)
+        {
+          char advance_tmpl[256], advance_sql[384];
+          snprintf (advance_tmpl, sizeof advance_tmpl,
+            "UPDATE bank_orders SET last_occurrence_at={1},next_run_at={2} WHERE %s={3}", idcol);
+          if (sql_build (db, advance_tmpl, advance_sql, sizeof advance_sql) != 0
+              || !db_exec (db, advance_sql,
+                (db_bind_t[]){db_bind_timestamp_text (occurrence),
+                              db_bind_timestamp_text ((int64_t) next),
+                              db_bind_i32 (ids[i])}, 3, &err))
+            { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+        }
+      if (!db_tx_commit (db, &err))
+        { db_tx_rollback (db, NULL); return err.code ? err.code : ERR_DB_TX; }
+    }
   return 0;
 }
 
@@ -1327,6 +1567,161 @@ cmd_bank_transfer (client_ctx_t *ctx, json_t *root)
   json_object_set_new (payload, "from_balance", json_integer (from_bal));
   json_object_set_new (payload, "to_balance", json_integer (to_bal));
   send_response_ok_take (ctx, root, "bank.transfer.confirmed", &payload);
+  return 0;
+}
+
+int
+cmd_bank_orders_create (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    { send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required"); return 0; }
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  int recipient = 0;
+  long long amount = 0;
+  const char *frequency = json_is_object (data)
+    ? json_string_value (json_object_get (data, "frequency")) : NULL;
+  const char *time_utc = json_is_object (data)
+    ? json_string_value (json_object_get (data, "time_utc")) : NULL;
+  if (!db || !json_is_object (data)
+      || !json_get_int_flexible (data, "recipient_player_id", &recipient)
+      || !json_get_int64_flexible (data, "amount", &amount)
+      || recipient <= 0 || amount <= 0 || !frequency || !time_utc)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "Invalid standing order fields"); return 0; }
+  int hour = -1, minute = -1, used = 0;
+  if (sscanf (time_utc, "%2d:%2d%n", &hour, &minute, &used) != 2
+      || used != 5 || time_utc[used] != '\0' || hour > 23 || minute > 59)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "time_utc must be HH:MM"); return 0; }
+  int weekday = 0, month_day = 0;
+  json_t *j_weekday = json_object_get (data, "weekday");
+  json_t *j_monthday = json_object_get (data, "day_of_month");
+  if (strcmp (frequency, "weekly") == 0)
+    {
+      if (!json_is_integer (j_weekday) || (weekday = (int) json_integer_value (j_weekday)) < 1 || weekday > 7)
+        { send_response_error (ctx, root, ERR_INVALID_ARG, "weekly orders require ISO weekday 1-7"); return 0; }
+    }
+  else if (strcmp (frequency, "monthly") == 0)
+    {
+      if (!json_is_integer (j_monthday) || (month_day = (int) json_integer_value (j_monthday)) < 1 || month_day > 31)
+        { send_response_error (ctx, root, ERR_INVALID_ARG, "monthly orders require day_of_month 1-31"); return 0; }
+    }
+  else if (strcmp (frequency, "daily") != 0)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "frequency must be daily, weekly or monthly"); return 0; }
+
+  int64_t now = (int64_t) time (NULL);
+  int64_t next = bank_order_first_run (now, frequency, hour, minute,
+                                      weekday, month_day);
+  if (!next)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "Could not compute schedule"); return 0; }
+  db_error_t err = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not begin order creation"); return 0; }
+  db_res_t *check = NULL;
+  char sql[512];
+  if (sql_build (db, "SELECT player_id FROM players WHERE player_id={1} FOR UPDATE", sql, sizeof sql) != 0
+      || !db_query (db, sql, (db_bind_t[]){db_bind_i32 (recipient)}, 1, &check, &err))
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Recipient lookup failed"); return 0; }
+  int exists = db_res_step (check, &err);
+  db_res_finalize (check);
+  if (!exists)
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_TARGET_INVALID, "Recipient player does not exist"); return 0; }
+
+  const char *idcol = db_backend (db) == DB_BACKEND_MYSQL ? "id" : "bank_orders_id";
+  char schedule[40], insert_tmpl[1024], insert_sql[1280];
+  snprintf (schedule, sizeof schedule, "%s@%sZ", frequency, time_utc);
+  snprintf (insert_tmpl, sizeof insert_tmpl,
+    "INSERT INTO bank_orders (player_id,kind,schedule,next_run_at,enabled,amount,currency,to_entity,to_id,memo,frequency,utc_hour,utc_minute,weekday,month_day) "
+    "VALUES ({1},'recurring',{2},{3},TRUE,{4},'CRD','player',{5},NULL,{6},{7},{8},NULLIF({9},0),NULLIF({10},0))");
+  if (sql_build (db, insert_tmpl, insert_sql, sizeof insert_sql) != 0)
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Order storage unavailable"); return 0; }
+  int64_t order_id = 0;
+  db_bind_t binds[] = {db_bind_i32 (ctx->player_id), db_bind_text (schedule),
+    db_bind_timestamp_text (next), db_bind_i64 (amount), db_bind_i32 (recipient),
+    db_bind_text (frequency), db_bind_i32 (hour), db_bind_i32 (minute),
+    db_bind_i32 (weekday), db_bind_i32 (month_day)};
+  if (!db_exec_insert_id (db, insert_sql, binds, 10, idcol, &order_id, &err))
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not create standing order"); return 0; }
+  if (!db_tx_commit (db, &err))
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not commit standing order"); return 0; }
+  json_t *payload = json_pack ("{s:I,s:i,s:I,s:s,s:s,s:I}", "order_id", order_id,
+    "recipient_player_id", recipient, "amount", amount,
+    "frequency", frequency, "time_utc", time_utc, "next_run_at", (json_int_t) next);
+  send_response_ok_take (ctx, root, "bank.orders.created", &payload);
+  return 0;
+}
+
+int
+cmd_bank_orders_list (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    { send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required"); return 0; }
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  int page = 1, limit = 50;
+  if (json_is_object (data))
+    {
+      json_t *v = json_object_get (data, "page");
+      if (v && (!json_is_integer (v) || (page = (int) json_integer_value (v)) < 1))
+        { send_response_error (ctx, root, ERR_INVALID_ARG, "page must be positive"); return 0; }
+      v = json_object_get (data, "limit");
+      if (v && (!json_is_integer (v) || (limit = (int) json_integer_value (v)) < 1 || limit > 100))
+        { send_response_error (ctx, root, ERR_INVALID_ARG, "limit must be 1-100"); return 0; }
+    }
+  if (!db || (int64_t) (page - 1) * limit > INT32_MAX)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "page out of range"); return 0; }
+  const char *idcol = db_backend (db) == DB_BACKEND_MYSQL ? "id" : "bank_orders_id";
+  char query_tmpl[768], query[1024];
+  snprintf (query_tmpl, sizeof query_tmpl,
+    "SELECT %s AS order_id,to_id AS recipient_player_id,amount,frequency,utc_hour,utc_minute,weekday,month_day,enabled,%s AS next_run_at "
+    "FROM bank_orders WHERE player_id={1} ORDER BY %s LIMIT {2} OFFSET {3}", idcol,
+    db_backend (db) == DB_BACKEND_POSTGRES ? "EXTRACT(EPOCH FROM next_run_at)::bigint" : "UNIX_TIMESTAMP(next_run_at)", idcol);
+  if (sql_build (db, query_tmpl, query, sizeof query) != 0)
+    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Order listing unavailable"); return 0; }
+  db_error_t err = {0}; db_res_t *res = NULL; json_t *orders = NULL;
+  if (!db_query (db, query, (db_bind_t[]){db_bind_i32 (ctx->player_id), db_bind_i32 (limit), db_bind_i64 ((int64_t)(page-1)*limit)}, 3, &res, &err)
+      || stmt_to_json_array (res, &orders, &err) != 0)
+    { if (res) db_res_finalize (res); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Order listing failed"); return 0; }
+  db_res_finalize (res);
+  json_t *payload = json_pack ("{s:o,s:i,s:i}", "orders", orders, "page", page, "limit", limit);
+  send_response_ok_take (ctx, root, "bank.orders.list_v1", &payload);
+  return 0;
+}
+
+int
+cmd_bank_orders_cancel (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    { send_response_error (ctx, root, ERR_NOT_AUTHENTICATED, "Authentication required"); return 0; }
+  db_t *db = game_db_get_handle ();
+  json_t *data = json_object_get (root, "data");
+  long long order_id = 0;
+  if (!db || !json_is_object (data) || !json_get_int64_flexible (data, "order_id", &order_id) || order_id <= 0)
+    { send_response_error (ctx, root, ERR_INVALID_ARG, "order_id must be positive"); return 0; }
+  const char *idcol = db_backend (db) == DB_BACKEND_MYSQL ? "id" : "bank_orders_id";
+  char update_tmpl[256], update[384];
+  snprintf (update_tmpl, sizeof update_tmpl, "UPDATE bank_orders SET enabled=FALSE WHERE %s={1} AND player_id={2}", idcol);
+  if (sql_build (db, update_tmpl, update, sizeof update) != 0)
+    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Order update unavailable"); return 0; }
+  db_error_t err = {0}; int64_t rows = 0;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err)
+      || !db_exec_rows_affected (db, update, (db_bind_t[]){db_bind_i64 (order_id), db_bind_i32 (ctx->player_id)}, 2, &rows, &err))
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not cancel order"); return 0; }
+  if (rows == 0)
+    {
+      char check_tmpl[256], check_sql[384];
+      snprintf (check_tmpl, sizeof check_tmpl, "SELECT 1 FROM bank_orders WHERE %s={1} AND player_id={2} AND enabled=FALSE", idcol);
+      sql_build (db, check_tmpl, check_sql, sizeof check_sql);
+      db_res_t *res = NULL;
+      if (!db_query (db, check_sql, (db_bind_t[]){db_bind_i64 (order_id), db_bind_i32 (ctx->player_id)}, 2, &res, &err))
+        { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Could not verify order"); return 0; }
+      int found = db_res_step (res, &err); db_res_finalize (res);
+      if (!found)
+        { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_NOT_FOUND, "Standing order not found"); return 0; }
+    }
+  if (!db_tx_commit (db, &err))
+    { db_tx_rollback (db, NULL); send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Cancellation failed"); return 0; }
+  json_t *payload = json_pack ("{s:I,s:b}", "order_id", order_id, "cancelled", 1);
+  send_response_ok_take (ctx, root, "bank.orders.cancelled", &payload);
   return 0;
 }
 

@@ -664,6 +664,13 @@
       "required": true,
       "v3_only": true,
       "diagnostic": false
+    },
+    {
+      "name": "172_v3_bank_standing_orders.sql",
+      "subsystem": "banking",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
     }
   ]
 }
