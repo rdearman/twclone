@@ -67,6 +67,10 @@ class PlanetaryServerContractTests(unittest.TestCase):
             buy.index("h_player_is_evil_aligned"),
             buy.index("h_can_trade_commodity"),
         )
+        self.assertEqual(buy.count("h_player_is_evil_aligned"), 2)
+        settled_slave_guard = buy.rindex("h_player_is_evil_aligned")
+        self.assertGreater(settled_slave_guard, buy.index("if (!db_tx_begin"))
+        self.assertLess(settled_slave_guard, buy.index("h_market_move_port_stock"))
         self.assertIn("db_alignment_band_for_value", self.ports)
 
     def test_treasury_is_not_authorized_by_landing_alone(self):

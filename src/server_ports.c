@@ -4447,6 +4447,19 @@ cmd_trade_buy (client_ctx_t *ctx, json_t *root)
       const char *commodity = trade_lines[i].commodity;
       int qty = trade_lines[i].quantity;
 
+      /* Repeat the evil-alignment gate under the settlement transaction. The
+       * preflight check provides a clean refusal without charging a turn; this
+       * locked-time check closes an alignment-change race before any stock or
+       * cargo mutation. */
+      if (strcasecmp (commodity, "SLV") == 0
+          && !h_player_is_evil_aligned (db, ctx->player_id))
+	{
+	  send_response_refused_steal (ctx, root, ERR_ALIGNMENT_RESTRICTED,
+	                               "Only evil-aligned players may acquire slaves.",
+	                               NULL);
+	  goto fail_tx;
+	}
+
       int unit_price = h_entity_calculate_sell_price (db,
 						      ENTITY_TYPE_PORT,
 						      port_id,
