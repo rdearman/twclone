@@ -2996,13 +2996,29 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
     }
 
   int capacity_stock = 0, planet_capacity = 0;
-  if (db_planets_get_market_move_info(db, planet_id, commodity_code,
-                                      &capacity_stock, &planet_capacity) != 0 ||
-      quantity_total > planet_capacity - capacity_stock) {
-      send_response_error(ctx, root, ERR_INVALID_ARG,
-                          "Commodity is not configured or the order exceeds planet storage capacity.");
+  if (db_planets_get_market_move_info (db, planet_id, commodity_code,
+                                       &capacity_stock,
+                                       &planet_capacity) != 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Commodity is not configured for this planet.");
       return 0;
-  }
+    }
+  bool illegal_commodity = h_is_illegal_commodity (db, commodity_code);
+  if (illegal_commodity && capacity_stock < quantity_total)
+    {
+      send_response_refused_steal
+	(ctx, root, REF_NO_WARP_LINK,
+	 "Insufficient inventory for immediate illegal purchase.", NULL);
+      return 0;
+    }
+  if (!illegal_commodity
+      && quantity_total > planet_capacity - capacity_stock)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+			   "The order exceeds planet storage capacity.");
+      return 0;
+    }
 
   int commodity_id = 0;
   db_planets_get_commodity_id (db, commodity_code, &commodity_id);
@@ -3015,18 +3031,8 @@ cmd_planet_market_buy_order (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  if (h_is_illegal_commodity (db, commodity_code))
+  if (illegal_commodity)
     {
-      if (capacity_stock < quantity_total)
-	{
-	  send_response_refused_steal (ctx,
-				       root,
-				       REF_NO_WARP_LINK,
-				       "Insufficient inventory for immediate illegal purchase.",
-				       NULL);
-	  return 0;
-	}
-
       long long player_credits = 0;
 
 

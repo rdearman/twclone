@@ -48,6 +48,9 @@ path exists; end-to-end behavior still needs focused protocol verification.
   guarded atomic inventory decrement. Sale proceeds, purchase cargo/credits,
   planet treasury changes, and taxable activity are committed together; any
   failed settlement leg rolls back instead of returning a false success.
+  Immediate purchases now check available inventory rather than wrongly
+  requiring free storage on the planet; only standing orders require free
+  planet capacity.
   Build and focused source-contract verification pass; database-backed protocol
   verification remains pending.
 

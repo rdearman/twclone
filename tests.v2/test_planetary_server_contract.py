@@ -311,7 +311,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
         handler = self.planets.split("cmd_planet_market_buy_order", 1)[1].split(
             "cmd_planet_colonists_set", 1
         )[0]
-        immediate = handler.split("if (h_is_illegal_commodity", 1)[1].split(
+        immediate = handler.split("bool illegal_commodity", 1)[1].split(
             "long long worst_case_cost", 1
         )[0]
         for operation in (
@@ -324,6 +324,16 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("settlement_rc != 0", immediate)
         self.assertIn("db_tx_rollback", immediate)
         self.assertIn("Purchase settlement failed.", immediate)
+
+    def test_planet_market_uses_capacity_only_for_orders_and_stock_for_withdrawals(self):
+        handler = self.planets.split("cmd_planet_market_buy_order", 1)[1].split(
+            "cmd_planet_colonists_set", 1
+        )[0]
+        self.assertIn("bool illegal_commodity = h_is_illegal_commodity", handler)
+        self.assertIn("illegal_commodity && capacity_stock < quantity_total", handler)
+        self.assertIn("!illegal_commodity", handler)
+        self.assertIn("quantity_total > planet_capacity - capacity_stock", handler)
+        self.assertIn("if (illegal_commodity)", handler)
 
 
 if __name__ == "__main__":
