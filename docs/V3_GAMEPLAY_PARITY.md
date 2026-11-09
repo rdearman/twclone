@@ -115,11 +115,13 @@ path exists; end-to-end behavior still needs focused protocol verification.
   against current membership instead of trusting cached session `corp_id`. See
   `src/server_planets.c::cmd_planet_colonists_allocate`.
 
-All three source changes compile in the PostgreSQL build (`make -C bin -j2`)
-with ASan/UBSan enabled, and scoped `git diff --check` is clean. Focused
-runtime/state-transition verification remains outstanding: the documented QA
-game-server port 12483 is not currently listening, and no regression/full-suite
-run was started.
+The source changes compile in the PostgreSQL build (`make -C bin -j2`) with
+ASan/UBSan enabled, and scoped `git diff --check` is clean. Focused
+runtime/state-transition verification remains outstanding. A bounded check of
+the documented QA environment found no PostgreSQL response on loopback port
+55438 and no game listener on 12483; the documented PostgreSQL data directory
+`/tmp/twclone-v3-qa-20261028-c2/pgdata` is absent in this execution environment.
+No database startup, migration, fixture load, or regression suite was run.
 
 ## Next actionable correction
 
