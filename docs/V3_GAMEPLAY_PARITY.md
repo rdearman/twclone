@@ -59,7 +59,7 @@ path exists; end-to-end behavior still needs focused protocol verification.
   combat settlement. Capture also conditionally validates the observed owner,
   population type and defender fighter count, so stale calculations cannot
   capture over concurrent reinforcements. Focused planetary/hazard tests and
-  ASan/UBSan build pass; DB runtime remains outstanding (`0abc2c09`, pending).
+  ASan/UBSan build pass; DB runtime remains outstanding (`0abc2c09`, `212e6f34`).
 
 - Police bribe and surrender now lock the current incident row inside a
   transaction, fail closed on read/write/commit errors, and include banned-only
