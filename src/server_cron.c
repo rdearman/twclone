@@ -64,6 +64,35 @@ market_lock_inventory_location (db_t *db, const char *location_type,
   return ERR_INVALID_ARG;
 }
 
+/* Every two-sided market settlement locks inventory locations in a stable
+ * lexical (type,id) order, independent of buy/sell order orientation. This
+ * also keeps the Exchange clearing-account lock ahead of planet/port locks,
+ * matching immediate planetary Exchange sales. */
+static int
+market_lock_inventory_pair (db_t *db, const char *first_type, int first_id,
+                            const char *second_type, int second_id)
+{
+  if (!first_type || !second_type)
+    return ERR_INVALID_ARG;
+  int order = strcmp (first_type, second_type);
+  if (order == 0)
+    order = first_id < second_id ? -1 : first_id > second_id ? 1 : 0;
+  if (order > 0)
+    {
+      const char *type = first_type;
+      first_type = second_type;
+      second_type = type;
+      int id = first_id;
+      first_id = second_id;
+      second_id = id;
+    }
+  int rc = market_lock_inventory_location (db, first_type, first_id);
+  if (rc != 0 || (first_id == second_id
+                  && strcmp (first_type, second_type) == 0))
+    return rc;
+  return market_lock_inventory_location (db, second_type, second_id);
+}
+
 int iss_init_once (void);
 #define INITIAL_QUEUE_CAPACITY 64
 #define FEDSPACE_SECTOR_START 1
@@ -1600,10 +1629,9 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 
 		bool trade_ok = true;
 		int trade_price = sell->price;
-		if (market_lock_inventory_location (db, sell->location_type,
-		                                    sell->location_id) != 0
-		    || market_lock_inventory_location (db, buy->location_type,
-		                                       buy->location_id) != 0)
+	if (market_lock_inventory_pair (db, sell->location_type,
+	                                sell->location_id, buy->location_type,
+	                                buy->location_id) != 0)
 		  trade_ok = false;
 		if (trade_ok && db_ports_get_stock_quantity (db, sell->location_type,
 		                                              sell->location_id,

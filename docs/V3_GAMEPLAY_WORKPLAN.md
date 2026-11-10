@@ -34,9 +34,14 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   runner. Build and focused tests pass; the shared-output follow-up is
   committed as `6c790d40`.
   Portable insurance command operations are committed as `a6290ad6`.
+  Tracker cleanup is committed as `06c8284f`. Exchange market matching was
+  then changed to acquire bilateral inventory locks in deterministic order;
+  sanitizer build and 47 focused tests pass, with runtime race verification
+  outstanding.
 - **Next action:** continue with remaining actionable tracker requirements,
-  beginning with targeted exchange/planet-inventory settlement coverage;
-  preserve database runtime as unverified until executed.
+  beginning with the next actionable population/capture workflow after
+  verifying the existing source contracts; preserve database runtime as
+  unverified until executed.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed

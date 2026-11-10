@@ -199,6 +199,10 @@ approved protocol. Runtime verification of recent transactions remains pending.
 - Galactic Exchange sale receipts persist as virtual Exchange inventory,
   settle through a clearing account with explicitly configured liquidity,
   and Exchange stock is offered to the existing matcher.
+- Bilateral market settlement locks inventory endpoints in deterministic
+  `(location_type, location_id)` order, consistent with immediate planet-sale
+  clearing-account locking. Sanitizer/source tests pass; DB race verification
+  remains outstanding.
 - Daily unrest scheduling uses persisted event state and deterministic
   proportional integer loss allocation.
 - The exact slave-output floor multiplier is centralized and shared by the

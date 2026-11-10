@@ -76,7 +76,7 @@ No live DB or full JSON regression run has been performed in this work session.
 | EXC-008 | Commodity conservation | IMPLEMENTED_UNVERIFIED | immediate sale transfers exact planetary quantity to Exchange; fills conditionally debit Exchange stock | Source tests; DB unverified | Working change | DB conservation/concurrency/restart checks |
 | EXC-009 | Financial integrity and game liquidity | IMPLEMENTED_UNVERIFIED | virtual clearing account and explicit `SYSTEM_LIQUIDITY` injection under nonnegative `galactic_exchange_liquidity_credits` target | Build/source tests; runtime unverified | Working change | Verify ledger settlement and SysOp set/get |
 | EXC-010 | Audit named market paths | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `server_cron.c`, `repo_market.c` | Source audit documented; no runtime tests | — | Resolve Exchange gaps |
-| EXC-011 | No loss/duplication/oversell | PARTIAL | conditional stock decrement and bilateral settlement | No DB runtime tests | — | Verify race/retry/restart cases |
+| EXC-011 | No loss/duplication/oversell | IMPLEMENTED_UNVERIFIED | conditional stock decrement, bilateral settlement, and stable `(location_type, location_id)` lock ordering in `market_lock_inventory_pair` | Focused source contract asserts stable order; sanitizer build and focused tests pass; no DB race/retry/restart test | Current working change | Verify concurrent opposite-direction matches, retry, and restart in DB runtime |
 | EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
 | COMBAT-001 | Universal escape-pod respawn | IMPLEMENTED_UNVERIFIED | `repo_ships_handle_destruction`; command, NPC/player combat, Captain Z, engine self-destruct and legacy repository entry points converge via `handle_ship_destruction` | Added lethal-NPC and lethal-PvP assertions, including NPC-owner exclusion; focused planetary/hazard tests: 41 passed; ASan/UBSan build passed; runtime unverified | `63169074`, `aaf8a02e`, `6d2e36f0` | Exercise NPC- and player-caused lethal combat through JSON and verify pod/insurance state |
 | COMBAT-002 | No starter-ship respawn | IMPLEMENTED_UNVERIFIED | shared repository creates canonical Escape Pod at sector 1 and assigns it active | Source contract and ASan/UBSan build; no server/DB runtime | `63169074` | JSON state assertion / runtime test |
@@ -125,6 +125,12 @@ No live DB or full JSON regression run has been performed in this work session.
   stoppage and unchanged non-slave output; focused pytest passes (51 tests),
   ASan/UBSan build is up to date, and `git diff --check` passes. DB production
   persistence remains unverified; committed as `6c790d40`.
+- Exchange lock-order correction: market matches now lock both inventory
+  locations in deterministic `(type,id)` order, consistent with the clearing
+  account-before-planet order used by immediate planet sales. The ASan/UBSan
+  build passed; `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
+  passed (47 tests); `tests.v2/run_engine_regressions.sh` passed; and
+  `git diff --check` passed. No database concurrency test was run.
 - Current Exchange/unrest/insurance/used-hull batch: `make -C bin -j2` passed
   with ASan/UBSan after the ship-sale ownership-count correction;
   `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`

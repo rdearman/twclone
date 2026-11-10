@@ -642,7 +642,11 @@ class PlanetaryServerContractTests(unittest.TestCase):
 
     def test_market_matching_locks_current_capacity_and_buyer_balance(self):
         settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
-        self.assertIn("market_lock_inventory_location", settlement)
+        self.assertIn("market_lock_inventory_pair", settlement)
+        lock_pair = self.cron.split("market_lock_inventory_pair (", 1)[1].split(
+            "int iss_init_once", 1)[0]
+        self.assertIn('strcmp (first_type, second_type)', lock_pair)
+        self.assertIn("first_id = second_id", lock_pair)
         self.assertIn("repo_bank_get_balance_by_account_id_for_update", settlement)
         self.assertIn("buyer_balance / trade_price", settlement)
         self.assertIn('"cancelled"', settlement)
