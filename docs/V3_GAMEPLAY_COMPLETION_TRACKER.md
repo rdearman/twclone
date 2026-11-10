@@ -46,7 +46,7 @@ No live DB or full JSON regression run has been performed in this work session.
 | BANK-003 | Persisted specified UTC time | IMPLEMENTED_UNVERIFIED | migrations 172/124; UTC fields and `next_run_at`; one-minute durable cron task | Build passed; no database migration/runtime | — | Verify scheduler time behavior and restart |
 | BANK-004 | Any existing-player recipient | IMPLEMENTED_UNVERIFIED | create command locks and validates player row; processor rechecks and locks recipient | JSON uses an existing non-corporate player; not runtime-run | — | Verify recipient eligibility and deletion race |
 | BANK-005 | Skip insufficient occurrence | IMPLEMENTED_UNVERIFIED | processor records `skipped_insufficient_funds`, advances next run and uses no debt | No DB test | — | Verify account and next occurrence state |
-| BANK-006 | Monthly last-day adjustment | IMPLEMENTED_UNVERIFIED | monthly recurrence clamps execution date and retains configured `month_day` | No leap/non-leap DB test | — | Verify 28/29/30-day month boundaries |
+| BANK-006 | Monthly last-day adjustment | IMPLEMENTED_UNVERIFIED | `bank_schedule_monthly_at` is shared by first-run and recurrence calculation; retains configured `month_day` | `tests.v2/run_engine_regressions.sh` verifies February 28/29, Gregorian century boundaries, 30-day month, and invalid inputs; sanitizer build passed; scheduler/DB runtime unverified | Current working change | Verify persisted monthly schedule and occurrence advancement through server/DB runtime |
 | BANK-007 | Deleted recipient cancellation | IMPLEMENTED_UNVERIFIED | processor disables order and records cancellation outcome when recipient absent | No DB test | — | Verify deleted-recipient scenario |
 | BANK-008 | Immediate cancellation | IMPLEMENTED_UNVERIFIED | cancel and processor serialize on order row in transaction | JSON cancellation and wrong-owner cases added; not runtime-run | — | Verify concurrent cancel/execute order |
 | BANK-009 | Exactly once per occurrence | IMPLEMENTED_UNVERIFIED | occurrence table unique `(bank_orders_id,scheduled_for)`; transfer and advancement in same transaction; stale due-ID snapshots now skip if the locked row has advanced | `python3 -m pytest -q tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 44 passed; `make -C bin -j2`: passed with ASan/UBSan; database retry/restart test absent | `1f24988f` | Verify concurrent workers and restart |
@@ -137,6 +137,12 @@ No live DB or full JSON regression run has been performed in this work session.
   `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py`
   passed (51 tests), ASan/UBSan build passed, and `git diff --check` passed.
   No live protocol/DB runtime was run.
+- Bank monthly scheduling now shares one UTC calendar-clamping helper between
+  initial run calculation and recurrence advancement. Existing engine runner
+  verifies leap/non-leap February, Gregorian century rules, 30-day months and
+  invalid input. `tests.v2/run_engine_regressions.sh`, focused bank/planet
+  pytest (47 passed), ASan/UBSan build and `git diff --check` passed. No DB
+  schedule execution was run.
 - Current Exchange/unrest/insurance/used-hull batch: `make -C bin -j2` passed
   with ASan/UBSan after the ship-sale ownership-count correction;
   `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`

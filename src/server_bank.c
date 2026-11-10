@@ -29,6 +29,7 @@
 #include "server_ships.h"
 #include "server_loop.h"
 #include "server_bank.h"
+#include "bank_schedule.h"
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 
@@ -741,26 +742,17 @@ bank_order_first_run (int64_t now_s, const char *frequency, int hour,
   if (strcmp (frequency, "monthly") == 0 && month_day >= 1
       && month_day <= 31)
     {
-      int month_days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-      int days = month_days[utc.tm_mon];
       int year = utc.tm_year + 1900;
-      if (utc.tm_mon == 1 && (year % 4 == 0)
-          && (year % 100 != 0 || year % 400 == 0)) days = 29;
-      utc.tm_mday = month_day < days ? month_day : days;
-      time_t candidate = timegm (&utc);
+      time_t candidate = (time_t) bank_schedule_monthly_at
+        (year, utc.tm_mon + 1, month_day, hour, minute);
       if (candidate <= value)
         {
-          utc.tm_mday = 1;
-          utc.tm_mon += 1;
-          time_t first = timegm (&utc);
-          if (!gmtime_r (&first, &utc)) return 0;
-          days = month_days[utc.tm_mon];
-          year = utc.tm_year + 1900;
-          if (utc.tm_mon == 1 && (year % 4 == 0)
-              && (year % 100 != 0 || year % 400 == 0)) days = 29;
-          utc.tm_mday = month_day < days ? month_day : days;
-          utc.tm_hour = hour; utc.tm_min = minute; utc.tm_sec = 0;
-          candidate = timegm (&utc);
+          int next_year = year;
+          int next_month = utc.tm_mon + 2;
+          if (next_month > 12)
+            { next_month = 1; next_year++; }
+          candidate = (time_t) bank_schedule_monthly_at
+            (next_year, next_month, month_day, hour, minute);
         }
       return (int64_t) candidate;
     }
@@ -1015,25 +1007,14 @@ db_bank_process_orders (db_t *db)
         next += 7 * 86400;
       else if (strcmp (frequency, "monthly") == 0)
         {
-          scheduled.tm_mday = 1;
-          scheduled.tm_mon += 1;
-          scheduled.tm_hour = hour;
-          scheduled.tm_min = minute;
-          scheduled.tm_sec = 0;
-          time_t month_start = timegm (&scheduled);
-          struct tm next_month;
-          if (!gmtime_r (&month_start, &next_month))
+          int year = scheduled.tm_year + 1900;
+          int month = scheduled.tm_mon + 2;
+          if (month > 12)
+            { month = 1; year++; }
+          next = (time_t) bank_schedule_monthly_at
+            (year, month, month_day, hour, minute);
+          if (next <= occurrence)
             { db_tx_rollback (db, NULL); return ERR_INVALID_ARG; }
-          int month_days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
-          int days = month_days[next_month.tm_mon];
-          if (next_month.tm_mon == 1
-              && ((next_month.tm_year + 1900) % 4 == 0)
-              && (((next_month.tm_year + 1900) % 100 != 0)
-                  || ((next_month.tm_year + 1900) % 400 == 0))) days = 29;
-          next_month.tm_mday = month_day < days ? month_day : days;
-          next_month.tm_hour = hour; next_month.tm_min = minute;
-          next_month.tm_sec = 0;
-          next = timegm (&next_month);
         }
       else
         { db_tx_rollback (db, NULL); return ERR_INVALID_ARG; }

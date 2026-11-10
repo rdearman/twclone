@@ -42,6 +42,9 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 - The insurance purchase schema/server now reject cargo and planet coverage;
   the existing JSON insurance suite includes a refusal case. Focused tests and
   sanitised build pass; committed as `dfdcd791`.
+- Bank standing-order first-run and recurrence calculations now share a UTC
+  month-end helper. Existing C engine tests cover leap days and Gregorian
+  century rules; sanitizer build and focused bank/planet contract tests pass.
 - **Next action:** continue with remaining actionable tracker requirements,
   beginning with the next actionable population/capture workflow after
   verifying the existing source contracts; preserve database runtime as

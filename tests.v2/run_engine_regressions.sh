@@ -23,4 +23,10 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror \
   -o "$TMPDIR_TEST/slave-population-split"
 "$TMPDIR_TEST/slave-population-split"
 
+${CC:-cc} -std=c11 -Wall -Wextra -Werror \
+  -I"$ROOT/src" \
+  "$ROOT/tests.v2/test_bank_schedule.c" \
+  -o "$TMPDIR_TEST/bank-schedule"
+"$TMPDIR_TEST/bank-schedule"
+
 echo "Engine gameplay regression unit tests passed."
