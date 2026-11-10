@@ -680,6 +680,34 @@
       "required": true,
       "v3_only": true,
       "diagnostic": false
+    },
+    {
+      "name": "174_galactic_exchange_accounting.sql",
+      "subsystem": "economy",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "175_insurance_guaranteed_settlement.sql",
+      "subsystem": "insurance",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "176_slave_unrest_daily_scheduler.sql",
+      "subsystem": "planets",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "177_used_ship_resale_factor.sql",
+      "subsystem": "shipyard",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
     }
   ]
 }

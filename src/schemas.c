@@ -5959,8 +5959,7 @@ schema_shipyard_upgrade (void)
   json_t *required = json_array ();
   schema_nav_add_field (properties, "new_type_id", "integer", 1);
   schema_nav_add_field (properties, "new_ship_name", "string", 0);
-  schema_nav_require (required, "new_type_id");
-  schema_nav_require (required, "new_ship_name");
+  schema_nav_add_field (properties, "used_inventory_id", "integer", 1);
   return schema_player_simple ("ge://schema/shipyard.upgrade.json",
                                properties, required, 0);
 }
@@ -5984,8 +5983,11 @@ schema_shipyard_list_response (void)
   json_t *available = json_object ();
   json_object_set_new (available, "type", json_string ("array"));
   json_object_set_new (properties, "available", available);
+  json_t *used_available = json_object ();
+  json_object_set_new (used_available, "type", json_string ("array"));
+  json_object_set_new (properties, "used_available", used_available);
   json_t *required = json_array ();
-  const char *fields[] = {"sector_id", "is_shipyard", "current_ship", "available"};
+  const char *fields[] = {"sector_id", "is_shipyard", "current_ship", "available", "used_available"};
   for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)
     schema_nav_require (required, fields[i]);
   return schema_shipyard_response ("ge://schema/shipyard.list_v1.json",
@@ -6000,6 +6002,7 @@ schema_shipyard_upgraded_response (void)
   schema_nav_add_field (properties, "new_type_id", "integer", 1);
   schema_nav_add_field (properties, "new_ship_name", "string", 0);
   schema_nav_add_field (properties, "credits_spent", "integer", 0);
+  schema_nav_add_field (properties, "used_inventory_id", "integer", 1);
   json_t *required = json_array ();
   const char *fields[] = {"ship_id", "new_type_id", "new_ship_name", "credits_spent"};
   for (size_t i = 0; i < sizeof fields / sizeof fields[0]; ++i)

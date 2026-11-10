@@ -840,9 +840,9 @@ CREATE TABLE currencies (
 
 CREATE TABLE commodity_orders (
     commodity_orders_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    actor_type TEXT NOT NULL CHECK (actor_type IN ('player', 'corp', 'npc_planet', 'port')),
+    actor_type TEXT NOT NULL CHECK (actor_type IN ('player', 'corp', 'npc_planet', 'port', 'exchange')),
     actor_id bigint NOT NULL,
-    location_type TEXT NOT NULL CHECK (location_type IN ('planet', 'port')),
+    location_type TEXT NOT NULL CHECK (location_type IN ('planet', 'port', 'exchange')),
     location_id bigint NOT NULL,
     commodity_id bigint NOT NULL,
     side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
@@ -859,13 +859,13 @@ CREATE TABLE commodity_orders (
 CREATE TABLE commodity_trades (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     commodity_id bigint NOT NULL,
-    buyer_actor_type TEXT NOT NULL CHECK (buyer_actor_type IN ('player', 'corp', 'npc_planet', 'port')),
+    buyer_actor_type TEXT NOT NULL CHECK (buyer_actor_type IN ('player', 'corp', 'npc_planet', 'port', 'exchange')),
     buyer_actor_id bigint NOT NULL,
-    buyer_location_type TEXT NOT NULL CHECK (buyer_location_type IN ('planet', 'port')),
+    buyer_location_type TEXT NOT NULL CHECK (buyer_location_type IN ('planet', 'port', 'exchange')),
     buyer_location_id bigint NOT NULL,
-    seller_actor_type TEXT NOT NULL CHECK (seller_actor_type IN ('player', 'corp', 'npc_planet', 'port')),
+    seller_actor_type TEXT NOT NULL CHECK (seller_actor_type IN ('player', 'corp', 'npc_planet', 'port', 'exchange')),
     seller_actor_id bigint NOT NULL,
-    seller_location_type TEXT NOT NULL CHECK (seller_location_type IN ('planet', 'port')),
+    seller_location_type TEXT NOT NULL CHECK (seller_location_type IN ('planet', 'port', 'exchange')),
     seller_location_id bigint NOT NULL,
     quantity bigint NOT NULL CHECK (quantity > 0),
     price bigint NOT NULL CHECK (price >= 0),
@@ -876,7 +876,7 @@ CREATE TABLE commodity_trades (
 );
 
 CREATE TABLE entity_stock (
-    entity_type VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (entity_type IN ('port', 'planet')),
+    entity_type VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (entity_type IN ('port', 'planet', 'exchange')),
     entity_id bigint NOT NULL,
     commodity_code VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     quantity bigint NOT NULL,
@@ -921,7 +921,7 @@ CREATE TABLE bank_accounts (
 CREATE TABLE bank_transactions (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     account_id bigint NOT NULL,
-    tx_type TEXT NOT NULL CHECK (tx_type IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'INTEREST', 'FEE', 'WIRE', 'TAX', 'TRADE_BUY', 'TRADE_SELL', 'TRADE_BUY_FEE', 'TRADE_SELL_FEE', 'WITHDRAWAL_FEE', 'ADJUSTMENT')),
+    tx_type TEXT NOT NULL CHECK (tx_type IN ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER', 'INTEREST', 'FEE', 'WIRE', 'TAX', 'TRADE_BUY', 'TRADE_SELL', 'TRADE_BUY_FEE', 'TRADE_SELL_FEE', 'WITHDRAWAL_FEE', 'ADJUSTMENT', 'SYSTEM_LIQUIDITY', 'INSURANCE_GUARANTEE')),
     direction TEXT NOT NULL CHECK (direction IN ('CREDIT', 'DEBIT')),
     amount bigint NOT NULL CHECK (amount > 0),
     currency TEXT NOT NULL,

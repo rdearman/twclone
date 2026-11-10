@@ -24,6 +24,7 @@
 #include "db/repo/repo_citadel.h"
 #include "db/repo/repo_corporation.h"
 #include "db/repo/repo_ports.h"
+#include "db/repo/repo_bank.h"
 #include "db/repo/repo_universe.h"
 #include "game_db.h"
 #include "errors.h"
@@ -3305,6 +3306,20 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
                            "Could not begin planet market sale.");
       return 0;
     }
+  /* Acquire the Exchange clearing lock before the planet lock, matching the
+   * Exchange-order settlement lock order and serializing virtual inventory. */
+  int exchange_account_id = 0;
+  long long exchange_balance = 0;
+  if (h_get_system_account_id_unlocked (db, "system", 70000001,
+                                        &exchange_account_id) != 0
+      || repo_bank_get_balance_by_account_id_for_update
+           (db, exchange_account_id, &exchange_balance) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not lock the Galactic Exchange account.");
+      return 0;
+    }
   int control_rc = h_planet_market_lock_control (db, planet_id,
                                                   ctx->player_id);
   if (control_rc != 0)
@@ -3330,6 +3345,75 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
       else
         send_response_error (ctx, root, ERR_DB,
                              "Failed to update planet inventory.");
+      return 0;
+    }
+  /* The Exchange is a virtual market participant. Serialize against Exchange
+   * settlement through its clearing account and replenish only to the
+   * explicitly configured SysOp liquidity target. */
+  if (exchange_balance < total_credits)
+    {
+      int64_t configured_liquidity =
+        g_cfg.galactic_exchange_liquidity_credits;
+      if (configured_liquidity < total_credits)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS,
+                                       "The Galactic Exchange has insufficient configured liquidity.", NULL);
+          return 0;
+        }
+      long long replenish = configured_liquidity - exchange_balance;
+      if (replenish > 0
+          && h_add_credits_unlocked (db, exchange_account_id, replenish,
+                                     "SYSTEM_LIQUIDITY",
+                                     "GALACTIC_EXCHANGE_LIQUIDITY", NULL) != 0)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_DB,
+                               "Could not replenish Exchange liquidity.");
+          return 0;
+        }
+    }
+  char exchange_request_key[256];
+  const char *request_id = json_string_value (json_object_get (root, "id"));
+  char generated_request_id[37] = {0};
+  if (!request_id)
+    {
+      h_generate_hex_uuid (generated_request_id, sizeof generated_request_id);
+      request_id = generated_request_id;
+    }
+  snprintf (exchange_request_key, sizeof exchange_request_key,
+            "planet-exchange-sale:%d:%s", planet_id, request_id);
+  /* The unique transaction key makes a retried protocol request fail closed;
+   * all preceding inventory and credit mutations roll back with it. */
+  db_error_t exchange_err = {0};
+  const char *exchange_sql =
+    "INSERT INTO galactic_exchange_transactions "
+    "(idempotency_key,planet_id,player_id,commodity_code,quantity,unit_price,credits_paid) "
+    "VALUES ({1},{2},{3},{4},{5},{6},{7})";
+  char exchange_sql_built[512];
+  if (sql_build (db, exchange_sql, exchange_sql_built,
+                 sizeof exchange_sql_built) != 0
+      || !db_exec (db, exchange_sql_built,
+                   (db_bind_t[]){ db_bind_text (exchange_request_key),
+                     db_bind_i64 (planet_id), db_bind_i64 (ctx->player_id),
+                     db_bind_text (commodity_code), db_bind_i64 (quantity),
+                     db_bind_i64 (unit_price), db_bind_i64 (total_credits) },
+                   7, &exchange_err))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_BAD_REQUEST,
+                                   "Duplicate or invalid Exchange sale request.", NULL);
+      return 0;
+    }
+  if (h_update_entity_stock (db, "exchange", 1, commodity_code, quantity,
+                             NULL) != 0
+      || h_deduct_credits_unlocked (db, exchange_account_id, total_credits,
+                                    "TRADE_BUY", exchange_request_key,
+                                    NULL) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not settle the Exchange purchase.");
       return 0;
     }
   long long new_balance = 0;

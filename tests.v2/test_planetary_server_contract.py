@@ -26,6 +26,8 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.cron_repo = (ROOT / "src/db/repo/repo_cron.c").read_text(encoding="utf-8")
         cls.corp_repo = (ROOT / "src/db/repo/repo_corporation.c").read_text(encoding="utf-8")
         cls.planet_repo = (ROOT / "src/db/repo/repo_planets.c").read_text(encoding="utf-8")
+        cls.stardock = (ROOT / "src/server_stardock.c").read_text(encoding="utf-8")
+        cls.stardock_repo = (ROOT / "src/db/repo/repo_stardock.c").read_text(encoding="utf-8")
         cls.ports = (ROOT / "src/server_ports.c").read_text(encoding="utf-8")
         cls.cargo_repo = (ROOT / "src/db/repo/repo_cargo.c").read_text(encoding="utf-8")
         cls.citadel_repo = (ROOT / "src/db/repo/repo_citadel.c").read_text(encoding="utf-8")
@@ -56,6 +58,75 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("You do not control this planet", handler)
         self.assertIn("repo_corp_check_member_role", handler)
         self.assertIn("revalidates ownership, landing, available", handler)
+
+    def test_galactic_exchange_sale_is_ring_fenced_and_liquidity_backed(self):
+        sale = self.planets.split("cmd_planet_market_sell", 1)[1].split(
+            "cmd_planet_market_buy_order", 1
+        )[0]
+        self.assertIn('"exchange", 1, commodity_code, quantity', sale)
+        self.assertIn("h_deduct_credits_unlocked", sale)
+        self.assertIn("SYSTEM_LIQUIDITY", sale)
+        self.assertIn("galactic_exchange_transactions", sale)
+        self.assertIn("galactic_exchange_liquidity_credits", sale)
+        self.assertLess(sale.index("db_tx_begin"), sale.index("galactic_exchange_transactions"))
+        self.assertIn("db_tx_rollback", sale)
+
+    def test_exchange_offers_only_persisted_inventory_to_market_orders(self):
+        self.assertIn("db_ports_get_stock_quantity (db, \"exchange\", 1", self.cron)
+        self.assertIn('db_insert_commodity_order (db, "exchange", 1, "exchange", 1', self.cron)
+        self.assertIn('strcmp (sell->location_type, "exchange") == 0', self.cron)
+        self.assertIn('db_ports_decrement_stock (db, "exchange", sell->location_id', self.cron)
+        self.assertIn('location_type IN (\'planet\', \'port\', \'exchange\')',
+                      (ROOT / "sql/pg/174_galactic_exchange_accounting.sql").read_text())
+        mysql_migration = (ROOT / "sql/my/126_galactic_exchange_accounting.sql").read_text()
+        self.assertIn("CHECK (entity_type IN ('port','planet','exchange'))", mysql_migration)
+        self.assertIn("galactic_exchange_transactions", mysql_migration)
+        self.assertIn("SYSTEM_LIQUIDITY", mysql_migration)
+
+    def test_slave_unrest_is_daily_idempotent_and_proportional(self):
+        self.assertIn('{"daily_slave_unrest", h_daily_slave_unrest}',
+                      (ROOT / "src/server_engine.c").read_text())
+        self.assertIn("db_cron_apply_slave_unrest", self.cron)
+        self.assertIn("slave_loss_split", self.cron_repo)
+        self.assertIn("(__int128) bucket[i] * loss", self.cron_repo)
+        self.assertIn("UNIQUE (planet_id, scheduled_at)",
+                      (ROOT / "sql/pg/171_v3_planet_population_state.sql").read_text())
+        self.assertIn("daily@04:15Z",
+                      (ROOT / "sql/pg/176_slave_unrest_daily_scheduler.sql").read_text())
+        self.assertIn("interval_days == 0 || stoppage_cycles == 0 || population_loss == 0",
+                      self.cron_repo)
+
+    def test_used_shipyard_inventory_preserves_and_sells_existing_hulls(self):
+        listing = self.stardock.split("cmd_shipyard_list", 1)[1].split(
+            "cmd_shipyard_upgrade", 1
+        )[0]
+        self.assertIn("shipyard_used_inventory", listing)
+        self.assertIn("used_available", listing)
+        self.assertIn("shipyard_used_resale_factor_bp", listing)
+        self.assertIn("used_inventory_id", listing)
+        purchase = self.stardock.split("cmd_shipyard_upgrade", 1)[1].split(
+            "cmd_", 1
+        )[0]
+        self.assertIn("repo_stardock_purchase_used_ship", purchase)
+        self.assertIn("used_inventory_id", purchase)
+        repo = self.stardock_repo.split("repo_stardock_purchase_used_ship", 1)[1]
+        self.assertIn("shipyard_used_inventory", repo)
+        self.assertIn("ship_sale_audit", repo)
+        self.assertIn("__int128", repo)
+        self.assertIn("ship_ownership(ship_id,player_id,role_id,is_primary)", repo)
+        self.assertIn("DELETE FROM shipyard_used_inventory", repo)
+        self.assertIn("UPDATE ships SET sector_id", repo)
+
+    def test_ship_sale_last_hull_count_includes_non_primary_owned_ships(self):
+        sale = self.stardock_repo.split("repo_stardock_sell_ship", 1)[1].split(
+            "repo_stardock_get_port_by_sector", 1
+        )[0]
+        count_query = sale.split("int owned_ship_count", 1)[1].split(
+            "if (db_res_step", 1
+        )[0]
+        self.assertIn("SELECT COUNT(*) FROM ship_ownership", count_query)
+        self.assertIn("AND role_id = 1", count_query)
+        self.assertNotIn("is_primary", count_query)
 
     def test_slave_purchase_requires_evil_alignment_independent_of_neutral_policy(self):
         buy = self.ports.split("cmd_trade_buy", 1)[1].split(

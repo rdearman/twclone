@@ -23,6 +23,8 @@ Allows tuning of specific server parameters without a restart.
 *   **Economy**: `bank_min_balance_for_interest`, `bank_max_daily_interest_per_account`, `planet_treasury_interest_rate_bps`, `bank_alert_threshold_player`, `bank_alert_threshold_corp`, `planet_market.buy_order_expiry_seconds`
 *   **Shipyard**: `shipyard_enabled`, `shipyard_trade_in_factor_bp`, `shipyard_sale_factor_bp`, `shipyard_require_cargo_fit`, `shipyard_require_fighters_fit`, `shipyard_require_shields_fit`, `shipyard_require_hardware_compat`, `shipyard_tax_bp`
 *   **Planet population**: `planet.slave_unrest_interval_days`, `planet.slave_unrest_stoppage_cycles`, `planet.slave_unrest_population_loss`
+*   **Galactic Exchange**: `galactic_exchange_liquidity_credits` (nonnegative CRD target; default `0`; explicit system-created liquidity is recorded as `SYSTEM_LIQUIDITY`; zero disables injections)
+*   **Used ship resale**: `shipyard_used_resale_factor_bp` (integer 0–10000 basis points; default 8000; affects used-hull purchase price only)
 
 ### Planet slave unrest policy
 

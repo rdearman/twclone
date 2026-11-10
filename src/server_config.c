@@ -80,6 +80,9 @@ config_set_defaults (void)
   g_cfg.shipyard_enabled = 1;
   g_cfg.shipyard_trade_in_factor_bp = 5000;
   g_cfg.shipyard_sale_factor_bp = 6000;
+  g_cfg.shipyard_used_resale_factor_bp = 8000;
+  /* System liquidity is injected only when explicitly configured. */
+  g_cfg.galactic_exchange_liquidity_credits = 0;
   g_cfg.shipyard_require_cargo_fit = 1;
   g_cfg.shipyard_require_fighters_fit = 1;
   g_cfg.shipyard_require_shields_fit = 1;
@@ -593,6 +596,24 @@ apply_db (db_t *db)
 	      else
 	        LOGW ("[config] Invalid shipyard sale factor; using 6000 basis points.");
 	    }
+          else if (strcmp (key, "galactic_exchange_liquidity_credits") == 0)
+            {
+              int64_t liquidity = 0;
+              cfg_parse_int64 (val, type, &liquidity);
+              if (liquidity >= 0)
+                g_cfg.galactic_exchange_liquidity_credits = liquidity;
+              else
+                LOGW ("[config] Invalid Exchange liquidity; using zero.");
+            }
+          else if (strcmp (key, "shipyard_used_resale_factor_bp") == 0)
+            {
+              int factor = 8000;
+              cfg_parse_int (val, type, &factor);
+              if (factor >= 0 && factor <= 10000)
+                g_cfg.shipyard_used_resale_factor_bp = factor;
+              else
+                LOGW ("[config] Invalid used hull resale factor; using 8000 basis points.");
+            }
 	  else if (strcmp (key, "shipyard_require_cargo_fit") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.shipyard_require_cargo_fit);
@@ -1072,6 +1093,8 @@ config_load (void)
   c->startingholds = g_cfg.startingholds;
   c->max_ship_name_length = g_cfg.max_ship_name_length;
   c->shipyard_sale_factor_bp = g_cfg.shipyard_sale_factor_bp;
+  c->galactic_exchange_liquidity_credits = g_cfg.galactic_exchange_liquidity_credits;
+  c->shipyard_used_resale_factor_bp = g_cfg.shipyard_used_resale_factor_bp;
   /* Keep the runtime starter-ship policy in the legacy config view used by
    * player provisioning.  Without this copy, spawn_starter_ship() receives
    * an empty type name even though g_cfg has the configured value. */

@@ -148,12 +148,24 @@ With no arguments, list hulls available at the shipyard where the player is
 docked. The `shipyard.list_v1` response includes `sector_id`, `is_shipyard`,
 `current_ship` (`type`, `base_price`, `trade_in_value`), and an `available`
 array with each hull's prices, eligibility, and any restriction reasons.
+It also includes `used_available`, a list of persistent used hulls at the
+facility. Entries identify `used_inventory_id`, the original `ship_id`, name,
+type, original hull value, retained-equipment value and current resale price.
+Used hulls are existing ships, not newly manufactured stock.
 
 ### `shipyard.upgrade`
 Upgrade the active ship while docked at a shipyard. Args:
 `{ "new_type_id": 2, "new_ship_name": "Merchant Vessel" }`.
 On success, `shipyard.upgraded_v1` acknowledges `ship_id`, `new_type_id`,
 `new_ship_name`, and `credits_spent`. Failures retain the existing error codes.
+The same command also accepts `{ "used_inventory_id": 17 }` to purchase a
+listed used hull. Price is
+`floor((original_hull_value + retained_equipment_value) * factor_bp / 10000)`;
+`shipyard_used_resale_factor_bp` defaults to 8000 (80%) and is independent of
+the seller's 6000-bp payout and new-hull trade-in factor. The purchase preserves
+the used ship's ID, condition and installed equipment, removes its listing and
+makes it the active ship atomically. The former active hull remains owned but
+non-primary. The response includes the consumed `used_inventory_id`.
 
 ### `ship.sell` and `shipyard.sell`
 These command names invoke the same standalone sale operation. The authenticated
@@ -189,11 +201,12 @@ Repeating a completed sale cannot pay twice because the sold hull is no longer
 owned by the seller. A used-inventory hull is not an abandoned hull and cannot
 be acquired through `ship.claim`.
 
-The used hull is persisted as identifiable shipyard inventory. V3 does not yet
-define a used-hull purchase request, valuation/price rule, or acquisition
-settlement contract; listing a used hull as purchasable is therefore not
-implemented by this contract. New-hull purchasing and shipyard upgrades are
-unchanged.
+Used-hull acquisition is implemented through the existing
+`shipyard.upgrade` workflow, selecting `used_inventory_id` from
+`used_available`. It retains the ship ID, equipment and current condition,
+charges the configured used resale price, removes the inventory listing and
+makes that existing hull active in the same transaction. New-hull purchasing
+and upgrade trade-in pricing remain unchanged.
 
 ---
 

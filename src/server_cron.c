@@ -51,6 +51,16 @@ market_lock_inventory_location (db_t *db, const char *location_type,
       free (owner_type);
       return rc;
     }
+  if (strcmp (location_type, "exchange") == 0)
+    {
+      int account_id = 0;
+      long long balance = 0;
+      int rc = h_get_system_account_id_unlocked (db, "system", 70000001,
+                                                  &account_id);
+      return rc != 0 ? rc
+        : repo_bank_get_balance_by_account_id_for_update (db, account_id,
+                                                           &balance);
+    }
   return ERR_INVALID_ARG;
 }
 
@@ -1499,6 +1509,25 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
       continue;
     char *commodity_code = strdup (commodity_code_ptr);
 
+    /* The Exchange offers its currently ring-fenced stock through the same
+     * order book as every other market participant. Orders are refreshed from
+     * authoritative inventory, so an expired/stale offer cannot create goods. */
+    db_cancel_commodity_orders_for_actor_and_commodity (db, "exchange", 1,
+                                                         commodity_id, "sell");
+    int exchange_stock = 0;
+    if (db_ports_get_stock_quantity (db, "exchange", 1, commodity_code,
+                                     &exchange_stock) == 0
+        && exchange_stock > 0)
+      {
+        int exchange_price = 0;
+        if (db_planets_get_commodity_price (db, commodity_code,
+                                            &exchange_price) == 0
+            && exchange_price > 0)
+          db_insert_commodity_order (db, "exchange", 1, "exchange", 1,
+                                     commodity_id, "sell", exchange_stock,
+                                     exchange_price, 0);
+      }
+
     // 4. Load Orders
     int buy_count = 0;
     commodity_order_t *buy_orders = db_load_open_orders_for_commodity (db,
@@ -1680,12 +1709,19 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 						  -trade_qty) != 0)
 		      trade_ok = false;
 		  }
-		else if (trade_ok && strcmp (sell->location_type, "planet") == 0)
+	else if (trade_ok && strcmp (sell->location_type, "planet") == 0)
 		  {
 		    if (h_market_move_planet_stock (db,
 						    sell->location_id,
 						    commodity_code,
 						    -trade_qty) != 0)
+		      trade_ok = false;
+		  }
+		else if (trade_ok && strcmp (sell->location_type, "exchange") == 0)
+		  {
+		    if (db_ports_decrement_stock (db, "exchange", sell->location_id,
+		                                  commodity_code, trade_qty,
+		                                  now_s) != 0)
 		      trade_ok = false;
 		  }
 
@@ -1709,10 +1745,16 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		/* Lock and validate inventory before account rows. This matches the
 		 * player-facing market paths' entity -> cargo/account lock order. */
 		int seller_acct = 0;
-		if (trade_ok && h_get_account_id_unlocked (db, sell->actor_type,
-							   sell->actor_id,
-							   &seller_acct) != 0)
-		  trade_ok = false;
+		if (trade_ok)
+		  {
+		    int account_rc = strcmp (sell->actor_type, "exchange") == 0
+		      ? h_get_system_account_id_unlocked (db, "system", 70000001,
+		                                           &seller_acct)
+		      : h_get_account_id_unlocked (db, sell->actor_type, sell->actor_id,
+		                                   &seller_acct);
+		    if (account_rc != 0)
+		      trade_ok = false;
+		  }
 		long long new_bal;
 		if (trade_ok && h_deduct_credits_unlocked (db, buyer_acct,
 							   total_cost, "TRADE_BUY",
@@ -1876,6 +1918,21 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 
   unlock (db, "daily_market_settlement");
   return 0;
+}
+
+int
+h_daily_slave_unrest (db_t *db, int64_t now_s)
+{
+  if (!db || !try_lock (db, "daily_slave_unrest", now_s))
+    return db ? 0 : ERR_INVALID_ARG;
+  int rc = db_cron_apply_slave_unrest (
+    db, now_s, g_cfg.planet_slave_unrest_interval_days,
+    g_cfg.planet_slave_unrest_stoppage_cycles,
+    g_cfg.planet_slave_unrest_population_loss);
+  if (rc != 0)
+    LOGE ("daily_slave_unrest: evaluation failed: %d", rc);
+  unlock (db, "daily_slave_unrest");
+  return rc;
 }
 
 

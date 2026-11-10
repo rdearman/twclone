@@ -96,11 +96,22 @@ inventory mutations. Use locks/conditional updates and a consistent lock order
 to prevent overselling. Retries, concurrency, process restarts, cancelled
 orders and stale matches must not duplicate or lose settlement.
 
-No unlimited Exchange liquidity is assumed. Before an Exchange pays sellers,
-source its funding from the existing accounting model and verify that the
-funds are available. If no authoritative clearing account or funded market
-buyer exists, this is an implementation blocker requiring an explicit
-accounting decision, not permission to create credits.
+The Exchange is a game-system participant, not a self-financing real-world
+institution. It uses a virtual system clearing account (`system/70000001`).
+`galactic_exchange_liquidity_credits` is a SysOp-configured liquidity target;
+it defaults to zero, so the engine does not silently create credits. When
+configured liquidity is injected, the bank ledger records it as
+`SYSTEM_LIQUIDITY` with the `GALACTIC_EXCHANGE_LIQUIDITY` group. Such explicit
+engine funding is distinct from player trades. Liquidity injections may keep
+the market usable, but may not duplicate player credits, goods or completed
+settlements.
+
+Exchange inventory uses the virtual `entity_stock` location `exchange/1`.
+Planet sales move exact quantities into this inventory and debit the clearing
+account in the same transaction. The daily matcher exposes only current
+Exchange inventory as an Exchange sell order; fills conditionally decrement
+that inventory and transfer goods directly to the buyer's planet or port.
+No ship or delivery delay is involved.
 
 ## Implementation audit checklist
 
@@ -125,13 +136,12 @@ requirements can be marked VERIFIED.
 
 | Requirement | Current path and evidence | Current behavior | Gap / next action |
 |---|---|---|---|
-| Planet immediate sale | `src/server_planets.c::cmd_planet_market_sell` (around lines 3066–3090) conditionally decrements planet stock and credits player petty cash in one transaction; it records taxable activity. | Seller inventory falls and seller receives credits. No Exchange stock increase or buyer-side debit appears in this settlement path. | Goods leave the planet and are not represented as Exchange inventory: a sink relative to EXC-02/03/07. The direct credit also lacks an identified Exchange-funded buyer. Must replace/extend this path with a funded, durable inventory transfer; do not create liquidity. |
-| Market order settlement | `src/server_cron.c::h_daily_market_settlement` (around lines 1522–1733) locks seller/buyer locations, revalidates stock/capacity/funds, directly moves port/planet stock, posts buyer debit and seller credit, records `commodity_trades`, updates fills in a transaction. | Matched orders transfer directly between the order's seller and buyer locations, with partial fills and transactional records. There is no intermediate Exchange inventory. | Direct transfer conserves goods for a matched fill, but does not implement ring-fenced Exchange-owned stock or the required Exchange participant. Retain this working matching machinery where possible while adding an explicit accounted Exchange leg. |
-| Port demand | `src/server_cron.c::h_port_economy_tick` (around lines 1364–1454) generates port BUY orders for shortages and SELL orders for surplus; buy orders carry the port as actor/location. | Ports can buy from matched seller orders and pay from their account. Orders match against existing port/planet SELL orders, not an Exchange stock source. | Port replenishment is seller-to-port direct, not a purchase from Exchange inventory. Must route through Exchange accounting without bypassing source stock or funding. |
+| Planet immediate sale | `src/server_planets.c::cmd_planet_market_sell` debits planet stock, adds Exchange stock, records a unique Exchange transaction, pays from the system clearing account and records taxable activity in one transaction. | Goods are ring-fenced in `exchange/1`; player receives existing petty-credit proceeds; funding is capped/replenished to the configured liquidity target. | Source implementation added; verify migration, credit/inventory conservation and duplicate request behavior in DB runtime. |
+| Market order settlement | `src/server_cron.c::h_daily_market_settlement` exposes Exchange inventory as a refreshed sell order, locks the virtual stock location, conditionally decrements stock, then transfers goods and credits through existing order settlement. | Buyers can acquire only persisted Exchange quantity; existing bilateral matching remains intact. | Source implementation added; test partial fills, retry/restart and concurrent port/planet buys in DB runtime. |
+| Port demand | `src/server_cron.c::h_port_economy_tick` creates shortage BUY orders; matcher now offers available Exchange inventory. | Port purchases use existing account, stock and capacity checks; no artificial goods are created. | Source path connected; demonstrate configured port account liquidity and stock flow at runtime. |
 | Planet supply | `src/server_cron.c::h_planet_market_tick` generates planet orders based on stock targets; `cmd_planet_market_sell` is a separate immediate operation. | Order book handles location actors; immediate sale is distinct and credits the player. | Ensure these paths do not offer the same quantity both as an open sell order and an immediate sale; inspect reservation/revalidation behavior during implementation. |
-| Persisted model | `sql/pg/000_tables.sql` defines `commodity_orders` and `commodity_trades`; these identify actors, locations, fills and bilateral settlement records. No Exchange-owned inventory/account table or equivalent Exchange ledger was found in the inspected schema/migrations. | The model represents bilateral location transfers. | Define Exchange inventory/clearing representation using existing accounting where possible. Before paying immediate sales, identify a funded source of Exchange liquidity. |
+| Persisted model | Migration `174_galactic_exchange_accounting.sql` allows the virtual Exchange location/actor, records immediate sales with an idempotency key, and adds a distinct system-liquidity bank transaction type. | Exchange stock is held in existing `entity_stock`; the clearing account is an existing system bank account. | PostgreSQL migration has not been executed in this session. Equivalent MySQL migration/backend behavior remains to be assessed. |
 
-This audit establishes a confirmed inventory-accounting gap in the immediate
-planet sale path and an architectural mismatch between bilateral order fills
-and the approved Exchange participant model. It does not establish runtime
-behavior; no database-backed test was run during this source audit.
+Source now implements the bounded Exchange inventory and liquidity path above.
+This does not establish runtime behavior: no database-backed test was run in
+this session.

@@ -1187,6 +1187,18 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
   if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
     return err.code ? err.code : -1;
 
+  /* Stop only through the persisted deadline; a coarse daily policy tick must
+   * not extend a configured number of 10-minute production cycles. */
+  char unrest_clear_sql[512];
+  if (sql_build (db,
+      "UPDATE planets SET slave_unrest_stopped=FALSE,slave_unrest_stoppage_until=NULL "
+      "WHERE population_type='SLAVE' AND slave_unrest_stopped=TRUE "
+      "AND slave_unrest_stoppage_until IS NOT NULL AND slave_unrest_stoppage_until<={1}",
+      unrest_clear_sql, sizeof unrest_clear_sql) != 0
+      || !db_exec (db, unrest_clear_sql,
+                   (db_bind_t[]){db_bind_i64 (now_s)}, 1, &err))
+    { db_tx_rollback (db, &err); return err.code ? err.code : ERR_DB_EXEC_FAILED; }
+
   const char *select_template =
     "SELECT p.planet_id, COALESCE(p.fighters, 0), "
     "COALESCE(p.fighter_production_remainder, 0), "
@@ -2904,4 +2916,191 @@ db_cron_planet_get_production_overview_json (db_t *db, int planet_id,
       return err.code;
     }
   return 0;
+}
+
+typedef struct
+{
+  int64_t planet_id, population, bucket[5], next_at, stopped_until;
+  bool stopped;
+} slave_unrest_row_t;
+
+/* Deterministic largest-remainder split. Bucket order is the tie-breaker:
+ * unassigned, ore, organics, equipment, weapons. The sum is exactly loss. */
+static void
+slave_loss_split (const int64_t bucket[5], int64_t total, int64_t loss,
+                  int64_t out[5])
+{
+  int64_t remainder[5] = {0};
+  int64_t assigned = 0;
+  for (int i = 0; i < 5; i++)
+    {
+      __int128 product = (__int128) bucket[i] * loss;
+      out[i] = total > 0 ? (int64_t) (product / total) : 0;
+      remainder[i] = total > 0 ? (int64_t) (product % total) : 0;
+      assigned += out[i];
+    }
+  int64_t left = loss - assigned;
+  while (left > 0)
+    {
+      int best = -1;
+      for (int i = 0; i < 5; i++)
+        if (out[i] < bucket[i]
+            && (best < 0 || remainder[i] > remainder[best]))
+          best = i;
+      if (best < 0) break;
+      out[best]++;
+      remainder[best] = -1; /* each assignment receives at most one remainder */
+      left--;
+    }
+}
+
+int
+db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
+                            int64_t interval_days,
+                            int64_t stoppage_cycles,
+                            int64_t population_loss)
+{
+  if (!db || now_s <= 0 || interval_days < 0 || stoppage_cycles < 0
+      || population_loss < 0)
+    return ERR_INVALID_ARG;
+  db_error_t err = {0};
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+    return err.code ? err.code : ERR_DB_TX;
+  const char *select_tmpl =
+    "SELECT planet_id,COALESCE(population,0),"
+    "COALESCE(colonists_unassigned,0),COALESCE(colonists_ore,0),"
+    "COALESCE(colonists_org,0),COALESCE(colonists_eq,0),"
+    "COALESCE(colonists_weapons,0),COALESCE(slave_unrest_next_at,0),"
+    "COALESCE(slave_unrest_stopped,FALSE),"
+    "COALESCE(slave_unrest_stoppage_until,0) FROM planets "
+    "WHERE population_type='SLAVE' ORDER BY planet_id FOR UPDATE";
+  char sql[1024];
+  if (sql_build (db, select_tmpl, sql, sizeof sql) != 0)
+    { db_tx_rollback (db, &err); return ERR_DB_QUERY_FAILED; }
+  db_res_t *res = NULL;
+  if (!db_query (db, sql, NULL, 0, &res, &err))
+    { db_tx_rollback (db, &err); return err.code ? err.code : ERR_DB_QUERY_FAILED; }
+  slave_unrest_row_t *rows = NULL;
+  size_t count = 0, cap = 0;
+  while (db_res_step (res, &err))
+    {
+      if (count == cap)
+        {
+          size_t next_cap = cap ? cap * 2 : 32;
+          slave_unrest_row_t *next = realloc (rows, next_cap * sizeof *rows);
+          if (!next) { err.code = ERR_SERVER_ERROR; break; }
+          rows = next; cap = next_cap;
+        }
+      slave_unrest_row_t *r = &rows[count++];
+      memset (r, 0, sizeof *r);
+      r->planet_id = db_res_col_i64 (res, 0, &err);
+      r->population = db_res_col_i64 (res, 1, &err);
+      for (int i = 0; i < 5; i++) r->bucket[i] = db_res_col_i64 (res, i + 2, &err);
+      r->next_at = db_res_col_i64 (res, 7, &err);
+      r->stopped = db_res_col_bool (res, 8, &err);
+      r->stopped_until = db_res_col_i64 (res, 9, &err);
+      if (err.code) break;
+    }
+  db_res_finalize (res);
+  if (err.code)
+    { free (rows); db_tx_rollback (db, &err); return err.code; }
+
+  for (size_t i = 0; i < count; i++)
+    {
+      slave_unrest_row_t *r = &rows[i];
+      if (r->stopped && r->stopped_until > 0 && r->stopped_until <= now_s)
+        {
+          const char *clear_tmpl =
+            "UPDATE planets SET slave_unrest_stopped=FALSE,"
+            "slave_unrest_stoppage_until=NULL WHERE planet_id={1}"
+            " AND slave_unrest_stoppage_until<={2}";
+          if (sql_build (db, clear_tmpl, sql, sizeof sql) != 0
+              || !db_exec (db, sql,
+                    (db_bind_t[]){db_bind_i64 (r->planet_id),db_bind_i64 (now_s)},
+                    2, &err))
+            goto unrest_fail;
+          r->stopped = false;
+        }
+      /* Zero is the deliberate unset/disabled configuration sentinel. */
+      if (interval_days == 0 || stoppage_cycles == 0 || population_loss == 0)
+        continue;
+      if (interval_days > INT64_MAX / 86400
+          || stoppage_cycles > INT64_MAX / 600)
+        { err.code = ERR_INVALID_ARG; goto unrest_fail; }
+      int64_t interval_s = interval_days * 86400;
+      if (r->next_at <= 0)
+        {
+          if (now_s > INT64_MAX - interval_s)
+            { err.code = ERR_INVALID_ARG; goto unrest_fail; }
+          const char *schedule_tmpl =
+            "UPDATE planets SET slave_unrest_next_at={1} WHERE planet_id={2}"
+            " AND slave_unrest_next_at IS NULL";
+          if (sql_build (db, schedule_tmpl, sql, sizeof sql) != 0
+              || !db_exec (db, sql,
+                    (db_bind_t[]){db_bind_i64 (now_s + interval_s),
+                                  db_bind_i64 (r->planet_id)}, 2, &err))
+            goto unrest_fail;
+          continue;
+        }
+      if (r->next_at > now_s) continue;
+      int64_t bucket_total = 0;
+      for (int b = 0; b < 5; b++)
+        {
+          if (r->bucket[b] < 0 || bucket_total > INT64_MAX - r->bucket[b])
+            { err.code = ERR_DB_CONSTRAINT; goto unrest_fail; }
+          bucket_total += r->bucket[b];
+        }
+      if (bucket_total <= 0) continue;
+      int64_t loss = population_loss < bucket_total
+        ? population_loss : bucket_total;
+      int64_t split[5] = {0};
+      slave_loss_split (r->bucket, bucket_total, loss, split);
+      if (now_s > INT64_MAX - stoppage_cycles * 600
+          || r->next_at > INT64_MAX - interval_s)
+        { err.code = ERR_INVALID_ARG; goto unrest_fail; }
+      int64_t stopped_until = now_s + stoppage_cycles * 600;
+      int64_t next_at = r->next_at + interval_s;
+      const char *event_tmpl =
+        "INSERT INTO planet_slave_unrest_events(planet_id,scheduled_at,"
+        "stoppage_until,configured_population_loss,applied_population_loss)"
+        " VALUES({1},{2},{3},{4},{5})";
+      if (sql_build (db, event_tmpl, sql, sizeof sql) != 0
+          || !db_exec (db, sql,
+                (db_bind_t[]){db_bind_i64 (r->planet_id),db_bind_i64 (r->next_at),
+                  db_bind_i64 (stopped_until),db_bind_i64 (population_loss),
+                  db_bind_i64 (loss)}, 5, &err))
+        goto unrest_fail;
+      const char *update_tmpl =
+        "UPDATE planets SET population=GREATEST(COALESCE(population,0)-{1},0),"
+        "colonists_unassigned=GREATEST(COALESCE(colonists_unassigned,0)-{2},0),"
+        "colonists_ore=GREATEST(COALESCE(colonists_ore,0)-{3},0),"
+        "colonists_org=GREATEST(COALESCE(colonists_org,0)-{4},0),"
+        "colonists_eq=GREATEST(COALESCE(colonists_eq,0)-{5},0),"
+        "colonists_weapons=GREATEST(COALESCE(colonists_weapons,0)-{6},0),"
+        "slave_unrest_stopped=TRUE,slave_unrest_stoppage_until={7},"
+        "slave_unrest_last_event_at={8},slave_unrest_next_at={9}"
+        " WHERE planet_id={10} AND population_type='SLAVE'"
+        " AND COALESCE(slave_unrest_next_at,0)={11}";
+      if (sql_build (db, update_tmpl, sql, sizeof sql) != 0)
+        { err.code = ERR_DB_QUERY_FAILED; goto unrest_fail; }
+      int64_t affected = 0;
+      if (!db_exec_rows_affected (db, sql,
+          (db_bind_t[]){db_bind_i64 (loss),db_bind_i64 (split[0]),
+            db_bind_i64 (split[1]),db_bind_i64 (split[2]),
+            db_bind_i64 (split[3]),db_bind_i64 (split[4]),
+            db_bind_i64 (stopped_until),db_bind_i64 (now_s),
+            db_bind_i64 (next_at),db_bind_i64 (r->planet_id),
+            db_bind_i64 (r->next_at)}, 11, &affected, &err))
+        goto unrest_fail;
+      if (affected != 1) { err.code = ERR_DB_CONSTRAINT; goto unrest_fail; }
+    }
+  free (rows);
+  if (!db_tx_commit (db, &err))
+    { db_tx_rollback (db, &err); return err.code ? err.code : ERR_DB_TX; }
+  return 0;
+
+unrest_fail:
+  free (rows);
+  db_tx_rollback (db, &err);
+  return err.code ? err.code : ERR_DB_EXEC_FAILED;
 }

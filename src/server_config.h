@@ -59,6 +59,8 @@ extern "C"
     int shipyard_enabled;
     int shipyard_trade_in_factor_bp;
     int shipyard_sale_factor_bp;
+    int64_t galactic_exchange_liquidity_credits;
+    int shipyard_used_resale_factor_bp;
     int shipyard_require_cargo_fit;
     int shipyard_require_fighters_fit;
     int shipyard_require_shields_fit;
@@ -225,6 +227,8 @@ extern "C"
     int64_t planet_slave_unrest_interval_days;
     int64_t planet_slave_unrest_stoppage_cycles;
     int64_t planet_slave_unrest_population_loss;
+    int64_t galactic_exchange_liquidity_credits;
+    int shipyard_used_resale_factor_bp;
     /* Misc */
     int illegal_allowed_neutral;
     int illegal_min_experience;

@@ -1080,6 +1080,59 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
     }
   db_res_finalize (res_inventory);
   json_object_set_new (response_data, "available", available_array);
+  json_t *used_array = json_array ();
+  char used_sql[1024];
+  const char *used_tmpl =
+    "SELECT u.used_inventory_id,u.ship_id,s.name,st.name,a.hull_valuation,"
+    "a.equipment_valuation FROM shipyard_used_inventory u "
+    "JOIN ships s ON s.ship_id=u.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id "
+    "JOIN ship_sale_audit a ON a.sale_id=u.sale_id WHERE u.port_id={1} "
+    "AND s.destroyed=FALSE ORDER BY u.listed_at,u.used_inventory_id";
+  db_res_t *used_res = NULL;
+  if (sql_build (db, used_tmpl, used_sql, sizeof used_sql) != 0
+      || !db_query (db, used_sql, (db_bind_t[]){db_bind_i32 (port_id)}, 1,
+                    &used_res, &err))
+    {
+      json_decref (used_array);
+      json_decref (response_data);
+      free (cfg);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Failed to fetch used shipyard inventory.");
+      return 0;
+    }
+  while (db_res_step (used_res, &err))
+    {
+      int64_t used_id = db_res_col_i64 (used_res, 0, &err);
+      int64_t used_ship_id = db_res_col_i64 (used_res, 1, &err);
+      const char *used_name = db_res_col_text (used_res, 2, &err);
+      const char *used_type = db_res_col_text (used_res, 3, &err);
+      int64_t hull_value = db_res_col_i64 (used_res, 4, &err);
+      int64_t equipment_value = db_res_col_i64 (used_res, 5, &err);
+      __int128 resale = ((__int128) hull_value + equipment_value)
+        * cfg->shipyard_used_resale_factor_bp / 10000;
+      if (resale > INT64_MAX)
+        { err.code = ERR_DB_CONSTRAINT; break; }
+      json_t *used = json_object ();
+      json_object_set_new (used, "used_inventory_id", json_integer (used_id));
+      json_object_set_new (used, "ship_id", json_integer (used_ship_id));
+      json_object_set_new (used, "name", json_string (used_name ? used_name : ""));
+      json_object_set_new (used, "ship_type", json_string (used_type ? used_type : ""));
+      json_object_set_new (used, "hull_value", json_integer (hull_value));
+      json_object_set_new (used, "installed_equipment_value", json_integer (equipment_value));
+      json_object_set_new (used, "price", json_integer ((int64_t) resale));
+      json_array_append_new (used_array, used);
+    }
+  db_res_finalize (used_res);
+  if (err.code)
+    {
+      json_decref (used_array);
+      json_decref (response_data);
+      free (cfg);
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Failed to read used shipyard inventory.");
+      return 0;
+    }
+  json_object_set_new (response_data, "used_available", used_array);
   send_response_ok_take (ctx, root, "shipyard.list_v1", &response_data);
   free (cfg);
   return 0;
@@ -1104,6 +1157,45 @@ cmd_shipyard_upgrade (client_ctx_t *ctx, json_t *root)
     {
       send_response_error (ctx, root, ERR_BAD_REQUEST,
 			   "Missing data payload.");
+      return 0;
+    }
+  int used_inventory_id = 0;
+  if (json_get_int_flexible (data, "used_inventory_id", &used_inventory_id)
+      && used_inventory_id > 0)
+    {
+      int port_id = 0;
+      if (repo_stardock_check_shipyard_location (db, ctx->sector_id,
+                                                  ctx->player_id, &port_id) != 0)
+        {
+          send_response_error (ctx, root, ERR_NOT_AT_SHIPYARD,
+                               "You are not docked at a shipyard.");
+          return 0;
+        }
+      struct twconfig *used_cfg = config_load ();
+      if (!used_cfg)
+        {
+          send_response_error (ctx, root, ERR_SERVER_ERROR,
+                               "Could not load server configuration.");
+          return 0;
+        }
+      repo_used_ship_purchase_t purchase = {0};
+      int purchase_rc = repo_stardock_purchase_used_ship (
+        db, ctx->player_id, port_id, used_inventory_id,
+        used_cfg->shipyard_used_resale_factor_bp, &purchase);
+      free (used_cfg);
+      if (purchase_rc != 0)
+        {
+          send_response_error (ctx, root, purchase_rc,
+                               "Used ship purchase could not be completed.");
+          return 0;
+        }
+      json_t *purchase_data = json_object ();
+      json_object_set_new (purchase_data, "ship_id", json_integer (purchase.ship_id));
+      json_object_set_new (purchase_data, "new_type_id", json_integer (purchase.ship_type_id));
+      json_object_set_new (purchase_data, "new_ship_name", json_string (purchase.ship_name));
+      json_object_set_new (purchase_data, "credits_spent", json_integer (purchase.credits_spent));
+      json_object_set_new (purchase_data, "used_inventory_id", json_integer (used_inventory_id));
+      send_response_ok_take (ctx, root, "shipyard.upgraded_v1", &purchase_data);
       return 0;
     }
   int new_type_id = 0;

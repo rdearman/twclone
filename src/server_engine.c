@@ -99,6 +99,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"traps_process", h_traps_process},
   {"npc_step", h_npc_step},
   {"daily_market_settlement", h_daily_market_settlement},
+  {"daily_slave_unrest", h_daily_slave_unrest},
   {"daily_news_compiler", h_daily_news_compiler},
   {"cleanup_old_news", h_cleanup_old_news},
   {"limpet_ttl_cleanup", cron_limpet_ttl_cleanup},

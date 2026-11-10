@@ -17,6 +17,7 @@ int h_planet_growth (db_t * db, int64_t now_s);
 int h_daily_turn_reset (db_t * db, int64_t now_s);
 int h_terra_replenish (db_t * db, int64_t now_s);
 int h_daily_market_settlement (db_t * db, int64_t now_s);
+int h_daily_slave_unrest (db_t *db, int64_t now_s);
 int h_shield_regen_tick (db_t * db, int64_t now_s);
 int h_daily_news_compiler (db_t * db, int64_t now_s);
 int h_cleanup_old_news (db_t * db, int64_t now_s);

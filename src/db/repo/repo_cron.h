@@ -36,6 +36,10 @@ int db_cron_terra_replenish (db_t *db);
 int db_cron_planet_pop_growth_tick (db_t *db, double growth_rate);
 int db_cron_citadel_treasury_tick (db_t *db, int rate_bps);
 int db_cron_planet_update_production_stock (db_t *db, int64_t now_s);
+int db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
+                                int64_t interval_days,
+                                int64_t stoppage_cycles,
+                                int64_t population_loss);
 int db_cron_planet_get_market_data_json (db_t *db, json_t **out_array);
 int db_cron_planet_get_production_overview_json (db_t *db, int planet_id,
                                                  json_t **out_array);

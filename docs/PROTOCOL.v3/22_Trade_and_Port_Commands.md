@@ -112,9 +112,10 @@ authoritative ownership, funding, matching and conservation contract in
 An order is not a completed trade. Executed transfers are immediate virtual
 inventory movements, recorded and settled atomically; no physical Exchange
 transport ship or travel delay is involved. No trade may create or discard
-commodities, and the Exchange may not pay sellers from invented/unlimited
-liquidity. Price haggling is not part of V3; current configured dynamic prices
-remain authoritative.
+commodities. The Exchange clearing account may receive explicit SysOp-configured
+system liquidity injections, recorded distinctly from player trades; see
+`galactic_exchange_liquidity_credits` in Protocol 29. Price haggling is not
+part of V3; current configured dynamic prices remain authoritative.
 
 ### Player trade offers
 

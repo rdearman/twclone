@@ -10,9 +10,10 @@ and standing-order details in
 [`PROTOCOL.v3/26_Banking_and_Ledger.md`](PROTOCOL.v3/26_Banking_and_Ledger.md).
 
 This file is an index, not an independent or competing source of gameplay
-rules. Older descriptions of port-only physical stock transfers, guaranteed
-central-market settlement, invented liquidity, or conservation only between
-ships and ports are superseded by the V3 Exchange contract. Market behavior
+rules. Older descriptions of port-only physical stock transfers, real-world
+Exchange self-sufficiency, or conservation only between ships and ports are
+superseded by the V3 Exchange contract. Explicit, configurable system
+liquidity is permitted and must be visibly distinguished in the ledger. Market behavior
 must be evaluated against the current approved contract and implementation;
 the existence of order-generation or settlement functions is not evidence
 that goods are fully accounted for.
@@ -32,6 +33,7 @@ that goods are fully accounted for.
 
 ## Verification status
 
-The source-level Exchange audit is in progress. No statement here should be
-read as runtime certification. The decision register tracks each approved
-rule's implementation and verification state separately.
+The first Exchange inventory/clearing-account integration is implemented in
+source and sanitizer-built, but the migration and settlement have not yet been
+verified against a live disposable database. The decision register tracks
+implementation and verification state separately.

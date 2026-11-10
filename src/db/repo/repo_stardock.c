@@ -165,11 +165,10 @@ repo_stardock_sell_ship (db_t *db, int32_t player_id, int32_t ship_id,
     int owned_ship_count = 0;
     if (sql_build (db,
                    "SELECT COUNT(*) FROM ship_ownership WHERE player_id = {1} "
-                   "AND role_id = 1 AND is_primary = {2}",
+                   "AND role_id = 1",
                    sql, sizeof sql) != 0
         || !db_query (db, sql,
-                      (db_bind_t[]){db_bind_i32 (player_id), db_bind_bool (true)},
-                      2, &res, &err))
+                      (db_bind_t[]){db_bind_i32 (player_id)}, 1, &res, &err))
         return ship_sale_abort (db, err.code ? err.code : ERR_DB_QUERY_FAILED,
                                 &err);
     if (db_res_step (res, &err))
@@ -874,6 +873,128 @@ int repo_stardock_upgrade_ship(db_t *db, int32_t new_type_id, const char *new_na
         return rc;
     }
     return 0;
+}
+
+int
+repo_stardock_purchase_used_ship (db_t *db, int32_t player_id,
+                                  int32_t port_id, int64_t used_inventory_id,
+                                  int resale_factor_bp,
+                                  repo_used_ship_purchase_t *out)
+{
+    if (!db || player_id <= 0 || port_id <= 0 || used_inventory_id <= 0
+        || resale_factor_bp < 0 || resale_factor_bp > 10000 || !out)
+        return ERR_INVALID_ARG;
+    memset (out, 0, sizeof *out);
+    db_error_t err = {0};
+    if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+    char sql[1024];
+    db_res_t *res = NULL;
+    if (sql_build (db,
+        "SELECT COALESCE(ship_id,0),COALESCE(credits,0),COALESCE(sector_id,0) "
+        "FROM players WHERE player_id={1} FOR UPDATE", sql, sizeof sql) != 0
+        || !db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1,
+                      &res, &err))
+        goto used_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_DB_NOT_FOUND; goto used_fail; }
+    int32_t old_ship_id = db_res_col_i32 (res, 0, &err);
+    int64_t credits = db_res_col_i64 (res, 1, &err);
+    int32_t sector_id = db_res_col_i32 (res, 2, &err);
+    db_res_finalize (res); res = NULL;
+    if (err.code || old_ship_id <= 0 || sector_id <= 0)
+      { if (!err.code) err.code = ERR_DB_CONSTRAINT; goto used_fail; }
+    int32_t actual_port = 0;
+    if (repo_stardock_check_shipyard_location (db, sector_id, player_id,
+                                                &actual_port) != 0
+        || actual_port != port_id)
+      { err.code = ERR_NOT_AT_SHIPYARD; goto used_fail; }
+
+    const char *used_tmpl =
+      "SELECT u.ship_id,u.port_id,a.hull_valuation,a.equipment_valuation,"
+      "s.type_id,s.name,COALESCE(s.destroyed,FALSE) "
+      "FROM shipyard_used_inventory u JOIN ship_sale_audit a ON a.sale_id=u.sale_id "
+      "JOIN ships s ON s.ship_id=u.ship_id WHERE u.used_inventory_id={1} FOR UPDATE";
+    if (sql_build (db, used_tmpl, sql, sizeof sql) != 0
+        || !db_query (db, sql,
+             (db_bind_t[]){db_bind_i64 (used_inventory_id)}, 1, &res, &err))
+      goto used_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_DB_NOT_FOUND; goto used_fail; }
+    int32_t used_ship_id = db_res_col_i32 (res, 0, &err);
+    int32_t inventory_port_id = db_res_col_i32 (res, 1, &err);
+    int64_t hull_value = db_res_col_i64 (res, 2, &err);
+    int64_t equipment_value = db_res_col_i64 (res, 3, &err);
+    int32_t type_id = db_res_col_i32 (res, 4, &err);
+    const char *name = db_res_col_text (res, 5, &err);
+    snprintf (out->ship_name, sizeof out->ship_name, "%s", name ? name : "Used vessel");
+    bool destroyed = db_res_col_bool (res, 6, &err);
+    db_res_finalize (res); res = NULL;
+    if (err.code) goto used_fail;
+    if (inventory_port_id != port_id || used_ship_id <= 0 || type_id <= 0
+        || destroyed || used_ship_id == old_ship_id)
+      { err.code = ERR_DB_CONSTRAINT; goto used_fail; }
+    __int128 value = (__int128) hull_value + equipment_value;
+    __int128 quoted = value * resale_factor_bp / 10000;
+    if (hull_value < 0 || equipment_value < 0 || quoted > INT64_MAX)
+      { err.code = ERR_INVALID_ARG; goto used_fail; }
+    int64_t price = (int64_t) quoted;
+    if (credits < price) { err.code = ERR_INSUFFICIENT_FUNDS; goto used_fail; }
+    int64_t affected = 0;
+    if (price > 0)
+      {
+        if (sql_build (db, "UPDATE players SET credits=credits-{1} WHERE player_id={2} AND credits>={1}",
+                       sql, sizeof sql) != 0)
+          { err.code = ERR_DB_QUERY_FAILED; goto used_fail; }
+        if (!db_exec_rows_affected (db, sql,
+              (db_bind_t[]){db_bind_i64 (price),db_bind_i32 (player_id)}, 2,
+              &affected, &err) || affected != 1)
+          { if (!err.code) err.code = ERR_DB_CONSTRAINT; goto used_fail; }
+      }
+
+    if (sql_build (db,
+        "UPDATE ships SET sector_id={1} WHERE ship_id={2} AND destroyed=FALSE",
+        sql, sizeof sql) != 0
+        || !db_exec (db, sql,
+             (db_bind_t[]){db_bind_i32 (sector_id),db_bind_i32 (used_ship_id)},
+             2, &err))
+      goto used_fail;
+    if (sql_build (db,
+        "UPDATE ship_ownership SET is_primary=FALSE WHERE player_id={1} "
+        "AND ship_id={2} AND is_primary=TRUE", sql, sizeof sql) != 0)
+      { err.code = ERR_DB_QUERY_FAILED; goto used_fail; }
+    affected = 0;
+    if (!db_exec_rows_affected (db, sql,
+          (db_bind_t[]){db_bind_i32 (player_id),db_bind_i32 (old_ship_id)}, 2,
+          &affected, &err) || affected != 1)
+      { if (!err.code) err.code = ERR_DB_CONSTRAINT; goto used_fail; }
+    if (sql_build (db,
+        "INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) "
+        "VALUES({1},{2},1,TRUE)", sql, sizeof sql) != 0
+        || !db_exec (db, sql,
+             (db_bind_t[]){db_bind_i32 (used_ship_id),db_bind_i32 (player_id)},
+             2, &err))
+      goto used_fail;
+    if (sql_build (db,
+        "DELETE FROM shipyard_used_inventory WHERE used_inventory_id={1} "
+        "AND ship_id={2} AND port_id={3}", sql, sizeof sql) != 0)
+      { err.code = ERR_DB_QUERY_FAILED; goto used_fail; }
+    affected = 0;
+    if (!db_exec_rows_affected (db, sql,
+          (db_bind_t[]){db_bind_i64 (used_inventory_id),
+            db_bind_i32 (used_ship_id),db_bind_i32 (port_id)}, 3,
+          &affected, &err) || affected != 1)
+      { if (!err.code) err.code = ERR_DB_CONSTRAINT; goto used_fail; }
+    if (!db_tx_commit (db, &err)) goto used_fail;
+    out->ship_id = used_ship_id;
+    out->ship_type_id = type_id;
+    out->credits_spent = price;
+    return 0;
+
+used_fail:
+    if (res) db_res_finalize (res);
+    (void) db_tx_rollback (db, &err);
+    return err.code ? err.code : ERR_DB_EXEC_FAILED;
 }
 
 int repo_stardock_get_tavern_settings(db_t *db, db_res_t **out_res)

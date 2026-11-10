@@ -47,6 +47,16 @@ int repo_stardock_get_shipyard_inventory(db_t *db, int32_t port_id, db_res_t **o
 int repo_stardock_get_shiptype_details(db_t *db, int32_t type_id, db_res_t **out_res);
 
 int repo_stardock_upgrade_ship(db_t *db, int32_t new_type_id, const char *new_name, int64_t cost, int32_t ship_id);
+typedef struct {
+    int32_t ship_id;
+    int32_t ship_type_id;
+    int64_t credits_spent;
+    char ship_name[128];
+} repo_used_ship_purchase_t;
+int repo_stardock_purchase_used_ship(db_t *db, int32_t player_id,
+                                     int32_t port_id, int64_t used_inventory_id,
+                                     int resale_factor_bp,
+                                     repo_used_ship_purchase_t *out);
 
 int repo_stardock_get_tavern_settings(db_t *db, db_res_t **out_res);
 

@@ -58,6 +58,8 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
     {"shipyard_enabled", CFG_INT, "Enable shipyard features", CFG_OFF(shipyard_enabled)},
     {"shipyard_trade_in_factor_bp", CFG_INT, "Trade-in value factor (bp)", CFG_OFF(shipyard_trade_in_factor_bp)},
     {"shipyard_sale_factor_bp", CFG_INT, "Standalone ship sale value factor in basis points (0-10000)", CFG_OFF(shipyard_sale_factor_bp)},
+    {"galactic_exchange_liquidity_credits", CFG_INT64, "Exchange liquidity target; explicit system-issued credits", CFG_OFF(galactic_exchange_liquidity_credits)},
+    {"shipyard_used_resale_factor_bp", CFG_INT, "Used ship resale price factor (basis points, default 8000)", CFG_OFF(shipyard_used_resale_factor_bp)},
     {"shipyard_require_cargo_fit", CFG_INT, "Require cargo fit check", CFG_OFF(shipyard_require_cargo_fit)},
     {"shipyard_require_fighters_fit", CFG_INT, "Require fighters fit check", CFG_OFF(shipyard_require_fighters_fit)},
     {"shipyard_require_shields_fit", CFG_INT, "Require shields fit check", CFG_OFF(shipyard_require_shields_fit)},
@@ -227,6 +229,25 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             return 0;
         }
     }
+    if (strcmp(key, "galactic_exchange_liquidity_credits") == 0) {
+        char *end = NULL;
+        errno = 0;
+        long long liquidity = strtoll(val_str, &end, 10);
+        if (errno == ERANGE || end == val_str || *end != '\0' || liquidity < 0) {
+            send_response_refused(ctx, root, 1407,
+                                  "Refused: Exchange liquidity must be a nonnegative credit amount", NULL);
+            return 0;
+        }
+    }
+    if (strcmp(key, "shipyard_used_resale_factor_bp") == 0) {
+        char *end = NULL;
+        long factor = strtol(val_str, &end, 10);
+        if (end == val_str || *end != '\0' || factor < 0 || factor > 10000) {
+            send_response_refused(ctx, root, 1407,
+                                  "Refused: used resale factor must be 0-10000 basis points", NULL);
+            return 0;
+        }
+    }
     if (strcmp(key, "planet.slave_unrest_interval_days") == 0
         || strcmp(key, "planet.slave_unrest_stoppage_cycles") == 0
         || strcmp(key, "planet.slave_unrest_population_loss") == 0) {
@@ -243,6 +264,8 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
     // Capture old value for audit
     int old_planet_market_expiry = g_cfg.planet_market_buy_order_expiry_seconds;
     int old_shipyard_sale_factor = g_cfg.shipyard_sale_factor_bp;
+    int64_t old_exchange_liquidity = g_cfg.galactic_exchange_liquidity_credits;
+    int old_used_resale_factor = g_cfg.shipyard_used_resale_factor_bp;
     int64_t old_slave_unrest_interval = g_cfg.planet_slave_unrest_interval_days;
     int64_t old_slave_unrest_stoppage = g_cfg.planet_slave_unrest_stoppage_cycles;
     int64_t old_slave_unrest_loss = g_cfg.planet_slave_unrest_population_loss;
@@ -282,6 +305,10 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             g_cfg.planet_market_buy_order_expiry_seconds = old_planet_market_expiry;
         if (strcmp(key, "shipyard_sale_factor_bp") == 0)
             g_cfg.shipyard_sale_factor_bp = old_shipyard_sale_factor;
+        if (strcmp(key, "galactic_exchange_liquidity_credits") == 0)
+            g_cfg.galactic_exchange_liquidity_credits = old_exchange_liquidity;
+        if (strcmp(key, "shipyard_used_resale_factor_bp") == 0)
+            g_cfg.shipyard_used_resale_factor_bp = old_used_resale_factor;
         if (strcmp(key, "planet.slave_unrest_interval_days") == 0)
             g_cfg.planet_slave_unrest_interval_days = old_slave_unrest_interval;
         if (strcmp(key, "planet.slave_unrest_stoppage_cycles") == 0)

@@ -59,14 +59,12 @@ settlement. The current C repository transaction writes the destroyed hull,
 loss state, pod ownership/active-ship assignment, podded status and one
 per-hull destruction event atomically. Eligible insurance pays configured
 player-held ship-policy payouts, capped in aggregate at the shiptype base cost,
-to the player's bank ledger in the same transaction. It covers neither cargo
+to the player's bank ledger in the same transaction. If insurer reserves are
+short, `INSURANCE_GUARANTEE` records the explicit system-issued shortfall. It covers neither cargo
 nor installed equipment, does not directly replace the ship, and cannot pay
 twice for one destruction. Policies are applied in policy-ID order if several
-cover a hull. If a policy fund or bank account is missing, or a fund cannot
-cover its allocated payout, destruction still completes and the claim remains
-open for the existing claim workflow; guaranteed payout under insurer
-insolvency remains unresolved. Selling an insured ship ends that ship's policy
-without refund.
+cover a hull. Insurer insolvency does not delay a qualifying payout. Selling an
+insured ship ends that ship's policy without refund.
 
 ### Planet capture and population
 

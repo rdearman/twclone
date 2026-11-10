@@ -12,7 +12,7 @@ path exists; end-to-end behavior still needs focused protocol verification.
 | Player lifecycle | Register, authenticate, persist identity/session, recover state; list currently connected players | `src/server_auth.c`, `src/server_players.c`, `src/db/repo/repo_auth.c` | Online listing deduplicates authenticated players, orders by player ID and exposes only ID/username/corporation/alignment via page/limit; runtime verification pending | Session replay/client recovery remains unverified | Partial |
 | Universe and navigation | Generated connected sectors/warps; movement, scans and route assistance | `src/bigbang_pg_main.c`, `src/server_universe.c`, `src/server_autopilot.c` | Interrupted-transwarp fuel/origin/no-destination-hazard rule is approved; implementation/runtime verification outstanding | No new policy blocker | Partial; see `V3_STATUS.md` |
 | Ships and lifecycle | Ownership, acquisition, status, upgrades/equipment, repair, cargo, claim/tow, sale | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_ships.c`, `src/db/repo/repo_stardock.c` | Standalone sale now atomically settles credits, cargo forfeiture, insurance termination, active replacement, audit and persistent used-hull inventory; runtime verification pending | Used-hull purchase has no approved request, valuation or settlement contract | Partial |
-| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c` | Planet buy orders use unreserved best-effort matching, revalidate funds/capacity, permit partial fills, cancel unexecutable remainder and support cancellation/expiry; fixed current authoritative port prices | Price haggling is explicitly not part of V3; configured dynamic pricing remains authoritative | Implemented in source; runtime unverified |
+| Trading/economy | Directional port trade, authoritative quotes, cargo/credits settlement, persistent market orders and Exchange-owned inventory | `src/server_ports.c`, `src/server_planets.c`, `src/server_cron.c`, `src/db/repo/repo_ports.c`, `src/db/repo/repo_market.c`, migration 174 | Planet immediate sales now transfer into virtual `entity_stock(exchange,1)` and debit the Exchange clearing account; configured liquidity injections are explicit ledger entries; daily market matcher offers persisted Exchange stock to port/planet buyers | No physical exchange vessels; no haggling; dynamic pricing retained. Migration and settlement runtime tests still outstanding | Partial: source/build/static-test verified only; Exchange runtime unverified |
 | Planets/colonies | Genesis, landing, transfers, worker assignment, production, harvest, population, slavery, emancipation and citadels | `src/server_planets.c`, `src/db/repo/repo_planets.c`, `src/db/repo/repo_cron.c` | `planet.view_v1` is allow-listed, includes current per-cycle ORE/ORG/EQU output and owner/corporation-only treasury; emancipation is transactional; harvest is capacity-aware and transactional under existing withdrawal permissions; population migration and slave output logic present; capture conversion is transactional | Runtime verification; slave purchase/transport; unrest parameters and effects remain outstanding | Partial |
 | Combat/defences | Ship/planet combat, fighters, mines, shields, destruction and recovery | `src/server_combat.c`, `src/server_planets.c`, `src/db/repo/repo_combat.c`, `src/db/repo/repo_ships.c` | All destruction callers converge on an atomic transaction that destroys hull/cargo/equipment, creates and assigns an Escape Pod at sector 1, records loss/podded state and a per-hull idempotency event; funded eligible player insurance pays configured policy payout capped at shiptype basecost to bank; lethal movement reports pod sector | Insolvent/missing insurance fund leaves an open claim; guarantee under insolvency needs policy. Runtime verification pending | Partial |
 | Corporations | Membership, roles, shared assets, treasury and governance | `src/server_corporation.c`, `src/db/repo/repo_corporation.c` | Membership events and advanced settlement require verification | Tax/dividend RPCs are explicitly not registered; stock subcommands have a stub fallback | Partial |
@@ -151,13 +151,16 @@ approved protocol. Runtime verification of recent transactions remains pending.
   parity question not resolved by approved V3 policy. V3 has now explicitly
   ruled out haggling and defined hull-only insurance, escape-pod destruction,
   planet-capture population policy and interrupted-transwarp behavior.
-- Planet harvest permission for landed non-owners remains unspecified; partial
-  transfer to available ship capacity is approved.
-- Slave unrest interval, stoppage duration and fixed loss values require
-  explicit SysOp configuration; deterministic allocation of losses among
-  unassigned/working populations is still undefined. Unrest must remain
-  inactive until resolved.
-- Used-hull acquisition request, price and settlement remain undefined.
+- Planet harvesting follows existing planet inventory permissions (owner or
+  authorized corporation Leader/Officer), transfers partially to available
+  ship capacity, and consumes no turns. Runtime verification remains pending.
+- Slave unrest interval, stoppage duration and fixed loss values remain
+  explicit SysOp-configured policy; loss allocation is deterministic
+  proportional largest-remainder across assignments. Effects remain inactive
+  until all required values are configured.
+- Used-hull acquisition uses `shipyard.upgrade` with `used_inventory_id` and
+  configurable 80% default resale pricing, preserving hull identity/equipment.
+  Database/runtime verification remains pending.
 
 ## Implemented in the current work batch
 
@@ -175,25 +178,34 @@ approved protocol. Runtime verification of recent transactions remains pending.
 
 - SysOp can persist the three deterministic unrest parameters through the
   existing configuration API. The zero value is an unset/disabled sentinel,
-  not a gameplay default; negative values are rejected. PG migration 173 and
-  MySQL migration 125 seed only this sentinel. No daily unrest scheduler
-  consumes the values, and no unrest effects are active. A sanitized build,
-  41 focused source/manifest tests and JSON syntax validation passed; protocol
-  and migration runtime verification remain outstanding.
+  not a gameplay default; negative values are rejected. Daily engine evaluation
+  and persisted deterministic losses/stoppages are implemented, with effects
+  disabled until every policy value is supplied. Focused source tests and a
+  sanitized build pass; migration and scheduler runtime verification remain
+  outstanding.
 
 ## Gameplay contract amendments awaiting approval
 
-- **Used-hull purchase — SPECIFICATION REQUIRED:** Define request, price,
-  eligibility and settlement before used inventory can be acquired.
-- **Planet harvesting — PARTIAL CONTRACT:** Resources, landed-ship destination,
-  zero turns, conservation, atomicity and partial transfer up to available
-  ship capacity are approved. Permission for landed non-owner/corporation
-  actors remains unspecified and must follow existing authorization rules.
-- **Slave unrest — POLICY VALUES/LOSS ALLOCATION REQUIRED:** No interval,
-  stoppage duration or fixed loss quantity is selected. The deterministic rule
-  for reducing assigned versus unassigned workers is also unspecified; keep
-  unrest inactive.
+- **Slave unrest — POLICY VALUES REQUIRED:** No interval, stoppage duration or
+  fixed loss quantity is selected. Configure these values through SysOp; do
+  not select defaults, and keep effects inactive until configured.
 - **Planet morale display — PARTIAL CONTRACT:** Slave morale is permanently
   low, but numeric encoding and colonist morale source are not defined. Do not
   invent numeric morale. Planet overview treasury visibility is owner or
   authorized corporation-member only.
+
+## Current implementation batch
+
+- Galactic Exchange sale receipts persist as virtual Exchange inventory,
+  settle through a clearing account with explicitly configured liquidity,
+  and Exchange stock is offered to the existing matcher.
+- Daily unrest scheduling uses persisted event state and deterministic
+  proportional integer loss allocation.
+- Existing used hulls can be purchased through the shipyard command at a
+  configurable 80% default price, preserving ship identity and equipment.
+- Qualifying insurance claims are guaranteed and credited to the player's bank
+  despite insufficient insurer reserves; system-created value is distinguished
+  in the ledger.
+- `make -C bin -j2` passed with ASan/UBSan; the focused source/migration suite
+  passed 69 tests and 200 subtests. PostgreSQL/MySQL migration and server
+  runtime verification were not performed.
