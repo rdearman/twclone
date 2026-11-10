@@ -85,9 +85,9 @@ No live DB or full JSON regression run has been performed in this work session.
 | COMBAT-005 | Preserve bank/planet/corporate assets | IMPLEMENTED_UNVERIFIED | shared destruction transaction; Terra enforcement no longer calls asset-seizure SQL, checks settlement result, and retains the existing `sanctioned` event field | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 43 passed; `make -C bin -j2`: passed with ASan/UBSan; runtime state preservation unverified | `63169074`, `0e81209c`, `5195480b`, `6027d878`, `ef07c811` | Runtime state-preservation assertion |
 | INS-001 | Hull-only coverage | IMPLEMENTED_UNVERIFIED | `settle_destruction_insurance` pays the configured payout capped at shiptype replacement value; cargo/equipment excluded | ASan/UBSan build and focused source assertions pass; JSON/server/DB runtime not run | `15821cd8`, working change | Verify hull valuation cap and loss exclusions |
 | INS-002 | Qualifying destruction | IMPLEMENTED_UNVERIFIED | player-held active policy selected only when start/expiry epoch bounds include destruction time | Source inspection/build; no runtime | `15821cd8` | Verify time bounds and voluntary/nonqualifying loss cases |
-| INS-003 | Credit bank account | IMPLEMENTED_UNVERIFIED | locked CRD account credited in destruction transaction; funded payout uses `ADJUSTMENT`, guaranteed system funding uses `INSURANCE_GUARANTEE` | ASan/UBSan build and focused source test pass; migration 175 and runtime unverified | Working change | Verify player balance, ledger label and rollback |
+| INS-003 | Credit bank account | IMPLEMENTED_UNVERIFIED | locked CRD account credited in destruction and portable explicit-claim transactions; funded payout uses `ADJUSTMENT`, guaranteed system funding uses `INSURANCE_GUARANTEE` | ASan/UBSan build and focused source tests pass; no DB runtime | `6bf7dcd2`, working change | Verify player balance, ledger label and rollback on both backends |
 | INS-004 | Pod independent of policy | IMPLEMENTED_UNVERIFIED | unconditional pod creation is independent of insurance result | Source contract/build only | `63169074`, `15821cd8` | Verify insured and uninsured runtime cases |
-| INS-005 | Exactly-once payout | IMPLEMENTED_UNVERIFIED | destruction locks player/hull, conditional destroyed update, per-hull event key and same-transaction insurance claim/ledger; SQL settlement locks claim and returns idempotently when paid | Focused source test; sanitized build; migration 175 not DB-tested | `15821cd8`, working change | DB retry/concurrency and migration verification |
+| INS-005 | Exactly-once payout | IMPLEMENTED_UNVERIFIED | destruction locks player/hull, conditional destroyed update and per-hull event key; explicit claim repository locks claim/policy/account and returns idempotently when paid | `test_insurance_server_contract.py` plus related focus: 51 passed; ASan/UBSan build passed; DB not tested | `6bf7dcd2`, working change | Verify retry/concurrency, account/ledger rollback on PostgreSQL and MySQL |
 | INS-006 | Sale terminates without refund | IMPLEMENTED_UNVERIFIED | `repo_stardock.c` sale transaction | Ship-sale JSON suite authored, not run | `bcaf3e93` | DB-backed verify |
 | CAP-001 | Defeat defenses | IMPLEMENTED_UNVERIFIED | `cmd_combat_attack_planet`; uses `db_planets_get_citadel_defenses_ex` and aborts on repository failure rather than treating unavailable defenses as absent | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 44 passed; `make -C bin -j2`: passed with ASan/UBSan; no DB runtime | `5195480b` | Run combat JSON scenario against disposable server; verify citadel/fighter settlement |
 | CAP-002 | Successful invasion required | IMPLEMENTED_UNVERIFIED | existing fighter comparison determines success | Combat JSON suite authored, not run | — | Validate combat outcome tests |
@@ -113,6 +113,12 @@ No live DB or full JSON regression run has been performed in this work session.
 
 ## Execution evidence log
 
+- Portable insurance command batch: `make -C bin -j2` passed with ASan/UBSan
+  after adding shared C repository transactions for policy purchase and
+  explicit claim settlement; focused
+  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
+  passed (51 tests); `git diff --check` passed. No PostgreSQL/MySQL runtime.
+  Changes are uncommitted at this checkpoint.
 - Current Exchange/unrest/insurance/used-hull batch: `make -C bin -j2` passed
   with ASan/UBSan after the ship-sale ownership-count correction;
   `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`

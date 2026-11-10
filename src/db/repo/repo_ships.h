@@ -62,4 +62,17 @@ int repo_ships_update_cargo_column(db_t *db, int32_t ship_id, const char *col_na
 /* Clear a ship's active cloak marker. The caller controls transaction scope. */
 int repo_ships_decloak(db_t *db, int32_t ship_id);
 
+/* Portable transactional equivalents of the insurance policy/claim
+ * operations. The server remains responsible for protocol validation. */
+int repo_ships_insurance_buy_policy(db_t *db, int32_t player_id,
+                                    const char *subject_type,
+                                    int64_t subject_id, int64_t premium,
+                                    int64_t payout, int64_t fund_id,
+                                    const char *start_ts,
+                                    const char *expiry_ts,
+                                    int64_t *policy_id_out);
+int repo_ships_insurance_settle_claim(db_t *db, int32_t player_id,
+                                      int64_t claim_id, const char *event_id,
+                                      int64_t amount, int64_t *claim_id_out);
+
 #endif

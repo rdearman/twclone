@@ -2,6 +2,7 @@
 #include "db_int.h"
 #include "db/repo/repo_ships.h"
 #include "db/sql_driver.h"
+#include "errors.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -869,4 +870,294 @@ repo_ships_decloak (db_t *db, int32_t ship_id)
     if (!db_exec (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1, &err))
         return err.code ? err.code : ERR_DB_EXEC_FAILED;
     return 0;
+}
+
+static int
+insurance_lock_player_account (db_t *db, int32_t player_id,
+                               int64_t *account_id, int64_t *balance,
+                               db_error_t *err)
+{
+    const char *id_col = db_backend (db) == DB_BACKEND_POSTGRES
+        ? "bank_accounts_id" : "id";
+    char query[512], sql[768];
+    snprintf (query, sizeof query,
+        "SELECT %s,balance FROM bank_accounts WHERE owner_type='player' "
+        "AND owner_id={1} AND currency='CRD' AND is_active=TRUE FOR UPDATE",
+        id_col);
+    if (sql_build (db, query, sql, sizeof sql) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    if (!db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1,
+                   &res, err))
+        return err->code ? err->code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step (res, err))
+      { db_res_finalize (res); return err->code ? err->code : ERR_NOT_FOUND; }
+    *account_id = db_res_col_i64 (res, 0, err);
+    *balance = db_res_col_i64 (res, 1, err);
+    db_res_finalize (res);
+    return err->code ? err->code : 0;
+}
+
+static int
+insurance_update_player_balance (db_t *db, int64_t account_id,
+                                 int64_t amount, bool debit,
+                                 db_error_t *err)
+{
+    const char *id_col = db_backend (db) == DB_BACKEND_POSTGRES
+        ? "bank_accounts_id" : "id";
+    char query[384], sql[512];
+    if (debit)
+        snprintf (query, sizeof query,
+            "UPDATE bank_accounts SET balance=balance-{1} WHERE %s={2} "
+            "AND is_active=TRUE AND balance>={1}", id_col);
+    else
+        snprintf (query, sizeof query,
+            "UPDATE bank_accounts SET balance=balance+{1} WHERE %s={2} "
+            "AND is_active=TRUE", id_col);
+    int64_t rows = 0;
+    if (sql_build (db, query, sql, sizeof sql) != 0
+        || !db_exec_rows_affected (db, sql,
+             (db_bind_t[]){db_bind_i64 (amount),db_bind_i64 (account_id)},
+             2, &rows, err))
+        return err->code ? err->code : ERR_DB_EXEC_FAILED;
+    return rows == 1 ? 0 : (debit ? ERR_INSUFFICIENT_FUNDS : ERR_DB_BUSY);
+}
+
+int
+repo_ships_insurance_buy_policy (db_t *db, int32_t player_id,
+                                 const char *subject_type,
+                                 int64_t subject_id, int64_t premium,
+                                 int64_t payout, int64_t fund_id,
+                                 const char *start_ts, const char *expiry_ts,
+                                 int64_t *policy_id_out)
+{
+    if (!db || player_id <= 0 || !subject_type || subject_id <= 0
+        || premium < 0 || payout < 0 || fund_id <= 0 || !start_ts
+        || !*start_ts || !expiry_ts || !*expiry_ts || !policy_id_out
+        || (strcmp (subject_type, "ship") != 0
+            && strcmp (subject_type, "cargo") != 0
+            && strcmp (subject_type, "planet") != 0))
+        return ERR_INVALID_ARG;
+    *policy_id_out = 0;
+    db_error_t err = {0};
+    if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+    char sql[1024];
+    db_res_t *res = NULL;
+    if (sql_build (db, "SELECT player_id FROM players WHERE player_id={1} FOR UPDATE",
+                   sql, sizeof sql) != 0
+        || !db_query (db, sql, (db_bind_t[]){db_bind_i32 (player_id)}, 1,
+                      &res, &err))
+        goto policy_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_NOT_FOUND; goto policy_fail; }
+    db_res_finalize (res); res = NULL;
+
+    const char *owned_query =
+      (strcmp (subject_type, "ship") == 0 || strcmp (subject_type, "cargo") == 0)
+      ? "SELECT o.ship_id FROM ship_ownership o JOIN ships s ON s.ship_id=o.ship_id "
+        "WHERE o.ship_id={1} AND o.player_id={2} AND o.is_primary=TRUE FOR UPDATE"
+      : "SELECT planet_id FROM planets WHERE planet_id={1} AND owner_type='player' "
+        "AND owner_id={2} FOR UPDATE";
+    if (sql_build (db, owned_query, sql, sizeof sql) != 0
+        || !db_query (db, sql,
+             (db_bind_t[]){db_bind_i64 (subject_id),db_bind_i32 (player_id)},
+             2, &res, &err))
+        goto policy_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_PERMISSION_DENIED; goto policy_fail; }
+    db_res_finalize (res); res = NULL;
+
+    if (sql_build (db, "SELECT fund_id FROM insurance_funds WHERE fund_id={1} FOR UPDATE",
+                   sql, sizeof sql) != 0
+        || !db_query (db, sql, (db_bind_t[]){db_bind_i64 (fund_id)}, 1,
+                      &res, &err))
+        goto policy_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_NOT_FOUND; goto policy_fail; }
+    db_res_finalize (res); res = NULL;
+
+    int64_t account_id = 0, balance = 0;
+    int rc = insurance_lock_player_account (db, player_id, &account_id,
+                                             &balance, &err);
+    if (rc != 0) { err.code = rc; goto policy_fail; }
+    if (balance < premium) { err.code = ERR_INSUFFICIENT_FUNDS; goto policy_fail; }
+    const char *policy_insert =
+      "INSERT INTO insurance_policies(holder_type,holder_id,subject_type,subject_id,"
+      "premium,payout,fund_id,start_ts,expiry_ts,active) "
+      "VALUES('player',{1},{2},{3},{4},{5},{6},{7},{8},TRUE)";
+    if (sql_build (db, policy_insert, sql, sizeof sql) != 0
+        || !db_exec_insert_id (db, sql,
+             (db_bind_t[]){db_bind_i32 (player_id),db_bind_text (subject_type),
+               db_bind_i64 (subject_id),db_bind_i64 (premium),db_bind_i64 (payout),
+               db_bind_i64 (fund_id),db_bind_text (start_ts),
+               db_bind_text (expiry_ts)}, 8, "insurance_policies_id",
+             policy_id_out, &err))
+        goto policy_fail;
+    if (premium > 0)
+      {
+        if (insurance_update_player_balance (db, account_id, premium,
+                                                true, &err) != 0)
+          { if (!err.code) err.code = ERR_DB_CONSTRAINT; goto policy_fail; }
+        int64_t rows = 0;
+        if (sql_build (db, "UPDATE insurance_funds SET balance=balance+{1} "
+                       "WHERE fund_id={2} AND balance<={3}",
+                       sql, sizeof sql) != 0
+            || !db_exec_rows_affected (db, sql,
+                 (db_bind_t[]){db_bind_i64 (premium),db_bind_i64 (fund_id),
+                   db_bind_i64 (INT64_MAX - premium)}, 3, &rows, &err)
+            || rows != 1)
+          { if (!err.code) err.code = ERR_DB_CONSTRAINT; goto policy_fail; }
+        char group[64], idem[96];
+        snprintf (group, sizeof group, "insurance-policy-%lld",
+                  (long long) *policy_id_out);
+        snprintf (idem, sizeof idem, "insurance-policy-premium-%lld",
+                  (long long) *policy_id_out);
+        const char *ledger =
+          "INSERT INTO bank_transactions(account_id,tx_type,direction,amount,currency,"
+          "tx_group_id,description,ts,balance_after,idempotency_key) "
+          "VALUES({1},'FEE','DEBIT',{2},'CRD',{3},'insurance premium',{4},{5},{6})";
+        if (sql_build (db, ledger, sql, sizeof sql) != 0
+            || !db_exec (db, sql,
+                 (db_bind_t[]){db_bind_i64 (account_id),db_bind_i64 (premium),
+                   db_bind_text (group),db_bind_i64 ((int64_t) time (NULL)),
+                   db_bind_i64 (balance - premium),db_bind_text (idem)}, 6,
+                 &err))
+            goto policy_fail;
+      }
+    if (!db_tx_commit (db, &err)) goto policy_fail;
+    return 0;
+
+policy_fail:
+    if (res) db_res_finalize (res);
+    db_tx_rollback (db, &err);
+    return err.code ? err.code : ERR_DB_EXEC_FAILED;
+}
+
+int
+repo_ships_insurance_settle_claim (db_t *db, int32_t player_id,
+                                   int64_t claim_id, const char *event_id,
+                                   int64_t amount, int64_t *claim_id_out)
+{
+    if (!db || player_id <= 0 || claim_id <= 0 || !event_id || !*event_id
+        || amount <= 0 || !claim_id_out)
+        return ERR_INVALID_ARG;
+    *claim_id_out = 0;
+    db_error_t err = {0};
+    if (!db_tx_begin (db, DB_TX_DEFAULT, &err))
+        return err.code ? err.code : ERR_DB_TX;
+    char sql[1024];
+    db_res_t *res = NULL;
+    if (sql_build (db, "SELECT policy_id,amount,status FROM insurance_claims "
+                   "WHERE insurance_claims_id={1} FOR UPDATE", sql, sizeof sql) != 0
+        || !db_query (db, sql, (db_bind_t[]){db_bind_i64 (claim_id)}, 1,
+                      &res, &err))
+        goto claim_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_NOT_FOUND; goto claim_fail; }
+    int64_t policy_id = db_res_col_i64 (res, 0, &err);
+    int64_t claim_amount = db_res_col_i64 (res, 1, &err);
+    const char *status_value = db_res_col_text (res, 2, &err);
+    char status[16] = {0};
+    snprintf (status, sizeof status, "%s", status_value ? status_value : "");
+    db_res_finalize (res); res = NULL;
+    if (err.code) goto claim_fail;
+    const char *policy_query =
+      "SELECT holder_type,holder_id,payout,COALESCE(fund_id,0),active "
+      "FROM insurance_policies WHERE insurance_policies_id={1} FOR UPDATE";
+    if (sql_build (db, policy_query, sql, sizeof sql) != 0
+        || !db_query (db, sql, (db_bind_t[]){db_bind_i64 (policy_id)}, 1,
+                      &res, &err))
+        goto claim_fail;
+    if (!db_res_step (res, &err))
+      { db_res_finalize (res); res = NULL; err.code = ERR_NOT_FOUND; goto claim_fail; }
+    const char *holder_value = db_res_col_text (res, 0, &err);
+    char holder_type[16] = {0};
+    snprintf (holder_type, sizeof holder_type, "%s", holder_value ? holder_value : "");
+    int64_t holder_id = db_res_col_i64 (res, 1, &err);
+    int64_t payout = db_res_col_i64 (res, 2, &err);
+    int64_t fund_id = db_res_col_i64 (res, 3, &err);
+    bool active = db_res_col_bool (res, 4, &err);
+    db_res_finalize (res); res = NULL;
+    if (err.code) goto claim_fail;
+    if (strcmp (holder_type, "player") != 0 || holder_id != player_id)
+      { err.code = ERR_PERMISSION_DENIED; goto claim_fail; }
+    if (strcmp (status, "paid") == 0)
+      {
+        *claim_id_out = claim_id;
+        if (!db_tx_commit (db, &err)) goto claim_fail;
+        return 0;
+      }
+    if (strcmp (status, "open") != 0 || !active)
+      { err.code = ERR_PERMISSION_DENIED; goto claim_fail; }
+    if (amount > payout || amount > claim_amount)
+      { err.code = ERR_INVALID_ARG; goto claim_fail; }
+
+    int64_t account_id = 0, balance = 0;
+    int rc = insurance_lock_player_account (db, player_id, &account_id,
+                                             &balance, &err);
+    if (rc != 0) { err.code = rc; goto claim_fail; }
+    if (balance > INT64_MAX - amount)
+      { err.code = ERR_DB_CONSTRAINT; goto claim_fail; }
+    bool funded = false;
+    if (fund_id > 0)
+      {
+        if (sql_build (db, "SELECT balance FROM insurance_funds WHERE fund_id={1} FOR UPDATE",
+                       sql, sizeof sql) != 0
+            || !db_query (db, sql, (db_bind_t[]){db_bind_i64 (fund_id)}, 1,
+                          &res, &err))
+            goto claim_fail;
+        if (db_res_step (res, &err))
+          funded = db_res_col_i64 (res, 0, &err) >= amount;
+        db_res_finalize (res); res = NULL;
+        if (err.code) goto claim_fail;
+      }
+    int64_t rows = 0;
+    if (funded
+        && (sql_build (db, "UPDATE insurance_funds SET balance=balance-{1} "
+                       "WHERE fund_id={2} AND balance>={1}", sql, sizeof sql) != 0
+            || !db_exec_rows_affected (db, sql,
+                 (db_bind_t[]){db_bind_i64 (amount),db_bind_i64 (fund_id)},
+                 2, &rows, &err) || rows != 1))
+      { if (!err.code) err.code = ERR_DB_BUSY; goto claim_fail; }
+    if (insurance_update_player_balance (db, account_id, amount, false,
+                                        &err) != 0)
+      goto claim_fail;
+
+    char group[64], idem[96];
+    snprintf (group, sizeof group, "insurance-claim-%lld", (long long) claim_id);
+    snprintf (idem, sizeof idem, "insurance-claim-settlement-%lld",
+              (long long) claim_id);
+    const char *ledger =
+      "INSERT INTO bank_transactions(account_id,tx_type,direction,amount,currency,"
+      "tx_group_id,description,ts,balance_after,idempotency_key) "
+      "VALUES({1},{2},'CREDIT',{3},'CRD',{4},{5},{6},{7},{8})";
+    int64_t tx_id = 0;
+    if (sql_build (db, ledger, sql, sizeof sql) != 0
+        || !db_exec_insert_id (db, sql,
+             (db_bind_t[]){db_bind_i64 (account_id),
+               db_bind_text (funded ? "ADJUSTMENT" : "INSURANCE_GUARANTEE"),
+               db_bind_i64 (amount),db_bind_text (group),
+               db_bind_text (funded ? "automatic hull insurance" :
+                                      "system-guaranteed hull insurance"),
+               db_bind_i64 ((int64_t) time (NULL)),db_bind_i64 (balance + amount),
+               db_bind_text (idem)}, 8,
+             db_backend (db) == DB_BACKEND_POSTGRES
+               ? "bank_transactions_id" : "id", &tx_id, &err))
+        goto claim_fail;
+    if (sql_build (db, "UPDATE insurance_claims SET status='paid',event_id={1},"
+                   "paid_bank_tx={2} WHERE insurance_claims_id={3} AND status='open'",
+                   sql, sizeof sql) != 0
+        || !db_exec_rows_affected (db, sql,
+             (db_bind_t[]){db_bind_text (event_id),db_bind_i64 (tx_id),
+               db_bind_i64 (claim_id)}, 3, &rows, &err) || rows != 1)
+      { if (!err.code) err.code = ERR_DB_BUSY; goto claim_fail; }
+    if (!db_tx_commit (db, &err)) goto claim_fail;
+    *claim_id_out = claim_id;
+    return 0;
+
+claim_fail:
+    if (res) db_res_finalize (res);
+    db_tx_rollback (db, &err);
+    return err.code ? err.code : ERR_DB_EXEC_FAILED;
 }

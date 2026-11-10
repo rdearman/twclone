@@ -81,17 +81,19 @@ completed payments. No arbitrary active-order limit is imposed.
 
 `insurance.policies.list` returns the authenticated player's policies.
 `insurance.policies.buy` requires `subject_type`, `subject_id`, `duration`,
-`premium`, `payout`, and `fund_id`; PostgreSQL debits the holder's CRD account,
-credits the fund, and creates the policy atomically. `insurance.claim.file`
-settles an existing `claim_id` with `event_id` and `amount`; PostgreSQL locks
-the claim, policy, fund and holder account, and repeated settlement is
-idempotent. No server-side balance or claim updates are performed outside
-those routines.
+`premium`, `payout`, and `fund_id`; the shared C repository locks the insured
+asset, player account and fund, then debits the premium, credits the fund,
+records the ledger entry and creates the policy atomically. `insurance.claim.file`
+settles an existing `claim_id` with `event_id` and `amount` through that same
+backend-portable transaction layer. It locks the claim, policy, fund and holder
+account and is idempotent. Automatic destruction settlement also uses the
+shared C repository path. PostgreSQL stored functions remain for compatibility
+with existing database callers; the server handlers do not depend on them.
 
 V3 insurance covers hull replacement only. On qualifying ship destruction the
 shared ship-loss transaction selects active player-held ship policies whose
 epoch `start_ts`/`expiry_ts` cover the destruction time. It uses each policy's
-configured payout, capped in aggregate at shiptype `basecost`, and credits the
+configured covered payout, capped in aggregate at shiptype `basecost`, and credits the
 player's CRD bank account. Funded insurer payouts use `ADJUSTMENT/CREDIT`; an
 insurer shortfall is covered by an explicit `INSURANCE_GUARANTEE/CREDIT`
 system-issued ledger entry. Policy claims, any insurer-fund debit, bank credits

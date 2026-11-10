@@ -19,6 +19,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "db/repo/repo_database.h"
+#include "db/repo/repo_ships.h"
 #include "db/repo/repo_communication.h"
 #include <jansson.h>
 #include <stdbool.h>
@@ -138,27 +139,8 @@ monotonic_millis (void)
   return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
 }
 
-/* --------------------------------------------------------------------------
-   Insurance commands.  Monetary and claim state changes are delegated to
-   PostgreSQL routines so the server never performs a partial settlement.
-   -------------------------------------------------------------------------- */
-
-static int
-insurance_result (db_res_t *res, int *code_out, char **message_out,
-                  int64_t *id_out)
-{
-  db_error_t err = {0};
-  if (!res || !db_res_step (res, &err))
-    return ERR_DB_QUERY_FAILED;
-  if (code_out) *code_out = db_res_col_i32 (res, 0, &err);
-  if (message_out)
-    {
-      const char *message = db_res_col_text (res, 1, &err);
-      *message_out = message ? strdup (message) : strdup ("");
-    }
-  if (id_out) *id_out = db_res_col_i64 (res, 2, &err);
-  return 0;
-}
+/* Insurance settlement operations live in the shared C repository so both
+   PostgreSQL and MySQL use the same lock and ledger semantics. */
 
 static int
 insurance_subject_owned (db_t *db, const char *subject_type, int64_t subject_id,
@@ -264,18 +246,16 @@ cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
     { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Unable to validate insured subject"); return 0; }
   if (!owned)
     { send_response_error (ctx, root, ERR_PERMISSION_DENIED, "Insured subject is not owned by the player"); return 0; }
-  char start_ts[32], expiry_ts[32], sql[1024];
+  char start_ts[32], expiry_ts[32];
   time_t now = time (NULL);
   snprintf (start_ts, sizeof start_ts, "%lld", (long long) now);
   snprintf (expiry_ts, sizeof expiry_ts, "%lld", (long long) now + duration);
-  sql_build (db, "SELECT * FROM insurance_buy_policy({1},{2},{3},{4},{5},{6},{7},{8},{9});", sql, sizeof sql);
-  db_res_t *res = NULL; db_error_t err = {0};
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_text ("player"), db_bind_i64 (ctx->player_id), db_bind_text (subject_type), db_bind_i64 (subject_id), db_bind_i64 (premium), db_bind_i64 (payout), db_bind_i64 (fund_id), db_bind_text (start_ts), db_bind_text (expiry_ts)}, 9, &res, &err))
-    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Insurance purchase failed"); return 0; }
-  int code = ERR_DB_QUERY_FAILED; int64_t policy_id = 0; char *message = NULL;
-  insurance_result (res, &code, &message, &policy_id); db_res_finalize (res);
-  if (code != 0) { send_response_error (ctx, root, code, message ? message : "Insurance purchase refused"); free (message); return 0; }
-  free (message);
+  int64_t policy_id = 0;
+  int purchase_rc = repo_ships_insurance_buy_policy
+    (db, ctx->player_id, subject_type, subject_id, premium, payout, fund_id,
+     start_ts, expiry_ts, &policy_id);
+  if (purchase_rc != 0)
+    { send_response_error (ctx, root, purchase_rc, "Insurance purchase refused"); return 0; }
   json_t *payload = json_pack ("{s:I,s:s}", "policy_id", (json_int_t) policy_id, "status", "purchased");
   send_response_ok_take (ctx, root, "insurance.policies.buy.response", &payload);
   return 0;
@@ -292,18 +272,15 @@ cmd_insurance_claim_file (client_ctx_t *ctx, json_t *root)
   const char *event_id = json_string_value (json_object_get (data, "event_id"));
   if (claim_id <= 0 || amount < 0 || !event_id || !*event_id)
     { send_response_error (ctx, root, ERR_INVALID_ARG, "claim_id, event_id and amount are required"); return 0; }
-  db_t *db = game_db_get_handle (); char sql[512];
+  db_t *db = game_db_get_handle ();
   int owned = insurance_claim_owned (db, claim_id, ctx->player_id);
   if (owned < 0) { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Unable to validate claim ownership"); return 0; }
   if (!owned) { send_response_error (ctx, root, ERR_PERMISSION_DENIED, "Claim is not owned by the player"); return 0; }
-  sql_build (db, "SELECT * FROM insurance_settle_claim({1},{2},{3});", sql, sizeof sql);
-  db_res_t *res = NULL; db_error_t err = {0};
-  if (!db_query (db, sql, (db_bind_t[]){db_bind_i64 (claim_id), db_bind_text (event_id), db_bind_i64 (amount)}, 3, &res, &err))
-    { send_response_error (ctx, root, ERR_DB_QUERY_FAILED, "Insurance claim failed"); return 0; }
-  int code = ERR_DB_QUERY_FAILED; int64_t settled_id = 0; char *message = NULL;
-  insurance_result (res, &code, &message, &settled_id); db_res_finalize (res);
-  if (code != 0) { send_response_error (ctx, root, code, message ? message : "Insurance claim refused"); free (message); return 0; }
-  free (message);
+  int64_t settled_id = 0;
+  int claim_rc = repo_ships_insurance_settle_claim
+    (db, ctx->player_id, claim_id, event_id, amount, &settled_id);
+  if (claim_rc != 0)
+    { send_response_error (ctx, root, claim_rc, "Insurance claim refused"); return 0; }
   json_t *payload = json_pack ("{s:I,s:s}", "claim_id", (json_int_t) settled_id, "status", "settled");
   send_response_ok_take (ctx, root, "insurance.claim.file.response", &payload);
   return 0;

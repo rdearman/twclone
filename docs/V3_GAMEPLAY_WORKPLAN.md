@@ -32,9 +32,9 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   proportional loss allocator into `src/slave_population.h` and added C unit
   assertions to the existing engine regression script. Its build and focused
   tests passed; that follow-up is not committed yet.
-- **Next action:** commit the verified pure allocation helper/test, then
-  continue to remaining actionable tracker requirements without restarting
-  completed Exchange/resale implementation.
+- **Next action:** preserve the portable explicit insurance command fix in a
+  separate commit after final diff review, then continue through remaining
+  actionable tracker requirements without restarting completed packages.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed

@@ -8,12 +8,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_insurance_handlers_delegate_money_and_claim_state_to_database():
     source = (ROOT / "src/server_loop.c").read_text(encoding="utf-8")
-    assert "insurance_buy_policy" in source
-    assert "insurance_settle_claim" in source
+    assert "repo_ships_insurance_buy_policy" in source
+    assert "repo_ships_insurance_settle_claim" in source
+    assert "SELECT * FROM insurance_buy_policy" not in source
+    assert "SELECT * FROM insurance_settle_claim" not in source
     assert "Policy purchased" not in source
     assert "json_integer (12345)" not in source
     assert "insurance_subject_owned" in source
     assert "insurance_claim_owned" in source
+
+
+def test_insurance_policy_and_claim_transactions_are_backend_portable():
+    repo = (ROOT / "src/db/repo/repo_ships.c").read_text(encoding="utf-8")
+    assert "repo_ships_insurance_buy_policy" in repo
+    assert "repo_ships_insurance_settle_claim" in repo
+    assert '"bank_accounts_id"' in repo and '? "bank_accounts_id" : "id"' in repo
+    assert "INSURANCE_GUARANTEE" in repo
+    assert "db_tx_begin" in repo and "db_tx_commit" in repo and "db_tx_rollback" in repo
+    assert "UPDATE insurance_claims SET status='paid'" in repo
 
 
 def test_insurance_sql_fixture_covers_success_refusal_and_idempotency():
