@@ -90,7 +90,7 @@
       "command": "bank.orders.create",
       "data": { "recipient_player_id": "@bank_target_player_id", "amount": 25, "frequency": "daily", "time_utc": "23:59" },
       "user": "bank_user",
-      "extract": { "bank_order_id": "data.order_id" },
+      "save": { "bank_order_id": "data.order_id" },
       "asserts": [
         { "path": "data.amount", "op": "==", "value": 25 },
         { "path": "data.frequency", "op": "==", "value": "daily" }
@@ -103,7 +103,7 @@
       "data": { "page": 1, "limit": 20 },
       "user": "bank_user",
       "asserts": [
-        { "path": "data.orders.0.order_id", "op": "==", "value": "@bank_order_id" },
+        { "path": "data.orders.0.order_id", "op": "==", "value": "@{bank_order_id}" },
         { "path": "data.orders.0.recipient_player_id", "op": "==", "value": "@bank_target_player_id" }
       ],
       "expect": { "status": "ok" }
@@ -111,7 +111,7 @@
     {
       "name": "Cancel the standing order",
       "command": "bank.orders.cancel",
-      "data": { "order_id": "@bank_order_id" },
+      "data": { "order_id": "@{bank_order_id}" },
       "user": "bank_user",
       "asserts": [ { "path": "data.cancelled", "op": "==", "value": true } ],
       "expect": { "status": "ok" }
@@ -119,7 +119,7 @@
     {
       "name": "Another player cannot cancel a standing order",
       "command": "bank.orders.cancel",
-      "data": { "order_id": "@bank_order_id" },
+      "data": { "order_id": "@{bank_order_id}" },
       "user": "bank_target",
       "expect": { "status": "error", "error_code": 404 }
     },

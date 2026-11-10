@@ -7,6 +7,21 @@
     { "name": "Setup: Admin", "setup": "macro_bootstrap_admin" },
     { "name": "Setup: Tax activity seller", "setup": "macro_auth_user", "username": "taxable_activity_seller", "password": "password123" },
     {
+      "name": "Save Exchange liquidity configuration",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "galactic_exchange_liquidity_credits" },
+      "expect": { "status": "ok", "data": { "type": "int" } },
+      "save": { "old_exchange_liquidity": "data.value" }
+    },
+    {
+      "name": "Fund Exchange clearing liquidity for the sale scenario",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "galactic_exchange_liquidity_credits", "value": 100000, "confirm": true },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Remove prior isolated planet goods",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -105,6 +120,25 @@
       "data": { "sql": "SELECT COUNT(*) FROM planet_economic_activity WHERE planet_id = @{test_planet_id} AND activity_type = 'market_trade' AND commodity_code = 'ORE' AND quantity = 10 AND idempotency_key LIKE 'planet-trade:sell:%';" },
       "expect": { "status": "ok" },
       "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Verify planetary-to-Exchange inventory conservation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=@{test_planet_id} AND commodity_code='ORE'), (SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'), (SELECT COUNT(*) FROM galactic_exchange_transactions WHERE planet_id=@{test_planet_id} AND commodity_code='ORE' AND quantity=10);" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 90 },
+        { "path": "data.rows.0.1", "op": "==", "value": 10 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Restore Exchange liquidity configuration",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "galactic_exchange_liquidity_credits", "value": "@old_exchange_liquidity", "confirm": true },
+      "expect": { "status": "ok" }
     }
   ]
 }

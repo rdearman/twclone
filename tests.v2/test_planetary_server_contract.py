@@ -71,6 +71,14 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertLess(sale.index("db_tx_begin"), sale.index("galactic_exchange_transactions"))
         self.assertIn("db_tx_rollback", sale)
 
+    def test_exchange_system_account_is_created_when_repository_reports_db_not_found(self):
+        bank = (ROOT / "src/server_bank.c").read_text(encoding="utf-8")
+        helper = bank.split("h_get_system_account_id_unlocked", 1)[1].split(
+            "static int", 1
+        )[0]
+        self.assertIn("rc == ERR_DB_NOT_FOUND", helper)
+        self.assertIn("h_create_bank_account_unlocked", helper)
+
     def test_exchange_offers_only_persisted_inventory_to_market_orders(self):
         self.assertIn("db_ports_get_stock_quantity (db, \"exchange\", 1", self.cron)
         self.assertIn('db_insert_commodity_order (db, "exchange", 1, "exchange", 1', self.cron)

@@ -206,7 +206,9 @@ h_get_system_account_id_unlocked (db_t *db, const char *system_owner_type,
 {
   int rc = h_get_account_id_unlocked (db, system_owner_type, system_owner_id,
 				      account_id_out);
-  if (rc == ERR_NOT_FOUND)
+  /* repo_bank_get_account_id reports an absent account as an internal
+   * database-not-found result, not the client-facing ERR_NOT_FOUND code. */
+  if (rc == ERR_DB_NOT_FOUND)
     {
       /* Create the system account if it doesn't exist */
       rc =

@@ -8,7 +8,9 @@ Exchange requirements additionally use [`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_G
 
 Status values: `NOT_STARTED`, `PARTIAL`, `IMPLEMENTED_UNVERIFIED`, `VERIFIED`,
 `BLOCKED`. Verification listed here is evidence already executed, not a plan.
-No live DB or full JSON regression run has been performed in this work session.
+Database-backed evidence for the 2026-11-10 QA integration pass is appended below;
+it does not convert source/contract coverage into runtime verification unless
+the specific workflow was exercised.
 
 | ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
 |---|---|---|---|---|---|---|
@@ -66,10 +68,10 @@ No live DB or full JSON regression run has been performed in this work session.
 | POP-012 | Restart-safe unrest idempotency | IMPLEMENTED_UNVERIFIED | persisted next/last event state, unique `(planet_id, scheduled_at)` event, row-locked daily worker; migrations 171/176 and MySQL equivalents | Static contract test executed; no DB restart/replay execution | `6bf7dcd2` | Verify replay/restart and competing workers in DB runtime |
 | POP-013 | Whole-population emancipation | IMPLEMENTED_UNVERIFIED | `cmd_planet_emancipate`, `repo_planets_emancipate` | Sanitised build; static contract suite 32 passed; no DB runtime | — | Test corp roles and transaction |
 | POP-014 | Atomic acquisition/conversion/conquest | IMPLEMENTED_UNVERIFIED | `server_ports.c::cmd_trade_buy` repeats the evil-alignment gate within purchase settlement; `repo_planets_deposit_slaves`, `repo_planets_emancipate`, and `db_planets_capture` transact deposit, emancipation and capture conversions | `test_planetary_server_contract.py` asserts alignment recheck, cargo-based deposit, exclusive population and transaction paths; no DB runtime | Existing source; current focused test suite passed (51 tests) | Exercise concurrent purchase/deposit/capture and rollback in DB-backed protocol tests |
-| EXC-001 | Persistent exchange market | IMPLEMENTED_UNVERIFIED | migration 174 extends `entity_stock` with virtual `exchange/1`; Exchange actor/location supported in orders | Focused source-contract suite passed; no DB runtime | `6bf7dcd2` | Apply migration and verify stock/actor schema in disposable DB |
-| EXC-002 | Sale into ring-fenced inventory and funded payout | IMPLEMENTED_UNVERIFIED | `cmd_planet_market_sell`; virtual system clearing account `system/70000001`; unique Exchange transaction record; configurable SysOp liquidity | ASan/UBSan build and focused source tests passed; settlement DB-unverified | `6bf7dcd2` | Test conservation, duplicate request and liquidity boundary in DB runtime |
+| EXC-001 | Persistent exchange market | IMPLEMENTED_UNVERIFIED | migration 174 extends `entity_stock` with virtual `exchange/1`; Exchange actor/location supported in orders | Clean disposable QA database applied migrations through 177; Exchange stock tables available | `6bf7dcd2` | Verify full Exchange buy-side settlement and restart |
+| EXC-002 | Sale into ring-fenced inventory and funded payout | VERIFIED | `cmd_planet_market_sell`; virtual system clearing account `system/70000001`; unique Exchange transaction record; configurable SysOp liquidity; account lookup now handles repository `ERR_DB_NOT_FOUND` | `suite_planet_taxable_activity_e2e.json`: 23/23 passed against real V3 server/PostgreSQL; asserted seller stock -10, Exchange stock +10, one transaction | `6bf7dcd2`, current working change | Extend verification to concurrent requests, retries and liquidity boundaries |
 | EXC-003 | Exchange purchases to planet/port | IMPLEMENTED_UNVERIFIED | Daily settlement refreshes Exchange sell offer from persisted inventory; existing buyer path settles fill | Source test/build; runtime unverified | `6bf7dcd2` | Test port/planet purchase, capacity, funds, partial fill and restart |
-| EXC-004 | Ring-fenced stock | IMPLEMENTED_UNVERIFIED | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; order fill conditionally debits it | Source tests; DB unverified | `6bf7dcd2` | Validate no double harvest/sale, race oversell or loss |
+| EXC-004 | Ring-fenced stock | PARTIAL | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; order fill conditionally debits it | Planet sale conservation passed in QA; market matching test left orders open and inventory unchanged, so downstream transfer not verified | `6bf7dcd2` | Diagnose and repair the observed market order settlement failure; then test double sale/harvest and concurrency |
 | EXC-005 | Virtual transport | IMPLEMENTED_UNVERIFIED | Exchange is a virtual inventory location; no vessel entities | Source inspection/build | `6bf7dcd2` | Preserve no-ship behavior in runtime acceptance |
 | EXC-006 | Open order lifecycle | IMPLEMENTED_UNVERIFIED | `repo_market.c`, `server_cron.c` | Existing tests not executed here | — | Verify partial fills, cancel and expiry |
 | EXC-007 | Port demand purchases | IMPLEMENTED_UNVERIFIED | port shortage BUY orders match the Exchange offer; clearing account serializes inventory access | Source tests/build; runtime unverified | `6bf7dcd2` | Verify account-funded restock in database |
@@ -174,4 +176,56 @@ No live DB or full JSON regression run has been performed in this work session.
 - Other recent gameplay commits: ship sale `bcaf3e93`; evil-only slave acquisition `477bc1ed`; online listing `a07b3bf4`; Godot ship-sale/population display `b7ff3720`; universal destruction `63169074`; funded hull insurance `15821cd8`.
 - `git diff --check` — passed.
 - A combined pytest command once referenced nonexistent `test_v3_population_contract.py`; that command failed collection and is not counted as a test pass. The valid focused command above was run separately and passed.
-- No PostgreSQL integration, server protocol run, full regression or Godot test was performed.
+- Prior checkpoint note (superseded by the disposable PostgreSQL integration
+  evidence immediately below): no PostgreSQL integration, server protocol run,
+  full regression or Godot test had been performed at that time.
+
+### Disposable PostgreSQL integration evidence — 2026-11-10
+
+- QA target was verified as PostgreSQL at `127.0.0.1:55438`, role
+  `twclone_qa_runner`, with `CREATEDB`; no connection was made to production
+  port 5432 or a remote host. An isolated runner-generated database was
+  migrated from clean state through migration 177 and then removed after the
+  tests. The system PostgreSQL client wrapper was unusable in the sandbox;
+  using the direct PostgreSQL 16 client with inherited `PGPASSWORD` unset and
+  the configured `.pgpass` succeeded. No password or role was changed.
+- Full real-server JSON execution completed all supported suites: 169 JSON
+  files / 161 suites discovered; 157 suites executed; 2,225 cases executed,
+  2,133 passed and 92 failed; 1 TLS suite blocked; 3 nested-DSL suites
+  unsupported; 0 not-executed cases. The runner retained this as an incomplete
+  `/tmp` report and did not replace the prior completed baseline. Server log
+  records clean engine shutdown and no crash/transport cascade.
+- Focused JSON execution: `suite_combat_sector_hazards.json` 45/45,
+  `suite_economy_insurance.json` 12/12,
+  `suite_planet_slave_unrest_config_v3.json` 11/11, and
+  `suite_planet_taxable_activity_e2e.json` 23/23 passed (91/91 total). The
+  planet sale workflow verified seller stock decreases by 10, Exchange stock
+  increases by 10, and exactly one sale transaction is recorded. This
+  verifies immediate Exchange accounting for this sale path, not subsequent
+  Exchange-to-port settlement.
+- Focused follow-up: `suite_economy_and_bank.json` 29/30 and
+  `suite_planet_market_buy_order_lifecycle.json` 25/27 (54/57 total). Standing
+  order creation/list/cancel protocol paths passed; the remaining bank failure
+  is an undocumented exact error-code expectation (implementation returns
+  403 for another player's order, while protocol only requires ownership).
+  Market matching did not settle the seeded port-to-planet pair: both orders
+  remained open, no trade was recorded, and inventories/credits were unchanged.
+  This is a reproduced runtime failure; its underlying matcher cause remains
+  unisolated and must not be reported as fixed.
+- Supplementary PostgreSQL checks: `test_pg_bank_debit_concurrency.py` passed;
+  `test_pg_ship_claim_concurrency.py` failed in its fixture because the claim
+  function resolves `federation_protected_assets` from the shared public
+  schema but the isolated test schema does not define it. Insurance settlement
+  and insurance ledger SQL scripts passed. The ship-lifecycle restart snapshot
+  script failed because included migrations commit and discard its
+  `SET LOCAL search_path`, leaving its later snapshot view unresolved. These
+  are fixture/script execution failures, not evidence of gameplay pass/fail.
+- Fresh schema inspection confirmed `taverns.enabled BOOLEAN NOT NULL DEFAULT
+  TRUE`, matching the canonical PostgreSQL migration. The previous `bigint`
+  report was not reproduced on a clean migration.
+- Source correction in this batch: `h_get_system_account_id_unlocked` now
+  recognizes the repository's `ERR_DB_NOT_FOUND` result and creates the
+  Exchange clearing account. `test_planetary_server_contract.py` passes 47
+  tests; ASan/UBSan build passed; JSON syntax validation and
+  `git diff --check` are pending final local verification. Market order
+  matching remains the next integration defect to isolate.

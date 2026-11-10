@@ -255,3 +255,47 @@ Updated 2026-11-07.
 - Current test-only changes in this batch are the `planet.info` fixture identity and this trade-offer lifecycle fixture. Both JSON files parse; the four non-AI static modules pass 23/23 and scoped `git diff --check` passes. No gameplay source change is included.
 - Re-ran those checks after the trade fixture edit: JSON parsing and scoped whitespace validation pass; targeted static tests remain 23/23. Full regression remains blocked by the one previously recorded QA-role authentication failure; no counts have changed.
 - Next action: resume V3 failure recovery from the retained case report once QA credentials authenticate. First validate the pending ship/planet/trade fixture changes and recent Quasar/event/jettison work; then address the next specification-supported implementation failure. Keep the QA blocker recorded once and continue with source-supported tasks meanwhile.
+### Disposable QA integration / gameplay verification — 2026-11-10
+
+- Confirmed the actual blocker was the sandbox execution context: exported
+  `PGPASSWORD` took precedence over the correct `.pgpass`; additionally,
+  `/usr/bin/psql` is a Debian wrapper that did not work in this sandbox. With
+  `PGPASSWORD` unset, `PGPASSFILE=/home/rick/.pgpass`, the direct PostgreSQL 16
+  client and explicitly approved host access, connection succeeded to
+  `127.0.0.1:55438` as `twclone_qa_runner`. The PostgreSQL 16 `main` cluster on
+  5432 and all remote hosts were untouched.
+- Verified disposable runner database was migrated from clean state through
+  migration 177. Its `taverns.enabled` column is `BOOLEAN NOT NULL DEFAULT
+  TRUE`, matching `sql/pg/000_tables.sql`; the old bigint report was not
+  reproduced. The temporary database was dropped after testing. QA cluster
+  remains running; the test server exited cleanly.
+- Full actual-server JSON execution: 169 JSON files / 161 suites discovered;
+  157 suites executed; 2,225 cases executed; 2,133 passed; 92 failed; 1
+  blocked (`suite_tls_smoke.json`); 3 unsupported nested-DSL suites; 0
+  unexecuted cases. Run report is `/tmp/twclone-v3-gameplay-integration-report.json.tmp`;
+  because this run contains failures/blocking, it was not promoted over the
+  prior completed report. No crash or transport cascade was observed.
+- Focused JSON run passed 91/91 across hazard (45), insurance (12), slave
+  unrest config (11), and taxable planetary activity (23). Planet-to-Exchange
+  sale verified 10 units leave planet inventory, 10 appear in Exchange stock,
+  and one transaction is recorded. This does not verify Exchange-to-port
+  matching.
+- Follow-up JSON run passed 54/57. Bank standing-order create/list/cancel
+  requests passed except the other-player cancellation test's exact 404 code
+  expectation (actual 403); the V3 contract requires ownership but does not
+  define that exact code. The market lifecycle's two settlement assertions
+  failed: the order pair remained open, no trade row appeared, and all queried
+  inventory and balances were unchanged. This reproduces a real settlement
+  path failure; exact underlying cause remains to be traced. Do not weaken the
+  test or claim it resolved.
+- Existing PostgreSQL checks: bank debit concurrency passed; ship claim
+  concurrency fixture failed because it omits `federation_protected_assets`;
+  insurance settlement and insurance ledger scripts passed; ship lifecycle
+  restart snapshot script failed because included migration commits clear its
+  local search path. These two failures are fixture/script setup problems.
+- Code change: `h_get_system_account_id_unlocked` now handles the repository's
+  `ERR_DB_NOT_FOUND` value and creates the Exchange clearing account. Focused
+  source contract tests: 47 passed; ASan/UBSan build passed before runtime;
+  final local checks pending. Next: isolate the market matcher failure with
+  the captured QA state/report and inspect exact settlement eligibility and
+  persistence path. No broad audit or QA infrastructure change is authorized.
