@@ -84,6 +84,19 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn('db_insert_commodity_order (db, "exchange", 1, "exchange", 1', self.cron)
         self.assertIn('strcmp (sell->location_type, "exchange") == 0', self.cron)
         self.assertIn('db_ports_decrement_stock (db, "exchange", sell->location_id', self.cron)
+        settlement = self.cron.split('failure_stage = "buyer_debit"', 1)[1].split(
+            'if (trade_ok)', 1
+        )[0]
+        self.assertIn("h_deduct_credits_unlocked_with_transaction_id", settlement)
+        self.assertIn("h_add_credits_unlocked_with_transaction_id", settlement)
+        trade_record = self.cron.split("db_insert_commodity_trade (db", 1)[1].split(
+            "if (failure_rc < 0)", 1
+        )[0]
+        self.assertIn("settlement_tx_buy, settlement_tx_sell", trade_record)
+        bank = (ROOT / "src/server_bank.c").read_text(encoding="utf-8")
+        self.assertIn("repo_bank_insert_transaction_returning_id", bank)
+        bank_repo = (ROOT / "src/db/repo/repo_bank.c").read_text(encoding="utf-8")
+        self.assertIn("db_exec_insert_id", bank_repo)
         self.assertIn('location_type IN (\'planet\', \'port\', \'exchange\')',
                       (ROOT / "sql/pg/174_galactic_exchange_accounting.sql").read_text())
         mysql_migration = (ROOT / "sql/my/126_galactic_exchange_accounting.sql").read_text()
@@ -681,6 +694,15 @@ class PlanetaryServerContractTests(unittest.TestCase):
         trade_insert = self.market_repo.split("db_insert_commodity_trade (", 1)[1]
         self.assertIn("buyer_location_type", trade_insert)
         self.assertIn("db_bind_i64 (buyer_location_id)", trade_insert)
+
+    def test_market_settlement_treats_positive_trade_id_as_success(self):
+        settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
+        trade_insert_check = settlement.split('failure_stage = "trade_record"', 1)[1].split(
+            "/* Checked arithmetic", 1
+        )[0]
+        self.assertIn("failure_rc = db_insert_commodity_trade", trade_insert_check)
+        self.assertIn("if (failure_rc < 0)", trade_insert_check)
+        self.assertIn("returns the inserted trade ID", trade_insert_check)
 
     def test_cancel_and_expiry_release_open_partial_orders_without_escrow(self):
         for query in ("status = 'open'",):

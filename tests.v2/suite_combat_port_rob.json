@@ -10,7 +10,7 @@
     {
       "name": "Rig: Find Target Port",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT port_id, sector_id FROM ports LIMIT 1;" },
+      "data": { "sql": "SELECT port_id, sector_id FROM ports WHERE sector_id > 10 ORDER BY sector_id, port_id LIMIT 1;" },
       "user": "admin",
       "expect": { "status": "ok" },
       "save": { "target_port_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }

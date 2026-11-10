@@ -158,12 +158,20 @@ int h_add_credits_unlocked (db_t *db,
                             const char *tx_type,
                             const char *tx_group_id,
                             long long *new_balance_out);
+int h_add_credits_unlocked_with_transaction_id (db_t *db, int account_id,
+                            long long amount, const char *tx_type,
+                            const char *tx_group_id, long long *new_balance_out,
+                            int64_t *transaction_id_out);
 int h_deduct_credits_unlocked (db_t *db,
                                int account_id,
                                long long amount,
                                const char *tx_type,
                                const char *tx_group_id,
                                long long *new_balance);
+int h_deduct_credits_unlocked_with_transaction_id (db_t *db, int account_id,
+                               long long amount, const char *tx_type,
+                               const char *tx_group_id, long long *new_balance,
+                               int64_t *transaction_id_out);
 long long h_get_config_int_unlocked (db_t *db,
                                      const char *key,
                                      long long default_value);

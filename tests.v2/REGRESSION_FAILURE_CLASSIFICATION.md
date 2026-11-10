@@ -1,31 +1,63 @@
 # Regression failure classification
 
-## Last verified completed run
-
-The latest completed full run recorded 2,096 executed cases: 1,985 passed, 111 failed, 1 blocked, 2 unsupported, and zero server crashes. A subsequent full run did not complete: PostgreSQL was unavailable before database setup. Its attempt overwrote `tests.v2/regression_report.json` with a blocked-run summary.
+Latest full execution: **2,242 executed; 2,168 passed; 74 failed**. The runner marked the report `incomplete` because one TLS suite was blocked; 157 suites executed, 3 were unsupported, and there were no server crashes. The run started at `2026-11-10T22:15:16Z`; the runner did not write a completion timestamp.
 
 | Primary classification | Cases |
 | --- | ---: |
-| IMPLEMENTATION_DEFECT | 0 |
-| FIXTURE_DEFECT | 0 |
-| OBSOLETE_V2_TEST | 0 |
-| PROTOCOL_SCHEMA_MISMATCH | 0 |
-| MISSING_IMPLEMENTATION | 0 |
-| SPECIFICATION_BLOCKER | 0 |
-| INFRASTRUCTURE | 0 |
-| UNCLASSIFIED | 111 |
-| **Failed total** | **111** |
+| IMPLEMENTATION_DEFECT | 1 |
+| MISSING_IMPLEMENTATION | 2 |
+| OBSOLETE_V2_TEST | 16 |
+| PROTOCOL_SCHEMA_MISMATCH | 3 |
+| SPECIFICATION_BLOCKER | 3 |
+| INFRASTRUCTURE | 8 |
+| UNCLASSIFIED | 6 |
+| FIXTURE_DEFECT | 35 |
+| **Failed total** | **74** |
 
-Blocked (1) and unsupported (2) are tracked separately and are not included in the failed-case classification total.
+Blocked (1) and unsupported (3) are outside the failed total.
 
-## Evidence limitation
+## Exchange attribution
 
-The preserved artifact `/tmp/twclone-v3-regression-8rk9qywp/responses.jsonl` has 1,986 rows with suite, stable case ID, test name, command, and actual response. It does not contain the runner's pass/fail verdict, expected response, or assertion results. The full report containing those verdicts is no longer present; the current report was replaced by the later PostgreSQL-blocked attempt. Suite files have also been edited since the completed run, so comparing the old responses against their current assertions would produce unreliable classifications.
+Previous full run had 92 failures; current has 74 (net change -18): 21 prior failures resolved and 3 new failures appeared. Exactly two resolved cases directly evidenced the Exchange clearing-account failure (`suite_planet_taxable_activity_e2e.json::case-0018` and `case-0019`); the other 19 resolved cases are unrelated. The current port-robbery failure is a fixture selecting a port in FedSpace, where V3 explicitly refuses aggression. Two new Exchange assertions were caused by the test port's insufficient balance, not failed matching; an explicit QA fixture funding step corrected this and the focused scenario now passes.
 
-Accordingly, the 111 are explicitly UNCLASSIFIED. The case-level `cases` list is empty because the retained evidence does not establish which of the 1,986 captured request IDs were among the 111 failures. No IDs or causes are inferred. This is an evidence blocker, not a claim that the failures share one root cause. The machine-readable record is [REGRESSION_FAILURE_CLASSIFICATION.json](REGRESSION_FAILURE_CLASSIFICATION.json).
+The focused real-server PostgreSQL Exchange flow passed **36/36 executed cases** after funding the port buyer for the intended full fill. It verified planetary sale, ring-fenced goods, port purchase, stock conservation, linked ledger settlement and retry idempotency. These focused results do not replace the full-run figures. The later `suite_combat_port_rob` fixture was corrected to select a port outside sectors 1–10; this correction has not yet been rerun.
 
-The checkpoint contains aggregate-only clusters (planet landing/defense 12; tavern/trade 11; MSL enforcement 10; police D1 8; ship cargo 8; phase-3 port trading 6; combat advanced 6; event journal 6). These counts are preserved as probable leads, not as verified memberships or a partition of the 111.
+## Largest root-cause groups
 
-## Next classification pass
+- 13: Tavern fixture violates availability, economy limit, input or alignment precondition
+- 10: Legacy port command naming or unsupported ALT commodity assumption
+- 6: Unsupported sys.run_cron_handler trigger and dependent cleanup assertions
+- 6: Fixture calls C repository function as SQL / combines statements in prepared SQL
+- 4: Legacy expected success despite approved immediate lethal entry hazard and pod destruction response
+- 3: Fixture selects a planet ID not present in generated universe
+- 2: No citadel requirement rows seeded for supported planet type
+- 2: Configured named Ferengi roster definitions not provisioned in spawned population
+- 2: Unsupported sys.run_cron_handler test hook
+- 1: Fixture leaves Exchange liquidity at configured zero default
+- 1: suite_bucket1_remainder_ship_stock_system.json: ship.jettison - Positive
+- 1: suite_bucket1_remainder_ship_stock_system.json: ship.sell - Positive
+- 1: suite_bucket1_remainder_ship_stock_system.json: ship.transfer - Positive
+- 1: suite_bucket1_remainder_ship_stock_system.json: ship.transfer_cargo - Positive
+- 1: suite_bucket1_remainder_ship_stock_system.json: shipyard.sell - Positive
+- 1: suite_combat_toll_fighters.json: Victim Warps to Toll Sector (Should Auto-Pay)
+- 1: suite_combat_toll_final_working.json: Test: Toll Collector Verified
+- 1: suite_combat_toll_final_working.json: Test: Victim Verified
+- 1: Ownership refusal test asserts undocumented exact code 404; actual refusal is 403
+- 1: Legacy status assertion expects active rather than podded after destruction
+- 1: suite_movement_move_autopilot_start.json: Positive: Start Autopilot
+- 1: suite_navigation.json: Get Route
+- 1: Legacy test expects no active ship where V3 mandates active escape pod
+- 1: Schema assertion assumes new_type_id required despite used_inventory_id alternative
+- 1: Bootstrap System player is authenticated and included in online unique-player count
+- 1: suite_police_phase_d1_enforcement.json: Test D1-D1: Dock intercept should block docking when wanted=2
+- 1: suite_police_phase_d1_enforcement.json: Test D1-L3: Dock intercept should NOT trigger in lawless cluster
+- 1: suite_ship_sale_v3.json: Sell inactive hull through shipyard.sell alias
+- 1: suite_sys_admin_boundaries.json: Admin: admin.notice (Allow)
+- 1: test_sysop_players.json: Verify Player Disconnected
+- 1: test_sysop_world.json: Set MOTD
+- 1: test_sysop_world.json: Queue Port Restock
+- 1: test_sysop_world.json: View Audit Tail
 
-When PostgreSQL is safely available, run the existing full regression against its disposable database and preserve a completed report to a separate durable path before the next attempt can overwrite it. The report must include each stable case ID, expected and actual values, and runner classification. Then classify every failed record individually; keep truly ambiguous cases UNCLASSIFIED. Do not count blocked or unsupported cases as passes.
+## Case-level evidence
+
+The JSON inventory contains each stable ID, suite, request, expected/asserted values, actual response, classification, root cause, source reference, action and confidence. Truly uncertain cases remain `UNCLASSIFIED`.

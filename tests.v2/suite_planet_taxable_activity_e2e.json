@@ -134,6 +134,112 @@
       ]
     },
     {
+      "name": "Choose a real ORE-buying port for Exchange delivery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.port_id FROM ports p JOIN port_trade pt ON pt.port_id = p.port_id WHERE pt.commodity = 'ORE' AND pt.mode = 'buy' ORDER BY p.port_id LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "exchange_test_port_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Isolate port demand and clear prior ORE inventory",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE commodity_orders SET status = 'cancelled', cancellation_reason = 'isolated Exchange delivery fixture' WHERE actor_type = 'port' AND actor_id = @{exchange_test_port_id} AND commodity_id = (SELECT commodities_id FROM commodities WHERE code = 'ORE') AND side = 'buy' AND status = 'open';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset ORE inventory at selected port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('port', @{exchange_test_port_id}, 'ORE', 0) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = 0;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fund port buyer for deterministic full Exchange fill",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance = 50000 WHERE owner_type = 'port' AND owner_id = @{exchange_test_port_id} AND currency = 'CRD' AND is_active = TRUE;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Save buyer and Exchange clearing balances before purchase",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT balance FROM bank_accounts WHERE owner_type = 'port' AND owner_id = @{exchange_test_port_id} AND currency = 'CRD' AND is_active = TRUE), (SELECT balance FROM bank_accounts WHERE owner_type = 'system' AND owner_id = 70000001 AND currency = 'CRD' AND is_active = TRUE);" },
+      "expect": { "status": "ok" },
+      "save": { "exchange_port_balance_before": "data.rows.0.0", "exchange_balance_before_port_purchase": "data.rows.0.1" }
+    },
+    {
+      "name": "Place isolated port demand for the ring-fenced ORE",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO commodity_orders (actor_type, actor_id, location_type, location_id, commodity_id, side, quantity, filled_quantity, price, status, ts, expires_at) SELECT 'port', @{exchange_test_port_id}, 'port', @{exchange_test_port_id}, commodities_id, 'buy', 10, 0, 1000000, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 hour' FROM commodities WHERE code = 'ORE';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Save isolated port demand order ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT MAX(commodity_orders_id) FROM commodity_orders WHERE actor_type = 'port' AND actor_id = @{exchange_test_port_id} AND commodity_id = (SELECT commodities_id FROM commodities WHERE code = 'ORE') AND side = 'buy' AND status = 'open';" },
+      "expect": { "status": "ok" },
+      "save": { "exchange_port_order_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Make Exchange settlement due for port purchase",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_market_settlement';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Wait for Exchange-to-port settlement",
+      "command": "delay",
+      "data": { "seconds": 65 }
+    },
+    {
+      "name": "Verify Exchange-to-port commodity and credit conservation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type = 'planet' AND entity_id = @{test_planet_id} AND commodity_code = 'ORE'), (SELECT quantity FROM entity_stock WHERE entity_type = 'exchange' AND entity_id = 1 AND commodity_code = 'ORE'), (SELECT quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = @{exchange_test_port_id} AND commodity_code = 'ORE'), (SELECT CASE WHEN status IN ('open','filled') AND filled_quantity = 10 THEN 1 ELSE 0 END FROM commodity_orders WHERE commodity_orders_id = @{exchange_port_order_id}), (SELECT COUNT(*) FROM commodity_trades ct JOIN bank_transactions b ON b.bank_transactions_id = ct.settlement_tx_buy JOIN bank_transactions s ON s.bank_transactions_id = ct.settlement_tx_sell WHERE ct.buyer_actor_type = 'port' AND ct.buyer_actor_id = @{exchange_test_port_id} AND ct.seller_actor_type = 'exchange' AND ct.seller_location_type = 'exchange' AND ct.seller_location_id = 1 AND ct.quantity = 10 AND b.direction = 'DEBIT' AND s.direction = 'CREDIT' AND b.amount = s.amount), (SELECT CASE WHEN balance = @{exchange_port_balance_before} - (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'port' AND owner_id = @{exchange_test_port_id} AND currency = 'CRD' AND is_active = TRUE), (SELECT CASE WHEN balance = @{exchange_balance_before_port_purchase} + (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'system' AND owner_id = 70000001 AND currency = 'CRD' AND is_active = TRUE);" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 90 },
+        { "path": "data.rows.0.1", "op": "==", "value": 0 },
+        { "path": "data.rows.0.2", "op": "==", "value": 10 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 },
+        { "path": "data.rows.0.4", "op": "==", "value": 1 },
+        { "path": "data.rows.0.5", "op": "==", "value": 1 },
+        { "path": "data.rows.0.6", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Retry settlement and verify Exchange sale is not duplicated",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_market_settlement';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Wait for idempotent Exchange settlement retry",
+      "command": "delay",
+      "data": { "seconds": 65 }
+    },
+    {
+      "name": "Verify retry did not duplicate stock, credits, or trade receipt",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type = 'planet' AND entity_id = @{test_planet_id} AND commodity_code = 'ORE'), (SELECT quantity FROM entity_stock WHERE entity_type = 'exchange' AND entity_id = 1 AND commodity_code = 'ORE'), (SELECT quantity FROM entity_stock WHERE entity_type = 'port' AND entity_id = @{exchange_test_port_id} AND commodity_code = 'ORE'), (SELECT COUNT(*) FROM commodity_trades WHERE buyer_actor_type = 'port' AND buyer_actor_id = @{exchange_test_port_id} AND seller_actor_type = 'exchange' AND seller_location_id = 1 AND quantity = 10), (SELECT CASE WHEN balance = @{exchange_port_balance_before} - (SELECT base_price * 10 FROM commodities WHERE code = 'ORE') THEN 1 ELSE 0 END FROM bank_accounts WHERE owner_type = 'port' AND owner_id = @{exchange_test_port_id} AND currency = 'CRD' AND is_active = TRUE);" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 90 },
+        { "path": "data.rows.0.1", "op": "==", "value": 0 },
+        { "path": "data.rows.0.2", "op": "==", "value": 10 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 },
+        { "path": "data.rows.0.4", "op": "==", "value": 1 }
+      ]
+    },
+    {
       "name": "Restore Exchange liquidity configuration",
       "command": "sysop.config.set",
       "user": "admin",

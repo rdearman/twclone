@@ -568,8 +568,8 @@ db_insert_commodity_trade (db_t *db,
                            int seller_actor_id,
                            const char *seller_location_type,
                            int seller_location_id,
-                           int settlement_tx_buy,
-                           int settlement_tx_sell)
+                           int64_t settlement_tx_buy,
+                           int64_t settlement_tx_sell)
 {
   db_error_t err;
   db_error_clear(&err);

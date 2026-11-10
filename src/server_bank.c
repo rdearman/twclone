@@ -310,22 +310,23 @@ db_get_planet_bank_balance (db_t *db, int planet_id, long long *balance_out)
 }
 
 
-int
-h_add_credits_unlocked (db_t *db,
-			int account_id,
-			long long amount,
-			const char *tx_type,
-			const char *tx_group_id, long long *out_new_balance)
+static int
+h_adjust_credits_unlocked (db_t *db, int account_id, long long amount,
+			   const char *tx_type, const char *tx_group_id,
+			   long long *out_new_balance,
+			   int64_t *transaction_id_out, bool credit)
 {
   if (!db || account_id <= 0 || amount < 0 || !tx_type)
     {
       return ERR_DB_MISUSE;
     }
   long long new_balance = 0;
-  int rc =
-    repo_bank_add_credits_returning (db, account_id, amount, &new_balance);
+  int rc = credit
+    ? repo_bank_add_credits_returning (db, account_id, amount, &new_balance)
+    : repo_bank_deduct_credits_returning (db, account_id, amount, &new_balance);
   if (rc != 0)
     {
+      if (!credit && rc == ERR_DB_NOT_FOUND) return ERR_INSUFFICIENT_FUNDS;
       return rc;
     }
 
@@ -342,14 +343,17 @@ h_add_credits_unlocked (db_t *db,
       return ERR_DB_QUERY_FAILED;	/* Unsupported backend */
     }
 
-  const char *sql_tx_template =
+  const char *sql_tx_format =
     "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
-    "VALUES ({1}, {2}, 'CREDIT', {3}, 'CRD', {4}, {5}, %s);";
+    "VALUES ({1}, {2}, '%s', {3}, 'CRD', {4}, {5}, %s);";
+  char sql_tx_template[512];
+  snprintf (sql_tx_template, sizeof sql_tx_template, sql_tx_format,
+            credit ? "CREDIT" : "DEBIT", now_epoch);
 
-  rc =
-    repo_bank_insert_transaction (db, sql_tx_template, account_id, tx_type,
-				  "CREDIT", amount, new_balance,
-				  tx_group_id ? tx_group_id : "", now_epoch);
+  rc = repo_bank_insert_transaction_returning_id
+    (db, sql_tx_template, account_id, tx_type,
+	     credit ? "CREDIT" : "DEBIT", amount, new_balance,
+	     tx_group_id ? tx_group_id : "", now_epoch, transaction_id_out);
   if (rc != 0)
     {
       return rc;
@@ -365,52 +369,41 @@ h_add_credits_unlocked (db_t *db,
 
 
 int
-h_deduct_credits_unlocked (db_t *db,
-			   int account_id,
-			   long long amount,
-			   const char *tx_type,
-			   const char *tx_group_id,
+h_add_credits_unlocked_with_transaction_id (db_t *db, int account_id,
+			   long long amount, const char *tx_type,
+			   const char *tx_group_id, long long *out_new_balance,
+			   int64_t *transaction_id_out)
+{
+  return h_adjust_credits_unlocked (db, account_id, amount, tx_type,
+      tx_group_id, out_new_balance, transaction_id_out, true);
+}
+
+int
+h_add_credits_unlocked (db_t *db, int account_id, long long amount,
+			const char *tx_type, const char *tx_group_id,
+			long long *out_new_balance)
+{
+  return h_add_credits_unlocked_with_transaction_id (db, account_id, amount,
+      tx_type, tx_group_id, out_new_balance, NULL);
+}
+
+int
+h_deduct_credits_unlocked_with_transaction_id (db_t *db, int account_id,
+			   long long amount, const char *tx_type,
+			   const char *tx_group_id, long long *out_new_balance,
+			   int64_t *transaction_id_out)
+{
+  return h_adjust_credits_unlocked (db, account_id, amount, tx_type,
+      tx_group_id, out_new_balance, transaction_id_out, false);
+}
+
+int
+h_deduct_credits_unlocked (db_t *db, int account_id, long long amount,
+			   const char *tx_type, const char *tx_group_id,
 			   long long *out_new_balance)
 {
-  if (!db || account_id <= 0 || amount < 0 || !tx_type)
-    {
-      return ERR_DB_MISUSE;
-    }
-  long long new_balance = 0;
-  int rc =
-    repo_bank_deduct_credits_returning (db, account_id, amount, &new_balance);
-  if (rc != 0)
-    {
-      if (rc == ERR_DB_NOT_FOUND)
-	return ERR_INSUFFICIENT_FUNDS;
-      return rc;
-    }
-
-  const char *now_epoch = sql_epoch_now (db);
-  if (!now_epoch)
-    {
-      return ERR_DB_QUERY_FAILED;	/* Unsupported backend */
-    }
-
-  const char *sql_tx_template =
-    "INSERT INTO bank_transactions (account_id, tx_type, direction, amount, currency, balance_after, tx_group_id, ts) "
-    "VALUES ({1}, {2}, 'DEBIT', {3}, 'CRD', {4}, {5}, %s);";
-
-  rc =
-    repo_bank_insert_transaction (db, sql_tx_template, account_id, tx_type,
-				  "DEBIT", amount, new_balance,
-				  tx_group_id ? tx_group_id : "", now_epoch);
-  if (rc != 0)
-    {
-      return rc;
-    }
-
-
-  if (out_new_balance)
-    {
-      *out_new_balance = new_balance;
-    }
-  return 0;
+  return h_deduct_credits_unlocked_with_transaction_id (db, account_id,
+      amount, tx_type, tx_group_id, out_new_balance, NULL);
 }
 
 

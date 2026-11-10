@@ -1570,7 +1570,10 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 									commodity_id,
 									"sell",
 									now_s,
-									&sell_count);
+								&sell_count);
+
+    LOGD ("daily market matcher: commodity=%s id=%d buy_orders=%d sell_orders=%d",
+          commodity_code, commodity_id, buy_count, sell_count);
 
     // 5. Matching Loop
     int b_idx = 0;
@@ -1581,6 +1584,10 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
       {
 	commodity_order_t *buy = &buy_orders[b_idx];
 	commodity_order_t *sell = &sell_orders[s_idx];
+	LOGD ("daily market candidate: buy=%d %s/%d qty=%d filled=%d price=%d; sell=%d %s/%d qty=%d filled=%d price=%d",
+	      buy->id, buy->location_type, buy->location_id, buy->quantity,
+	      buy->filled_quantity, buy->price, sell->id, sell->location_type,
+	      sell->location_id, sell->quantity, sell->filled_quantity, sell->price);
 
 
 	if (buy->price >= sell->price)
@@ -1628,15 +1635,19 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		  }
 
 		bool trade_ok = true;
+		const char *failure_stage = "inventory_lock";
+		int failure_rc = 0;
 		int trade_price = sell->price;
-	if (market_lock_inventory_pair (db, sell->location_type,
+		failure_rc = market_lock_inventory_pair (db, sell->location_type,
 	                                sell->location_id, buy->location_type,
-	                                buy->location_id) != 0)
+	                                buy->location_id);
+		if (failure_rc != 0)
 		  trade_ok = false;
-		if (trade_ok && db_ports_get_stock_quantity (db, sell->location_type,
+		failure_stage = "seller_stock_revalidation";
+		if (trade_ok && (failure_rc = db_ports_get_stock_quantity (db, sell->location_type,
 		                                              sell->location_id,
 		                                              commodity_code,
-		                                              &seller_stock) != 0)
+		                                              &seller_stock)) != 0)
 		  trade_ok = false;
 		trade_qty = qty_buy_rem < qty_sell_rem ? qty_buy_rem : qty_sell_rem;
 		if (trade_ok && seller_stock < trade_qty)
@@ -1644,9 +1655,10 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		if (trade_ok && strcmp (buy->location_type, "planet") == 0)
 		  {
 		    int current = 0, capacity = 0;
-		    if (db_planets_get_market_move_info (db, buy->location_id,
+		    failure_stage = "planet_capacity";
+		    if ((failure_rc = db_planets_get_market_move_info (db, buy->location_id,
 		                                         commodity_code, &current,
-		                                         &capacity) != 0)
+		                                         &capacity)) != 0)
 		      trade_ok = false;
 		    else if (current >= capacity)
 		      {
@@ -1662,9 +1674,10 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		else if (trade_ok && strcmp (buy->location_type, "port") == 0)
 		  {
 		    int current = 0, capacity = 0;
-		    if (db_ports_get_market_move_info (db, buy->location_id,
+		    failure_stage = "port_capacity";
+		    if ((failure_rc = db_ports_get_market_move_info (db, buy->location_id,
 		                                      commodity_code, &current,
-		                                      &capacity) != 0)
+		                                      &capacity)) != 0)
 		      trade_ok = false;
 		    else if (current >= capacity)
 		      {
@@ -1679,12 +1692,14 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		  }
 		int buyer_acct = 0;
 		long long buyer_balance = 0;
-		if (trade_ok && h_get_account_id_unlocked (db, buy->actor_type,
+		failure_stage = "buyer_account";
+		if (trade_ok && (failure_rc = h_get_account_id_unlocked (db, buy->actor_type,
 		                                           buy->actor_id,
-		                                           &buyer_acct) != 0)
+		                                           &buyer_acct)) != 0)
 		  trade_ok = false;
-		if (trade_ok && repo_bank_get_balance_by_account_id_for_update
-		    (db, buyer_acct, &buyer_balance) != 0)
+		failure_stage = "buyer_balance_lock";
+		if (trade_ok && (failure_rc = repo_bank_get_balance_by_account_id_for_update
+		    (db, buyer_acct, &buyer_balance)) != 0)
 		  trade_ok = false;
 		if (trade_ok && trade_price > 0 && trade_qty > 0)
 		  {
@@ -1699,11 +1714,16 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		if (!trade_ok)
 		  {
 		    db_tx_rollback (db, &err);
-		    LOGE ("h_daily_market_settlement: failed to lock/revalidate match inputs");
+		    LOGE ("h_daily_market_settlement: match buy=%d sell=%d failed at %s rc=%d db=%d: %s",
+		          buy->id, sell->id, failure_stage, failure_rc, err.code,
+		          err.message);
 		    break;
 		  }
 		if (trade_qty <= 0)
 		  {
+	    LOGD ("daily market match unavailable: buy=%d sell=%d capacity_full=%d funds_limited=%d balance=%lld",
+		          buy->id, sell->id, buyer_capacity_full,
+		          buyer_funds_limited, buyer_balance);
 		    buyer_cancel_reason = buyer_capacity_full ? "no_capacity"
 		      : (buyer_funds_limited ? "insufficient_credits" : NULL);
 		    if (buyer_cancel_reason)
@@ -1729,50 +1749,53 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		  }
 		long long total_cost = (long long) trade_qty * trade_price;
 
+		failure_stage = "seller_inventory_debit";
 		if (trade_ok && strcmp (sell->location_type, "port") == 0)
 		  {
-		    if (h_market_move_port_stock (db,
+		    if ((failure_rc = h_market_move_port_stock (db,
 						  sell->location_id,
 						  commodity_code,
-						  -trade_qty) != 0)
+						  -trade_qty)) != 0)
 		      trade_ok = false;
 		  }
 	else if (trade_ok && strcmp (sell->location_type, "planet") == 0)
 		  {
-		    if (h_market_move_planet_stock (db,
+		    if ((failure_rc = h_market_move_planet_stock (db,
 						    sell->location_id,
 						    commodity_code,
-						    -trade_qty) != 0)
+						    -trade_qty)) != 0)
 		      trade_ok = false;
 		  }
 		else if (trade_ok && strcmp (sell->location_type, "exchange") == 0)
 		  {
-		    if (db_ports_decrement_stock (db, "exchange", sell->location_id,
+		    if ((failure_rc = db_ports_decrement_stock (db, "exchange", sell->location_id,
 		                                  commodity_code, trade_qty,
-		                                  now_s) != 0)
+		                                  now_s)) != 0)
 		      trade_ok = false;
 		  }
 
+		failure_stage = "buyer_inventory_credit";
 		if (trade_ok && strcmp (buy->location_type, "port") == 0)
 		  {
-		    if (h_market_move_port_stock (db,
+		    if ((failure_rc = h_market_move_port_stock (db,
 						  buy->location_id,
 						  commodity_code,
-						  trade_qty) != 0)
+						  trade_qty)) != 0)
 		      trade_ok = false;
 		  }
 		else if (trade_ok && strcmp (buy->location_type, "planet") == 0)
 		  {
-		    if (h_market_move_planet_stock (db,
-						    buy->location_id,
-						    commodity_code,
-						    trade_qty) != 0)
+		    if ((failure_rc = h_market_move_planet_stock (db,
+							    buy->location_id,
+							    commodity_code,
+							    trade_qty)) != 0)
 		    trade_ok = false;
 		  }
 
 		/* Lock and validate inventory before account rows. This matches the
 		 * player-facing market paths' entity -> cargo/account lock order. */
 		int seller_acct = 0;
+		failure_stage = "seller_account";
 		if (trade_ok)
 		  {
 		    int account_rc = strcmp (sell->actor_type, "exchange") == 0
@@ -1781,21 +1804,33 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		      : h_get_account_id_unlocked (db, sell->actor_type, sell->actor_id,
 		                                   &seller_acct);
 		    if (account_rc != 0)
+		      {
+		        failure_rc = account_rc;
 		      trade_ok = false;
+		      }
 		  }
 		long long new_bal;
-		if (trade_ok && h_deduct_credits_unlocked (db, buyer_acct,
+		int64_t settlement_tx_buy = 0;
+		int64_t settlement_tx_sell = 0;
+		failure_stage = "buyer_debit";
+		if (trade_ok && (failure_rc = h_deduct_credits_unlocked_with_transaction_id (db, buyer_acct,
 							   total_cost, "TRADE_BUY",
 							   "MARKET_SETTLEMENT",
-							   &new_bal) != 0)
+							   &new_bal, &settlement_tx_buy)) != 0)
 		  trade_ok = false;
-		if (trade_ok && h_add_credits_unlocked (db, seller_acct,
-						       total_cost, "TRADE_SELL",
-						       "MARKET_SETTLEMENT",
-						       &new_bal) != 0)
+		failure_stage = "seller_credit";
+		if (trade_ok && (failure_rc = h_add_credits_unlocked_with_transaction_id (db, seller_acct,
+							       total_cost, "TRADE_SELL",
+							       "MARKET_SETTLEMENT",
+							       &new_bal, &settlement_tx_sell)) != 0)
 		  trade_ok = false;
 
-		if (trade_ok && db_insert_commodity_trade (db,
+		failure_stage = "trade_record";
+		if (trade_ok)
+		  {
+		    /* The repository returns the inserted trade ID (positive) on
+		     * success and a negative value on failure; it is not a 0/-1 status. */
+		    failure_rc = db_insert_commodity_trade (db,
 							   commodity_id,
 							   buy->id,
 							   sell->id,
@@ -1809,8 +1844,12 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 							   sell->actor_id,
 							   sell->location_type,
 							   sell->location_id,
-							   0, 0) != 0)
-		  trade_ok = false;
+							   settlement_tx_buy, settlement_tx_sell);
+		    if (failure_rc < 0)
+		      trade_ok = false;
+		    else
+		      failure_rc = 0;
+		  }
 
 		if (trade_ok)
 		  {
@@ -1843,11 +1882,12 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 	              : (buyer_funds_limited ? "insufficient_credits" : NULL);
 
 
-		    if (db_update_commodity_order_state (db,
+		    failure_stage = "buy_order_update";
+		    if ((failure_rc = db_update_commodity_order_state (db,
 						         buy->id,
 						         buy->quantity,
 						         buy->filled_quantity,
-						         b_status, cancel_reason) != 0)
+						         b_status, cancel_reason)) != 0)
 		      trade_ok = false;
 
 		    const char *s_status = (sell->filled_quantity >=
@@ -1855,16 +1895,18 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		      "open";
 
 
-		    if (trade_ok && db_update_commodity_order (db,
+		    failure_stage = "sell_order_update";
+		    if (trade_ok && (failure_rc = db_update_commodity_order (db,
 							       sell->id,
 							       sell->quantity,
 							       sell->filled_quantity,
-							       s_status) != 0)
+							       s_status)) != 0)
 		      trade_ok = false;
 		  }
 
 		if (trade_ok)
 		  {
+		    failure_stage = "commit";
 		    if (!db_tx_commit (db, &err))
 		      {
 			LOGE ("h_daily_market_settlement: commit failed: %s",
@@ -1876,6 +1918,10 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		if (!trade_ok)
 		  {
 		    db_tx_rollback (db, &err);
+		    if (!commit_failed)
+		      LOGE ("h_daily_market_settlement: rolling back buy=%d sell=%d qty=%d at %s rc=%d db=%d: %s",
+		            buy->id, sell->id, trade_qty, failure_stage,
+		            failure_rc, err.code, err.message);
 		    buy->filled_quantity = prior_buy_filled;
 		    sell->filled_quantity = prior_sell_filled;
 		    if (commit_failed)
@@ -1891,6 +1937,8 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		      }
 		    continue;
 		  }
+		LOGI ("daily market settlement committed: buy=%d sell=%d qty=%d unit_price=%d",
+		      buy->id, sell->id, trade_qty, trade_price);
 
 		if (buy->filled_quantity >= buy->quantity
 	            || buyer_capacity_limited || buyer_funds_limited)

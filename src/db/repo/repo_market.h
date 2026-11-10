@@ -112,8 +112,8 @@ int db_insert_commodity_trade (db_t *db,
                                int seller_actor_id,
                                const char *seller_location_type,
                                int seller_location_id,
-                               int settlement_tx_buy,
-                               int settlement_tx_sell);
+                               int64_t settlement_tx_buy,
+                               int64_t settlement_tx_sell);
 
 // Helper to list open orders for a specific port (read-only, for diagnostics)
 // Returns 0 on success, populating out_orders.

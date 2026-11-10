@@ -68,17 +68,17 @@ the specific workflow was exercised.
 | POP-012 | Restart-safe unrest idempotency | IMPLEMENTED_UNVERIFIED | persisted next/last event state, unique `(planet_id, scheduled_at)` event, row-locked daily worker; migrations 171/176 and MySQL equivalents | Static contract test executed; no DB restart/replay execution | `6bf7dcd2` | Verify replay/restart and competing workers in DB runtime |
 | POP-013 | Whole-population emancipation | IMPLEMENTED_UNVERIFIED | `cmd_planet_emancipate`, `repo_planets_emancipate` | Sanitised build; static contract suite 32 passed; no DB runtime | — | Test corp roles and transaction |
 | POP-014 | Atomic acquisition/conversion/conquest | IMPLEMENTED_UNVERIFIED | `server_ports.c::cmd_trade_buy` repeats the evil-alignment gate within purchase settlement; `repo_planets_deposit_slaves`, `repo_planets_emancipate`, and `db_planets_capture` transact deposit, emancipation and capture conversions | `test_planetary_server_contract.py` asserts alignment recheck, cargo-based deposit, exclusive population and transaction paths; no DB runtime | Existing source; current focused test suite passed (51 tests) | Exercise concurrent purchase/deposit/capture and rollback in DB-backed protocol tests |
-| EXC-001 | Persistent exchange market | IMPLEMENTED_UNVERIFIED | migration 174 extends `entity_stock` with virtual `exchange/1`; Exchange actor/location supported in orders | Clean disposable QA database applied migrations through 177; Exchange stock tables available | `6bf7dcd2` | Verify full Exchange buy-side settlement and restart |
+| EXC-001 | Persistent exchange market | VERIFIED | migration 174 extends `entity_stock` with virtual `exchange/1`; Exchange actor/location supported in orders | Clean disposable QA database applied migrations through 177; end-to-end planet sale and port purchase read/write Exchange stock | `6bf7dcd2` | Verify restart recovery and supported MySQL migration path |
 | EXC-002 | Sale into ring-fenced inventory and funded payout | VERIFIED | `cmd_planet_market_sell`; virtual system clearing account `system/70000001`; unique Exchange transaction record; configurable SysOp liquidity; account lookup now handles repository `ERR_DB_NOT_FOUND` | `suite_planet_taxable_activity_e2e.json`: 23/23 passed against real V3 server/PostgreSQL; asserted seller stock -10, Exchange stock +10, one transaction | `6bf7dcd2`, current working change | Extend verification to concurrent requests, retries and liquidity boundaries |
-| EXC-003 | Exchange purchases to planet/port | IMPLEMENTED_UNVERIFIED | Daily settlement refreshes Exchange sell offer from persisted inventory; existing buyer path settles fill | Source test/build; runtime unverified | `6bf7dcd2` | Test port/planet purchase, capacity, funds, partial fill and restart |
-| EXC-004 | Ring-fenced stock | PARTIAL | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; order fill conditionally debits it | Planet sale conservation passed in QA; market matching test left orders open and inventory unchanged, so downstream transfer not verified | `6bf7dcd2` | Diagnose and repair the observed market order settlement failure; then test double sale/harvest and concurrency |
+| EXC-003 | Exchange purchases to planet/port | PARTIAL | Daily settlement refreshes Exchange sell offer from persisted inventory; existing buyer path settles fill | Disposable PostgreSQL JSON scenario verified Exchange-to-port transfer, ledger rows and account balances (35/35 cases); Exchange-to-planet buyer path not exercised | `6bf7dcd2`, current working change | Exercise planet buyer, capacity/funds boundaries, and restart |
+| EXC-004 | Ring-fenced stock | PARTIAL | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; matching conditionally debits it | PostgreSQL JSON scenario verified planet -10, Exchange +10, Exchange -10, port +10 and no duplicate on a second settlement tick | `6bf7dcd2`, current working change | Verify sale-versus-harvest/construction races and concurrent buyers |
 | EXC-005 | Virtual transport | IMPLEMENTED_UNVERIFIED | Exchange is a virtual inventory location; no vessel entities | Source inspection/build | `6bf7dcd2` | Preserve no-ship behavior in runtime acceptance |
-| EXC-006 | Open order lifecycle | IMPLEMENTED_UNVERIFIED | `repo_market.c`, `server_cron.c` | Existing tests not executed here | — | Verify partial fills, cancel and expiry |
-| EXC-007 | Port demand purchases | IMPLEMENTED_UNVERIFIED | port shortage BUY orders match the Exchange offer; clearing account serializes inventory access | Source tests/build; runtime unverified | `6bf7dcd2` | Verify account-funded restock in database |
-| EXC-008 | Commodity conservation | IMPLEMENTED_UNVERIFIED | immediate sale transfers exact planetary quantity to Exchange; fills conditionally debit Exchange stock | Source tests; DB unverified | `6bf7dcd2` | DB conservation/concurrency/restart checks |
-| EXC-009 | Financial integrity and game liquidity | IMPLEMENTED_UNVERIFIED | virtual clearing account and explicit `SYSTEM_LIQUIDITY` injection under nonnegative `galactic_exchange_liquidity_credits` target | Build/source tests; runtime unverified | `6bf7dcd2` | Verify ledger settlement and SysOp set/get |
-| EXC-010 | Audit named market paths | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `server_cron.c`, `repo_market.c` | Source audit documented; no runtime tests | — | Resolve Exchange gaps |
-| EXC-011 | No loss/duplication/oversell | IMPLEMENTED_UNVERIFIED | conditional stock decrement, bilateral settlement, and stable `(location_type, location_id)` lock ordering in `market_lock_inventory_pair` | Focused source contract asserts stable order; sanitizer build and focused tests pass; no DB race/retry/restart test | `c12668c2` | Verify concurrent opposite-direction matches, retry, and restart in DB runtime |
+| EXC-006 | Open order lifecycle | PARTIAL | `repo_market.c`, `server_cron.c` | Real matcher partially filled port demand and persisted a trade; second tick did not repeat it. Existing lifecycle JSON covers cancellation/expiry separately | `6bf7dcd2`, current working change | Reconcile larger merged order remainder and test cancellation/expiry with DB runtime |
+| EXC-007 | Port demand purchases | VERIFIED (port path) | port shortage BUY orders match the Exchange offer; clearing account settles port debit/system credit | `suite_planet_taxable_activity_e2e.json`, focused disposable PostgreSQL run 35/35; port stock +10, port balance -1,000, clearing balance +1,000 | current working change | Verify other port classes and insufficient-balance behavior |
+| EXC-008 | Commodity conservation | VERIFIED (tested path) | immediate sale transfers planet stock to Exchange; fill conditionally debits Exchange and credits port stock | Focused PostgreSQL JSON run verified planet 100→90, Exchange 0→10→0, port 0→10; all quantities conserved | current working change | Verify planet buyers and simultaneous sales/harvest |
+| EXC-009 | Financial integrity and game liquidity | VERIFIED (tested settlement) | clearing account and explicit `SYSTEM_LIQUIDITY`; matcher records actual debit/credit `bank_transactions` IDs in `commodity_trades` | Focused PostgreSQL JSON run verified port debit and clearing credit, equal amounts, and no second debit on retry; ASan/UBSan build passed | current working change | Concurrent settlement and liquidity boundary/restart tests remain |
+| EXC-010 | Audit named market paths | VERIFIED (targeted paths) | `cmd_planet_market_sell`, `h_daily_market_settlement`, `h_market_move_port_stock`, market/bank repositories | Actual V3 server/PostgreSQL exercised planet sale→Exchange→port purchase, credit/ledger settlement and retry | current working change | Extend runtime evidence to other buyer types and simultaneous requests |
+| EXC-011 | No loss/duplication/oversell | PARTIAL | conditional stock decrement, bilateral settlement, deterministic `(location_type, location_id)` lock order; matched trades reference persisted bank ledger transactions | Sequential DB retry was idempotent; concurrent matcher stress was not executed. Prior direct test had two settlement defects now corrected | `c12668c2`, current working change | Execute simultaneous matching against shared disposable DB; verify no deadlock/oversell |
 | EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
 | COMBAT-001 | Universal escape-pod respawn | IMPLEMENTED_UNVERIFIED | `repo_ships_handle_destruction`; command, NPC/player combat, Captain Z, engine self-destruct and legacy repository entry points converge via `handle_ship_destruction` | Added lethal-NPC and lethal-PvP assertions, including NPC-owner exclusion; focused planetary/hazard tests: 41 passed; ASan/UBSan build passed; runtime unverified | `63169074`, `aaf8a02e`, `6d2e36f0` | Exercise NPC- and player-caused lethal combat through JSON and verify pod/insurance state |
 | COMBAT-002 | No starter-ship respawn | IMPLEMENTED_UNVERIFIED | shared repository creates canonical Escape Pod at sector 1 and assigns it active | Source contract and ASan/UBSan build; no server/DB runtime | `63169074` | JSON state assertion / runtime test |
@@ -229,3 +229,32 @@ the specific workflow was exercised.
   tests; ASan/UBSan build passed; JSON syntax validation and
   `git diff --check` are pending final local verification. Market order
   matching remains the next integration defect to isolate.
+- Exchange matcher correction: `h_daily_market_settlement` now treats the
+  positive inserted `commodity_trades` ID as success (the repository returns
+  a row ID, not a boolean status), and records the actual buyer-debit and
+  seller-credit `bank_transactions` IDs instead of zero in the trade receipt.
+  This resolves both the prior rollback at trade-record interpretation and
+  the settlement FK failure. Verification: `make -C bin -j2` passed with
+  ASan/UBSan; `python3 -m pytest -q
+  tests.v2/test_planetary_server_contract.py` passed (48); focused actual V3
+  server/PostgreSQL `suite_planet_taxable_activity_e2e.json` passed 36/36,
+  after the fixture funded the intended full port purchase. It verifies
+  planet→Exchange→port stock/credit conservation, ledger linkage and repeat-tick
+  idempotency. Concurrent matcher execution and server-restart recovery remain
+  unverified. The latest full execution ran 2,242 cases: 2,168 passed, 74
+  failed, 1 blocked and 3 unsupported; zero crashes. The report is incomplete
+  because of its blocked TLS suite, not a server failure. Relative to the prior
+  92-failure report, 21 failures resolved and 3 appeared (net -18); exactly two
+  resolved cases directly evidenced the Exchange clearing-account failure.
+  See `tests.v2/REGRESSION_FAILURE_CLASSIFICATION.md` for all 74 case records.
+- `suite_combat_port_rob.json::case-0009` was a fixture defect: the fixture
+  selected an arbitrary port, potentially in FedSpace, where protocol §23
+  mandates refusal of aggression. It now selects a stable port outside sectors
+  1–10. This correction has not yet been runtime-rerun.
+- Re-running `make regression-full` in the sandbox stopped before migration or
+  gameplay execution: BigBang could not connect to its admin DB. A read-only
+  connection made with approved QA credentials confirmed `postgres`,
+  `127.0.0.1:55438`, user `twclone_qa_runner`. The runner could not be retried
+  outside the sandbox because the permission review rejected that command;
+  this is not evidence of a bad password or a gameplay failure. No production
+  or remote database was contacted.

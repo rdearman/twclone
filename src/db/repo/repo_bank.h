@@ -14,6 +14,7 @@ int repo_bank_get_account_id(db_t *db, const char *owner_type, int owner_id, int
 int repo_bank_create_system_notice(db_t *db, const char *now_ts, int player_id, const char *msg);
 int repo_bank_add_credits_returning(db_t *db, int account_id, long long amount, long long *new_balance_out);
 int repo_bank_insert_transaction(db_t *db, const char *sql_template, int account_id, const char *tx_type, const char *direction, long long amount, long long balance_after, const char *tx_group_id, const char *now_epoch);
+int repo_bank_insert_transaction_returning_id(db_t *db, const char *sql_template, int account_id, const char *tx_type, const char *direction, long long amount, long long balance_after, const char *tx_group_id, const char *now_epoch, int64_t *transaction_id_out);
 int repo_bank_deduct_credits_returning(db_t *db, int account_id, long long amount, long long *new_balance_out);
 int repo_bank_create_account_if_not_exists(db_t *db, const char *owner_type, int owner_id, long long initial_balance);
 int repo_bank_set_frozen_status(db_t *db, int player_id, int is_frozen);

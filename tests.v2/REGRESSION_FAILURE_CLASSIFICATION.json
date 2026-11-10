@@ -1,46 +1,3080 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "run": {
-    "status": "last_completed_run; subsequent_run_blocked",
-    "executed": 2096,
-    "passed": 1985,
-    "failed": 111,
+    "report": "Original completed report path tests.v2/regression_report.json.tmp; overwritten by subsequent blocked attempt; case-level details retained in this inventory.",
+    "status": "incomplete",
+    "started_at": "2026-11-10T22:15:16.850901+00:00",
+    "finished_at": null,
+    "suites_discovered": 161,
+    "suites_executed": 157,
+    "cases_executed": 2242,
+    "passed": 2168,
+    "failed": 74,
     "blocked": 1,
-    "unsupported": 2,
-    "server_crashes": 0,
-    "response_artifact": "/tmp/twclone-v3-regression-8rk9qywp/responses.jsonl",
-    "response_rows": 1986,
-    "report_status": "tests.v2/regression_report.json was overwritten by the later PostgreSQL-blocked attempt and contains no completed per-case verdicts"
+    "unsupported": 3,
+    "server_crashes": 0
   },
   "classification_counts": {
-    "IMPLEMENTATION_DEFECT": 0,
-    "FIXTURE_DEFECT": 0,
-    "OBSOLETE_V2_TEST": 0,
-    "PROTOCOL_SCHEMA_MISMATCH": 0,
-    "MISSING_IMPLEMENTATION": 0,
-    "SPECIFICATION_BLOCKER": 0,
-    "INFRASTRUCTURE": 0,
-    "UNCLASSIFIED": 111
+    "IMPLEMENTATION_DEFECT": 1,
+    "MISSING_IMPLEMENTATION": 2,
+    "OBSOLETE_V2_TEST": 16,
+    "PROTOCOL_SCHEMA_MISMATCH": 3,
+    "SPECIFICATION_BLOCKER": 3,
+    "INFRASTRUCTURE": 8,
+    "UNCLASSIFIED": 6,
+    "FIXTURE_DEFECT": 35
   },
   "blocked_cases": 1,
-  "unsupported_cases": 2,
-  "cases": [],
-  "evidence_gaps": [
-    "The retained responses.jsonl records suite, stable ID, test name, command and actual response, but not runner verdict, expected response or assertions.",
-    "The current suite definitions include edits made after the completed run, so recomputing verdicts from them would not reliably reproduce that run.",
-    "The later regression attempt failed before database setup because the configured PostgreSQL listener was unavailable; its report replaced the previous complete report.",
-    "The checkpoint records several aggregate failure clusters but does not enumerate the stable IDs belonging to those clusters."
+  "unsupported_cases": 3,
+  "cases": [
+    {
+      "case_id": "suite_bucket1_remainder_planet.json::case-0019",
+      "suite": "suite_bucket1_remainder_planet.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture leaves Exchange liquidity at configured zero default",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "planet.market.sell",
+        "case_name": "planet.market.sell - Positive",
+        "failure_reason": "Status: refused != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-refuse",
+          "reply_to": "test-17352eba03464520a797471151ed01c6",
+          "ts": "2026-11-10T21:30:11Z",
+          "status": "refused",
+          "type": "error",
+          "error": {
+            "code": 1403,
+            "message": "The Galactic Exchange has insufficient configured liquidity."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_ship_stock_system.json::case-0011",
+      "suite": "suite_bucket1_remainder_ship_stock_system.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_bucket1_remainder_ship_stock_system.json: ship.jettison - Positive",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "ship.jettison",
+        "case_name": "ship.jettison - Positive",
+        "failure_reason": "Status: refused != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-refuse",
+          "reply_to": "test-98f81f7756a44cffa636c36990b38846",
+          "ts": "2026-11-10T21:30:14Z",
+          "status": "refused",
+          "type": "error",
+          "error": {
+            "code": 1495,
+            "message": "You do not carry enough of that commodity to jettison."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_ship_stock_system.json::case-0015",
+      "suite": "suite_bucket1_remainder_ship_stock_system.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "suite_bucket1_remainder_ship_stock_system.json: ship.sell - Positive",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "ship.sell",
+        "case_name": "ship.sell - Positive",
+        "failure_reason": "Error Code: 1301 != 502",
+        "expected": {
+          "status": "error",
+          "error_code": 502
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-d179bcd104584ba0be5001fd55fc12f4",
+          "ts": "2026-11-10T21:30:14Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1301,
+            "message": "missing required property: replacement_ship_id"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_ship_stock_system.json::case-0019",
+      "suite": "suite_bucket1_remainder_ship_stock_system.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_bucket1_remainder_ship_stock_system.json: ship.transfer - Positive",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "ship.transfer",
+        "case_name": "ship.transfer - Positive",
+        "failure_reason": "Error Code: 1900 != 502",
+        "expected": {
+          "status": "error",
+          "error_code": 502
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-refuse",
+          "reply_to": "test-227f77250a9d42bdbc5cce9c51dcc04d",
+          "ts": "2026-11-10T21:30:14Z",
+          "status": "refused",
+          "type": "error",
+          "error": {
+            "code": 1900,
+            "message": "Transfer recipient does not exist"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_ship_stock_system.json::case-0021",
+      "suite": "suite_bucket1_remainder_ship_stock_system.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_bucket1_remainder_ship_stock_system.json: ship.transfer_cargo - Positive",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "ship.transfer_cargo",
+        "case_name": "ship.transfer_cargo - Positive",
+        "failure_reason": "Error Code: 1463 != 502",
+        "expected": {
+          "status": "error",
+          "error_code": 502
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-refuse",
+          "reply_to": "test-6b1bd1799dd34efdace3b3c1d4094fde",
+          "ts": "2026-11-10T21:30:14Z",
+          "status": "refused",
+          "type": "error",
+          "error": {
+            "code": 1463,
+            "message": "Target ship is not in your sector."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_ship_stock_system.json::case-0025",
+      "suite": "suite_bucket1_remainder_ship_stock_system.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "suite_bucket1_remainder_ship_stock_system.json: shipyard.sell - Positive",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "shipyard.sell",
+        "case_name": "shipyard.sell - Positive",
+        "failure_reason": "Error Code: 1301 != 502",
+        "expected": {
+          "status": "error",
+          "error_code": 502
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-760417697ec94c4aa184513ec3d7938c",
+          "ts": "2026-11-10T21:30:14Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1301,
+            "message": "missing required property: replacement_ship_id"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0013",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.deadpool.place_bet",
+        "case_name": "tavern.deadpool.place_bet - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-e3b41450264c461b9644d32e1e26adf3",
+          "ts": "2026-11-10T21:30:16Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1825,
+            "message": "Target player not found."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0017",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.highstakes.play",
+        "case_name": "tavern.highstakes.play - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-56a94273996a49dab58c347791d6fa54",
+          "ts": "2026-11-10T21:30:17Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 400,
+            "message": "Bet amount must be positive."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0019",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.loan.pay",
+        "case_name": "tavern.loan.pay - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-7e30361b4dff466380c8f149602462ae",
+          "ts": "2026-11-10T21:30:17Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1830,
+            "message": "The Loan Shark is not currently available."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0021",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.lottery.buy_ticket",
+        "case_name": "tavern.lottery.buy_ticket - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-8b2c70fb867d4cd2ad51bbc8a37deb4a",
+          "ts": "2026-11-10T21:30:17Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 400,
+            "message": "Lottery ticket number must be between 1 and 999."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0025",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.raffle.buy_ticket",
+        "case_name": "tavern.raffle.buy_ticket - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-528be650f2f64039ba1917f576f4c03f",
+          "ts": "2026-11-10T21:30:17Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1821,
+            "message": "Raffle ticket price exceeds maximum per transaction."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0027",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.rumour.get_hint",
+        "case_name": "tavern.rumour.get_hint - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-392046edc2904f63adf9eb48c31c8e83",
+          "ts": "2026-11-10T21:30:17Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1821,
+            "message": "Hint cost exceeds maximum transaction limit."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0029",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.trader.buy_password",
+        "case_name": "tavern.trader.buy_password - Positive",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-2dc2fe9800e54f8d944f3f24ce3844de",
+          "ts": "2026-11-10T21:30:17Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1833,
+            "message": "You are too honorable to access the underground."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_bucket1_remainder_tavern_trade.json::case-0044",
+      "suite": "suite_bucket1_remainder_tavern_trade.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "trade.sell",
+        "case_name": "trade.sell - Positive",
+        "failure_reason": "Status: refused != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-refuse",
+          "reply_to": "test-19a1d5990e0d4323abe2ac6209e2b877",
+          "ts": "2026-11-10T21:30:18Z",
+          "status": "refused",
+          "type": "error",
+          "error": {
+            "code": 1701,
+            "message": "Port is not buying this commodity right now."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_citadel.json::case-0011",
+      "suite": "suite_combat_citadel.json",
+      "primary_classification": "MISSING_IMPLEMENTATION",
+      "root_cause_group": "No citadel requirement rows seeded for supported planet type",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "citadel.build",
+        "case_name": "Positive: Citadel Build",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-343a7a030c784ceeafe059d99311385b",
+          "ts": "2026-11-10T21:30:27Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 404,
+            "message": "Could not retrieve upgrade requirements for this planet type."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Citadel gameplay contract and suite_combat_citadel.json. Schema declares citadel_requirements, but canonical PostgreSQL SQL has no INSERT seed for that table.",
+      "proposed_corrective_action": "Provide canonical supported-planet citadel requirement data or approved lookup behavior, then rerun build and upgrade acceptance cases.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_citadel.json::case-0014",
+      "suite": "suite_combat_citadel.json",
+      "primary_classification": "MISSING_IMPLEMENTATION",
+      "root_cause_group": "No citadel requirement rows seeded for supported planet type",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "citadel.upgrade",
+        "case_name": "Positive: Citadel Upgrade",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-b93febb25d93493390de7b69cc665a0b",
+          "ts": "2026-11-10T21:30:27Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 404,
+            "message": "Could not retrieve upgrade requirements for this planet type."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Citadel gameplay contract and suite_combat_citadel.json. Schema declares citadel_requirements, but canonical PostgreSQL SQL has no INSERT seed for that table.",
+      "proposed_corrective_action": "Provide canonical supported-planet citadel requirement data or approved lookup behavior, then rerun build and upgrade acceptance cases.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_quasar.json::case-0010",
+      "suite": "suite_combat_quasar.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy expected success despite approved immediate lethal entry hazard and pod destruction response",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "move.warp",
+        "case_name": "Victim Warps to Quasar Sector (Should Take Damage)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.sector_id",
+            "op": "==",
+            "value": "@target_sector_id"
+          }
+        ],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-74213c6b31754f33a1f50538543b869f",
+          "ts": "2026-11-10T21:30:35Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 402,
+            "message": "Ship destroyed by sector hazards.",
+            "data": {
+              "sector_id": 555,
+              "current_sector_id": 1,
+              "ship_destroyed": true,
+              "hazards": []
+            }
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_quasar.json::case-0012",
+      "suite": "suite_combat_quasar.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy expected success despite approved immediate lethal entry hazard and pod destruction response",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "move.warp",
+        "case_name": "Victim Warps Away",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-c1a93cd597af46fd9ef6dbef5d921842",
+          "ts": "2026-11-10T21:30:35Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1453,
+            "message": "No link"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_quasar.json::case-0013",
+      "suite": "suite_combat_quasar.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy expected success despite approved immediate lethal entry hazard and pod destruction response",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "move.warp",
+        "case_name": "Victim Warps Back to Quasar Sector (Should Take Damage Again)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-47e441f44e9d436b9ebcfedf945200f2",
+          "ts": "2026-11-10T21:30:36Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 402,
+            "message": "Ship destroyed by sector hazards.",
+            "data": {
+              "sector_id": 555,
+              "current_sector_id": 1,
+              "ship_destroyed": true,
+              "hazards": []
+            }
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_quasar.json::case-0014",
+      "suite": "suite_combat_quasar.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy expected success despite approved immediate lethal entry hazard and pod destruction response",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "planet.info",
+        "case_name": "Test Atmosphere Quasar Shot (Planet Landing)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-4d6dd85864aa4fc095d1ea43a1856515",
+          "ts": "2026-11-10T21:30:36Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1703,
+            "message": "Planet details require landing or ownership authorization"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_combat_toll_fighters.json::case-0012",
+      "suite": "suite_combat_toll_fighters.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_combat_toll_fighters.json: Victim Warps to Toll Sector (Should Auto-Pay)",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "move.warp",
+        "case_name": "Victim Warps to Toll Sector (Should Auto-Pay)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.sector_id",
+            "op": "==",
+            "value": 2
+          }
+        ],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-3cb01f4d5a454e25abaa2a49287cde88",
+          "ts": "2026-11-10T21:30:42Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 402,
+            "message": "Ship destroyed by sector hazards.",
+            "data": {
+              "sector_id": 2,
+              "current_sector_id": 1,
+              "ship_destroyed": true,
+              "hazards": []
+            }
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "probable"
+    },
+    {
+      "case_id": "suite_combat_toll_final_working.json::case-0006",
+      "suite": "suite_combat_toll_final_working.json",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "suite_combat_toll_final_working.json: Test: Toll Collector Verified",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "auth.mfa_verify",
+        "case_name": "Test: Toll Collector Verified",
+        "failure_reason": "Status: error != refused",
+        "expected": {
+          "status": "refused"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-e196f06701834b5eadce039ce483b4cc",
+          "ts": "2026-11-10T21:30:49Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
+      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
+      "confidence": "unknown"
+    },
+    {
+      "case_id": "suite_combat_toll_final_working.json::case-0007",
+      "suite": "suite_combat_toll_final_working.json",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "suite_combat_toll_final_working.json: Test: Victim Verified",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "auth.mfa_verify",
+        "case_name": "Test: Victim Verified",
+        "failure_reason": "Status: error != refused",
+        "expected": {
+          "status": "refused"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-8aac921729ea47c2bec7c7a05173a6d1",
+          "ts": "2026-11-10T21:30:49Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
+      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
+      "confidence": "unknown"
+    },
+    {
+      "case_id": "suite_commodities_data_driven_phase2.json::case-0009",
+      "suite": "suite_commodities_data_driven_phase2.json",
+      "primary_classification": "SPECIFICATION_BLOCKER",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "ship.inspect",
+        "case_name": "T1: Verify new commodity can be added without code changes (ALT test)",
+        "failure_reason": "database fixture statement rejected: {'id': 'srv-err', 'reply_to': 'test-dbb1717323584587a218488d4e5f1e8d', 'ts': '2026-11-10T21:30:54Z', 'status': 'error', 'type': 'error', 'error': {'code': 1004, 'message': 'ERROR:  new row for relation \"port_trade\" violates check constraint \"port_trade_commodity_check\"\\nDETAIL:  Failing row contains (1012, 7, 1000, ALT, buy).\\n'}, 'data': None, 'meta': {'rate_limit': {'limit': 60, 'remaining': 60, 'reset': 60}}}",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-dbb1717323584587a218488d4e5f1e8d",
+          "ts": "2026-11-10T21:30:54Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  new row for relation \"port_trade\" violates check constraint \"port_trade_commodity_check\"\nDETAIL:  Failing row contains (1012, 7, 1000, ALT, buy).\n"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Tests require arbitrary ALT commodity codes; the current port_trade check rejects ALT, and approved V3 commodity contracts do not establish extensible commodity-code policy.",
+      "proposed_corrective_action": "Request product decision on user-defined commodity codes and schema constraints before changing them.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_commodities_data_driven_phase2.json::case-0010",
+      "suite": "suite_commodities_data_driven_phase2.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.get_trade_info",
+        "case_name": "T2.1: Port trade list is DB-driven (legal commodity)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-04c6e0dddb614ff6b1cb5a32f3c4e933",
+          "ts": "2026-11-10T21:30:54Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_commodities_data_driven_phase2.json::case-0011",
+      "suite": "suite_commodities_data_driven_phase2.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.trade.buy",
+        "case_name": "T2.2: Port trade list includes ORE (standard commodity)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-652560b89a644ecd9db09bd73cc0f18a",
+          "ts": "2026-11-10T21:30:54Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_commodities_data_driven_phase2.json::case-0015",
+      "suite": "suite_commodities_data_driven_phase2.json",
+      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "planet.deposit",
+        "case_name": "T4.2: Good player deposits ORE (standard commodity)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-31712ee5f7c247d68b0e3616473f3827",
+          "ts": "2026-11-10T21:30:54Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "property 'planet_id' must be integer"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md ownership check; docs/PROTOCOL.v3/19_Ship_Commands.md used-hull alternative; docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md planet.deposit schema.",
+      "proposed_corrective_action": "Align test request/assertion to documented V3 schema; do not add undocumented error-code guarantees.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_economy_and_bank.json::case-0022",
+      "suite": "suite_economy_and_bank.json",
+      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
+      "root_cause_group": "Ownership refusal test asserts undocumented exact code 404; actual refusal is 403",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "bank.orders.cancel",
+        "case_name": "Another player cannot cancel a standing order",
+        "failure_reason": "Error Code: 403 != 404",
+        "expected": {
+          "status": "error",
+          "error_code": 404
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-a5f310a1d97043399e6c869bece49828",
+          "ts": "2026-11-10T21:31:09Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 403,
+            "message": "Standing order not found"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md ownership check; docs/PROTOCOL.v3/19_Ship_Commands.md used-hull alternative; docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md planet.deposit schema.",
+      "proposed_corrective_action": "Align test request/assertion to documented V3 schema; do not add undocumented error-code guarantees.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_economy_tavern_loan.json::case-0005",
+      "suite": "suite_economy_tavern_loan.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.loan.take",
+        "case_name": "Positive: Take Loan",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-973d3e977c27429382a6be4967b65a4a",
+          "ts": "2026-11-10T21:31:19Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1830,
+            "message": "The Loan Shark is not currently available."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_economy_tavern_loan.json::case-0006",
+      "suite": "suite_economy_tavern_loan.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.loan.take",
+        "case_name": "Negative: Take Second Loan (Refused)",
+        "failure_reason": "Error Code: 1830 != 1832",
+        "expected": {
+          "status": "error",
+          "error_code": 1832
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-995a7fc58ed54f8bab0a52eade2d6347",
+          "ts": "2026-11-10T21:31:19Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1830,
+            "message": "The Loan Shark is not currently available."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_aggression_captainz.json::case-0016",
+      "suite": "suite_fedspace_aggression_captainz.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy status assertion expects active rather than podded after destruction",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Test 1c: Verify Attacker is Podded",
+        "failure_reason": "assertion failed at data.rows.0.0: expected 'active', got 'podded'",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.rows.0.0",
+            "op": "==",
+            "value": "active"
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-5f4fe60781064a2d8dc048f686d4094a",
+          "ts": "2026-11-10T21:31:21Z",
+          "status": "ok",
+          "type": "sys.raw_sql_exec",
+          "data": {
+            "rows": [
+              [
+                "podded"
+              ]
+            ]
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_msl_asset_enforcement.json::case-0021",
+      "suite": "suite_fedspace_msl_asset_enforcement.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler trigger and dependent cleanup assertions",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.run_cron_handler",
+        "case_name": "Test 4e: Run MSL Cleanse Cron",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-6a8d4cefd26d4544a906e7bc2b40a2c5",
+          "ts": "2026-11-10T21:31:25Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_msl_asset_enforcement.json::case-0022",
+      "suite": "suite_fedspace_msl_asset_enforcement.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler trigger and dependent cleanup assertions",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "deploy.fighters.list",
+        "case_name": "Test 4f: Verify Fighters REMOVED from MSL Sector",
+        "failure_reason": "assertion failed at data.total: expected 0, got 1",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.total",
+            "op": "==",
+            "value": 0
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-1d3c146a6acd4149b9319cf5ef9fb8df",
+          "ts": "2026-11-10T21:31:25Z",
+          "status": "ok",
+          "type": "deploy.fighters.list_v1",
+          "data": {
+            "total": 1,
+            "entries": [
+              {
+                "asset_id": 23,
+                "sector_id": 144,
+                "count": 25,
+                "offense_mode": 2,
+                "player_id": 194,
+                "player_name": "fedspace_user_1",
+                "corp_id": 0,
+                "corp_tag": "",
+                "type": 2
+              }
+            ]
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_msl_asset_enforcement.json::case-0030",
+      "suite": "suite_fedspace_msl_asset_enforcement.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler trigger and dependent cleanup assertions",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.run_cron_handler",
+        "case_name": "Test 5f: Run MSL Cleanse Cron Again",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-8e35314e3b974e79b2db2b5b037cb480",
+          "ts": "2026-11-10T21:31:25Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_msl_asset_enforcement.json::case-0031",
+      "suite": "suite_fedspace_msl_asset_enforcement.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler trigger and dependent cleanup assertions",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "deploy.mines.list",
+        "case_name": "Test 5g: Verify Mines REMOVED from MSL Sector",
+        "failure_reason": "assertion failed at data.total: expected 0, got 2",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.total",
+            "op": "==",
+            "value": 0
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-d16bfd2f8d8e42e3bb5c1f734b2d4e1d",
+          "ts": "2026-11-10T21:31:25Z",
+          "status": "ok",
+          "type": "deploy.mines.list_v1",
+          "data": {
+            "total": 2,
+            "entries": [
+              {
+                "asset_id": 25,
+                "sector_id": 144,
+                "count": 10,
+                "offense_mode": 1,
+                "player_id": 194,
+                "player_name": "fedspace_user_1",
+                "corp_id": 0,
+                "corp_tag": "",
+                "type": 1
+              },
+              {
+                "asset_id": 24,
+                "sector_id": 144,
+                "count": 15,
+                "offense_mode": 1,
+                "player_id": 194,
+                "player_name": "fedspace_user_1",
+                "corp_id": 0,
+                "corp_tag": "",
+                "type": 1
+              }
+            ]
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_msl_asset_enforcement.json::case-0032",
+      "suite": "suite_fedspace_msl_asset_enforcement.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler trigger and dependent cleanup assertions",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Test 5h: Verify Beacon REMOVED from MSL Sector",
+        "failure_reason": "assertion failed at data.rows.0.0: expected None, got 'MSL Test Beacon'",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.rows.0.0",
+            "op": "==",
+            "value": null
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-3c904b01b92141d4ab2ff108b18abb73",
+          "ts": "2026-11-10T21:31:25Z",
+          "status": "ok",
+          "type": "sys.raw_sql_exec",
+          "data": {
+            "rows": [
+              [
+                "MSL Test Beacon"
+              ]
+            ]
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_fedspace_msl_asset_enforcement.json::case-0039",
+      "suite": "suite_fedspace_msl_asset_enforcement.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler trigger and dependent cleanup assertions",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.run_cron_handler",
+        "case_name": "Test 6d: Run MSL Cleanse Cron",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-9a0c64272ed6499aaba7866879e1a223",
+          "ts": "2026-11-10T21:31:26Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_ferengi_travelling_traders.json::case-0036",
+      "suite": "suite_ferengi_travelling_traders.json",
+      "primary_classification": "IMPLEMENTATION_DEFECT",
+      "root_cause_group": "Configured named Ferengi roster definitions not provisioned in spawned population",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Verify data-only trader was provisioned with its configured name",
+        "failure_reason": "assertion failed at data.rows.0.0: expected 'Configured Roster Trader', got None",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.rows.0.0",
+            "op": "==",
+            "value": "Configured Roster Trader"
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-94e7184187d948c2a2a9284df0101bb8",
+          "ts": "2026-11-10T21:31:29Z",
+          "status": "ok",
+          "type": "sys.raw_sql_exec",
+          "data": {
+            "rows": []
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Ferengi named-roster population requirement; docs/V3_GAMEPLAY_DECISIONS.md NPC/Ferengi rows and the named roster acceptance suite.",
+      "proposed_corrective_action": "Trace seed/reconciliation through NPC spawning; provision the existing named definitions with stable identities and validate encounter discovery.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_movement_move_autopilot_start.json::case-0006",
+      "suite": "suite_movement_move_autopilot_start.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_movement_move_autopilot_start.json: Positive: Start Autopilot",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "move.autopilot.start",
+        "case_name": "Positive: Start Autopilot",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-c6b36bb8d71c449391d3bb28bc2c2716",
+          "ts": "2026-11-10T21:32:47Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "property 'from_sector_id' must be integer"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "probable"
+    },
+    {
+      "case_id": "suite_navigation.json::case-0006",
+      "suite": "suite_navigation.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_navigation.json: Get Route",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "move.pathfind",
+        "case_name": "Get Route",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-1dfd569f8e1b4b60a2c57b717371fae4",
+          "ts": "2026-11-10T21:33:00Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 403,
+            "message": "Path not found"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "probable"
+    },
+    {
+      "case_id": "suite_phase3_port_dynamic_trading.json::case-0006",
+      "suite": "suite_phase3_port_dynamic_trading.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.get_trade_info",
+        "case_name": "T1.2: Get normal port ID",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-fb2638843e9c429c9c9346ba86d5666c",
+          "ts": "2026-11-10T21:33:05Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_phase3_port_dynamic_trading.json::case-0008",
+      "suite": "suite_phase3_port_dynamic_trading.json",
+      "primary_classification": "SPECIFICATION_BLOCKER",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "ship.inspect",
+        "case_name": "T2.2: Add ALT to port 1 via port_trade",
+        "failure_reason": "database fixture statement rejected: {'id': 'srv-err', 'reply_to': 'test-e65022ec1a8e459baafff3a2928ad313', 'ts': '2026-11-10T21:33:05Z', 'status': 'error', 'type': 'error', 'error': {'code': 1004, 'message': 'ERROR:  new row for relation \"port_trade\" violates check constraint \"port_trade_commodity_check\"\\nDETAIL:  Failing row contains (1013, 1, 1000, ALT, sell).\\n'}, 'data': None, 'meta': {'rate_limit': {'limit': 60, 'remaining': 60, 'reset': 60}}}",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-e65022ec1a8e459baafff3a2928ad313",
+          "ts": "2026-11-10T21:33:05Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  new row for relation \"port_trade\" violates check constraint \"port_trade_commodity_check\"\nDETAIL:  Failing row contains (1013, 1, 1000, ALT, sell).\n"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Tests require arbitrary ALT commodity codes; the current port_trade check rejects ALT, and approved V3 commodity contracts do not establish extensible commodity-code policy.",
+      "proposed_corrective_action": "Request product decision on user-defined commodity codes and schema constraints before changing them.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_phase3_port_dynamic_trading.json::case-0010",
+      "suite": "suite_phase3_port_dynamic_trading.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.trade.buy",
+        "case_name": "T2.4: Buy ALT from port 1 - should work now without code changes",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok",
+          "receipt_contains": "total_cost"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-abd516b45af74a1ea8913a74a69052a2",
+          "ts": "2026-11-10T21:33:05Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_phase3_port_dynamic_trading.json::case-0012",
+      "suite": "suite_phase3_port_dynamic_trading.json",
+      "primary_classification": "SPECIFICATION_BLOCKER",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.get_trade_info",
+        "case_name": "T3.1: Add ALT to port 1 for SELL mode (test sell path)",
+        "failure_reason": "database fixture statement rejected: {'id': 'srv-err', 'reply_to': 'test-7f56780ef5fb4c84902e4b5f09944d1c', 'ts': '2026-11-10T21:33:05Z', 'status': 'error', 'type': 'error', 'error': {'code': 1004, 'message': 'ERROR:  new row for relation \"port_trade\" violates check constraint \"port_trade_commodity_check\"\\nDETAIL:  Failing row contains (1014, 1, 500, ALT, buy).\\n'}, 'data': None, 'meta': {'rate_limit': {'limit': 60, 'remaining': 60, 'reset': 60}}}",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-7f56780ef5fb4c84902e4b5f09944d1c",
+          "ts": "2026-11-10T21:33:05Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  new row for relation \"port_trade\" violates check constraint \"port_trade_commodity_check\"\nDETAIL:  Failing row contains (1014, 1, 500, ALT, buy).\n"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Tests require arbitrary ALT commodity codes; the current port_trade check rejects ALT, and approved V3 commodity contracts do not establish extensible commodity-code policy.",
+      "proposed_corrective_action": "Request product decision on user-defined commodity codes and schema constraints before changing them.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_phase3_port_dynamic_trading.json::case-0013",
+      "suite": "suite_phase3_port_dynamic_trading.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.trade.sell",
+        "case_name": "T3.2: Sell ALT to port 1 - should work via DB-driven trade path",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-6749d81e48c140049bd5f4e50ddd6b79",
+          "ts": "2026-11-10T21:33:05Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_phase3_port_dynamic_trading.json::case-0016",
+      "suite": "suite_phase3_port_dynamic_trading.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.trade.buy",
+        "case_name": "T5.1: Regression - Verify ORE still trades normally",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-20eceac0dd8647309845c8474101d8bd",
+          "ts": "2026-11-10T21:33:05Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_planet_advanced.json::case-0005",
+      "suite": "suite_planet_advanced.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture selects a planet ID not present in generated universe",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "planet.info",
+        "case_name": "Planet Info",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-ef149035cf254e78a7eb9e5f5ff7a978",
+          "ts": "2026-11-10T21:33:07Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 403,
+            "message": "Planet not found"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_planet_advanced.json::case-0006",
+      "suite": "suite_planet_advanced.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture selects a planet ID not present in generated universe",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "planet.land",
+        "case_name": "Planet Land",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-cea23df2191e4eaebdff69aee80730d8",
+          "ts": "2026-11-10T21:33:07Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 403,
+            "message": "Planet not found."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_planet_creation.json::case-0005",
+      "suite": "suite_planet_creation.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture selects a planet ID not present in generated universe",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "planet.info",
+        "case_name": "planet.info - Get planet information",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-d8a2c0466803431c9853dea1f525291e",
+          "ts": "2026-11-10T21:33:08Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 403,
+            "message": "Planet not found"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_planet_landing_defense.json::case-0057",
+      "suite": "suite_planet_landing_defense.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "Legacy test expects no active ship where V3 mandates active escape pod",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Verify destroyed ship and no active ship assignment",
+        "failure_reason": "assertion failed at data.rows.0.0: expected 't', got 'f'",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.rows.0.0",
+            "op": "==",
+            "value": "t"
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-6ab2fb41819e4c0992f97ad68e11323f",
+          "ts": "2026-11-10T21:33:17Z",
+          "status": "ok",
+          "type": "sys.raw_sql_exec",
+          "data": {
+            "rows": [
+              [
+                "f"
+              ]
+            ]
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_player_preferences.json::case-0017",
+      "suite": "suite_player_preferences.json",
+      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
+      "root_cause_group": "Schema assertion assumes new_type_id required despite used_inventory_id alternative",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "system.describe_schema",
+        "case_name": "shipyard upgrade request schema is discoverable",
+        "failure_reason": "assertion failed at data.schema.required.0: expected 'new_type_id', got None",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.schema.properties.new_type_id.type",
+            "op": "==",
+            "value": "integer"
+          },
+          {
+            "path": "data.schema.required.0",
+            "op": "==",
+            "value": "new_type_id"
+          },
+          {
+            "path": "data.schema.required.1",
+            "op": "==",
+            "value": "new_ship_name"
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-0c5c0e81914d4cae9142f8980ddb0e3e",
+          "ts": "2026-11-10T21:37:52Z",
+          "status": "ok",
+          "type": "system.schema",
+          "data": {
+            "name": "shipyard.upgrade",
+            "type": "command",
+            "schema": {
+              "$id": "ge://schema/shipyard.upgrade.json",
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "properties": {
+                "new_type_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "new_ship_name": {
+                  "type": "string"
+                },
+                "used_inventory_id": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md ownership check; docs/PROTOCOL.v3/19_Ship_Commands.md used-hull alternative; docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md planet.deposit schema.",
+      "proposed_corrective_action": "Align test request/assertion to documented V3 schema; do not add undocumented error-code guarantees.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_player_status.json::case-0005",
+      "suite": "suite_player_status.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Bootstrap System player is authenticated and included in online unique-player count",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "player.list_online",
+        "case_name": "Player List Online",
+        "failure_reason": "assertion failed at data.total_online: expected 1, got 2",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [
+          {
+            "path": "data.total_online",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "path": "data.returned_count",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "path": "data.page",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "path": "data.limit",
+            "op": "==",
+            "value": 50
+          },
+          {
+            "path": "data.players",
+            "op": "contains",
+            "value": "status_player"
+          },
+          {
+            "path": "data.players.0",
+            "op": "keys_eq",
+            "value": [
+              "player_id",
+              "username",
+              "corporation",
+              "alignment"
+            ]
+          }
+        ],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-298fce7ed186481d8d486d0fb4e0cf3c",
+          "ts": "2026-11-10T21:37:53Z",
+          "status": "ok",
+          "type": "player.list_online",
+          "data": {
+            "total_online": 2,
+            "returned_count": 2,
+            "page": 1,
+            "limit": 50,
+            "players": [
+              {
+                "player_id": 107,
+                "username": "System",
+                "corporation": "Ferengi Alliance",
+                "alignment": 0
+              },
+              {
+                "player_id": 124,
+                "username": "status_player",
+                "corporation": "",
+                "alignment": 0
+              }
+            ]
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0010",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture calls C repository function as SQL / combines statements in prepared SQL",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Test D1-C1: Lawful contraband should increment suspicion",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-dd0c10ded2dd4d27bbe5f1af277e9300",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  cannot insert multiple commands into a prepared statement\n"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0011",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture calls C repository function as SQL / combines statements in prepared SQL",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Trigger D1-C1: Record contraband crime in lawful cluster",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-e0b880cd5a6041999922cf7953c5d6ae",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  function repo_clusters_record_crime(integer, integer, integer, integer) does not exist\nLINE 1: SELECT repo_clusters_record_crime((SELECT player_id FROM pla...\n               ^\nHINT:  No function matches the given name and argument types. You might"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0013",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture calls C repository function as SQL / combines statements in prepared SQL",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Test D1-C2: Port aggression should increment suspicion more",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-a141c716f1384840a932dbc59c2cd26b",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  function repo_clusters_record_crime(integer, integer, integer, integer) does not exist\nLINE 1: SELECT repo_clusters_record_crime((SELECT player_id FROM pla...\n               ^\nHINT:  No function matches the given name and argument types. You might"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0015",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture calls C repository function as SQL / combines statements in prepared SQL",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Test D1-C3: Another port aggression should push wanted to 2",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-d380c28452c14e04b24b4a11727c70ef",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  function repo_clusters_record_crime(integer, integer, integer, integer) does not exist\nLINE 1: SELECT repo_clusters_record_crime((SELECT player_id FROM pla...\n               ^\nHINT:  No function matches the given name and argument types. You might"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0017",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "suite_police_phase_d1_enforcement.json: Test D1-D1: Dock intercept should block docking when wanted=2",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.dock_status",
+        "case_name": "Test D1-D1: Dock intercept should block docking when wanted=2",
+        "failure_reason": "Error Code: 1300 != 1410",
+        "expected": {
+          "status": "error",
+          "error_code": 1410,
+          "data.enforcement.cluster_id": "@{lawful_cluster_id}",
+          "data.enforcement.wanted_level": 2,
+          "data.enforcement.options": [
+            "surrender",
+            "bribe"
+          ]
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-5bc46bba9dd045929491723159cae9bb",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0022",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture calls C repository function as SQL / combines statements in prepared SQL",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Trigger D1-L1: Record contraband in lawless cluster (should be no-op)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-de21aa657c63488b92cb1b53dc44238b",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  function repo_clusters_record_crime(integer, integer, integer, integer) does not exist\nLINE 1: SELECT repo_clusters_record_crime((SELECT player_id FROM pla...\n               ^\nHINT:  No function matches the given name and argument types. You might"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0025",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Fixture calls C repository function as SQL / combines statements in prepared SQL",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Test D1-L2: Lawless port.rob should NOT create cluster_player_status",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-5c431a6832f54615b43cdfc684c1491e",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1004,
+            "message": "ERROR:  function repo_clusters_record_crime(integer, integer, integer, integer) does not exist\nLINE 1: SELECT repo_clusters_record_crime((SELECT player_id FROM pla...\n               ^\nHINT:  No function matches the given name and argument types. You might"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_police_phase_d1_enforcement.json::case-0028",
+      "suite": "suite_police_phase_d1_enforcement.json",
+      "primary_classification": "OBSOLETE_V2_TEST",
+      "root_cause_group": "suite_police_phase_d1_enforcement.json: Test D1-L3: Dock intercept should NOT trigger in lawless cluster",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.dock_status",
+        "case_name": "Test D1-L3: Dock intercept should NOT trigger in lawless cluster",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-c23d0bccef6747ac9a72bf4263f3c917",
+          "ts": "2026-11-10T21:37:58Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Approved V3 sources: docs/PROTOCOL.v3/19_Ship_Commands.md (replacement_ship_id); docs/V3_GAMEPLAY_DECISIONS.md COMBAT-001/MOVE-003; docs/PROTOCOL.v3/22_Trade_and_Port_Commands.md (trade.buy/sell and dock.status).",
+      "proposed_corrective_action": "Update to the documented V3 command/behavior after reconciliation; do not change gameplay to satisfy legacy expectation.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_ship_sale_v3.json::case-0016",
+      "suite": "suite_ship_sale_v3.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_ship_sale_v3.json: Sell inactive hull through shipyard.sell alias",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "shipyard.sell",
+        "case_name": "Sell inactive hull through shipyard.sell alias",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok",
+          "type": "ship.sold_v1"
+        },
+        "assertions": [
+          {
+            "path": "data.ship_id",
+            "op": "==",
+            "value": "@sale_test_alias_ship_id"
+          },
+          {
+            "path": "data.replacement_ship_id",
+            "op": "==",
+            "value": "@sale_test_replacement_ship_id"
+          },
+          {
+            "path": "data.cargo_forfeited",
+            "op": "==",
+            "value": true
+          },
+          {
+            "path": "data.insurance_terminated",
+            "op": "==",
+            "value": true
+          },
+          {
+            "path": "data.used_inventory_id",
+            "op": ">",
+            "value": 0
+          }
+        ],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-45e743e80523431ab8e34a34c9a30ea1",
+          "ts": "2026-11-10T21:38:19Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1811,
+            "message": "Your active ship must be docked at an authorized shipyard"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "probable"
+    },
+    {
+      "case_id": "suite_sys_admin_boundaries.json::case-0019",
+      "suite": "suite_sys_admin_boundaries.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "suite_sys_admin_boundaries.json: Admin: admin.notice (Allow)",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "admin.notice",
+        "case_name": "Admin: admin.notice (Allow)",
+        "failure_reason": "Status: refused != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-refuse",
+          "reply_to": "test-828cbb396bf241089e8e8d72a233acab",
+          "ts": "2026-11-10T21:38:29Z",
+          "status": "refused",
+          "type": "error",
+          "error": {
+            "code": 402,
+            "message": "Permission denied"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "probable"
+    },
+    {
+      "case_id": "suite_tavern_economy.json::case-0005",
+      "suite": "suite_tavern_economy.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.dice.play",
+        "case_name": "Tavern: Play Dice (Win/Loss Structure Check)",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-08578b649efd46da87dc7bd2ad3c16ae",
+          "ts": "2026-11-10T21:38:30Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1821,
+            "message": "Bet exceeds maximum per transaction."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_tavern_economy.json::case-0006",
+      "suite": "suite_tavern_economy.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.loan.take",
+        "case_name": "Tavern: Take Loan",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-945c19eb26f14cb1b0e8578c933f9f8d",
+          "ts": "2026-11-10T21:38:30Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1830,
+            "message": "The Loan Shark is not currently available."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_tavern_extras.json::case-0005",
+      "suite": "suite_tavern_extras.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Tavern fixture violates availability, economy limit, input or alignment precondition",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "tavern.barcharts.get_prices_summary",
+        "case_name": "Tavern Barcharts",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-6f00b969ad944ca6813b7a56423e7150",
+          "ts": "2026-11-10T21:38:31Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1821,
+            "message": "Summary cost exceeds maximum transaction limit."
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Captured request/setup violates operation preconditions (stock, cargo, valid target, facility availability, location, seeded planet, path, permission, or configured limits); retain intended operation assertion after repairing setup.",
+      "proposed_corrective_action": "Correct fixture preconditions using existing test rig while retaining the intended gameplay behavior assertion.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_v3_npc_federation_phases.json::case-0004",
+      "suite": "suite_v3_npc_federation_phases.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler test hook",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.run_cron_handler",
+        "case_name": "Phase 3: Ferengi tick is idempotent",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-b3c26ed67b7946239536f0632e23155c",
+          "ts": "2026-11-10T21:38:40Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_v3_npc_federation_phases.json::case-0006",
+      "suite": "suite_v3_npc_federation_phases.json",
+      "primary_classification": "INFRASTRUCTURE",
+      "root_cause_group": "Unsupported sys.run_cron_handler test hook",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.run_cron_handler",
+        "case_name": "Phase 4: Orion tick is idempotent",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-ddbb27a4dd97486cb979b0ec4f53a8ab",
+          "ts": "2026-11-10T21:38:40Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Cases use absent sys.run_cron_handler as a test trigger. Dependent checks do not establish engine behavior without a supported scheduler invocation.",
+      "proposed_corrective_action": "Replace test-only handler call with existing supported deterministic scheduler fixture/trigger; do not infer game behavior from unknown-command cascades.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "test_sysop_players.json::case-0014",
+      "suite": "test_sysop_players.json",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "test_sysop_players.json: Verify Player Disconnected",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "player.my_info",
+        "case_name": "Verify Player Disconnected",
+        "failure_reason": "Status: ok != error",
+        "expected": {
+          "status": "error"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-ok",
+          "reply_to": "test-9fe5a651d1a9414b81467f92e88dd4e6",
+          "ts": "2026-11-10T21:43:23Z",
+          "status": "ok",
+          "type": "player.info",
+          "data": {
+            "player": {
+              "id": 256,
+              "username": "target_user",
+              "credits": "5000.00",
+              "turns_remaining": 500,
+              "sector": 1,
+              "ship_id": 155,
+              "corp_id": 0,
+              "alignment": 1,
+              "experience": 0
+            }
+          },
+          "error": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
+      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
+      "confidence": "unknown"
+    },
+    {
+      "case_id": "test_sysop_world.json::case-0002",
+      "suite": "test_sysop_world.json",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "test_sysop_world.json: Set MOTD",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sysop.motd.set",
+        "case_name": "Set MOTD",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-c2fd4c1f0b644bb390d14ae901f2da63",
+          "ts": "2026-11-10T21:43:24Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
+      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
+      "confidence": "unknown"
+    },
+    {
+      "case_id": "test_sysop_world.json::case-0004",
+      "suite": "test_sysop_world.json",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "test_sysop_world.json: Queue Port Restock",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sysop.port.restock",
+        "case_name": "Queue Port Restock",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok"
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-7744aaf0482d4f22879cc4649cd22101",
+          "ts": "2026-11-10T21:43:24Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
+      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
+      "confidence": "unknown"
+    },
+    {
+      "case_id": "test_sysop_world.json::case-0006",
+      "suite": "test_sysop_world.json",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "test_sysop_world.json: View Audit Tail",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sysop.audit.tail",
+        "case_name": "View Audit Tail",
+        "failure_reason": "Status: error != ok",
+        "expected": {
+          "status": "ok",
+          "data": {
+            "items": "*[cmd_type=sysop.motd.set]"
+          }
+        },
+        "assertions": [],
+        "actual": {
+          "id": "srv-err",
+          "reply_to": "test-19307f0a964e40f99ddf65625df5ab43",
+          "ts": "2026-11-10T21:43:24Z",
+          "status": "error",
+          "type": "error",
+          "error": {
+            "code": 1300,
+            "message": "Unknown command"
+          },
+          "data": null,
+          "meta": {
+            "rate_limit": {
+              "limit": 60,
+              "remaining": 60,
+              "reset": 60
+            }
+          }
+        }
+      },
+      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
+      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
+      "confidence": "unknown"
+    }
+    ,{
+      "case_id": "suite_combat_port_rob.json::case-0009",
+      "suite": "suite_combat_port_rob.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Port robbery fixture selects an arbitrary port, including protected FedSpace",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "port.rob",
+        "case_name": "Positive: Rob Port Credits",
+        "failure_reason": "Status: refused != ok",
+        "expected": {"status": "ok"},
+        "assertions": [],
+        "actual": {
+          "status": "refused",
+          "error": {"code": 402, "message": "Captain Z intervenes: aggression in FedSpace is forbidden."}
+        }
+      },
+      "specification_reference": "docs/PROTOCOL.v3/23_Combat_and_Weapons.md, Aggression in FedSpace: overt aggression initiated in sectors 1-10 is refused with Captain Z intervention.",
+      "proposed_corrective_action": "Select a deterministic port outside sectors 1-10; preserve the successful robbery assertion there.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_planet_taxable_activity_e2e.json::case-0031",
+      "suite": "suite_planet_taxable_activity_e2e.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Port buyer fixture had insufficient credits for the intended full order fill",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Verify Exchange-to-port commodity and credit conservation",
+        "failure_reason": "Expected Exchange stock 0 and port stock 10; actual Exchange stock 8 and port stock 2",
+        "expected": {"exchange_stock": 0, "port_stock": 10},
+        "assertions": [
+          {"path": "data.rows.0.1", "op": "==", "value": 0},
+          {"path": "data.rows.0.2", "op": "==", "value": 10}
+        ],
+        "actual": {"status": "ok", "data": {"rows": [[90, 8, 2, 0, 0, 0, 0]]}}
+      },
+      "specification_reference": "EXC-003/EXC-008 in docs/V3_GAMEPLAY_DECISIONS.md: purchase settlement is bounded by available funds and preserves commodity conservation.",
+      "proposed_corrective_action": "Fund the isolated test port sufficiently for the case's explicitly intended full fill; do not alter matcher partial-fill behavior.",
+      "confidence": "confirmed"
+    },
+    {
+      "case_id": "suite_planet_taxable_activity_e2e.json::case-0034",
+      "suite": "suite_planet_taxable_activity_e2e.json",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Port buyer fixture had insufficient credits for the intended full order fill",
+      "evidence": {
+        "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
+        "request_command": "sys.raw_sql_exec",
+        "case_name": "Verify retry did not duplicate stock, credits, or trade receipt",
+        "failure_reason": "Expected Exchange stock 0 and port stock 10; actual Exchange stock 8 and port stock 2",
+        "expected": {"exchange_stock": 0, "port_stock": 10},
+        "assertions": [
+          {"path": "data.rows.0.1", "op": "==", "value": 0},
+          {"path": "data.rows.0.2", "op": "==", "value": 10}
+        ],
+        "actual": {"status": "ok", "data": {"rows": [[90, 8, 2, 0, 0]]}}
+      },
+      "specification_reference": "EXC-003/EXC-008 in docs/V3_GAMEPLAY_DECISIONS.md: purchase settlement is bounded by available funds and preserves commodity conservation.",
+      "proposed_corrective_action": "Fund the isolated test port sufficiently for the case's explicitly intended full fill; retain the retry/idempotency assertions.",
+      "confidence": "confirmed"
+    }
   ],
-  "classification_note": "All 111 failures remain UNCLASSIFIED rather than assigning identities or causes by inference. This total is exact, but per-case inventory is blocked until a completed runner report with expected/actual verdicts is recovered or a new full run can safely execute.",
-  "known_aggregate_clusters_from_checkpoint": [
-    {"group": "planet landing/defense", "count": 12, "case_ids": null, "confidence": "probable", "note": "Checkpoint summary only; not safe to treat as the complete current cluster."},
-    {"group": "tavern/trade", "count": 11, "case_ids": null, "confidence": "probable", "note": "Checkpoint summary only; not safe to treat as the complete current cluster."},
-    {"group": "FedSpace MSL asset enforcement", "count": 10, "case_ids": null, "confidence": "probable", "note": "Includes tests blocked on unregistered internal cron invocation; exact failed IDs unavailable."},
-    {"group": "police D1", "count": 8, "case_ids": null, "confidence": "probable", "note": "Known fixture/API mismatch described in checkpoint; exact verdict membership unavailable."},
-    {"group": "ship cargo", "count": 8, "case_ids": null, "confidence": "probable", "note": "Suite has since been edited; current edits are unverified."},
-    {"group": "phase-3 port trading", "count": 6, "case_ids": null, "confidence": "probable", "note": "Aggregate checkpoint finding; current membership unavailable."},
-    {"group": "combat advanced", "count": 6, "case_ids": null, "confidence": "probable", "note": "Aggregate checkpoint finding; current membership unavailable."},
-    {"group": "event journal", "count": 6, "case_ids": null, "confidence": "probable", "note": "Includes unregistered events.resume coverage; exact membership unavailable."}
-  ],
-  "next_action": "When the isolated PostgreSQL test cluster is available, run make regression-full with a durable JSON report path and per-case expected/actual capture; then replace this provisional aggregate classification with one record per failed stable case ID."
+  "comparison_to_prior_full_run": {
+    "prior_failed": 92,
+    "current_failed": 74,
+    "resolved_failures": 21,
+    "new_failures": [
+      "suite_combat_port_rob.json::case-0009",
+      "suite_planet_taxable_activity_e2e.json::case-0031",
+      "suite_planet_taxable_activity_e2e.json::case-0034"
+    ],
+    "exchange_clearing_lock_failures_resolved": [
+      "suite_planet_taxable_activity_e2e.json::case-0018",
+      "suite_planet_taxable_activity_e2e.json::case-0019"
+    ],
+    "other_resolved_failures": [
+      "suite_computer_loops.json::case-0006",
+      "suite_computer_loops.json::case-0010",
+      "suite_computer_loops.json::case-0013",
+      "suite_computer_loops_scan_negative.json::case-0006",
+      "suite_computer_loops_scan_negative.json::case-0007",
+      "suite_computer_loops_scan_negative.json::case-0010",
+      "suite_computer_loops_scan_negative.json::case-0014",
+      "suite_economy_and_bank.json::case-0020",
+      "suite_economy_and_bank.json::case-0021",
+      "suite_planet_market_buy_order_lifecycle.json::case-0011",
+      "suite_planet_market_buy_order_lifecycle.json::case-0014",
+      "suite_planet_market_buy_order_lifecycle.json::case-0015",
+      "suite_planet_market_buy_order_lifecycle.json::case-0016",
+      "suite_planet_market_buy_order_lifecycle.json::case-0019",
+      "suite_planet_market_buy_order_lifecycle.json::case-0025",
+      "suite_planet_market_buy_order_lifecycle.json::case-0026",
+      "suite_police_phase_b_incidents.json::case-0015",
+      "suite_police_phase_b_incidents.json::case-0018",
+      "suite_police_phase_b_incidents.json::case-0020"
+    ],
+    "note": "21 failures resolved and 3 new failures appeared (net -18). Of the 21 resolved cases, only taxable-activity case-0018 and case-0019 directly evidenced the Exchange clearing-account failure. The other 19 resolved failures are not attributed to Exchange. The current case-0031 and case-0034 failures were a separate underfunded test-port fixture and passed after fixture funding in a focused 36/36 run."
+  },
+  "classification_note": "Every failed case in the latest full report has exactly one primary category; unknown evidence remains UNCLASSIFIED. Blocked/unsupported are outside failed total.",
+  "case_count_check": 74
 }

@@ -185,12 +185,32 @@ int repo_bank_add_credits_returning(db_t *db, int account_id, long long amount, 
     return ERR_DB_NOT_FOUND;
 }
 
+int repo_bank_insert_transaction_returning_id(db_t *db, const char *sql_template, int account_id, const char *tx_type, const char *direction, long long amount, long long balance_after, const char *tx_group_id, const char *now_epoch, int64_t *transaction_id_out) {
+    db_error_t err;
+    (void)direction;
+    char sql[512];
+    snprintf(sql, sizeof(sql), sql_template, now_epoch);
+    int64_t transaction_id = 0;
+    const char *id_column = sql_bank_transaction_id_column(db);
+    if (!id_column || !db_exec_insert_id(db, sql,
+          (db_bind_t[]){ db_bind_i64(account_id), db_bind_text(tx_type),
+                         db_bind_i64(amount), db_bind_i64(balance_after),
+                         db_bind_text(tx_group_id) },
+          5, id_column, &transaction_id, &err))
+        return err.code ? err.code : ERR_DB_EXEC_FAILED;
+    if (transaction_id_out) *transaction_id_out = transaction_id;
+    return 0;
+}
+
 int repo_bank_insert_transaction(db_t *db, const char *sql_template, int account_id, const char *tx_type, const char *direction, long long amount, long long balance_after, const char *tx_group_id, const char *now_epoch) {
     db_error_t err;
     (void)direction;
     char sql[512];
     snprintf(sql, sizeof(sql), sql_template, now_epoch);
-    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(account_id), db_bind_text(tx_type), db_bind_i64(amount), db_bind_i64(balance_after), db_bind_text(tx_group_id) }, 5, &err)) return err.code;
+    if (!db_exec(db, sql, (db_bind_t[]){ db_bind_i64(account_id),
+          db_bind_text(tx_type), db_bind_i64(amount),
+          db_bind_i64(balance_after), db_bind_text(tx_group_id) }, 5, &err))
+        return err.code;
     return 0;
 }
 

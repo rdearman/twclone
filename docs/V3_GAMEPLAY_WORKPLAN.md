@@ -23,8 +23,9 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   guaranteed. Unrest numerical policy remains unset and effects remain
   inactive until SysOp supplies all required positive values.
 - **Verification performed:** Focused source-contract/migration test command
-  recorded in the tracker; sanitised build recorded below. No database-backed
-  runtime test was performed in this session.
+  recorded in the tracker; sanitised build recorded below. The Exchange port
+  purchase path has since been exercised against an isolated PostgreSQL DB and
+  the actual V3 server; concurrent settlement and restart verification remain.
 - **Completed checkpoint:** commit `6bf7dcd2` contains the Exchange, unrest,
   insurance and used-hull source/migration/documentation batch, including the
   correction that last-ship eligibility counts every role-1 owned hull rather
@@ -45,10 +46,11 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 - Bank standing-order first-run and recurrence calculations now share a UTC
   month-end helper. Existing C engine tests cover leap days and Gregorian
   century rules; sanitizer build and focused bank/planet contract tests pass.
-- **Next action:** continue with remaining actionable tracker requirements,
-  beginning with the next actionable population/capture workflow after
-  verifying the existing source contracts; preserve database runtime as
-  unverified until executed.
+- **Next action:** add or run a deterministic concurrent matcher scenario
+  against the disposable database to verify stable inventory lock ordering,
+  no oversell and no duplicate ledger/trade records. Then proceed to the next
+  incomplete population/capture workflow; do not repeat the completed Exchange
+  sequential settlement investigation.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed
@@ -58,7 +60,7 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
 | Order | Package | Requirement IDs | Exit criteria |
 |---|---|---|---|
-| 1 | Complete current Exchange/unrest/resale/insurance batch | EXC-001–011, HARV-008, POP-05/10/12, SHIP-005, INS-01/02 | Source/migration tests and sanitised build pass; DB limitations remain accurately marked unverified. |
+| 1 | Complete current Exchange/unrest/resale/insurance batch | EXC-001–011, HARV-008, POP-05/10/12, SHIP-005, INS-01/02 | Exchange sequential planet→port settlement and conservation pass against PostgreSQL; verify concurrent matcher/restart, then continue the remaining unrest/resale/insurance checks. |
 | 2 | Remaining planet population and capture workflows | POP-001–014, CAP-001–006, SYS-002/003 | Verify migrations, exclusive population, capture conversion, emancipation, exact 50% production, scheduler idempotency. Do not invent unset unrest values. |
 | 3 | Ship sale/destruction completeness | SHIP-001–009, COMBAT-001–005, INS-001–006 | Resolve missing equipment valuation source; test sale, used-hull purchase, pod, destruction asset retention and guaranteed insurance. |
 | 4 | Galactic Exchange end-to-end | EXC-001–011, HARV-008, SYS-005 | Verify immediate sale, port/planet purchase, conservation, liquidity and idempotency using an available isolated DB. |
