@@ -25,11 +25,16 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 - **Verification performed:** Focused source-contract/migration test command
   recorded in the tracker; sanitised build recorded below. No database-backed
   runtime test was performed in this session.
-- **Next action:** finish source review, rerun build and focused tests after the
-  used-hull ownership-count correction, inspect migration portability and
-  `git diff --check`; commit this coherent package if checks pass. Then take
-  the next incomplete requirement from the tracker rather than restarting this
-  package.
+- **Completed checkpoint:** commit `6bf7dcd2` contains the Exchange, unrest,
+  insurance and used-hull source/migration/documentation batch, including the
+  correction that last-ship eligibility counts every role-1 owned hull rather
+  than only the primary hull. A subsequent focused package extracted the
+  proportional loss allocator into `src/slave_population.h` and added C unit
+  assertions to the existing engine regression script. Its build and focused
+  tests passed; that follow-up is not committed yet.
+- **Next action:** commit the verified pure allocation helper/test, then
+  continue to remaining actionable tracker requirements without restarting
+  completed Exchange/resale implementation.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed
@@ -39,7 +44,7 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
 | Order | Package | Requirement IDs | Exit criteria |
 |---|---|---|---|
-| 1 | Complete current Exchange/unrest/resale/insurance batch | EXC-001–011, HARV-008, POP-05/10/12, SHIP-005, INS-01/02 | Focused source tests/build pass; DB limitations remain accurately marked unverified. |
+| 1 | Complete current Exchange/unrest/resale/insurance batch | EXC-001–011, HARV-008, POP-05/10/12, SHIP-005, INS-01/02 | Source/migration tests and sanitised build pass; DB limitations remain accurately marked unverified. |
 | 2 | Remaining planet population and capture workflows | POP-001–014, CAP-001–006, SYS-002/003 | Verify migrations, exclusive population, capture conversion, emancipation, exact 50% production, scheduler idempotency. Do not invent unset unrest values. |
 | 3 | Ship sale/destruction completeness | SHIP-001–009, COMBAT-001–005, INS-001–006 | Resolve missing equipment valuation source; test sale, used-hull purchase, pod, destruction asset retention and guaranteed insurance. |
 | 4 | Galactic Exchange end-to-end | EXC-001–011, HARV-008, SYS-005 | Verify immediate sale, port/planet purchase, conservation, liquidity and idempotency using an available isolated DB. |

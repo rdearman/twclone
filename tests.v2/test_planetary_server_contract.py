@@ -87,8 +87,8 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn('{"daily_slave_unrest", h_daily_slave_unrest}',
                       (ROOT / "src/server_engine.c").read_text())
         self.assertIn("db_cron_apply_slave_unrest", self.cron)
-        self.assertIn("slave_loss_split", self.cron_repo)
-        self.assertIn("(__int128) bucket[i] * loss", self.cron_repo)
+        self.assertIn("slave_population_split_loss", self.cron_repo)
+        self.assertIn("(__int128) buckets[i] * loss", (ROOT / "src/slave_population.h").read_text())
         self.assertIn("UNIQUE (planet_id, scheduled_at)",
                       (ROOT / "sql/pg/171_v3_planet_population_state.sql").read_text())
         self.assertIn("daily@04:15Z",

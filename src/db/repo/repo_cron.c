@@ -12,6 +12,7 @@
 #include "db/db_api.h"
 #include "db/sql_driver.h"
 #include "planet_fighter_production.h"
+#include "../../slave_population.h"
 #include "errors.h"
 
 /* ==================================================================== */
@@ -2924,36 +2925,6 @@ typedef struct
   bool stopped;
 } slave_unrest_row_t;
 
-/* Deterministic largest-remainder split. Bucket order is the tie-breaker:
- * unassigned, ore, organics, equipment, weapons. The sum is exactly loss. */
-static void
-slave_loss_split (const int64_t bucket[5], int64_t total, int64_t loss,
-                  int64_t out[5])
-{
-  int64_t remainder[5] = {0};
-  int64_t assigned = 0;
-  for (int i = 0; i < 5; i++)
-    {
-      __int128 product = (__int128) bucket[i] * loss;
-      out[i] = total > 0 ? (int64_t) (product / total) : 0;
-      remainder[i] = total > 0 ? (int64_t) (product % total) : 0;
-      assigned += out[i];
-    }
-  int64_t left = loss - assigned;
-  while (left > 0)
-    {
-      int best = -1;
-      for (int i = 0; i < 5; i++)
-        if (out[i] < bucket[i]
-            && (best < 0 || remainder[i] > remainder[best]))
-          best = i;
-      if (best < 0) break;
-      out[best]++;
-      remainder[best] = -1; /* each assignment receives at most one remainder */
-      left--;
-    }
-}
-
 int
 db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
                             int64_t interval_days,
@@ -3054,7 +3025,8 @@ db_cron_apply_slave_unrest (db_t *db, int64_t now_s,
       int64_t loss = population_loss < bucket_total
         ? population_loss : bucket_total;
       int64_t split[5] = {0};
-      slave_loss_split (r->bucket, bucket_total, loss, split);
+      if (!slave_population_split_loss (r->bucket, 5, loss, split))
+        { err.code = ERR_DB_CONSTRAINT; goto unrest_fail; }
       if (now_s > INT64_MAX - stoppage_cycles * 600
           || r->next_at > INT64_MAX - interval_s)
         { err.code = ERR_INVALID_ARG; goto unrest_fail; }

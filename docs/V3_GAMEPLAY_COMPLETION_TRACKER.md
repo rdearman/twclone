@@ -118,6 +118,13 @@ No live DB or full JSON regression run has been performed in this work session.
   `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`
   passed (69 tests, 200 subtests); PostgreSQL manifest JSON validation and
   `git diff --check` passed. No database or server runtime was run.
+- Unrest allocation was extracted to the production-used pure helper
+  `src/slave_population.h`; `tests.v2/run_engine_regressions.sh` now executes
+  deterministic proportional/largest-remainder, tie-order, zero, full-loss and
+  invalid-input cases. The runner passed; the sanitized server build passed;
+  focused pytest remained 69 passed / 200 subtests. This test/helper change is
+  uncommitted as of this checkpoint; DB scheduling and restart behavior remain
+  unverified.
 - `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 50 passed after stale-defense compare-and-update; `make -C bin -j2` — passed with ASan/UBSan; `git diff --check` — passed. Tests are source/contract tests; no server/DB runtime.
 - `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 49 passed after transactional capture-event change; `make -C bin -j2` — passed with ASan/UBSan; `git diff --check` — passed. No DB/server runtime.
 - `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 48 passed; source/contract tests only, not DB or server runtime.
