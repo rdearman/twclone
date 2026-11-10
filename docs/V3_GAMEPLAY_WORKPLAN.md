@@ -39,6 +39,9 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   sanitizer build and 47 focused tests pass, with runtime race verification
   outstanding. Source and test change committed as `c12668c2`; decision-register
   update committed as `ea74d79d`.
+- The insurance purchase schema/server now reject cargo and planet coverage;
+  the existing JSON insurance suite includes a refusal case. Focused tests and
+  sanitised build pass; committed as `dfdcd791`.
 - **Next action:** continue with remaining actionable tracker requirements,
   beginning with the next actionable population/capture workflow after
   verifying the existing source contracts; preserve database runtime as
