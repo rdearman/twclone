@@ -37,7 +37,8 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   Tracker cleanup is committed as `06c8284f`. Exchange market matching was
   then changed to acquire bilateral inventory locks in deterministic order;
   sanitizer build and 47 focused tests pass, with runtime race verification
-  outstanding.
+  outstanding. Source and test change committed as `c12668c2`; decision-register
+  update committed as `ea74d79d`.
 - **Next action:** continue with remaining actionable tracker requirements,
   beginning with the next actionable population/capture workflow after
   verifying the existing source contracts; preserve database runtime as
