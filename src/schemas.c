@@ -4721,8 +4721,6 @@ schema_insurance_policies_buy (void)
 
 
   json_array_append_new (subject_type_enum, json_string ("ship"));
-  json_array_append_new (subject_type_enum, json_string ("cargo"));
-  json_array_append_new (subject_type_enum, json_string ("planet"));
   json_object_set_new (subject_type_prop, "enum", subject_type_enum);
   json_object_set_new (data_properties, "subject_type", subject_type_prop);
 

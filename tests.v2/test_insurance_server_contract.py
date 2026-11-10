@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_insurance_handlers_delegate_money_and_claim_state_to_database():
     source = (ROOT / "src/server_loop.c").read_text(encoding="utf-8")
+    schema = (ROOT / "src/schemas.c").read_text(encoding="utf-8")
     assert "repo_ships_insurance_buy_policy" in source
     assert "repo_ships_insurance_settle_claim" in source
     assert "SELECT * FROM insurance_buy_policy" not in source
@@ -16,6 +17,24 @@ def test_insurance_handlers_delegate_money_and_claim_state_to_database():
     assert "json_integer (12345)" not in source
     assert "insurance_subject_owned" in source
     assert "insurance_claim_owned" in source
+    buy_handler = source.rsplit("cmd_insurance_policies_buy (client_ctx_t *ctx", 1)[1].split(
+        "cmd_insurance_claim_file", 1
+    )[0]
+    assert 'strcmp (subject_type, "ship") != 0' in buy_handler
+    buy_schema = schema.rsplit("schema_insurance_policies_buy (void)", 1)[1].split(
+        "return data_schema;", 1
+    )[0]
+    assert 'json_string ("ship")' in buy_schema
+    assert 'json_string ("cargo")' not in buy_schema
+    assert 'json_string ("planet")' not in buy_schema
+
+
+def test_insurance_json_suite_rejects_non_hull_coverage():
+    suite = (ROOT / "tests.v2/suite_economy_insurance.json").read_text(
+        encoding="utf-8"
+    )
+    assert '"subject_type": "cargo"' in suite
+    assert "Cargo insurance is not supported" in suite
 
 
 def test_insurance_policy_and_claim_transactions_are_backend_portable():

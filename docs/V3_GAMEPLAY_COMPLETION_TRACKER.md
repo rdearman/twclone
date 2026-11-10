@@ -83,7 +83,7 @@ No live DB or full JSON regression run has been performed in this work session.
 | COMBAT-003 | No duplicate hull/pod/loss | IMPLEMENTED_UNVERIFIED | player/hull locking, conditional destroyed update, ownership removal, one pod and per-hull event key | Source contract and ASan/UBSan build; no DB concurrency/runtime test | `63169074` | Verify retries and simultaneous lethal paths |
 | COMBAT-004 | Cargo/equipment loss | IMPLEMENTED_UNVERIFIED | shared destruction update zeroes cargo and ship equipment/defence quantities | Source inspection/build only | `63169074` | Protocol/database assertion |
 | COMBAT-005 | Preserve bank/planet/corporate assets | IMPLEMENTED_UNVERIFIED | shared destruction transaction; Terra enforcement no longer calls asset-seizure SQL, checks settlement result, and retains the existing `sanctioned` event field | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 43 passed; `make -C bin -j2`: passed with ASan/UBSan; runtime state preservation unverified | `63169074`, `0e81209c`, `5195480b`, `6027d878`, `ef07c811` | Runtime state-preservation assertion |
-| INS-001 | Hull-only coverage | IMPLEMENTED_UNVERIFIED | `settle_destruction_insurance` pays the configured payout capped at shiptype replacement value; cargo/equipment excluded | ASan/UBSan build and focused source assertions pass; JSON/server/DB runtime not run | `15821cd8`, working change | Verify hull valuation cap and loss exclusions |
+| INS-001 | Hull-only coverage | IMPLEMENTED_UNVERIFIED | purchase schema and handler now restrict insurance subjects to ships; `settle_destruction_insurance` caps covered payout at shiptype replacement value, excluding cargo/equipment | Added non-hull JSON refusal case and source contract assertions; 51 focused tests and ASan/UBSan build pass; server/DB runtime not run | Current working change | Execute protocol rejection and hull-payout/loss-exclusion flow; clarify no new pricing formula |
 | INS-002 | Qualifying destruction | IMPLEMENTED_UNVERIFIED | player-held active policy selected only when start/expiry epoch bounds include destruction time | Source inspection/build; no runtime | `15821cd8` | Verify time bounds and voluntary/nonqualifying loss cases |
 | INS-003 | Credit bank account | IMPLEMENTED_UNVERIFIED | locked CRD account credited in destruction and portable explicit-claim transactions; funded payout uses `ADJUSTMENT`, guaranteed system funding uses `INSURANCE_GUARANTEE` | ASan/UBSan build and focused source tests pass; no DB runtime | `6bf7dcd2`, working change | Verify player balance, ledger label and rollback on both backends |
 | INS-004 | Pod independent of policy | IMPLEMENTED_UNVERIFIED | unconditional pod creation is independent of insurance result | Source contract/build only | `63169074`, `15821cd8` | Verify insured and uninsured runtime cases |
@@ -131,6 +131,12 @@ No live DB or full JSON regression run has been performed in this work session.
   build passed; `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
   passed (47 tests); `tests.v2/run_engine_regressions.sh` passed; and
   `git diff --check` passed. No database concurrency test was run.
+- Insurance hull-only contract correction: `insurance.policies.buy` schema and
+  handler reject cargo/planet subjects; `suite_economy_insurance.json` now
+  covers the non-hull refusal. JSON validation passed, focused
+  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py`
+  passed (51 tests), ASan/UBSan build passed, and `git diff --check` passed.
+  No live protocol/DB runtime was run.
 - Current Exchange/unrest/insurance/used-hull batch: `make -C bin -j2` passed
   with ASan/UBSan after the ship-sale ownership-count correction;
   `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`

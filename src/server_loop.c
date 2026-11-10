@@ -234,10 +234,12 @@ cmd_insurance_policies_buy (client_ctx_t *ctx, json_t *root)
   int64_t payout = json_integer_value (json_object_get (data, "payout"));
   int64_t fund_id = json_integer_value (json_object_get (data, "fund_id"));
   int duration = (int) json_integer_value (json_object_get (data, "duration"));
-  if (!subject_type || subject_id <= 0 || premium < 0 || payout < 0 || fund_id <= 0 || duration <= 0)
+  if (!subject_type || strcmp (subject_type, "ship") != 0
+      || subject_id <= 0 || premium < 0 || payout < 0 || fund_id <= 0
+      || duration <= 0)
     {
       send_response_error (ctx, root, ERR_INVALID_ARG,
-                           "subject, premium, payout, fund_id and duration are required");
+                           "A ship subject, premium, payout, fund_id and duration are required");
       return 0;
     }
   db_t *db = game_db_get_handle ();

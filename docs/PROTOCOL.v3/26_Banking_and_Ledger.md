@@ -80,7 +80,8 @@ completed payments. No arbitrary active-order limit is imposed.
 # Insurance commands
 
 `insurance.policies.list` returns the authenticated player's policies.
-`insurance.policies.buy` requires `subject_type`, `subject_id`, `duration`,
+`insurance.policies.buy` is hull-only: `subject_type` must be `ship`. It
+requires `subject_id`, `duration`,
 `premium`, `payout`, and `fund_id`; the shared C repository locks the insured
 asset, player account and fund, then debits the premium, credits the fund,
 records the ledger entry and creates the policy atomically. `insurance.claim.file`

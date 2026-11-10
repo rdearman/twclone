@@ -31,6 +31,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Negative: Cargo insurance is not supported by hull-only V3 coverage",
+      "command": "insurance.policies.buy",
+      "data": { "subject_type": "cargo", "subject_id": "@econ_trader_ship_id", "duration": 3600, "premium": 10, "payout": 50, "fund_id": 1 },
+      "user": "econ_trader",
+      "expect": { "status": "error" }
+    },
+    {
       "name": "Rig: Create owned insurance claim",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "INSERT INTO insurance_claims (policy_id, event_id, amount, status) VALUES (@{policy_id}, 'insurance-regression-event', 25, 'open') RETURNING insurance_claims_id;" },

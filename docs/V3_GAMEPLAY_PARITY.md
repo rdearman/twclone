@@ -213,6 +213,9 @@ approved protocol. Runtime verification of recent transactions remains pending.
 - Qualifying insurance claims are guaranteed and credited to the player's bank
   despite insufficient insurer reserves; system-created value is distinguished
   in the ledger.
+- Insurance purchase requests accept ship hulls only; the schema and handler
+  both reject cargo/planet subjects. The new refusal case is source- and
+  schema-tested; protocol runtime remains pending.
 - `make -C bin -j2` passed with ASan/UBSan; the focused source/migration suite
   passed 69 tests and 200 subtests. PostgreSQL/MySQL migration and server
   runtime verification were not performed.
