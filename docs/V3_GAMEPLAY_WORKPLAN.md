@@ -29,12 +29,13 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   insurance and used-hull source/migration/documentation batch, including the
   correction that last-ship eligibility counts every role-1 owned hull rather
   than only the primary hull. A subsequent focused package extracted the
-  proportional loss allocator into `src/slave_population.h` and added C unit
-  assertions to the existing engine regression script. Its build and focused
-  tests passed; that follow-up is not committed yet.
-- **Next action:** preserve the portable explicit insurance command fix in a
-  separate commit after final diff review, then continue through remaining
-  actionable tracker requirements without restarting completed packages.
+  proportional loss allocator and shared output policy in
+  `src/slave_population.h`, with C assertions in the existing engine test
+  runner. Build and focused tests pass; this follow-up remains uncommitted.
+  Portable insurance command operations are committed as `a6290ad6`.
+- **Next action:** commit the shared output-policy/test follow-up after final
+  diff review, then continue through remaining actionable tracker requirements
+  without restarting completed packages.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed

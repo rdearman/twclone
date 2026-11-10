@@ -201,6 +201,9 @@ approved protocol. Runtime verification of recent transactions remains pending.
   and Exchange stock is offered to the existing matcher.
 - Daily unrest scheduling uses persisted event state and deterministic
   proportional integer loss allocation.
+- The exact slave-output floor multiplier is centralized and shared by the
+  production tick and planet overview; the existing C engine test runner
+  exercises its ORE/ORG/EQU rounding and stoppage behavior.
 - Existing used hulls can be purchased through the shipyard command at a
   configurable 80% default price, preserving ship identity and equipment.
 - Qualifying insurance claims are guaranteed and credited to the player's bank

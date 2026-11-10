@@ -89,6 +89,9 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("db_cron_apply_slave_unrest", self.cron)
         self.assertIn("slave_population_split_loss", self.cron_repo)
         self.assertIn("(__int128) buckets[i] * loss", (ROOT / "src/slave_population.h").read_text())
+        self.assertGreaterEqual(self.cron_repo.count("slave_population_effective_output"), 2)
+        self.assertIn('strcmp (commodity_code, "ORE") == 0',
+                      (ROOT / "src/slave_population.h").read_text())
         self.assertIn("UNIQUE (planet_id, scheduled_at)",
                       (ROOT / "sql/pg/171_v3_planet_population_state.sql").read_text())
         self.assertIn("daily@04:15Z",
@@ -455,10 +458,12 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("db_cron_planet_get_production_overview_json", view)
         self.assertIn("WHEN 'ORG' THEN COALESCE(p.colonists_org,0)*COALESCE(pt.organicsProduction,0)", production)
         self.assertIn("WHEN 'EQU' THEN COALESCE(p.colonists_eq,0)*COALESCE(pt.equipmentProduction,0)", production)
-        self.assertIn('strcmp (code, "ORE") == 0', production)
-        self.assertIn('strcmp (code, "ORG") == 0', production)
-        self.assertIn('strcmp (code, "EQU") == 0', production)
-        self.assertIn("normal_output / 2", production)
+        self.assertIn("slave_population_effective_output", production)
+        policy = (ROOT / "src/slave_population.h").read_text(encoding="utf-8")
+        self.assertIn('strcmp (commodity_code, "ORE") == 0', policy)
+        self.assertIn('strcmp (commodity_code, "ORG") == 0', policy)
+        self.assertIn('strcmp (commodity_code, "EQU") == 0', policy)
+        self.assertIn("normal_output / 2", policy)
         self.assertIn("unrest_stopped", production)
 
     def test_slave_deposit_uses_real_cargo_and_prevents_mixed_populations(self):

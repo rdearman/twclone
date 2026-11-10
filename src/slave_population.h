@@ -3,6 +3,27 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
+
+/* The tick and read-only production overview must apply exactly the same
+ * server-authoritative slave modifier. */
+static inline int64_t
+slave_population_effective_output (int64_t normal_output,
+                                   const char *commodity_code,
+                                   bool is_slave_population,
+                                   bool unrest_stopped)
+{
+  if (!is_slave_population)
+    return normal_output;
+  if (unrest_stopped)
+    return 0;
+  if (commodity_code
+      && (strcmp (commodity_code, "ORE") == 0
+          || strcmp (commodity_code, "ORG") == 0
+          || strcmp (commodity_code, "EQU") == 0))
+    return normal_output > 0 ? normal_output / 2 : 0;
+  return normal_output;
+}
 
 /* Allocate a configured slave loss proportionally across fixed production
  * assignment buckets. Largest remainders are awarded in bucket order for

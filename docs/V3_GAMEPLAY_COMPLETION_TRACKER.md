@@ -59,7 +59,7 @@ No live DB or full JSON regression run has been performed in this work session.
 | POP-005 | Neutral inheritance/no acquisition | IMPLEMENTED_UNVERIFIED | capture retains existing SLAVE type; delivery requires existing alignment-band evil flag | Static contract suite 32 passed; no runtime | — | Test neutral capture and attempted purchase |
 | POP-006 | Good auto-liberation | IMPLEMENTED_UNVERIFIED | capture transaction conversion | Build passed; no dedicated executed test | — | JSON scenario and runtime validation |
 | POP-007 | Evil may retain slave population | IMPLEMENTED_UNVERIFIED | capture path leaves SLAVE unchanged | No runtime test | — | JSON scenario |
-| POP-008 | Slave production at 50% | IMPLEMENTED_UNVERIFIED | `repo_cron.c` integer production multiplier | Static contract tests not specific; no DB runtime | — | Test exact floor for all three outputs |
+| POP-008 | Slave production at 50% | IMPLEMENTED_UNVERIFIED | shared `slave_population_effective_output` used by both production tick and read-only overview | `tests.v2/run_engine_regressions.sh` now tests floor arithmetic for ORE/ORG/EQU, negative/zero boundary, and no second colonist modifier; DB tick unverified | Working change | Verify persisted production quantities and stoppage against DB |
 | POP-009 | Permanently low morale, no second penalty | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `repo_cron.c` | Source/static only | — | Verify production and API |
 | POP-010 | Deterministic daily unrest | IMPLEMENTED_UNVERIFIED | `h_daily_slave_unrest`, `db_cron_apply_slave_unrest`, engine registry; migrations 176/128 | Source contract checks daily handler, idempotent event, proportional split and zero-config disable; included in focused pytest run | Working change | Database verify daily execution, stoppage duration, exact loss and no duplicate event |
 | POP-011 | No unapproved defaults | IMPLEMENTED_UNVERIFIED | `server_config.c`, `server_sysop.c`; zero sentinel is unset/disabled, negative values rejected | JSON config scenario authored; sanitised build passed; 41 focused source/manifest tests passed; not runtime-run | `5f7bb98c` | Verify SysOp set/get and startup parsing in protocol runtime |
@@ -103,7 +103,7 @@ No live DB or full JSON regression run has been performed in this work session.
 | TRADE-002 | Dynamic pricing retained | IMPLEMENTED_UNVERIFIED | port price repositories | No test executed | — | Verify supply/demand prices |
 | TRADE-003 | Direction, stock, cargo, policing | IMPLEMENTED_UNVERIFIED | `server_ports.c`, repositories | No test executed | — | Runtime contract verification |
 | SYS-001 | 60% ship sale setting | IMPLEMENTED_UNVERIFIED | `server_config.c`, `server_sysop.c` | Build passed, no runtime | `bcaf3e93` | Confirm default and bounds via protocol |
-| SYS-002 | Fixed 50% slave productivity | IMPLEMENTED_UNVERIFIED | `repo_cron.c` | No DB test | — | Verify exact floor |
+| SYS-002 | Fixed 50% slave productivity | IMPLEMENTED_UNVERIFIED | `src/slave_population.h`, shared by `repo_cron.c` production and overview | Existing engine C runner tests exact integer floor and stoppage; DB runtime unverified | Working change | Verify actual production tick against persisted stock |
 | SYS-003 | Configurable deterministic unrest | IMPLEMENTED_UNVERIFIED | config keys/parser, SysOp validation, daily scheduler, PG migrations 173/176 and MySQL 125/128 | Focused source suite (69 passed, 200 subtests) and ASan/UBSan build passed; protocol/DB runtime not run | Working change | Verify SysOp setting and daily scheduler against DB; zero disables effects |
 | SYS-004 | Existing insurance valuation config | PARTIAL | insurance config/repositories need trace | No test executed | — | Confirm authoritative value or request policy |
 | SYS-005 | Economy config | IMPLEMENTED_UNVERIFIED | `galactic_exchange_liquidity_credits`, default zero, nonnegative configured target; explicit `SYSTEM_LIQUIDITY` ledger | ASan/UBSan build and focused source/migration suite (69 passed, 200 subtests); protocol/DB runtime unverified | Working change | Verify migration and SysOp setting plus market top-up |
@@ -118,7 +118,13 @@ No live DB or full JSON regression run has been performed in this work session.
   explicit claim settlement; focused
   `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
   passed (51 tests); `git diff --check` passed. No PostgreSQL/MySQL runtime.
-  Changes are uncommitted at this checkpoint.
+  Committed as `a6290ad6`.
+- Shared slave production policy follow-up: both production-tick settlement
+  and overview now call the same pure integer output function. The existing
+  engine runner passes exact floor checks for ORE/ORG/EQU, zero/odd/even values,
+  stoppage and unchanged non-slave output; focused pytest passes (51 tests),
+  ASan/UBSan build is up to date, and `git diff --check` passes. DB production
+  persistence remains unverified; changes uncommitted at this checkpoint.
 - Current Exchange/unrest/insurance/used-hull batch: `make -C bin -j2` passed
   with ASan/UBSan after the ship-sale ownership-count correction;
   `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`

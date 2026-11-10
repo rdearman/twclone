@@ -1283,17 +1283,9 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
       row->stock_capacity = db_res_col_i64 (res, 13, &err);
       row->normal_output = db_res_col_i64 (res, 14, &err);
       row->consumption = db_res_col_i64 (res, 15, &err);
-      int64_t effective_output = row->normal_output;
-      if (row->slave_population)
-        {
-          if (row->unrest_stopped)
-            effective_output = 0;
-          else if (strcmp (row->commodity, "ORE") == 0
-                   || strcmp (row->commodity, "ORG") == 0
-                   || strcmp (row->commodity, "EQU") == 0)
-            effective_output = effective_output > 0
-              ? effective_output / 2 : 0;
-        }
+      int64_t effective_output = slave_population_effective_output
+        (row->normal_output, row->commodity, row->slave_population,
+         row->unrest_stopped);
       if (__builtin_sub_overflow (effective_output, row->consumption,
                                   &row->net_delta))
         {
@@ -2875,16 +2867,10 @@ db_cron_planet_get_production_overview_json (db_t *db, int planet_id,
       bool unrest_stopped = db_res_col_bool (res, 4, &err);
       if (err.code || !code)
         break;
-      int64_t effective_output = normal_output;
-      if (population_type && strcmp (population_type, "SLAVE") == 0)
-        {
-          if (unrest_stopped)
-            effective_output = 0;
-          else if (strcmp (code, "ORE") == 0
-                   || strcmp (code, "ORG") == 0
-                   || strcmp (code, "EQU") == 0)
-            effective_output = normal_output > 0 ? normal_output / 2 : 0;
-        }
+      bool is_slave = population_type
+        && strcmp (population_type, "SLAVE") == 0;
+      int64_t effective_output = slave_population_effective_output
+        (normal_output, code, is_slave, unrest_stopped);
       int64_t net = 0;
       if (__builtin_sub_overflow (effective_output, consumption, &net))
         {

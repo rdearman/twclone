@@ -14,6 +14,18 @@ sum (const int64_t *values, unsigned count)
 int
 main (void)
 {
+  const char *produced[] = {"ORE", "ORG", "EQU"};
+  const int64_t normal[] = {0, 1, 2, 3, 5, 101};
+  const int64_t half[] = {0, 0, 1, 1, 2, 50};
+  for (unsigned c = 0; c < 3; c++)
+    for (unsigned i = 0; i < sizeof normal / sizeof normal[0]; i++)
+      assert (slave_population_effective_output (normal[i], produced[c],
+                                                   true, false) == half[i]);
+  assert (slave_population_effective_output (37, "FUE", true, false) == 37);
+  assert (slave_population_effective_output (37, "ORE", true, true) == 0);
+  assert (slave_population_effective_output (37, "FUE", true, true) == 0);
+  assert (slave_population_effective_output (37, "ORE", false, true) == 37);
+
   int64_t buckets[5] = {2, 3, 5, 0, 0};
   int64_t loss[5] = {0};
   assert (slave_population_split_loss (buckets, 5, 5, loss));
