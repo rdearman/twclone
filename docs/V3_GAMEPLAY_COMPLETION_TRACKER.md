@@ -258,3 +258,10 @@ the specific workflow was exercised.
   outside the sandbox because the permission review rejected that command;
   this is not evidence of a bad password or a gameplay failure. No production
   or remote database was contacted.
+- The remaining failed Ferengi roster case (`case-0036`) is a fixture issue,
+  not a spawn regression: the test added a definition after the active NPC
+  population had already reached its configured 2%-of-sectors cap. The fixture
+  now temporarily raises the cap by exactly one slot, restores the original
+  value, and reconciles population afterward. Classification is updated to
+  FIXTURE_DEFECT; this fixture correction is JSON-validated but runtime
+  verification remains blocked by the sandbox's QA connection failure.

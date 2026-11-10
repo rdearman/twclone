@@ -4,21 +4,21 @@ Latest full execution: **2,242 executed; 2,168 passed; 74 failed**. The runner m
 
 | Primary classification | Cases |
 | --- | ---: |
-| IMPLEMENTATION_DEFECT | 1 |
+| IMPLEMENTATION_DEFECT | 0 |
 | MISSING_IMPLEMENTATION | 2 |
 | OBSOLETE_V2_TEST | 16 |
 | PROTOCOL_SCHEMA_MISMATCH | 3 |
 | SPECIFICATION_BLOCKER | 3 |
 | INFRASTRUCTURE | 8 |
 | UNCLASSIFIED | 6 |
-| FIXTURE_DEFECT | 35 |
+| FIXTURE_DEFECT | 36 |
 | **Failed total** | **74** |
 
 Blocked (1) and unsupported (3) are outside the failed total.
 
 ## Exchange attribution
 
-Previous full run had 92 failures; current has 74 (net change -18): 21 prior failures resolved and 3 new failures appeared. Exactly two resolved cases directly evidenced the Exchange clearing-account failure (`suite_planet_taxable_activity_e2e.json::case-0018` and `case-0019`); the other 19 resolved cases are unrelated. The current port-robbery failure is a fixture selecting a port in FedSpace, where V3 explicitly refuses aggression. Two new Exchange assertions were caused by the test port's insufficient balance, not failed matching; an explicit QA fixture funding step corrected this and the focused scenario now passes.
+Previous full run had 92 failures; current has 74 (net change -18): 21 prior failures resolved and 3 new failures appeared. Exactly two resolved cases directly evidenced the Exchange clearing-account failure (`suite_planet_taxable_activity_e2e.json::case-0018` and `case-0019`); the other 19 resolved cases are unrelated. The current port-robbery failure is a fixture selecting a port in FedSpace, where V3 explicitly refuses aggression. Two new Exchange assertions were caused by the test port's insufficient balance, not failed matching; an explicit QA fixture funding step corrected this and the focused scenario now passes. The remaining Ferengi case was also a fixture: a data-only definition sorted after the active population cap; the test now uses an early deterministic test code, preserving the real population limit.
 
 The focused real-server PostgreSQL Exchange flow passed **36/36 executed cases** after funding the port buyer for the intended full fill. It verified planetary sale, ring-fenced goods, port purchase, stock conservation, linked ledger settlement and retry idempotency. These focused results do not replace the full-run figures. The later `suite_combat_port_rob` fixture was corrected to select a port outside sectors 1–10; this correction has not yet been rerun.
 
@@ -31,7 +31,7 @@ The focused real-server PostgreSQL Exchange flow passed **36/36 executed cases**
 - 4: Legacy expected success despite approved immediate lethal entry hazard and pod destruction response
 - 3: Fixture selects a planet ID not present in generated universe
 - 2: No citadel requirement rows seeded for supported planet type
-- 2: Configured named Ferengi roster definitions not provisioned in spawned population
+- 1: Ferengi data-only roster fixture sorted beyond the configured active population cap
 - 2: Unsupported sys.run_cron_handler test hook
 - 1: Fixture leaves Exchange liquidity at configured zero default
 - 1: suite_bucket1_remainder_ship_stock_system.json: ship.jettison - Positive

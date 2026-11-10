@@ -15,14 +15,14 @@
     "server_crashes": 0
   },
   "classification_counts": {
-    "IMPLEMENTATION_DEFECT": 1,
+    "IMPLEMENTATION_DEFECT": 0,
     "MISSING_IMPLEMENTATION": 2,
     "OBSOLETE_V2_TEST": 16,
     "PROTOCOL_SCHEMA_MISMATCH": 3,
     "SPECIFICATION_BLOCKER": 3,
     "INFRASTRUCTURE": 8,
     "UNCLASSIFIED": 6,
-    "FIXTURE_DEFECT": 35
+    "FIXTURE_DEFECT": 36
   },
   "blocked_cases": 1,
   "unsupported_cases": 3,
@@ -1537,8 +1537,8 @@
     {
       "case_id": "suite_ferengi_travelling_traders.json::case-0036",
       "suite": "suite_ferengi_travelling_traders.json",
-      "primary_classification": "IMPLEMENTATION_DEFECT",
-      "root_cause_group": "Configured named Ferengi roster definitions not provisioned in spawned population",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Data-only roster test trader falls beyond the configured active population rank",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "sys.raw_sql_exec",
@@ -1573,8 +1573,8 @@
           }
         }
       },
-      "specification_reference": "Ferengi named-roster population requirement; docs/V3_GAMEPLAY_DECISIONS.md NPC/Ferengi rows and the named roster acceptance suite.",
-      "proposed_corrective_action": "Trace seed/reconciliation through NPC spawning; provision the existing named definitions with stable identities and validate encounter discovery.",
+      "specification_reference": "Ferengi population is capped at the configured percentage of sectors (minimum three); roster definitions are capacity, not simultaneous active population. docs/V3_GAMEPLAY_DECISIONS.md and V3 faction roster contract.",
+      "proposed_corrective_action": "Place the temporary fixture definition early in stable roster ordering so it is within the configured active population cap; leave production cap behavior unchanged.",
       "confidence": "confirmed"
     },
     {

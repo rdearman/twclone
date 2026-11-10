@@ -159,31 +159,44 @@
     {
       "name": "Clean up interrupted data-only trader fixture",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "DELETE FROM ships WHERE ship_id IN (SELECT ship_id FROM ferengi_traders WHERE trader_code = 'codex_fixture_roster_only');" },
+      "data": { "sql": "DELETE FROM ships WHERE ship_id IN (SELECT ship_id FROM ferengi_traders WHERE trader_code = '000_codex_fixture_roster_only');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Save Ferengi population density",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT value FROM config WHERE key = 'ferengi.population.percent';" },
+      "expect": { "status": "ok" },
+      "save": { "old_ferengi_population_percent": "data.rows.0.0" }
+    },
+    {
+      "name": "Temporarily allow one additional Ferengi roster slot",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE config SET value = (SELECT LEAST(100, ((f.active_count + 1) * 100 + s.sector_count - 1) / s.sector_count)::text FROM (SELECT COUNT(*) AS sector_count FROM sectors) s CROSS JOIN (SELECT COUNT(*) AS active_count FROM ferengi_traders WHERE active = TRUE) f) WHERE key = 'ferengi.population.percent';" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Clean up interrupted trader definition",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "DELETE FROM ferengi_trader_definitions WHERE trader_code = 'codex_fixture_roster_only';" },
+      "data": { "sql": "DELETE FROM ferengi_trader_definitions WHERE trader_code = '000_codex_fixture_roster_only';" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Add temporary trader using data only",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "INSERT INTO ferengi_trader_definitions (trader_code, display_name, ship_type_id, active) SELECT 'codex_fixture_roster_only', 'Configured Roster Trader', shiptypes_id, TRUE FROM shiptypes WHERE name = 'Merchant Freighter' ON CONFLICT (trader_code) DO UPDATE SET active = TRUE, display_name = EXCLUDED.display_name, ship_type_id = EXCLUDED.ship_type_id;" },
+      "data": { "sql": "INSERT INTO ferengi_trader_definitions (trader_code, display_name, ship_type_id, active) SELECT '000_codex_fixture_roster_only', 'Configured Roster Trader', shiptypes_id, TRUE FROM shiptypes WHERE name = 'Merchant Freighter' ON CONFLICT (trader_code) DO UPDATE SET active = TRUE, display_name = EXCLUDED.display_name, ship_type_id = EXCLUDED.ship_type_id;" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Configure temporary trader commodity rotation",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "INSERT INTO ferengi_trader_definition_rotation (trader_code, position, commodity_code) VALUES ('codex_fixture_roster_only', 1, 'ORE') ON CONFLICT (trader_code, position) DO UPDATE SET commodity_code = EXCLUDED.commodity_code;" },
+      "data": { "sql": "INSERT INTO ferengi_trader_definition_rotation (trader_code, position, commodity_code) VALUES ('000_codex_fixture_roster_only', 1, 'ORE') ON CONFLICT (trader_code, position) DO UPDATE SET commodity_code = EXCLUDED.commodity_code;" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Configure temporary trader starting cargo",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "INSERT INTO ferengi_trader_definition_cargo (trader_code, commodity_code, quantity) VALUES ('codex_fixture_roster_only', 'ORE', 3) ON CONFLICT (trader_code, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" },
+      "data": { "sql": "INSERT INTO ferengi_trader_definition_cargo (trader_code, commodity_code, quantity) VALUES ('000_codex_fixture_roster_only', 'ORE', 3) ON CONFLICT (trader_code, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;" },
       "expect": { "status": "ok" }
     },
     {
@@ -194,20 +207,31 @@
     {
       "name": "Verify data-only trader was provisioned with its configured name",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "SELECT display_name FROM ferengi_traders WHERE trader_code = 'codex_fixture_roster_only';" },
+      "data": { "sql": "SELECT display_name FROM ferengi_traders WHERE trader_code = '000_codex_fixture_roster_only';" },
       "expect": { "status": "ok" },
       "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": "Configured Roster Trader" } ]
     },
     {
       "name": "Remove temporary data-only trader",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "DELETE FROM ships WHERE ship_id IN (SELECT ship_id FROM ferengi_traders WHERE trader_code = 'codex_fixture_roster_only');" },
+      "data": { "sql": "DELETE FROM ships WHERE ship_id IN (SELECT ship_id FROM ferengi_traders WHERE trader_code = '000_codex_fixture_roster_only');" },
       "expect": { "status": "ok" }
     },
     {
       "name": "Remove temporary trader definition",
       "command": "sys.raw_sql_exec", "user": "admin",
-      "data": { "sql": "DELETE FROM ferengi_trader_definitions WHERE trader_code = 'codex_fixture_roster_only';" },
+      "data": { "sql": "DELETE FROM ferengi_trader_definitions WHERE trader_code = '000_codex_fixture_roster_only';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore Ferengi population density",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE config SET value = '@{old_ferengi_population_percent}' WHERE key = 'ferengi.population.percent';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reconcile Ferengi population at configured density",
+      "command": "sys.npc.ferengi_tick_once", "user": "admin", "data": {},
       "expect": { "status": "ok" }
     }
   ]
