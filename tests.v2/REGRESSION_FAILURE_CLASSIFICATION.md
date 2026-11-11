@@ -4,17 +4,52 @@ Latest full execution: **2,242 executed; 2,168 passed; 74 failed**. The runner m
 
 | Primary classification | Cases |
 | --- | ---: |
-| IMPLEMENTATION_DEFECT | 0 |
-| MISSING_IMPLEMENTATION | 2 |
+| IMPLEMENTATION_DEFECT | 2 |
+| MISSING_IMPLEMENTATION | 0 |
 | OBSOLETE_V2_TEST | 16 |
 | PROTOCOL_SCHEMA_MISMATCH | 3 |
-| SPECIFICATION_BLOCKER | 3 |
+| SPECIFICATION_BLOCKER | 6 |
 | INFRASTRUCTURE | 8 |
-| UNCLASSIFIED | 6 |
-| FIXTURE_DEFECT | 36 |
+| UNCLASSIFIED | 2 |
+| FIXTURE_DEFECT | 37 |
 | **Failed total** | **74** |
 
 Blocked (1) and unsupported (3) are outside the failed total.
+
+The six previously unclassified cases are now reconciled from preserved
+request/response evidence and the current V3 contracts. The two
+`auth.mfa_verify` cases use a command absent from the registry; the registry
+does expose `auth.mfa.totp.verify`, but the V3 authentication contract does not
+approve a rename or define MFA behavior, so the historical tests must not yet
+be rewritten. Three legacy SysOp requests (`sysop.motd.set`,
+`sysop.port.restock`, `sysop.audit.tail`) are specification blockers: they are
+neither registered nor documented, and no approved removal is recorded. The
+kicked-player case is a confirmed implementation defect: the V3 contract
+requires session invalidation, while the captured post-kick `player.my_info`
+succeeded because the handler only closed sockets. The handler now revokes
+durable target sessions first; runtime verification remains pending.
+
+Reconciliation of the other previously recorded protocol mismatches found
+two additional actionable defects: the shipyard-upgrade discoverable schema
+did not express the documented new-versus-used acquisition alternatives, so
+the schema is corrected with `oneOf` and its existing JSON case now checks both
+branches; the planet-deposit failure used an unresolved planet-ID substitution
+and an unsupported `ship_id` field, so its fixture now captures the inserted
+planet ID and establishes ownership/landing state. The standing-order
+ownership case asserted an undocumented exact 404; its JSON expectation now
+requires an error without prescribing the code. These edits are not runtime
+verified. The historical 74-case classification now has 2 implementation
+defects, 3 protocol mismatches, 6 specification blockers, 37 fixture defects,
+16 obsolete V2 tests, 8 infrastructure failures, 0 missing implementations
+and 2 unclassified cases.
+
+The two citadel failures are no longer called confirmed missing
+implementations. The handler reads per-level costs and duration from
+`planettypes`, and the canonical lookup seed contains those values. The error
+shows that the selected row had no usable positive duration, but the lost run
+report did not preserve that planet type or its `citadelUpgradeTime` value.
+The exact cause remains UNCLASSIFIED pending a runtime capture; no costs or
+seed values are invented.
 
 ## Exchange attribution
 
@@ -30,7 +65,7 @@ The focused real-server PostgreSQL Exchange flow passed **36/36 executed cases**
 - 6: Fixture calls C repository function as SQL / combines statements in prepared SQL
 - 4: Legacy expected success despite approved immediate lethal entry hazard and pod destruction response
 - 3: Fixture selects a planet ID not present in generated universe
-- 2: No citadel requirement rows seeded for supported planet type
+- 2: Citadel build/upgrade receive no usable duration; selected planet type and database value were not retained, so root cause is unclassified
 - 1: Ferengi data-only roster fixture sorted beyond the configured active population cap
 - 2: Unsupported sys.run_cron_handler test hook
 - 1: Fixture leaves Exchange liquidity at configured zero default

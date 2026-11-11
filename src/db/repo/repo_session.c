@@ -35,6 +35,18 @@ int repo_session_lookup(db_t *db, const char *token, int32_t *out_player_id, int
     return err.code;
 }
 
+int repo_session_revoke_player_sessions(db_t *db, int32_t player_id)
+{
+    if (!db || player_id <= 0)
+        return -1;
+
+    db_error_t err;
+    if (!db_exec(db, "DELETE FROM sessions WHERE player_id = {1}",
+                 (db_bind_t[]){ db_bind_i64(player_id) }, 1, &err))
+        return err.code ? err.code : -1;
+    return 0;
+}
+
 int repo_session_get_unseen_notices(db_t *db, int32_t max_rows, db_res_t **out_res)
 {
     /* SQL_VERBATIM: Q2 */

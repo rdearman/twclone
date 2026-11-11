@@ -216,6 +216,15 @@ approved protocol. Runtime verification of recent transactions remains pending.
 - Insurance purchase requests accept ship hulls only; the schema and handler
   both reject cargo/planet subjects. The new refusal case is source- and
   schema-tested; protocol runtime remains pending.
+- `shipyard.upgrade` schema discovery now expresses its two mutually exclusive
+  modes (`new_type_id` + `new_ship_name`, or `used_inventory_id`) with JSON
+  Schema `oneOf`, matching protocol 19. Its existing JSON schema acceptance
+  case was updated; server runtime remains pending.
+- `sysop.player.kick` now revokes all durable session tokens for the target
+  before closing active sockets. The pre-fix full-run evidence showed a
+  post-kick `player.my_info` still succeeded. A focused source-contract test
+  and ASan/UBSan build pass; same-token JSON runtime verification remains
+  pending.
 - `make -C bin -j2` passed with ASan/UBSan; the focused source/migration suite
   passed 69 tests and 200 subtests. PostgreSQL/MySQL migration and server
   runtime verification were not performed.

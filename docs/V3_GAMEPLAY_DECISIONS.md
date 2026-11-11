@@ -88,6 +88,12 @@ compilation alone never qualify as VERIFIED.
 | MOVE-01 | Interrupted transwarp | After initiation, consume required fuel and remain at origin if interrupted; rejected pre-initiation request does not consume fuel absent existing rule; no destination hazards if not entered. | `src/server_universe.c::cmd_move_transwarp`, movement repositories | `21_Sector_and_Movement_Commands.md` | APPROVED; preflight rejection precedes turn use, but no post-initiation interrupting event/path exists in source. The required interrupt behavior is PARTIAL pending an explicit interrupt mechanism; no arbitrary hazard-triggered interruption is inferred. |
 | MOVE-02 | Entry hazards | Apply hazards immediately on normal/transwarp sector entry; persist damage/destruction, trigger pod lifecycle; no disconnect/prompt bypass. | `src/server_universe.c`, `src/server_combat.c` | `21_Sector_and_Movement_Commands.md`, `23_Combat_and_Weapons.md` | APPROVED; common entry resolver is called after both movement types; lethal state/context fix and JSON acceptance scenario added; runtime UNVERIFIED. |
 
+## SysOp session invalidation
+
+| ID | Subsystem | Approved behaviour / configuration | Implementation references | Protocol references | Status / verification / unresolved details |
+|---|---|---|---|---|---|
+| SYS-07 | Player kick | `sysop.player.kick` must invalidate every durable session for the target and disconnect active connections; a subsequent request using an old token must be unauthenticated. | `src/server_sysop.c::cmd_sysop_player_kick`, `src/db/repo/repo_session.c::repo_session_revoke_player_sessions`, `src/server_loop.c::process_message` | `29_SysOp_Commands.md` | APPROVED; source change and contract test added. Build/static test passed; JSON runtime verification UNVERIFIED because QA access is blocked in the permitted environment. |
+
 ## Configuration and verification ledger
 
 | ID | Subsystem | Approved configuration | Source / protocol | Status |

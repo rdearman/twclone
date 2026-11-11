@@ -110,6 +110,7 @@ the specific workflow was exercised.
 | SYS-004 | Existing insurance valuation config | PARTIAL | insurance config/repositories need trace | No test executed | — | Confirm authoritative value or request policy |
 | SYS-005 | Economy config | IMPLEMENTED_UNVERIFIED | `galactic_exchange_liquidity_credits`, default zero, nonnegative configured target; explicit `SYSTEM_LIQUIDITY` ledger | ASan/UBSan build and focused source/migration suite (69 passed, 200 subtests); protocol/DB runtime unverified | `6bf7dcd2` | Verify migration and SysOp setting plus market top-up |
 | SYS-006 | Config documentation | IMPLEMENTED_UNVERIFIED | `docs/SYSOP_MENU.md`, protocol 29, protocol 24 | Documentation commits `434d81a6`, `5f7bb98c` | `5f7bb98c` | Keep parameter descriptions synchronized with any approved policy changes |
+| SYS-007 | SysOp kick invalidates all target sessions | IMPLEMENTED_UNVERIFIED | `cmd_sysop_player_kick` calls `repo_session_revoke_player_sessions` before closing active sockets | Existing JSON case `test_sysop_players.json::case-0014` observed post-kick `player.my_info` succeed; source-contract test added, runtime rerun blocked | uncommitted | Run the JSON case against isolated QA and verify the same session token is rejected |
 | NPC-FER-01 | Ferengi wanted bounty and captain pursuit | PARTIAL | `src/server_universe.c::ferengi_handle_hostile_attack`, Ferengi scheduler; `src/server_combat.c::handle_ship_attack` | Added persistence-failure/rollback source-contract assertion; `test_planetary_server_contract.py`: 35 passed; ASan/UBSan build passed; no DB runtime | `e4954ef7` | Ferengi flow exists, but bounty amount is hardcoded 5000 without an approved amount and runtime pursuit is unverified; define amount and verify scheduler/action persistence |
 | NPC-ORI-01 | Orion blockader hold/deploy/attack behavior | PARTIAL | `src/server_universe.c::ori_move_all_ships` | Blockade assets/attacks now gated to assigned post; source-contract assertions; `test_planetary_server_contract.py`: 35 passed; ASan/UBSan build passed; no DB runtime | `ed08c3be` | Current target exclusion is Orion ownership; clarify whether hostile/allied player targeting requires additional policy, then verify home-sector hold and deployment at runtime |
 
@@ -265,3 +266,26 @@ the specific workflow was exercised.
   value, and reconciles population afterward. Classification is updated to
   FIXTURE_DEFECT; this fixture correction is JSON-validated but runtime
   verification remains blocked by the sandbox's QA connection failure.
+- The six formerly UNCLASSIFIED failures have been classified from retained
+  evidence: two MFA requests are protocol-name mismatches with no authoritative
+  V3 MFA contract; three legacy SysOp requests have no V3 contract or approved
+  removal; one post-kick session remained usable, violating
+  `29_SysOp_Commands.md`. The latter is corrected by revoking durable session
+  tokens before socket closure. Two independent citadel failures previously
+  labeled missing implementations are now UNCLASSIFIED: the handler reads
+  `planettypes` values that canonical seed SQL provides, but the failed report
+  omitted the selected type/value needed to explain the nonpositive duration.
+  The shipyard-upgrade schema's missing mutually exclusive alternatives is
+  corrected; planet-deposit and bank-refusal fixtures/assertions are also
+  corrected based on their captured evidence. Focused source test passed (1),
+  ASan/UBSan build passed, JSON parsing and classification sum passed. No QA
+  runtime/full regression ran. Totals remain 74: 2 implementation defects,
+  3 protocol mismatches, 6 specification blockers, 37 fixture defects, 16
+  obsolete V2 tests, 8 infrastructure failures, 0 missing implementations and
+  2 unclassified. No new full run was available.
+- QA regression retry policy: the restricted sandbox cannot reach the QA
+  PostgreSQL service for BigBang; one approved-identity read-only check outside
+  it had previously verified `127.0.0.1:55438` / `twclone_qa_runner`, but the
+  subsequent test-run escalation was denied. Do not retry outside the permitted
+  environment or modify credentials/security configuration. Focused Ferengi,
+  FedSpace and concurrent Exchange runtime scenarios remain pending.

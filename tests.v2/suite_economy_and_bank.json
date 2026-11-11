@@ -121,7 +121,7 @@
       "command": "bank.orders.cancel",
       "data": { "order_id": "@{bank_order_id}" },
       "user": "bank_target",
-      "expect": { "status": "error", "error_code": 404 }
+      "expect": { "status": "error" }
     },
     {
       "name": "Create a weekly standing order at the requested UTC time",

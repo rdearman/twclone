@@ -5958,8 +5958,27 @@ schema_shipyard_upgrade (void)
   schema_nav_add_field (properties, "new_type_id", "integer", 1);
   schema_nav_add_field (properties, "new_ship_name", "string", 0);
   schema_nav_add_field (properties, "used_inventory_id", "integer", 1);
-  return schema_player_simple ("ge://schema/shipyard.upgrade.json",
-                               properties, required, 0);
+  json_t *root = schema_player_simple ("ge://schema/shipyard.upgrade.json",
+                                       properties, required, 0);
+
+  /* Exactly one acquisition mode is valid: a new hull needs its type/name,
+   * while used inventory is selected by its persistent listing identifier. */
+  json_t *new_hull = json_object ();
+  json_t *new_hull_required = json_array ();
+  json_array_append_new (new_hull_required, json_string ("new_type_id"));
+  json_array_append_new (new_hull_required, json_string ("new_ship_name"));
+  json_object_set_new (new_hull, "required", new_hull_required);
+
+  json_t *used_hull = json_object ();
+  json_t *used_hull_required = json_array ();
+  json_array_append_new (used_hull_required, json_string ("used_inventory_id"));
+  json_object_set_new (used_hull, "required", used_hull_required);
+
+  json_t *one_of = json_array ();
+  json_array_append_new (one_of, new_hull);
+  json_array_append_new (one_of, used_hull);
+  json_object_set_new (root, "oneOf", one_of);
+  return root;
 }
 
 static json_t *

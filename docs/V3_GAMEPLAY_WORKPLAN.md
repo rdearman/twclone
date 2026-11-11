@@ -48,9 +48,11 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   century rules; sanitizer build and focused bank/planet contract tests pass.
 - **Next action:** add or run a deterministic concurrent matcher scenario
   against the disposable database to verify stable inventory lock ordering,
-  no oversell and no duplicate ledger/trade records. Then proceed to the next
-  incomplete population/capture workflow; do not repeat the completed Exchange
-  sequential settlement investigation.
+  no oversell and no duplicate ledger/trade records. The sandbox could not
+  reach QA PostgreSQL and a permitted escalation was denied, so do not repeat
+  that connection attempt. Continue source-supported work while runtime is
+  blocked. The 36/36 sequential Exchange run remains valid evidence;
+  concurrency is not verified.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed
@@ -76,3 +78,42 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 - Do not mark requirements `VERIFIED` without executing appropriate tests.
 - Update tracker and decision register after each bounded package; record
   actual verification and commit identifiers.
+
+## Current resume point — 2026-11-11
+
+- The six cases previously marked `UNCLASSIFIED` have been categorized, but
+  two separate citadel failures remain `UNCLASSIFIED`. Two MFA-name failures
+  are protocol mismatches pending an
+  approved MFA contract; three undocumented SysOp world commands are
+  specification blockers; the post-kick session case is a confirmed defect.
+  The two citadel failures report a nonpositive/unavailable planet-type
+  duration, but source shows values in `planettypes` seed SQL and the failed
+  run did not retain the selected type/value. Capture that row at the next
+  allowed runtime instead of inventing seed data.
+- Corrected the `shipyard.upgrade` discovery schema to express the documented
+  new-hull versus used-hull request alternatives and updated its existing JSON
+  schema assertion. Updated the planet-deposit fixture to capture its generated
+  ID and establish owner/landing state; removed an unsupported ship ID field.
+  The bank ownership-refusal assertion now checks error status without
+  prescribing an undocumented code.
+- Fixed `sysop.player.kick` to revoke durable target session rows before
+  closing sockets, matching the documented invalidation requirement.
+- Local verification on the current worktree: `python3 -m pytest -q
+  tests.v2/test_sysop_session_kick_contract.py` passed (1); `make -C bin -j2`
+  passed with ASan/UBSan after the schema follow-up; four edited JSON files
+  parsed; the category sum equals 74; and `git diff --check` passed. No
+  PostgreSQL runtime or full regression ran against the current tree.
+- Classification now totals 74: 2 implementation defects, 3 protocol
+  mismatches, 6 specification blockers, 37 fixture defects, 16 obsolete V2
+  tests, 8 infrastructure failures and 2 unclassified; the missing-
+  implementation category is 0. The two citadel cases were removed from that
+  category because their previously alleged missing `citadel_requirements`
+  rows are not used by the handler.
+- The historical 74-failure report did not store its exact tested Git SHA and
+  was later overwritten by a blocked attempt. Do not attribute the 2,242-case
+  result to `769e16dc` or `332f0695` without an artifact proving the binary
+  revision.
+- Next: run local tests/build and static reconciliation, then inspect citadel
+  requirement data for recoverable historical values; do not invent costs.
+  Resume focused Ferengi/FedSpace and Exchange-concurrency PostgreSQL checks
+  only if an allowed in-sandbox QA connection is available.

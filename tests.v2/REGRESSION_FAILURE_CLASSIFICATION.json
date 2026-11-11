@@ -14,15 +14,36 @@
     "unsupported": 3,
     "server_crashes": 0
   },
+  "reconciliation_record": {
+    "date": "2026-11-11",
+    "historical_full_run_commit_sha": null,
+    "historical_full_run_commit_note": "The 2,242-case report did not record a Git SHA. It started before commits 769e16dc (23:11 UTC) and 332f0695 (23:15 UTC), but exact source/binary state is not established. The report path was later overwritten by a blocked attempt.",
+    "current_tree_base_commit": "332f0695322e267f9cac765e67fd6408d546c395",
+    "current_tree_has_uncommitted_changes": true,
+    "current_tree_runtime_regression_executed": false,
+    "environment": "restricted workspace sandbox; no production database access",
+    "qa_endpoint": "127.0.0.1:55438 (not reached during this execution; prior permitted escalation was denied; no retry outside sandbox)",
+    "local_verification_commands": [
+      "python3 -m pytest -q tests.v2/test_sysop_session_kick_contract.py",
+      "make -C bin -j2",
+      "python3 -m json.tool tests.v2/REGRESSION_FAILURE_CLASSIFICATION.json",
+      "python3 -m json.tool tests.v2/suite_player_preferences.json",
+      "python3 -m json.tool tests.v2/suite_commodities_data_driven_phase2.json",
+      "python3 -m json.tool tests.v2/suite_economy_and_bank.json",
+      "jq category-sum check",
+      "git diff --check"
+    ],
+    "local_results": "focused source-contract test 1 passed; ASan/UBSan build passed; JSON parsing, 74-case classification sum and diff check passed. No focused QA suites or full regression were run."
+  },
   "classification_counts": {
-    "IMPLEMENTATION_DEFECT": 0,
-    "MISSING_IMPLEMENTATION": 2,
+    "IMPLEMENTATION_DEFECT": 2,
+    "MISSING_IMPLEMENTATION": 0,
     "OBSOLETE_V2_TEST": 16,
     "PROTOCOL_SCHEMA_MISMATCH": 3,
-    "SPECIFICATION_BLOCKER": 3,
+    "SPECIFICATION_BLOCKER": 6,
     "INFRASTRUCTURE": 8,
-    "UNCLASSIFIED": 6,
-    "FIXTURE_DEFECT": 36
+    "UNCLASSIFIED": 2,
+    "FIXTURE_DEFECT": 37
   },
   "blocked_cases": 1,
   "unsupported_cases": 3,
@@ -566,8 +587,8 @@
     {
       "case_id": "suite_combat_citadel.json::case-0011",
       "suite": "suite_combat_citadel.json",
-      "primary_classification": "MISSING_IMPLEMENTATION",
-      "root_cause_group": "No citadel requirement rows seeded for supported planet type",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "Selected planet type upgrade duration was nonpositive or unavailable; run-time row not retained",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "citadel.build",
@@ -597,15 +618,15 @@
           }
         }
       },
-      "specification_reference": "Citadel gameplay contract and suite_combat_citadel.json. Schema declares citadel_requirements, but canonical PostgreSQL SQL has no INSERT seed for that table.",
-      "proposed_corrective_action": "Provide canonical supported-planet citadel requirement data or approved lookup behavior, then rerun build and upgrade acceptance cases.",
-      "confidence": "confirmed"
+      "specification_reference": "Citadel handler reads per-level citadelUpgradeTime_lvlN and resource values from planettypes (src/db/repo/repo_citadel.c:134); sql/pg/090_seed_lookup.sql contains values. The failed response establishes a nonpositive/unavailable time for the selected row, but the report did not retain that planet's type/value.",
+      "proposed_corrective_action": "On the next isolated runtime, capture target planet type and its seeded per-level citadelUpgradeTime value before build; compare with the actual query result. Do not invent costs or seed data until this is known.",
+      "confidence": "unknown"
     },
     {
       "case_id": "suite_combat_citadel.json::case-0014",
       "suite": "suite_combat_citadel.json",
-      "primary_classification": "MISSING_IMPLEMENTATION",
-      "root_cause_group": "No citadel requirement rows seeded for supported planet type",
+      "primary_classification": "UNCLASSIFIED",
+      "root_cause_group": "Selected planet type upgrade duration was nonpositive or unavailable; run-time row not retained",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "citadel.upgrade",
@@ -635,9 +656,9 @@
           }
         }
       },
-      "specification_reference": "Citadel gameplay contract and suite_combat_citadel.json. Schema declares citadel_requirements, but canonical PostgreSQL SQL has no INSERT seed for that table.",
-      "proposed_corrective_action": "Provide canonical supported-planet citadel requirement data or approved lookup behavior, then rerun build and upgrade acceptance cases.",
-      "confidence": "confirmed"
+      "specification_reference": "Citadel handler reads per-level citadelUpgradeTime_lvlN and resource values from planettypes (src/db/repo/repo_citadel.c:134); sql/pg/090_seed_lookup.sql contains values. The failed response establishes a nonpositive/unavailable time for the selected row, but the report did not retain that planet's type/value.",
+      "proposed_corrective_action": "On the next isolated runtime, capture target planet type and its seeded per-level citadelUpgradeTime value before upgrade; compare with the actual query result. Do not invent costs or seed data until this is known.",
+      "confidence": "unknown"
     },
     {
       "case_id": "suite_combat_quasar.json::case-0010",
@@ -862,8 +883,8 @@
     {
       "case_id": "suite_combat_toll_final_working.json::case-0006",
       "suite": "suite_combat_toll_final_working.json",
-      "primary_classification": "UNCLASSIFIED",
-      "root_cause_group": "suite_combat_toll_final_working.json: Test: Toll Collector Verified",
+      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
+      "root_cause_group": "Legacy MFA request name is not registered by V3",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "auth.mfa_verify",
@@ -893,15 +914,15 @@
           }
         }
       },
-      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
-      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
-      "confidence": "unknown"
+      "specification_reference": "The current command registry exposes auth.mfa.totp.verify and no auth.mfa_verify alias (src/server_loop.c); the V3 authentication document does not define MFA semantics or establish this rename.",
+      "proposed_corrective_action": "Obtain/locate the approved MFA request contract before changing this historical test or adding a compatibility alias.",
+      "confidence": "confirmed"
     },
     {
       "case_id": "suite_combat_toll_final_working.json::case-0007",
       "suite": "suite_combat_toll_final_working.json",
-      "primary_classification": "UNCLASSIFIED",
-      "root_cause_group": "suite_combat_toll_final_working.json: Test: Victim Verified",
+      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
+      "root_cause_group": "Legacy MFA request name is not registered by V3",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "auth.mfa_verify",
@@ -931,9 +952,9 @@
           }
         }
       },
-      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
-      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
-      "confidence": "unknown"
+      "specification_reference": "The current command registry exposes auth.mfa.totp.verify and no auth.mfa_verify alias (src/server_loop.c); the V3 authentication document does not define MFA semantics or establish this rename.",
+      "proposed_corrective_action": "Obtain/locate the approved MFA request contract before changing this historical test or adding a compatibility alias.",
+      "confidence": "confirmed"
     },
     {
       "case_id": "suite_commodities_data_driven_phase2.json::case-0009",
@@ -1052,8 +1073,8 @@
     {
       "case_id": "suite_commodities_data_driven_phase2.json::case-0015",
       "suite": "suite_commodities_data_driven_phase2.json",
-      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
-      "root_cause_group": "Legacy port command naming or unsupported ALT commodity assumption",
+      "primary_classification": "FIXTURE_DEFECT",
+      "root_cause_group": "Planet deposit fixture left planet_id as an unresolved variable",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "planet.deposit",
@@ -1083,8 +1104,8 @@
           }
         }
       },
-      "specification_reference": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md ownership check; docs/PROTOCOL.v3/19_Ship_Commands.md used-hull alternative; docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md planet.deposit schema.",
-      "proposed_corrective_action": "Align test request/assertion to documented V3 schema; do not add undocumented error-code guarantees.",
+      "specification_reference": "docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md documents planet_id as an integer and transfers through the authenticated player's active landed ship; schema_planet_deposit rejects additional ship_id.",
+      "proposed_corrective_action": "Implemented: fixture captures the inserted planet ID, removes unsupported ship_id, and sets matching ownership/landing state. Rerun suite_commodities_data_driven_phase2.json through QA.",
       "confidence": "confirmed"
     },
     {
@@ -1123,7 +1144,7 @@
         }
       },
       "specification_reference": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md ownership check; docs/PROTOCOL.v3/19_Ship_Commands.md used-hull alternative; docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md planet.deposit schema.",
-      "proposed_corrective_action": "Align test request/assertion to documented V3 schema; do not add undocumented error-code guarantees.",
+      "proposed_corrective_action": "Keep the ownership-refusal assertion at status=error without prescribing an undocumented numeric code; this assertion was changed in suite_economy_and_bank.json and still needs runtime rerun.",
       "confidence": "confirmed"
     },
     {
@@ -2046,8 +2067,8 @@
     {
       "case_id": "suite_player_preferences.json::case-0017",
       "suite": "suite_player_preferences.json",
-      "primary_classification": "PROTOCOL_SCHEMA_MISMATCH",
-      "root_cause_group": "Schema assertion assumes new_type_id required despite used_inventory_id alternative",
+      "primary_classification": "IMPLEMENTATION_DEFECT",
+      "root_cause_group": "shipyard.upgrade discoverable schema omitted its mutually exclusive acquisition alternatives",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "system.describe_schema",
@@ -2113,8 +2134,8 @@
           }
         }
       },
-      "specification_reference": "docs/PROTOCOL.v3/26_Banking_and_Ledger.md ownership check; docs/PROTOCOL.v3/19_Ship_Commands.md used-hull alternative; docs/PROTOCOL.v3/24_Planets_Outposts_Stations.md planet.deposit schema.",
-      "proposed_corrective_action": "Align test request/assertion to documented V3 schema; do not add undocumented error-code guarantees.",
+      "specification_reference": "docs/PROTOCOL.v3/19_Ship_Commands.md: shipyard.upgrade accepts either new_type_id plus new_ship_name or used_inventory_id. The captured schema described all as optional with no oneOf constraint.",
+      "proposed_corrective_action": "Implemented: schema now exposes both mutually exclusive shapes with oneOf and the existing JSON assertion checks each. Rerun suite_player_preferences.json through QA to verify.",
       "confidence": "confirmed"
     },
     {
@@ -2814,8 +2835,8 @@
     {
       "case_id": "test_sysop_players.json::case-0014",
       "suite": "test_sysop_players.json",
-      "primary_classification": "UNCLASSIFIED",
-      "root_cause_group": "test_sysop_players.json: Verify Player Disconnected",
+      "primary_classification": "IMPLEMENTATION_DEFECT",
+      "root_cause_group": "SysOp kick closed active sockets but left durable session tokens valid",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "player.my_info",
@@ -2854,15 +2875,15 @@
           }
         }
       },
-      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
-      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
-      "confidence": "unknown"
+      "specification_reference": "PROTOCOL.v3/29_SysOp_Commands.md, sysop.player.kick: force disconnect and invalidate session. The captured post-kick player.my_info response succeeded, and the old handler only closed sockets without deleting sessions rows.",
+      "proposed_corrective_action": "Implemented durable revocation before socket close and added a source-contract check. Rerun test_sysop_players.json through QA and confirm the same token is rejected.",
+      "confidence": "confirmed"
     },
     {
       "case_id": "test_sysop_world.json::case-0002",
       "suite": "test_sysop_world.json",
-      "primary_classification": "UNCLASSIFIED",
-      "root_cause_group": "test_sysop_world.json: Set MOTD",
+      "primary_classification": "SPECIFICATION_BLOCKER",
+      "root_cause_group": "Legacy SysOp world command has no approved V3 contract",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "sysop.motd.set",
@@ -2892,15 +2913,15 @@
           }
         }
       },
-      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
-      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
-      "confidence": "unknown"
+      "specification_reference": "The command is absent from PROTOCOL.v3/29_SysOp_Commands.md, the V3 server command registry and current configuration allowlist. No approved removal or replacement is recorded.",
+      "proposed_corrective_action": "Product owner must decide whether MOTD mutation remains a supported V3 capability and define its contract or explicitly retire the legacy request.",
+      "confidence": "confirmed"
     },
     {
       "case_id": "test_sysop_world.json::case-0004",
       "suite": "test_sysop_world.json",
-      "primary_classification": "UNCLASSIFIED",
-      "root_cause_group": "test_sysop_world.json: Queue Port Restock",
+      "primary_classification": "SPECIFICATION_BLOCKER",
+      "root_cause_group": "Legacy SysOp world command has no approved V3 contract",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "sysop.port.restock",
@@ -2930,15 +2951,15 @@
           }
         }
       },
-      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
-      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
-      "confidence": "unknown"
+      "specification_reference": "PROTOCOL.v3/29_SysOp_Commands.md defines job management but not sysop.port.restock; the registry only has hidden S2S port restock. No approved client-facing replacement/removal is recorded.",
+      "proposed_corrective_action": "Product owner must decide whether a client-facing port-restock operation is required and define authorization, request and job semantics.",
+      "confidence": "confirmed"
     },
     {
       "case_id": "test_sysop_world.json::case-0006",
       "suite": "test_sysop_world.json",
-      "primary_classification": "UNCLASSIFIED",
-      "root_cause_group": "test_sysop_world.json: View Audit Tail",
+      "primary_classification": "SPECIFICATION_BLOCKER",
+      "root_cause_group": "Legacy SysOp world command has no approved V3 contract",
       "evidence": {
         "full_run_report": "The completed run report at tests.v2/regression_report.json.tmp was overwritten by a later blocked attempt; this entry preserves the case evidence.",
         "request_command": "sysop.audit.tail",
@@ -2971,9 +2992,9 @@
           }
         }
       },
-      "specification_reference": "Available response is insufficient to distinguish implementation defect from obsolete expectation; inspect authoritative V3 command contract/registration before disposition.",
-      "proposed_corrective_action": "Review V3 contract and implementation; preserve unclassified status until evidence supports a primary category.",
-      "confidence": "unknown"
+      "specification_reference": "The V3 SysOp protocol documents jobs and sysop.logs.tail, but not sysop.audit.tail or an audit response/filter contract. No approved removal or replacement is recorded.",
+      "proposed_corrective_action": "Product owner must decide whether audit-tail access is required and define its request, role, filtering and response contract; do not equate it with log tailing.",
+      "confidence": "confirmed"
     }
     ,{
       "case_id": "suite_combat_port_rob.json::case-0009",

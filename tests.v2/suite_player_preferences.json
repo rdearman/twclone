@@ -194,8 +194,11 @@
       "expect": { "status": "ok" },
       "asserts": [
         { "path": "data.schema.properties.new_type_id.type", "op": "==", "value": "integer" },
-        { "path": "data.schema.required.0", "op": "==", "value": "new_type_id" },
-        { "path": "data.schema.required.1", "op": "==", "value": "new_ship_name" }
+        { "path": "data.schema.properties.new_ship_name.type", "op": "==", "value": "string" },
+        { "path": "data.schema.properties.used_inventory_id.type", "op": "==", "value": "integer" },
+        { "path": "data.schema.oneOf.0.required.0", "op": "==", "value": "new_type_id" },
+        { "path": "data.schema.oneOf.0.required.1", "op": "==", "value": "new_ship_name" },
+        { "path": "data.schema.oneOf.1.required.0", "op": "==", "value": "used_inventory_id" }
       ]
     },
     {

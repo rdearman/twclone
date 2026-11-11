@@ -83,22 +83,24 @@
       "description": "T4 verifies planet.deposit checks planet_goods table, allowing any commodity found there",
       "db_setup": {
         "sql": [
-          "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, population, type, creator, created_by) VALUES (1, 'Test Planet Deposit', 1, 'player', 'M', 0, 1, 'test', 1);",
+          "INSERT INTO planets (sector_id, name, owner_id, owner_type, class, population, type, creator, created_by) SELECT p.sector_id, 'Test Planet Deposit', p.player_id, 'player', 'M', 0, 1, 'test', 1 FROM players p WHERE p.name = 'comm_test_good';",
           "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) SELECT p.planet_id, 'ORE', 0, 1000000, 0 FROM planets p WHERE p.name = 'Test Planet Deposit';",
-          "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) SELECT p.planet_id, 'DRG', 0, 1000000, 0 FROM planets p WHERE p.name = 'Test Planet Deposit';"
+          "INSERT INTO planet_goods (planet_id, commodity, quantity, max_capacity, production_rate) SELECT p.planet_id, 'DRG', 0, 1000000, 0 FROM planets p WHERE p.name = 'Test Planet Deposit';",
+          "UPDATE players SET lastplanet = (SELECT planet_id FROM planets WHERE name = 'Test Planet Deposit') WHERE name = 'comm_test_good';",
+          "UPDATE ships SET onplanet = TRUE, sector_id = (SELECT sector_id FROM planets WHERE name = 'Test Planet Deposit') WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'comm_test_good');"
         ]
       },
-      "command": "ship.inspect",
-      "user": "comm_test_good",
-      "data": { "ship_id": "@comm_test_good_active_ship_id" },
-      "expect": { "status": "ok" }
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT planet_id FROM planets WHERE name = 'Test Planet Deposit'" },
+      "expect": { "status": "ok" },
+      "save": { "test_planet_deposit": "data.rows.0.0" }
     },
     {
       "name": "T4.2: Good player deposits ORE (standard commodity)",
       "command": "planet.deposit",
       "user": "comm_test_good",
       "data": {
-        "ship_id": "@comm_test_good_active_ship_id",
         "planet_id": "@{test_planet_deposit}",
         "commodity": "ORE",
         "quantity": 1
@@ -110,7 +112,6 @@
       "command": "planet.deposit",
       "user": "comm_test_good",
       "data": {
-        "ship_id": "@comm_test_good_active_ship_id",
         "planet_id": "@{test_planet_deposit}",
         "commodity": "DRG",
         "quantity": 1

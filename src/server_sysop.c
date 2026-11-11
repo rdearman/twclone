@@ -8,6 +8,7 @@
 #include "errors.h"
 #include "db/repo/repo_config.h"
 #include "db/repo/repo_sysop.h"
+#include "db/repo/repo_session.h"
 #include "db/repo/repo_communication.h"
 #include "server_communication.h"
 #include <string.h>
@@ -467,11 +468,18 @@ int cmd_sysop_player_kick(client_ctx_t *ctx, json_t *root) {
         return 0;
     }
 
-    // Attempt kick
-    int kicked_count = server_sysop_kick_player(target_id);
-    
-    // Audit
     db_t *db = game_db_get_handle();
+    if (!db || repo_session_revoke_player_sessions(db, target_id) != 0) {
+        send_response_error(ctx, root, 1503,
+                            "Database Error: could not revoke player sessions");
+        return 0;
+    }
+
+    /* Revoke durable tokens before closing sockets. Even if a client reconnects
+     * on an already-open transport, the next request must fail authentication. */
+    int kicked_count = server_sysop_kick_player(target_id);
+
+    // Audit
     char *audit_payload = json_dumps(j_data, 0);
     repo_sysop_audit(db, ctx->player_id, "sysop.player.kick", audit_payload, NULL);
     free(audit_payload);
