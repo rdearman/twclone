@@ -22,6 +22,7 @@ CREATE TABLE bank_transactions (
 );
 
 \ir ../sql/pg/130_insurance_ledger_invariants.sql
+SET search_path TO insurance_ledger_130_test, pg_catalog;
 \ir ../sql/pg/179_insurance_guarantee_ledger_invariants.sql
 SET search_path TO insurance_ledger_130_test, pg_catalog;
 

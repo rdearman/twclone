@@ -82,3 +82,6 @@ def test_ledger_invariant_view_accepts_guaranteed_claim_credits():
     assert "tx_type NOT IN ('ADJUSTMENT', 'INSURANCE_GUARANTEE')" in migration
     assert "'insurance-claim-10', 'INSURANCE_GUARANTEE', 'CREDIT', 15, 'CRD'" in fixture
     assert "\\ir ../sql/pg/179_insurance_guarantee_ledger_invariants.sql" in fixture
+    assert fixture.index("SET search_path TO insurance_ledger_130_test, pg_catalog;") < fixture.index(
+        "\\ir ../sql/pg/179_insurance_guarantee_ledger_invariants.sql"
+    )
