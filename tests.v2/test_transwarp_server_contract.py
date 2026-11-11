@@ -47,6 +47,19 @@ class TranswarpServerContractTests(unittest.TestCase):
         nav_names = [t.get("name") for t in self.nav_suite["tests"]]
         self.assertIn("Missing transwarp equipment preserves turns", nav_names)
 
+    def test_transwarp_is_synchronous_and_commits_movement_with_entry_hazards(self):
+        tx_begin = self.handler.index("db_tx_begin")
+        turn_debit = self.handler.index("h_consume_player_turn")
+        relocation = self.handler.index("repo_universe_move_player_and_ship")
+        hazards = self.handler.index("server_combat_apply_entry_hazards_report")
+        commit = self.handler.index("db_tx_commit", hazards)
+        self.assertLess(tx_begin, turn_debit)
+        self.assertLess(turn_debit, relocation)
+        self.assertLess(relocation, hazards)
+        self.assertLess(hazards, commit)
+        self.assertIn("transwarp_complete", self.handler)
+        self.assertNotIn("interrupted", self.handler.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -60,8 +60,8 @@ variants.
   `planet.emancipate` now have source handlers, but runtime verification is
   pending. Population-type and slave-production groundwork exists; conquest
   conversion, slave acquisition and deterministic unrest remain incomplete.
-- Mandatory escape-pod respawn, cargo/equipment loss, interrupted-transwarp
-  and immediate entry-hazard policies are approved in protocol 21/23;
+- Mandatory escape-pod respawn, cargo/equipment loss, synchronous atomic
+  transwarp and immediate entry-hazard policies are approved in protocol 21/23;
   implementation across every destruction/movement path remains outstanding.
 - Full trade settlement, retries, restart conservation, market-order matching,
   and the trade-account preference contract remain unresolved. V3 excludes
@@ -84,7 +84,7 @@ variants.
 
 - `V3-CAN-00`: pin the TW2002 edition for parity questions not settled by
   approved V3 policies. V3 has explicit rules for fixed-price trade, hull-only
-  insurance, harvest, destruction/respawn, capture and interrupted transwarp;
+  insurance, harvest, destruction/respawn, capture and synchronous transwarp;
   these do not assert edition-specific parity.
 - Issue `#491`: original player-facing parity authority; federation and other
   noncanonical expansions are outside that release authority.

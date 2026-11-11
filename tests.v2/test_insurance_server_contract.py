@@ -47,6 +47,18 @@ def test_insurance_policy_and_claim_transactions_are_backend_portable():
     assert "UPDATE insurance_claims SET status='paid'" in repo
 
 
+def test_insurance_repository_rejects_non_ship_subjects_before_transaction():
+    repo = (ROOT / "src/db/repo/repo_ships.c").read_text(encoding="utf-8")
+    buy = repo.split("repo_ships_insurance_buy_policy", 1)[1].split(
+        "repo_ships_insurance_settle_claim", 1
+    )[0]
+    guard = buy.split("db_tx_begin", 1)[0]
+    assert 'strcmp (subject_type, "ship") != 0' in guard
+    assert 'strcmp (subject_type, "cargo")' not in guard
+    assert 'strcmp (subject_type, "planet")' not in guard
+    assert 'SELECT planet_id FROM planets' not in buy
+
+
 def test_insurance_sql_fixture_covers_success_refusal_and_idempotency():
     fixture = (ROOT / "tests.v2/test_pg_insurance_settlement.sql").read_text(
         encoding="utf-8"
@@ -69,6 +81,20 @@ def test_destruction_guarantees_hull_payout_when_insurer_fund_is_short():
         encoding="utf-8"
     )
     assert "'INSURANCE_GUARANTEE'" in migration
+
+
+def test_underinsured_policy_pays_configured_amount_not_full_hull_value():
+    repo = (ROOT / "src/db/repo/repo_ships.c").read_text(encoding="utf-8")
+    settlement = repo.split("settle_destruction_insurance", 1)[1].split(
+        "int repo_ships_handle_destruction", 1
+    )[0]
+    # Policies are applied in ID order. A payout below hull_value is honored
+    # as configured; only payouts above the remaining replacement value clamp.
+    assert "int64_t remaining = hull_value;" in settlement
+    assert "int64_t amount = policies[i].payout;" in settlement
+    assert "if (amount > remaining) amount = remaining;" in settlement
+    assert "remaining -= amount;" in settlement
+    assert "amount = hull_value" not in settlement
 
 
 def test_ledger_invariant_view_accepts_guaranteed_claim_credits():

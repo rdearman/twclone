@@ -1,5 +1,11 @@
 # 25. Corporations & Stock Market
 
+> **V3 scope:** Corporate equity/stock-market functionality is an expansion,
+> not required original TradeWars 2002 parity. It is excluded from V3 gameplay
+> implementation and release acceptance. Existing explicit
+> `NOT_IMPLEMENTED` responses may remain; this scope decision does not defer
+> unrelated corporation membership, governance, or treasury requirements.
+
 ## 1. Corporation Management
 
 ### `corp.create`

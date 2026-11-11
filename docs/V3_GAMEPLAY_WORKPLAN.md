@@ -67,7 +67,7 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 | 3 | Ship sale/destruction completeness | SHIP-001–009, COMBAT-001–005, INS-001–006 | SHIP-002 catalogue baseline is documented and implemented; run sale valuation/purchase-capacity JSON tests and migration, then verify used-hull purchase, pod, destruction asset retention and guaranteed insurance. |
 | 4 | Galactic Exchange end-to-end | EXC-001–011, HARV-008, SYS-005 | Verify immediate sale, port/planet purchase, conservation, liquidity and idempotency using an available isolated DB. |
 | 5 | Banking standing orders | BANK-001–011 | Verify schedule boundaries, skips, cancellations, deleted recipient, ledger and exactly-once restart behavior. |
-| 6 | Movement, hazards, listing and trade | MOVE-001–004, PLAYER-001–006, TRADE-001–003 | Verify approved wire behavior and immediate hazard/destruction settlement. |
+| 6 | Movement, hazards, listing and trade | MOVE-001–004, PLAYER-001–006, TRADE-001–003 | Runtime-verify synchronous transwarp success/refusal and immediate hazard/destruction settlement; mid-flight interruption is excluded from V3 acceptance. |
 | 7 | Remaining tracker reconciliation | All outstanding IDs | Every ID has implementation/test evidence or an exact policy/external blocker; do not infer completion from handler presence. |
 
 ## Execution constraints

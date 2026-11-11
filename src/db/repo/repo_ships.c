@@ -934,9 +934,7 @@ repo_ships_insurance_buy_policy (db_t *db, int32_t player_id,
     if (!db || player_id <= 0 || !subject_type || subject_id <= 0
         || premium < 0 || payout < 0 || fund_id <= 0 || !start_ts
         || !*start_ts || !expiry_ts || !*expiry_ts || !policy_id_out
-        || (strcmp (subject_type, "ship") != 0
-            && strcmp (subject_type, "cargo") != 0
-            && strcmp (subject_type, "planet") != 0))
+        || strcmp (subject_type, "ship") != 0)
         return ERR_INVALID_ARG;
     *policy_id_out = 0;
     db_error_t err = {0};
@@ -954,11 +952,8 @@ repo_ships_insurance_buy_policy (db_t *db, int32_t player_id,
     db_res_finalize (res); res = NULL;
 
     const char *owned_query =
-      (strcmp (subject_type, "ship") == 0 || strcmp (subject_type, "cargo") == 0)
-      ? "SELECT o.ship_id FROM ship_ownership o JOIN ships s ON s.ship_id=o.ship_id "
-        "WHERE o.ship_id={1} AND o.player_id={2} AND o.is_primary=TRUE FOR UPDATE"
-      : "SELECT planet_id FROM planets WHERE planet_id={1} AND owner_type='player' "
-        "AND owner_id={2} FOR UPDATE";
+      "SELECT o.ship_id FROM ship_ownership o JOIN ships s ON s.ship_id=o.ship_id "
+      "WHERE o.ship_id={1} AND o.player_id={2} AND o.is_primary=TRUE FOR UPDATE";
     if (sql_build (db, owned_query, sql, sizeof sql) != 0
         || !db_query (db, sql,
              (db_bind_t[]){db_bind_i64 (subject_id),db_bind_i32 (player_id)},

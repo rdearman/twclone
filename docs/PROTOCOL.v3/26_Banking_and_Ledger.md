@@ -93,9 +93,12 @@ with existing database callers; the server handlers do not depend on them.
 
 V3 insurance covers hull replacement only. On qualifying ship destruction the
 shared ship-loss transaction selects active player-held ship policies whose
-epoch `start_ts`/`expiry_ts` cover the destruction time. It uses each policy's
-configured covered payout, capped in aggregate at shiptype `basecost`, and credits the
-player's CRD bank account. Funded insurer payouts use `ADJUSTMENT/CREDIT`; an
+epoch `start_ts`/`expiry_ts` cover the destruction time. Each policy's configured
+`payout` is the covered amount and may be below the ship's replacement value;
+the configured amount governs settlement. Eligible policies are applied in
+policy-ID order and their aggregate payout is capped at shiptype `basecost`.
+The resulting amount is credited to the player's CRD bank account. Funded
+insurer payouts use `ADJUSTMENT/CREDIT`; an
 insurer shortfall is covered by an explicit `INSURANCE_GUARANTEE/CREDIT`
 system-issued ledger entry. Policy claims, any insurer-fund debit, bank credits
 and ship destruction are one transaction and are keyed to that destroyed hull. Cargo and installed

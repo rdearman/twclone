@@ -102,11 +102,13 @@ If destination-entry damage destroys the transwarping ship, the response
 includes both the attempted destination (`sector_id`) and the pod's actual
 `current_sector_id`.
 
-If an initiated transwarp is interrupted, required fuel remains consumed, the
-ship remains at its origin, and destination-entry hazards do not run. Record
-the interrupted movement using existing movement-event conventions. A request
-rejected before initiation is not an interruption; existing validation and
-turn rules remain in force.
+Transwarp is an atomic, synchronous movement operation. Eligibility, fuel and
+destination validation occur before movement. Once accepted, movement
+completes at the destination and existing destination-entry hazards resolve
+after arrival in the same transaction. There is no mid-flight interruption
+mechanism in V3; interrupted-transwarp behavior is excluded from V3 acceptance
+unless a canonical trigger is subsequently established. Do not introduce
+arbitrary random interruption.
 
 ### `move.pathfind`
 Calculate a route through the current sector and sectors the player has visited.

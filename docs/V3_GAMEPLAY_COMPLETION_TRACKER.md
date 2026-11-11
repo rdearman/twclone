@@ -12,6 +12,25 @@ Database-backed evidence for the 2026-11-10 QA integration pass is appended belo
 it does not convert source/contract coverage into runtime verification unless
 the specific workflow was exercised.
 
+## Current-state reconciliation (2026-11-11)
+
+The earlier baseline contained 97 requirement rows. The current register has
+99 unique requirement IDs: 89 `IMPLEMENTED_UNVERIFIED`, 7 verified entries
+(four scoped-path variants plus three `VERIFIED`), and 3 `PARTIAL`
+requirements (`NPC-FER-01`, `NPC-ORI-01`, `MOVE-001`). Four former partials
+(`EXC-003/004/006/011`) have source paths for
+the approved behavior; their outstanding work is specifically runtime,
+restart, or concurrency evidence, so they are not described as missing code.
+`MOVE-001` now describes the approved synchronous, atomic transwarp behavior;
+mid-flight interruption is explicitly excluded from V3 acceptance absent a
+future canonical trigger. `SYS-004` is now
+`IMPLEMENTED_UNVERIFIED`: policy permits below-replacement coverage, and source
+honors the configured payout; DB settlement remains unverified. The 89
+unverified items must not be read as 89 missing implementations; their
+row-level source and evidence fields state
+the known verification gap. This count is a source/tracker reconciliation,
+not release certification.
+
 | ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
 |---|---|---|---|---|---|---|
 | SHIP-001 | Eligible sale locations | IMPLEMENTED_UNVERIFIED | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_stardock.c` | Sale JSON scenario authored and parsed; no runtime execution | `bcaf3e93` | Verify database classifications/police restrictions |
@@ -70,22 +89,22 @@ the specific workflow was exercised.
 | POP-014 | Atomic acquisition/conversion/conquest | IMPLEMENTED_UNVERIFIED | `server_ports.c::cmd_trade_buy` repeats the evil-alignment gate within purchase settlement; `repo_planets_deposit_slaves`, `repo_planets_emancipate`, and `db_planets_capture` transact deposit, emancipation and capture conversions | `test_planetary_server_contract.py` asserts alignment recheck, cargo-based deposit, exclusive population and transaction paths; no DB runtime | Existing source; current focused test suite passed (51 tests) | Exercise concurrent purchase/deposit/capture and rollback in DB-backed protocol tests |
 | EXC-001 | Persistent exchange market | VERIFIED | migration 174 extends `entity_stock` with virtual `exchange/1`; Exchange actor/location supported in orders | Clean disposable QA database applied migrations through 177; end-to-end planet sale and port purchase read/write Exchange stock | `6bf7dcd2` | Verify restart recovery and supported MySQL migration path |
 | EXC-002 | Sale into ring-fenced inventory and funded payout | VERIFIED | `cmd_planet_market_sell`; virtual system clearing account `system/70000001`; unique Exchange transaction record; configurable SysOp liquidity; account lookup now handles repository `ERR_DB_NOT_FOUND` | `suite_planet_taxable_activity_e2e.json`: 23/23 passed against real V3 server/PostgreSQL; asserted seller stock -10, Exchange stock +10, one transaction | `6bf7dcd2`, current working change | Extend verification to concurrent requests, retries and liquidity boundaries |
-| EXC-003 | Exchange purchases to planet/port | PARTIAL | Daily settlement refreshes Exchange sell offer from persisted inventory; existing buyer path settles fill | Disposable PostgreSQL JSON scenario verified Exchange-to-port transfer, ledger rows and account balances (35/35 cases); Exchange-to-planet buyer path not exercised | `6bf7dcd2`, current working change | Exercise planet buyer, capacity/funds boundaries, and restart |
-| EXC-004 | Ring-fenced stock | PARTIAL | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; matching conditionally debits it | PostgreSQL JSON scenario verified planet -10, Exchange +10, Exchange -10, port +10 and no duplicate on a second settlement tick | `6bf7dcd2`, current working change | Verify sale-versus-harvest/construction races and concurrent buyers |
+| EXC-003 | Exchange purchases to planet/port | IMPLEMENTED_UNVERIFIED | `h_daily_market_settlement` handles both `port` and `planet` destinations, with destination-capacity checks and `h_market_move_*_stock` settlement | Disposable PostgreSQL JSON scenario verified Exchange-to-port transfer, ledger rows and account balances (35/35 cases); planet buyer path has source support but no runtime case | `6bf7dcd2`, `81a366ce` | Add/run planet-buyer success, capacity/funds refusal, and restart scenarios |
+| EXC-004 | Ring-fenced stock | IMPLEMENTED_UNVERIFIED | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; matching conditionally debits that stock; harvesting reads only remaining planet inventory | PostgreSQL JSON verified planet -10, Exchange +10, Exchange -10, port +10 and no duplicate on a second tick; sale-versus-harvest race not run | `6bf7dcd2`, `81a366ce` | Verify sale/harvest/construction contention and concurrent buyers |
 | EXC-005 | Virtual transport | IMPLEMENTED_UNVERIFIED | Exchange is a virtual inventory location; no vessel entities | Source inspection/build | `6bf7dcd2` | Preserve no-ship behavior in runtime acceptance |
-| EXC-006 | Open order lifecycle | PARTIAL | `repo_market.c`, `server_cron.c` | Real matcher partially filled port demand and persisted a trade; second tick did not repeat it. Existing lifecycle JSON covers cancellation/expiry separately | `6bf7dcd2`, current working change | Reconcile larger merged order remainder and test cancellation/expiry with DB runtime |
+| EXC-006 | Open order lifecycle | IMPLEMENTED_UNVERIFIED | `repo_market.c`, `server_cron.c`; matcher locks and rereads open orders, records partial fills, expires/cancels non-executable orders, and commits fills atomically | Real matcher partially filled port demand and persisted a trade; second tick did not repeat it. Cancellation/expiry JSON scenarios exist but current-HEAD execution is absent | `6bf7dcd2`, `81a366ce` | Runtime-test partial remainder, cancellation, expiry, retry, and restart together |
 | EXC-007 | Port demand purchases | VERIFIED (port path) | port shortage BUY orders match the Exchange offer; clearing account settles port debit/system credit | `suite_planet_taxable_activity_e2e.json`, focused disposable PostgreSQL run 35/35; port stock +10, port balance -1,000, clearing balance +1,000 | current working change | Verify other port classes and insufficient-balance behavior |
 | EXC-008 | Commodity conservation | VERIFIED (tested path) | immediate sale transfers planet stock to Exchange; fill conditionally debits Exchange and credits port stock | Focused PostgreSQL JSON run verified planet 100→90, Exchange 0→10→0, port 0→10; all quantities conserved | current working change | Verify planet buyers and simultaneous sales/harvest |
 | EXC-009 | Financial integrity and game liquidity | VERIFIED (tested settlement) | clearing account and explicit `SYSTEM_LIQUIDITY`; matcher records actual debit/credit `bank_transactions` IDs in `commodity_trades` | Focused PostgreSQL JSON run verified port debit and clearing credit, equal amounts, and no second debit on retry; ASan/UBSan build passed | current working change | Concurrent settlement and liquidity boundary/restart tests remain |
 | EXC-010 | Audit named market paths | VERIFIED (targeted paths) | `cmd_planet_market_sell`, `h_daily_market_settlement`, `h_market_move_port_stock`, market/bank repositories | Actual V3 server/PostgreSQL exercised planet sale→Exchange→port purchase, credit/ledger settlement and retry | current working change | Extend runtime evidence to other buyer types and simultaneous requests |
-| EXC-011 | No loss/duplication/oversell | PARTIAL | `h_daily_market_settlement` locks inventory/account locations in deterministic order, then locks and rereads both order rows in ascending order ID before settlement; the repository returns `ERR_DB_NOT_FOUND` for a disappeared candidate | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py` (49 passed), `tests.v2/run_engine_regressions.sh` passed, ASan/UBSan `make -C bin -j2` passed. Concurrent PostgreSQL matcher test not run in this sandbox; the 36/36 sequential settlement run remains prior evidence | `c12668c2`, `81a366ce` | Run two-worker same-order and limited-inventory contention tests against isolated QA PostgreSQL; assert no duplicate receipt/credits, oversell, deadlock or stuck order |
+| EXC-011 | No loss/duplication/oversell | IMPLEMENTED_UNVERIFIED | `h_daily_market_settlement` locks inventory/account locations in deterministic order, then locks and rereads both order rows in ascending order ID before settlement; repository handles disappeared candidates | Source/ASan tests pass; concurrent PostgreSQL matcher test is absent. A 36/36 sequential settlement run is prior evidence, not concurrency evidence | `c12668c2`, `81a366ce` | Run two-worker same-order and limited-inventory contention against isolated PostgreSQL; assert no duplicate receipt/credits, oversell, deadlock or stuck order |
 | EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
 | COMBAT-001 | Universal escape-pod respawn | IMPLEMENTED_UNVERIFIED | `repo_ships_handle_destruction`; command, NPC/player combat, Captain Z, engine self-destruct and legacy repository entry points converge via `handle_ship_destruction` | Added lethal-NPC and lethal-PvP assertions, including NPC-owner exclusion; focused planetary/hazard tests: 41 passed; ASan/UBSan build passed; runtime unverified | `63169074`, `aaf8a02e`, `6d2e36f0` | Exercise NPC- and player-caused lethal combat through JSON and verify pod/insurance state |
 | COMBAT-002 | No starter-ship respawn | IMPLEMENTED_UNVERIFIED | shared repository creates canonical Escape Pod at sector 1 and assigns it active | Source contract and ASan/UBSan build; no server/DB runtime | `63169074` | JSON state assertion / runtime test |
 | COMBAT-003 | No duplicate hull/pod/loss | IMPLEMENTED_UNVERIFIED | player/hull locking, conditional destroyed update, ownership removal, one pod and per-hull event key | Source contract and ASan/UBSan build; no DB concurrency/runtime test | `63169074` | Verify retries and simultaneous lethal paths |
 | COMBAT-004 | Cargo/equipment loss | IMPLEMENTED_UNVERIFIED | shared destruction update zeroes cargo and ship equipment/defence quantities | Source inspection/build only | `63169074` | Protocol/database assertion |
 | COMBAT-005 | Preserve bank/planet/corporate assets | IMPLEMENTED_UNVERIFIED | shared destruction transaction; Terra enforcement no longer calls asset-seizure SQL, checks settlement result, and retains the existing `sanctioned` event field | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 43 passed; `make -C bin -j2`: passed with ASan/UBSan; runtime state preservation unverified | `63169074`, `0e81209c`, `5195480b`, `6027d878`, `ef07c811` | Runtime state-preservation assertion |
-| INS-001 | Hull-only coverage | IMPLEMENTED_UNVERIFIED | purchase schema and handler restrict insurance subjects to ships; `settle_destruction_insurance` caps covered payout at shiptype replacement value, excluding cargo/equipment | Added non-hull JSON refusal case and source contract assertions; 51 focused tests and ASan/UBSan build pass; server/DB runtime not run | `dfdcd791` | Execute protocol rejection and hull-payout/loss-exclusion flow; do not invent a premium formula |
+| INS-001 | Hull-only coverage | IMPLEMENTED_UNVERIFIED | purchase schema, handler, and `repo_ships_insurance_buy_policy` restrict subjects to ships; `settle_destruction_insurance` caps covered payout at shiptype replacement value, excluding cargo/equipment | Added non-hull JSON refusal case and repository-boundary source contract assertion; focused tests/build recorded below; server/DB runtime not run | `dfdcd791`, current source change | Execute protocol rejection and hull-payout/loss-exclusion flow; preserve existing per-policy premium and coverage inputs |
 | INS-002 | Qualifying destruction | IMPLEMENTED_UNVERIFIED | player-held active policy selected only when start/expiry epoch bounds include destruction time | Source inspection/build; no runtime | `15821cd8` | Verify time bounds and voluntary/nonqualifying loss cases |
 | INS-003 | Credit bank account | IMPLEMENTED_UNVERIFIED | locked CRD account credited in destruction and portable explicit-claim transactions; funded payout uses `ADJUSTMENT`, guaranteed system funding uses `INSURANCE_GUARANTEE` | ASan/UBSan build and focused source tests pass; no DB runtime | `6bf7dcd2`, working change | Verify player balance, ledger label and rollback on both backends |
 | INS-004 | Pod independent of policy | IMPLEMENTED_UNVERIFIED | unconditional pod creation is independent of insurance result | Source contract/build only | `63169074`, `15821cd8` | Verify insured and uninsured runtime cases |
@@ -97,7 +116,7 @@ the specific workflow was exercised.
 | CAP-004 | Resources/entire treasury remain with planet | IMPLEMENTED_UNVERIFIED | capture updates ownership/population only | Source inspection; no DB runtime | — | Verify associated stock/accounts stay linked |
 | CAP-005 | Unrelated assets stay put | IMPLEMENTED_UNVERIFIED | capture does not mutate external accounts/assets | Source inspection only | — | Verify via JSON/DB journey |
 | CAP-006 | Population transition atomic | IMPLEMENTED_UNVERIFIED | `db_planets_capture` conditional owner/population update in combat tx | Build passed; no runtime test | — | Add full capture population matrix |
-| MOVE-001 | Interrupted transwarp consumes fuel, stays origin | PARTIAL | `cmd_move_transwarp` in `src/server_universe.c` | No interruption source/path found; no runtime test | — | Existing handler commits initiation, relocation and entry hazards atomically; identify an approved interrupting event/mechanism before adding interruption behavior |
+| MOVE-001 | Atomic synchronous transwarp; mid-flight interruption excluded | PARTIAL | `cmd_move_transwarp` validates destination and installed drive, then consumes a turn, relocates and resolves hazards transactionally; no fuel availability/consumption check exists in the handler | `test_transwarp_server_contract.py` verifies sync order; runtime not executed here | — | Reconcile the required fuel source/amount without inventing a cost, implement the preflight check, then verify success/refusal/hazards |
 | MOVE-002 | Rejected validation does not consume fuel | IMPLEMENTED_UNVERIFIED | preflight validation precedes transaction and turn consumption in `cmd_move_transwarp` | Existing transwarp JSON cases; not executed | — | Execute refusal turn/fuel assertions |
 | MOVE-003 | Immediate entry hazards | IMPLEMENTED_UNVERIFIED | `cmd_move_warp`, `cmd_move_transwarp`, shared `server_combat_apply_entry_hazards_report` | Lethal transwarp JSON case added; JSON validation/build pending, runtime not run | — | Execute normal/transwarp hazard scenarios |
 | MOVE-004 | Hazard destruction uses common lifecycle | IMPLEMENTED_UNVERIFIED | shared hazard resolver delegates lethal outcomes to `handle_ship_destruction`; session context reset to sector 1 | New JSON case verifies attempted/current sectors and Escape Pod state; runtime not run | — | Execute lethal movement case against disposable server |
@@ -107,7 +126,7 @@ the specific workflow was exercised.
 | SYS-001 | 60% ship sale setting | IMPLEMENTED_UNVERIFIED | `server_config.c`, `server_sysop.c` | Build passed, no runtime | `bcaf3e93` | Confirm default and bounds via protocol |
 | SYS-002 | Fixed 50% slave productivity | IMPLEMENTED_UNVERIFIED | `src/slave_population.h`, shared by `repo_cron.c` production and overview | Existing engine C runner tests exact integer floor and stoppage; DB runtime unverified | `6c790d40` | Verify actual production tick against persisted stock |
 | SYS-003 | Configurable deterministic unrest | IMPLEMENTED_UNVERIFIED | config keys/parser, SysOp validation, daily scheduler, PG migrations 173/176 and MySQL 125/128 | Focused source suite (69 passed, 200 subtests) and ASan/UBSan build passed; protocol/DB runtime not run | `6bf7dcd2` | Verify SysOp setting and daily scheduler against DB; zero disables effects |
-| SYS-004 | Existing insurance valuation config | PARTIAL | insurance config/repositories need trace | No test executed | — | Confirm authoritative value or request policy |
+| SYS-004 | Insurance policy payout / hull replacement valuation | IMPLEMENTED_UNVERIFIED | `insurance.policies.buy` persists per-policy `premium` and `payout`; `settle_destruction_insurance` pays configured amounts in policy-ID order, capped at aggregate shiptype hull replacement value; no global valuation setting is required | `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py`: 57 passed, including underinsured payout source assertion; DB settlement not executed | Current source | Runtime-verify underinsured payout, overlapping policy cap, guarantee funding and exactly-once credit |
 | SYS-005 | Economy config | IMPLEMENTED_UNVERIFIED | `galactic_exchange_liquidity_credits`, default zero, nonnegative configured target; explicit `SYSTEM_LIQUIDITY` ledger | ASan/UBSan build and focused source/migration suite (69 passed, 200 subtests); protocol/DB runtime unverified | `6bf7dcd2` | Verify migration and SysOp setting plus market top-up |
 | SYS-006 | Config documentation | IMPLEMENTED_UNVERIFIED | `docs/SYSOP_MENU.md`, protocol 29, protocol 24 | Documentation commits `434d81a6`, `5f7bb98c` | `5f7bb98c` | Keep parameter descriptions synchronized with any approved policy changes |
 | SYS-007 | SysOp kick invalidates all target sessions | IMPLEMENTED_UNVERIFIED | `cmd_sysop_player_kick` calls `repo_session_revoke_player_sessions` before closing active sockets | Existing JSON case `test_sysop_players.json::case-0014` observed post-kick `player.my_info` succeed; source-contract test 1/1 and ASan/UBSan build passed; runtime rerun blocked | `2f03808b` | Run the JSON case against isolated QA and verify the same session token is rejected |
@@ -327,3 +346,37 @@ the specific workflow was exercised.
   subsequent test-run escalation was denied. Do not retry outside the permitted
   environment or modify credentials/security configuration. Focused Ferengi,
   FedSpace and concurrent Exchange runtime scenarios remain pending.
+- Insurance scope audit: `repo_ships_insurance_buy_policy` previously accepted
+  `cargo` and `planet` subjects even though the approved INS-01 contract and
+  public schema permit hull-only policies. The repository now rejects every
+  non-`ship` subject before opening a transaction, and its ownership lock is
+  ship-only. Added a repository-boundary assertion to
+  `test_insurance_server_contract.py`. Verification actually run:
+  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py
+  tests.v2/test_planetary_server_contract.py` (56 passed),
+  `make -C bin -j2` (ASan/UBSan build passed),
+  `tests.v2/run_engine_regressions.sh` (all existing engine regression unit
+  checks passed), and `git diff --check` (passed). PostgreSQL/server runtime
+  was not run. This is a source-verified correctness fix, not runtime
+  verification.
+- Approved insurance valuation update: per-policy payout may be below hull
+  replacement value and governs settlement; a separate SysOp valuation setting
+  is unnecessary. `SYS-004` is now IMPLEMENTED_UNVERIFIED. Added a focused
+  assertion that destruction settlement uses the configured payout and clamps
+  only when it exceeds remaining hull value. Updated the insurance protocol
+  contract and decision register. `python3 -m pytest -q
+  tests.v2/test_insurance_server_contract.py
+  tests.v2/test_planetary_server_contract.py` passed (57 tests), including the
+  underinsured payout assertion. Database-backed settlement remains
+  unverified.
+- Approved parity scope update: corporate equity/stock-market expansion is
+  excluded from V3 parity/release acceptance; existing `NOT_IMPLEMENTED`
+  responses may remain. It is not one of the 97 approved master requirement
+  rows. This decision does not defer unrelated corporate requirements.
+- MOVE-001 policy supersession: transwarp is explicitly atomic and synchronous;
+  eligibility/fuel/destination checks precede movement, success completes at
+  the destination, and entry hazards resolve after arrival. Mid-flight
+  interruption is excluded from V3 acceptance unless a canonical trigger is
+  later established. Source inspection found no existing pre-arrival event.
+  Added a focused source-order assertion; database/runtime verification remains
+  outstanding.
