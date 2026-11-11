@@ -682,11 +682,11 @@
       ]
     },
     {
-      "name": "Verify destroyed ship and no active ship assignment",
+      "name": "Verify destroyed hull and active escape pod assignment",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT s.destroyed=TRUE AND s.hull=0 AND p.ship_id IS NULL AND EXISTS (SELECT 1 FROM podded_status ps WHERE ps.player_id=p.player_id AND ps.status='active') FROM ship_ownership so JOIN ships s ON s.ship_id=so.ship_id JOIN players p ON p.player_id=so.player_id WHERE so.player_id=@{landing_planet_outsider_player_id} ORDER BY so.ship_id DESC LIMIT 1;"
+        "sql": "SELECT lost.destroyed=TRUE AND lost.hull=0 AND pod.destroyed=FALSE AND p.ship_id=pod.ship_id AND own.player_id=p.player_id AND own.is_primary=TRUE AND EXISTS (SELECT 1 FROM podded_status ps WHERE ps.player_id=p.player_id AND ps.status='podded') FROM players p JOIN engine_events e ON e.actor_player_id=p.player_id AND e.type='ship.destroyed' JOIN ships lost ON lost.ship_id=(e.payload::jsonb->>'victim_ship_id')::integer JOIN ships pod ON pod.ship_id=p.ship_id JOIN ship_ownership own ON own.ship_id=pod.ship_id WHERE p.player_id=@{landing_planet_outsider_player_id} ORDER BY e.ts DESC LIMIT 1;"
       },
       "expect": {
         "status": "ok"
