@@ -97,7 +97,8 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   The bank ownership-refusal assertion now checks error status without
   prescribing an undocumented code.
 - Fixed `sysop.player.kick` to revoke durable target session rows before
-  closing sockets, matching the documented invalidation requirement.
+  closing sockets, matching the documented invalidation requirement. The
+  source/schema/fixture/evidence batch is committed as `2f03808b`.
 - Local verification on the current worktree: `python3 -m pytest -q
   tests.v2/test_sysop_session_kick_contract.py` passed (1); `make -C bin -j2`
   passed with ASan/UBSan after the schema follow-up; four edited JSON files
@@ -109,7 +110,9 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
   implementation category is 0. The two citadel cases were removed from that
   category because their previously alleged missing `citadel_requirements`
   rows are not used by the handler.
-- The historical 74-failure report did not store its exact tested Git SHA and
+- The current local checks were performed on the worktree based at
+  `332f0695322e267f9cac765e67fd6408d546c395` and committed as `2f03808b`.
+  The historical 74-failure report did not store its exact tested Git SHA and
   was later overwritten by a blocked attempt. Do not attribute the 2,242-case
   result to `769e16dc` or `332f0695` without an artifact proving the binary
   revision.
