@@ -29,7 +29,7 @@ CREATE INDEX idx_warps_from ON sector_warps (from_sector);
 
 CREATE INDEX idx_warps_to ON sector_warps (to_sector);
 
-CREATE UNIQUE INDEX idx_ports_loc ON ports (sector_id);
+CREATE UNIQUE INDEX idx_ports_loc ON ports (sector_id) WHERE is_active = TRUE;
 
 CREATE INDEX idx_planets_sector ON planets (sector_id);
 
@@ -44,8 +44,6 @@ CREATE INDEX idx_players_ship ON players (ship_id);
 CREATE UNIQUE INDEX idx_players_name ON players (name);
 
 CREATE INDEX idx_ship_own_ship ON ship_ownership (ship_id);
-
-CREATE UNIQUE INDEX idx_ports_loc_number ON ports (sector_id, number);
 
 CREATE UNIQUE INDEX idx_mail_idem_recipient ON mail (idempotency_key, recipient_id)
 WHERE

@@ -128,7 +128,7 @@ BEGIN
         FROM sectors s
         WHERE s.sector_id > 10
             AND s.sector_id <= v_target
-            AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+            AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id AND p.is_active = TRUE)
             AND RAND() <= (v_port_ratio / 100.0)
     ) AS new_data;
     
@@ -227,7 +227,7 @@ BEGIN
     
     CALL bigbang_lock(v_lock_key);
     
-    SELECT EXISTS(SELECT 1 FROM ports WHERE type = 9) INTO v_exists;
+    SELECT EXISTS(SELECT 1 FROM ports WHERE type = 9 AND is_active = TRUE) INTO v_exists;
     IF v_exists THEN
         CALL bigbang_unlock(v_lock_key);
         RETURN 0;
@@ -236,7 +236,7 @@ BEGIN
     SET v_sector = (SELECT s.sector_id
                       FROM sectors s
                      WHERE s.sector_id > 10
-                       AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+                       AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id AND p.is_active = TRUE)
                      ORDER BY RAND() LIMIT 1);
     IF v_sector IS NULL THEN
         CALL bigbang_unlock(v_lock_key);
@@ -246,7 +246,7 @@ BEGIN
     INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash, porttype_id)
     VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000, (SELECT porttype_id FROM porttypes WHERE code = 'CLASS0'));
     
-    SELECT port_id INTO v_port_id FROM ports WHERE sector_id = v_sector AND type = 9 LIMIT 1;
+    SELECT port_id INTO v_port_id FROM ports WHERE sector_id = v_sector AND type = 9 AND is_active = TRUE LIMIT 1;
     
     IF v_port_id IS NOT NULL THEN
         INSERT INTO stardock_assets (sector_id, owner_id, fighters, defenses, ship_capacity)
@@ -541,23 +541,23 @@ BEGIN
     SELECT planettypes_id INTO v_ptype FROM planettypes WHERE code = 'M' LIMIT 1;
     SELECT id INTO v_orion_corp_id FROM corporations WHERE LOWER(name) = LOWER('Orion Syndicate') LIMIT 1;
     SET v_orion_port_id = (SELECT port_id FROM ports
-                           WHERE type = 10 AND name = 'Orion Black Market'
+                           WHERE type = 10 AND name = 'Orion Black Market' AND is_active = TRUE
                            ORDER BY port_id LIMIT 1);
     SET v_orion_sector = (SELECT sector_id FROM ports
-                          WHERE type = 10 AND name = 'Orion Black Market'
+                          WHERE type = 10 AND name = 'Orion Black Market' AND is_active = TRUE
                           ORDER BY port_id LIMIT 1);
     IF v_orion_sector IS NULL THEN
         SET v_orion_sector = (SELECT lt.exit_sector
                                 FROM longest_tunnels lt
                                WHERE lt.exit_sector > 10
-                                 AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector)
+                                 AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector AND p.is_active = TRUE)
                                ORDER BY RAND() LIMIT 1);
     END IF;
     IF v_orion_sector IS NULL THEN
         SET v_orion_sector = (SELECT s.sector_id
                                 FROM sectors s
                                WHERE s.sector_id > 10
-                                 AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+                                 AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id AND p.is_active = TRUE)
                                ORDER BY RAND() LIMIT 1);
     END IF;
     IF v_orion_sector IS NULL THEN

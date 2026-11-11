@@ -407,6 +407,9 @@ CREATE TABLE ports (
     `number` bigint,
     `name` TEXT NOT NULL,
     sector_id bigint NOT NULL,
+    is_active boolean NOT NULL DEFAULT TRUE,
+    active_sector_id BIGINT GENERATED ALWAYS AS
+        (CASE WHEN is_active THEN sector_id ELSE NULL END) STORED,
     size bigint,
     techlevel bigint,
     petty_cash bigint NOT NULL DEFAULT 0,

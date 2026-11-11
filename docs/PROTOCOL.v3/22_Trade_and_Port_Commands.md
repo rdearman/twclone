@@ -165,9 +165,10 @@ an existing port. The B/S pattern is from the port's perspective:
 | SSB | Sell | Sell | Buy |
 | SSS | Sell | Sell | Sell |
 
-At most one StarPort may occupy a sector. A sector must be eligible and have
-no existing port before construction. Destroying the port makes that sector
-eligible again, subject to the remaining construction restrictions. Basic V3
+At most one **active** StarPort may occupy a sector. Destroyed ports are
+retained as inactive records for trade/audit references; a sector with only
+inactive port records may host a replacement. A sector must be eligible and
+have no active port before construction. Basic V3
 ports have no persistent player/corporation owner; owner-specific policies,
 tariffs and access are V4 scope. Exact construction costs, timing, eligibility
 exceptions and destruction consequences must follow the project's selected

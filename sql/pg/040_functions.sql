@@ -175,7 +175,7 @@ BEGIN
           AND NOT EXISTS (
                 SELECT 1
                   FROM ports p
-                 WHERE p.sector_id = s.sector_id
+                 WHERE p.sector_id = s.sector_id AND p.is_active = TRUE
           )
           AND random() <= (v_port_ratio / 100.0)
     ),
@@ -481,7 +481,7 @@ BEGIN
             FROM
                 ports
             WHERE
-                type = 9) INTO v_exists;
+                type = 9 AND is_active = TRUE) INTO v_exists;
     IF v_exists THEN
         PERFORM
             bigbang_unlock (v_lock_key);
@@ -492,7 +492,7 @@ BEGIN
     SELECT s.sector_id INTO v_sector
       FROM sectors s
      WHERE s.sector_id > 10
-       AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+       AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id AND p.is_active = TRUE)
      ORDER BY random()
      LIMIT 1;
     IF v_sector IS NULL THEN
@@ -1048,21 +1048,21 @@ BEGIN
     -- Keep Orion provisioning idempotent and obey one-port-per-sector.
     SELECT sector_id INTO v_orion_sector
       FROM ports
-     WHERE type = 10 AND name = 'Orion Black Market Dock'
+     WHERE type = 10 AND name = 'Orion Black Market Dock' AND is_active = TRUE
      ORDER BY port_id LIMIT 1;
     IF v_orion_sector IS NULL THEN
         SELECT lt.exit_sector INTO v_orion_sector
           FROM longest_tunnels lt
          WHERE lt.exit_sector > 10
            AND lt.exit_sector != COALESCE(v_ferengi_sector, 0)
-           AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector)
+           AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector AND p.is_active = TRUE)
          ORDER BY random() LIMIT 1;
     END IF;
     IF v_orion_sector IS NULL THEN
         SELECT s.sector_id INTO v_orion_sector
           FROM sectors s
          WHERE s.sector_id > 10
-           AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+           AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id AND p.is_active = TRUE)
          ORDER BY random() LIMIT 1;
     END IF;
     IF v_orion_sector IS NULL THEN
@@ -1100,12 +1100,12 @@ BEGIN
     -- Create Orion Black Market port (type 10 = blackmarket stardock)
     INSERT INTO ports (sector_id, name, type, number)
     VALUES (v_orion_sector, 'Orion Black Market Dock', 10, v_orion_sector)
-    ON CONFLICT (sector_id, number) DO NOTHING
+    ON CONFLICT DO NOTHING
     RETURNING port_id INTO v_port_id;
 
     -- Ensure bank account exists (even if port already existed)
     IF v_port_id IS NULL THEN
-         SELECT port_id INTO v_port_id FROM ports WHERE sector_id = v_orion_sector AND type = 10;
+         SELECT port_id INTO v_port_id FROM ports WHERE sector_id = v_orion_sector AND type = 10 AND is_active = TRUE;
     END IF;
 
     IF v_port_id IS NOT NULL THEN

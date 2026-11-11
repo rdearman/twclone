@@ -7,13 +7,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class StarPortSectorAndPtaContract(unittest.TestCase):
-    def test_both_base_schemas_use_unique_sector_index(self):
-        for backend in ("pg", "my"):
-            sql = (ROOT / "sql" / backend / "010_indexes.sql").read_text()
-            self.assertRegex(
-                sql,
-                r"CREATE\s+UNIQUE\s+INDEX\s+idx_ports_loc\s+ON\s+ports\s*\(\s*sector_id\s*\)",
-            )
+    def test_base_schemas_allow_history_but_only_one_active_port_per_sector(self):
+        pg_tables = (ROOT / "sql/pg/000_tables.sql").read_text()
+        my_tables = (ROOT / "sql/my/000_tables.sql").read_text()
+        pg_indexes = (ROOT / "sql/pg/010_indexes.sql").read_text()
+        my_indexes = (ROOT / "sql/my/010_indexes.sql").read_text()
+        self.assertIn("is_active boolean NOT NULL DEFAULT TRUE", pg_tables)
+        self.assertIn("WHERE is_active = TRUE", pg_indexes)
+        self.assertIn("active_sector_id BIGINT GENERATED ALWAYS AS", my_tables)
+        self.assertIn("ON ports (active_sector_id)", my_indexes)
+        self.assertNotIn("idx_ports_loc_number", pg_indexes)
+        self.assertNotIn("idx_ports_loc_number", my_indexes)
 
     def test_upgrade_migrations_refuse_to_discard_duplicate_ports(self):
         pg = (ROOT / "sql/pg/180_one_port_per_sector.sql").read_text()
@@ -27,13 +31,22 @@ class StarPortSectorAndPtaContract(unittest.TestCase):
         manifest = json.loads((ROOT / "sql/pg/migration_manifest.json").read_text())
         names = {entry["name"] for entry in manifest["scripts"] if entry["required"]}
         self.assertIn("180_one_port_per_sector.sql", names)
+        self.assertIn("181_active_starport_sector_uniqueness.sql", names)
+
+    def test_active_port_migration_preserves_inactive_port_history(self):
+        pg = (ROOT / "sql/pg/181_active_starport_sector_uniqueness.sql").read_text()
+        mysql = (ROOT / "sql/my/181_active_starport_sector_uniqueness.sql").read_text()
+        self.assertIn("WHERE is_active = TRUE", pg)
+        self.assertIn("WHERE is_active = TRUE", mysql)
+        self.assertIn("CREATE UNIQUE INDEX idx_ports_loc ON ports (sector_id)", pg)
+        self.assertIn("CREATE UNIQUE INDEX idx_ports_loc ON ports (active_sector_id)", mysql)
 
     def test_bigbang_places_stardock_and_orion_only_in_empty_sectors(self):
         pg = (ROOT / "sql/pg/040_functions.sql").read_text()
         mysql = (ROOT / "sql/my/040_functions.sql").read_text()
         for sql in (pg, mysql):
-            self.assertIn("NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)", sql)
-            self.assertIn("NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector)", sql)
+            self.assertIn("NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id AND p.is_active = TRUE)", sql)
+            self.assertIn("NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector AND p.is_active = TRUE)", sql)
         self.assertIn("No eligible empty sector available for Stardock", pg)
         self.assertIn("No eligible empty sector available for Stardock", mysql)
         self.assertIn("Orion Black Market Dock", pg)

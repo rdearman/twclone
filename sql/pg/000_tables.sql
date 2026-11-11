@@ -434,6 +434,7 @@ CREATE TABLE ports (
     number integer,
     name text NOT NULL,
     sector_id integer NOT NULL,
+    is_active boolean NOT NULL DEFAULT TRUE,
     size bigint,
     techlevel bigint,
     petty_cash bigint NOT NULL DEFAULT 0,
