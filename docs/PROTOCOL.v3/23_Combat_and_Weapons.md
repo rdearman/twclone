@@ -26,6 +26,31 @@ reinforced defenses or overwriting a newer capture.
 Attack a port.
 **Events**: Emits `player.port_strike.v1`.
 
+## 1.1 Historical Photon and Toll-Fighter Mechanics
+
+The original TradeWars 2002 Player's Manual (1990–2000) establishes these
+mechanics as parity references; this section does not claim that V3 handlers
+currently implement them:
+
+- Photon missiles may be used by Missile Frigates and Imperial StarShips.
+- Ship and planetary shields protect against photon impact. The manual
+  describes disabling citadel Combat Control, Quasar Cannon and Interdictor
+  systems after shields are defeated.
+- A photon neutralizes sector mines and fighters for a short-lived effect.
+  The consulted manual does not establish a numeric duration or the V3
+  configuration key/default. Do not invent either value.
+- Toll fighters stop non-hostile passers and request a payment; the deployed
+  toll-fighter quantity determines the requested amount. They fight back if
+  attacked. The manual does not state a numeric conversion formula or define
+  a JSON accept/refuse/payment interaction.
+
+Source: [TradeWars 2002 Player's Manual (1990–2000)](https://electraphysics.com/documents/tradewarsmanual.pdf),
+fighter modes at pp. 8–9 (PDF lines 385–411), photon description at p. 34
+(PDF lines 338–339). These historical facts do not fill the missing V3
+wire-level and configurable-value contracts. Until those are specified,
+photon firing and toll collection remain incomplete rather than inferred from
+current implementation.
+
 ## 2. Asset Deployment Rules (FedSpace & MSL)
 
 ### Published FedSpace (Sectors 1–10)
