@@ -57,6 +57,10 @@ db_res_t* repo_universe_get_player_known_warps(db_t *db, int player_id,
 db_res_t* repo_universe_get_asset_counts(db_t *db, int sector_id, db_error_t *err);
 int repo_universe_set_beacon(db_t *db, int sector_id, const char *text);
 int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out);
+/* Requires an active transaction; locks an existing destination fighter row
+ * so the homing beacon cannot be removed before transwarp settlement. */
+int repo_universe_lock_sector_fighter(db_t *db, int sector_id,
+                                      int *found_out);
 int repo_universe_update_player_sector(db_t *db, int player_id, int sector_id);
 int repo_universe_get_ferengi_corp_info(db_t *db, int *corp_id_out, int *player_id_out);
 int repo_universe_ensure_ferengi_traders(db_t *db, int corporation_id, int home_sector);

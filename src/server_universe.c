@@ -2286,6 +2286,28 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
     }
   int previous_sector = ctx->sector_id;
 
+  /* The original TradeWars manual describes a destination fighter as the
+   * transwarp homing reference. Lock it before any turn or location mutation
+   * so it cannot disappear between validation and arrival. */
+  int homing_fighter = 0;
+  int fighter_rc = repo_universe_lock_sector_fighter
+    (db, to_sector_id, &homing_fighter);
+  if (fighter_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not verify transwarp homing reference.");
+      return 0;
+    }
+  if (!homing_fighter)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, REF_TRANSWARP_UNAVAILABLE,
+                                   "Transwarp requires a fighter in the destination sector.",
+                                   NULL);
+      return 0;
+    }
+
   /* Try to perform transwarp */
   TurnConsumeResult tc = h_consume_player_turn (db, ctx, 1);
   if (tc != TURN_CONSUME_SUCCESS)

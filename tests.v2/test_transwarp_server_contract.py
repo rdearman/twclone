@@ -26,12 +26,17 @@ class TranswarpServerContractTests(unittest.TestCase):
     def test_destination_validation_precedes_drive_and_turn_mutation(self):
         max_check = self.handler.index("repo_universe_get_max_sector_id")
         drive_check = self.handler.index("repo_universe_check_transwarp")
+        tx_begin = self.handler.index("db_tx_begin")
+        homing_check = self.handler.index("repo_universe_lock_sector_fighter")
         turn_debit = self.handler.index("h_consume_player_turn")
         self.assertLess(max_check, drive_check)
         self.assertLess(drive_check, turn_debit)
+        self.assertLess(tx_begin, homing_check)
+        self.assertLess(homing_check, turn_debit)
         self.assertIn("Failed to validate transwarp destination", self.handler)
         self.assertIn("Failed to verify transwarp capability", self.handler)
         self.assertIn("ERR_SECTOR_NOT_FOUND", self.handler)
+        self.assertIn("Transwarp requires a fighter in the destination sector.", self.handler)
 
     def test_integration_suites_assert_refusal_without_turn_debit(self):
         transwarp_names = [t.get("name") for t in self.suite["tests"]]

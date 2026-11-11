@@ -31,6 +31,7 @@
 #include "server_cmds.h"
 #include "server_corporation.h"
 #include "server_ports.h"
+#include "server_clusters.h"
 #include "repo_market.h"
 #include "server_players.h"
 #include "server_ships.h"
@@ -3457,6 +3458,350 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
 		       json_integer (total_credits));
 
   send_response_ok_take (ctx, root, "planet.market.sell", &resp);
+  return 0;
+}
+
+/* Direct Planetary Trade Agreement settlement. This is intentionally separate
+ * from planet.market.sell: PTA goods transfer to a local port, not the
+ * Galactic Exchange. */
+int
+cmd_planet_trade_port (client_ctx_t *ctx, json_t *root)
+{
+  db_t *db = game_db_get_handle ();
+  json_t *data = root ? json_object_get (root, "data") : NULL;
+  int planet_id = 0, port_id = 0, planet_sector = 0, port_sector = 0;
+  const char *idempotency_key = NULL;
+  json_t *items = data ? json_object_get (data, "items") : NULL;
+  char *request_json = NULL, *old_request = NULL, *old_response = NULL;
+  json_t *response = NULL, *lines = NULL;
+  long long total_value = 0, player_balance = 0;
+  int port_account_id = 0;
+  db_error_t txerr = {0};
+  bool in_tx = false;
+  int failure_code = ERR_DB;
+  const char *failure_message = "Planetary port trade failed.";
+
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
+      return 0;
+    }
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable.");
+      return 0;
+    }
+  if (!json_is_object (data)
+      || !json_get_int_flexible (data, "planet_id", &planet_id)
+      || !json_get_int_flexible (data, "port_id", &port_id)
+      || planet_id <= 0 || port_id <= 0 || !json_is_array (items)
+      || json_array_size (items) == 0 || json_array_size (items) > 3
+      || !(idempotency_key = json_string_value
+           (json_object_get (data, "idempotency_key")))
+      || !*idempotency_key || strlen (idempotency_key) > 128)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "planet_id, port_id, items and idempotency_key are required.");
+      return 0;
+    }
+
+  request_json = json_dumps (data, JSON_COMPACT | JSON_SORT_KEYS);
+  if (!request_json)
+    {
+      send_response_error (ctx, root, ERR_NOMEM,
+                           "Could not encode trade request.");
+      return 0;
+    }
+  if (db_ports_lookup_idemp (db, idempotency_key, ctx->player_id, 0,
+                             &old_request, &old_response) == 0)
+    {
+      json_error_t parse_error;
+      json_t *prior_data = old_request
+        ? json_loads (old_request, 0, &parse_error) : NULL;
+      json_t *prior_response = old_response
+        ? json_loads (old_response, 0, &parse_error) : NULL;
+      bool same = prior_data && json_equal (prior_data, data);
+      free (old_request);
+      free (old_response);
+      free (request_json);
+      if (!same || !prior_response)
+        {
+          json_decref (prior_data);
+          json_decref (prior_response);
+          send_response_refused_steal (ctx, root, ERR_BAD_REQUEST,
+                                       "Idempotency key was already used for a different trade.",
+                                       NULL);
+          return 0;
+        }
+      send_response_ok_take (ctx, root, "planet.trade.port_receipt_v1",
+                             &prior_response);
+      json_decref (prior_data);
+      return 0;
+    }
+
+  if (h_refuse_terra_mutation (db, ctx, root, planet_id))
+    {
+      free (request_json);
+      return 0;
+    }
+  if (db_planets_get_sector (db, planet_id, &planet_sector) != 0
+      || db_ports_get_port_sector (db, port_id, &port_sector) != 0)
+    {
+      free (request_json);
+      send_response_error (ctx, root, ERR_NOT_FOUND,
+                           "Planet or port was not found.");
+      return 0;
+    }
+  if (planet_sector <= 0 || planet_sector != port_sector)
+    {
+      free (request_json);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "The planet and port must be in the same sector.",
+                                   NULL);
+      return 0;
+    }
+  if (!cluster_can_trade (db, planet_sector, ctx->player_id))
+    {
+      free (request_json);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Local authorities prevent trading at this port.",
+                                   NULL);
+      return 0;
+    }
+
+  /* Each of the three supported planetary commodities appears at most once;
+   * exact requested quantities are settled all-or-nothing. */
+  for (size_t i = 0; i < json_array_size (items); ++i)
+    {
+      json_t *item = json_array_get (items, i);
+      const char *code = item && json_is_object (item)
+        ? json_string_value (json_object_get (item, "commodity")) : NULL;
+      json_t *quantity_value = item && json_is_object (item)
+        ? json_object_get (item, "quantity") : NULL;
+      if (!code || strlen (code) != 3 || !json_is_integer (quantity_value)
+          || json_integer_value (quantity_value) <= 0
+          || (strcmp (code, "ORE") != 0 && strcmp (code, "ORG") != 0
+              && strcmp (code, "EQU") != 0))
+        {
+          free (request_json);
+          send_response_error (ctx, root, ERR_INVALID_ARG,
+                               "PTA items require ORE, ORG or EQU with positive quantity.");
+          return 0;
+        }
+      for (size_t j = 0; j < i; ++j)
+        {
+          const char *previous = json_string_value
+            (json_object_get (json_array_get (items, j), "commodity"));
+          if (previous && strcmp (previous, code) == 0)
+            {
+              free (request_json);
+              send_response_error (ctx, root, ERR_INVALID_ARG,
+                                   "Each commodity may appear only once.");
+              return 0;
+            }
+        }
+    }
+
+  db_error_clear (&txerr);
+  if (!db_tx_begin (db, DB_TX_DEFAULT, &txerr))
+    {
+      free (request_json);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin planetary port trade.");
+      return 0;
+    }
+  in_tx = true;
+
+  /* Lock order is port -> planet -> port account, matching ship/port sale
+   * settlement and serializing capacity plus account checks. */
+  int lock_rc = db_ports_lock_for_update (db, port_id);
+  if (lock_rc != 0)
+    {
+      failure_message = "Could not lock the destination port.";
+      goto pta_fail;
+    }
+  int auth_rc = h_planet_market_lock_control (db, planet_id, ctx->player_id);
+  if (auth_rc != 0)
+    {
+      failure_code = auth_rc == ERR_PERMISSION_DENIED
+        ? ERR_PERMISSION_DENIED : ERR_DB;
+      failure_message = auth_rc == ERR_PERMISSION_DENIED
+        ? "You do not have trading authority over this planet."
+        : "Could not revalidate planetary trading authority.";
+      goto pta_fail;
+    }
+  if (db_planets_get_sector (db, planet_id, &planet_sector) != 0
+      || db_ports_get_port_sector (db, port_id, &port_sector) != 0
+      || planet_sector <= 0 || planet_sector != port_sector)
+    {
+      failure_code = ERR_PERMISSION_DENIED;
+      failure_message = "The planet and port must remain in the same sector.";
+      goto pta_fail;
+    }
+  if (!cluster_can_trade (db, planet_sector, ctx->player_id))
+    {
+      failure_code = ERR_PERMISSION_DENIED;
+      failure_message = "Local authorities prevent trading at this port.";
+      goto pta_fail;
+    }
+  if (h_get_account_id_unlocked (db, "port", port_id, &port_account_id) != 0)
+    {
+      failure_message = "Could not resolve port settlement account.";
+      goto pta_fail;
+    }
+
+  response = json_object ();
+  lines = json_array ();
+  if (!response || !lines)
+    {
+      failure_code = ERR_NOMEM;
+      failure_message = "Could not allocate trade receipt.";
+      goto pta_fail;
+    }
+  json_object_set_new (response, "planet_id", json_integer (planet_id));
+  json_object_set_new (response, "port_id", json_integer (port_id));
+  json_object_set_new (response, "sector_id", json_integer (planet_sector));
+  json_object_set_new (response, "player_id", json_integer (ctx->player_id));
+  json_object_set_new (response, "lines", lines);
+  lines = NULL;
+
+  for (size_t i = 0; i < json_array_size (items); ++i)
+    {
+      json_t *item = json_array_get (items, i);
+      const char *code = json_string_value (json_object_get (item, "commodity"));
+      int quantity = (int) json_integer_value (json_object_get (item, "quantity"));
+      int planet_stock = 0, planet_capacity = 0;
+      int port_stock = 0, port_capacity = 0;
+      bool port_buys = false, port_sells = false;
+      if (db_planets_get_market_move_info (db, planet_id, code,
+                                           &planet_stock, &planet_capacity) != 0
+          || planet_stock < quantity)
+        {
+          failure_code = REF_NOT_ENOUGH_COMMODITY;
+          failure_message = "Planet does not have the requested commodity quantity.";
+          goto pta_fail;
+        }
+      if (db_ports_get_commodity_details (db, port_id, code, &port_stock,
+                                           &port_capacity, &port_buys,
+                                           &port_sells) != 0 || !port_buys)
+        {
+          failure_code = ERR_PERMISSION_DENIED;
+          failure_message = "This port is not configured to buy that commodity.";
+          goto pta_fail;
+        }
+      if (quantity > port_capacity - port_stock)
+        {
+          failure_code = ERR_DB_CONSTRAINT;
+          failure_message = "Port capacity is insufficient for the requested quantity.";
+          goto pta_fail;
+        }
+      int unit_price = h_calculate_port_buy_price (db, port_id, code);
+      if (unit_price <= 0 || (long long) quantity > LLONG_MAX / unit_price)
+        {
+          failure_message = "Could not calculate a valid port purchase price.";
+          goto pta_fail;
+        }
+      long long line_total = (long long) quantity * unit_price;
+      if (line_total > LLONG_MAX - total_value)
+        {
+          failure_code = ERR_INVALID_ARG;
+          failure_message = "Trade total exceeds supported credit range.";
+          goto pta_fail;
+        }
+      total_value += line_total;
+      json_t *line = json_pack ("{s:s,s:i,s:i,s:I}", "commodity", code,
+                                "quantity", quantity, "unit_price", unit_price,
+                                "value", (json_int_t) line_total);
+      if (!line || json_array_append_new
+          (json_object_get (response, "lines"), line) != 0)
+        {
+          failure_code = ERR_NOMEM;
+          failure_message = "Could not build trade receipt.";
+          goto pta_fail;
+        }
+    }
+
+  for (size_t i = 0; i < json_array_size (items); ++i)
+    {
+      json_t *item = json_array_get (items, i);
+      const char *code = json_string_value (json_object_get (item, "commodity"));
+      int quantity = (int) json_integer_value (json_object_get (item, "quantity"));
+      int unit_price = (int) json_integer_value
+        (json_object_get (json_array_get (json_object_get (response, "lines"), i),
+                          "unit_price"));
+      if (db_ports_log_trade_sell (db, ctx->player_id, port_id, planet_sector,
+                                   code, quantity, unit_price) != 0
+          || db_ports_decrement_stock (db, "planet", planet_id, code, quantity,
+                                       (int64_t) time (NULL)) != 0
+          || h_update_port_stock (db, port_id, code, quantity, NULL) != 0)
+        {
+          failure_code = ERR_DB_CONSTRAINT;
+          failure_message = "Commodity inventory changed or exceeded port capacity.";
+          goto pta_fail;
+        }
+      if (planet_record_taxable_trade (db, planet_id, code, quantity,
+                                       unit_price, "pta_sell", root) != 0)
+        {
+          failure_message = "Could not record planetary trade activity.";
+          goto pta_fail;
+        }
+    }
+  int settlement_rc = h_deduct_credits_unlocked
+    (db, port_account_id, total_value, "TRADE_SELL", idempotency_key, NULL);
+  if (settlement_rc == 0)
+    settlement_rc = h_add_player_petty_cash_unlocked
+      (db, ctx->player_id, total_value, &player_balance);
+  if (settlement_rc != 0)
+    {
+      failure_code = settlement_rc == ERR_INSUFFICIENT_FUNDS
+        ? ERR_INSUFFICIENT_FUNDS : ERR_DB;
+      failure_message = settlement_rc == ERR_INSUFFICIENT_FUNDS
+        ? "Port cannot settle the requested purchase."
+        : "Could not settle planetary port trade credits.";
+      goto pta_fail;
+    }
+  json_object_set_new (response, "total_credits_received",
+                       json_integer ((json_int_t) total_value));
+  json_object_set_new (response, "player_credits", json_integer
+                       ((json_int_t) player_balance));
+  json_object_set_new (response, "turns_consumed", json_integer (0));
+
+  char *response_json = json_dumps (response, JSON_COMPACT | JSON_SORT_KEYS);
+  if (!response_json
+      || db_ports_insert_idemp_sell (db, idempotency_key, ctx->player_id,
+                                     planet_sector, request_json,
+                                     response_json) != 0)
+    {
+      free (response_json);
+      failure_code = ERR_BAD_REQUEST;
+      failure_message = "Trade request was duplicated or could not be recorded.";
+      goto pta_fail;
+    }
+  free (response_json);
+  if (!db_tx_commit (db, &txerr))
+    {
+      db_tx_rollback (db, NULL);
+      in_tx = false;
+      free (request_json);
+      json_decref (response);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not commit planetary port trade.");
+      return 0;
+    }
+  in_tx = false;
+  free (request_json);
+  send_response_ok_take (ctx, root, "planet.trade.port_receipt_v1", &response);
+  return 0;
+
+pta_fail:
+  if (in_tx)
+    db_tx_rollback (db, NULL);
+  free (request_json);
+  json_decref (lines);
+  json_decref (response);
+  send_response_error (ctx, root, failure_code, failure_message);
   return 0;
 }
 

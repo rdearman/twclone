@@ -132,6 +132,7 @@ json_t *schema_planet_land (void);
 json_t *schema_planet_launch (void);
 json_t *schema_planet_transfer_ownership (void);
 json_t *schema_planet_harvest (void);
+json_t *schema_planet_trade_port (void);
 json_t *schema_planet_deposit (void);
 json_t *schema_planet_colonists_allocate (void);
 json_t *schema_planet_withdraw (void);

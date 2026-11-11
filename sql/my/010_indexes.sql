@@ -29,7 +29,7 @@ CREATE INDEX idx_warps_from ON sector_warps (from_sector);
 
 CREATE INDEX idx_warps_to ON sector_warps (to_sector);
 
-CREATE INDEX idx_ports_loc ON ports (sector_id);
+CREATE UNIQUE INDEX idx_ports_loc ON ports (sector_id);
 
 CREATE INDEX idx_planets_sector ON planets (sector_id);
 

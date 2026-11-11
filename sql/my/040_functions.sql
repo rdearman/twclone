@@ -221,7 +221,6 @@ CREATE FUNCTION generate_stardock() RETURNS BIGINT
 DETERMINISTIC
 BEGIN
     DECLARE v_sector INT;
-    DECLARE v_max_sector INT;
     DECLARE v_lock_key BIGINT DEFAULT 72002006;
     DECLARE v_exists BOOLEAN;
     DECLARE v_port_id INT;
@@ -234,17 +233,18 @@ BEGIN
         RETURN 0;
     END IF;
     
-    SELECT MAX(sector_id) INTO v_max_sector FROM sectors;
-    SET v_sector = 11 + FLOOR(RAND() * (v_max_sector - 10));
+    SET v_sector = (SELECT s.sector_id
+                      FROM sectors s
+                     WHERE s.sector_id > 10
+                       AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+                     ORDER BY RAND() LIMIT 1);
+    IF v_sector IS NULL THEN
+        CALL bigbang_unlock(v_lock_key);
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No eligible empty sector available for Stardock';
+    END IF;
     
     INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash, porttype_id)
-    VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000, (SELECT porttype_id FROM porttypes WHERE code = 'CLASS0'))
-    ON DUPLICATE KEY UPDATE 
-        name = VALUES(name), 
-        type = VALUES(type), 
-        size = VALUES(size), 
-        techlevel = VALUES(techlevel), 
-        petty_cash = VALUES(petty_cash);
+    VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000, (SELECT porttype_id FROM porttypes WHERE code = 'CLASS0'));
     
     SELECT port_id INTO v_port_id FROM ports WHERE sector_id = v_sector AND type = 9 LIMIT 1;
     
@@ -535,14 +535,33 @@ CREATE PROCEDURE setup_orion_syndicate()
 BEGIN
     DECLARE v_ptype INT;
     DECLARE v_orion_corp_id INT;
-    DECLARE v_orion_sector INT DEFAULT 386;
+    DECLARE v_orion_port_id BIGINT DEFAULT NULL;
+    DECLARE v_orion_sector INT DEFAULT NULL;
     
     SELECT planettypes_id INTO v_ptype FROM planettypes WHERE code = 'M' LIMIT 1;
     SELECT id INTO v_orion_corp_id FROM corporations WHERE LOWER(name) = LOWER('Orion Syndicate') LIMIT 1;
-    SELECT COALESCE(exit_sector, 386) INTO v_orion_sector FROM longest_tunnels LIMIT 1 OFFSET 1;
-    
-    IF v_orion_sector IS NULL OR v_orion_sector = 0 THEN
-        SET v_orion_sector = FLOOR(RAND() * (989 - 11 + 1)) + 11;
+    SET v_orion_port_id = (SELECT port_id FROM ports
+                           WHERE type = 10 AND name = 'Orion Black Market'
+                           ORDER BY port_id LIMIT 1);
+    SET v_orion_sector = (SELECT sector_id FROM ports
+                          WHERE type = 10 AND name = 'Orion Black Market'
+                          ORDER BY port_id LIMIT 1);
+    IF v_orion_sector IS NULL THEN
+        SET v_orion_sector = (SELECT lt.exit_sector
+                                FROM longest_tunnels lt
+                               WHERE lt.exit_sector > 10
+                                 AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector)
+                               ORDER BY RAND() LIMIT 1);
+    END IF;
+    IF v_orion_sector IS NULL THEN
+        SET v_orion_sector = (SELECT s.sector_id
+                                FROM sectors s
+                               WHERE s.sector_id > 10
+                                 AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+                               ORDER BY RAND() LIMIT 1);
+    END IF;
+    IF v_orion_sector IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No eligible empty sector available for Orion port';
     END IF;
     
     INSERT IGNORE INTO planets (num, sector_id, name, owner_id, owner_type, class, type, created_at, created_by)
@@ -554,8 +573,11 @@ BEGIN
     INSERT IGNORE INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, deployed_at)
     VALUES (v_orion_sector, 4, COALESCE(v_orion_corp_id, 1), 1, 250, NOW());
     
-    INSERT IGNORE INTO ports (sector_id, name, type, port_code, created_by, created_at)
-    VALUES (v_orion_sector, 'Orion Black Market', 10, 9998, 0, NOW());
+    IF v_orion_port_id IS NULL THEN
+        INSERT INTO ports (sector_id, name, type, port_code, created_by, created_at)
+        VALUES (v_orion_sector, 'Orion Black Market', 10, 9998, 0, NOW());
+        SET v_orion_port_id = LAST_INSERT_ID();
+    END IF;
 END$$
 
 CREATE PROCEDURE spawn_initial_fleet()

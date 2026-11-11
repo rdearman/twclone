@@ -378,6 +378,7 @@ extern json_t *schema_planet_land (void);
 extern json_t *schema_planet_launch (void);
 extern json_t *schema_planet_transfer_ownership (void);
 extern json_t *schema_planet_harvest (void);
+extern json_t *schema_planet_trade_port (void);
 extern json_t *schema_planet_deposit (void);
 extern json_t *schema_planet_colonists_allocate (void);
 extern json_t *schema_planet_withdraw (void);
@@ -550,6 +551,7 @@ static schema_entry_t g_schema_table[] = {
   {"planet.launch", NULL, schema_planet_launch},
   {"planet.transfer_ownership", NULL, schema_planet_transfer_ownership},
   {"planet.harvest", NULL, schema_planet_harvest},
+  {"planet.trade.port", NULL, schema_planet_trade_port},
   {"planet.harvest_v1", NULL, schema_planet_harvest_response},
   {"planet.deposit", NULL, schema_planet_deposit},
   {"planet.colonists.allocate", NULL, schema_planet_colonists_allocate},
@@ -3588,6 +3590,64 @@ schema_planet_harvest (void)
   json_object_set_new (root, "required", required);
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
+}
+
+json_t *
+schema_planet_trade_port (void)
+{
+  json_t *properties = json_object ();
+  json_t *planet_id = json_object ();
+  json_object_set_new (planet_id, "type", json_string ("integer"));
+  json_object_set_new (planet_id, "minimum", json_integer (1));
+  json_object_set_new (properties, "planet_id", planet_id);
+  json_t *port_id = json_object ();
+  json_object_set_new (port_id, "type", json_string ("integer"));
+  json_object_set_new (port_id, "minimum", json_integer (1));
+  json_object_set_new (properties, "port_id", port_id);
+  json_t *item_properties = json_object ();
+  json_t *commodity = json_object ();
+  json_object_set_new (commodity, "type", json_string ("string"));
+  json_object_set_new (commodity, "minLength", json_integer (3));
+  json_object_set_new (commodity, "maxLength", json_integer (3));
+  json_object_set_new (item_properties, "commodity", commodity);
+  json_t *quantity = json_object ();
+  json_object_set_new (quantity, "type", json_string ("integer"));
+  json_object_set_new (quantity, "minimum", json_integer (1));
+  json_object_set_new (item_properties, "quantity", quantity);
+  json_t *item_required = json_array ();
+  json_array_append_new (item_required, json_string ("commodity"));
+  json_array_append_new (item_required, json_string ("quantity"));
+  json_t *item_schema = json_object ();
+  json_object_set_new (item_schema, "type", json_string ("object"));
+  json_object_set_new (item_schema, "properties", item_properties);
+  json_object_set_new (item_schema, "required", item_required);
+  json_object_set_new (item_schema, "additionalProperties", json_false ());
+  json_t *items = json_object ();
+  json_object_set_new (items, "type", json_string ("array"));
+  json_object_set_new (items, "minItems", json_integer (1));
+  json_object_set_new (items, "maxItems", json_integer (3));
+  json_object_set_new (items, "items", item_schema);
+  json_object_set_new (properties, "items", items);
+  json_t *idem = json_object ();
+  json_object_set_new (idem, "type", json_string ("string"));
+  json_object_set_new (idem, "minLength", json_integer (1));
+  json_object_set_new (idem, "maxLength", json_integer (128));
+  json_object_set_new (properties, "idempotency_key", idem);
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_array_append_new (required, json_string ("port_id"));
+  json_array_append_new (required, json_string ("items"));
+  json_array_append_new (required, json_string ("idempotency_key"));
+  json_t *schema = json_object ();
+  json_object_set_new (schema, "$id",
+                       json_string ("ge://schema/planet.trade.port.json"));
+  json_object_set_new (schema, "$schema", json_string
+                       ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (schema, "type", json_string ("object"));
+  json_object_set_new (schema, "properties", properties);
+  json_object_set_new (schema, "required", required);
+  json_object_set_new (schema, "additionalProperties", json_false ());
+  return schema;
 }
 
 json_t *

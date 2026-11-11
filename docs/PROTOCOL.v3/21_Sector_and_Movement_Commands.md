@@ -110,6 +110,13 @@ mechanism in V3; interrupted-transwarp behavior is excluded from V3 acceptance
 unless a canonical trigger is subsequently established. Do not introduce
 arbitrary random interruption.
 
+The original TradeWars manual describes a deployed fighter in the destination
+sector as the transwarp homing reference. V3 validates and locks a destination
+fighter asset before turn or location mutation. Fuel remains incomplete:
+transwarp consumes substantial fuel ore, but the referenced manual does not
+give a numeric amount or distance formula. Do not guess a cost or claim fuel
+settlement is implemented.
+
 ### `move.pathfind`
 Calculate a route through the current sector and sectors the player has visited.
 Unvisited sectors are excluded so the response does not reveal hidden topology.

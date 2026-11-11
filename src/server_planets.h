@@ -27,6 +27,7 @@ int cmd_planet_deposit (client_ctx_t * ctx, json_t * root);
 int cmd_planet_withdraw (client_ctx_t * ctx, json_t * root);
 int cmd_planet_genesis_create (client_ctx_t * ctx, json_t * root);
 int cmd_planet_market_sell (client_ctx_t * ctx, json_t * root);
+int cmd_planet_trade_port (client_ctx_t *ctx, json_t *root);
 int cmd_planet_market_buy_order (client_ctx_t * ctx, json_t * root);
 int cmd_planet_market_buy_order_cancel (client_ctx_t * ctx, json_t * root);
 int cmd_planet_transwarp (client_ctx_t * ctx, json_t * root);

@@ -586,6 +586,29 @@ int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled_out) {
     return err.code;
 }
 
+int repo_universe_lock_sector_fighter(db_t *db, int sector_id,
+                                      int *found_out) {
+    if (!db || sector_id <= 0 || !found_out || db->tx_nest_level <= 0)
+        return ERR_INVALID_ARG;
+    *found_out = 0;
+    char query[512], sql[768];
+    snprintf(query, sizeof(query),
+             "SELECT sector_assets_id FROM sector_assets "
+             "WHERE sector_id = {1} AND asset_type = 2 AND quantity > 0 "
+             "ORDER BY sector_assets_id LIMIT 1%s",
+             sql_for_update(db));
+    if (sql_build(db, query, sql, sizeof(sql)) != 0)
+        return ERR_DB_QUERY_FAILED;
+    db_res_t *res = NULL;
+    db_error_t err = {0};
+    if (!db_query(db, sql, (db_bind_t[]){db_bind_i64(sector_id)}, 1,
+                  &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    *found_out = db_res_step(res, &err) ? 1 : 0;
+    db_res_finalize(res);
+    return err.code ? err.code : 0;
+}
+
 int repo_universe_update_player_sector(db_t *db, int player_id, int sector_id) {
     return repo_universe_move_player_and_ship(db, player_id, 0, sector_id);
 }

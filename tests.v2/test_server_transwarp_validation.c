@@ -15,6 +15,8 @@ static int g_max_rc;
 static int g_max_sector;
 static int g_drive_rc;
 static int g_has_drive;
+static int g_fighter_rc;
+static int g_has_fighter;
 static int g_turn_debits;
 static int g_sector_updates;
 static int g_last_response_code;
@@ -50,6 +52,39 @@ int repo_universe_check_transwarp(db_t *db, int ship_id, int *enabled)
   return g_drive_rc;
 }
 
+int repo_universe_lock_sector_fighter(db_t *db, int sector_id, int *found)
+{
+  (void) db; (void) sector_id;
+  *found = g_has_fighter;
+  return g_fighter_rc;
+}
+
+bool db_tx_begin(db_t *db, db_tx_flags_t flags, db_error_t *err)
+{
+  (void) db; (void) flags; (void) err;
+  return true;
+}
+
+bool db_tx_commit(db_t *db, db_error_t *err)
+{
+  (void) db; (void) err;
+  return true;
+}
+
+bool db_tx_rollback(db_t *db, db_error_t *err)
+{
+  (void) db; (void) err;
+  return true;
+}
+
+int repo_universe_move_player_and_ship(db_t *db, int player_id,
+                                       int expected_ship_id, int sector_id)
+{
+  (void) db; (void) player_id; (void) expected_ship_id; (void) sector_id;
+  g_sector_updates++;
+  return 0;
+}
+
 TurnConsumeResult h_consume_player_turn(db_t *db, client_ctx_t *ctx, int turns)
 {
   (void) db; (void) ctx;
@@ -70,7 +105,6 @@ int handle_turn_consumption_error(client_ctx_t *ctx,
 int db_player_set_sector(int player_id, int sector_id)
 {
   (void) player_id; (void) sector_id;
-  g_sector_updates++;
   return 0;
 }
 
@@ -128,6 +162,8 @@ static void reset(void)
   g_max_sector = 680;
   g_drive_rc = 0;
   g_has_drive = 1;
+  g_fighter_rc = 0;
+  g_has_fighter = 1;
   g_turn_debits = 0;
   g_sector_updates = 0;
   g_last_response_code = 0;
@@ -167,6 +203,22 @@ int main(void)
   root = request(20);
   cmd_move_transwarp(&ctx, root);
   assert(g_last_response_code == REF_TRANSWARP_UNAVAILABLE);
+  assert(g_turn_debits == 0 && g_sector_updates == 0);
+  json_decref(root);
+
+  reset();
+  g_has_fighter = 0;
+  root = request(20);
+  cmd_move_transwarp(&ctx, root);
+  assert(g_last_response_code == REF_TRANSWARP_UNAVAILABLE);
+  assert(g_turn_debits == 0 && g_sector_updates == 0);
+  json_decref(root);
+
+  reset();
+  g_fighter_rc = -1;
+  root = request(20);
+  cmd_move_transwarp(&ctx, root);
+  assert(g_last_response_code == ERR_DB);
   assert(g_turn_debits == 0 && g_sector_updates == 0);
   json_decref(root);
 

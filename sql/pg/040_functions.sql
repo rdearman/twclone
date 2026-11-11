@@ -467,7 +467,6 @@ CREATE OR REPLACE FUNCTION generate_stardock ()
     AS $$
 DECLARE
     v_sector int;
-    v_max_sector int;
     v_lock_key bigint := 72002006;
     v_exists boolean;
     v_port_id int;
@@ -488,24 +487,24 @@ BEGIN
             bigbang_unlock (v_lock_key);
         RETURN 0;
     END IF;
-    SELECT
-        MAX(sector_id) INTO v_max_sector
-    FROM
-        sectors;
-    -- Pick random sector_id > 10
-    v_sector := 11 + floor(random() * (v_max_sector - 10));
+    -- A StarPort may be the only port in its sector. Do not replace an
+    -- ordinary port merely to make room for Stardock.
+    SELECT s.sector_id INTO v_sector
+      FROM sectors s
+     WHERE s.sector_id > 10
+       AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+     ORDER BY random()
+     LIMIT 1;
+    IF v_sector IS NULL THEN
+        PERFORM bigbang_unlock(v_lock_key);
+        RAISE EXCEPTION 'No eligible empty sector available for Stardock';
+    END IF;
     -- Insert Stardock (Type 9, Size 10, Tech 10)
     INSERT INTO ports (number, name, sector_id, type, size, techlevel, petty_cash,
                        porttype_id)
         VALUES (v_sector, 'Stardock', v_sector, 9, 10, 10, 1000000,
                 (SELECT porttype_id FROM porttypes WHERE code = 'STARDOCK'))
-    ON CONFLICT (sector_id, number)
-        DO UPDATE SET
-            name = EXCLUDED.name, type = EXCLUDED.type, size = EXCLUDED.size,
-            techlevel = EXCLUDED.techlevel, petty_cash = EXCLUDED.petty_cash,
-            porttype_id = EXCLUDED.porttype_id
-        RETURNING
-            port_id INTO v_port_id;
+    RETURNING port_id INTO v_port_id;
     -- Create bank account for Stardock
     IF v_port_id IS NOT NULL THEN
         INSERT INTO bank_accounts (owner_type, owner_id, currency, balance, interest_rate_bp, is_active)
@@ -1046,15 +1045,28 @@ BEGIN
     -- Get current Ferengi sector to avoid it
     SELECT sector_id INTO v_ferengi_sector FROM planets WHERE planet_id = 2;
     
-    -- Pick a random exit sector from longest_tunnels that isn't Ferenginar
-    SELECT exit_sector INTO v_orion_sector
-    FROM longest_tunnels 
-    WHERE exit_sector > 10 AND exit_sector != COALESCE(v_ferengi_sector, 0)
-    ORDER BY random() LIMIT 1;
-    
-    -- If no second tunnel or default conflict, use random sector
-    IF v_orion_sector IS NULL OR v_orion_sector = 0 THEN
-        v_orion_sector := (random() * 989)::int + 11;
+    -- Keep Orion provisioning idempotent and obey one-port-per-sector.
+    SELECT sector_id INTO v_orion_sector
+      FROM ports
+     WHERE type = 10 AND name = 'Orion Black Market Dock'
+     ORDER BY port_id LIMIT 1;
+    IF v_orion_sector IS NULL THEN
+        SELECT lt.exit_sector INTO v_orion_sector
+          FROM longest_tunnels lt
+         WHERE lt.exit_sector > 10
+           AND lt.exit_sector != COALESCE(v_ferengi_sector, 0)
+           AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = lt.exit_sector)
+         ORDER BY random() LIMIT 1;
+    END IF;
+    IF v_orion_sector IS NULL THEN
+        SELECT s.sector_id INTO v_orion_sector
+          FROM sectors s
+         WHERE s.sector_id > 10
+           AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = s.sector_id)
+         ORDER BY random() LIMIT 1;
+    END IF;
+    IF v_orion_sector IS NULL THEN
+        RAISE EXCEPTION 'No eligible empty sector available for Orion port';
     END IF;
     
     -- Create Orion Hideout planet (planet_id 3)
@@ -1088,7 +1100,7 @@ BEGIN
     -- Create Orion Black Market port (type 10 = blackmarket stardock)
     INSERT INTO ports (sector_id, name, type, number)
     VALUES (v_orion_sector, 'Orion Black Market Dock', 10, v_orion_sector)
-    ON CONFLICT (sector_id, number) DO UPDATE SET sector_id = EXCLUDED.sector_id, name = EXCLUDED.name
+    ON CONFLICT (sector_id, number) DO NOTHING
     RETURNING port_id INTO v_port_id;
 
     -- Ensure bank account exists (even if port already existed)

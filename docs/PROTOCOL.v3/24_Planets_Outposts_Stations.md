@@ -362,6 +362,19 @@ Start or upgrade a citadel on a landed planet.
 
 ## 6. Planet Market Integration
 
+`planet.trade.port` is the separate direct local PTA workflow. It transfers
+planetary ORE/ORG/EQU to a same-sector port configured to buy the commodity,
+using current port pricing, capacity and access rules. It requires the caller's
+existing planet trading authority and consumes zero turns; it is not a
+Galactic Exchange order. See the full receipt and transaction contract in
+[`22_Trade_and_Port_Commands.md`](22_Trade_and_Port_Commands.md#planettradeport).
+
+StarPort construction with class selection, capacity upgrades and destruction
+are approved V3 parity scope. Construction selects the class of a new port;
+existing ports cannot be freely reclassified. A sector may contain no more
+than one port. Explicit player/corporation port ownership and owner-specific
+fees or access policy remain V4 scope.
+
 ### `planet.market.sell`
 Sell surplus commodities from a player-owned planet to the global market. The planet must have sufficient inventory. Proceeds are credited to the player's account.
 

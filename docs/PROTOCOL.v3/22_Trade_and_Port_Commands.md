@@ -146,6 +146,76 @@ records expiry immediately.
 
 ## 2. Hardware & Services (Stardock)
 
+### StarPort construction and class (V3 parity)
+
+V3 includes the original StarPort lifecycle: construct a StarPort in an
+eligible sector, choose its trading class during construction, upgrade its
+commodity trading capacity, and destroy it under the applicable combat rules.
+Class selection configures a newly built port; it is not a way to reclassify
+an existing port. The B/S pattern is from the port's perspective:
+
+| Class | Fuel ore | Organics | Equipment |
+|---|---|---|---|
+| BBB | Buy | Buy | Buy |
+| BBS | Buy | Buy | Sell |
+| BSB | Buy | Sell | Buy |
+| BSS | Buy | Sell | Sell |
+| SBB | Sell | Buy | Buy |
+| SBS | Sell | Buy | Sell |
+| SSB | Sell | Sell | Buy |
+| SSS | Sell | Sell | Sell |
+
+At most one StarPort may occupy a sector. A sector must be eligible and have
+no existing port before construction. Destroying the port makes that sector
+eligible again, subject to the remaining construction restrictions. Basic V3
+ports have no persistent player/corporation owner; owner-specific policies,
+tariffs and access are V4 scope. Exact construction costs, timing, eligibility
+exceptions and destruction consequences must follow the project's selected
+historical reference and are not inferred from the class table.
+
+### `planet.trade.port`
+
+Execute a direct Planetary Trade Agreement sale to a StarPort in the same
+sector. This is separate from `planet.market.sell`, which sells to the Galactic
+Exchange. The caller must own the planet or have existing planet trading
+authority. The destination port must be configured to buy every requested
+commodity, and existing local police/faction restrictions apply. No ship or
+cargo holds are required; this transaction consumes zero turns and does not
+use Exchange matching.
+
+Request:
+
+```json
+{
+  "command": "planet.trade.port",
+  "data": {
+    "planet_id": 123,
+    "port_id": 501,
+    "items": [{"commodity": "ORE", "quantity": 100}],
+    "idempotency_key": "planet-port-sale-123"
+  }
+}
+```
+
+`items` accepts one entry per commodity (`ORE`, `ORG`, `EQU`), with a positive
+quantity. The requested set is settled atomically: planetary stock, port buy
+direction and capacity, port funds, and player petty-cash settlement must all
+permit the complete request. The server uses the authoritative dynamic port
+purchase price. Success is `planet.trade.port_receipt_v1`, containing planet,
+port, sector and player IDs; per-commodity quantity/unit-price/value lines;
+total proceeds; updated player credits; and `turns_consumed: 0`. A retry with
+the same key and identical request replays the receipt without transferring
+stock or credits again. Reusing the key for a different request is rejected.
+
+One transaction decrements planetary stock, adds the same quantity to port
+stock, debits the port CRD account, credits the player and records the trade.
+Failure rolls back all effects. Planet treasury visibility is unchanged.
+
+Historical basis: the [TradeWars 2002 Player's Manual (1990–2000)](https://electraphysics.com/documents/tradewarsmanual.pdf)
+describes PTA at lines 207–217 and construction/class, material, upgrade and
+single-port-per-sector behavior at lines 434–455. That reference does not
+establish exact numeric construction costs or a V3 port-owner/tariff model.
+
 ### `hardware.list`
 List available upgrades (ships, equipment) at the current port. At a
 configured special hardware port, `data.location_type` is `BLACK_MARKET` and

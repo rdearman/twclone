@@ -1,0 +1,181 @@
+{
+  "name": "Planetary Trade Agreement to local StarPort",
+  "version": "2.0.0",
+  "protocol_category": "21_Planetary_Operations",
+  "description": "Exercises direct local planet-to-port settlement, inventory conservation, authorization, and idempotent retry. Contract: PTA-V3-01.",
+  "tests": [
+    { "name": "Setup: PTA administrator", "setup": "macro_bootstrap_admin" },
+    { "name": "Setup: PTA planet owner", "setup": "macro_auth_user", "username": "pta_owner", "password": "password123" },
+    { "name": "Setup: Unauthorized PTA player", "setup": "macro_auth_user", "username": "pta_guest", "password": "password123" },
+    {
+      "name": "Choose a funded port that buys ORE and sells another planetary commodity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT p.port_id,p.sector_id,(SELECT pt2.commodity FROM port_trade pt2 WHERE pt2.port_id=p.port_id AND pt2.commodity IN ('ORG','EQU') AND pt2.mode='sell' ORDER BY pt2.commodity LIMIT 1) FROM ports p JOIN port_trade pt ON pt.port_id=p.port_id AND pt.commodity='ORE' AND pt.mode='buy' JOIN bank_accounts b ON b.owner_type='port' AND b.owner_id=p.port_id AND b.currency='CRD' AND b.is_active=TRUE WHERE p.sector_id>10 AND EXISTS (SELECT 1 FROM port_trade pt2 WHERE pt2.port_id=p.port_id AND pt2.commodity IN ('ORG','EQU') AND pt2.mode='sell') ORDER BY p.port_id LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "pta_port_id": "data.rows.0.0", "pta_sector_id": "data.rows.0.1", "pta_not_bought_code": "data.rows.0.2" }
+    },
+    {
+      "name": "Remove prior named PTA fixture planet stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM entity_stock WHERE entity_type='planet' AND entity_id IN (SELECT planet_id FROM planets WHERE name='V3 PTA acceptance planet');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior named PTA fixture goods",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_goods WHERE planet_id IN (SELECT planet_id FROM planets WHERE name='V3 PTA acceptance planet');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior named PTA fixture citadels",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM citadels WHERE planet_id IN (SELECT planet_id FROM planets WHERE name='V3 PTA acceptance planet');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior named PTA taxable activity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planet_economic_activity WHERE planet_id IN (SELECT planet_id FROM planets WHERE name='V3 PTA acceptance planet');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Remove prior named PTA fixture planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM planets WHERE name='V3 PTA acceptance planet';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create an owned planet in the selected port sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planets (sector_id,name,owner_id,owner_type,class,type,created_by) SELECT @{pta_sector_id},'V3 PTA acceptance planet',@{pta_owner_player_id},'player','M',MIN(planettypes_id),@{admin_player_id} FROM planettypes RETURNING planet_id;" },
+      "expect": { "status": "ok" },
+      "save": { "pta_planet_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Seed planet stock, clear port ORE and fund its account",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity) VALUES ('planet',@{pta_planet_id},'ORE',100) ON CONFLICT (entity_type,entity_id,commodity_code) DO UPDATE SET quantity=100;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed planet stock for a commodity the port does not buy",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity) VALUES ('planet',@{pta_planet_id},'@{pta_not_bought_code}',10) ON CONFLICT (entity_type,entity_id,commodity_code) DO UPDATE SET quantity=10;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset selected port ORE inventory",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity) VALUES ('port',@{pta_port_id},'ORE',0) ON CONFLICT (entity_type,entity_id,commodity_code) DO UPDATE SET quantity=0;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fund port account for the trade fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance=1000000 WHERE owner_type='port' AND owner_id=@{pta_port_id} AND currency='CRD' AND is_active=TRUE;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Read funded port account before sale",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='port' AND owner_id=@{pta_port_id} AND currency='CRD' AND is_active=TRUE;" },
+      "expect": { "status": "ok" },
+      "save": { "pta_port_balance_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Read owner petty cash before sale",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT credits FROM players WHERE player_id=@{pta_owner_player_id};" },
+      "expect": { "status": "ok" },
+      "save": { "pta_credits_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Sell planetary ORE directly to same-sector buying port",
+      "command": "planet.trade.port",
+      "user": "pta_owner",
+      "data": { "planet_id": "@{pta_planet_id}", "port_id": "@{pta_port_id}", "items": [{"commodity":"ORE","quantity":10}], "idempotency_key":"pta-v3-@{pta_planet_id}-sale" },
+      "expect": { "status": "ok", "type": "planet.trade.port_receipt_v1" },
+      "asserts": [
+        { "path": "data.planet_id", "op": "==", "value": "@{pta_planet_id}" },
+        { "path": "data.port_id", "op": "==", "value": "@{pta_port_id}" },
+        { "path": "data.turns_consumed", "op": "==", "value": 0 },
+        { "path": "data.lines.0.quantity", "op": "==", "value": 10 }
+      ],
+      "save": { "pta_sale_proceeds": "data.total_credits_received" }
+    },
+    {
+      "name": "Retry identical sale with same idempotency key",
+      "command": "planet.trade.port",
+      "user": "pta_owner",
+      "data": { "planet_id": "@{pta_planet_id}", "port_id": "@{pta_port_id}", "items": [{"commodity":"ORE","quantity":10}], "idempotency_key":"pta-v3-@{pta_planet_id}-sale" },
+      "expect": { "status": "ok", "type": "planet.trade.port_receipt_v1" },
+      "asserts": [ { "path": "data.lines.0.quantity", "op": "==", "value": 10 } ]
+    },
+    {
+      "name": "Reject reuse of successful idempotency key for a different quantity",
+      "command": "planet.trade.port",
+      "user": "pta_owner",
+      "data": { "planet_id": "@{pta_planet_id}", "port_id": "@{pta_port_id}", "items": [{"commodity":"ORE","quantity":1}], "idempotency_key":"pta-v3-@{pta_planet_id}-sale" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Verify one transfer, one credit settlement and exact commodity conservation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=@{pta_planet_id} AND commodity_code='ORE'),(SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=@{pta_port_id} AND commodity_code='ORE'),(SELECT COUNT(*) FROM trade_idempotency WHERE key='pta-v3-@{pta_planet_id}-sale' AND player_id=@{pta_owner_player_id}),(SELECT credits FROM players WHERE player_id=@{pta_owner_player_id})-@{pta_credits_before},@{pta_port_balance_before}-(SELECT balance FROM bank_accounts WHERE owner_type='port' AND owner_id=@{pta_port_id} AND currency='CRD' AND is_active=TRUE);" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 90 },
+        { "path": "data.rows.0.1", "op": "==", "value": 10 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 },
+        { "path": "data.rows.0.3", "op": "==", "value": "@{pta_sale_proceeds}" },
+        { "path": "data.rows.0.4", "op": "==", "value": "@{pta_sale_proceeds}" }
+      ]
+    },
+    {
+      "name": "Reject sale by player without planet trading authority",
+      "command": "planet.trade.port",
+      "user": "pta_guest",
+      "data": { "planet_id": "@{pta_planet_id}", "port_id": "@{pta_port_id}", "items": [{"commodity":"ORE","quantity":1}], "idempotency_key":"pta-v3-unauthorized" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reject commodity the port is configured to sell rather than buy",
+      "command": "planet.trade.port",
+      "user": "pta_owner",
+      "data": { "planet_id": "@{pta_planet_id}", "port_id": "@{pta_port_id}", "items": [{"commodity":"@{pta_not_bought_code}","quantity":1}], "idempotency_key":"pta-v3-wrong-direction" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reject request exceeding planetary available stock",
+      "command": "planet.trade.port",
+      "user": "pta_owner",
+      "data": { "planet_id": "@{pta_planet_id}", "port_id": "@{pta_port_id}", "items": [{"commodity":"ORE","quantity":1000}], "idempotency_key":"pta-v3-insufficient-stock" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Verify rejected requests did not mutate either inventory",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT (SELECT quantity FROM entity_stock WHERE entity_type='planet' AND entity_id=@{pta_planet_id} AND commodity_code='ORE'),(SELECT quantity FROM entity_stock WHERE entity_type='port' AND entity_id=@{pta_port_id} AND commodity_code='ORE');" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 90 },
+        { "path": "data.rows.0.1", "op": "==", "value": 10 }
+      ]
+    }
+  ]
+}
