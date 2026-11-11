@@ -119,8 +119,10 @@ the specific workflow was exercised.
 - INS-005 ledger audit alignment: migration 179 updates
   `insurance_ledger_invariant_snapshot` to accept both funded
   `ADJUSTMENT/CREDIT` and guaranteed `INSURANCE_GUARANTEE/CREDIT` rows. The
-  existing SQL invariant fixture now includes a guaranteed paid claim. Runtime
-  SQL execution is still pending.
+  existing SQL invariant fixture now includes a guaranteed paid claim.
+  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py
+  tests.v2/test_planetary_server_contract.py` passed (55); runtime SQL
+  execution is still pending.
 - 2026-11-11 QA attempt: sandbox `pg_isready` reported no response on the
   isolated loopback QA port 55438. Following explicit user authorization, the
   host-access bridge returned exit 0 but no identity output and no new report
@@ -128,6 +130,13 @@ the specific workflow was exercised.
   successful DB access or regression execution. No connection to port 5432 or
   a remote host was made. Continue local work; retry QA only when the allowed
   path yields observable identity and test artifacts.
+- SHIP-002 local validation on the current tree: `python3 -m pytest -q
+  tests.v2/test_ship_sale_equipment_catalog.py
+  tests.v2/test_bigbang_sql_selection.py
+  tests.v2/test_mysql_migration_portability.py
+  tests.v2/test_insurance_server_contract.py` passed (29 tests, 217 subtests);
+  `tests.v2/run_engine_regressions.sh` passed all three C engine checks. This
+  does not apply migrations or exercise ship-sale JSON against a server.
 
 - Portable insurance command batch: `make -C bin -j2` passed with ASan/UBSan
   after adding shared C repository transactions for policy purchase and
