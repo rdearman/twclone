@@ -680,6 +680,8 @@ int repo_stardock_update_ship_hardware(db_t *db, const char *col_name, int32_t q
         {"holds", "maxholds", false},
         {"genesis", "maxgenesis", false},
         {"mines", "maxmines", false},
+        {"limpets", "maxlimpets", false},
+        {"photons", "maxphotons", false},
         {"beacons", "maxbeacons", false},
         {"cloaking_devices", "max_cloaks", false},
         {"detonators", "max_detonators", false},

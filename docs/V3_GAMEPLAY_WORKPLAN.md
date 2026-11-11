@@ -64,7 +64,7 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 |---|---|---|---|
 | 1 | Complete current Exchange/unrest/resale/insurance batch | EXC-001–011, HARV-008, POP-05/10/12, SHIP-005, INS-01/02 | Exchange sequential planet→port settlement and conservation pass against PostgreSQL; verify concurrent matcher/restart, then continue the remaining unrest/resale/insurance checks. |
 | 2 | Remaining planet population and capture workflows | POP-001–014, CAP-001–006, SYS-002/003 | Verify migrations, exclusive population, capture conversion, emancipation, exact 50% production, scheduler idempotency. Do not invent unset unrest values. |
-| 3 | Ship sale/destruction completeness | SHIP-001–009, COMBAT-001–005, INS-001–006 | Resolve missing equipment valuation source; test sale, used-hull purchase, pod, destruction asset retention and guaranteed insurance. |
+| 3 | Ship sale/destruction completeness | SHIP-001–009, COMBAT-001–005, INS-001–006 | SHIP-002 catalogue baseline is documented and implemented; run sale valuation/purchase-capacity JSON tests and migration, then verify used-hull purchase, pod, destruction asset retention and guaranteed insurance. |
 | 4 | Galactic Exchange end-to-end | EXC-001–011, HARV-008, SYS-005 | Verify immediate sale, port/planet purchase, conservation, liquidity and idempotency using an available isolated DB. |
 | 5 | Banking standing orders | BANK-001–011 | Verify schedule boundaries, skips, cancellations, deleted recipient, ledger and exactly-once restart behavior. |
 | 6 | Movement, hazards, listing and trade | MOVE-001–004, PLAYER-001–006, TRADE-001–003 | Verify approved wire behavior and immediate hazard/destruction settlement. |

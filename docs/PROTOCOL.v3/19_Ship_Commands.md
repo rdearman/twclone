@@ -182,6 +182,15 @@ primary-owned ship. The player cannot sell their last primary-owned ship. If
 the sold hull is active, the selected replacement becomes active in the same
 transaction.
 
+Canonical base prices for sale valuation are listed in
+[`V3_EQUIPMENT_CATALOGUE.md`](../V3_EQUIPMENT_CATALOGUE.md). In this
+catalogue `PROBE` is a Subspace Ether Probe, not the separate Psychic Probe.
+Mines, Limpets, probes, photons, and beacons are constrained by the selected
+ship type's configured capacities during purchase. The classic TWGS 3.13
+reference prices are Armid 1,000, Limpet 10,000, Ether Probe 3,000, Photon
+40,000, and Marker Beacon 100 credits; local catalogue rows may retain
+deployment-specific values.
+
 The sale proceeds are
 `floor((shiptypes.basecost + installed equipment value) * factor_bp / 10000)`.
 Equipment unit values come from the hardware catalogue. The standalone factor

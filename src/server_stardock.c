@@ -526,6 +526,14 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
     {
       col_name = "mines";
     }
+  else if (strcmp (code, "LIMPETS") == 0)
+    {
+      col_name = "limpets";
+    }
+  else if (strcmp (code, "PHOTONS") == 0)
+    {
+      col_name = "photons";
+    }
   else if (strcmp (code, "BEACONS") == 0)
     {
       col_name = "beacons";
@@ -588,6 +596,14 @@ cmd_hardware_buy (client_ctx_t *ctx, json_t *root)
   else if (strcmp (col_name, "mines") == 0)
     {
       strcpy (limit_col, "maxmines");
+    }
+  else if (strcmp (col_name, "limpets") == 0)
+    {
+      strcpy (limit_col, "maxlimpets");
+    }
+  else if (strcmp (col_name, "photons") == 0)
+    {
+      strcpy (limit_col, "maxphotons");
     }
   else if (strcmp (col_name, "beacons") == 0)
     {

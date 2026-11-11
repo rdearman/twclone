@@ -88,7 +88,12 @@ INSERT INTO hardware_items (code, name, price, requires_stardock, sold_in_class0
     ('CLOAK', 'Cloaking Device', 50000, 0, 1, 1, 'MODULE', 1),
     ('LSCANNER', 'Long-Range Scanner', 30000, 0, 1, 1, 'MODULE', 1),
     ('PSCANNER', 'Planet Scanner', 15000, 0, 1, 1, 'MODULE', 1),
-    ('TWARP', 'TransWarp Drive', 100000, 0, 1, 1, 'MODULE', 1)
+    ('TWARP', 'TransWarp Drive', 100000, 0, 1, 1, 'MODULE', 1),
+    ('MINES', 'Armid Mine', 1000, 1, 0, NULL, 'SPECIAL', 1),
+    ('LIMPETS', 'Limpet Mine', 10000, 1, 0, NULL, 'SPECIAL', 1),
+    ('PROBE', 'Subspace Ether Probe', 3000, 1, 0, NULL, 'SPECIAL', 1),
+    ('PHOTONS', 'Photon Missile', 40000, 1, 0, NULL, 'SPECIAL', 1),
+    ('BEACONS', 'Marker Beacon', 100, 1, 0, NULL, 'SPECIAL', 1)
 ;
 -- 13. FedSpace Sectors (1-10)
 INSERT INTO sectors (sector_id, name, beacon, nebulae)

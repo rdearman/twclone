@@ -73,6 +73,7 @@
       "171_v3_planet_population_state.sql",
       "172_v3_bank_standing_orders.sql",
       "173_v3_slave_unrest_policy_config.sql"
+      ,"178_ship_sale_equipment_catalogue.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -704,6 +705,13 @@
     },
     {
       "name": "177_used_ship_resale_factor.sql",
+      "subsystem": "shipyard",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "178_ship_sale_equipment_catalogue.sql",
       "subsystem": "shipyard",
       "required": true,
       "v3_only": true,

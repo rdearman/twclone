@@ -38,7 +38,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "WITH yard AS (SELECT p.port_id, p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1), moved AS (UPDATE players SET sector_id = (SELECT sector_id FROM yard) WHERE name = 'ship_sale_v3' RETURNING player_id, ship_id), active AS (UPDATE ships SET sector_id = (SELECT sector_id FROM yard), ported = (SELECT port_id FROM yard), ore = 1 WHERE ship_id = (SELECT ship_id FROM moved) RETURNING ship_id, type_id, sector_id), replacement AS (INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields) SELECT 'Sale replacement V3', type_id, sector_id, 10, 0, 0 FROM active RETURNING ship_id), ownership AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT replacement.ship_id, moved.player_id, 1, TRUE FROM replacement CROSS JOIN moved RETURNING ship_id) SELECT yard.port_id, active.ship_id, ownership.ship_id FROM yard CROSS JOIN active CROSS JOIN ownership;"
+        "sql": "WITH yard AS (SELECT p.port_id, p.sector_id FROM ports p JOIN porttypes pt ON pt.porttype_id = p.porttype_id WHERE pt.is_stardock = TRUE ORDER BY p.port_id LIMIT 1), moved AS (UPDATE players SET sector_id = (SELECT sector_id FROM yard) WHERE name = 'ship_sale_v3' RETURNING player_id, ship_id), active AS (UPDATE ships SET sector_id = (SELECT sector_id FROM yard), ported = (SELECT port_id FROM yard), ore = 1, mines = 1, limpets = 1, probes = 1, photons = 1, beacons = 1 WHERE ship_id = (SELECT ship_id FROM moved) RETURNING ship_id, type_id, sector_id), replacement AS (INSERT INTO ships (name, type_id, sector_id, holds, fighters, shields) SELECT 'Sale replacement V3', type_id, sector_id, 10, 0, 0 FROM active RETURNING ship_id), ownership AS (INSERT INTO ship_ownership (ship_id, player_id, role_id, is_primary) SELECT replacement.ship_id, moved.player_id, 1, TRUE FROM replacement CROSS JOIN moved RETURNING ship_id) SELECT yard.port_id, active.ship_id, ownership.ship_id FROM yard CROSS JOIN active CROSS JOIN ownership;"
       },
       "expect": { "status": "ok" },
       "save": {
@@ -67,6 +67,7 @@
         { "path": "data.ship_id", "op": "==", "value": "@sale_test_active_ship_id" },
         { "path": "data.replacement_ship_id", "op": "==", "value": "@sale_test_replacement_ship_id" },
         { "path": "data.shipyard_port_id", "op": "==", "value": "@sale_test_port_id" },
+        { "path": "data.installed_equipment_valuation", "op": "==", "value": 54100 },
         { "path": "data.sale_factor_bp", "op": "==", "value": 6000 },
         { "path": "data.cargo_forfeited", "op": "==", "value": true },
         { "path": "data.insurance_terminated", "op": "==", "value": true },

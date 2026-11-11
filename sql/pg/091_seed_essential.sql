@@ -229,7 +229,12 @@ INSERT INTO hardware_items (code, name, price, requires_stardock, sold_in_class0
     ('CLOAK', 'Cloaking Device', 50000, FALSE, TRUE, 1, 'MODULE', TRUE),
     ('LSCANNER', 'Long-Range Scanner', 30000, FALSE, TRUE, 1, 'MODULE', TRUE),
     ('PSCANNER', 'Planet Scanner', 15000, FALSE, TRUE, 1, 'MODULE', TRUE),
-    ('TWARP', 'TransWarp Drive', 100000, FALSE, TRUE, 1, 'MODULE', TRUE)
+    ('TWARP', 'TransWarp Drive', 100000, FALSE, TRUE, 1, 'MODULE', TRUE),
+    ('MINES', 'Armid Mine', 1000, TRUE, FALSE, NULL, 'SPECIAL', TRUE),
+    ('LIMPETS', 'Limpet Mine', 10000, TRUE, FALSE, NULL, 'SPECIAL', TRUE),
+    ('PROBE', 'Subspace Ether Probe', 3000, TRUE, FALSE, NULL, 'SPECIAL', TRUE),
+    ('PHOTONS', 'Photon Missile', 40000, TRUE, FALSE, NULL, 'SPECIAL', TRUE),
+    ('BEACONS', 'Marker Beacon', 100, TRUE, FALSE, NULL, 'SPECIAL', TRUE)
 ON CONFLICT (code)
     DO NOTHING;
 -- 13. FedSpace Sectors (1-10)
