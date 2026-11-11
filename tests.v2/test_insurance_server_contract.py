@@ -69,3 +69,16 @@ def test_destruction_guarantees_hull_payout_when_insurer_fund_is_short():
         encoding="utf-8"
     )
     assert "'INSURANCE_GUARANTEE'" in migration
+
+
+def test_ledger_invariant_view_accepts_guaranteed_claim_credits():
+    migration = (ROOT / "sql/pg/179_insurance_guarantee_ledger_invariants.sql").read_text(
+        encoding="utf-8"
+    )
+    fixture = (ROOT / "tests.v2/test_pg_insurance_ledger_invariants.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "tx_type IN ('ADJUSTMENT', 'INSURANCE_GUARANTEE')" in migration
+    assert "tx_type NOT IN ('ADJUSTMENT', 'INSURANCE_GUARANTEE')" in migration
+    assert "'insurance-claim-10', 'INSURANCE_GUARANTEE', 'CREDIT', 15, 'CRD'" in fixture
+    assert "\\ir ../sql/pg/179_insurance_guarantee_ledger_invariants.sql" in fixture

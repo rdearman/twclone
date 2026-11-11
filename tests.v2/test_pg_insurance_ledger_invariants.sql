@@ -22,13 +22,15 @@ CREATE TABLE bank_transactions (
 );
 
 \ir ../sql/pg/130_insurance_ledger_invariants.sql
+\ir ../sql/pg/179_insurance_guarantee_ledger_invariants.sql
 SET search_path TO insurance_ledger_130_test, pg_catalog;
 
 INSERT INTO insurance_policies VALUES (7, 25);
-INSERT INTO insurance_claims VALUES (9, 20, 'paid');
+INSERT INTO insurance_claims VALUES (9, 20, 'paid'), (10, 15, 'paid');
 INSERT INTO bank_transactions (tx_group_id, tx_type, direction, amount, currency)
 VALUES ('insurance-policy-7', 'FEE', 'DEBIT', 25, 'CRD'),
-       ('insurance-claim-9', 'ADJUSTMENT', 'CREDIT', 20, 'CRD');
+       ('insurance-claim-9', 'ADJUSTMENT', 'CREDIT', 20, 'CRD'),
+       ('insurance-claim-10', 'INSURANCE_GUARANTEE', 'CREDIT', 15, 'CRD');
 
 DO $test$
 DECLARE r record;

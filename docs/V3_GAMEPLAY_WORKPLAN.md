@@ -72,6 +72,15 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
 ## Execution constraints
 
+### QA verification checkpoint — 2026-11-11
+
+The current sandbox reports no response from `127.0.0.1:55438`. An explicitly
+authorized host-access invocation did not return psql identity output or create
+a fresh regression artifact, so no DB or full-suite runtime verification is
+claimed. Port 5432 and remote hosts remain out of scope. Continue with local
+specification-supported work, then retry focused SHIP-002 and Exchange checks
+only when the QA path can produce observable identity and results.
+
 - Do not access production or remote databases. Do not repair QA infrastructure.
 - Do not run historical regression recovery or modify the parked AI Player.
 - Preserve user changes, existing architecture and documented policy.

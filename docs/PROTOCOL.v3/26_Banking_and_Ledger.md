@@ -105,3 +105,8 @@ ID until the replacement-value cap is reached. A missing or underfunded insurer
 reserve does not prevent a qualifying claim from being paid; the guaranteed
 system-funded amount is separately labeled. Selling an insured ship ends its
 policy without refund.
+
+The `insurance_ledger_invariant_snapshot` view accepts funded
+`ADJUSTMENT/CREDIT` and guaranteed `INSURANCE_GUARANTEE/CREDIT` entries as
+valid claim settlements. Other transaction types and duplicate or missing
+claim groups remain invariant violations.

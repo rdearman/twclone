@@ -716,6 +716,13 @@
       "required": true,
       "v3_only": true,
       "diagnostic": false
+    },
+    {
+      "name": "179_insurance_guarantee_ledger_invariants.sql",
+      "subsystem": "insurance",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
     }
   ]
 }

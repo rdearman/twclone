@@ -116,6 +116,19 @@ the specific workflow was exercised.
 
 ## Execution evidence log
 
+- INS-005 ledger audit alignment: migration 179 updates
+  `insurance_ledger_invariant_snapshot` to accept both funded
+  `ADJUSTMENT/CREDIT` and guaranteed `INSURANCE_GUARANTEE/CREDIT` rows. The
+  existing SQL invariant fixture now includes a guaranteed paid claim. Runtime
+  SQL execution is still pending.
+- 2026-11-11 QA attempt: sandbox `pg_isready` reported no response on the
+  isolated loopback QA port 55438. Following explicit user authorization, the
+  host-access bridge returned exit 0 but no identity output and no new report
+  artifact; retained report timestamps were unchanged. This is not evidence of
+  successful DB access or regression execution. No connection to port 5432 or
+  a remote host was made. Continue local work; retry QA only when the allowed
+  path yields observable identity and test artifacts.
+
 - Portable insurance command batch: `make -C bin -j2` passed with ASan/UBSan
   after adding shared C repository transactions for policy purchase and
   explicit claim settlement; focused
