@@ -14,11 +14,13 @@ V3 must provide:
   and idempotent retries;
 - usable ordinary-player Python and Godot workflows with aligned schemas,
   refusals, refreshes, and state recovery;
-- explicit separation of V3 scope from MySQL, federation, and experimental AI work.
+- explicit separation of V3 scope from MySQL, V5 server-to-server federation,
+  and experimental AI work. This does not exclude the in-game Federation
+  faction, jurisdiction, or enforcement mechanics from V3 where specified.
 
 Canonical requirements are described in the TradeWars references cited by the
 parity work, the V3 protocol in [`docs/PROTOCOL.v3/00_index.md`](PROTOCOL.v3/00_index.md),
-and the gameplay/design contracts in [`docs/V2_GAMEPLAY_SYSTEMS_CONTRACTS.md`](V2_GAMEPLAY_SYSTEMS_CONTRACTS.md),
+and the gameplay/design contracts in [`docs/V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md),
 [`docs/ENGINE.md`](ENGINE.md), [`docs/ARCHITECTURE_OWNERSHIP.md`](ARCHITECTURE_OWNERSHIP.md),
 and `docs/design/`. Ship, movement, trade, combat, planets, corporations, banking,
 NPC, community, and SysOp command requirements are in `docs/PROTOCOL.v3/19_*` through
@@ -86,8 +88,9 @@ variants.
   approved V3 policies. V3 has explicit rules for fixed-price trade, hull-only
   insurance, harvest, destruction/respawn, capture and synchronous transwarp;
   these do not assert edition-specific parity.
-- Issue `#491`: original player-facing parity authority; federation and other
-  noncanonical expansions are outside that release authority.
+- Issue `#491`: V3 release contract and original player-facing parity
+  authority; server-to-server federation and other noncanonical expansions
+  are outside that release authority.
 - Issue `#423`: computer/intelligence, scans, rankings, and information scope.
 - Issue `#396`: combat feature scope and aftermath.
 - Issue `#416`: planet/colonisation scope.
@@ -95,7 +98,9 @@ variants.
 - Issue `#490`: bounded ordinary-player/AI QA capability, not proof of canonical
   parity.
 - Issue `#493`: MySQL backend work; not a V3 PostgreSQL gameplay release gate.
-- Issues `#472–#483`: federation; defer from V3 parity certification.
+- Issues `#472–#483`: server-to-server federation programme, assigned to V5;
+  preserve these issue numbers and exclude this programme from V3 parity
+  certification. This does not refer to in-game Federation gameplay.
 
 ## Reproducible acceptance evidence
 

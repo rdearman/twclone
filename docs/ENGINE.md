@@ -4,7 +4,9 @@
 
 Run background game logic outside the player server: clocks/timers, economy drift, planetary growth, FedSpace maintenance, NPC scaffolding, and sanctions—communicating via durable DB rails and a TCP control link.
 
-**Out of scope:** inter-server federation; rich NPC AI beyond stubs; client UX.
+**Out of scope for this engine scope:** inter-server federation (planned for
+V5); rich NPC AI beyond stubs; client UX. In-game Federation jurisdiction is
+separate gameplay and is not excluded by this note.
 
 ## 2) Roles & boundaries
 

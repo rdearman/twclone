@@ -11,9 +11,9 @@ A modern, C-based recreation of classic BBS-era space-trading gameplay (in the s
 > * A separate **Game Engine** process (forked) that runs clocks, economy, maintenance, NPC stubs, and enforcement via **durable DB rails** and a **TCP S2S** control channel
 > * **DB-backed configuration** & secrets with live reload
 > * Cleaner broadcast pipeline to players
-> * **Massive concurrent player support:** PostgreSQL supports 100+ connections out-of-box; see **[`docs/PGBOUNCER_DEPLOYMENT.md`](./docs/PGBOUNCER_DEPLOYMENT.md)** for unlimited connections via connection pooling
+> * **Massive concurrent player support:** PostgreSQL supports 100+ connections out-of-box; see **[`docs/PRODUCTION_DEPLOYMENT_GUIDE.md`](./docs/PRODUCTION_DEPLOYMENT_GUIDE.md)** for connection-pooling guidance
 
-**Migration from SQLite (2025):** Early builds used SQLite for simplicity, but single-writer limitations proved problematic for scaling concurrent players. PostgreSQL removes this blocker and supports 100+ connections natively; see **[`docs/PGBOUNCER_DEPLOYMENT.md`](./docs/PGBOUNCER_DEPLOYMENT.md)** for unlimited scaling via connection pooling. Stress tests confirmed this change enables massive concurrent player counts.
+**Migration from SQLite (2025):** Early builds used SQLite for simplicity, but single-writer limitations proved problematic for scaling concurrent players. PostgreSQL removes this blocker and supports 100+ connections natively; see **[`docs/PRODUCTION_DEPLOYMENT_GUIDE.md`](./docs/PRODUCTION_DEPLOYMENT_GUIDE.md)** for connection-pooling guidance. Stress tests confirmed this change enables massive concurrent player counts.
 
 If you’re here from SourceForge: welcome back! The original code (largely GPL-era) is still available there; this repo is a ground-up rewrite focused on DB storage and JSON I/O. Portions I authored are now under **MIT**. Big thanks to the original collaborators; see **Credits** at the end.
 
@@ -66,7 +66,7 @@ twclone/
 make clean && make -j
 
 # 2) Configure PostgreSQL (or MySQL/other DB)
-# See docs/PGBOUNCER_DEPLOYMENT.md for production pooling setup
+# See docs/PRODUCTION_DEPLOYMENT_GUIDE.md for production pooling setup
 
 # 3) Build the Universe
     ./bin/bigbang.json 
@@ -84,7 +84,7 @@ python3 client/python_client/client.py --help
 
 ```
 
-> **DB Setup:** See **[`docs/PGBOUNCER_DEPLOYMENT.md`](./docs/PGBOUNCER_DEPLOYMENT.md)** for PostgreSQL + PgBouncer configuration that unlocks unlimited concurrent connections.
+> **DB Setup:** See **[`docs/PRODUCTION_DEPLOYMENT_GUIDE.md`](./docs/PRODUCTION_DEPLOYMENT_GUIDE.md)** for PostgreSQL connection-pooling guidance.
 
 ---
 
@@ -209,7 +209,7 @@ All client↔server interactions use JSON. The engine↔server (S2S) control cha
 * **Client protocol:** request/response envelopes, errors, deprecations.
 * **Engine↔Server (S2S):** `s2s.health.check`, `s2s.broadcast.sweep`, `s2s.command.push`, `s2s.config.bump`, `s2s.engine.shutdown`.
 
-🔗 See **[`docs/PROTOCOL.md`](./docs/PROTOCOL.md)** for structures and examples.
+🔗 See **[`docs/PROTOCOL.v3/00_index.md`](./docs/PROTOCOL.v3/00_index.md)** for structures and examples.
 🔗 Engine S2S specifics are also summarized in **[`docs/ENGINE.md`](./docs/ENGINE.md)**.
 
 ---
@@ -217,7 +217,7 @@ All client↔server interactions use JSON. The engine↔server (S2S) control cha
 ## Database
 
 * **Engine:** PostgreSQL (primary), with MySQL and other database support.
-* **Scaling:** 100+ concurrent connections out-of-box; unlimited via **[PgBouncer connection pooling](./docs/PGBOUNCER_DEPLOYMENT.md)**.
+* **Scaling:** 100+ concurrent connections out-of-box; scalable via **[connection pooling](./docs/PRODUCTION_DEPLOYMENT_GUIDE.md)**.
 * **Schema:** created/verified at first run (or by `test_bang`).
 * **Reset:** drop and recreate the database, then re-run `test_bang` (or start the server to re-seed essentials).
 
@@ -244,19 +244,72 @@ psql -U twclone_user -d twclone_db -c "SELECT * FROM sectors LIMIT 10;"
 
 ## Roadmap
 
-* [x] **PostgreSQL migration** (multi-writer, massive concurrency support)
-* [ ] Finish parity with legacy client features.
-* [ ] Economy loops (ports, stock/price updates), Terra/planet growth.
-* [ ] NPC scaffold (Ferrengi/Imperials) + encounter hooks.
-* [ ] Imperial enforcement (warn/dispatch/destroy) golden path end-to-end.
-* [ ] Broadcast pump & ephemeral TTLs.
-* [ ] **TLS/SSL transport encryption** (or Docker + reverse proxy for now).
-* [ ] Robust auth (Argon2id, rate-limiting), admin/sysop ops.
-* [ ] Resolve open GitHub issues.
-* [ ] Tests (idempotency, crash-resume, load/priority).
-* [ ] CI build & lint.
+This roadmap defines release goals, not implementation or verification claims.
+Current implementation evidence and known gaps are tracked separately in
+[`docs/V3_STATUS.md`](docs/V3_STATUS.md) and
+[`docs/V3_GAMEPLAY_PARITY.md`](docs/V3_GAMEPLAY_PARITY.md). A feature is not
+considered release-complete solely because code or a protocol command exists.
 
-For deep technical detail and task breakdowns, see **ENGINE.md** and GitHub Issues/Epics (Engine Process & IPC, Durable Rails, Scheduler, Broadcasts, NPC/Enforcement, Reliability & Ops).
+### V2 — Core Platform
+
+V2 is the established platform baseline: a modern C server, PostgreSQL and
+other database backends, a JSON protocol, a separate game-engine process,
+universe generation, Python and Godot clients, and foundational gameplay.
+This describes the platform foundation; it does not assert that every
+gameplay subsystem has been fully verified.
+
+### V3 — Classic TradeWars 2002 Parity
+
+**Release goal:** complete the agreed original TradeWars 2002 gameplay scope,
+alongside approved V3-specific rules. The release contract is
+[GitHub issue #491](https://github.com/rdearman/twclone/issues/491).
+
+Outstanding parity work includes StarPort construction, upgrades and
+destruction; photon firing; toll fighters; transwarp fuel rules; and corporate
+asset transfers. These are goals, not claims of completion. V3 release
+acceptance requires end-to-end verification in both the Python and Godot
+clients, database migration testing, and regression certification.
+
+### V4 — Enhanced Play
+
+**Release goal:** add economic and strategic gameplay beyond the original
+TradeWars 2002 baseline, including StarPort ownership, freight contracts,
+planetary industry, shipyards, corporate equity, mercenaries, territory and
+salvage. The programme is tracked by
+[epic #526](https://github.com/rdearman/twclone/issues/526) and
+[issues #525](https://github.com/rdearman/twclone/issues/525),
+[#526](https://github.com/rdearman/twclone/issues/526),
+[#527](https://github.com/rdearman/twclone/issues/527),
+[#528](https://github.com/rdearman/twclone/issues/528),
+[#529](https://github.com/rdearman/twclone/issues/529),
+[#530](https://github.com/rdearman/twclone/issues/530), and
+[#531](https://github.com/rdearman/twclone/issues/531). These are planned
+features, not a statement that they are implemented.
+
+### V5 — Federation
+
+**Release goal:** connect independently operated twclone servers through
+federation, covering peer trust, identity, inter-universe travel,
+communications and economic consistency. Existing federation roadmap issues
+[#472](https://github.com/rdearman/twclone/issues/472),
+[#473](https://github.com/rdearman/twclone/issues/473),
+[#474](https://github.com/rdearman/twclone/issues/474),
+[#475](https://github.com/rdearman/twclone/issues/475),
+[#476](https://github.com/rdearman/twclone/issues/476),
+[#477](https://github.com/rdearman/twclone/issues/477),
+[#478](https://github.com/rdearman/twclone/issues/478),
+[#479](https://github.com/rdearman/twclone/issues/479),
+[#480](https://github.com/rdearman/twclone/issues/480),
+[#481](https://github.com/rdearman/twclone/issues/481),
+[#482](https://github.com/rdearman/twclone/issues/482), and
+[#483](https://github.com/rdearman/twclone/issues/483) retain their numbers
+and are assigned to this V5 programme. This server-to-server
+federation is distinct from the in-game Federation faction and its V3
+jurisdiction mechanics. V5 functionality is planned, not represented as
+complete.
+
+For technical architecture and implementation detail, see
+[`docs/ENGINE.md`](docs/ENGINE.md) and the linked issue programmes above.
 
 ---
 
