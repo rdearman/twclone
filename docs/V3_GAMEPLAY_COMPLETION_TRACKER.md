@@ -122,7 +122,8 @@ the specific workflow was exercised.
   existing SQL invariant fixture now includes a guaranteed paid claim.
   `python3 -m pytest -q tests.v2/test_insurance_server_contract.py
   tests.v2/test_planetary_server_contract.py` passed (55); runtime SQL
-  execution is still pending.
+  execution is still pending. Migration/view commit: `ea095363`; fixture
+  search-path correction: `37d12e4f`; verification checkpoint: `f947e67b`.
 - 2026-11-11 QA attempt: sandbox `pg_isready` reported no response on the
   isolated loopback QA port 55438. Following explicit user authorization, the
   host-access bridge returned exit 0 but no identity output and no new report
