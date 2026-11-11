@@ -358,6 +358,65 @@ db_get_open_order (db_t *db,
   return rc;
 }
 
+int
+db_market_lock_order_for_update (db_t *db, int order_id,
+                                 commodity_order_t *out_order)
+{
+  if (!db || order_id <= 0 || !out_order)
+    return ERR_INVALID_ARG;
+
+  char expires_expr[128];
+  if (sql_ts_to_epoch_expr (db, "expires_at", expires_expr,
+                            sizeof (expires_expr)) != 0)
+    return ERR_DB;
+
+  char sql_tmpl[512];
+  snprintf (sql_tmpl, sizeof (sql_tmpl),
+            "SELECT commodity_orders_id, actor_type, actor_id, location_type, "
+            "location_id, commodity_id, side, quantity, price, status, "
+            "filled_quantity, %s FROM commodity_orders "
+            "WHERE commodity_orders_id={1} FOR UPDATE;", expires_expr);
+  char sql[768];
+  if (sql_build (db, sql_tmpl, sql, sizeof (sql)) != 0)
+    return ERR_DB;
+
+  db_res_t *res = NULL;
+  db_error_t err;
+  db_error_clear (&err);
+  if (!db_query (db, sql, (db_bind_t[]){ db_bind_i64 (order_id) }, 1,
+                 &res, &err))
+    return err.code ? err.code : ERR_DB;
+
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res);
+      return err.code ? err.code : ERR_DB_NOT_FOUND;
+    }
+
+  memset (out_order, 0, sizeof (*out_order));
+  out_order->id = (int) db_res_col_i64 (res, 0, &err);
+  h_copy_cstr (out_order->actor_type, sizeof (out_order->actor_type),
+               db_res_col_text (res, 1, &err));
+  out_order->actor_id = (int) db_res_col_i64 (res, 2, &err);
+  h_copy_cstr (out_order->location_type, sizeof (out_order->location_type),
+               db_res_col_text (res, 3, &err));
+  out_order->location_id = (int) db_res_col_i64 (res, 4, &err);
+  out_order->commodity_id = (int) db_res_col_i64 (res, 5, &err);
+  h_copy_cstr (out_order->side, sizeof (out_order->side),
+               db_res_col_text (res, 6, &err));
+  out_order->quantity = (int) db_res_col_i64 (res, 7, &err);
+  out_order->price = (int) db_res_col_i64 (res, 8, &err);
+  h_copy_cstr (out_order->status, sizeof (out_order->status),
+               db_res_col_text (res, 9, &err));
+  out_order->filled_quantity = (int) db_res_col_i64 (res, 10, &err);
+  out_order->remaining_quantity = out_order->quantity -
+                                  out_order->filled_quantity;
+  if (!db_res_col_is_null (res, 11))
+    out_order->expires_at = db_res_col_i64 (res, 11, &err);
+  db_res_finalize (res);
+  return err.code ? err.code : 0;
+}
+
 
 // Helper to get a specific open order for a port.
 

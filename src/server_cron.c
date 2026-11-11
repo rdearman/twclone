@@ -1621,8 +1621,6 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 	    const char *buyer_cancel_reason = NULL;
 	    if (trade_qty > 0)
 	      {
-	int prior_buy_filled = buy->filled_quantity;
-	int prior_sell_filled = sell->filled_quantity;
 	bool commit_failed = false;
 		db_error_t err;
 		db_error_clear (&err);
@@ -1633,17 +1631,127 @@ h_daily_market_settlement (db_t *db, int64_t now_s)
 		       err.message);
 		    break;
 		  }
+		/* Keep market lock order consistent with player paths: inventory and
+		 * the Exchange clearing account precede order rows. Planet-order
+		 * cancellation locks the planet before the order, so the reverse order
+		 * here could deadlock. */
+		int inventory_lock_rc = market_lock_inventory_pair
+		  (db, sell->location_type, sell->location_id,
+		   buy->location_type, buy->location_id);
+		if (inventory_lock_rc != 0)
+		  {
+		    db_tx_rollback (db, &err);
+		    LOGE ("h_daily_market_settlement: inventory lock failed buy=%d sell=%d rc=%d",
+		          buy->id, sell->id, inventory_lock_rc);
+		    break;
+		  }
 
+		/* The order book snapshot above is only for candidate selection. Lock
+		 * and re-read both orders in stable ID order before using any quantity,
+		 * price or status in settlement. Inventory locks alone cannot prevent
+		 * two workers from settling the same still-stocked order snapshot. */
+		commodity_order_t fresh_buy, fresh_sell;
+		commodity_order_t *first_order = buy->id < sell->id ? buy : sell;
+		commodity_order_t *second_order = buy->id < sell->id ? sell : buy;
+		commodity_order_t first_fresh, second_fresh;
+		int first_lock_rc = db_market_lock_order_for_update
+		  (db, first_order->id, &first_fresh);
+		int second_lock_rc = (first_lock_rc == 0
+		                      || first_lock_rc == ERR_DB_NOT_FOUND)
+		  ? db_market_lock_order_for_update (db, second_order->id,
+		                                     &second_fresh)
+		  : first_lock_rc;
+		if ((first_lock_rc != 0 && first_lock_rc != ERR_DB_NOT_FOUND)
+		    || (second_lock_rc != 0
+		        && second_lock_rc != ERR_DB_NOT_FOUND))
+		  {
+		    db_tx_rollback (db, &err);
+		    LOGE ("h_daily_market_settlement: order lock failed buy=%d sell=%d rc=%d/%d",
+		          buy->id, sell->id, first_lock_rc, second_lock_rc);
+		    break;
+		  }
+		if (first_lock_rc == ERR_DB_NOT_FOUND
+		    || second_lock_rc == ERR_DB_NOT_FOUND)
+		  {
+		    db_tx_rollback (db, &err);
+		    if (first_lock_rc == ERR_DB_NOT_FOUND)
+		      {
+		        if (first_order == buy) b_idx++;
+		        else s_idx++;
+		      }
+		    if (second_lock_rc == ERR_DB_NOT_FOUND)
+		      {
+		        if (second_order == buy) b_idx++;
+		        else s_idx++;
+		      }
+		    continue;
+		  }
+		if (first_order == buy)
+		  {
+		    fresh_buy = first_fresh;
+		    fresh_sell = second_fresh;
+		  }
+		else
+		  {
+		    fresh_sell = first_fresh;
+		    fresh_buy = second_fresh;
+		  }
+		*buy = fresh_buy;
+		*sell = fresh_sell;
+		int prior_buy_filled = buy->filled_quantity;
+		int prior_sell_filled = sell->filled_quantity;
+
+		bool buy_is_open = strcmp (buy->status, "open") == 0;
+		bool sell_is_open = strcmp (sell->status, "open") == 0;
+		bool buy_expired = buy_is_open && buy->expires_at > 0
+		  && buy->expires_at <= now_s;
+		bool sell_expired = sell_is_open && sell->expires_at > 0
+		  && sell->expires_at <= now_s;
+		if (buy_expired || sell_expired)
+		  {
+		    bool expiry_ok = true;
+		    if (buy_expired
+		        && db_update_commodity_order_state
+		             (db, buy->id, buy->quantity, buy->filled_quantity,
+		              "expired", "expired") != 0)
+		      expiry_ok = false;
+		    if (expiry_ok && sell_expired
+		        && db_update_commodity_order_state
+		             (db, sell->id, sell->quantity, sell->filled_quantity,
+		              "expired", "expired") != 0)
+		      expiry_ok = false;
+		    if (!expiry_ok || !db_tx_commit (db, &err))
+		      {
+		        db_tx_rollback (db, &err);
+		        LOGE ("h_daily_market_settlement: could not expire locked orders buy=%d sell=%d",
+		              buy->id, sell->id);
+		        break;
+		      }
+		    if (buy_expired) b_idx++;
+		    if (sell_expired) s_idx++;
+		    continue;
+		  }
+		if (!buy_is_open || !sell_is_open)
+		  {
+		    db_tx_rollback (db, &err);
+		    if (!buy_is_open) b_idx++;
+		    if (!sell_is_open) s_idx++;
+		    continue;
+		  }
+		qty_buy_rem = buy->quantity - buy->filled_quantity;
+		qty_sell_rem = sell->quantity - sell->filled_quantity;
+		if (buy->price < sell->price || qty_buy_rem <= 0 || qty_sell_rem <= 0)
+		  {
+		    db_tx_rollback (db, &err);
+		    if (qty_buy_rem <= 0) b_idx++;
+		    if (qty_sell_rem <= 0) s_idx++;
+		    else if (buy->price < sell->price) break;
+		    continue;
+		  }
 		bool trade_ok = true;
-		const char *failure_stage = "inventory_lock";
+		const char *failure_stage = "seller_stock_revalidation";
 		int failure_rc = 0;
 		int trade_price = sell->price;
-		failure_rc = market_lock_inventory_pair (db, sell->location_type,
-	                                sell->location_id, buy->location_type,
-	                                buy->location_id);
-		if (failure_rc != 0)
-		  trade_ok = false;
-		failure_stage = "seller_stock_revalidation";
 		if (trade_ok && (failure_rc = db_ports_get_stock_quantity (db, sell->location_type,
 		                                              sell->location_id,
 		                                              commodity_code,

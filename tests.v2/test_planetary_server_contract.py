@@ -675,6 +675,23 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn('"insufficient_credits"', settlement)
         self.assertIn("AND (expires_at IS NULL OR expires_at > {3})", self.market_repo)
 
+    def test_market_matching_reloads_and_locks_both_orders_before_inventory(self):
+        settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
+        order_locks = settlement.split("The order book snapshot above", 1)[1].split(
+            "bool trade_ok = true", 1
+        )[0]
+        self.assertIn("buy->id < sell->id ? buy : sell", order_locks)
+        self.assertIn("db_market_lock_order_for_update", order_locks)
+        self.assertIn("*buy = fresh_buy", order_locks)
+        self.assertIn("*sell = fresh_sell", order_locks)
+        self.assertIn('strcmp (buy->status, "open") == 0', order_locks)
+        self.assertLess(settlement.index("market_lock_inventory_pair"),
+                        settlement.index("db_market_lock_order_for_update"))
+        self.assertLess(settlement.index("db_market_lock_order_for_update"),
+                        settlement.index('failure_stage = "seller_stock_revalidation"'))
+        self.assertIn("buy->expires_at <= now_s", order_locks)
+        self.assertIn('"expired", "expired"', order_locks)
+
     def test_partial_market_fills_remain_open_and_failed_commit_restores_match_state(self):
         settlement = self.cron.split("h_daily_market_settlement (", 1)[1]
         self.assertIn('? "filled" :', settlement)

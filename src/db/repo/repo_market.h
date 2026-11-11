@@ -53,6 +53,10 @@ int db_market_lock_planet_buy_order(db_t *db, int order_id,
                                     char status_out[16]);
 int db_market_cancel_open_order(db_t *db, int order_id,
                                 const char *cancellation_reason);
+/* Lock and read the current order row inside the caller's transaction.
+ * Returns 0 when found, ERR_DB_NOT_FOUND when absent, or a database error. */
+int db_market_lock_order_for_update(db_t *db, int order_id,
+                                    commodity_order_t *out_order);
 
 // Helper to cancel open commodity orders for a given port and commodity on a specific side.
 // Returns 0 on success.

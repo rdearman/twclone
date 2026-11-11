@@ -299,3 +299,42 @@ Updated 2026-11-07.
   final local checks pending. Next: isolate the market matcher failure with
   the captured QA state/report and inspect exact settlement eligibility and
   persistence path. No broad audit or QA infrastructure change is authorized.
+
+### Exchange order-row concurrency guard — 2026-11-11
+
+- Starting commit: `0ad7a9a3f8450cc455e3bc329475ac0ae97b0a7e`; the tested
+  source tree also contained the uncommitted changes listed below. The latest
+  historical full report remains 2,242 executed / 2,168 passed / 74 failed,
+  1 blocked and 3 unsupported. It has no verified successor; the 74-case
+  classification in `REGRESSION_FAILURE_CLASSIFICATION.json` is unchanged.
+- Source diagnosis: matcher candidate orders were loaded before settlement,
+  while the transaction locked inventory but did not reread/lock order rows.
+  Two workers could therefore act on stale open/remaining-quantity snapshots.
+- Correction in progress: `h_daily_market_settlement` now locks inventory
+  locations (including Exchange clearing account) in deterministic order, then
+  locks and rereads the buy/sell order rows in ascending order ID. It checks
+  current status, expiry, remaining quantity and crossing price before
+  settlement; expired orders are marked under lock. This preserves
+  planet-before-order order used by cancellation and avoids reversing that
+  lock dependency.
+- Verification actually run: `python3 -m pytest -q
+  tests.v2/test_planetary_server_contract.py` — 49 passed;
+  `tests.v2/run_engine_regressions.sh` — passed; `make -C bin -j2` — passed
+  with ASan/UBSan; `git diff --check` — passed. These are local source/build
+  checks, not PostgreSQL concurrency verification.
+- No Ferengi/FedSpace or full JSON suites ran: this sandbox cannot start the
+  actual V3 server against the approved QA PostgreSQL endpoint, and no
+  permitted external connection retry is authorized. No production or remote
+  database was contacted. The previous 36/36 sequential Exchange run remains
+  prior evidence only.
+- Files changed in the pending batch: `src/db/repo/repo_market.c`,
+  `src/db/repo/repo_market.h`, `src/server_cron.c`,
+  `tests.v2/test_planetary_server_contract.py`,
+  `docs/V3_GAMEPLAY_COMPLETION_TRACKER.md`,
+  `docs/V3_GAMEPLAY_DECISIONS.md`, and `docs/V3_GAMEPLAY_WORKPLAN.md`.
+- Next exact action when QA is available: run focused Ferengi roster and
+  FedSpace robbery JSON suites, then two-worker same-order and competing
+  limited-inventory matcher scenarios; only after these complete, run
+  `make regression-full` and reconcile case IDs against the preserved 74-case
+  inventory. Meanwhile continue the next independently actionable requirement
+  from the cumulative tracker.

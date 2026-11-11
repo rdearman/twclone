@@ -46,13 +46,13 @@ approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 - Bank standing-order first-run and recurrence calculations now share a UTC
   month-end helper. Existing C engine tests cover leap days and Gregorian
   century rules; sanitizer build and focused bank/planet contract tests pass.
-- **Next action:** add or run a deterministic concurrent matcher scenario
-  against the disposable database to verify stable inventory lock ordering,
-  no oversell and no duplicate ledger/trade records. The sandbox could not
-  reach QA PostgreSQL and a permitted escalation was denied, so do not repeat
-  that connection attempt. Continue source-supported work while runtime is
-  blocked. The 36/36 sequential Exchange run remains valid evidence;
-  concurrency is not verified.
+- **Next action:** run focused Ferengi roster and FedSpace robbery suites, then
+  deterministic Exchange contention scenarios and the full regression run
+  against isolated QA PostgreSQL when available. The current sandbox lacks
+  permitted DB/server access; a prior escalation was denied, so do not retry
+  outside the allowed environment. The matcher now rereads and locks orders
+  under transaction, but PostgreSQL concurrency is not verified. The 36/36
+  sequential Exchange run remains valid prior evidence.
 - **Known blockers:** Exchange, unrest, used-hull and insurance migrations and
   transaction behavior require disposable PostgreSQL/MySQL runtime verification.
   Unrest trigger/stoppage/loss values remain deliberately unset. Some installed

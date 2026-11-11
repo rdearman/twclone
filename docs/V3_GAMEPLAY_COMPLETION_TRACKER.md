@@ -78,7 +78,7 @@ the specific workflow was exercised.
 | EXC-008 | Commodity conservation | VERIFIED (tested path) | immediate sale transfers planet stock to Exchange; fill conditionally debits Exchange and credits port stock | Focused PostgreSQL JSON run verified planet 100→90, Exchange 0→10→0, port 0→10; all quantities conserved | current working change | Verify planet buyers and simultaneous sales/harvest |
 | EXC-009 | Financial integrity and game liquidity | VERIFIED (tested settlement) | clearing account and explicit `SYSTEM_LIQUIDITY`; matcher records actual debit/credit `bank_transactions` IDs in `commodity_trades` | Focused PostgreSQL JSON run verified port debit and clearing credit, equal amounts, and no second debit on retry; ASan/UBSan build passed | current working change | Concurrent settlement and liquidity boundary/restart tests remain |
 | EXC-010 | Audit named market paths | VERIFIED (targeted paths) | `cmd_planet_market_sell`, `h_daily_market_settlement`, `h_market_move_port_stock`, market/bank repositories | Actual V3 server/PostgreSQL exercised planet sale→Exchange→port purchase, credit/ledger settlement and retry | current working change | Extend runtime evidence to other buyer types and simultaneous requests |
-| EXC-011 | No loss/duplication/oversell | PARTIAL | conditional stock decrement, bilateral settlement, deterministic `(location_type, location_id)` lock order; matched trades reference persisted bank ledger transactions | Sequential DB retry was idempotent; concurrent matcher stress was not executed. Prior direct test had two settlement defects now corrected | `c12668c2`, current working change | Execute simultaneous matching against shared disposable DB; verify no deadlock/oversell |
+| EXC-011 | No loss/duplication/oversell | PARTIAL | `h_daily_market_settlement` locks inventory/account locations in deterministic order, then locks and rereads both order rows in ascending order ID before settlement; the repository returns `ERR_DB_NOT_FOUND` for a disappeared candidate | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py` (49 passed), `tests.v2/run_engine_regressions.sh` passed, ASan/UBSan `make -C bin -j2` passed. Concurrent PostgreSQL matcher test not run in this sandbox; the 36/36 sequential settlement run remains prior evidence | `c12668c2`, pending current source change | Run two-worker same-order and limited-inventory contention tests against isolated QA PostgreSQL; assert no duplicate receipt/credits, oversell, deadlock or stuck order |
 | EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
 | COMBAT-001 | Universal escape-pod respawn | IMPLEMENTED_UNVERIFIED | `repo_ships_handle_destruction`; command, NPC/player combat, Captain Z, engine self-destruct and legacy repository entry points converge via `handle_ship_destruction` | Added lethal-NPC and lethal-PvP assertions, including NPC-owner exclusion; focused planetary/hazard tests: 41 passed; ASan/UBSan build passed; runtime unverified | `63169074`, `aaf8a02e`, `6d2e36f0` | Exercise NPC- and player-caused lethal combat through JSON and verify pod/insurance state |
 | COMBAT-002 | No starter-ship respawn | IMPLEMENTED_UNVERIFIED | shared repository creates canonical Escape Pod at sector 1 and assigns it active | Source contract and ASan/UBSan build; no server/DB runtime | `63169074` | JSON state assertion / runtime test |
@@ -134,6 +134,21 @@ the specific workflow was exercised.
   build passed; `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
   passed (47 tests); `tests.v2/run_engine_regressions.sh` passed; and
   `git diff --check` passed. No database concurrency test was run.
+- Exchange stale-order concurrency correction (current source change, not yet
+  committed): each candidate settlement now locks inventory/clearing-account
+  locations in deterministic order, then locks and rereads both order rows in
+  ascending ID order inside the transaction. It revalidates open status,
+  expiry, remaining quantity and crossing price before settlement; disappeared
+  or already-settled candidates are skipped, and expired rows are persisted as
+  expired under lock. This closes the stale-snapshot double-settlement path at
+  source level while preserving planet-before-order lock order used by order
+  cancellation. Verification: `python3 -m pytest -q
+  tests.v2/test_planetary_server_contract.py` passed (49);
+  `tests.v2/run_engine_regressions.sh` passed; `make -C bin -j2` passed with
+  ASan/UBSan; `git diff --check` passed. PostgreSQL concurrency/runtime remains
+  unverified. No new full regression run was possible: sandbox QA access and
+  game-server runtime are unavailable, and a prior access escalation was
+  denied. The historical 74-failure inventory is unchanged, not a new run.
 - Insurance hull-only contract correction: `insurance.policies.buy` schema and
   handler reject cargo/planet subjects; `suite_economy_insurance.json` now
   covers the non-hull refusal. JSON validation passed, focused
