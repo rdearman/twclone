@@ -821,7 +821,7 @@ regression-static:
 		tests.v2/test_issue_490_ship02_contract.py
 
 regression-full:
-	@python3 tests.v2/run_regression_instance.py --pg-port "$${QA_PGPORT:-55438}" --report tests.v2/regression_report.json
+	@python3 tests.v2/run_regression_instance.py --pg-port "$${QA_PGPORT:-55438}" --pg-user "$${QA_PGUSER:-twclone_qa_runner}" --report tests.v2/regression_report.json
 
 check-local: architecture-check regression-static
 

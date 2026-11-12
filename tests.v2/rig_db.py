@@ -11,6 +11,7 @@ from tools.migrate_passwords_argon2id import encoded_hash, load_argon2
 
 _argon2 = load_argon2()
 QA_DEFAULT_PGPORT = 55438
+QA_DEFAULT_PGUSER = "twclone_qa_runner"
 PRODUCTION_DEFAULT_PGPORT = 5432
 
 
@@ -67,7 +68,7 @@ def main():
     parser.add_argument("--port", type=int, default=int(os.environ.get("QA_PGPORT", str(QA_DEFAULT_PGPORT))))
     parser.add_argument("--dbname", default=os.environ.get("QA_PGDATABASE"),
                         help="Disposable database (required; must use a twclone_qa_ or twclone_v3qa_ name)")
-    parser.add_argument("--user", default=os.environ.get("QA_PGUSER", "postgres"))
+    parser.add_argument("--user", default=os.environ.get("QA_PGUSER", QA_DEFAULT_PGUSER))
     args = parser.parse_args()
 
     if not args.dbname:

@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -20,7 +21,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests.v2"))
-from rig_db import QA_DEFAULT_PGPORT, validate_qa_target
+from rig_db import (QA_DEFAULT_PGPORT, QA_DEFAULT_PGUSER,
+                    validate_qa_target)
 
 
 def conninfo_value(conninfo, key):
@@ -31,7 +33,7 @@ def conninfo_value(conninfo, key):
 def build_qa_conninfos(dbname, host, port, user, password=None, admin_conn=None):
     """Build DB connections that are provably scoped to the disposable QA host."""
     validate_qa_target(dbname, host, port)
-    auth = f" user={user} host={host} port={port}"
+    auth = f" user={user} host={host} port={port} connect_timeout=5"
     if password:
         escaped = password.replace("\\", "\\\\").replace("'", "\\'")
         auth += f" password='{escaped}'"
@@ -48,6 +50,84 @@ def build_qa_conninfos(dbname, host, port, user, password=None, admin_conn=None)
         return admin_conn, app_conn
 
     return f"dbname=postgres{auth}", app_conn
+
+
+def direct_psql_path():
+    """Prefer the versioned PostgreSQL client over Debian's cluster wrapper."""
+    pg_config = shutil.which("pg_config")
+    if pg_config:
+        try:
+            result = subprocess.run([pg_config, "--bindir"], capture_output=True,
+                                    text=True, timeout=3, check=False)
+            candidate = Path(result.stdout.strip()) / "psql"
+            if result.returncode == 0 and candidate.is_file():
+                return str(candidate)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return shutil.which("psql") or "psql"
+
+
+def verify_qa_cluster(host, port, admin_conn, env, psql_path=None):
+    """Read-only check against the repository-documented QA cluster identity."""
+    try:
+        with socket.create_connection((host, int(port)), timeout=3):
+            pass
+    except PermissionError as error:
+        raise RuntimeError(
+            f"QA TCP access blocked by execution sandbox (socket errno {error.errno}): {error}"
+        ) from error
+    except OSError as error:
+        if getattr(error, "errno", None) == 111:
+            reason = "QA PostgreSQL listener is not accepting connections"
+        else:
+            reason = f"QA TCP connection failed (errno {getattr(error, 'errno', None)})"
+        raise RuntimeError(f"{reason}: {error}") from error
+
+    command = [psql_path or direct_psql_path(), "-X", "-w", "-A", "-t",
+               "-q", "-v", "ON_ERROR_STOP=1", admin_conn, "-c",
+               "SELECT json_build_array(current_database(), current_setting('port'), "
+               "host(inet_server_addr()), current_user, EXISTS (SELECT 1 FROM pg_database "
+               "WHERE left(datname, 11) = 'twclone_qa_' "
+               "OR left(datname, 13) = 'twclone_v3qa_'))::text;"]
+    try:
+        result = subprocess.run(command, env=env, capture_output=True,
+                                text=True, timeout=8, check=False)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("QA PostgreSQL identity query timed out after 8 seconds") from error
+    except OSError as error:
+        raise RuntimeError(f"Could not launch direct PostgreSQL client: {error}") from error
+    if result.returncode != 0:
+        diagnostic = (result.stderr or result.stdout).strip()
+        lowered = diagnostic.lower()
+        if "password authentication failed" in lowered or "no password supplied" in lowered:
+            category = "QA PostgreSQL authentication failure"
+        elif "permission denied" in lowered:
+            category = "QA PostgreSQL authorization failure"
+        elif "operation not permitted" in lowered:
+            category = "QA PostgreSQL socket access blocked by execution environment"
+        elif "connection refused" in lowered or "no response" in lowered:
+            category = "QA PostgreSQL listener unavailable"
+        else:
+            category = "QA PostgreSQL identity query failed"
+        raise RuntimeError(f"{category} (psql exit {result.returncode}): {diagnostic or 'no client diagnostic'}")
+    try:
+        identity = json.loads(result.stdout.strip())
+        database, server_port, server_address, user, marker_present = identity
+    except (ValueError, TypeError):
+        raise RuntimeError(
+            "QA PostgreSQL identity query returned no parseable identity; "
+            f"psql stdout={result.stdout!r}, stderr={result.stderr!r}"
+        )
+    if (database != "postgres" or int(server_port) != int(port)
+            or server_address not in ("127.0.0.1", "::1")
+            or user != QA_DEFAULT_PGUSER or not marker_present):
+        raise RuntimeError(
+            "Refusing database operations: endpoint identity mismatch "
+            f"(database={database!r}, port={server_port!r}, "
+            f"server_address={server_address!r}, role={user!r}, "
+            f"documented_QA_marker_present={marker_present!r})"
+        )
+    return identity
 
 
 def wait_for_port(host, port, process, timeout=30):
@@ -95,7 +175,7 @@ def main(argv=None):
     parser.add_argument("--s2s-port", type=int, default=43218)
     parser.add_argument("--pg-host", default=os.environ.get("QA_PGHOST", "127.0.0.1"))
     parser.add_argument("--pg-port", type=int, default=int(os.environ.get("QA_PGPORT", str(QA_DEFAULT_PGPORT))))
-    parser.add_argument("--pg-user", default=os.environ.get("QA_PGUSER"))
+    parser.add_argument("--pg-user", default=os.environ.get("QA_PGUSER", QA_DEFAULT_PGUSER))
     parser.add_argument("--admin-conn", default=os.environ.get("TWCLONE_TEST_PG_ADMIN"))
     parser.add_argument("--template", default=str(ROOT / "bin" / "bigbang.json"))
     parser.add_argument("--sectors", type=int, default=int(os.environ.get("TWCLONE_REGRESSION_SECTORS", "500")))
@@ -107,7 +187,9 @@ def main(argv=None):
     if not app_conn:
         parser.error("a PostgreSQL app connection template is required")
 
-    pg_user = args.pg_user or conninfo_value(app_conn, "user")
+    # Never inherit a role from the generic BigBang template: that template
+    # may name a non-QA account whose credentials are not in the QA .pgpass.
+    pg_user = args.pg_user
     if not pg_user:
         parser.error("--pg-user or an app connection user is required")
     password = os.environ.get("QA_PGPASSWORD") or conninfo_value(
@@ -159,13 +241,31 @@ def main(argv=None):
 
     server = None
     result_code = 2
+    qa_identity_verified = False
+    psql_path = direct_psql_path()
     try:
         print(f"REGRESSION DATABASE: {dbname}")
         print(f"REGRESSION ARTIFACTS: {artifact_dir}")
 
-        bigbang = run([str(ROOT / "bin" / "bigbang")], cwd=artifact_dir, env=env)
+        verify_qa_cluster(args.pg_host, args.pg_port, admin_conn, env, psql_path)
+        qa_identity_verified = True
+        # rig_db invokes `psql` by name. Prefer the same versioned client used
+        # for identity checks and cleanup, avoiding Debian's cluster wrapper.
+        env["PATH"] = str(Path(psql_path).parent) + os.pathsep + env.get("PATH", "")
+        print(f"QA CLUSTER VERIFIED: loopback port {args.pg_port}, dedicated QA role, "
+              "QA database namespace present")
+
+        bigbang_log = artifact_dir / "bigbang.log"
+        with open(bigbang_log, "w", encoding="utf-8") as output:
+            bigbang = run([str(ROOT / "bin" / "bigbang")], cwd=artifact_dir,
+                          env=env, log=output)
         if bigbang.returncode != 0:
-            raise RuntimeError(f"BigBang failed with status {bigbang.returncode}; see {artifact_dir}")
+            tail = bigbang_log.read_text(encoding="utf-8", errors="replace").splitlines()[-40:]
+            diagnostics = "\n".join(tail) or "(no output)"
+            raise RuntimeError(
+                f"BigBang failed with status {bigbang.returncode}; "
+                f"diagnostics:\n{diagnostics}; see {artifact_dir}"
+            )
 
         rig = run([
             sys.executable, str(ROOT / "tests.v2" / "rig_db.py"),
@@ -209,11 +309,20 @@ def main(argv=None):
     finally:
         terminate_process(server)
         try:
-            subprocess.run(["psql", admin_conn, "-v", "ON_ERROR_STOP=1", "-c",
-                            f'DROP DATABASE IF EXISTS "{dbname}"'],
-                           env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                           text=True, check=False)
-        except OSError as error:
+            if qa_identity_verified:
+                cleanup = subprocess.run([psql_path, "-X", "-w", admin_conn,
+                                "-v", "ON_ERROR_STOP=1", "-c",
+                                f'DROP DATABASE IF EXISTS "{dbname}"'],
+                               env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                               text=True, timeout=10, check=False)
+                if cleanup.returncode != 0:
+                    print("WARNING: disposable QA database cleanup failed "
+                          f"(psql exit {cleanup.returncode}): "
+                          f"{cleanup.stderr.strip() or 'no client diagnostic'}", file=sys.stderr)
+            else:
+                print("Skipping database cleanup because QA cluster identity was not verified",
+                      file=sys.stderr)
+        except (OSError, subprocess.TimeoutExpired) as error:
             print(f"WARNING: could not remove disposable database: {error}", file=sys.stderr)
         if not args.keep_artifacts:
             # Keep the report and server log when a run fails; remove only

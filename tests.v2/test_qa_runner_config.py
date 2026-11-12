@@ -2,6 +2,7 @@
 
 import os
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -142,6 +143,80 @@ class RunnerConfigurationTests(unittest.TestCase):
             run_regression_instance.build_qa_conninfos(
                 "twclone_v3qa_ci_123", "127.0.0.1", 5432, "qa_user", "qa-secret"
             )
+
+    def test_regression_defaults_to_dedicated_qa_role(self):
+        self.assertEqual(rig_db.QA_DEFAULT_PGUSER, "twclone_qa_runner")
+        self.assertEqual(run_regression_instance.QA_DEFAULT_PGUSER,
+                         "twclone_qa_runner")
+
+    def test_qa_identity_check_distinguishes_authentication_failure(self):
+        completed = subprocess.CompletedProcess(
+            ["psql"], 2, "", "FATAL: password authentication failed for user\n"
+        )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=completed):
+                with self.assertRaisesRegex(
+                    RuntimeError, "QA PostgreSQL authentication failure"
+                ):
+                    run_regression_instance.verify_qa_cluster(
+                        "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                    )
+
+    def test_qa_identity_check_reports_sandbox_socket_denial(self):
+        with patch.object(run_regression_instance.socket, "create_connection",
+                          side_effect=PermissionError(1, "Operation not permitted")):
+            with self.assertRaisesRegex(
+                RuntimeError, "QA TCP access blocked by execution sandbox"
+            ):
+                run_regression_instance.verify_qa_cluster(
+                    "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                )
+
+    def test_qa_identity_check_requires_matching_cluster_identity(self):
+        completed = subprocess.CompletedProcess(
+            ["psql"], 0,
+            '["postgres", "55438", "127.0.0.1", "twclone_qa_runner", true]\n', ""
+        )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=completed):
+                identity = run_regression_instance.verify_qa_cluster(
+                    "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                )
+        self.assertEqual(identity[:4],
+                         ["postgres", "55438", "127.0.0.1", "twclone_qa_runner"])
+
+        wrong_cluster = subprocess.CompletedProcess(
+            ["psql"], 0,
+            '["postgres", "55438", "127.0.0.1", "twclone_qa_runner", false]\n', ""
+        )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=wrong_cluster):
+                with self.assertRaisesRegex(RuntimeError, "identity mismatch"):
+                    run_regression_instance.verify_qa_cluster(
+                        "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                    )
+
+    def test_qa_identity_permission_error_is_not_called_sandbox_failure(self):
+        completed = subprocess.CompletedProcess(
+            ["psql"], 1, "",
+            'ERROR: permission denied to examine "data_directory"\n'
+        )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=completed):
+                with self.assertRaisesRegex(
+                    RuntimeError, "QA PostgreSQL authorization failure"
+                ):
+                    run_regression_instance.verify_qa_cluster(
+                        "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                    )
 
     def test_response_capture_redacts_session_tokens(self):
         response = {"data": {"session_token": "secret", "player_id": 7}}

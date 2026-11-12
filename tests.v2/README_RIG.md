@@ -40,6 +40,14 @@ with `twclone_v3qa_` and is dropped after the run. Regression database access
 defaults to the dedicated QA cluster on loopback port `55438`; port `5432` is
 explicitly rejected to prevent accidental use of the live/default instance.
 Set `QA_PGPORT` only to another verified disposable QA endpoint, never to 5432.
+The default database role is `twclone_qa_runner` (`QA_PGUSER` overrides it).
+Credentials should be supplied through the protected QA `.pgpass` entry or
+`QA_PGPASSWORD`; the runner removes an unrelated inherited `PGPASSWORD` so it
+cannot override `.pgpass`. Before provisioning, the runner verifies loopback,
+port, authenticated QA role and the presence of the `twclone_qa_*` or
+`twclone_v3qa_*` database namespace using a read-only query. It uses the
+versioned PostgreSQL client directly for identity checks, rigging and cleanup.
+BigBang startup output is retained in `bigbang.log` when setup fails.
 
 The instance runner accepts `--keep-artifacts` when logs and its temporary
 bootstrap configuration need to be retained for diagnosis. Configure the
