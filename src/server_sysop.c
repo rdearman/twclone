@@ -79,11 +79,7 @@ static const sysop_cfg_def_t* find_config_def(const char *key) {
 
 static bool check_sysop_role(client_ctx_t *ctx) {
     if (!ctx) return false;
-    /* Local console/System actor has id 0 and is always SysOp */
-    if (ctx->player_id == 0) return true;
-    if (ctx->player_id < 0) return false;
-    int type = auth_player_get_type(ctx->player_id);
-    return (type == PLAYER_TYPE_SYSOP);
+    return auth_player_is_sysop(ctx->player_id) != 0;
 }
 
 static json_t* get_config_value_json(const sysop_cfg_def_t *def) {

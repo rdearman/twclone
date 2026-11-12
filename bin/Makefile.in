@@ -434,7 +434,7 @@ AM_CFLAGS = -Wall -Wextra -Werror=maybe-uninitialized -D_GNU_SOURCE \
 
 # 4. Linker flags
 AM_LDFLAGS = $(SANITIZE_FLAGS)
-server_LDADD = -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory -ldl
+server_LDADD = -ljansson -lssl -lcrypto -lpthread -lm -lpq -lreadline -lhistory -ldl -lbsd
 AUTOMAKE_OPTIONS = subdir-objects
 
 # BigBang sources (PostgreSQL Only)

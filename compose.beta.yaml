@@ -1,0 +1,106 @@
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: twclone_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      TWCLONE_APP_ROLE: twclone_runtime
+    secrets:
+      - postgres_admin_password
+      - app_db_password
+    volumes:
+      - beta_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/10-runtime-role.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    networks: [beta_private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twclone_admin -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /run/postgresql:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 256
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    entrypoint: ["/app/entrypoint-migrate.sh"]
+    environment:
+      TWCLONE_DB_ADMIN_CONNINFO: host=db port=5432 dbname=postgres user=twclone_admin passfile=/tmp/admin.pgpass connect_timeout=5
+      TWCLONE_DB_APP_CONNINFO: host=db port=5432 dbname=%DB% user=twclone_admin passfile=/tmp/admin.pgpass connect_timeout=5
+      TWCLONE_DB_MIGRATION_CONNINFO: host=db port=5432 dbname=twclone user=twclone_admin passfile=/tmp/admin.pgpass connect_timeout=5
+    secrets: [admin_pgpass]
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [beta_private]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 128
+    restart: "no"
+
+  game:
+    build: .
+    environment:
+      TWCLONE_DB_APP_CONNINFO: host=db port=5432 dbname=twclone user=twclone_runtime passfile=/tmp/app.pgpass connect_timeout=5
+      TWCLONE_LISTEN_ADDRESS: 0.0.0.0
+      TWCLONE_LISTEN_PORT: 12483
+      TWCLONE_MAX_CONNECTIONS: ${TWCLONE_MAX_CONNECTIONS:-128}
+      TWCLONE_MAX_REQUEST_BYTES: ${TWCLONE_MAX_REQUEST_BYTES:-65536}
+      TWCLONE_REQUEST_TIMEOUT_MS: ${TWCLONE_REQUEST_TIMEOUT_MS:-10000}
+      TWCLONE_REQUESTS_PER_MINUTE: ${TWCLONE_REQUESTS_PER_MINUTE:-200}
+      TWCLONE_TLS_ENABLED: 1
+      TWCLONE_TLS_REQUIRED: 1
+      TWCLONE_TLS_CERT_PATH: /run/secrets/beta_tls_cert
+      TWCLONE_TLS_KEY_PATH: /run/secrets/beta_tls_key
+      TWCLONE_LOG_PATH: /tmp/twclone.log
+    secrets: [app_pgpass, beta_tls_cert, beta_tls_key]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [beta_private, beta_frontend]
+    # Loopback-only publication for local verification; never a public bind.
+    ports: ["127.0.0.1:12483:12483"]
+    expose: [12483]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 256
+    restart: unless-stopped
+
+networks:
+  beta_private:
+    internal: true
+  beta_frontend:
+    driver: bridge
+
+volumes:
+  beta_pgdata:
+
+secrets:
+  postgres_admin_password:
+    file: ${TWCLONE_POSTGRES_ADMIN_PASSWORD_FILE:?set a local admin password secret file}
+  app_db_password:
+    file: ${TWCLONE_APP_DB_PASSWORD_FILE:?set a local runtime-role password secret file}
+  admin_pgpass:
+    file: ${TWCLONE_ADMIN_PGPASS_FILE:?set a protected local migration .pgpass file}
+  app_pgpass:
+    file: ${TWCLONE_APP_PGPASS_FILE:?set a protected local runtime .pgpass file}
+  beta_tls_cert:
+    file: ${TWCLONE_BETA_TLS_CERT_FILE:?set a beta TLS certificate file}
+  beta_tls_key:
+    file: ${TWCLONE_BETA_TLS_KEY_FILE:?set a beta TLS private-key file}

@@ -21,6 +21,7 @@ extern "C"
 #define PLAYER_TYPE_PLAYER 2
 #define PLAYER_TYPE_NPC 3
   int auth_player_get_type (int player_id);
+  int auth_player_is_sysop (int player_id);
 
 #ifdef __cplusplus
 }

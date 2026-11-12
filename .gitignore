@@ -84,3 +84,8 @@ temp_parser_test.py
 
 # Local Codex supervisor infrastructure (never commit)
 /tools/codex_supervisor/
+
+# Local beta deployment credentials and environment files
+.env.beta
+.env.beta.local
+/secrets/

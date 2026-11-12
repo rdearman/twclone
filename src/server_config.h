@@ -94,6 +94,11 @@ extern "C"
     int max_name_length;
     int planet_type_count;
     int server_port;
+    char server_bind_address[64];
+    int server_max_connections;
+    int server_max_request_bytes;
+    int server_request_timeout_ms;
+    int server_requests_per_minute;
     char pg_conn_str[512];
     /* Bootstrap-only database selection. PostgreSQL remains the default. */
     char db_backend[16];

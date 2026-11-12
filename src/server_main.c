@@ -343,7 +343,9 @@ main (void)
 
   g_running = 1;
   install_signal_handlers ();	/* Handle signals early */
-  server_log_init_file ("./twclone.log", "[server]", 0, LOG_DEBUG);
+  const char *log_path = getenv ("TWCLONE_LOG_PATH");
+  server_log_init_file (log_path && *log_path ? log_path : "./twclone.log",
+                        "[server]", 1, LOG_DEBUG);
   LOGI ("starting up");
   sysop_start (&g_running);
 

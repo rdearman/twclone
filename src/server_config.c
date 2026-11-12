@@ -64,6 +64,12 @@ config_set_defaults (void)
   g_cfg.max_name_length = 50;
   g_cfg.planet_type_count = 8;
   g_cfg.server_port = 1234;
+  snprintf (g_cfg.server_bind_address, sizeof g_cfg.server_bind_address,
+            "127.0.0.1");
+  g_cfg.server_max_connections = 128;
+  g_cfg.server_max_request_bytes = 65536;
+  g_cfg.server_request_timeout_ms = 10000;
+  g_cfg.server_requests_per_minute = 200;
   g_cfg.s2s.tcp_port = 4321;
   g_cfg.bank_alert_threshold_player = 1000000;
   g_cfg.bank_alert_threshold_corp = 5000000;
@@ -266,6 +272,30 @@ validate_cfg (void)
     {
       LOGE ("ERROR config: s2s.frame_size_limit exceeds 8 MiB (%d)\n",
 	    g_cfg.s2s.frame_size_limit);
+      return 0;
+    }
+  struct in_addr bind_addr;
+  if (inet_pton (AF_INET, g_cfg.server_bind_address, &bind_addr) != 1)
+    {
+      LOGE ("ERROR config: server_bind_address must be a valid IPv4 address.\n");
+      return 0;
+    }
+  if (g_cfg.server_port < 1 || g_cfg.server_port > 65535
+      || g_cfg.server_max_connections < 1
+      || g_cfg.server_max_connections > 10000
+      || g_cfg.server_max_request_bytes < 256
+      || g_cfg.server_max_request_bytes > 1048576
+      || g_cfg.server_request_timeout_ms < 100
+      || g_cfg.server_request_timeout_ms > 300000
+      || g_cfg.server_requests_per_minute < 1
+      || g_cfg.server_requests_per_minute > 100000)
+    {
+      LOGE ("ERROR config: invalid network security limits.\n");
+      return 0;
+    }
+  if (g_cfg.tls_required && !g_cfg.tls_enabled)
+    {
+      LOGE ("ERROR config: tls_required needs tls_enabled.\n");
       return 0;
     }
   return 1;
@@ -520,6 +550,27 @@ apply_db (db_t *db)
 	  else if (strcmp (key, "server_port") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.server_port);
+	    }
+	  else if (strcmp (key, "server_bind_address") == 0)
+	    {
+	      snprintf (g_cfg.server_bind_address,
+	                sizeof g_cfg.server_bind_address, "%s", val);
+	    }
+	  else if (strcmp (key, "server_max_connections") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.server_max_connections);
+	    }
+	  else if (strcmp (key, "server_max_request_bytes") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.server_max_request_bytes);
+	    }
+	  else if (strcmp (key, "server_request_timeout_ms") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.server_request_timeout_ms);
+	    }
+	  else if (strcmp (key, "server_requests_per_minute") == 0)
+	    {
+	      cfg_parse_int (val, type, &g_cfg.server_requests_per_minute);
 	    }
 	  else if (strcmp (key, "s2s_port") == 0)
 	    {
@@ -792,8 +843,37 @@ apply_db (db_t *db)
 static void
 apply_env (void)
 {
-  /* intentionally unused in v1.0 */
-  /* same names as before: TW_ENGINE_TICK_MS, etc. */
+  const char *value = getenv ("TWCLONE_LISTEN_ADDRESS");
+  if (value && *value && strlen (value) < sizeof g_cfg.server_bind_address)
+    snprintf (g_cfg.server_bind_address, sizeof g_cfg.server_bind_address,
+              "%s", value);
+  value = getenv ("TWCLONE_LISTEN_PORT");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.server_port);
+  value = getenv ("TWCLONE_MAX_CONNECTIONS");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.server_max_connections);
+  value = getenv ("TWCLONE_MAX_REQUEST_BYTES");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.server_max_request_bytes);
+  value = getenv ("TWCLONE_REQUEST_TIMEOUT_MS");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.server_request_timeout_ms);
+  value = getenv ("TWCLONE_REQUESTS_PER_MINUTE");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.server_requests_per_minute);
+  value = getenv ("TWCLONE_TLS_ENABLED");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.tls_enabled);
+  value = getenv ("TWCLONE_TLS_REQUIRED");
+  if (value && *value)
+    cfg_parse_int (value, "int", &g_cfg.tls_required);
+  value = getenv ("TWCLONE_TLS_CERT_PATH");
+  if (value && strlen (value) < sizeof g_cfg.tls_cert_path)
+    snprintf (g_cfg.tls_cert_path, sizeof g_cfg.tls_cert_path, "%s", value);
+  value = getenv ("TWCLONE_TLS_KEY_PATH");
+  if (value && strlen (value) < sizeof g_cfg.tls_key_path)
+    snprintf (g_cfg.tls_key_path, sizeof g_cfg.tls_key_path, "%s", value);
 }
 
 
@@ -812,6 +892,9 @@ load_bootstrap_config (const char *filename)
   const char *backend = json_string_value (json_object_get (root, "backend"));
   const char *app_conn_tmpl =
     json_string_value (json_object_get (root, "app"));
+  const char *app_conn_env = getenv ("TWCLONE_DB_APP_CONNINFO");
+  if (app_conn_env && *app_conn_env)
+    app_conn_tmpl = app_conn_env;
   const char *db_name = json_string_value (json_object_get (root, "db"));
 
   if (backend && strcasecmp (backend, "postgres") != 0
@@ -1030,8 +1113,10 @@ cmd_system_hello (client_ctx_t *ctx, json_t *root)
   json_t *limits = json_object ();
 
 
-  json_object_set_new (limits, "max_frame_size", json_integer (131072));
-  json_object_set_new (limits, "max_req_per_min", json_integer (200));
+  json_object_set_new (limits, "max_frame_size",
+                       json_integer (g_cfg.server_max_request_bytes));
+  json_object_set_new (limits, "max_req_per_min",
+                       json_integer (g_cfg.server_requests_per_minute));
 
   json_object_set (payload, "capabilities", g_capabilities);
   json_object_set_new (payload, "limits", limits);

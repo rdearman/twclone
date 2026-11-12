@@ -25,6 +25,27 @@
       "data": { "title": "Fail", "body": "Should not work" },
       "user": "sysop_normie_1",
       "expect": { "status": "refused", "error_code": 402, "message": "Permission denied" }
+    },
+    {
+      "name": "Normal player cannot read SysOp configuration",
+      "command": "sysop.config.list",
+      "data": {},
+      "user": "sysop_normie_1",
+      "expect": { "status": "refused", "error_code": 1407 }
+    },
+    {
+      "name": "Normal player cannot modify SysOp configuration",
+      "command": "sysop.config.set",
+      "data": { "key": "server_port", "value": 12483 },
+      "user": "sysop_normie_1",
+      "expect": { "status": "refused", "error_code": 1407 }
+    },
+    {
+      "name": "Normal player cannot kick another player",
+      "command": "sysop.player.kick",
+      "data": { "player_id": 1, "reason": "privilege test" },
+      "user": "sysop_normie_1",
+      "expect": { "status": "refused", "error_code": 1407 }
     }
   ]
 }

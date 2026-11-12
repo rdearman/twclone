@@ -7,13 +7,16 @@
 #include <string.h>
 #include <strings.h>
 #include <errno.h>
+#include <limits.h>
 #include <signal.h>
 #include <unistd.h>
 #include <poll.h>
 #include <time.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/socket.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <openssl/ssl.h>
@@ -79,6 +82,7 @@ __thread client_ctx_t *g_ctx_for_send = NULL;
 
 /* TLS context (global, thread-safe) */
 static SSL_CTX *g_ssl_ctx = NULL;
+static atomic_int g_active_client_connections = 0;
 
 /* forward declaration to avoid implicit extern */
 void send_all_json (int fd, json_t * obj);
@@ -1213,7 +1217,12 @@ make_listen_socket (uint16_t port)
 
   memset (&sa, 0, sizeof (sa));
   sa.sin_family = AF_INET;
-  sa.sin_addr.s_addr = htonl (INADDR_ANY);
+  if (!bind_address || inet_pton (AF_INET, bind_address, &sa.sin_addr) != 1)
+    {
+      close (fd);
+      errno = EINVAL;
+      return -1;
+    }
   sa.sin_port = htons (port);
   if (bind (fd, (struct sockaddr *) &sa, sizeof (sa)) < 0)
     {
@@ -1253,6 +1262,23 @@ rl_tick (client_ctx_t *ctx)
       ctx->rl_count = 0;
     }
   ctx->rl_count++;
+}
+
+static int
+request_rate_allow (client_ctx_t *ctx)
+{
+  time_t now = time (NULL);
+  if (ctx->request_window_start == 0)
+    ctx->request_window_start = now;
+  if (now - ctx->request_window_start >= 60)
+    {
+      ctx->request_window_start = now;
+      ctx->request_count = 0;
+    }
+  if (ctx->request_count >= ctx->rl_limit)
+    return 0;
+  ctx->request_count++;
+  return 1;
 }
 
 static json_t *
@@ -1455,11 +1481,6 @@ process_message (client_ctx_t *ctx, json_t *root)
 			   ERR_INVALID_SCHEMA, "Invalid request schema");
       return;
     }
-  ctx->rl_limit = 60;
-  ctx->rl_window_sec = 60;
-  ctx->rl_window_start = time (NULL);
-  ctx->rl_count = 0;
-
   if (server_dispatch_command (ctx, root) == -1)
     {
       if (ctx->responses_sent == 0)
@@ -1470,134 +1491,197 @@ process_message (client_ctx_t *ctx, json_t *root)
     }
 }
 
-/* TLS helper: read a line from SSL connection (buffered for partial reads) */
-static ssize_t
-ssl_readline (SSL *ssl, unsigned char *buf, size_t buf_len,
-	      unsigned char *read_buf, size_t *read_pos, size_t *read_used)
+static int
+wait_for_socket (int fd, short events, uint64_t deadline_ms)
 {
-  size_t line_len = 0;
-
-  while (line_len < buf_len - 1)
+  for (;;)
     {
-      /* Check if we have data in buffer */
-      if (*read_pos < *read_used)
-	{
-	  unsigned char ch = read_buf[(*read_pos)++];
-	  buf[line_len++] = ch;
-	  if (ch == '\n')
-	    {
-	      buf[line_len] = '\0';
-	      return (ssize_t) line_len;
-	    }
-	}
-      else
-	{
-	  /* Buffer empty, read more */
-	  int n = SSL_read (ssl, read_buf, 8192);
-	  if (n > 0)
-	    {
-	      *read_used = (size_t) n;
-	      *read_pos = 0;
-	    }
-	  else if (n == 0)
-	    {
-	      /* Connection closed cleanly */
-	      if (line_len > 0)
-		{
-		  buf[line_len] = '\0';
-		  return (ssize_t) line_len;
-		}
-	      return 0;
-	    }
-	  else
-	    {
-	      /* SSL error */
-	      int err = SSL_get_error (ssl, n);
-	      if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE)
-		{
-		  continue;	/* Retry */
-		}
-	      LOGD ("SSL_read error: %d", err);
-	      return -1;
-	    }
-	}
+      uint64_t now = monotonic_millis ();
+      if (now >= deadline_ms)
+        return 0;
+      int remain = (deadline_ms - now > INT_MAX)
+        ? INT_MAX : (int) (deadline_ms - now);
+      struct pollfd pfd = {.fd = fd, .events = events, .revents = 0};
+      int rc = poll (&pfd, 1, remain);
+      if (rc > 0)
+        return (pfd.revents & (events | POLLERR | POLLHUP | POLLNVAL)) ? 1 : 0;
+      if (rc == 0)
+        return 0;
+      if (errno != EINTR)
+        return -1;
+    }
+}
+
+static int
+connection_tls_handshake (client_ctx_t *ctx)
+{
+  SSL *ssl = SSL_new (g_ssl_ctx);
+  if (!ssl || SSL_set_fd (ssl, ctx->fd) <= 0)
+    {
+      if (ssl) SSL_free (ssl);
+      return -1;
+    }
+  int old_flags = fcntl (ctx->fd, F_GETFL, 0);
+  if (old_flags < 0 || fcntl (ctx->fd, F_SETFL, old_flags | O_NONBLOCK) < 0)
+    {
+      SSL_free (ssl);
+      return -1;
     }
 
-  /* Line too long */
-  LOGD ("SSL readline: line exceeds max length %zu", buf_len);
-  return -1;
+  uint64_t deadline = monotonic_millis () + (uint64_t) g_cfg.server_request_timeout_ms;
+  int result = -1;
+  for (;;)
+    {
+      int rc = SSL_accept (ssl);
+      if (rc == 1)
+        {
+          result = 0;
+          break;
+        }
+      int ssl_error = SSL_get_error (ssl, rc);
+      short events = ssl_error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN;
+      if (ssl_error != SSL_ERROR_WANT_READ && ssl_error != SSL_ERROR_WANT_WRITE)
+        break;
+      if (wait_for_socket (ctx->fd, events, deadline) <= 0)
+        break;
+    }
+  if (fcntl (ctx->fd, F_SETFL, old_flags) < 0)
+    result = -1;
+  if (result != 0)
+    {
+      SSL_free (ssl);
+      return -1;
+    }
+  struct timeval io_timeout = {
+    .tv_sec = g_cfg.server_request_timeout_ms / 1000,
+    .tv_usec = (g_cfg.server_request_timeout_ms % 1000) * 1000
+  };
+  (void) setsockopt (ctx->fd, SOL_SOCKET, SO_RCVTIMEO, &io_timeout,
+                     sizeof io_timeout);
+  (void) setsockopt (ctx->fd, SOL_SOCKET, SO_SNDTIMEO, &io_timeout,
+                     sizeof io_timeout);
+  ctx->ssl_conn = ssl;
+  ctx->is_tls = 1;
+  return 0;
+}
+
+/* Read one newline-framed request, bounded by both bytes and an absolute
+   deadline. Returns -2 for an oversized frame and -3 for a deadline expiry. */
+static ssize_t
+client_readline (client_ctx_t *ctx, char *buf, size_t cap, int timeout_ms)
+{
+  size_t used = 0;
+  uint64_t deadline = monotonic_millis () + (uint64_t) timeout_ms;
+  while (used < cap - 1)
+    {
+      if (!(ctx->is_tls && SSL_pending ((SSL *) ctx->ssl_conn) > 0))
+        {
+          int ready = wait_for_socket (ctx->fd, POLLIN, deadline);
+          /* A partial frame is not a completed request. Do not hand it to
+             the parser and start a fresh deadline, or a slow client could
+             keep a connection alive indefinitely by dripping bytes. */
+          if (ready == 0) return -3;
+          if (ready < 0) return -1;
+        }
+      char ch;
+      ssize_t n;
+      if (ctx->is_tls)
+        {
+          int rc = SSL_read ((SSL *) ctx->ssl_conn, &ch, 1);
+          if (rc > 0) n = rc;
+          else
+            {
+              int ssl_error = SSL_get_error ((SSL *) ctx->ssl_conn, rc);
+              if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE)
+                continue;
+              if (ssl_error == SSL_ERROR_ZERO_RETURN)
+                return used ? (ssize_t) used : 0;
+              return -1;
+            }
+        }
+      else
+        {
+          n = recv (ctx->fd, &ch, 1, 0);
+          if (n == 0) return used ? (ssize_t) used : 0;
+          if (n < 0)
+            {
+              if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                continue;
+              return -1;
+            }
+        }
+      buf[used++] = ch;
+      if (ch == '\n')
+        {
+          buf[used] = '\0';
+          return (ssize_t) used;
+        }
+    }
+  return -2;
 }
 
 void *
 connection_thread (void *arg)
 {
   client_ctx_t *ctx = (client_ctx_t *) arg;
+  g_ctx_for_send = ctx;
   int fd = ctx->fd;
-
-  char *line = NULL;
-  size_t line_len = 0;
+  char *line = malloc ((size_t) g_cfg.server_max_request_bytes + 1);
   ssize_t read_len;
 
-  if (ctx->is_tls)
+  if (line && g_cfg.tls_enabled && connection_tls_handshake (ctx) != 0)
+    goto cleanup;
+  if (!line)
+    goto cleanup;
+
+  loop_add_client (ctx);
+  ctx->rl_limit = g_cfg.server_requests_per_minute;
+  ctx->rl_window_sec = 60;
+  ctx->rl_window_start = time (NULL);
+  struct timeval io_timeout = {
+    .tv_sec = g_cfg.server_request_timeout_ms / 1000,
+    .tv_usec = (g_cfg.server_request_timeout_ms % 1000) * 1000
+  };
+  (void) setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, &io_timeout, sizeof io_timeout);
+  (void) setsockopt (fd, SOL_SOCKET, SO_SNDTIMEO, &io_timeout, sizeof io_timeout);
+
+  while ((read_len = client_readline (ctx, line,
+                                      (size_t) g_cfg.server_max_request_bytes + 1,
+                                      g_cfg.server_request_timeout_ms)) != 0)
     {
-      /* TLS path: use ssl_readline */
-      char line_buf[65536];
-      while ((read_len = ssl_readline (ctx->ssl_conn, (unsigned char *) line_buf,
-					sizeof (line_buf),
-					ctx->ssl_read_buf, &ctx->ssl_read_pos,
-					&ctx->ssl_read_used)) > 0)
-	{
-	  json_error_t jerr;
-	  json_t *root = json_loads (line_buf, 0, &jerr);
-
-	  if (!root || !json_is_object (root))
-	    {
-	      send_enveloped_error (fd, NULL, ERR_INVALID_SCHEMA,
-				    "Malformed JSON");
-	      if (root)
-		json_decref (root);
-	    }
-	  else
-	    {
-	      process_message (ctx, root);
-	      json_decref (root);
-	    }
-	}
-    }
-  else
-    {
-      /* Plaintext path: use FILE* and getline */
-      FILE *f = fdopen (fd, "r");
-      if (!f)
-	{
-	  close (fd);
-	  free (ctx);
-	  return NULL;
-	}
-
-      while (getline (&line, &line_len, f) != -1)
-	{
-	  json_error_t jerr;
-	  json_t *root = json_loads (line, 0, &jerr);
-
-	  if (!root || !json_is_object (root))
-	    {
-	      send_enveloped_error (fd, NULL, ERR_INVALID_SCHEMA,
-				    "Malformed JSON");
-	      if (root)
-		json_decref (root);
-	    }
-	  else
-	    {
-	      process_message (ctx, root);
-	      json_decref (root);
-	    }
-	}
-
-      free (line);
-      fclose (f);
+      if (read_len == -2)
+        {
+          send_response_error (ctx, NULL, ERR_BAD_REQUEST, "Request exceeds maximum frame size");
+          break;
+        }
+      if (read_len == -3)
+        {
+          send_response_error (ctx, NULL, ERR_TIMEOUT, "Request deadline exceeded");
+          break;
+        }
+      if (read_len < 0)
+        break;
+      if (!request_rate_allow (ctx))
+        {
+          send_response_error (ctx, NULL, ERR_RATE_LIMITED, "Request rate limit exceeded");
+          break;
+        }
+      json_error_t jerr;
+      json_t *root = json_loads (line, 0, &jerr);
+      if (!root || !json_is_object (root))
+        {
+          send_enveloped_error (fd, NULL, ERR_INVALID_SCHEMA, "Malformed JSON");
+          if (root) json_decref (root);
+        }
+      else
+        {
+          process_message (ctx, root);
+          json_decref (root);
+        }
     }
 
+cleanup:
+  free (line);
   /* TLS cleanup */
   if (ctx->is_tls && ctx->ssl_conn)
     {
@@ -1605,13 +1689,11 @@ connection_thread (void *arg)
       SSL_free (ctx->ssl_conn);
     }
 
-  if (ctx->is_tls)
-    {
-      close (fd);
-    }
-
   db_close_thread ();
   loop_remove_client (ctx);
+  if (ctx->connection_counted)
+    atomic_fetch_sub (&g_active_client_connections, 1);
+  close (fd);
   free (ctx);
   return NULL;
 }
@@ -1661,11 +1743,13 @@ server_loop (volatile sig_atomic_t *running)
 	}
 
       SSL_CTX_set_options (g_ssl_ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+      SSL_CTX_set_min_proto_version (g_ssl_ctx, TLS1_2_VERSION);
       LOGI ("TLS initialized with cert=%s, key=%s\n",
 	    g_cfg.tls_cert_path, g_cfg.tls_key_path);
     }
 
-  int listen_fd = make_listen_socket (g_cfg.server_port);
+  int listen_fd = make_listen_socket (g_cfg.server_port,
+                                      g_cfg.server_bind_address);
 
   if (listen_fd < 0)
     {
@@ -1674,7 +1758,8 @@ server_loop (volatile sig_atomic_t *running)
 	SSL_CTX_free (g_ssl_ctx);
       return -1;
     }
-  LOGI ("Listening on 0.0.0.0:%d\n", g_cfg.server_port);
+  LOGI ("Listening on %s:%d\n", g_cfg.server_bind_address,
+        g_cfg.server_port);
   struct pollfd pfd = {.fd = listen_fd,.events = POLLIN,.revents = 0 };
   pthread_attr_t attr;
 
@@ -1744,46 +1829,15 @@ server_loop (volatile sig_atomic_t *running)
 	      perror ("accept");
 	      continue;
 	    }
-
-	  /* TLS handshake if enabled */
-	  if (g_cfg.tls_enabled && g_ssl_ctx)
+	  int previous = atomic_fetch_add (&g_active_client_connections, 1);
+	  if (previous >= g_cfg.server_max_connections)
 	    {
-	      SSL *ssl = SSL_new (g_ssl_ctx);
-	      if (!ssl)
-		{
-		  LOGE ("SSL_new failed\n");
-		  close (cfd);
-		  free (ctx);
-		  continue;
-		}
-
-	      if (SSL_set_fd (ssl, cfd) <= 0)
-		{
-		  LOGE ("SSL_set_fd failed\n");
-		  SSL_free (ssl);
-		  close (cfd);
-		  free (ctx);
-		  continue;
-		}
-
-	      int ret = SSL_accept (ssl);
-	      if (ret <= 0)
-		{
-		  int err = SSL_get_error (ssl, ret);
-		  LOGE ("SSL_accept failed: %d\n", err);
-		  SSL_free (ssl);
-		  close (cfd);
-		  free (ctx);
-		  continue;
-		}
-
-	      ctx->is_tls = 1;
-	      ctx->ssl_conn = ssl;
-	      ctx->ssl_read_pos = 0;
-	      ctx->ssl_read_used = 0;
+	      atomic_fetch_sub (&g_active_client_connections, 1);
+	      close (cfd);
+	      free (ctx);
+	      continue;
 	    }
-
-	  loop_add_client (ctx);
+	  ctx->connection_counted = 1;
 	  ctx->fd = cfd;
 	  ctx->running = (sig_atomic_t *) running;
 	  char ip[INET_ADDRSTRLEN];
@@ -1801,11 +1855,7 @@ server_loop (volatile sig_atomic_t *running)
 	  else
 	    {
 	      LOGE ("pthread_create: %s\n", strerror (prc));
-	      loop_remove_client (ctx);
-	      if (ctx->is_tls && ctx->ssl_conn)
-		{
-		  SSL_free (ctx->ssl_conn);
-		}
+	      atomic_fetch_sub (&g_active_client_connections, 1);
 	      close (cfd);
 	      free (ctx);
 	    }

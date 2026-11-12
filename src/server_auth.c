@@ -370,9 +370,12 @@ cmd_auth_register (client_ctx_t *ctx, json_t *root)
 
 
   /* Call register_player with sector specified */
+  db_error_clear (&err);
   if (repo_auth_register_player
       (db, name, pass, ship_name, spawn_sid, &player_id, &err) != 0)
     {
+      LOGE ("auth.register player creation failed (code=%d, backend=%d, category=%d)",
+            err.code, err.backend_code, (int) err.category);
       if (db_error_is_constraint_violation (&err))	// Wait, err is not filled by repo if it returns non-zero code. 
 	// I should check code or category.
 	{
@@ -756,10 +759,19 @@ get_welcome_message (int pid)
 
 
 int
+auth_player_is_sysop (int player_id)
+{
+  if (player_id == 0)
+    return 1; /* internal System actor; never assigned by player sessions */
+  if (player_id < 0)
+    return 0;
+  return player_is_sysop (game_db_get_handle (), player_id) ? 1 : 0;
+}
+
+int
 auth_player_get_type (int player_id)
 {
-  db_t *db = game_db_get_handle ();
-  if (player_is_sysop (db, player_id))
+  if (auth_player_is_sysop (player_id))
     {
       return PLAYER_TYPE_SYSOP;
     }

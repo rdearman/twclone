@@ -857,8 +857,10 @@ engine_main_loop (int shutdown_fd)
       LOGW ("[engine] Failed to load tavern settings. Using defaults.");
     }
 
-  int server_port_unused = 0;	// Not needed by engine, but db_load_ports requires it
-  int s2s_port = 0;
+  /* Preserve validated defaults (including environment overrides) when the
+     optional database port settings have not been provisioned. */
+  int server_port_unused = g_cfg.server_port;
+  int s2s_port = g_cfg.s2s.tcp_port;
 
 
   if (db_load_ports (&server_port_unused, &s2s_port) != 0)

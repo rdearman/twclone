@@ -1144,6 +1144,21 @@ main (int argc, char **argv)
 	       jerr.text);
     }
 
+  /* Runtime credentials are injected by deployment, never stored in the
+     checked-in bootstrap template. Explicit command-line options win. */
+  const char *admin_env = getenv ("TWCLONE_DB_ADMIN_CONNINFO");
+  const char *app_env = getenv ("TWCLONE_DB_APP_CONNINFO");
+  if (admin_env && *admin_env)
+    {
+      free (admin_cs);
+      admin_cs = strdup (admin_env);
+    }
+  if (app_env && *app_env)
+    {
+      free (app_cs_tmpl);
+      app_cs_tmpl = strdup (app_env);
+    }
+
   int opt, idx = 0;
 
 

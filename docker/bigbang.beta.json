@@ -1,0 +1,12 @@
+{
+  "backend": "postgres",
+  "db": "twclone",
+  "sql_dir": "../sql/pg",
+  "sectors": 500,
+  "density": 4,
+  "port_ratio": 40,
+  "planet_ratio": 30.0,
+  "min_tunnels": 15,
+  "min_tunnel_len": 4,
+  "include_v3_migrations": true
+}

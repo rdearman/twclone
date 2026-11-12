@@ -46,6 +46,10 @@ typedef struct
   int rl_count;
   int rl_limit;
   int rl_window_sec;
+  int rate_limited;
+  int connection_counted;
+  time_t request_window_start;
+  int request_count;
 
   /* --- bulk execution capture --- */
   json_t *captured_envelopes;	// If non-NULL, responses are appended here instead of sent
