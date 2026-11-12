@@ -26,6 +26,33 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Ensure a direct one-sector transwarp distance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 10) ON CONFLICT DO NOTHING"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set mover_transwarp Fuel Ore cargo to two",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 2 FROM players WHERE name = 'mover_transwarp' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity = 2"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Synchronize legacy Fuel Ore column",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET ore = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'mover_transwarp')"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Capture state before invalid destination",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -67,11 +94,63 @@
       ]
     },
     {
-      "name": "Positive: Transwarp to Sector",
+      "name": "Negative: Insufficient transwarp Fuel Ore is refused",
+      "command": "move.transwarp",
+      "data": { "to_sector_id": 10 },
+      "user": "mover_transwarp",
+      "expect": { "status": "refused", "error_code": 1471 }
+    },
+    {
+      "name": "Insufficient fuel preserves fuel turns and location",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT t.turns_remaining, p.sector_id, c.quantity FROM turns t JOIN players p ON p.player_id=t.player_id JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": "@{transwarp_invalid_turns}" },
+        { "path": "data.rows.0.1", "op": "==", "value": "@{transwarp_invalid_sector}" },
+        { "path": "data.rows.0.2", "op": "==", "value": 2 }
+      ]
+    },
+    {
+      "name": "Rig: Provide exactly three Fuel Ore for one-hop transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ship_cargo SET quantity = 3 WHERE ship_id = (SELECT ship_id FROM players WHERE name='mover_transwarp') AND commodity_code='ORE'"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Synchronize legacy column before transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET ore = 3 WHERE ship_id = (SELECT ship_id FROM players WHERE name='mover_transwarp')"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Positive: One-hop transwarp consumes exactly three Fuel Ore",
       "command": "move.transwarp",
       "data": { "to_sector_id": 10 },
       "user": "mover_transwarp",
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Successful transwarp persists fuel debit and destination",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.sector_id, c.quantity FROM players p JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 10 },
+        { "path": "data.rows.0.1", "op": "==", "value": 0 }
+      ]
     },
     {
       "name": "Negative: Transwarp Missing Auth",

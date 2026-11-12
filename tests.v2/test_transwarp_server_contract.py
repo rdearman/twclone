@@ -28,11 +28,19 @@ class TranswarpServerContractTests(unittest.TestCase):
         drive_check = self.handler.index("repo_universe_check_transwarp")
         tx_begin = self.handler.index("db_tx_begin")
         homing_check = self.handler.index("repo_universe_lock_sector_fighter")
+        distance_check = self.handler.index("repo_universe_get_transwarp_distance")
+        fuel_check = self.handler.index("repo_cargo_get")
+        fuel_debit = self.handler.index("repo_cargo_consume_locked")
         turn_debit = self.handler.index("h_consume_player_turn")
         self.assertLess(max_check, drive_check)
         self.assertLess(drive_check, turn_debit)
         self.assertLess(tx_begin, homing_check)
         self.assertLess(homing_check, turn_debit)
+        self.assertLess(distance_check, fuel_check)
+        self.assertLess(fuel_check, homing_check)
+        self.assertLess(homing_check, fuel_debit)
+        self.assertLess(fuel_debit, turn_debit)
+        self.assertIn("(int64_t) distance * 3", self.handler)
         self.assertIn("Failed to validate transwarp destination", self.handler)
         self.assertIn("Failed to verify transwarp capability", self.handler)
         self.assertIn("ERR_SECTOR_NOT_FOUND", self.handler)
@@ -64,6 +72,14 @@ class TranswarpServerContractTests(unittest.TestCase):
         self.assertLess(hazards, commit)
         self.assertIn("transwarp_complete", self.handler)
         self.assertNotIn("interrupted", self.handler.lower())
+
+    def test_fuel_refusal_and_success_are_covered_by_handler_harness(self):
+        harness = (ROOT / "tests.v2/test_server_transwarp_validation.c").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("g_fuel_available = 8", harness)
+        self.assertIn("g_last_response_code == REF_INSUFFICIENT_RES", harness)
+        self.assertIn("g_fuel_consumed == 9", harness)
 
 
 if __name__ == "__main__":

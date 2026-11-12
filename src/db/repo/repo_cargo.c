@@ -387,6 +387,18 @@ repo_cargo_add_unlocked (db_t *db, int32_t ship_id, const char *commodity_code,
   return 0;
 }
 
+int
+repo_cargo_consume_locked (db_t *db, int32_t ship_id,
+                           const char *commodity_code, int64_t quantity)
+{
+  if (!db || db->tx_nest_level <= 0 || ship_id <= 0 || !commodity_code
+      || quantity < 0)
+    return ERR_INVALID_ARG;
+  if (quantity == 0)
+    return 0;
+  return repo_cargo_add_unlocked (db, ship_id, commodity_code, -quantity, NULL);
+}
+
 static int
 repo_cargo_lock_ship_for_update (db_t *db, int32_t ship_id)
 {

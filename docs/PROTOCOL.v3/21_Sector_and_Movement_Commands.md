@@ -112,17 +112,21 @@ arbitrary random interruption.
 
 The original TradeWars manual describes a deployed fighter in the destination
 sector as the transwarp homing reference. V3 validates and locks a destination
-fighter asset before turn or location mutation. Fuel remains incomplete:
-the selected [1990–2000 primary manual](https://electraphysics.com/documents/tradewarsmanual.pdf)
-says transwarp consumes substantial Fuel Ore but does not state a number or
-distance formula. A [2001 guide](https://www.thestardock.com/post/299) likewise
-gives no formula. A [2005 player guide](https://2005.apolytonarchive.net/forums/thread/125243/1.html)
-and the [current Stardock reference](https://www.thestardock.com/files/ModernManual/core/ships.md)
-state 3 fuel units per sector of distance, but do not establish that value as
-the selected TWGS 3.13 baseline. The 3-unit figure has not been approved as
-V3 policy. Product-owner decision required; do not infer or charge a cost
-until approved. The source handler currently performs no fuel availability
-check or debit.
+fighter asset before turn or location mutation. The approved TWGS 3.13 baseline
+charges three Fuel Ore per sector of distance. Distance is the shortest
+directed warp-hop count in the authoritative universe graph; one directed warp
+edge is one sector of distance. Fuel Ore is read from the active ship's
+authoritative cargo, and the exact amount is debited atomically with the turn,
+movement and arrival-hazard settlement. An unreachable destination has no
+defined graph distance and is refused without fuel or turn consumption.
+Insufficient Fuel Ore is refused before movement. A same-sector transwarp has
+zero distance and therefore costs no Fuel Ore; existing equipment, homing,
+turn and hazard checks still apply. Legacy request field `sector_id` remains
+accepted alongside `to_sector_id`.
+
+Successful `move.transwarp` responses include `distance_sectors` and
+`fuel_ore_consumed`; if entry hazards destroy the ship, the same settled fuel
+amount is included in the destruction response data.
 
 ### `move.pathfind`
 Calculate a route through the current sector and sectors the player has visited.

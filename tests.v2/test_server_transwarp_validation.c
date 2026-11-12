@@ -17,6 +17,13 @@ static int g_drive_rc;
 static int g_has_drive;
 static int g_fighter_rc;
 static int g_has_fighter;
+static int g_origin_sector;
+static int g_distance_rc;
+static int g_distance;
+static int64_t g_fuel_available;
+static int g_cargo_rc;
+static int64_t g_fuel_consumed;
+static int g_fuel_debits;
 static int g_turn_debits;
 static int g_sector_updates;
 static int g_last_response_code;
@@ -57,6 +64,50 @@ int repo_universe_lock_sector_fighter(db_t *db, int sector_id, int *found)
   (void) db; (void) sector_id;
   *found = g_has_fighter;
   return g_fighter_rc;
+}
+
+int repo_universe_lock_player_ship_sector(db_t *db, int player_id,
+                                          int expected_ship_id, int *sector)
+{
+  (void) db;
+  assert(player_id == 7 && expected_ship_id == 99);
+  *sector = g_origin_sector;
+  return 0;
+}
+
+int repo_universe_get_transwarp_distance(db_t *db, int from, int to,
+                                         int *distance)
+{
+  (void) db;
+  assert(from == g_origin_sector && to == 20);
+  *distance = g_distance;
+  return g_distance_rc;
+}
+
+int repo_cargo_lock_ships_for_update(db_t *db, int first, int second)
+{
+  (void) db;
+  assert(first == 99 && second == 99);
+  return g_cargo_rc;
+}
+
+int repo_cargo_get(db_t *db, int ship_id, const char *commodity, int64_t *qty)
+{
+  (void) db;
+  assert(ship_id == 99 && strcmp(commodity, "ORE") == 0);
+  *qty = g_fuel_available;
+  return g_cargo_rc;
+}
+
+int repo_cargo_consume_locked(db_t *db, int ship_id, const char *commodity,
+                              int64_t quantity)
+{
+  (void) db;
+  assert(ship_id == 99 && strcmp(commodity, "ORE") == 0);
+  assert(quantity <= g_fuel_available);
+  g_fuel_consumed = quantity;
+  g_fuel_debits++;
+  return 0;
 }
 
 bool db_tx_begin(db_t *db, db_tx_flags_t flags, db_error_t *err)
@@ -135,6 +186,8 @@ void send_response_ok_take(client_ctx_t *ctx, json_t *req, const char *type,
 {
   (void) ctx; (void) req;
   assert(strcmp(type, "move.transwarp") == 0);
+  assert(json_integer_value(json_object_get(*data, "distance_sectors")) == 3);
+  assert(json_integer_value(json_object_get(*data, "fuel_ore_consumed")) == 9);
   g_success_responses++;
   json_decref(*data);
   *data = NULL;
@@ -164,6 +217,13 @@ static void reset(void)
   g_has_drive = 1;
   g_fighter_rc = 0;
   g_has_fighter = 1;
+  g_origin_sector = 1;
+  g_distance_rc = 0;
+  g_distance = 3;
+  g_fuel_available = 100;
+  g_cargo_rc = 0;
+  g_fuel_consumed = 0;
+  g_fuel_debits = 0;
   g_turn_debits = 0;
   g_sector_updates = 0;
   g_last_response_code = 0;
@@ -211,7 +271,7 @@ int main(void)
   root = request(20);
   cmd_move_transwarp(&ctx, root);
   assert(g_last_response_code == REF_TRANSWARP_UNAVAILABLE);
-  assert(g_turn_debits == 0 && g_sector_updates == 0);
+  assert(g_fuel_debits == 0 && g_turn_debits == 0 && g_sector_updates == 0);
   json_decref(root);
 
   reset();
@@ -219,13 +279,30 @@ int main(void)
   root = request(20);
   cmd_move_transwarp(&ctx, root);
   assert(g_last_response_code == ERR_DB);
-  assert(g_turn_debits == 0 && g_sector_updates == 0);
+  assert(g_fuel_debits == 0 && g_turn_debits == 0 && g_sector_updates == 0);
+  json_decref(root);
+
+  reset();
+  g_distance_rc = REF_NO_WARP_LINK;
+  root = request(20);
+  cmd_move_transwarp(&ctx, root);
+  assert(g_last_response_code == REF_NO_WARP_LINK);
+  assert(g_fuel_debits == 0 && g_turn_debits == 0 && g_sector_updates == 0);
+  json_decref(root);
+
+  reset();
+  g_fuel_available = 8;
+  root = request(20);
+  cmd_move_transwarp(&ctx, root);
+  assert(g_last_response_code == REF_INSUFFICIENT_RES);
+  assert(g_fuel_debits == 0 && g_turn_debits == 0 && g_sector_updates == 0);
   json_decref(root);
 
   reset();
   root = request(20);
   cmd_move_transwarp(&ctx, root);
   assert(g_turn_debits == 1 && g_sector_updates == 1);
+  assert(g_fuel_debits == 1 && g_fuel_consumed == 9);
   assert(g_success_responses == 1);
   json_decref(root);
 

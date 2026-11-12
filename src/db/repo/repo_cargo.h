@@ -62,6 +62,10 @@ int repo_cargo_add(db_t *db, int32_t ship_id, const char *commodity_code, int64_
 int repo_cargo_lock_ships_for_update(db_t *db, int32_t first_ship_id,
                                      int32_t second_ship_id);
 
+/* Consume cargo while the caller's transaction holds the ship row lock. */
+int repo_cargo_consume_locked(db_t *db, int32_t ship_id,
+                              const char *commodity_code, int64_t quantity);
+
 /**
  * repo_cargo_sync_legacy_columns - Sync legacy ships.* columns from ship_cargo
  * @db: database handle

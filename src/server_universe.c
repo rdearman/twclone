@@ -2286,6 +2286,67 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
     }
   int previous_sector = ctx->sector_id;
 
+  /* Lock the authenticated player's row and active ship in the same order as
+   * the movement repository. Fuel is priced by directed warp-hop distance in
+   * the authoritative universe graph, not by client-supplied coordinates. */
+  int origin_sector = 0;
+  int state_rc = repo_universe_lock_player_ship_sector
+    (db, ctx->player_id, ship_id, &origin_sector);
+  if (state_rc != 0 || origin_sector <= 0)
+    {
+      db_tx_rollback (db, NULL);
+      if (state_rc == ERR_NO_ACTIVE_SHIP || state_rc == ERR_SHIP_NOT_FOUND)
+        send_response_refused_steal (ctx, root, ERR_NO_ACTIVE_SHIP,
+                                     "No active ship found.", NULL);
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not lock transwarp ship state.");
+      return 0;
+    }
+
+  int distance = 0;
+  int distance_rc = repo_universe_get_transwarp_distance
+    (db, origin_sector, to_sector_id, &distance);
+  if (distance_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      if (distance_rc == REF_NO_WARP_LINK)
+        send_response_refused_steal (ctx, root, REF_NO_WARP_LINK,
+                                     "No directed warp route establishes transwarp distance.",
+                                     NULL);
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not calculate transwarp fuel requirement.");
+      return 0;
+    }
+  int64_t fuel_required = (int64_t) distance * 3;
+
+  /* The player/ship row lock serializes this cargo read and debit with every
+   * repository cargo operation. Keep the debit in the same transaction as
+   * turn consumption, movement and destination hazards. */
+  int cargo_rc = repo_cargo_lock_ships_for_update (db, ship_id, ship_id);
+  int64_t fuel_available = 0;
+  if (cargo_rc == 0)
+    cargo_rc = repo_cargo_get (db, ship_id, "ORE", &fuel_available);
+  if (cargo_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not validate transwarp Fuel Ore.");
+      return 0;
+    }
+  if (fuel_available < fuel_required)
+    {
+      db_tx_rollback (db, NULL);
+      char message[160];
+      snprintf (message, sizeof(message),
+                "Transwarp requires %" PRId64 " Fuel Ore; ship has %" PRId64 ".",
+                fuel_required, fuel_available);
+      send_response_refused_steal (ctx, root, REF_INSUFFICIENT_RES,
+                                   message, NULL);
+      return 0;
+    }
+
   /* The original TradeWars manual describes a destination fighter as the
    * transwarp homing reference. Lock it before any turn or location mutation
    * so it cannot disappear between validation and arrival. */
@@ -2305,6 +2366,15 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
       send_response_refused_steal (ctx, root, REF_TRANSWARP_UNAVAILABLE,
                                    "Transwarp requires a fighter in the destination sector.",
                                    NULL);
+      return 0;
+    }
+
+  cargo_rc = repo_cargo_consume_locked (db, ship_id, "ORE", fuel_required);
+  if (cargo_rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not debit transwarp Fuel Ore.");
       return 0;
     }
 
@@ -2362,6 +2432,9 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
       json_object_set_new (data, "current_sector_id",
                            json_integer (ctx->sector_id));
       json_object_set_new (data, "ship_destroyed", json_true ());
+      json_object_set_new (data, "distance_sectors", json_integer (distance));
+      json_object_set_new (data, "fuel_ore_consumed",
+                           json_integer ((json_int_t) fuel_required));
       json_object_set_new (data, "hazards",
                            hazard_report ? hazard_report : json_array ());
       send_response_error_data (ctx, root, ERR_PERMISSION_DENIED,
@@ -2383,6 +2456,9 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 
   json_t *data = json_object ();
   json_object_set_new (data, "sector_id", json_integer (to_sector_id));
+  json_object_set_new (data, "distance_sectors", json_integer (distance));
+  json_object_set_new (data, "fuel_ore_consumed",
+                       json_integer ((json_int_t) fuel_required));
   json_object_set_new (data, "status", json_string ("transwarp_complete"));
   if (hazard_report && json_array_size (hazard_report) > 0)
     json_object_set_new (data, "message",

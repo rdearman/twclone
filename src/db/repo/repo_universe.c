@@ -520,6 +520,128 @@ db_res_t* repo_universe_get_all_warps(db_t *db, db_error_t *err) {
     return res;
 }
 
+int
+repo_universe_lock_player_ship_sector (db_t *db, int player_id,
+                                       int expected_ship_id,
+                                       int *sector_id_out)
+{
+    if (!db || db->tx_nest_level <= 0 || player_id <= 0
+        || expected_ship_id <= 0 || !sector_id_out)
+        return ERR_INVALID_ARG;
+    *sector_id_out = 0;
+    db_error_t err;
+    db_error_clear(&err);
+    db_res_t *res = NULL;
+    char sql_template[512], sql[512];
+    snprintf(sql_template, sizeof(sql_template),
+             "SELECT ship_id FROM players WHERE player_id={1}%s;",
+             sql_for_update(db));
+    if (sql_build(db, sql_template, sql, sizeof(sql)) != 0
+        || !db_query(db, sql, (db_bind_t[]){db_bind_i64(player_id)}, 1,
+                     &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_NO_ACTIVE_SHIP;
+    }
+    int active_ship_id = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    if (err.code != 0) return err.code;
+    if (active_ship_id != expected_ship_id) return ERR_NO_ACTIVE_SHIP;
+
+    snprintf(sql_template, sizeof(sql_template),
+             "SELECT sector_id FROM ships WHERE ship_id={1}%s;",
+             sql_for_update(db));
+    if (sql_build(db, sql_template, sql, sizeof(sql)) != 0
+        || !db_query(db, sql,
+                     (db_bind_t[]){db_bind_i64(expected_ship_id)}, 1,
+                     &res, &err))
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    if (!db_res_step(res, &err)) {
+        db_res_finalize(res);
+        return err.code ? err.code : ERR_SHIP_NOT_FOUND;
+    }
+    *sector_id_out = db_res_col_i32(res, 0, &err);
+    db_res_finalize(res);
+    return err.code;
+}
+
+int
+repo_universe_get_transwarp_distance (db_t *db, int from_sector,
+                                      int to_sector, int *distance_out)
+{
+    if (!db || from_sector <= 0 || to_sector <= 0 || !distance_out)
+        return ERR_INVALID_ARG;
+    *distance_out = 0;
+    if (from_sector == to_sector) return 0;
+
+    int max_sector = 0, edge_count = 0;
+    if (repo_universe_get_max_sector_id(db, &max_sector) != 0
+        || repo_universe_get_warp_count(db, &edge_count) != 0)
+        return ERR_DB_QUERY_FAILED;
+    if (max_sector <= 0 || from_sector > max_sector || to_sector > max_sector)
+        return ERR_SECTOR_NOT_FOUND;
+    if (edge_count < 0 || (size_t)max_sector + 1 > SIZE_MAX / sizeof(int)
+        || (size_t)(edge_count ? edge_count : 1) > SIZE_MAX / sizeof(int))
+        return ERR_DB_QUERY_FAILED;
+
+    int *head = malloc(((size_t)max_sector + 1) * sizeof(*head));
+    int *edge_to = malloc((size_t)(edge_count ? edge_count : 1) * sizeof(*edge_to));
+    int *edge_next = malloc((size_t)(edge_count ? edge_count : 1) * sizeof(*edge_next));
+    int *distance = malloc(((size_t)max_sector + 1) * sizeof(*distance));
+    int *queue = malloc(((size_t)max_sector + 1) * sizeof(*queue));
+    if (!head || !edge_to || !edge_next || !distance || !queue) {
+        free(head); free(edge_to); free(edge_next); free(distance); free(queue);
+        return ERR_DB_QUERY_FAILED;
+    }
+    for (int i = 0; i <= max_sector; ++i) {
+        head[i] = -1;
+        distance[i] = -1;
+    }
+
+    db_error_t err;
+    db_error_clear(&err);
+    db_res_t *warps = repo_universe_get_all_warps(db, &err);
+    if (!warps) {
+        free(head); free(edge_to); free(edge_next); free(distance); free(queue);
+        return err.code ? err.code : ERR_DB_QUERY_FAILED;
+    }
+    int used = 0, rc = 0;
+    while (db_res_step(warps, &err)) {
+        int from = db_res_col_i32(warps, 0, &err);
+        int to = db_res_col_i32(warps, 1, &err);
+        if (err.code != 0 || from <= 0 || from > max_sector
+            || to <= 0 || to > max_sector || used >= edge_count) {
+            rc = err.code ? err.code : ERR_DB_QUERY_FAILED;
+            break;
+        }
+        edge_to[used] = to;
+        edge_next[used] = head[from];
+        head[from] = used++;
+    }
+    if (err.code != 0) rc = err.code;
+    db_res_finalize(warps);
+    if (rc == 0) {
+        int first = 0, last = 0;
+        queue[last++] = from_sector;
+        distance[from_sector] = 0;
+        while (first < last && distance[to_sector] < 0) {
+            int sector = queue[first++];
+            for (int edge = head[sector]; edge >= 0; edge = edge_next[edge]) {
+                int next = edge_to[edge];
+                if (distance[next] >= 0) continue;
+                distance[next] = distance[sector] + 1;
+                queue[last++] = next;
+                if (next == to_sector) break;
+            }
+        }
+        if (distance[to_sector] < 0) rc = REF_NO_WARP_LINK;
+        else *distance_out = distance[to_sector];
+    }
+    free(head); free(edge_to); free(edge_next); free(distance); free(queue);
+    return rc;
+}
+
 /*
  * Player navigation must not use the complete universe graph: that allows
  * path helpers to derive routes through sectors the player has not visited.

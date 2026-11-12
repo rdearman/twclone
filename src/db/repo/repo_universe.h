@@ -50,6 +50,14 @@ int repo_universe_sector_has_port(db_t *db, int sector_id, int *has_port_out);
 int repo_universe_get_max_sector_id(db_t *db, int *max_id_out);
 int repo_universe_get_warp_count(db_t *db, int *count_out);
 db_res_t* repo_universe_get_all_warps(db_t *db, db_error_t *err);
+/* Shortest directed warp-hop distance in the authoritative universe graph. */
+int repo_universe_get_transwarp_distance(db_t *db, int from_sector,
+                                         int to_sector, int *distance_out);
+/* Requires an active transaction. Locks player then active ship and returns
+ * the authoritative ship sector, matching movement's lock order. */
+int repo_universe_lock_player_ship_sector(db_t *db, int player_id,
+                                          int expected_ship_id,
+                                          int *sector_id_out);
 /* Return directed exits whose source sector is current or visited by player. */
 db_res_t* repo_universe_get_player_known_warps(db_t *db, int player_id,
                                                 int current_sector_id,
