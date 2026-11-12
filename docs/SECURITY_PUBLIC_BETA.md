@@ -75,6 +75,12 @@ not been established, so this session did not contact it or rotate a password.
 The database owner must confirm the target and perform/authorize rotation. The
 app credential should also be rotated if valid or reused.
 
+The local ignored config's `app` connection still names the `postgres` role.
+The Docker deployment overrides that entry with `twclone_runtime` and is the
+only runtime configuration verified here. Do not run a native game server from
+the local BigBang config until its app role is changed to a verified
+least-privilege role; this session did not alter an unverified database role.
+
 The owner action that was required to clear the immutable attribute was:
 
 ```sh
@@ -204,7 +210,7 @@ beta; it is separate from the security acceptance results.
 | Slow TLS handshake isolation | **PASS (local probe)** | Stalled handshake did not prevent another TLS client completing. |
 | Central SysOp authorization and negative escalation tests | **PASS (local)** | Three unauthorized commands were refused with code 1407; automated JSON negatives are present. |
 | Docker non-root/read-only/restricted capabilities/resource limits | **PASS (local)** | Runtime inspect evidence: UID 10001, read-only root, dropped capabilities, `no-new-privileges`, bounded resources, secrets-only game mounts. |
-| Migration/runtime role separation and runtime least privilege | **PASS (local)** | Migration job ran with admin identity; game SQL reports `twclone_runtime` with no superuser/createdb/createrole flags. |
+| Migration/runtime role separation and runtime least privilege | **PASS (Docker only)** | Migration job ran with admin identity; Docker game SQL reports `twclone_runtime` with no superuser/createdb/createrole flags. The local native BigBang config still names `postgres` for app access and must not be used to run the server. |
 | Database network boundary | **PASS (Compose topology)** | PostgreSQL is on internal `beta_private`, has no host port binding, and is not attached to `beta_frontend`. Host-owned PostgreSQL listeners elsewhere remain outside this verification. |
 | Complete adversarial suite on designated QA cluster | **BLOCKED** | Port 55438 authentication failed for the configured QA runner; no full QA report exists. Equivalent six probes did pass against the local disposable Compose database/server. |
 | Host firewall / external reachability | **BLOCKED** | Read-only `nft list ruleset` exited 1 (`Operation not permitted (you must be root)`); `iptables -S INPUT` exited 4 (permission denied); `ufw status verbose` requires root. Host socket inspection found PostgreSQL listeners on non-loopback addresses; ownership/exposure remains unknown. No firewall changes or DB connections were attempted. |
