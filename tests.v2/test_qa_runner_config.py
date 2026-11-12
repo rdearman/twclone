@@ -161,7 +161,8 @@ class RunnerConfigurationTests(unittest.TestCase):
                     RuntimeError, "QA PostgreSQL authentication failure"
                 ):
                     run_regression_instance.verify_qa_cluster(
-                        "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                        "127.0.0.1", 55438, "dbname=postgres", {},
+                        psql_path="/usr/bin/psql"
                     )
 
     def test_qa_identity_check_reports_sandbox_socket_denial(self):
@@ -171,7 +172,8 @@ class RunnerConfigurationTests(unittest.TestCase):
                 RuntimeError, "QA TCP access blocked by execution sandbox"
             ):
                 run_regression_instance.verify_qa_cluster(
-                    "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                    "127.0.0.1", 55438, "dbname=postgres", {},
+                    psql_path="/usr/bin/psql"
                 )
 
     def test_qa_identity_check_requires_matching_cluster_identity(self):
@@ -184,7 +186,8 @@ class RunnerConfigurationTests(unittest.TestCase):
             with patch.object(run_regression_instance.subprocess, "run",
                               return_value=completed):
                 identity = run_regression_instance.verify_qa_cluster(
-                    "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                    "127.0.0.1", 55438, "dbname=postgres", {},
+                    psql_path="/usr/bin/psql"
                 )
         self.assertEqual(identity[:4],
                          ["postgres", "55438", "127.0.0.1", "twclone_qa_runner"])
@@ -199,7 +202,8 @@ class RunnerConfigurationTests(unittest.TestCase):
                               return_value=wrong_cluster):
                 with self.assertRaisesRegex(RuntimeError, "identity mismatch"):
                     run_regression_instance.verify_qa_cluster(
-                        "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                        "127.0.0.1", 55438, "dbname=postgres", {},
+                        psql_path="/usr/bin/psql"
                     )
 
     def test_qa_identity_permission_error_is_not_called_sandbox_failure(self):
@@ -215,8 +219,24 @@ class RunnerConfigurationTests(unittest.TestCase):
                     RuntimeError, "QA PostgreSQL authorization failure"
                 ):
                     run_regression_instance.verify_qa_cluster(
-                        "127.0.0.1", 55438, "dbname=postgres", {}, "/usr/bin/psql"
+                        "127.0.0.1", 55438, "dbname=postgres", {},
+                        psql_path="/usr/bin/psql"
                     )
+
+    def test_qa_identity_check_accepts_explicit_qa_role_override(self):
+        completed = subprocess.CompletedProcess(
+            ["psql"], 0,
+            '["postgres", "55438", "127.0.0.1", "qa_custom", true]\n', ""
+        )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=completed):
+                identity = run_regression_instance.verify_qa_cluster(
+                    "127.0.0.1", 55438, "dbname=postgres", {},
+                    expected_user="qa_custom", psql_path="/usr/bin/psql"
+                )
+        self.assertEqual(identity[3], "qa_custom")
 
     def test_response_capture_redacts_session_tokens(self):
         response = {"data": {"session_token": "secret", "player_id": 7}}

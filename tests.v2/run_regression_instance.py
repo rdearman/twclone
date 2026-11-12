@@ -67,7 +67,8 @@ def direct_psql_path():
     return shutil.which("psql") or "psql"
 
 
-def verify_qa_cluster(host, port, admin_conn, env, psql_path=None):
+def verify_qa_cluster(host, port, admin_conn, env, expected_user=QA_DEFAULT_PGUSER,
+                      psql_path=None):
     """Read-only check against the repository-documented QA cluster identity."""
     try:
         with socket.create_connection((host, int(port)), timeout=3):
@@ -120,7 +121,7 @@ def verify_qa_cluster(host, port, admin_conn, env, psql_path=None):
         )
     if (database != "postgres" or int(server_port) != int(port)
             or server_address not in ("127.0.0.1", "::1")
-            or user != QA_DEFAULT_PGUSER or not marker_present):
+            or user != expected_user or not marker_present):
         raise RuntimeError(
             "Refusing database operations: endpoint identity mismatch "
             f"(database={database!r}, port={server_port!r}, "
@@ -247,7 +248,8 @@ def main(argv=None):
         print(f"REGRESSION DATABASE: {dbname}")
         print(f"REGRESSION ARTIFACTS: {artifact_dir}")
 
-        verify_qa_cluster(args.pg_host, args.pg_port, admin_conn, env, psql_path)
+        verify_qa_cluster(args.pg_host, args.pg_port, admin_conn, env,
+                          expected_user=pg_user, psql_path=psql_path)
         qa_identity_verified = True
         # rig_db invokes `psql` by name. Prefer the same versioned client used
         # for identity checks and cleanup, avoiding Debian's cluster wrapper.
