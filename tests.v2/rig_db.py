@@ -61,6 +61,8 @@ def main():
     parser = argparse.ArgumentParser(description="Rig the database for regression tests")
     parser.add_argument("--config", required=True, help="Path to test_rig.json")
     parser.add_argument("--reset", action="store_true", help="Reset test data before rigging")
+    parser.add_argument("--skip-ports", action="store_true",
+                        help="Keep the generated world's ports; do not apply fixture port rows")
     parser.add_argument("--host", default=os.environ.get("QA_PGHOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("QA_PGPORT", str(QA_DEFAULT_PGPORT))))
     parser.add_argument("--dbname", default=os.environ.get("QA_PGDATABASE"),
@@ -109,7 +111,7 @@ def main():
             execute_sql(sql, **db_config)
 
     # 3. Ports
-    if "ports" in rig:
+    if "ports" in rig and not args.skip_ports:
         print("Rigging Ports...")
         for p in rig["ports"]:
             sql = f"""
