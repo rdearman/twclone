@@ -116,6 +116,7 @@ The following checks were run against the fresh disposable Compose project
 | Game process startup | PASS | `twclonebetafinal-game-1` running, exit 0, restart count 0; server log shows S2S on `127.0.0.1:4321`, engine accepted, TLS initialized, player listener on container `0.0.0.0:12483`. |
 | Player TLS/authentication workflow | PASS | Against the loopback-published listener: `system.hello`, fresh disposable `auth.register`, `auth.login`, and authenticated `player.my_info` all succeeded. Exit 0; stdout/stderr/exit preserved at `/tmp/twclone-beta-local.txtuf7/final-gameplay.{stdout,stderr,exit}`. |
 | Runtime database identity | PASS | Read-only query from the game container returned `current_user=twclone_runtime`, `rolsuper=false`, `rolcreatedb=false`, `rolcreaterole=false`; query also found zero `turns.turns_remaining IS NULL` rows in this fresh database. |
+| Local database backup/restore | PASS | In the positively identified `twclonebetafinal` internal DB container, `pg_dump -Fc` completed, restore into a temporary database completed with `pg_restore --exit-on-error`, and player/port/table/function counts matched (106/216/227/106). The temporary restore database and private dump were removed after comparison. This is not a tested off-host recovery. |
 | Container/network properties | PASS (local configuration) | `docker inspect` showed UID/GID 10001, read-only root, all game capabilities dropped, `no-new-privileges`, 1 GiB/2 CPU/256 PID limits, only three secret-file mounts. Game publication is `127.0.0.1:12483`; DB has no host port binding and belongs only to internal `beta_private`; no S2S host port is published. |
 
 The current stack's clean database did not reproduce the previously observed
@@ -206,9 +207,9 @@ beta; it is separate from the security acceptance results.
 | Migration/runtime role separation and runtime least privilege | **PASS (local)** | Migration job ran with admin identity; game SQL reports `twclone_runtime` with no superuser/createdb/createrole flags. |
 | Database network boundary | **PASS (Compose topology)** | PostgreSQL is on internal `beta_private`, has no host port binding, and is not attached to `beta_frontend`. Host-owned PostgreSQL listeners elsewhere remain outside this verification. |
 | Complete adversarial suite on designated QA cluster | **BLOCKED** | Port 55438 authentication failed for the configured QA runner; no full QA report exists. Equivalent six probes did pass against the local disposable Compose database/server. |
-| Host firewall / external reachability | **BLOCKED** | Not tested; host socket inspection found unrelated PostgreSQL listeners on port 5432 on non-loopback interfaces. Their owner and exposure must be established without connecting to them. |
+| Host firewall / external reachability | **BLOCKED** | Read-only `nft list ruleset` exited 1 (`Operation not permitted (you must be root)`); `iptables -S INPUT` exited 4 (permission denied); `ufw status verbose` requires root. Host socket inspection found PostgreSQL listeners on non-loopback addresses; ownership/exposure remains unknown. No firewall changes or DB connections were attempted. |
 | Local clean migration and app startup | **PASS (local)** | Fresh Compose migration job exit 0; game running without restarts. Daily scheduler execution remains unverified. |
-| Repository commit | **BLOCKED** | `.git` is mounted `ro`; the shared change set cannot be committed in this environment. |
+| Security changes committed | **PASS** | Security/deployment commit `d77d8e05`; evidence update `b39f11b6`. Existing corporation-transfer gameplay changes remain unstaged/uncommitted. |
 
 **NO-GO for restricted public beta at this time.** The fresh isolated local
 deployment verifies clean migration, TLS player authentication, game startup,
