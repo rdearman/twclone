@@ -35,6 +35,15 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Deploy the required homing fighter at the destination",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at) SELECT 10, player_id, 0, 2, 1, 2, now() FROM players WHERE name = 'mover_transwarp'"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Set mover_transwarp Fuel Ore cargo to two",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -144,7 +153,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT p.sector_id, c.quantity FROM players p JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"
+        "sql": "SELECT p.sector_id, COALESCE(c.quantity, 0) FROM players p LEFT JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"
       },
       "expect": { "status": "ok" },
       "asserts": [
