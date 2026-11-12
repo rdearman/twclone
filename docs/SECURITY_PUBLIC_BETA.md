@@ -150,8 +150,9 @@ full adversarial report from that runner is claimed.
 | Docker hardening | PASS | Runtime UID 10001, read-only root, all capabilities dropped, `no-new-privileges`, 1 GiB/2 CPU/256 PID limits; only secrets mounted in game container. |
 | Network exposure | PASS (local only) | Host listener was `127.0.0.1:12483`; PostgreSQL had no published port; S2S was `127.0.0.1:4321` inside game container only. |
 | Designated QA PostgreSQL port 55438 / official QA runner | BLOCKED | The bounded direct read-only `psql` probe to `127.0.0.1:55438`, user `twclone_qa_runner`, exited 2 with `FATAL: password authentication failed for user "twclone_qa_runner"`. The runner produced no usable report. No database was created or modified, and the same failed connection was not retried. |
-| Immutable local BigBang credential cleanup/rotation | BLOCKED | `lsattr` confirms immutable `i`; no sudo authority. No remote DB access or credential rotation was attempted. |
-| Commit | BLOCKED | Workspace `.git` is mounted read-only; writes to `.git/index.lock` fail with `EROFS`. No commit created. |
+| Local BigBang credential cleanup | PASS | Inline passwords removed; both connection entries now specify `/home/rick/.pgpass`; file mode 0600. |
+| Previously exposed administrative credential rotation | BLOCKED | Configuration targets a non-Compose host whose production status is unconfirmed. No connection or rotation was attempted; owner confirmation/authorization is required. |
+| Security commit | PASS | `d77d8e05` (`Harden V3 public beta deployment`). Corporation gameplay changes remain separate and uncommitted. |
 
 Execution evidence (separate stdout/stderr and exit files) is retained for
 local Docker runtime checks under `/tmp/twclone-beta-local.txtuf7/`. Test probes
@@ -169,23 +170,25 @@ of them. They are outside this Compose project and their ownership, firewall
 exposure and production status were not verified. This is an environment-level
 readiness risk, not a port published by this beta Compose file.
 
-The local BigBang file contains inline connection passwords in the `admin`
-and `app` entries; secret values are intentionally not reproduced here. The
-administrative credential is the credential requiring owner-led rotation.
-The local app credential should also be replaced if it is valid or reused.
-The exact owner action to remove the immutable bit is:
+The local BigBang file previously contained inline connection passwords in the
+`admin` and `app` entries; secret values are intentionally not reproduced
+here. The administrative credential is the credential requiring owner-led
+rotation. The local app credential should also be replaced if valid or reused.
+The owner cleared the immutable bit using:
 
 ```sh
 sudo chattr -i /home/rick/Development/Active/twclone/bin/bigbang.json
 ```
 
-Afterward remove inline passwords from that local configuration and rotate the
-administrative credential using the database owner's approved process. No
-remote database or credential was accessed or modified.
+Inline passwords have now been removed from that local configuration. No
+remote database or credential was accessed or modified; rotation remains
+pending target confirmation and owner authorization.
 
-One non-security runtime issue was observed and is not fixed here: the engine's
-`daily_turn_reset` task reports a PostgreSQL `NOT NULL` failure because a `turns`
-row has a null `turns_remaining`. This should be corrected and verified before
+An earlier local run observed the engine's `daily_turn_reset` task report a
+PostgreSQL `NOT NULL` failure because a `turns` row had null
+`turns_remaining`. The fresh database currently has no null rows and the error
+did not recur in inspected startup logs, but the daily scheduler has not been
+run through a reset. This remains unverified and should be exercised before
 beta; it is separate from the security acceptance results.
 
 ## Beta decision
