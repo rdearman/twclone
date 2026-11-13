@@ -935,13 +935,8 @@ db_cron_reset_daily_turns (db_t *db, int turns)
 
 {
 
-  (void) turns;
-
-
-
-
-
-  if (!db) return -1;
+  if (!db || turns <= 0)
+    return -1;
 
 
 
@@ -949,15 +944,13 @@ db_cron_reset_daily_turns (db_t *db, int turns)
 
   db_error_clear (&err);
 
-  // Using explicit value instead of subselect for safety/simplicity
-
   char sql[256];
+  if (sql_build (db, "UPDATE turns SET turns_remaining = {1}", sql,
+                 sizeof (sql)) != 0)
+    return -1;
 
-  if (sql_build(db, "UPDATE turns SET turns_remaining = CAST((SELECT value FROM config WHERE key = 'turnsperday') AS INTEGER);", sql, sizeof(sql)) != 0) return -1;
-
-  if (!db_exec (db, sql, NULL, 0, &err)) return -1;
-
-  return 0;
+  db_bind_t params[] = { db_bind_i32 (turns) };
+  return db_exec (db, sql, params, 1, &err) ? 0 : -1;
 
 }
 

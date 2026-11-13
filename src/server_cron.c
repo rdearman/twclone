@@ -935,7 +935,9 @@ h_daily_turn_reset (db_t *db, int64_t now_s)
     }
   LOGI ("daily_turn_reset: starting daily turn reset.");
 
-  int turns = (int) h_get_config_int_unlocked (db, "turnsperday", 0);
+  /* Match the server's documented default if an installation has not yet
+     persisted the optional SysOp override. */
+  int turns = (int) h_get_config_int_unlocked (db, "turnsperday", 120);
   if (db_cron_reset_daily_turns (db, turns) != 0)
     {
       LOGE ("daily_turn_reset: player turn update failed");
