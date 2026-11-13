@@ -157,12 +157,14 @@ full adversarial report from that runner is claimed.
 | Runtime DB least privilege | PASS | `twclone_runtime` has `rolsuper=false`, `rolcreatedb=false`, `rolcreaterole=false`; `CREATE ROLE` was denied and no role persisted. |
 | Docker hardening | PASS | Runtime UID 10001, read-only root, all capabilities dropped, `no-new-privileges`, 1 GiB/2 CPU/256 PID limits; only secrets mounted in game container. |
 | Network exposure | PASS (local only) | Host listener was `127.0.0.1:12483`; PostgreSQL had no published port; S2S was `127.0.0.1:4321` inside game container only. |
-| Designated QA PostgreSQL port 55438 / official QA runner | BLOCKED | The bounded direct read-only `psql` probe to `127.0.0.1:55438`, user `twclone_qa_runner`, exited 2 with `FATAL: password authentication failed for user "twclone_qa_runner"`. The runner produced no usable report. No database was created or modified, and the same failed connection was not retried. |
-| QA authentication diagnosis | BLOCKED (cause narrowed) | Preserved `/tmp/twclone-qa-psql.err` shows PostgreSQL responded on `127.0.0.1:55438` and rejected `twclone_qa_codex5`; the current mode-0600 `/home/rick/.pgpass` has no matching row for that role, while it has one redacted non-empty row for `twclone_qa_runner`. No `PGPASSWORD` or `PGPASSFILE` override is present. A separately recorded `twclone_qa_runner` attempt was also rejected. This proves listener reachability and an authentication rejection, but the server-side reason for the runner rejection cannot be established without owner-side auth logs; no retry or credential change was made. |
+| Designated QA PostgreSQL port 55438 / official QA runner | BLOCKED | `pg_lsclusters` currently reports PostgreSQL 16 `twclone_qa` on port 55438 as down. No service was started and no connection retried. The last recorded runner rejection is preserved in the cluster log. |
+| QA authentication diagnosis | BLOCKED (credential mismatch) | `/var/log/postgresql/postgresql-16-twclone_qa.log` records at 2026-11-12 20:41:15 GMT: `FATAL: password authentication failed for user "twclone_qa_runner"`; detail says the connection matched `/etc/postgresql/16/twclone_qa/pg_hba.conf` line 125, `host all all 127.0.0.1/32 scram-sha-256`. Thus TCP reached PostgreSQL and matched an authentication rule; the failure was SCRAM credential validation, not a missing HBA allowance. The cluster is now down, so current effective rules cannot be queried through PostgreSQL. No password or database state was changed. |
 | Local BigBang credential cleanup | PASS | Inline passwords removed; both connection entries now specify `/home/rick/.pgpass`; file mode 0600. |
 | Previously exposed administrative credential rotation | BLOCKED | Configuration targets a non-Compose host whose production status is unconfirmed. No connection or rotation was attempted; owner confirmation/authorization is required. |
 | Corporation member asset transfers | PASS (focused prior runtime evidence) | `485fc0b5` contains the separate feature commit; focused JSON acceptance passed 31/31 against isolated PostgreSQL on 2026-11-12, including concurrent duplicate-transfer conservation. |
-| Daily turn reset | PASS (Docker scheduler, configured path) | On 2026-11-13 the actual engine scheduler ran twice against `twclonebetafinal` PostgreSQL 16.15. With `turnsperday=120`, five rows reset from 7 to 120; after lowering them to 3, the next scheduled run again produced five 120 rows. Both `last_run_at` values advanced; zero mismatches and zero NULL rows; no reset error occurred. The earlier failure is preserved in the engine log as SQLSTATE `23502` because Docker BigBang omitted `turnsperday`. Source now binds the validated turn argument and uses the server's 120 default; sanitizer build, three focused contract tests and `docker build -t twclone-beta:resetcheck .` passed. The new fallback itself was not exercised by the pre-existing container binary. |
+| Daily turn reset, configured value | PASS (Docker scheduler) | On 2026-11-13 the actual engine scheduler ran twice against `twclonebetafinal` PostgreSQL 16.15. With `turnsperday=120`, five rows reset from 7 and then 3 to 120; both `last_run_at` values advanced, with zero mismatches/NULLs and no reset SQL error. |
+| Daily turn reset, missing-config fallback | PASS (rebuilt Docker runtime) | Image `twclone-beta:resetcheck` (image ID `sha256:51fae3247850df8e32b15f2c7422ac6adbe676ddcec84d00512e02d1537a292b`) ran as UID 10001 with a read-only root filesystem and no published ports on the internal QA network. On a disposable clone of the Docker QA database, `turnsperday` was deleted and all five `turns` rows set to 11; only `daily_turn_reset` was enabled and scheduled due. The server started, logged `Listening on 127.0.0.1:12484`, and PostgreSQL showed five rows at 120, zero `turnsperday` rows, and `last_run_at=2026-11-13 09:45:49+00`. The test container and clone database were removed afterward; the source QA database was not modified. |
+| Configured listener bind | PASS (rebuilt Docker runtime) | The same un-published test container honored `TWCLONE_LISTEN_ADDRESS=127.0.0.1` and `TWCLONE_LISTEN_PORT=12484`; startup log confirmed `Listening on 127.0.0.1:12484`. The remaining source diff is the matching function parameter declaration; review/build/runtime checks passed, but commit was blocked because `.git/index` is read-only in this session. |
 | Security commit | PASS | `d77d8e05` (`Harden V3 public beta deployment`). |
 
 Execution evidence (separate stdout/stderr and exit files) is retained for
@@ -174,7 +176,9 @@ the documented production limits, not the test overrides.
 
 The QA credentials/artifacts must be kept distinct: the successful TLS and
 runtime-role evidence is from the project-owned, disposable Docker database;
-the designated port-55438 QA login is an independent blocked check. Host socket
+the designated port-55438 QA login is an independent blocked check. Read-only
+inspection found the host `twclone_qa` cluster stopped; its retained log shows
+SCRAM password validation failure for the prior runner attempt. Host socket
 inspection also showed PostgreSQL listeners on `100.70.35.84:5432`,
 `192.168.25.5:5432`, and `127.0.0.1:5432`. No connection was attempted to any
 of them. They are outside this Compose project and their ownership, firewall
@@ -195,16 +199,13 @@ Inline passwords have now been removed from that local configuration. No
 remote database or credential was accessed or modified; rotation remains
 pending target confirmation and owner authorization.
 
-The reset failure is now reproduced and its cause established. The actual
-engine log records SQLSTATE `23502` at 2026-11-12 20:47:39 and again at
-2026-11-13 03:00:02: a missing `turnsperday` config lookup attempted to write
-NULL into `turns.turns_remaining`. `docker/bigbang.beta.json` did not seed that
-value. The fix adds the documented 120-turn default to the Docker BigBang
-config, makes the handler use the server's 120 fallback, and makes the
-repository bind the validated value instead of re-querying config. The current
-Docker DB was manually given `turnsperday=120` for the actual scheduler tests;
-the new missing-config fallback is compile- and contract-test-verified, not yet
-exercised by a newly rebuilt container.
+The reset failure was reproduced from retained engine logs as SQLSTATE `23502`
+because a missing `turnsperday` lookup supplied NULL to the turn update. The
+handler now uses the documented 120 fallback and the repository binds that
+validated value. Beyond static tests and configured-value scheduler runs, the
+rebuilt image was exercised against an isolated disposable clone with the
+config row absent; five players were reset from 11 to 120 and the cron
+`last_run_at` advanced. The clone and test container were cleaned up.
 
 ### Host administrator read-only inspection commands
 
@@ -247,14 +248,13 @@ deployment verifies clean migration, TLS player authentication, game startup,
 container hardening, loopback-only published player port, private DB topology,
 and least-privilege application DB identity. The six transport probes and three
 SysOp denial checks also passed on the actual local V3 server. Nonetheless, the
-previously exposed admin credential requires owner-authorized rotation; the
-designated QA runner cannot authenticate; host PostgreSQL listeners on port
-5432 have unverified ownership/exposure; and there is no preserved complete QA
-report; native runtime credentials remain unverified; and host PostgreSQL
-listeners on non-loopback addresses have unverified ownership/exposure. The
-daily reset workflow passed on the configured local Docker QA database, but a
-freshly rebuilt image has not yet exercised the new missing-config fallback.
-Do not expose this stack publicly.
+designated QA cluster is currently stopped and its retained log shows the
+runner password rejected under SCRAM; host PostgreSQL listeners on port 5432
+have unverified ownership/exposure; no complete report exists from the
+designated QA runner; native runtime credentials remain unverified; and the
+previously exposed administrative credential still requires owner-authorized
+rotation. The rebuilt image's missing-config daily-reset path has now passed on
+a disposable Docker database clone. Do not expose this stack publicly.
 
 Before reconsidering even a restricted beta:
 
@@ -262,13 +262,11 @@ Before reconsidering even a restricted beta:
    authorize its owner to rotate the previously exposed administrative
    credential; keep it out of runtime access. Rotate the app credential if it
    is valid or reused.
-2. Restore valid designated-QA credentials and rerun the QA-backed suite with
-   a preserved report.
-3. Rebuild and freshly provision the local Compose stack with the new
-   `turnsperday` default, then verify the missing-config path against that
-   rebuilt runtime; the current scheduler test used an explicitly seeded value.
-4. Establish ownership and firewall exposure for host PostgreSQL listeners
+2. Have the host administrator restore the designated QA cluster and reconcile
+   the `twclone_qa_runner` SCRAM credential with the protected client
+   credential; then rerun the QA-backed suite with a preserved report.
+3. Establish ownership and firewall exposure for host PostgreSQL listeners
    without connecting to or modifying production services; keep public network
    exposure disabled until separately authorized.
-5. Complete migration, gameplay regression, backup/restore, monitoring and
+4. Complete migration, gameplay regression, backup/restore, monitoring and
    incident-response review before any broader release.

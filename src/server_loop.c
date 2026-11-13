@@ -1202,7 +1202,7 @@ set_reuseaddr (int fd)
 }
 
 static int
-make_listen_socket (uint16_t port)
+make_listen_socket (uint16_t port, const char *bind_address)
 {
   int fd = socket (AF_INET, SOCK_STREAM, 0);
   if (fd < 0)
