@@ -27,11 +27,11 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Prepare a remote port",
+      "name": "Rig: Move StarDock away from the local test port",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ports SET sector_id = 2 WHERE port_id = 2;"
+        "sql": "UPDATE ports SET sector_id = (SELECT s.sector_id FROM sectors s WHERE NOT EXISTS (SELECT 1 FROM ports occupied WHERE occupied.sector_id = s.sector_id) ORDER BY s.sector_id DESC LIMIT 1) WHERE port_id = 9;"
       },
       "expect": { "status": "ok" }
     },
@@ -41,6 +41,15 @@
       "user": "admin",
       "data": {
         "sql": "UPDATE ports SET sector_id = 1 WHERE port_id = 1;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Put the remote test port in sector two",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET sector_id = 2 WHERE port_id = 2;"
       },
       "expect": { "status": "ok" }
     },

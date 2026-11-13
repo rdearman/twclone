@@ -53,17 +53,25 @@ The instance runner accepts `--keep-artifacts` when logs and its temporary
 bootstrap configuration need to be retained for diagnosis. Configure the
 PostgreSQL administrator connection with `TWCLONE_TEST_PG_ADMIN` when the
 default `bin/bigbang.json` connection is not appropriate.
+When PostgreSQL is in a loopback-published Docker container, PostgreSQL reports
+its bridge-side `inet_server_addr()` rather than the host loopback address.
+The runner still requires the host connection to be loopback-bound and the
+server-reported port, QA role, and QA database marker to match. In that case,
+pass `--expected-pg-server-address` with the exact address obtained from the
+disposable container; the default remains loopback-only.
 
 The JSON runner then:
-1. Discovers every direct `suite_*.json` suite.
+1. Discovers `suite_*.json` and `test_*.json` acceptance files only; generated
+   reports, coverage data and manifests are not mistaken for suites.
 2. Executes every suite compatible with `json_runner.py` in alphabetical order.
 3. Records per-case responses, failures, infrastructure blocks and unsupported
    suite definitions in the JSON report.
 
-The two intentionally non-direct JSON files are reported as unsupported:
-`suite_regression_full.json` is a historical manifest, while
-`suite_phase10_market_decay.json` uses a nested DSL not understood by the
-authoritative runner. Python, PostgreSQL and C tests are separate checks.
+`suite_regression_full.json` is metadata, not a suite. The legacy nested-step
+`suite_phase10_market_decay.json` is reported as skipped with its declared case
+count; it is not counted as executed or passed. A suite requiring TLS is
+skipped with an explicit reason if the active listener cannot complete a
+read-only TLS handshake. Python, PostgreSQL and C tests are separate checks.
 
 To rig a disposable database explicitly before running suites:
 

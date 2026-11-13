@@ -1,4 +1,6 @@
 {
+  "archive_status": "OBSOLETE_V2_NOT_EXECUTABLE",
+  "archive_reason": "Assumes arbitrary ALT commodity codes, legacy port command aliases, obsolete payload schemas, and legacy planet.deposit request fields. Current V3 replacements are suite_port_fixed_modes.json, suite_ship_cargo_dynamic.json, suite_trade_illegal.json, and the current planet contract suites.",
   "test_suite_name": "Commodities Data-Driven Catalogue (Phase 2)",
   "description": "Tests commodity eligibility rules are driven by DB (port_trade, planet_goods, commodities.illegal) rather than hardcoded lists",
   "tests": [

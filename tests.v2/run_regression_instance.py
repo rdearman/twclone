@@ -67,8 +67,64 @@ def direct_psql_path():
     return shutil.which("psql") or "psql"
 
 
+def selected_suites_require_tls(suites):
+    """TLS requires a dedicated server instance because this listener is TLS-only."""
+    if not suites:
+        return False
+    flags = []
+    for suite in suites:
+        path = Path(suite)
+        if not path.is_absolute():
+            path = ROOT / "tests.v2" / path
+        with open(path, encoding="utf-8") as source:
+            flags.append(bool(json.load(source).get("config", {}).get("tls")))
+    if any(flags) and not all(flags):
+        raise ValueError("TLS suites must run in a dedicated regression instance")
+    return bool(flags and flags[0])
+
+
+def configure_disposable_test_tls(artifact_dir, psql_path, app_conn, dbname, env):
+    """Create a local self-signed cert and enable TLS only in the disposable QA DB."""
+    certificate = artifact_dir / "tls_test_cert.pem"
+    private_key = artifact_dir / "tls_test_key.pem"
+    try:
+        generated = subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", str(private_key), "-out", str(certificate),
+            "-days", "1", "-subj", "/CN=localhost",
+        ], capture_output=True, text=True, timeout=15, check=False)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f"could not generate disposable TLS test certificate: {error}") from error
+    if generated.returncode != 0:
+        raise RuntimeError(
+            "could not generate disposable TLS test certificate "
+            f"(openssl exit {generated.returncode}): {(generated.stderr or '').strip()}"
+        )
+
+    # app_conn contains the placeholder, and dbname was generated in the
+    # isolated twclone_v3qa_* namespace after QA identity verification.
+    connection = app_conn.replace("%DB%", dbname, 1)
+    escaped_cert = str(certificate).replace("'", "''")
+    escaped_key = str(private_key).replace("'", "''")
+    sql = (
+        "INSERT INTO config (key,value,type) VALUES "
+        f"('tls_enabled','1','int'),('tls_cert_path','{escaped_cert}','string'),"
+        f"('tls_key_path','{escaped_key}','string') "
+        "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,type=EXCLUDED.type"
+    )
+    result = subprocess.run(
+        [psql_path, "-X", "-w", connection, "-v", "ON_ERROR_STOP=1", "-c", sql],
+        env=env, capture_output=True, text=True, timeout=10, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "could not enable TLS in disposable QA database "
+            f"(psql exit {result.returncode}): {(result.stderr or '').strip()}"
+        )
+
+
 def verify_qa_cluster(host, port, admin_conn, env, expected_user=QA_DEFAULT_PGUSER,
-                      psql_path=None):
+                      psql_path=None, expected_server_address=None):
     """Read-only check against the repository-documented QA cluster identity."""
     try:
         with socket.create_connection((host, int(port)), timeout=3):
@@ -119,8 +175,12 @@ def verify_qa_cluster(host, port, admin_conn, env, expected_user=QA_DEFAULT_PGUS
             "QA PostgreSQL identity query returned no parseable identity; "
             f"psql stdout={result.stdout!r}, stderr={result.stderr!r}"
         )
+    allowed_server_addresses = (
+        (expected_server_address,) if expected_server_address
+        else ("127.0.0.1", "::1")
+    )
     if (database != "postgres" or int(server_port) != int(port)
-            or server_address not in ("127.0.0.1", "::1")
+            or server_address not in allowed_server_addresses
             or user != expected_user or not marker_present):
         raise RuntimeError(
             "Refusing database operations: endpoint identity mismatch "
@@ -177,6 +237,10 @@ def main(argv=None):
     parser.add_argument("--pg-host", default=os.environ.get("QA_PGHOST", "127.0.0.1"))
     parser.add_argument("--pg-port", type=int, default=int(os.environ.get("QA_PGPORT", str(QA_DEFAULT_PGPORT))))
     parser.add_argument("--pg-user", default=os.environ.get("QA_PGUSER", QA_DEFAULT_PGUSER))
+    parser.add_argument(
+        "--expected-pg-server-address",
+        help="exact inet_server_addr reported by an explicitly isolated, loopback-published Docker QA PostgreSQL container; default accepts loopback only",
+    )
     parser.add_argument("--admin-conn", default=os.environ.get("TWCLONE_TEST_PG_ADMIN"))
     parser.add_argument("--template", default=str(ROOT / "bin" / "bigbang.json"))
     parser.add_argument("--sectors", type=int, default=int(os.environ.get("TWCLONE_REGRESSION_SECTORS", "500")))
@@ -248,8 +312,11 @@ def main(argv=None):
         print(f"REGRESSION DATABASE: {dbname}")
         print(f"REGRESSION ARTIFACTS: {artifact_dir}")
 
+        tls_test = selected_suites_require_tls(args.suite or [])
+
         verify_qa_cluster(args.pg_host, args.pg_port, admin_conn, env,
-                          expected_user=pg_user, psql_path=psql_path)
+                          expected_user=pg_user, psql_path=psql_path,
+                          expected_server_address=args.expected_pg_server_address)
         qa_identity_verified = True
         # rig_db invokes `psql` by name. Prefer the same versioned client used
         # for identity checks and cleanup, avoiding Debian's cluster wrapper.
@@ -279,6 +346,11 @@ def main(argv=None):
         if rig.returncode != 0:
             raise RuntimeError(f"fixture rigging failed with status {rig.returncode}")
 
+        if tls_test:
+            configure_disposable_test_tls(
+                artifact_dir, psql_path, qa_app_conn, dbname, env
+            )
+
         log = open(server_log, "w", encoding="utf-8")
         server = subprocess.Popen(
             [str(ROOT / "bin" / "server")], cwd=artifact_dir, env=env,
@@ -289,6 +361,8 @@ def main(argv=None):
         runner = [
             sys.executable, str(ROOT / "tests.v2" / "run_suites_all.py"),
             "--host", args.host, "--port", str(args.port),
+            "--client-idle-timeout-ms", str(max(25, int(
+                config.get("server_request_timeout_ms", 10000) * 0.75))),
             "--report", str(report_path),
             "--capture-responses", str(capture_path),
         ]

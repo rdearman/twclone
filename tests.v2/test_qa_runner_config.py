@@ -16,9 +16,70 @@ import json_runner
 import rig_db
 import run_suites_all
 import run_regression_instance
+from twclient import TWClient
 
 
 class RunnerConfigurationTests(unittest.TestCase):
+    def test_suite_discovery_excludes_generated_json_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("suite_smoke.json", "test_smoke.json",
+                         "regression_report.json", "REGRESSION_FAILURE_CLASSIFICATION.json",
+                         "protocol_coverage_report.json", "macros.json"):
+                Path(tmp, name).write_text("{}", encoding="utf-8")
+            self.assertEqual(
+                {Path(item).name for item in run_suites_all.discover_json_suites(tmp)},
+                {"suite_smoke.json", "test_smoke.json"},
+            )
+
+    def test_nested_suite_case_count_is_reported_without_counting_metadata(self):
+        nested = {
+            "suites": [
+                {"tests": [{"id": "a"}, {"id": "b"}]},
+                {"tests": [{"id": "c"}]},
+                {"tests": "not-a-list"},
+            ]
+        }
+        self.assertEqual(run_suites_all.nested_case_count(nested), 3)
+
+    def test_skipped_only_run_is_not_reported_as_success(self):
+        self.assertEqual(run_suites_all.regression_exit_code({
+            "summary": {"total_suites_executed": 0}
+        }, []), 2)
+
+    def test_executed_passing_suites_can_report_explicit_skips(self):
+        self.assertEqual(run_suites_all.regression_exit_code({
+            "summary": {"total_suites_executed": 2}
+        }, []), 0)
+
+    def test_macro_expansion_preserves_ordinary_cases(self):
+        runner = json_runner.JsonSuiteRunner("127.0.0.1", 1)
+        cases = [{"command": "player.info", "name": "ordinary case"}]
+        self.assertEqual(runner._expand_macros(cases), cases)
+
+    def test_twclient_detects_server_closed_idle_socket_before_reuse(self):
+        import socket
+        client_sock, server_sock = socket.socketpair()
+        try:
+            client = TWClient()
+            client.sock = client_sock
+            self.assertTrue(client.is_connected())
+            server_sock.close()
+            self.assertFalse(client.is_connected())
+        finally:
+            client_sock.close()
+
+    def test_twclient_reconnects_before_configured_idle_deadline(self):
+        import socket
+        client_sock, server_sock = socket.socketpair()
+        try:
+            client = TWClient()
+            client.sock = client_sock
+            client.last_activity -= 2
+            self.assertFalse(client.is_connected(max_idle_seconds=1))
+        finally:
+            client_sock.close()
+            server_sock.close()
+
     def test_failed_case_records_assertions_and_reason(self):
         runner = json_runner.JsonSuiteRunner("127.0.0.1", 1)
         runner.active_suite = "sample.json"
@@ -237,6 +298,31 @@ class RunnerConfigurationTests(unittest.TestCase):
                     expected_user="qa_custom", psql_path="/usr/bin/psql"
                 )
         self.assertEqual(identity[3], "qa_custom")
+
+    def test_qa_identity_check_requires_explicit_docker_bridge_address(self):
+        completed = subprocess.CompletedProcess(
+            ["psql"], 0,
+            '["postgres", "55440", "172.17.0.2", "twclone_qa_runner", true]\n', ""
+        )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=completed):
+                with self.assertRaisesRegex(RuntimeError, "identity mismatch"):
+                    run_regression_instance.verify_qa_cluster(
+                        "127.0.0.1", 55440, "dbname=postgres", {},
+                        psql_path="/usr/bin/psql"
+                    )
+        with patch.object(run_regression_instance.socket, "create_connection") as connect:
+            connect.return_value.__enter__.return_value = object()
+            with patch.object(run_regression_instance.subprocess, "run",
+                              return_value=completed):
+                identity = run_regression_instance.verify_qa_cluster(
+                    "127.0.0.1", 55440, "dbname=postgres", {},
+                    psql_path="/usr/bin/psql",
+                    expected_server_address="172.17.0.2",
+                )
+        self.assertEqual(identity[2], "172.17.0.2")
 
     def test_response_capture_redacts_session_tokens(self):
         response = {"data": {"session_token": "secret", "player_id": 7}}

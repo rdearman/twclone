@@ -8,14 +8,23 @@
       "password": "password"
     },
     {
-      "name": "Rig: Select a known outgoing autopilot route",
+      "name": "Rig: Select an existing route and place player at its origin",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT p.sector_id, sw.to_sector FROM players p JOIN sector_warps sw ON sw.from_sector = p.sector_id WHERE p.player_id = @{mover_autopilot_player_id} ORDER BY sw.to_sector LIMIT 1;"
+        "sql": "SELECT sw.from_sector, sw.to_sector FROM sector_warps sw ORDER BY sw.from_sector, sw.to_sector LIMIT 1;"
       },
       "expect": { "status": "ok" },
       "save": { "route_from": "data.rows.0.0", "route_to": "data.rows.0.1" }
+    },
+    {
+      "name": "Rig: Move player and active ship to the route origin",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH moved AS (UPDATE ships SET sector_id=@{route_from} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{mover_autopilot_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{route_from} WHERE player_id=@{mover_autopilot_player_id};"
+      },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Positive: Start Autopilot",

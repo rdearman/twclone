@@ -43,15 +43,15 @@
     },
     {
       "name": "Test: Toll Collector Verified",
-      "command": "auth.mfa_verify",
-      "data": { "token": "000000" },
+      "command": "auth.mfa.totp.verify",
+      "data": { "code": "000000" },
       "user": "toll_collector",
       "expect": { "status": "refused" }
     },
     {
       "name": "Test: Victim Verified",
-      "command": "auth.mfa_verify",
-      "data": { "token": "000000" },
+      "command": "auth.mfa.totp.verify",
+      "data": { "code": "000000" },
       "user": "toll_victim",
       "expect": { "status": "refused" }
     }

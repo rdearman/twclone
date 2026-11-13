@@ -3,6 +3,7 @@ import argparse
 import glob
 import json
 import os
+import ssl
 import socket
 import subprocess
 import sys
@@ -16,17 +17,13 @@ HOST = "localhost"
 PORT = 1234
 
 def discover_json_suites(base_dir):
+    candidates = set(glob.glob(os.path.join(base_dir, "suite_*.json")))
+    candidates.update(glob.glob(os.path.join(base_dir, "test_*.json")))
     return sorted(
-        path for path in glob.glob(os.path.join(base_dir, "*.json"))
+        path for path in candidates
         if os.path.basename(path) not in {
-            "macros.json", "test_rig.json", "test_setup.json",
-            "suite_regression_full.json",
-            "regression_report.json",
-            "regression_previous.json",
-            "regression_failures.json",
-            "issue_490_ai_qa_scenarios.json",
-            "issue_490_plan01_case_matrix.json",
-            "issue_490_visibility_case_matrix.json",
+            "suite_regression_full.json",  # manifest, not a suite
+            "test_rig.json", "test_setup.json",
         }
     )
 
@@ -34,6 +31,28 @@ def discover_json_suites(base_dir):
 def load_suite(path):
     with open(path, encoding="utf-8") as source:
         return json.load(source)
+
+
+def tls_listener_available(host, port, timeout=2):
+    """Probe TLS without sending application data or changing server state."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as raw:
+            with context.wrap_socket(raw, server_hostname=host):
+                return True
+    except (OSError, ssl.SSLError):
+        return False
+
+
+def nested_case_count(data):
+    """Count cases in the documented legacy nested-suite shape for reports."""
+    return sum(
+        len(group.get("tests", []))
+        for group in data.get("suites", [])
+        if isinstance(group, dict) and isinstance(group.get("tests", []), list)
+    )
 
 
 def _case_statuses(report):
@@ -169,10 +188,21 @@ def server_listener_available(host, port):
         return False
 
 
+def regression_exit_code(report, failed):
+    """A skipped-only run is not a successful test execution."""
+    if failed:
+        return 1
+    if report.get("summary", {}).get("total_suites_executed", 0) == 0:
+        return 2
+    return 0
+
+
 def run_all():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.environ.get("TWCLONE_TEST_HOST", HOST))
     parser.add_argument("--port", type=int, default=int(os.environ.get("TWCLONE_TEST_PORT", PORT)))
+    parser.add_argument("--client-idle-timeout-ms", type=int, default=8000,
+                        help="Reconnect cached clients before the server's idle request deadline")
     parser.add_argument("--suite", action="append", help="Run only this suite; repeatable")
     parser.add_argument("--capture-responses")
     parser.add_argument("--report", default="tests.v2/regression_report.json")
@@ -216,6 +246,7 @@ def run_all():
         "port": args.port,
         "database_rigged": False,
         "suites": [],
+        "skipped": [],
         "unsupported": [],
         "blocked": [],
     }
@@ -247,25 +278,45 @@ def run_all():
         args.port,
         macros_path=os.path.join(base_dir, "macros.json"),
         capture_responses=args.capture_responses,
+        client_idle_timeout_ms=args.client_idle_timeout_ms,
     )
 
-    suites_to_run = []
-    for path in discover_json_suites(base_dir):
-        data = load_suite(path)
-        if not isinstance(data.get("tests"), list):
-            report["unsupported"].append({
-                "suite": path,
-                "reason": "nested suite DSL is not supported by json_runner.py",
-                "cases_declared": sum(
-                    len(group.get("tests", [])) for group in data.get("suites", [])
-                    if isinstance(group, dict)
-                ),
-            })
-            continue
-        suites_to_run.append(path)
+    candidate_suites = discover_json_suites(base_dir)
     if args.suite:
         requested = {os.path.abspath(os.path.join(os.getcwd(), item)) for item in args.suite}
-        suites_to_run = [path for path in suites_to_run if os.path.abspath(path) in requested]
+        candidate_suites = [path for path in candidate_suites
+                            if os.path.abspath(path) in requested]
+
+    suites_to_run = []
+    for path in candidate_suites:
+        data = load_suite(path)
+        if not isinstance(data.get("tests"), list):
+            report["skipped"].append({
+                "suite": path,
+                "reason": "legacy nested step DSL is not a direct JSON-RPC suite",
+                "cases_declared": nested_case_count(data),
+            })
+            continue
+        legacy_requests = any(
+            isinstance(test, dict)
+            and ("request" in test or "requests" in test)
+            and "command" not in test
+            for test in data.get("tests", [])
+        )
+        if data.get("config", {}).get("tls"):
+            tls_available = tls_listener_available(args.host, args.port)
+            if legacy_requests or not tls_available:
+                if not tls_available:
+                    reason = "suite requires TLS but the active test-server listener did not complete a TLS handshake"
+                else:
+                    reason = "TLS listener is available, but suite cases use the unnormalized legacy request/sequence DSL"
+                report["skipped"].append({
+                    "suite": path,
+                    "reason": reason,
+                    "cases_declared": len(data.get("tests", [])),
+                })
+                continue
+        suites_to_run.append(path)
 
     try:
         with socket.create_connection((args.host, args.port), timeout=2):
@@ -278,7 +329,7 @@ def run_all():
             "error": str(error),
         })
 
-    if not suites_to_run:
+    if not suites_to_run and not report["skipped"]:
         print("ERROR: No test suites found!")
         sys.exit(1)
 
@@ -370,7 +421,8 @@ def run_all():
         "total_cases_executed": sum(len(s.get("cases", [])) for s in report["suites"]),
         "passed": sum(1 for s in report["suites"] for c in s.get("cases", []) if c.get("status") == "passed"),
         "failed": sum(1 for s in report["suites"] for c in s.get("cases", []) if c.get("status") == "failed"),
-        "skipped": 0,
+        "skipped": sum(item.get("cases_declared", 0) for item in report["skipped"]),
+        "skipped_suites": len(report["skipped"]),
         "blocked": len(report["blocked"]) + sum(
             1 for suite in report["suites"] if suite.get("status") == "blocked"
         ),
@@ -397,10 +449,18 @@ def run_all():
         print(f"FAILURES: {len(failed)} suites failed.")
         for f in failed:
             print(f" - {f}")
-        sys.exit(1)
-    else:
-        print("ALL SUITES PASSED.")
-        sys.exit(0)
+        sys.exit(regression_exit_code(report, failed))
+
+    executed_suites = report["summary"]["total_suites_executed"]
+    if executed_suites == 0:
+        print("NO SUITES EXECUTED; requested suites were skipped or blocked.")
+        sys.exit(regression_exit_code(report, failed))
+
+    skipped_suites = report["summary"]["skipped_suites"]
+    skipped_cases = report["summary"]["skipped"]
+    print(f"ALL EXECUTED SUITES PASSED ({executed_suites}); "
+          f"{skipped_suites} suite(s) skipped ({skipped_cases} declared cases).")
+    sys.exit(regression_exit_code(report, failed))
 
 if __name__ == "__main__":
     run_all()

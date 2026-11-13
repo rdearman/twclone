@@ -25,7 +25,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'RANDOM' LIMIT 1;"
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id JOIN ports p ON p.sector_id = cs.sector_id WHERE c.role = 'RANDOM' ORDER BY cs.sector_id LIMIT 1;"
       },
       "expect": { "status": "ok" },
       "save": { "random_sector": "data.rows.0.0" }

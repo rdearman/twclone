@@ -29,10 +29,16 @@
       "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
     },
     {
-      "name": "Phase 3: Ferengi tick is idempotent",
-      "command": "sys.run_cron_handler",
-      "data": { "handler_name": "npc_step" },
+      "name": "Phase 3: Schedule an NPC engine tick through cron_tasks",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'npc_step';" },
       "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Phase 3 wait: Allow the real NPC engine tick to run",
+      "command": "delay",
+      "data": { "seconds": 65 },
       "expect": { "status": "ok" }
     },
     {
@@ -44,10 +50,16 @@
       "asserts": [{ "path": "data.rows.0.0", "op": ">", "value": 0 }]
     },
     {
-      "name": "Phase 4: Orion tick is idempotent",
-      "command": "sys.run_cron_handler",
-      "data": { "handler_name": "npc_step" },
+      "name": "Phase 4: Schedule the next NPC engine tick",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'npc_step';" },
       "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Phase 4 wait: Allow the real NPC engine tick to run",
+      "command": "delay",
+      "data": { "seconds": 65 },
       "expect": { "status": "ok" }
     },
     {

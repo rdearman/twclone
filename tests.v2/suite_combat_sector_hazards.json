@@ -324,6 +324,15 @@
       }
     },
     {
+      "name": "Rig: Seed fuel for the transwarp entry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 6 FROM players WHERE name='hazard_victim' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity=6;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Reinstall hostile entry assets for transwarp",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -486,7 +495,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id=679,hull=10,shields=0,fighters=0 WHERE ship_id=@{lethal_victim_ship_id};"
+        "sql": "WITH refueled AS (INSERT INTO ship_cargo (ship_id, commodity_code, quantity) VALUES (@{lethal_victim_ship_id}, 'ORE', 6) ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity=6 RETURNING ship_id) UPDATE ships SET hull=10,shields=0,fighters=0 WHERE ship_id=@{lethal_victim_ship_id};"
       },
       "expect": { "status": "ok" }
     },
@@ -495,7 +504,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO sector_assets (sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES (680,@{hazard_master_player_id},0,1,100,1,0);"
+        "sql": "INSERT INTO sector_assets (sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) VALUES (680,@{hazard_master_player_id},0,2,100,1,0);"
       },
       "expect": { "status": "ok" }
     },

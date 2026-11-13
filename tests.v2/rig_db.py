@@ -131,7 +131,8 @@ def main():
                 # omit the column so this fixture follows the schema default
                 # rather than forcing a boolean literal into a legacy numeric
                 # enabled column when running against an existing QA schema.
-                sql = f"INSERT INTO taverns (sector_id, name_id) VALUES ({p['sector_id']}, 3) ON CONFLICT (sector_id) DO NOTHING;"
+                tavern_sector = p.get("tavern_sector_id", p["sector_id"])
+                sql = f"INSERT INTO taverns (sector_id, name_id) VALUES ({tavern_sector}, 3) ON CONFLICT (sector_id) DO NOTHING;"
                 execute_sql(sql, **db_config)
 
     # 4. Users

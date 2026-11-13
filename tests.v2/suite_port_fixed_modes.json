@@ -11,11 +11,11 @@
       "password": "password"
     },
     {
-      "name": "Rig: Put class 1 port and player in sector two",
+      "name": "Rig: Keep class 1 port and player in sector three",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ports SET type = 1, sector_id = 2 WHERE port_id = 2"
+        "sql": "UPDATE ports SET type = 1, sector_id = 3 WHERE port_id = 2"
       },
       "expect": { "status": "ok" }
     },
@@ -51,7 +51,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "WITH moved AS (UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}) RETURNING ship_id) UPDATE players SET sector_id = 2 WHERE player_id = @{port_mode_player_player_id}"
+        "sql": "WITH moved AS (UPDATE ships SET sector_id = 3 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_mode_player_player_id}) RETURNING ship_id) UPDATE players SET sector_id = 3 WHERE player_id = @{port_mode_player_player_id}"
       },
       "expect": { "status": "ok" }
     },
@@ -89,7 +89,7 @@
       "data": { "username": "port_mode_player", "passwd": "password" },
       "expect": { "status": "ok", "type": "auth.login" },
       "asserts": [
-        { "path": "data.current_sector", "op": "==", "value": 2 }
+        { "path": "data.current_sector", "op": "==", "value": 3 }
       ]
     },
     {
@@ -115,7 +115,7 @@
       "command": "trade.sell",
       "user": "port_mode_player",
       "data": {
-        "sector_id": 2,
+        "sector_id": 3,
         "port_id": 2,
         "account": 0,
         "idempotency_key": "port-mode-zero-stock-*uuid*",
@@ -191,7 +191,7 @@
       "command": "trade.sell",
       "user": "port_mode_player",
       "data": {
-        "sector_id": 2,
+        "sector_id": 3,
         "port_id": 2,
         "account": 0,
         "idempotency_key": "port-mode-positive-stock-*uuid*",
@@ -232,7 +232,7 @@
       "command": "trade.buy",
       "user": "port_mode_player",
       "data": {
-        "sector_id": 2,
+        "sector_id": 3,
         "port_id": 2,
         "account": 0,
         "idempotency_key": "port-mode-buy-ore-*uuid*",

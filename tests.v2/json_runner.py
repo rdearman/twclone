@@ -14,10 +14,12 @@ from twclient import TWClient
 class JsonSuiteRunner:
     def __init__(self, host: str, port: int, timeout: int = 25, macros_path: str = "tests.v2/macros.json",
                  use_tls: bool = False, tls_skip_verify: bool = False,
-                 capture_responses: Optional[str] = None):
+                 capture_responses: Optional[str] = None,
+                 client_idle_timeout_ms: int = 8000):
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.client_idle_timeout_seconds = max(0.025, client_idle_timeout_ms / 1000.0)
         self.default_use_tls = use_tls
         self.default_tls_skip_verify = tls_skip_verify
         self.use_tls = use_tls
@@ -75,7 +77,7 @@ class JsonSuiteRunner:
         for test in tests:
             if "setup" in test:
                 macro_name = test["setup"]
-                if macro_name in self.macros:
+                if isinstance(macro_name, str) and macro_name in self.macros:
                     context = test.copy()
                     del context["setup"]
                     
@@ -99,6 +101,16 @@ class JsonSuiteRunner:
                             last_step["save"].update(test["save"])
                     
                     expanded_tests.extend(expanded_macro_steps)
+                elif macro_name == []:
+                    # Some historical transport suites used an empty setup
+                    # array to mean "no setup". Do not use that list as a
+                    # dictionary key (and do not silently treat its request
+                    # DSL as a passing command; run_suite validates that next).
+                    normalized = dict(test)
+                    normalized.pop("setup", None)
+                    expanded_tests.append(normalized)
+                else:
+                    expanded_tests.append(test)
             else:
                 expanded_tests.append(test)
         return expanded_tests
@@ -201,7 +213,9 @@ class JsonSuiteRunner:
 
     def _get_user_client(self, username: str) -> TWClient:
         client = self.user_clients.get(username)
-        if client is None or client.sock is None:
+        if client is None or not client.is_connected(self.client_idle_timeout_seconds):
+            if client is not None:
+                client.close()
             client = TWClient(self.host, self.port, timeout=self.timeout,
                             use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
             client.connect()
@@ -236,6 +250,10 @@ class JsonSuiteRunner:
                 pass
 
     def _get_admin_client(self) -> TWClient:
+        if (self._admin_client is not None
+                and not self._admin_client.is_connected(self.client_idle_timeout_seconds)):
+            self._admin_client.close()
+            self._admin_client = None
         if not self._admin_client:
             self._admin_client = TWClient(self.host, self.port, timeout=self.timeout,
                                         use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
@@ -266,6 +284,23 @@ class JsonSuiteRunner:
             return False
         with open(suite_path, "r") as f:
             data = json.load(f)
+
+        legacy_request_tests = [
+            test for test in data.get("tests", [])
+            if isinstance(test, dict)
+            and ("request" in test or "requests" in test)
+            and "command" not in test
+        ]
+        if legacy_request_tests:
+            self.last_suite_report = {
+                "suite": suite_path,
+                "status": "blocked",
+                "reason": "legacy request/sequence test DSL is not normalized to JSON-RPC cases",
+                "cases": [],
+                "total_cases": len(legacy_request_tests),
+            }
+            print("Suite requires legacy request DSL normalization")
+            return False
         
         # Transport configuration is scoped to this suite.  A TLS suite must
         # never leave subsequent plaintext suites using TLS (or vice versa).
@@ -391,7 +426,9 @@ class JsonSuiteRunner:
                     self._current_failure_reason = f"database fixture statement rejected: {response}"
                     return False
             print("PASS (database fixture)")
-            return True
+            # A fixture is setup for this case, not the case itself.  Continue
+            # so the command, response assertions and save mappings on the
+            # same test object are executed as authored.
         
         if "command" not in test:
             if "comment" in test:

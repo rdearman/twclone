@@ -1,0 +1,258 @@
+{
+  "baseline": {
+    "source_report": "regression_report.json.tmp",
+    "source_commit": "5820fa6f",
+    "status": "incomplete",
+    "executed": 2320,
+    "passed": 2217,
+    "failed": 103,
+    "blocked_suites": 1,
+    "unsupported_suites": 3,
+    "server_crashes": 0,
+    "notes": "Current case-level evidence is preserved in /tmp/twclone-v3-regression-23ss4kpl/responses.jsonl and /tmp/twclone-v3-canonical-20261113c.stdout. Root-cause groups are not additive to the failed-case count."
+  },
+  "latest_targeted_verification": {
+    "tested_commit": "5820fa6f",
+    "environment": "Fresh disposable PostgreSQL 16 container, loopback-published on host port 55440; real server on 127.0.0.1:12484. Read-only identity check confirmed database postgres, role twclone_qa_runner, port 55440, QA marker database present and expected bridge-side address.",
+    "command": "python3 tests.v2/run_regression_instance.py --pg-host 127.0.0.1 --pg-port 55440 --pg-user twclone_qa_runner --expected-pg-server-address 172.17.0.2 --port 12484 --s2s-port 43219 --sectors 500 --suite suite_combat_sector_hazards.json --suite suite_information_fog.json --suite suite_movement_move_autopilot_start.json --suite suite_police_phase_b_incidents.json --suite suite_police_phase_d1_enforcement.json --suite suite_port_fixed_modes.json",
+    "exit_code": 0,
+    "suites_executed": 6,
+    "cases_executed": 205,
+    "passed": 205,
+    "failed": 0,
+    "blocked": 0,
+    "unsupported": 0,
+    "report": "/tmp/twclone-v3-targeted-combined-nCyIyv/report.json",
+    "stdout": "/tmp/twclone-v3-targeted-combined-nCyIyv/stdout.log",
+    "stderr": "/tmp/twclone-v3-targeted-combined-nCyIyv/stderr.log",
+    "note": "Targeted verification only; historical full-regression baseline remains unchanged. The generated BigBang configuration containing disposable test credentials was removed after execution."
+  },
+  "connection_closure_reproduction": {
+    "tested_commit": "5820fa6f",
+    "command": "Same isolated run_regression_instance.py invocation, selecting only the six suites listed in RUNNER-OR-SERVER-CONNECTION-CLOSURES.",
+    "exit_code": 1,
+    "suites_executed": 6,
+    "cases_executed": 148,
+    "passed": 136,
+    "failed": 12,
+    "blocked": 0,
+    "unsupported": 0,
+    "report": "/tmp/twclone-v3-closures-ht2cT1/report.json",
+    "stdout": "/tmp/twclone-v3-closures-ht2cT1/stdout.log",
+    "server_log": "/tmp/twclone-v3-regression-ot624518/server.log",
+    "root_cause": "All 12 failures are the first request after a suite's 65- or 90-second delay. The server default idle request deadline is 10000 ms (src/server_config.c); the JSON runner retained cached admin and player sockets across delay commands. The server closes idle sockets after the deadline; the next send then observes EOF. Subsequent operations reconnect and pass. No server process crash was observed.",
+    "verification_status": "ROOT_CAUSE_CONFIRMED; RUNNER_FIX_ADDED; ONE_AFFECTED_SUITE_RUNTIME_VERIFIED_AFTER_FIX"
+  },
+  "stale_socket_fix_verification": {
+    "tested_commit": "5820fa6f (working tree)",
+    "command": "python3 tests.v2/run_regression_instance.py --pg-host 127.0.0.1 --pg-port 55440 --pg-user twclone_qa_runner --expected-pg-server-address 172.17.0.2 --port 12484 --s2s-port 43219 --sectors 500 --suite suite_black_market_hardware.json",
+    "exit_code": 0,
+    "suites_executed": 1,
+    "cases_executed": 29,
+    "passed": 29,
+    "failed": 0,
+    "blocked": 0,
+    "unsupported": 0,
+    "report": "/tmp/twclone-v3-stale-socket-fixed-umPdHy/report.json",
+    "stdout": "/tmp/twclone-v3-stale-socket-fixed-umPdHy/stdout.log",
+    "stderr": "/tmp/twclone-v3-stale-socket-fixed-umPdHy/stderr.log",
+    "note": "The suite includes a 65-second idle delay; formerly failing admin SQL query and player hardware purchase both passed after reconnecting cached clients before the server's idle deadline."
+  },
+  "postfix_connection_closure_verification": {
+    "tested_commit": "5820fa6f (working tree)",
+    "environment": "Disposable PostgreSQL 16 container, host-published only at 127.0.0.1:55440; server identity check returned QA role twclone_qa_runner, PostgreSQL port 55440, QA marker present, server bridge address 172.17.0.2; actual V3 server listened on 127.0.0.1:12484 with S2S on 43219.",
+    "command": "python3 tests.v2/run_regression_instance.py --pg-host 127.0.0.1 --pg-port 55440 --pg-user twclone_qa_runner --expected-pg-server-address 172.17.0.2 --port 12484 --s2s-port 43219 --suite suite_market_shocks_e2e.json --suite suite_planet_market_buy_order_lifecycle.json --suite suite_planet_taxable_activity_e2e.json --suite suite_planet_taxation_e2e.json --suite suite_v3_xp_persistence.json",
+    "exit_code": 0,
+    "suites_executed": 5,
+    "cases_executed": 119,
+    "passed": 119,
+    "failed": 0,
+    "blocked": 0,
+    "unsupported": 0,
+    "skipped": 0,
+    "historical_connection_failures_retested": ["suite_market_shocks_e2e.json::case-0011", "suite_planet_market_buy_order_lifecycle.json::case-0026", "suite_planet_taxable_activity_e2e.json::case-0032", "suite_planet_taxable_activity_e2e.json::case-0035", "suite_planet_taxation_e2e.json::case-0012", "suite_planet_taxation_e2e.json::case-0016", "suite_planet_taxation_e2e.json::case-0027", "suite_v3_xp_persistence.json::case-0006", "suite_v3_xp_persistence.json::case-0009", "suite_v3_xp_persistence.json::case-0013"],
+    "report": "/tmp/twclone-focused-closures-20261113-report.json",
+    "responses": "/tmp/twclone-focused-closures-20261113-responses.jsonl",
+    "stdout": "/tmp/twclone-focused-closures-20261113.stdout",
+    "stderr": "/tmp/twclone-focused-closures-20261113.stderr",
+    "server_log": "/tmp/twclone-v3-regression-zioxfagp/server.log",
+    "note": "All ten remaining historical post-delay closure cases passed. Also ran test_json_runner_db_setup and test_qa_runner_config: 27/27 passed, including a unit assertion that bank.transfer is sent only once after an ambiguous disconnect."
+  },
+  "targeted_protocol_and_scheduler_verification": {
+    "tested_commit": "5820fa6f (working tree)",
+    "environment": "Disposable PostgreSQL 16 cluster on 127.0.0.1:55440 with real V3 server; no production database accessed.",
+    "results": [
+      {"scope": "V3 port/cargo/trade replacements", "suites": 3, "executed": 78, "passed": 78, "failed": 0, "skipped": 0, "report": "/tmp/twclone-v3-port-replacements-20261113-report.json"},
+      {"scope": "MFA alias correction", "suites": 1, "executed": 7, "passed": 7, "failed": 0, "skipped": 0, "report": "/tmp/twclone-mfa-alias-20261113-report.json"},
+      {"scope": "TLS smoke", "suites": 1, "executed": 4, "passed": 4, "failed": 0, "skipped": 0, "report": "/tmp/twclone-tls-smoke-20261113-report.json"},
+      {"scope": "Real cron scheduler replacement", "suites": 2, "executed": 55, "passed": 54, "failed": 1, "skipped": 0, "report": "/tmp/twclone-cron-hooks-20261113-report.json"},
+      {"scope": "Converted Phase 10 market decay", "suites": 1, "executed": 15, "passed": 12, "failed": 3, "skipped": 0, "report": "/tmp/twclone-phase10-market-decay-20261113c-report.json"}
+    ],
+    "known_failures": [
+      {"case": "suite_fedspace_msl_asset_enforcement.json::case-0034", "evidence": "The real MSL scheduler ran, but sectors.beacon remained 'MSL Test Beacon'; the assertion expects cleanup. This is left as a gameplay failure, not hidden by fixture changes."},
+      {"case": "suite_phase10_market_decay.json::case-0009", "evidence": "Expected cluster ORE pressure/volume 4900/490 after decay; observed 5000/500."},
+      {"case": "suite_phase10_market_decay.json::case-0010", "evidence": "Expected cluster ORG pressure clamp 50000; observed 1000000."},
+      {"case": "suite_phase10_market_decay.json::case-0011", "evidence": "Expected negative cluster EQU pressure to decay to -4900; observed -5000."}
+    ],
+    "disposition": "Targeted repairs are not fully green. Do not start canonical full regression until the three cluster-pressure failures and MSL beacon case are investigated. No skipped case is counted as passed."
+  },
+  "defects": [
+    {
+      "defect_id": "FIXTURE-PORT-SECTOR-UNIQUENESS",
+      "category": "FIXTURE_DEFECT",
+      "affected_suites": ["suite_information_fog.json", "suite_port_fixed_modes.json"],
+      "affected_cases": ["suite_information_fog.json::case-0007", "suite_information_fog.json::case-0008", "suite_port_fixed_modes.json::case-0005"],
+      "root_cause": "Fixtures move active ports into sectors already occupied by another active port, contradicting the V3 one-active-StarPort-per-sector invariant.",
+      "evidence": "Preserved run returned PostgreSQL unique-index idx_ports_loc violations for sectors 1 and 2. Canonical migration: sql/pg/181_active_starport_sector_uniqueness.sql. Fixture definitions: tests.v2/suite_information_fog.json and suite_port_fixed_modes.json.",
+      "fix_commit": null,
+      "verification_status": "VERIFIED_3_CASES_IN_SIX_SUITE_205_CASE_RUN"
+    },
+    {
+      "defect_id": "FIXTURE-POLICE-PREPARED-MULTI-STATEMENT",
+      "category": "FIXTURE_DEFECT",
+      "affected_suites": ["suite_police_phase_d1_enforcement.json"],
+      "affected_cases": ["suite_police_phase_d1_enforcement.json::case-0010"],
+      "root_cause": "A single prepared sys.raw_sql_exec request contains an INSERT followed by SELECT pg_sleep, which PostgreSQL rejects as multiple commands in one prepared statement.",
+      "evidence": "The preserved response reports 'cannot insert multiple commands into a prepared statement'; the delay has no gameplay purpose and was removed while preserving the INSERT.",
+      "fix_commit": null,
+      "verification_status": "VERIFIED_D1_29_CASES_IN_SIX_SUITE_205_CASE_RUN"
+    },
+    {
+      "defect_id": "FIXTURE-POLICE-C-API-AS-SQL",
+      "category": "FIXTURE_DEFECT",
+      "affected_suites": ["suite_police_phase_d1_enforcement.json"],
+      "affected_cases": ["suite_police_phase_d1_enforcement.json::case-0011", "suite_police_phase_d1_enforcement.json::case-0013", "suite_police_phase_d1_enforcement.json::case-0015", "suite_police_phase_d1_enforcement.json::case-0022", "suite_police_phase_d1_enforcement.json::case-0025"],
+      "root_cause": "The suite invokes repo_clusters_record_crime, a C repository function, as though it were a PostgreSQL SQL function. No SQL function with that name exists.",
+      "evidence": "Five preserved PostgreSQL errors report no matching repo_clusters_record_crime(integer, integer, integer, integer). The fixture now seeds/query-checks incident state directly; real crime-event behavior remains covered through player commands in the Phase B suite and requires focused confirmation.",
+      "fix_commit": null,
+      "verification_status": "FIXTURE_SQL_REMOVED_AND_D1_VERIFIED_29_CASES; PRODUCTION_CRIME_EVENT_PATH_REQUIRES_SEPARATE_ASSERTION"
+    },
+    {
+      "defect_id": "FIXTURE-ACTIVE-SHIP-SECTOR-MISMATCH",
+      "category": "FIXTURE_DEFECT",
+      "affected_suites": ["suite_combat_sector_hazards.json"],
+      "affected_cases": ["suite_combat_sector_hazards.json::case-0042"],
+      "root_cause": "The fixture moves the active ship to sector 679 without moving its owning player's sector, violating the database active-ship-sector invariant.",
+      "evidence": "Preserved PostgreSQL error is SHIP_ACTIVE_SECTOR_MISMATCH. The setup now updates ship and player together and checks respawn at the actual origin sector 679.",
+      "fix_commit": null,
+      "verification_status": "VERIFIED_HAZARD_SUITE_IN_SIX_SUITE_205_CASE_RUN"
+    },
+    {
+      "defect_id": "LEGACY-ALT-PORT-COMMODITY",
+      "category": "OBSOLETE_V2_TEST",
+      "affected_suites": ["legacy_v2_commodities_data_driven_phase2.json", "legacy_v2_phase3_port_dynamic_trading.json"],
+      "affected_cases": ["suite_commodities_data_driven_phase2.json::case-0009", "suite_phase3_port_dynamic_trading.json::case-0008", "suite_phase3_port_dynamic_trading.json::case-0012"],
+      "root_cause": "Legacy tests assume arbitrary commodity codes can be attached to port_trade, while the V3 port protocol and canonical PostgreSQL schema constrain StarPort commodities to ORE, ORG, EQU, SLV, WPN and DRG.",
+      "evidence": "Preserved SQL errors name port_trade_commodity_check and reject ALT. The allowlist is sql/pg/000_tables.sql and the V3 commodity list is docs/PROTOCOL.v3/19_Ship_Commands.md; no production schema or gameplay change is authorized by this repair task.",
+      "fix_commit": null,
+      "disposition": "Archive the V2 arbitrary-commodity assertions; do not insert ALT into canonical commodities, port_trade, or entity_stock.",
+    "verification_status": "LEGACY_V2_CASES_ARCHIVED_NOT_COUNTED_AS_PASSES; NO_UNSUPPORTED_COMMODITY_ADDED; V3_REPLACEMENTS_78_OF_78_RUNTIME_PASS"
+    },
+    {
+      "defect_id": "FIXTURE-POLICE-PORT-SELECTION",
+      "category": "FIXTURE_DEFECT",
+      "affected_suites": ["suite_police_phase_b_incidents.json"],
+      "affected_cases": ["suite_police_phase_b_incidents.json::case-0015", "suite_police_phase_b_incidents.json::case-0018", "suite_police_phase_b_incidents.json::case-0020"],
+      "root_cause": "The fixture independently chooses a RANDOM-cluster sector and then looks for a port in that sector, so the selected sector can have no port and the saved port ID is null.",
+      "evidence": "Preserved SQL result for the selected sector was 172; the subsequent port query returned no rows. The selection query now joins ports before choosing the sector.",
+      "fix_commit": null,
+      "verification_status": "VERIFIED_PHASE_B_SUITE_IN_SIX_SUITE_205_CASE_RUN"
+    },
+    {
+      "defect_id": "FIXTURE-AUTOPILOT-EMPTY-ROUTE",
+      "category": "FIXTURE_DEFECT",
+      "affected_suites": ["suite_movement_move_autopilot_start.json"],
+      "affected_cases": ["suite_movement_move_autopilot_start.json::case-0006"],
+      "root_cause": "The newly created test player may start in a sector with no outgoing warp, leaving route_from and route_to unset before the request.",
+      "evidence": "Preserved SQL response returned an empty row set and the request then failed schema validation because from_sector_id was not an integer. The fixture now selects an existing warp and moves the player and active ship to its origin.",
+      "fix_commit": null,
+      "verification_status": "VERIFIED_AUTOPILOT_SUITE_IN_SIX_SUITE_205_CASE_RUN"
+    },
+    {
+      "defect_id": "RUNNER-DB-SETUP-RETURNS-EARLY",
+      "category": "INFRASTRUCTURE",
+      "affected_suites": ["suite_commodities_data_driven_phase2.json"],
+      "affected_cases": ["suite_commodities_data_driven_phase2.json::case-0015", "suite_commodities_data_driven_phase2.json::case-0016"],
+      "root_cause": "json_runner.py treats db_setup as a complete test and returns before executing the same test's command and save operations, leaving the planet ID variable unset.",
+      "evidence": "In tests.v2/json_runner.py::_run_test_impl, successful db_setup returns True before command execution and save handling. The planet.deposit requests consequently contain an unresolved planet_id.",
+      "fix_commit": null,
+      "verification_status": "UNIT_TESTED_IN_26_TESTS; AFFECTED_PHASE2_CASES_NOT_INCLUDED_IN_TARGETED_RUNTIME_BATCH"
+    },
+    {
+      "defect_id": "RUNNER-TLS-LEGACY-DSL",
+      "category": "INFRASTRUCTURE",
+      "affected_suites": ["suite_tls_smoke.json"],
+      "affected_cases": [],
+      "root_cause": "The suite requires TLS while the ordinary regression listener is plaintext and its cases use legacy request/requests DSL. The runner now reports a skip instead of a false pass or unhandled exception.",
+      "evidence": "TLS run /tmp/twclone-tls-smoke-20261113-report.json executed 4, passed 4, failed 0, skipped 0 on the disposable PostgreSQL and real TLS-enabled V3 server.",
+      "fix_commit": null,
+      "disposition": "Converted to current V3 JSON-RPC cases; temporary self-signed TLS is enabled only in the disposable QA database for this dedicated suite.",
+      "verification_status": "RUNTIME_VERIFIED_4_OF_4"
+    },
+    {
+      "defect_id": "RUNNER-SUITE-DISCOVERY-AND-NESTED-DSL",
+      "category": "INFRASTRUCTURE",
+      "affected_suites": ["REGRESSION_FAILURE_CLASSIFICATION.json", "protocol_coverage_report.json", "suite_phase10_market_decay.json", "suite_regression_full.json"],
+      "affected_cases": [],
+      "root_cause": "The runner had no executable JSON-RPC representation for the legacy Phase 10 step-DSL test. Two other reported entries are generated inventory artifacts, not test suites.",
+      "evidence": "The prior full report listed REGRESSION_FAILURE_CLASSIFICATION.json and protocol_coverage_report.json with zero declared cases, plus suite_phase10_market_decay.json with six nested cases. Phase 10 is now converted to 15 direct JSON-RPC cases and ran against the real server; see targeted_protocol_and_scheduler_verification. The two report artifacts remain non-executable, zero-case entries and are never counted as passes.",
+      "fix_commit": null,
+      "disposition": "Do not count generated reports as tests. Execute Phase 10 through supported direct JSON-RPC cases; no skipped or unsupported case counts as passed.",
+      "verification_status": "TWO_ZERO_CASE_REPORT_ARTIFACTS_NOT_TESTS; PHASE10_CONVERTED_AND_EXECUTED_15_CASES; 12_PASS_3_FAIL_ZERO_SKIPPED; THREE_CLUSTER_PRESSURE_ASSERTIONS_REMAIN"
+    },
+    {
+      "defect_id": "RUNNER-OR-SERVER-CONNECTION-CLOSURES",
+      "category": "INFRASTRUCTURE",
+      "affected_suites": ["suite_black_market_hardware.json", "suite_market_shocks_e2e.json", "suite_planet_market_buy_order_lifecycle.json", "suite_planet_taxable_activity_e2e.json", "suite_planet_taxation_e2e.json", "suite_v3_xp_persistence.json"],
+      "affected_cases": ["suite_black_market_hardware.json::case-0026", "suite_black_market_hardware.json::case-0027", "suite_market_shocks_e2e.json::case-0011", "suite_planet_market_buy_order_lifecycle.json::case-0026", "suite_planet_taxable_activity_e2e.json::case-0032", "suite_planet_taxable_activity_e2e.json::case-0035", "suite_planet_taxation_e2e.json::case-0012", "suite_planet_taxation_e2e.json::case-0016", "suite_planet_taxation_e2e.json::case-0027", "suite_v3_xp_persistence.json::case-0006", "suite_v3_xp_persistence.json::case-0009", "suite_v3_xp_persistence.json::case-0013"],
+      "root_cause": "The runner retained admin and player sockets past the server's 10000 ms idle request deadline. All historical failures followed 65- or 90-second suite delays; next operation used a stale socket. Runner now reconnects cached clients proactively at 75% of the configured server idle deadline and reauthenticates them.",
+      "evidence": "All 12 reproduced in the six-suite run: /tmp/twclone-v3-closures-ht2cT1/report.json. Server default: src/server_config.c:71. Post-fix runtime: /tmp/twclone-v3-stale-socket-fixed-umPdHy/report.json (29/29) plus /tmp/twclone-focused-closures-20261113-report.json (119/119). All 12 affected closure cases now pass. A unit test also verifies a non-idempotent bank.transfer is sent once and not replayed after an ambiguous disconnect.",
+      "fix_commit": null,
+      "verification_status": "VERIFIED_ALL_12_OF_12_POSTFIX"
+    },
+    {
+      "defect_id": "PROTOCOL-LEGACY-PORT-COMMAND-ALIASES",
+      "category": "PROTOCOL_SCHEMA_MISMATCH",
+      "affected_suites": ["legacy_v2_commodities_data_driven_phase2.json", "legacy_v2_phase3_port_dynamic_trading.json"],
+      "affected_cases": ["suite_commodities_data_driven_phase2.json::case-0010", "suite_commodities_data_driven_phase2.json::case-0011", "suite_commodities_data_driven_phase2.json::case-0012", "suite_commodities_data_driven_phase2.json::case-0018", "suite_phase3_port_dynamic_trading.json::case-0006", "suite_phase3_port_dynamic_trading.json::case-0007", "suite_phase3_port_dynamic_trading.json::case-0010", "suite_phase3_port_dynamic_trading.json::case-0013", "suite_phase3_port_dynamic_trading.json::case-0015", "suite_phase3_port_dynamic_trading.json::case-0016", "suite_phase3_port_dynamic_trading.json::case-0017"],
+      "root_cause": "Tests use port.get_trade_info, port.trade.buy and port.trade.sell. V3 registry names are port.info/trade.port_info and trade.buy/trade.sell. Some Phase 3 ALT cases also have a separate V3 commodity-schema conflict recorded above.",
+      "evidence": "Preserved responses contain 11 UNKNOWN_COMMAND errors. src/server_loop.c registers port.info, trade.port_info, trade.buy and trade.sell, not these aliases. The archived suites also contain invalid ALT assumptions, undefined port fixture variables and pre-V3 request fields. Replacement coverage is exercised by current port/cargo/trade suites.",
+      "disposition": "Archive the two obsolete V2 suites. V3 trade coverage remains in suite_port_fixed_modes.json, suite_ship_cargo_dynamic.json and suite_trade_illegal.json; do not add server aliases.",
+      "fix_commit": null,
+      "verification_status": "11_LEGACY_REQUESTS_ARCHIVED_NOT_PASSED; V3_REPLACEMENTS_78_OF_78_RUNTIME_PASS"
+    },
+    {
+      "defect_id": "PROTOCOL-LEGACY-MFA-ALIAS",
+      "category": "PROTOCOL_SCHEMA_MISMATCH",
+      "affected_suites": ["suite_combat_toll_final_working.json"],
+      "affected_cases": ["suite_combat_toll_final_working.json::case-0006", "suite_combat_toll_final_working.json::case-0007"],
+      "root_cause": "Tests request auth.mfa_verify; current registered TOTP API is auth.mfa.totp.verify.",
+      "evidence": "src/server_loop.c registers auth.mfa.totp.verify with required code field; the handler returns REFUSED because MFA is disabled. Corrected suite /tmp/twclone-mfa-alias-20261113-report.json passed 7/7, including both refusal checks.",
+      "disposition": "RENAME_TO_AUTH_MFA_TOTP_VERIFY_AND_CHANGE_TOKEN_TO_CODE; existing handler deliberately returns REFUSED because MFA is disabled. Preserve the refusal assertion; do not implement an MFA alias.",
+      "fix_commit": null,
+      "verification_status": "TWO_UNKNOWN_RESPONSES_CORRECTED; FOCUSED_RUNTIME_7_OF_7"
+    },
+    {
+      "defect_id": "TEST-UNREGISTERED-CRON-HOOK",
+      "category": "OBSOLETE_V2_TEST",
+      "affected_suites": ["suite_fedspace_msl_asset_enforcement.json", "suite_v3_npc_federation_phases.json"],
+      "affected_cases": ["suite_fedspace_msl_asset_enforcement.json::case-0021", "suite_fedspace_msl_asset_enforcement.json::case-0030", "suite_fedspace_msl_asset_enforcement.json::case-0039", "suite_v3_npc_federation_phases.json::case-0004", "suite_v3_npc_federation_phases.json::case-0006"],
+      "root_cause": "Tests call the generic sys.run_cron_handler hook through player JSON. It is neither registered nor part of the V3 client contract; specific cron commands are exposed instead.",
+      "evidence": "src/server_loop.c has no sys.run_cron_handler. Tests set cron_tasks.next_due_at in the disposable DB and await the real engine. /tmp/twclone-cron-hooks-20261113-report.json: NPC 12/12 passed; MSL 42/43, with case-0034 showing that sectors.beacon survives the sweep while sector_assets are the only table removed.",
+      "disposition": "REPLACE_WITH_EXISTING_ENGINE_SCHEDULER_SETUP: set the relevant cron_tasks.next_due_at in the disposable DB, allow the real engine tick to run, and assert persisted effects. For NPC tests use the registered sys.npc.ferengi_tick_once only where its semantics match; never add a generic player-facing cron hook.",
+      "fix_commit": null,
+      "verification_status": "FIVE_UNKNOWN_HOOKS_REPLACED; REAL_SCHEDULER_RUNTIME_VERIFIED; NPC_12_OF_12_PASS; MSL_42_OF_43_PASS; CASE_0034_BEACON_CLEANUP_FAILURE"
+    },
+    {
+      "defect_id": "TEST-UNDOCUMENTED-SYSOP-COMMANDS",
+      "category": "OBSOLETE_V2_TEST",
+      "affected_suites": ["test_sysop_world.json"],
+      "affected_cases": ["test_sysop_world.json::case-0002", "test_sysop_world.json::case-0004", "test_sysop_world.json::case-0006"],
+      "root_cause": "The test calls sysop.motd.set, sysop.port.restock and sysop.audit.tail; none is registered or documented as a V3 client command.",
+      "evidence": "No matching entries in src/server_loop.c or docs/PROTOCOL.v3. The commands were in legacy_v2_sysop_world.json and are excluded from executable V3 suite discovery.",
+      "disposition": "REMOVE_AS_OBSOLETE_V2_TEST_COMMANDS; no approved V3 command contract exists for MOTD mutation, port restock queueing, or global audit-tail retrieval. Keep documented sysop.config.*, sysop.jobs.*, and relevant SQL fixture checks; do not add undocumented commands.",
+      "fix_commit": null,
+      "verification_status": "THREE_CASES_ARCHIVED_AS_OBSOLETE_V2; NOT_COUNTED_AS_PASSES"
+    }
+  ]
+}

@@ -19,8 +19,8 @@
   ],
   "ports": [
     {"port_id": 9, "sector_id": 1, "type": 9, "name": "Stardock Prime"},
-    {"port_id": 1, "sector_id": 1, "type": 10, "name": "Tavern Central"},
-    {"port_id": 2, "sector_id": 1, "type": 1, "name": "Trader Outpost"}
+    {"port_id": 1, "sector_id": 2, "type": 10, "name": "Tavern Central", "tavern_sector_id": 1},
+    {"port_id": 2, "sector_id": 3, "type": 1, "name": "Trader Outpost"}
   ],
   "users": [
     {"username": "admin", "password": "password", "type": 1, "credits": 1000000000},

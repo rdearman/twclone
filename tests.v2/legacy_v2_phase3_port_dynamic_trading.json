@@ -1,4 +1,6 @@
 {
+  "archive_status": "OBSOLETE_V2_NOT_EXECUTABLE",
+  "archive_reason": "Asserts that arbitrary ALT can be added to port_trade and uses legacy port command aliases/payloads, contrary to the approved V3 commodity whitelist and trade contract. V3 coverage is in suite_port_fixed_modes.json and suite_ship_cargo_dynamic.json.",
   "test_suite_name": "Phase 3 - Port Dynamic Trading (Commodity-Driven Engine)",
   "description": "Tests that port trading is fully data-driven: adding a commodity to port_trade automatically enables trading without code changes",
   "tests": [

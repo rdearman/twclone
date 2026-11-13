@@ -1,4 +1,6 @@
 {
+  "archive_status": "OBSOLETE_V2_NOT_EXECUTABLE",
+  "archive_reason": "MOTD mutation, port restock queueing, and global audit-tail commands are not registered or specified V3 client operations. Supported SysOp contract coverage remains in the current sysop config, jobs, notice, and player-operation suites.",
   "name": "SysOp World & Audit Test",
   "version": "1.0.0",
   "description": "Tests for MOTD, Port Restock, and Audit Logs",

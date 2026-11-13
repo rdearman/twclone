@@ -156,10 +156,16 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Test 4e: Run MSL Cleanse Cron",
-      "command": "sys.run_cron_handler",
-      "data": { "handler_name": "fedspace_cleanup" },
+      "name": "Test 4e: Schedule the real MSL cleanup engine task",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'fedspace_cleanup';" },
       "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 4e wait: Allow the real engine scheduler to run",
+      "command": "delay",
+      "data": { "seconds": 65 },
       "expect": { "status": "ok" }
     },
     {
@@ -230,10 +236,16 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Test 5f: Run MSL Cleanse Cron Again",
-      "command": "sys.run_cron_handler",
-      "data": { "handler_name": "fedspace_cleanup" },
+      "name": "Test 5f: Schedule the next real MSL cleanup occurrence",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'fedspace_cleanup';" },
       "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 5f wait: Allow the real engine scheduler to run",
+      "command": "delay",
+      "data": { "seconds": 65 },
       "expect": { "status": "ok" }
     },
     {
@@ -304,10 +316,16 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Test 6d: Run MSL Cleanse Cron",
-      "command": "sys.run_cron_handler",
-      "data": { "handler_name": "fedspace_cleanup" },
+      "name": "Test 6d: Schedule MSL cleanup for the non-MSL control case",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'fedspace_cleanup';" },
       "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 6d wait: Allow the real engine scheduler to run",
+      "command": "delay",
+      "data": { "seconds": 65 },
       "expect": { "status": "ok" }
     },
     {

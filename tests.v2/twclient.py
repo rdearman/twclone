@@ -3,6 +3,7 @@ import json
 import time
 import uuid
 import ssl
+import select
 from typing import Optional, Dict, Any, List
 
 class TWClient:
@@ -17,12 +18,16 @@ class TWClient:
         self.session_token: Optional[str] = None
         self.player_id: Optional[int] = None
         self._last_request_id: Optional[str] = None
+        self._prefetched = bytearray()
+        self.last_activity = time.monotonic()
 
     def connect(self):
         """Establishes a connection to the server."""
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._prefetched.clear()
         self.sock.settimeout(self.timeout)
         self.sock.connect((self.host, self.port))
+        self.last_activity = time.monotonic()
         
         # Wrap with TLS if enabled
         if self.use_tls:
@@ -40,6 +45,38 @@ class TWClient:
             except:
                 pass
             self.sock = None
+        self._prefetched.clear()
+
+    def is_connected(self, max_idle_seconds: float = 8.0) -> bool:
+        """Detect an idle socket closed by the server before reusing it."""
+        if self.sock is None:
+            return False
+        if time.monotonic() - self.last_activity >= max_idle_seconds:
+            return False
+        try:
+            if isinstance(self.sock, ssl.SSLSocket) and self.sock.pending() > 0:
+                data = self.sock.recv(1)
+                if not data:
+                    return False
+                self._prefetched.extend(data)
+                return True
+            readable, _, exceptional = select.select([self.sock], [], [self.sock], 0)
+            if exceptional:
+                return False
+            if not readable:
+                return True
+            if isinstance(self.sock, ssl.SSLSocket):
+                data = self.sock.recv(1)
+                if not data:
+                    return False
+                self._prefetched.extend(data)
+                return True
+            try:
+                return bool(self.sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT))
+            except BlockingIOError:
+                return True
+        except (OSError, ValueError, ssl.SSLError):
+            return False
 
     def send_json(self, data: Dict[str, Any]):
         """Sends a JSON object as a line."""
@@ -60,13 +97,15 @@ class TWClient:
 
         line = json.dumps(data, ensure_ascii=False)
         self.sock.sendall(line.encode("utf-8") + b"\n")
+        self.last_activity = time.monotonic()
 
     def recv_json(self) -> Dict[str, Any]:
         """Receives a single JSON line."""
         if not self.sock:
             raise ConnectionError("Not connected")
         
-        buf = bytearray()
+        buf = bytearray(self._prefetched)
+        self._prefetched.clear()
         while True:
             chunk = self.sock.recv(1)
             if not chunk:
@@ -81,7 +120,9 @@ class TWClient:
         if not buf:
             return {}
             
-        return json.loads(buf.decode("utf-8", errors="replace"))
+        response = json.loads(buf.decode("utf-8", errors="replace"))
+        self.last_activity = time.monotonic()
+        return response
 
     def recv_next_non_notice(self, timeout: int = 10) -> Dict[str, Any]:
         """Reads responses until a non-notice type is received."""
