@@ -579,6 +579,7 @@ static schema_entry_t g_schema_table[] = {
   {"corp.statement", NULL, schema_corp_statement},
   {"corp.status", NULL, schema_corp_no_args},
   {"corp.transfer_ceo", NULL, schema_corp_target_player},
+  {"corp.member.transfer", NULL, schema_corp_member_transfer},
   {"corp.withdraw", NULL, schema_corp_amount},
   {"nav.avoid.add", NULL, schema_nav_avoid_sector},
   {"nav.avoid.list", NULL, schema_nav_no_args},
@@ -5712,6 +5713,43 @@ schema_corp_amount (void)
 {
   return schema_corp_object ("ge://schema/corp.amount.json", "amount",
                              "integer", "amount", 1);
+}
+
+json_t *
+schema_corp_member_transfer (void)
+{
+  json_t *properties = json_object ();
+  json_t *target = json_object ();
+  json_object_set_new (target, "type", json_string ("integer"));
+  json_object_set_new (target, "minimum", json_integer (1));
+  json_object_set_new (properties, "target_player_id", target);
+  json_t *asset = json_object ();
+  json_object_set_new (asset, "type", json_string ("string"));
+  json_t *asset_enum = json_array ();
+  json_array_append_new (asset_enum, json_string ("credits"));
+  json_array_append_new (asset_enum, json_string ("fighters"));
+  json_array_append_new (asset_enum, json_string ("mines"));
+  json_array_append_new (asset_enum, json_string ("shields"));
+  json_object_set_new (asset, "enum", asset_enum);
+  json_object_set_new (properties, "asset", asset);
+  json_t *quantity = json_object ();
+  json_object_set_new (quantity, "type", json_string ("integer"));
+  json_object_set_new (quantity, "minimum", json_integer (1));
+  json_object_set_new (properties, "quantity", quantity);
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("target_player_id"));
+  json_array_append_new (required, json_string ("asset"));
+  json_array_append_new (required, json_string ("quantity"));
+  json_t *root = json_object ();
+  json_object_set_new (root, "$id",
+                       json_string ("ge://schema/corp.member.transfer.json"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", properties);
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_false ());
+  return root;
 }
 
 json_t *

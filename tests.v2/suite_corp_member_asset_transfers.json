@@ -1,0 +1,101 @@
+{
+  "test_suite_name": "Corporation member asset transfers",
+  "protocol_category": "25_Corporations_and_Stock_Market",
+  "description": "Same-sector transfers conserve on-hand credits and active-ship fighters, mines, and shield charge between current members.",
+  "tests": [
+    { "name": "Create transfer sender", "setup": "macro_auth_user", "username": "corp_asset_sender", "password": "qa-password" },
+    { "name": "Create transfer recipient", "setup": "macro_auth_user", "username": "corp_asset_recipient", "password": "qa-password" },
+    { "name": "Create nonmember", "setup": "macro_auth_user", "username": "corp_asset_outsider", "password": "qa-password" },
+    { "name": "Set on-hand credits for transfer", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET credits=CASE name WHEN 'corp_asset_sender' THEN 1000 WHEN 'corp_asset_recipient' THEN 100 ELSE credits END WHERE name IN ('corp_asset_sender','corp_asset_recipient');" }, "expect": { "status": "ok" } },
+    { "name": "Fund sender bank account before corporation charter fee", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE bank_accounts SET balance=100000 WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='corp_asset_sender') AND currency='CRD' AND is_active=TRUE;" }, "expect": { "status": "ok" } },
+    { "name": "Verify bank fixture funding", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='corp_asset_sender') AND currency='CRD' AND is_active=TRUE;" }, "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 100000 }] },
+    { "name": "Create asset transfer corporation", "command": "corp.create", "data": { "name": "Asset Transfer QA" }, "user": "corp_asset_sender", "save": { "corp_id": "data.corp_id" }, "expect": { "status": "ok" } },
+    { "name": "Invite recipient", "command": "corp.invite", "data": { "target_player_id": "@corp_asset_recipient_player_id" }, "user": "corp_asset_sender", "expect": { "status": "ok" } },
+    { "name": "Recipient joins corporation", "command": "corp.join", "data": { "corp_id": "@corp_id" }, "user": "corp_asset_recipient", "expect": { "status": "ok" } },
+    { "name": "Give recipient ship capacity for transferred mines", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Merchant Cruiser') WHERE ship_id=(SELECT ship_id FROM players WHERE name='corp_asset_recipient');" }, "expect": { "status": "ok" } },
+    {
+      "name": "Seed on-hand assets and recipient capacities",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "WITH player_setup AS (SELECT player_id,name,ship_id FROM players WHERE name IN ('corp_asset_sender','corp_asset_recipient')) UPDATE ships s SET fighters=CASE p.name WHEN 'corp_asset_sender' THEN 10 ELSE 0 END, mines=CASE p.name WHEN 'corp_asset_sender' THEN 10 ELSE 0 END, installed_shields=LEAST(st.maxshields,20), shields=CASE p.name WHEN 'corp_asset_sender' THEN LEAST(st.maxshields,10) ELSE 0 END FROM player_setup p, shiptypes st WHERE p.ship_id=s.ship_id AND st.shiptypes_id=s.type_id;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Transfer request schema is discoverable",
+      "command": "system.describe_schema", "user": "corp_asset_sender",
+      "data": { "name": "corp.member.transfer", "type": "command" },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.schema.properties.asset.enum.0", "op": "==", "value": "credits" },
+        { "path": "data.schema.properties.quantity.minimum", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Transfer on-hand credits",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "credits", "quantity": 250 },
+      "expect": { "status": "ok", "type": "corp.member.asset_transferred_v1" },
+      "asserts": [
+        { "path": "data.sender_remaining", "op": "==", "value": 750 },
+        { "path": "data.recipient_total", "op": "==", "value": 350 }
+      ]
+    },
+    {
+      "name": "Verify credit conservation in player rows",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT (SELECT credits FROM players WHERE name='corp_asset_sender') || ':' || (SELECT credits FROM players WHERE name='corp_asset_recipient');" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": "750:350" }]
+    },
+    {
+      "name": "Transfer fighters between active ships",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "fighters", "quantity": 4 },
+      "expect": { "status": "ok", "type": "corp.member.asset_transferred_v1" },
+      "asserts": [{ "path": "data.sender_remaining", "op": "==", "value": 6 }, { "path": "data.recipient_total", "op": "==", "value": 4 }]
+    },
+    {
+      "name": "Transfer mines between active ships",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "mines", "quantity": 3 },
+      "expect": { "status": "ok", "type": "corp.member.asset_transferred_v1" },
+      "asserts": [{ "path": "data.sender_remaining", "op": "==", "value": 7 }, { "path": "data.recipient_total", "op": "==", "value": 3 }]
+    },
+    {
+      "name": "Transfer shield charge without changing installed capacities",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "shields", "quantity": 3 },
+      "expect": { "status": "ok", "type": "corp.member.asset_transferred_v1" },
+      "asserts": [{ "path": "data.sender_remaining", "op": "==", "value": 7 }, { "path": "data.recipient_total", "op": "==", "value": 3 }]
+    },
+    {
+      "name": "Reject nonmember recipient",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_outsider_player_id", "asset": "credits", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reject transfer exceeding sender holdings",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "fighters", "quantity": 999 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reject unsupported asset type at schema boundary",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "ore", "quantity": 1 },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reject transfer to member in another sector",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=2 WHERE ship_id=(SELECT ship_id FROM players WHERE name='corp_asset_recipient') RETURNING ship_id) UPDATE players SET sector_id=2 WHERE name='corp_asset_recipient';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reject cross-sector transfer",
+      "command": "corp.member.transfer", "user": "corp_asset_sender",
+      "data": { "target_player_id": "@corp_asset_recipient_player_id", "asset": "credits", "quantity": 1 },
+      "expect": { "status": "error" }
+    }
+  ]
+}

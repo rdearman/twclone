@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <strings.h>
+#include <limits.h>
 #include <pthread.h>
 #include <ctype.h>		// Required for isalnum and isupper
 #include "server_corporation.h"
@@ -1333,6 +1334,69 @@ cmd_corp_withdraw (client_ctx_t *ctx, json_t *root)
 		       json_string ("Withdrawal successful."));
   json_object_set_new (response_data, "amount", json_integer (amount));
   send_response_ok_take (ctx, root, "corp.withdraw.success", &response_data);
+  return 0;
+}
+
+int
+cmd_corp_member_transfer (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_NOT_AUTHENTICATED,
+                                   "Not authenticated", NULL);
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *jtarget = json_is_object (data)
+    ? json_object_get (data, "target_player_id") : NULL;
+  json_t *jquantity = json_is_object (data)
+    ? json_object_get (data, "quantity") : NULL;
+  const char *asset = json_is_object (data)
+    ? json_string_value (json_object_get (data, "asset")) : NULL;
+  if (!json_is_integer (jtarget) || !json_is_integer (jquantity)
+      || !asset || json_integer_value (jtarget) <= 0
+      || json_integer_value (jtarget) > INT_MAX
+      || json_integer_value (jquantity) <= 0)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "target_player_id, asset, and positive quantity are required.");
+      return 0;
+    }
+  int target_id = (int) json_integer_value (jtarget);
+  int64_t quantity = (int64_t) json_integer_value (jquantity);
+  int64_t sender_remaining = 0, recipient_total = 0;
+  repo_corp_transfer_result_t rc = repo_corp_transfer_member_asset
+    (game_db_get_handle (), ctx->player_id, target_id, asset, quantity,
+     &sender_remaining, &recipient_total);
+  if (rc != REPO_CORP_TRANSFER_OK)
+    {
+      int error_code = rc == REPO_CORP_TRANSFER_INSUFFICIENT
+        ? ERR_INSUFFICIENT_FUNDS
+        : rc == REPO_CORP_TRANSFER_CAPACITY ? ERR_INVALID_ARG
+        : rc == REPO_CORP_TRANSFER_INVALID ? ERR_PERMISSION_DENIED : ERR_DB;
+      const char *message = rc == REPO_CORP_TRANSFER_INSUFFICIENT
+        ? "Insufficient transferable assets."
+        : rc == REPO_CORP_TRANSFER_CAPACITY
+          ? "Recipient ship lacks capacity for this transfer."
+        : rc == REPO_CORP_TRANSFER_INVALID
+          ? "Both players must be active members of the same corporation and sector."
+          : "Asset transfer failed; no state was changed.";
+      send_response_error (ctx, root, error_code, message);
+      return 0;
+    }
+  json_t *response = json_object ();
+  json_object_set_new (response, "sender_player_id",
+                       json_integer (ctx->player_id));
+  json_object_set_new (response, "recipient_player_id",
+                       json_integer (target_id));
+  json_object_set_new (response, "asset", json_string (asset));
+  json_object_set_new (response, "quantity", json_integer (quantity));
+  json_object_set_new (response, "sender_remaining",
+                       json_integer (sender_remaining));
+  json_object_set_new (response, "recipient_total",
+                       json_integer (recipient_total));
+  send_response_ok_take (ctx, root, "corp.member.asset_transferred_v1",
+                         &response);
   return 0;
 }
 

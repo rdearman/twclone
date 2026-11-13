@@ -42,6 +42,7 @@ int cmd_corp_status (client_ctx_t * ctx, json_t * root);
 int cmd_corp_deposit (client_ctx_t * ctx, json_t * root);
 int cmd_corp_withdraw (client_ctx_t * ctx, json_t * root);
 int cmd_corp_transfer_ceo (client_ctx_t * ctx, json_t * root);
+int cmd_corp_member_transfer (client_ctx_t * ctx, json_t * root);
 
 /* --- RPC Handlers (Equity/Stock Market) --- */
 int cmd_equity (client_ctx_t * ctx, json_t * root);

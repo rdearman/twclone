@@ -5,6 +5,22 @@ status and evidence are maintained in
 [`V3_GAMEPLAY_COMPLETION_TRACKER.md`](V3_GAMEPLAY_COMPLETION_TRACKER.md), and
 approved policy is in [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md).
 
+## Current package — corporation member asset transfer
+
+- **Requirement:** `CORP-XFER-01`.
+- **Scope:** `corp.member.transfer` moves on-hand credits or active-ship
+  fighters, mines, and current shield charge between same-corporation members
+  in the same sector. The persistence operation locks members and ships in
+  stable order and validates current holdings/capacity before settlement.
+- **Protocol/test:** `docs/PROTOCOL.v3/25_Corporations_and_Stock_Market.md`;
+  `tests.v2/suite_corp_member_asset_transfers.json`.
+- **Completion evidence:** isolated PostgreSQL JSON acceptance passed 31/31 on
+  2026-11-12. Two concurrent identical fighter transfers yielded one success
+  and one refusal; persisted holdings remained conserved (sender 0, recipient
+  2 from an initial combined total of 2). No deadlock or duplicate settlement.
+- **Status:** `VERIFIED` for this focused workflow. Broader release certification
+  remains outside this package.
+
 ## Active package — Exchange, unrest, used resale and insurance
 
 - **Requirements:** EXC-001–011, HARV-008, POP-05/POP-10/POP-12, SHIP-005,

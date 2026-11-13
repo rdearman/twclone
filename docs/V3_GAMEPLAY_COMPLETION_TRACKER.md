@@ -408,3 +408,9 @@ not release certification.
   invariant. A read-only post-run query confirmed the exact disposable DB was
   absent. Focused QA runner tests: 17 passed; Python compilation, JSON parse
   and `git diff --check` passed. No full regression suite was run.
+
+## Added gameplay requirement — corporation member transfers
+
+| ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
+|---|---|---|---|---|---|---|
+| CORP-XFER-01 | Atomic same-sector transfer of on-hand credits and active-ship fighters, mines, or shield charge between members of the same corporation | VERIFIED | `src/server_corporation.c::cmd_corp_member_transfer`; `src/db/repo/repo_corporation.c::repo_corp_transfer_member_asset`; schema/registry in `src/schemas.c`, `src/server_loop.c` | `tests.v2/suite_corp_member_asset_transfers.json`: 31/31 passed on 2026-11-12 against real V3 server and isolated disposable PostgreSQL; concurrent duplicate fighter-transfer requests: one success/one refusal, persisted total preserved (sender 0, recipient 2); `make -j2` sanitizer build passed; `git diff --check` passed | Not committed (repository metadata is read-only in this session) | Broader V3 regression/release certification remains separate; no remaining CORP-XFER-01 work identified |

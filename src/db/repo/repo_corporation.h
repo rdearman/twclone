@@ -18,6 +18,19 @@ int repo_corp_check_member_role(db_t *db, int corp_id, int player_id, char *role
 /* Revalidate and lock current membership; requires an active transaction. */
 int repo_corp_lock_member_role(db_t *db, int corp_id, int player_id,
                                char *role_buffer, size_t buffer_size);
+typedef enum {
+    REPO_CORP_TRANSFER_OK = 0,
+    REPO_CORP_TRANSFER_INVALID = 1,
+    REPO_CORP_TRANSFER_INSUFFICIENT = 2,
+    REPO_CORP_TRANSFER_CAPACITY = 3,
+    REPO_CORP_TRANSFER_DATABASE = 4
+} repo_corp_transfer_result_t;
+/* Atomic member-to-member transfer; both players must be current members in
+ * the same sector. asset is credits/fighters/mines/shields. Ship assets move
+ * between each member's active ship. */
+repo_corp_transfer_result_t repo_corp_transfer_member_asset(
+    db_t *db, int sender_id, int recipient_id, const char *asset,
+    int64_t quantity, int64_t *sender_remaining, int64_t *recipient_total);
 int repo_corp_get_player_ship_type_name(db_t *db, int player_id, char *name_buffer, size_t buffer_size);
 int repo_corp_demote_ceo(db_t *db, int corp_id, int player_id);
 int repo_corp_insert_member_ignore(db_t *db, int corp_id, int player_id, const char *role);

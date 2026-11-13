@@ -166,6 +166,7 @@ json_t *schema_corp_join (void);
 json_t *schema_corp_roster (void);
 json_t *schema_corp_target_player (void);
 json_t *schema_corp_amount (void);
+json_t *schema_corp_member_transfer (void);
 json_t *schema_corp_statement (void);
 json_t *schema_nav_no_args (void);
 json_t *schema_nav_bookmark_add (void);

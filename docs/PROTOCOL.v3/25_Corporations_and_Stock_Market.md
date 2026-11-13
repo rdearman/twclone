@@ -54,6 +54,44 @@ Args: `{ "amount": 500 }` (positive integer). Responses are
 `corp.deposit.success` and `corp.withdraw.success`; withdrawals require the
 Leader or Officer role.
 
+### `corp.member.transfer`
+Transfer on-hand credits or active-ship fighters, mines, or shield charge to
+another current member of the same corporation. Both members must be in the
+same sector. The server derives the sender from the authenticated session and
+revalidates both memberships, sectors, active ships, holdings, and recipient
+capacity inside one transaction.
+
+```json
+{
+  "command": "corp.member.transfer",
+  "data": {
+    "target_player_id": 123,
+    "asset": "fighters",
+    "quantity": 10
+  }
+}
+```
+
+`asset` is one of `credits`, `fighters`, `mines`, or `shields`; `quantity` is a
+positive integer. Credits mean the spendable `players.credits` balance (not a
+bank-account or corporation-treasury balance). Ship assets move between the
+members' active ships. Fighters and mines must fit the recipient hull's
+configured maxima. Shields mean current shield charge: the sender loses the
+transferred charge and the recipient gains it, without changing either ship's
+installed shield capacity; the recipient's charge may not exceed that
+capacity. No turns or credits are charged for non-credit assets.
+
+Success response: `corp.member.asset_transferred_v1`, including sender and
+recipient IDs, asset, quantity, and resulting sender/recipient totals. Requests
+are all-or-nothing. Nonmembers, different corporations/sectors, missing or
+destroyed active ships, insufficient holdings, and capacity violations are
+rejected without state changes.
+
+This restores the original same-sector corporation associate transfer menu
+for credits, fighters, mines, and shields (TradeWars 2002 Player's Manual,
+Corporations section: [archived manual PDF](https://electraphysics.com/documents/tradewarsmanual.pdf)).
+It does not add StarPort ownership or corporation equity trading.
+
 ### `corp.set_tax`
 Set tax rate for members.
 Not currently registered as a server RPC.
