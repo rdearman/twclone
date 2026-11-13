@@ -306,9 +306,16 @@
         },
         {
           "key": "h",
-          "label": "(H) Harvest Production · unavailable",
+          "label": "(H) Harvest Production",
           "action": {
-            "pycall": "planet_harvest_unavailable_flow"
+            "pycall": "planet_harvest_flow"
+          }
+        },
+        {
+          "key": "p",
+          "label": "(P) Planetary Trade Agreement",
+          "action": {
+            "pycall": "planet_trade_port_flow"
           }
         },
         {
@@ -929,6 +936,14 @@
             "pycall": "corp_invite_flow"
           },
           "show_if_ctx": ["is_ceo_or_officer"]
+        },
+        {
+          "key": "a",
+          "label": "(A) Transfer Assets to Member",
+          "action": {
+            "pycall": "corp_member_asset_transfer_flow"
+          },
+          "show_if_ctx": ["in_corporation"]
         },
         {
           "key": "k",

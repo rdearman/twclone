@@ -1621,6 +1621,29 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
       prev[i] = -1;
     }
 
+  /* Persisted player avoids apply to ordinary route finding as well as the
+   * autopilot planner. A failed read must not silently route through an
+   * avoided sector. */
+  db_res_t *avoid_res = repo_players_get_avoids (db, ctx->player_id, &err);
+  if (!avoid_res)
+    {
+      free (avoid);
+      free (seen);
+      free (known);
+      free (prev);
+      free (queue);
+      send_response_error (ctx, root, ERR_DB,
+                           "Failed to load avoided sectors");
+      return 0;
+    }
+  while (db_res_step (avoid_res, &err))
+    {
+      int avoided_sector = db_res_col_i32 (avoid_res, 0, &err);
+      if (avoided_sector > 0 && avoided_sector <= max_id)
+        avoid[avoided_sector] = 1;
+    }
+  db_res_finalize (avoid_res);
+
   /* Pathfinding must not disclose routes through sectors the player has not
    * discovered. The live sector is known even if an older account lacks a
    * visit row. */
@@ -1647,7 +1670,31 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   if (ctx->sector_id > 0 && ctx->sector_id <= max_id)
     known[ctx->sector_id] = 1;
 
-  if (!known[from] || !known[to])
+  /* Direct exits are already visible in sector.info. Treat them as known
+   * endpoints so plotting a route to an adjacent sector works before the
+   * player has physically visited it. */
+  db_res_t *adjacent_res = repo_universe_get_adjacent_sectors
+    (db, ctx->sector_id, &err);
+  if (!adjacent_res)
+    {
+      free (avoid);
+      free (seen);
+      free (known);
+      free (prev);
+      free (queue);
+      send_response_error (ctx, root, ERR_DB,
+                           "Failed to load adjacent sectors");
+      return 0;
+    }
+  while (db_res_step (adjacent_res, &err))
+    {
+      int adjacent_sector = db_res_col_i32 (adjacent_res, 0, &err);
+      if (adjacent_sector > 0 && adjacent_sector <= max_id)
+        known[adjacent_sector] = 1;
+    }
+  db_res_finalize (adjacent_res);
+
+  if (!known[from])
     {
       free (avoid);
       free (seen);
@@ -1752,8 +1799,12 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
 	  int v = (int) db_res_col_i64 (res, 1, &err);
 
 
-	  if (u > 0 && u <= max_id && v > 0 && v <= max_id)
+      if (u > 0 && u <= max_id && v > 0 && v <= max_id)
 	    {
+              /* Exits from a visited/current sector are already visible to
+               * this player and therefore valid route endpoints. */
+              known[u] = 1;
+              known[v] = 1;
 	      to_v[e] = v;
 	      next[e] = head[u];
 	      head[u] = e++;
@@ -1802,6 +1853,17 @@ cmd_move_pathfind (client_ctx_t *ctx, json_t *root)
   free (to_v);
   free (next);
   free (head);
+
+  if (!known[to])
+    {
+      free (avoid);
+      free (seen);
+      free (known);
+      free (prev);
+      free (queue);
+      send_response_error (ctx, root, ERR_NOT_FOUND, "Path not found");
+      return 0;
+    }
 
   if (!found)
     {

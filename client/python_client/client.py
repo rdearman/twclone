@@ -6951,18 +6951,163 @@ def planet_workforce_flow(ctx: Context):
     _refresh_planet_overview(ctx, planet_id)
 
 
-@register("planet_harvest_unavailable_flow")
-def planet_harvest_unavailable_flow(ctx: Context):
-    """Explain why harvest cannot be requested from the client yet.
+@register("planet_harvest_flow")
+def planet_harvest_flow(ctx: Context):
+    """Collect the server-settled production into the landed active ship."""
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Harvest requires a server-confirmed landing on a planet.")
+        return
+    if input(f"Harvest stored production from planet {planet_id} into your ship? [y/N]: ").strip().lower() != "y":
+        print("Harvest cancelled.")
+        return
+    response = ctx.conn.rpc("planet.harvest", {"planet_id": planet_id})
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planet harvest refused: {_planet_error(response)}")
+        return
+    if response.get("type") != "planet.harvest_v1":
+        print("[Error] Harvest response type was unexpected; refresh the planet and ship before continuing.")
+        return
+    data = get_data(response)
+    if not isinstance(data, dict) or data.get("planet_id") != planet_id:
+        print("[Error] Harvest response did not identify the landed planet; refresh before continuing.")
+        return
+    print("Planetary production harvested into the active ship:")
+    print("  Ore: {ore_harvested}; Organics: {organics_harvested}; Equipment: {equipment_harvested}".format(
+        ore_harvested=data.get("ore_harvested", 0),
+        organics_harvested=data.get("organics_harvested", 0),
+        equipment_harvested=data.get("equipment_harvested", 0),
+    ))
+    print(f"  Turns charged: {data.get('turns_charged', 'not reported')}")
+    ship = _hud_rpc(ctx, "ship.status", {})
+    if ship.get("status") != "ok" or ship.get("type") != "ship.status":
+        print("Warning: harvest succeeded, but active ship cargo could not be refreshed.")
+    _refresh_planet_overview(ctx, planet_id)
 
-    The protocol exposes a harvest-shaped command, but the authoritative
-    server handler is still unavailable and V3 has no pinned harvest policy.
-    Keep the capability visible while refusing to fabricate a formula or RPC.
-    """
-    print(
-        "Planet harvest unavailable: the authoritative server handler and "
-        "V3 production policy are not released, so no request was sent."
-    )
+
+@register("planet_trade_port_flow")
+def planet_trade_port_flow(ctx: Context):
+    """Sell accumulated planetary stock directly to a local buying port."""
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Planetary port trade requires a server-confirmed planetary landing.")
+        return
+    sector = ctx.last_sector_desc or {}
+    port = sector.get("port") if isinstance(sector, dict) else None
+    port_id = port.get("id") if isinstance(port, dict) else None
+    if type(port_id) is not int or port_id <= 0:
+        print("No local port is reported in the current sector.")
+        return
+    commodity = input("Commodity to sell (ORE, ORG, EQU): ").strip().upper()
+    if commodity not in {"ORE", "ORG", "EQU"}:
+        print("Choose ORE, ORG, or EQU.")
+        return
+    try:
+        quantity = int(input("Quantity to sell: ").strip())
+    except ValueError:
+        print("Quantity must be a positive whole number.")
+        return
+    if quantity <= 0:
+        print("Quantity must be a positive whole number.")
+        return
+    if input(f"Sell {quantity} {commodity} from planet {planet_id} to local port {port_id}? [y/N]: ").strip().lower() != "y":
+        print("Planetary trade cancelled.")
+        return
+    request = {
+        "planet_id": planet_id,
+        "port_id": port_id,
+        "items": [{"commodity": commodity, "quantity": quantity}],
+        "idempotency_key": str(uuid.uuid4()),
+    }
+    response = ctx.conn.rpc("planet.trade.port", request)
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planetary port trade refused: {_planet_error(response)}")
+        return
+    if response.get("type") != "planet.trade.port_receipt_v1":
+        print("[Error] Planetary trade returned an unexpected receipt type; refresh before continuing.")
+        return
+    receipt = get_data(response)
+    if not isinstance(receipt, dict) or receipt.get("planet_id") != planet_id or receipt.get("port_id") != port_id:
+        print("[Error] Planetary trade receipt did not identify the requested planet and port.")
+        return
+    print("Planetary Trade Agreement settled by the server:")
+    _pp(receipt)
+    player = _hud_rpc(ctx, "player.my_info", {})
+    if player.get("status") != "ok" or player.get("type") != "player.info":
+        print("Warning: the sale succeeded, but player credits could not be refreshed.")
+    _refresh_planet_overview(ctx, planet_id)
+
+
+@register("corp_member_asset_transfer_flow")
+def corp_member_asset_transfer_flow(ctx: Context):
+    """Transfer a supported asset to a fellow corporation member."""
+    if not ctx.state.get("in_corporation"):
+        print("You must be a corporation member to transfer assets.")
+        return
+    try:
+        target_player_id = int(input("Recipient corporation member ID: ").strip())
+    except ValueError:
+        print("Enter a valid player ID.")
+        return
+    if target_player_id <= 0:
+        print("Player ID must be positive.")
+        return
+    assets = {"1": "credits", "2": "fighters", "3": "mines", "4": "shields"}
+    print("Transferable assets: 1) credits  2) fighters  3) mines  4) shields")
+    asset_choice = input("Asset: ").strip().lower()
+    asset = assets.get(asset_choice, asset_choice)
+    if asset not in {"credits", "fighters", "mines", "shields"}:
+        print("Choose credits, fighters, mines, or shields.")
+        return
+    try:
+        quantity = int(input("Quantity: ").strip())
+    except ValueError:
+        print("Quantity must be a positive whole number.")
+        return
+    if quantity <= 0:
+        print("Quantity must be a positive whole number.")
+        return
+    response = ctx.conn.rpc("corp.status", {})
+    if response.get("status") != "ok" or response.get("type") != "corp.status.success":
+        print("Could not confirm corporation membership; no transfer was sent.")
+        return
+    corp_id = get_data(response).get("corp_id")
+    if type(corp_id) is not int or corp_id <= 0:
+        print("You are not currently in a corporation.")
+        return
+    roster_response = ctx.conn.rpc("corp.roster", {"corp_id": corp_id})
+    if roster_response.get("status") != "ok":
+        print(f"Could not load the member roster: {_planet_error(roster_response)}")
+        return
+    roster = get_data(roster_response).get("roster", [])
+    member = next((row for row in roster if isinstance(row, dict) and row.get("player_id") == target_player_id), None)
+    if member is None:
+        print("That player is not in your corporation roster; no transfer was sent.")
+        return
+    recipient = member.get("name") or f"player {target_player_id}"
+    if input(f"Transfer {quantity} {asset} to {recipient}? [y/N]: ").strip().lower() != "y":
+        print("Asset transfer cancelled.")
+        return
+    result = ctx.conn.rpc("corp.member.transfer", {
+        "target_player_id": target_player_id,
+        "asset": asset,
+        "quantity": quantity,
+    })
+    ctx.state["last_rpc"] = result
+    if result.get("status") != "ok" or result.get("type") != "corp.member.asset_transferred_v1":
+        print(f"[Error] Corporation asset transfer refused: {_planet_error(result)}")
+        return
+    receipt = get_data(result)
+    if receipt.get("sender_player_id") != ctx.state.get("player_id") or receipt.get("recipient_player_id") != target_player_id:
+        print("[Error] Transfer receipt identity did not match the requested members.")
+        return
+    print(f"Transferred {quantity} {asset} to {recipient}.")
+    print(f"  Sender remaining: {receipt.get('sender_remaining')}; recipient total: {receipt.get('recipient_total')}")
+    refreshed = _hud_rpc(ctx, "player.my_info", {})
+    if refreshed.get("status") != "ok" or refreshed.get("type") != "player.info":
+        print("Warning: the transfer succeeded, but player balance could not be refreshed.")
 
 
 def _select_planet_commodity(planet: dict, include_credits: bool = False) -> Optional[str]:

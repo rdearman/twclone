@@ -314,10 +314,18 @@ def _first_authoritative_id(source: Dict[str, Any], keys: tuple[str, ...]) -> Op
 
 
 def _authoritative_adjacent_ids(value: Any) -> Optional[list[int]]:
-    """Keep only server-owned positive integer neighbor IDs."""
+    """Keep server-owned positive integer IDs from documented warp rows."""
     if not isinstance(value, list):
         return None
-    return [item for item in value if _authoritative_positive_id(item) is not None]
+    adjacent: list[int] = []
+    for item in value:
+        if _authoritative_positive_id(item) is not None:
+            adjacent.append(item)
+        elif isinstance(item, dict):
+            target = item.get("to_sector")
+            if _authoritative_positive_id(target) is not None:
+                adjacent.append(target)
+    return adjacent
 
 
 def normalize_sector(d: Dict[str, Any]) -> Dict[str, Any]:

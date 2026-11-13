@@ -2916,9 +2916,9 @@ schema_move_describe_sector (void)
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", props);
 
-  json_t *required = json_array ();
-  json_array_append_new (required, json_string ("sector_id"));
-  json_object_set_new (root, "required", required);
+  /* The command targets the authenticated caller's current sector when this
+   * optional field is omitted. This matches the handler and protocol 21. */
+  json_object_set_new (root, "required", json_array ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }

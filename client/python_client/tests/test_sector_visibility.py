@@ -47,10 +47,13 @@ def test_sector_normalization_does_not_coerce_malformed_port_presence():
 def test_sector_normalization_keeps_only_authoritative_adjacent_ids():
     sector = normalize_sector({
         "sector_id": 12,
-        "adjacent_sectors": [13, True, 14.0, "15", {"to_sector": 16}, 0, -1],
+        "adjacent_sectors": [
+            13, True, 14.0, "15", {"to_sector": 16},
+            {"to_sector": True}, {"to_sector": "17"}, 0, -1,
+        ],
     })
 
-    assert sector["adjacent"] == [13]
+    assert sector["adjacent"] == [13, 16]
     assert sector["knowledge"]["adjacent"] is True
 
 
