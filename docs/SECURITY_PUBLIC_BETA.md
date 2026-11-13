@@ -113,7 +113,7 @@ listener bound `0.0.0.0:12483` inside its container. Docker published only
 `127.0.0.1:12483`; no PostgreSQL or S2S host publication was present. This is a
 local verification stack, not a public deployment.
 
-## Executed verification (2026-11-12)
+## Executed verification (2026-11-12; follow-up 2026-11-13)
 
 ### Latest clean local-stack run
 
@@ -162,7 +162,7 @@ full adversarial report from that runner is claimed.
 | Local BigBang credential cleanup | PASS | Inline passwords removed; both connection entries now specify `/home/rick/.pgpass`; file mode 0600. |
 | Previously exposed administrative credential rotation | BLOCKED | Configuration targets a non-Compose host whose production status is unconfirmed. No connection or rotation was attempted; owner confirmation/authorization is required. |
 | Corporation member asset transfers | PASS (focused prior runtime evidence) | `485fc0b5` contains the separate feature commit; focused JSON acceptance passed 31/31 against isolated PostgreSQL on 2026-11-12, including concurrent duplicate-transfer conservation. |
-| Daily turn reset | PASS (Docker scheduler, configured path) | On 2026-11-13 the actual engine scheduler ran twice against `twclonebetafinal` PostgreSQL 16.15. With `turnsperday=120`, five rows reset from 7 to 120; after lowering them to 3, the next scheduled run again produced five 120 rows. Both `last_run_at` values advanced; zero mismatches and zero NULL rows; no reset error occurred. The earlier failure is preserved in the engine log as SQLSTATE `23502` because Docker BigBang omitted `turnsperday`. Source now binds the validated turn argument and uses the server's 120 default; sanitizer build and three focused contract tests passed. The new fallback itself was not exercised by the pre-existing container binary. |
+| Daily turn reset | PASS (Docker scheduler, configured path) | On 2026-11-13 the actual engine scheduler ran twice against `twclonebetafinal` PostgreSQL 16.15. With `turnsperday=120`, five rows reset from 7 to 120; after lowering them to 3, the next scheduled run again produced five 120 rows. Both `last_run_at` values advanced; zero mismatches and zero NULL rows; no reset error occurred. The earlier failure is preserved in the engine log as SQLSTATE `23502` because Docker BigBang omitted `turnsperday`. Source now binds the validated turn argument and uses the server's 120 default; sanitizer build, three focused contract tests and `docker build -t twclone-beta:resetcheck .` passed. The new fallback itself was not exercised by the pre-existing container binary. |
 | Security commit | PASS | `d77d8e05` (`Harden V3 public beta deployment`). |
 
 Execution evidence (separate stdout/stderr and exit files) is retained for
