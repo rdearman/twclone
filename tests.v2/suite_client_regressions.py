@@ -27,6 +27,24 @@ def run(command, *, cwd, env=None, timeout=None):
     return result.returncode == 0
 
 
+def run_godot_script(command, *, cwd, env, timeout):
+    try:
+        result = subprocess.run(
+            command, cwd=cwd, env=env, check=False, timeout=timeout,
+            capture_output=True, text=True,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"TIMEOUT after {timeout}s: {' '.join(map(str, command))}", file=sys.stderr)
+        return "failed"
+    output = result.stdout + result.stderr
+    if result.returncode != 0:
+        print(output, end="", file=sys.stderr)
+        return "failed"
+    if "SKIP:" in output:
+        return "skipped"
+    return "passed"
+
+
 def find_godot():
     configured = os.environ.get("GODOT_BIN")
     if configured and Path(configured).is_file():
@@ -67,13 +85,23 @@ def main():
                 print("Godot asset import failed.", file=sys.stderr)
                 return 1
             failed_scripts = []
+            skipped_scripts = []
             for path in scripts:
                 script = "res://tests/" + path.name
-                if not run([godot, "--headless", "--path", str(project), "--script", script], cwd=ROOT, env=env, timeout=5):
+                result = run_godot_script(
+                    [godot, "--headless", "--path", str(project), "--script", script],
+                    cwd=ROOT, env=env, timeout=5,
+                )
+                if result == "failed":
                     print(f"Godot client regression failed: {script}", file=sys.stderr)
                     godot_ok = False
                     failed_scripts.append(path.name)
-            print(f"Godot client regressions: {len(scripts) - len(failed_scripts)} passed, {len(failed_scripts)} failed, {len(scripts)} total.")
+                elif result == "skipped":
+                    skipped_scripts.append(path.name)
+            passed_scripts = len(scripts) - len(failed_scripts) - len(skipped_scripts)
+            print(f"Godot client regressions: {passed_scripts} passed, {len(failed_scripts)} failed, {len(skipped_scripts)} skipped, {len(scripts)} total.")
+            if skipped_scripts:
+                print("Skipped Godot scripts: " + ", ".join(skipped_scripts))
             if failed_scripts:
                 print("Failed Godot scripts: " + ", ".join(failed_scripts), file=sys.stderr)
 
