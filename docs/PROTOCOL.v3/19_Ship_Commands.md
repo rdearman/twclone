@@ -160,6 +160,10 @@ Upgrade the active ship while docked at a shipyard. Args:
 `{ "new_type_id": 2, "new_ship_name": "Merchant Vessel" }`.
 On success, `shipyard.upgraded_v1` acknowledges `ship_id`, `new_type_id`,
 `new_ship_name`, and `credits_spent`. Failures retain the existing error codes.
+The active hold capacity after an upgrade is at least the new hull's
+`shiptypes.initialholds`; previously installed capacity is retained when it is
+higher and the new hull's `maxholds` eligibility check still applies. This
+allows an escape pod with zero holds to recover into a usable replacement hull.
 The same command also accepts `{ "used_inventory_id": 17 }` to purchase a
 listed used hull. Price is
 `floor((original_hull_value + retained_equipment_value) * factor_bp / 10000)`;

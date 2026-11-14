@@ -150,3 +150,18 @@ def test_corporation_menu_exposes_member_asset_transfer(menus):
         for option in menus["CORPORATION_MAIN"]["options"]
     }
     assert actions["a"] == "corp_member_asset_transfer_flow"
+
+
+def test_corporation_context_loads_member_role_for_menu_permissions(ctx_factory, fake_conn):
+    ctx = ctx_factory()
+    ctx.player_info = {"player": {"id": 106, "corp_id": 3}}
+    fake_conn.queue("corp.status", {
+        "status": "ok", "type": "corp.status.success",
+        "data": {"corp_id": 3, "your_role": "Leader"},
+    })
+
+    client._update_corp_context(ctx)
+
+    assert ctx.state["in_corporation"] is True
+    assert ctx.state["is_ceo"] is True
+    assert ctx.state["is_ceo_or_officer"] is True

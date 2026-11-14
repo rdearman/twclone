@@ -2729,61 +2729,47 @@ def _update_corp_context(ctx: Context, force: bool = False):
     Fetches and updates corporation-related context flags in ctx.state.
     Should be called after player_info changes or a corp-related action.
     """
-    if not force and ctx.player_info:
-        # player.my_info publishes membership as player.corp_id. Older client
-        # code looked for a nested corporation object the server does not send.
-        corp_data = ctx.player_info.get("corporation")
-        player_data = ctx.player_info.get("player", {})
-        corp_id = player_data.get("corp_id") if isinstance(player_data, dict) else None
-        if corp_id is None:
-            corp_id = ctx.player_info.get("corp_id")
-        ctx.state["corp_id"] = int(corp_id) if isinstance(corp_id, int) and corp_id > 0 else None
-        ctx.state["in_corporation"] = bool(ctx.state["corp_id"] or (corp_data and isinstance(corp_data, dict)))
-        ctx.state["is_corp_member"] = ctx.state["in_corporation"]
-        return
+    if force or not ctx.player_info:
+        ctx.state["in_corporation"] = False
+        ctx.state["is_corp_member"] = False
+        ctx.state["corp_id"] = None
+        my_info_resp = _hud_rpc(ctx, "player.my_info", {})
+        if my_info_resp.get("status") != "ok":
+            return
+        ctx.player_info = get_data(my_info_resp)
 
-    ctx.state["in_corporation"] = False
+    # player.my_info publishes membership as player.corp_id. The role is only
+    # available from corp.status, so resolve it on login/reconnect as well as
+    # after an explicit corporation change. Menu-gated treasury and member
+    # administration actions must reflect the server's current role.
+    corp_data = ctx.player_info.get("corporation") if isinstance(ctx.player_info, dict) else None
+    player_data = ctx.player_info.get("player", {}) if isinstance(ctx.player_info, dict) else {}
+    corp_id = player_data.get("corp_id") if isinstance(player_data, dict) else None
+    if corp_id is None and isinstance(ctx.player_info, dict):
+        corp_id = ctx.player_info.get("corp_id")
+    ctx.state["corp_id"] = int(corp_id) if isinstance(corp_id, int) and corp_id > 0 else None
+    ctx.state["in_corporation"] = bool(ctx.state["corp_id"] or (corp_data and isinstance(corp_data, dict)))
+    ctx.state["is_corp_member"] = ctx.state["in_corporation"]
     ctx.state["is_ceo"] = False
     ctx.state["is_ceo_or_officer"] = False
     ctx.state["corp_is_public"] = False
     ctx.state["corp_not_public"] = True # Default until proven otherwise
-
-    # Fetch player_info to get basic corp membership status
-    my_info_resp = _hud_rpc(ctx, "player.my_info", {})
-    if my_info_resp.get("status") == "ok":
-        ctx.player_info = get_data(my_info_resp)
-    else:
-        # If player_info can't be fetched, can't determine corp status
+    if not ctx.state["in_corporation"]:
         return
 
-    corp_data = ctx.player_info.get("corporation")
-    player_data = ctx.player_info.get("player", {})
-    corp_id = player_data.get("corp_id") if isinstance(player_data, dict) else None
-    if corp_id is None:
-        corp_id = ctx.player_info.get("corp_id")
-    ctx.state["corp_id"] = int(corp_id) if isinstance(corp_id, int) and corp_id > 0 else None
-    if ctx.state["corp_id"] or (corp_data and isinstance(corp_data, dict)):
-        ctx.state["in_corporation"] = True
-        ctx.state["is_corp_member"] = True
-        
-        # Only do the heavy lifting if forced
-        if not force:
-            return
-
-        # Fetch corp.status to get role and public status
-        corp_status_resp = ctx.conn.rpc("corp.status", {})
-        if corp_status_resp.get("status") == "ok":
-            corp_status_data = get_data(corp_status_resp)
-            ctx.state["corp_id"] = corp_status_data.get("corp_id", ctx.state.get("corp_id"))
-            if corp_status_data.get("your_role") in ("Leader", "CEO"):
-                ctx.state["is_ceo"] = True
-                ctx.state["is_ceo_or_officer"] = True
-            elif corp_status_data.get("your_role") == "Officer":
-                ctx.state["is_ceo_or_officer"] = True
-            # Note: No read endpoint exists for public corporation status.
-            # corp_is_public stays False/unverified; validation is server-owned.
-        else:
-            print("[Warning] Could not fetch corporation status.")
+    corp_status_resp = ctx.conn.rpc("corp.status", {})
+    if corp_status_resp.get("status") == "ok":
+        corp_status_data = get_data(corp_status_resp)
+        ctx.state["corp_id"] = corp_status_data.get("corp_id", ctx.state.get("corp_id"))
+        if corp_status_data.get("your_role") in ("Leader", "CEO"):
+            ctx.state["is_ceo"] = True
+            ctx.state["is_ceo_or_officer"] = True
+        elif corp_status_data.get("your_role") == "Officer":
+            ctx.state["is_ceo_or_officer"] = True
+        # Note: No read endpoint exists for public corporation status.
+        # corp_is_public stays False/unverified; validation is server-owned.
+    else:
+        print("[Warning] Could not fetch corporation status.")
     
 @register("print_last_rpc")
 def print_last_rpc(ctx):
@@ -7597,12 +7583,13 @@ def land_flow(ctx: Context):
             and (expected_ship_id is None or actual_ship_id == expected_ship_id)
         )
         if ship_refreshed:
-            # ship.status exposes the server-owned landed planet ID. It is the
-            # final identity check before exposing planet actions: omission is
-            # also a partial refresh, because a ship-only record cannot prove
-            # that this active ship is on the planet returned by planet.land.
-            landed_planet_id = _authoritative_positive_integer_id(ship_record.get("onplanet"))
-            ship_refreshed = landed_planet_id == landed_pid
+            # ship.status exposes ``onplanet`` as a 0/1 flag (the landing
+            # response above supplies the confirmed planet ID). Require the
+            # authoritative active ship to remain landed after that response;
+            # comparing this boolean with the planet ID rejects every planet
+            # whose ID is not 1 and strands the player outside the surface UI.
+            onplanet = ship_record.get("onplanet")
+            ship_refreshed = type(onplanet) is int and onplanet == 1
         sector_refreshed = _safe_landing_sector_refresh(ctx)
         if not player_refreshed or not ship_refreshed or not sector_refreshed:
             # The landing envelope is not enough to make planet actions
@@ -8966,6 +8953,12 @@ def main():
             if not isinstance(current, int):
                 my_info_resp = conn.rpc("player.my_info", {})
                 current = extract_current_sector(my_info_resp) or 1
+            # Login often includes the current sector, so it does not need
+            # player.my_info for navigation. The same authoritative read is
+            # still required to hydrate the player's ID for later client-side
+            # receipt checks and permission-aware workflows.
+            if my_info_resp is None:
+                my_info_resp = conn.rpc("player.my_info", {})
 
             # describe sector and normalize
             desc = conn.rpc("move.describe_sector", {"sector_id": int(current)})
@@ -8981,8 +8974,6 @@ def main():
             # Authoritative HUD hydration: only confirmed, non-consuming
             # handlers are used (see hud.py module docstring for provenance
             # of every field, including the login-only unread-news snapshot).
-            if my_info_resp is None:
-                my_info_resp = conn.rpc("player.my_info", {})
             ship_resp = conn.rpc("ship.status", {})
             mail_resp = None
             notice_resp = None

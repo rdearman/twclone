@@ -850,7 +850,11 @@ int repo_stardock_upgrade_ship(db_t *db, int32_t new_type_id, const char *new_na
         return ERR_DB_BUSY;
     }
 
-    const char *ship_sql = "UPDATE ships SET type_id = {1}, name = {2} WHERE ship_id = {3};";
+    /* A replacement hull must carry at least its standard starting hold
+     * capacity. Preserve already purchased capacity when it is higher, and
+     * rely on the command's target-hull eligibility check to keep it within
+     * maxholds. This is essential when recovering from a zero-hold escape pod. */
+    const char *ship_sql = "UPDATE ships SET type_id = {1}, name = {2}, holds = GREATEST(COALESCE(holds, 0), (SELECT COALESCE(initialholds, 0) FROM shiptypes WHERE shiptypes_id = {1})) WHERE ship_id = {3};";
     if (sql_build(db, ship_sql, sql_converted, sizeof(sql_converted)) != 0) {
         (void)db_tx_rollback(db, &err);
         return ERR_DB_QUERY_FAILED;

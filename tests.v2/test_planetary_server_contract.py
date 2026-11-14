@@ -142,6 +142,14 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("DELETE FROM shipyard_used_inventory", repo)
         self.assertIn("UPDATE ships SET sector_id", repo)
 
+    def test_shipyard_upgrade_restores_replacement_hull_starting_holds(self):
+        upgrade = self.stardock_repo.split("repo_stardock_upgrade_ship", 1)[1].split(
+            "repo_stardock_purchase_used_ship", 1
+        )[0]
+        self.assertIn("initialholds", upgrade)
+        self.assertIn("GREATEST(COALESCE(holds, 0)", upgrade)
+        self.assertIn("holds = GREATEST", upgrade)
+
     def test_fast_scan_summary_includes_existing_ship_and_planet_row_counts(self):
         counts = self.universe.split("attach_sector_asset_counts (db_t *db, int sid, json_t *out)", 1)[1].split(
             "cmd_move_scan", 1

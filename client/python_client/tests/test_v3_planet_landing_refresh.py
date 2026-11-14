@@ -30,6 +30,40 @@ class DisconnectingLandingRefreshConn:
         return self.delegate.rpc(command, data)
 
 
+def test_confirmed_landing_accepts_ship_status_boolean_onplanet_flag(
+    ctx_factory, fake_conn, monkeypatch
+):
+    """The planet ID comes from planet.land; ship.status.onplanet is a flag."""
+    ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 77, "name": "Terra"}]})
+    fake_conn.queue("planet.land", {
+        "status": "ok", "type": "planet.land.success",
+        "data": {"planet_id": 77},
+    })
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "type": "player.info",
+        "data": {"player": {"id": 3, "ship_id": 9, "turns_remaining": 39}},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "type": "ship.status",
+        "data": {"ship": {"id": 9, "hull": 100, "onplanet": 1}},
+    })
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "type": "sector.info",
+        "data": {"id": 17, "planets": [{"id": 77, "name": "Terra"}]},
+    })
+    fake_conn.queue("planet.info", {
+        "status": "ok", "type": "planet.info",
+        "data": {"planet": {"planet_id": 77, "sector_id": 17}},
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+
+    client.land_flow(ctx)
+
+    assert ctx.state["on_planet"] is True
+    assert ctx.state["current_planet_id"] == 77
+    assert ctx.menu_stack[-1] == "SURFACE"
+
+
 def test_landing_success_keeps_authoritative_turn_refresh_before_surface(
     ctx_factory, fake_conn, monkeypatch
 ):
@@ -44,7 +78,7 @@ def test_landing_success_keeps_authoritative_turn_refresh_before_surface(
     })
     fake_conn.queue("ship.status", {
         "status": "ok",
-        "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 77}},
+        "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 1}},
     })
     fake_conn.queue("planet.info", {
         "status": "ok",
@@ -71,7 +105,7 @@ def test_landing_uses_refreshed_player_ship_identity_when_hud_ship_is_unknown(
         "status": "ok", "data": {"player": {"id": 3, "ship_id": 9, "turns": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 10, "hull": 100, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"ship_id": 10, "hull": 100, "onplanet": 1}},
     })
 
     client.land_flow(ctx)
@@ -95,7 +129,7 @@ def test_landing_rejects_success_shaped_player_refresh_with_wrong_response_type(
         "data": {"player": {"id": 3, "turns": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"ship_id": 9, "onplanet": 1}},
     })
 
     client.land_flow(ctx)
@@ -116,7 +150,7 @@ def test_landing_rejects_success_shaped_ship_refresh_with_wrong_response_type(
     })
     fake_conn.queue("ship.status", {
         "status": "ok", "type": "player.info",
-        "data": {"ship": {"ship_id": 9, "onplanet": 77}},
+        "data": {"ship": {"ship_id": 9, "onplanet": 1}},
     })
 
     client.land_flow(ctx)
@@ -140,7 +174,7 @@ def test_landing_accepts_explicit_success_envelope_type(
         "status": "ok", "data": {"player": {"id": 3, "turns": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 1}},
     })
     fake_conn.queue("planet.info", {
         "status": "ok", "data": {"planet": {"planet_id": 77, "sector_id": 17}},
@@ -189,7 +223,7 @@ def test_landing_success_with_unexpected_response_type_is_not_claimed(
         "status": "ok", "data": {"player": {"id": 3, "turns": 40}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 1}},
     })
     fake_conn.queue("move.describe_sector", {
         "status": "ok", "data": {"sector_id": 17, "planets": [{"id": 77}]},
@@ -352,7 +386,7 @@ def test_confirmed_landing_keeps_only_id_when_surface_read_is_refused(
         "status": "ok", "data": {"player": {"id": 3, "turns": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 1}},
     })
     fake_conn.queue("planet.info", {
         "status": "refused", "error": {"message": "Planet details are not available."},
@@ -456,7 +490,7 @@ def test_confirmed_landing_removes_surface_when_planet_refresh_is_refused(
         "status": "ok", "data": {"player": {"id": 3, "turns": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 1}},
     })
     fake_conn.queue("planet.info", {
         "status": "refused", "error": {"message": "Planet is no longer available."},
