@@ -22,26 +22,30 @@ func _run() -> void:
 	workflow.open_planet(77)
 	_check(captured.size() == 2, "opening the landed-planet view did not request authoritative details")
 	_check(captured[0]["command"] == "planet.info" and captured[1]["command"] == "planet.colonists.get", "planet screen requested unexpected operations")
-	workflow.set_planet_info({
-		"planet_id": 77, "name": "Test World", "population": 40, "population_type": "SLAVE", "morale_status": "LOW", "fighters": 12, "citadel_level": 1,
+	var confirmed_planet_info := {
+		"planet_id": 77, "sector_id": 7, "name": "Test World", "population": 40, "population_type": "SLAVE", "morale_status": "LOW", "fighters": 12, "citadel_level": 1,
 		"colonists_unassigned": 10, "colonists_ore": 8, "colonists_org": 6,
 		"colonists_eq": 4, "colonists_weapons": 12,
 		"max_colonists_ore": 20, "max_colonists_organics": 20,
 		"max_colonists_equipment": 20,
 		"goods": [{"commodity": "ORE", "quantity": 5, "max_capacity": 50}],
-	})
+	}
+	workflow.set_planet_info(confirmed_planet_info)
 	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": 8, "ship_colonists": 3, "ship_holds_available": 4})
 	_check(not workflow._pickup.disabled and not workflow._dropoff.disabled, "valid pickup/dropoff actions remained disabled")
-	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": "8", "ship_colonists": 3.0, "ship_holds_available": true})
+	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": "8", "ship_colonists": 3.5, "ship_holds_available": true})
 	_check(workflow._pickup.disabled and workflow._dropoff.disabled, "malformed colony counts became actionable transfer limits")
+	workflow.set_colonist_state({"planet_id": 77, "planet_colonists": 8, "ship_colonists": 3, "ship_holds_available": 4})
 	_check(workflow._info_label.text.to_lower().contains("fighters: 12"), "confirmed planetary fighter count was not displayed")
-	_check(workflow._info_label.text.contains("Population type: SLAVE"), "slave population type was not displayed")
-	_check(workflow._info_label.text.contains("Morale status: LOW"), "permanently low slave morale was not displayed")
+	_check(workflow._info_label.text.contains("Population Type: SLAVE"), "slave population type was not displayed")
+	_check(workflow._info_label.text.contains("Morale Status: LOW"), "permanently low slave morale was not displayed")
 	_check(int(workflow._labor_weapons.value) == 12, "confirmed weapons workforce was not loaded")
 	_check(workflow._labor_status.text.contains("weapons 12"), "weapons assignment was not shown in workforce status")
-	workflow.set_planet_info({"planet_id": 77, "citadel_level": "1"})
+	var malformed_citadel_info: Dictionary = confirmed_planet_info.duplicate()
+	malformed_citadel_info["citadel_level"] = "1"
+	workflow.set_planet_info(malformed_citadel_info)
 	_check(workflow._citadel_button.disabled, "malformed citadel level enabled development action")
-	workflow.set_planet_info({"planet_id": 77, "citadel_level": 1})
+	workflow.set_planet_info(confirmed_planet_info)
 	_check(not workflow._citadel_button.disabled, "valid citadel level did not enable development action")
 	workflow._labor_weapons.value = 11
 	workflow._save_labor_assignments()
@@ -58,8 +62,11 @@ func _run() -> void:
 		_check(captured[3]["data"] == {"planet_id": 77, "direction": "ship_to_planet", "quantity": 3} and captured[3]["mutating"], "fighter transfer payload did not match the public V3 contract")
 	workflow._quantity.value = 4
 	workflow._confirm_transfer("pickup")
-	var transfer_dialog: ConfirmationDialog = workflow.get_child(workflow.get_child_count() - 1)
-	transfer_dialog.confirmed.emit()
+	var transfer_dialogs := workflow.find_children("*", "ConfirmationDialog", true, false)
+	_check(transfer_dialogs.size() == 1, "colonist transfer did not present its confirmation dialog")
+	if transfer_dialogs.size() == 1:
+		var transfer_dialog := transfer_dialogs[0] as ConfirmationDialog
+		transfer_dialog.confirmed.emit()
 	_check(captured.size() == 5 and captured[4]["command"] == "planet.colonists.set", "colonist transfer did not submit after confirmation")
 	if captured.size() > 4:
 		_check(captured[4]["data"] == {"planet_id": 77, "action": "pickup", "quantity": 4} and captured[4]["mutating"], "colonist transfer payload did not match the implemented handler")

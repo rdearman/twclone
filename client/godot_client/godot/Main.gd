@@ -700,6 +700,7 @@ func _on_refresh_failed(snapshot: Dictionary) -> void:
 		gameplay_view.set_action_pending(false)
 	if _command_refresh_pending:
 		_command_refresh_pending = false
+		var specific_refresh_failure_presented := false
 		if _ship_roster_refresh_after_command:
 			_ship_roster_refresh_after_command = false
 			# The previous roster is no longer safe to use after an ownership
@@ -713,6 +714,7 @@ func _on_refresh_failed(snapshot: Dictionary) -> void:
 			_landing_surface_ready = false
 			gameplay_view.set_command_busy(false)
 			gameplay_view.show_notification("Launch confirmed, but the authoritative refresh was incomplete; keeping planet actions unavailable until state is refreshed.")
+			specific_refresh_failure_presented = true
 		if _pending_landing_surface_id > 0:
 			_pending_landing_surface_id = 0
 			# The landing reply was not enough to make the surface actionable:
@@ -726,12 +728,14 @@ func _on_refresh_failed(snapshot: Dictionary) -> void:
 			# leaving stale planet controls actionable.
 			gameplay_view.leave_planet_workflow()
 			gameplay_view.show_notification("Landing confirmed, but player and ship refresh was incomplete; planet actions remain unavailable until state is refreshed.")
+			specific_refresh_failure_presented = true
 		if _pending_trade.get("refresh_port_after") == true:
 			_pending_trade.erase("refresh_port_after")
 			_request_port_refresh()
 		else:
 			gameplay_view.set_command_busy(false)
-		gameplay_view.show_notification("Command completed, but the refreshed state could not be confirmed.")
+		if not specific_refresh_failure_presented:
+			gameplay_view.show_notification("Command completed, but the refreshed state could not be confirmed.")
 
 func _on_refresh_finished(snapshot: Dictionary) -> void:
 	if _warp_refresh_pending:
@@ -782,7 +786,6 @@ func _on_refresh_finished(snapshot: Dictionary) -> void:
 				await gameplay_view.play_warp_transition()
 				gameplay_view.enter_planet_workflow(landing_id)
 				gameplay_view.show_notification("Landing confirmed · planet surface opened.")
-				_request_planet_surface_records()
 			else:
 				_landing_surface_ready = false
 				# Freshness alone does not establish that the landing completed. Clear
@@ -806,9 +809,11 @@ func _finish_pending_launch_departure(snapshot: Dictionary) -> void:
 	var freshness: Dictionary = freshness_value if freshness_value is Dictionary else {}
 	var all_fresh := str(freshness.get("player", "")) == ClientState.FRESH and str(freshness.get("ship", "")) == ClientState.FRESH and str(freshness.get("sector", "")) == ClientState.FRESH
 	if not all_fresh:
+		_landed_planet_id = 0
 		_landing_surface_ready = false
+		gameplay_view.leave_planet_workflow()
 		gameplay_view.set_command_busy(false)
-		gameplay_view.show_notification("Launch confirmed, but the authoritative refresh was incomplete; keeping planet actions unavailable until state is refreshed.")
+		gameplay_view.show_notification("Launch confirmed, but the authoritative refresh was incomplete; planet actions remain closed until state is refreshed.")
 		return
 	var ship_value: Variant = snapshot.get("ship", {})
 	var ship_snapshot: Dictionary = ship_value if ship_value is Dictionary else {}
@@ -816,17 +821,21 @@ func _finish_pending_launch_departure(snapshot: Dictionary) -> void:
 	# before a launch can close the surface.  Missing or malformed metadata is
 	# not evidence that departure completed; keep the surface fail-closed.
 	if not ship_snapshot.has("onplanet"):
+		_landed_planet_id = 0
 		_landing_surface_ready = false
+		gameplay_view.leave_planet_workflow()
 		gameplay_view.set_command_busy(false)
-		gameplay_view.show_notification("Launch state was incomplete; keeping the confirmed planet surface until a fresh state is available.")
+		gameplay_view.show_notification("Launch state was incomplete; planet actions remain closed until a fresh state is available.")
 		return
 	var onplanet: Variant = ship_snapshot.get("onplanet")
 	var onplanet_valid_zero: bool = (typeof(onplanet) == TYPE_INT and int(onplanet) == 0) \
 		or (typeof(onplanet) == TYPE_FLOAT and is_finite(onplanet) and onplanet == 0.0)
 	if not onplanet_valid_zero:
+		_landed_planet_id = 0
 		_landing_surface_ready = false
+		gameplay_view.leave_planet_workflow()
 		gameplay_view.set_command_busy(false)
-		gameplay_view.show_notification("Launch state was contradictory; keeping the confirmed planet surface until a fresh state is available.")
+		gameplay_view.show_notification("Launch state was contradictory; planet actions remain closed until a fresh state is available.")
 		return
 	_landed_planet_id = 0
 	_landing_surface_ready = false
@@ -1557,8 +1566,11 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			await gameplay_view.play_warp_transition()
 			_pending_launch_departure = true
 			_planet_pending_count = 0
+			_landed_planet_id = 0
+			_landing_surface_ready = false
+			gameplay_view.leave_planet_workflow()
 			gameplay_view.show_notification("Launch confirmed · refreshing player, ship and sector state before leaving the surface.")
-			_refresh_after_command()
+			_refresh_after_command(["player", "ship", "sector"])
 			return
 		if command_name == "move.transwarp":
 			if not _movement_response_type_matches(response, "move.transwarp"):
@@ -1854,6 +1866,12 @@ func _refresh_after_command(domains: Array = []) -> void:
 	_command_refresh_pending = true
 	if not refresh_coordinator.refresh(true, domains):
 		_command_refresh_pending = false
+		if _pending_launch_departure:
+			_pending_launch_departure = false
+			_landed_planet_id = 0
+			_landing_surface_ready = false
+			gameplay_view.leave_planet_workflow()
+			gameplay_view.show_notification("Launch was confirmed, but state refresh could not start; planet actions remain closed until reconnect.")
 		if _pending_landing_surface_id > 0:
 			# A confirmed landing is not actionable until its player/ship refresh
 			# completes.  If refresh cannot even start, do not leave a pending

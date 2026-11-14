@@ -26,7 +26,7 @@ func _run() -> void:
 	var jettison := _command("Jettison cargo")
 	menu._choose_action(jettison)
 	_check(menu._form_fields.has("commodity") and menu._form_fields.has("quantity"), "jettison lost its commodity/quantity fields")
-	_check(menu._form_content.get_child_count() > 0 and (menu._form_content.get_child(0) as Label).text.to_lower().contains("permanently destroys"), "jettison warning is missing")
+	_check(menu._inline_form_content.get_child_count() > 1 and (menu._inline_form_content.get_child(1) as Label).text.to_lower().contains("permanently destroys"), "jettison warning is missing")
 
 	var hardware := _command("Buy ship hardware")
 	_check(hardware.get("fields", [])[0][0] == "code", "hardware purchase does not use the server's code field")

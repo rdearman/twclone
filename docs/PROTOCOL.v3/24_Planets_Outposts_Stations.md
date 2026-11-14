@@ -7,7 +7,11 @@ Canonical product decisions: [`../V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECI
 ### `planet.land`
 Land on a planet (if within range).
 **Args**: `{ "planet_id": 123 }`
-**Response**: `{ "status": "landed", "planet_id": 123 }`
+**Success response**: `type: "planet.land.success"`; `data` contains
+`{ "message": "Landed successfully.", "planet_id": 123 }`. The client must
+match the returned planet ID to the requested ID and then confirm the active
+ship's `onplanet` field through the authoritative player/ship/sector refresh
+before exposing planet actions.
 
 The planet owner and authorized members of its owning corporation land without
 hostile-fire checks. An unauthorized attempt resolves active atmosphere Quasar
@@ -37,7 +41,13 @@ so a ship can leave after collecting colonists.
 
 ### `planet.launch`
 Launch from a planet.
-**Response**: `{ "status": "launched", "in_space": true }`
+**Success response**: `type: "planet.launch.success"`; `data` contains
+`{ "message": "Launched successfully.", "sector_id": 12, "hazards": [] }`.
+`sector_id` is the server-confirmed destination. The client closes the planet
+surface on this typed success receipt and refreshes authoritative player,
+active-ship and sector state before enabling further actions. Entry hazards may
+be included in `data.hazards`; a ship destroyed during entry returns an error
+with terminal hazard data instead of this success response.
 
 ### `planet.info`
 Get detailed information about a planet after landing or when authorized as its
