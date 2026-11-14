@@ -12,6 +12,7 @@ class CargoRepositoryGuardTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = (ROOT / "src/db/repo/repo_cargo.c").read_text()
         cls.ships = (ROOT / "src/db/repo/repo_ships.c").read_text()
+        cls.db_api = (ROOT / "src/db/db_api.c").read_text()
 
     def test_every_sql_template_build_failure_is_checked(self):
         # An unchecked sql_build failure submits an empty statement. Keep every
@@ -29,6 +30,20 @@ class CargoRepositoryGuardTests(unittest.TestCase):
         self.assertIn("is_valid_commodity_code (commodity_code)", get_body)
         self.assertIn("is_valid_commodity_code (commodity_code)", add_body)
         self.assertIn("return cargo_rc;", add_body)
+
+    def test_result_readers_initialize_error_state_before_column_access(self):
+        for name, next_name in (
+            ("repo_cargo_get_total (", "repo_cargo_get ("),
+            ("repo_cargo_get (", "repo_cargo_add_unlocked ("),
+        ):
+            body = self.source.split(name, 1)[1].split(next_name, 1)[0]
+            self.assertIn("db_error_clear (&err);", body)
+
+    def test_db_query_clears_stale_error_before_successful_read(self):
+        body = self.db_api.split("bool db_query(", 1)[1].split(
+            "bool db_exec_returning", 1
+        )[0]
+        self.assertIn("db_error_clear(err);", body)
 
     def test_capacity_arithmetic_rejects_signed_overflow(self):
         add_body = self.source.split("repo_cargo_add_unlocked (", 1)[1].split(

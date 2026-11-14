@@ -3,6 +3,42 @@
 import client
 
 
+def test_dock_workflow_uses_server_confirmation_and_exposes_stardock_actions(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 216, "port": {"id": 207, "type": 9}})
+    fake_conn.queue("dock.status", {
+        "status": "ok", "type": "dock.status_v1", "data": {
+            "port_id": 0, "sector_id": 216, "docked": False,
+        },
+    })
+    fake_conn.queue("dock.status", {
+        "status": "ok", "type": "dock.status_v1", "data": {
+            "port_id": 207, "sector_id": 216, "docked": True,
+        },
+    })
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+    monkeypatch.setattr(client, "_refresh_ship_after_move", lambda _ctx: None)
+
+    client.dock_status_flow(ctx)
+
+    assert [call["command"] for call in fake_conn.calls] == ["dock.status", "dock.status"]
+    assert fake_conn.calls[1]["data"] == {"action": "dock"}
+    assert ctx.state["docked_port_id"] == 207
+    assert "Ship docked at the local port" in capsys.readouterr().out
+
+
+def test_fast_scan_displays_object_warp_rows_and_server_counts():
+    rendered = client._render_scan_card({"status": "ok", "type": "sector.scan", "data": {
+        "sector_id": 216, "name": "Canes",
+        "adjacent_sectors": [{"to_sector": 292}, {"to_sector": 404}],
+        "ships_present": [{"ship_id": 1}], "celestial_objects": [],
+        "counts": {"ships": 1, "planets": 0, "mines": 0, "fighters": 0},
+    }})
+    assert "Adjacent: 292, 404" in rendered
+    assert "ships=1, planets=0" in rendered
+
+
 def test_harvest_flow_calls_server_and_refreshes_ship_and_planet(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):

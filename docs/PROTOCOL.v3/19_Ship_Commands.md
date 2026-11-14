@@ -148,6 +148,8 @@ With no arguments, list hulls available at the shipyard where the player is
 docked. The `shipyard.list_v1` response includes `sector_id`, `is_shipyard`,
 `current_ship` (`type`, `base_price`, `trade_in_value`), and an `available`
 array with each hull's prices, eligibility, and any restriction reasons.
+Each available hull includes its integer `type_id`, which is the value to send
+as `new_type_id` when purchasing or upgrading to that hull.
 It also includes `used_available`, a list of persistent used hulls at the
 facility. Entries identify `used_inventory_id`, the original `ship_id`, name,
 type, original hull value, retained-equipment value and current resale price.

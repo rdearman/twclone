@@ -972,6 +972,10 @@ cmd_shipyard_list (client_ctx_t *ctx, json_t *root)
             }
         }
 
+      /* The player-facing upgrade workflow must send this exact catalogue
+       * identity back as shipyard.upgrade.new_type_id. Names and prices are
+       * display fields and are not safe substitutes. */
+      json_object_set_new (ship_obj, "type_id", json_integer (ship_type_id));
       json_object_set_new (ship_obj, "type", json_string (type_name));
       json_object_set_new (ship_obj, "name", json_string (type_name));	// Using type_name as name for now
       json_object_set_new (ship_obj, "base_price",

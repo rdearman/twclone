@@ -124,6 +124,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
         listing = self.stardock.split("cmd_shipyard_list", 1)[1].split(
             "cmd_shipyard_upgrade", 1
         )[0]
+        self.assertIn('"type_id", json_integer (ship_type_id)', listing)
         self.assertIn("shipyard_used_inventory", listing)
         self.assertIn("used_available", listing)
         self.assertIn("shipyard_used_resale_factor_bp", listing)
@@ -140,6 +141,15 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("ship_ownership(ship_id,player_id,role_id,is_primary)", repo)
         self.assertIn("DELETE FROM shipyard_used_inventory", repo)
         self.assertIn("UPDATE ships SET sector_id", repo)
+
+    def test_fast_scan_summary_includes_existing_ship_and_planet_row_counts(self):
+        counts = self.universe.split("attach_sector_asset_counts (db_t *db, int sid, json_t *out)", 1)[1].split(
+            "cmd_move_scan", 1
+        )[0]
+        self.assertIn('"ships_present"', counts)
+        self.assertIn('"celestial_objects"', counts)
+        self.assertIn('"ships"', counts)
+        self.assertIn('"planets"', counts)
 
     def test_ship_sale_last_hull_count_includes_non_primary_owned_ships(self):
         sale = self.stardock_repo.split("repo_stardock_sell_ship", 1)[1].split(

@@ -1110,6 +1110,11 @@ def ctx_refresh_port_context(ctx):
         # a success-shaped response that was rejected as another port.
         if "port_inventory" in ctx.state:
             ctx.state["is_stardock"] = _authoritative_is_stardock({"port": port_data})
+            # Stardock is the V3 shipyard. Keep the menu capability tied to
+            # the same server-authoritative port type; otherwise the Shipyard
+            # entry stays hidden even though dock/status correctly identifies
+            # the Stardock and the server exposes shipyard commands there.
+            ctx.state["is_shipyard_port"] = ctx.state["is_stardock"]
         else:
             error = r.get("error") if isinstance(r, dict) else {}
             message = error.get("message") if isinstance(error, dict) else None
@@ -1119,6 +1124,59 @@ def ctx_refresh_port_context(ctx):
         error = r.get("error") if isinstance(r, dict) else {}
         message = error.get("message") if isinstance(error, dict) else None
         print(f"Port details unavailable · {message or 'the server did not disclose this port here.'}")
+
+
+@register("dock_status_flow")
+def dock_status_flow(ctx: Context):
+    """Dock or undock the active ship at the local port using server state."""
+    def read_status(response):
+        if (not isinstance(response, dict) or response.get("status") != "ok"
+                or response.get("type") != "dock.status_v1"):
+            return None
+        data = get_data(response)
+        if not isinstance(data, dict) or type(data.get("docked")) is not bool:
+            return None
+        sector_id = _authoritative_positive_integer_id(data.get("sector_id"))
+        if sector_id != _authoritative_positive_integer_id(ctx.current_sector_id):
+            return None
+        port_id = data.get("port_id")
+        if type(port_id) is not int or port_id < 0:
+            return None
+        if data["docked"] != (port_id > 0):
+            return None
+        return data
+
+    status = ctx.conn.rpc("dock.status", {})
+    data = read_status(status)
+    if data is None:
+        print("Docking status could not be confirmed from the server.")
+        return
+    if data["docked"]:
+        action = "undock"
+        expected_port_id = data["port_id"]
+        prompt = f"Undock from port {expected_port_id}? [y/N]: "
+    else:
+        port = (ctx.last_sector_desc or {}).get("port") or {}
+        expected_port_id = _authoritative_positive_integer_id(port.get("id"))
+        if expected_port_id is None:
+            print("There is no confirmed local port to dock at.")
+            return
+        action = "dock"
+        prompt = f"Dock at port {expected_port_id}? [y/N]: "
+    if input(prompt).strip().lower() != "y":
+        print("Docking action cancelled.")
+        return
+    result = ctx.conn.rpc("dock.status", {"action": action})
+    confirmed = read_status(result)
+    should_be_docked = action == "dock"
+    if (confirmed is None or confirmed["docked"] is not should_be_docked
+            or (should_be_docked and confirmed["port_id"] != expected_port_id)
+            or (not should_be_docked and confirmed["port_id"] != 0)):
+        print("Docking action was not confirmed; refresh ship status before continuing.")
+        return
+    ctx.state["docked_port_id"] = confirmed["port_id"]
+    print("Ship docked at the local port." if should_be_docked else "Ship undocked.")
+    _refresh_ship_after_move(ctx)
 
 
 def normalize_port_info(resp: dict) -> dict:
@@ -4625,11 +4683,18 @@ def _render_scan_card(scan: dict) -> str:
         adjacent_known = "adjacent" in d or "adjacent_sectors" in d
         raw_adj = d.get("adjacent", d.get("adjacent_sectors", []))
         # Scan metadata is displayable only when each destination is a real
-        # server ID.  Do not let bool/float/string values become actionable
-        # destinations through presentation or the cache merge below.
-        adj = ([value for value in raw_adj
-                if _authoritative_positive_integer_id(value) is not None]
-               if isinstance(raw_adj, list) else [])
+        # server ID. The scan protocol emits the same {to_sector: id} rows as
+        # sector.info; accepting that shape keeps the scan usable without
+        # weakening the positive-integer validation.
+        adj = []
+        if isinstance(raw_adj, list):
+            for value in raw_adj:
+                if _authoritative_positive_integer_id(value) is not None:
+                    adj.append(value)
+                elif isinstance(value, dict):
+                    target = value.get("to_sector")
+                    if _authoritative_positive_integer_id(target) is not None:
+                        adj.append(target)
 
         # A non-empty array is visibility evidence only when every row has
         # the authoritative object shape.  Do not turn malformed rows into a
@@ -4658,6 +4723,13 @@ def _render_scan_card(scan: dict) -> str:
                 if (isinstance(value, int) and not isinstance(value, bool)
                         and value >= 0):
                     return str(value)
+            # The current-sector scan includes these arrays as part of its
+            # documented payload. Their lengths are authoritative counts when
+            # an older server omits the summary aliases.
+            rows_key = {"ships": "ships_present", "planets": "celestial_objects"}.get(key)
+            rows = d.get(rows_key) if rows_key else None
+            if isinstance(rows, list) and all(isinstance(row, dict) for row in rows):
+                return str(len(rows))
             return "unknown"
 
         beacon = d.get("beacon")

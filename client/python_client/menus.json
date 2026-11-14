@@ -604,6 +604,13 @@
           }
         },
         {
+          "key": "d",
+          "label": "(D) Dock / Undock",
+          "action": {
+            "pycall": "dock_status_flow"
+          }
+        },
+        {
           "key": "g",
           "label": "(G) Get Quote",
           "action": {

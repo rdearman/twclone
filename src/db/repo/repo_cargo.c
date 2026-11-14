@@ -85,6 +85,7 @@ repo_cargo_get_total (db_t *db, int32_t ship_id, int64_t *total_out)
 
   db_res_t *res = NULL;
   db_error_t err;
+  db_error_clear (&err);
   char sql_converted[512];
   if (sql_build (db, sql, sql_converted, sizeof (sql_converted)) != 0)
     return ERR_DB_QUERY_FAILED;
@@ -135,6 +136,7 @@ repo_cargo_get (db_t *db, int32_t ship_id, const char *commodity_code, int64_t *
 
   db_res_t *res = NULL;
   db_error_t err;
+  db_error_clear (&err);
   char sql_converted[512];
   if (sql_build (db, sql, sql_converted, sizeof (sql_converted)) != 0)
     return ERR_DB_QUERY_FAILED;

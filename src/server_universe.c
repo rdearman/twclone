@@ -1934,6 +1934,8 @@ static void
 attach_sector_asset_counts (db_t *db, int sid, json_t *out)
 {
   int ftrs = 0, armid = 0, limpet = 0;
+  json_t *ships_present = json_object_get (out, "ships_present");
+  json_t *celestial_objects = json_object_get (out, "celestial_objects");
   db_res_t *res = NULL;
   db_error_t err;
 
@@ -1963,6 +1965,16 @@ attach_sector_asset_counts (db_t *db, int sid, json_t *out)
       db_res_finalize (res);
     }
   json_t *c = json_object ();
+
+  /* The summary scan already fetched these current-sector rows. Include their
+   * cardinalities in the summary instead of forcing clients to infer missing
+   * counts or issue a second visibility request. */
+  json_object_set_new (c, "ships",
+                       json_integer (json_is_array (ships_present)
+                                     ? json_array_size (ships_present) : 0));
+  json_object_set_new (c, "planets",
+                       json_integer (json_is_array (celestial_objects)
+                                     ? json_array_size (celestial_objects) : 0));
 
 
   json_object_set_new (c, "fighters", json_integer (ftrs));

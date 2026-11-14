@@ -291,6 +291,11 @@ bool db_exec_rows_affected(db_t *db, const char *sql, const db_bind_t *params, s
 }
 
 bool db_query(db_t *db, const char *sql, const db_bind_t *params, size_t n_params, db_res_t **out_res, db_error_t *err) {
+    /* Drivers set error fields on failure but do not all clear them on
+     * success. Callers may inspect err after reading result columns, so do
+     * not let an uninitialized or stale code turn a successful read into a
+     * gameplay refusal. */
+    db_error_clear(err);
     if (!db || !db->vt || !db->vt->query) {
         if (err) {
             err->code = ERR_DB_CLOSED;
