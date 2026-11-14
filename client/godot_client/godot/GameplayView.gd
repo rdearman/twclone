@@ -1142,10 +1142,10 @@ func _authoritative_object_id(source: Dictionary, keys: Array) -> int:
 	for key in keys:
 		if not source.has(key):
 			continue
-		# Godot may decode a JSON integer as an integral float. Accept that wire
-		# representation, but never coerce strings, booleans or fractional values.
+		# IDs have to arrive in the normalized integer form; do not coerce
+		# strings, booleans or floats into actionable object identities.
 		var raw: Variant = source[key]
-		var valid: bool = (typeof(raw) == TYPE_INT and int(raw) > 0) or (typeof(raw) == TYPE_FLOAT and is_finite(raw) and raw > 0.0 and raw == floor(raw))
+		var valid: bool = typeof(raw) == TYPE_INT and int(raw) > 0
 		if not valid:
 			# An explicit but malformed identity must not fall through to a
 			# legacy alias that could identify a different object. This includes

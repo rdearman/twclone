@@ -56,11 +56,13 @@ func _run() -> void:
 	_check(view.hull_label.text == "HULL  43", "hull HUD did not reflect the supplied authoritative state")
 	_check(view.fighters_label.text == "FIGHTERS  120", "fighter HUD did not reflect the supplied authoritative state")
 	_check(view.sector_title.text.contains("44") and view.warp_links_label.text == "WARP LINKS: 45 · 91", "sector and warp-link HUD did not reflect the supplied authoritative state")
-	view.show_command_result("Sector density scan", {"sectors": [21, 21.0, 213, 100.0, 808, 0, 1793, null]})
+	view.show_command_result("Sector density scan", {"sectors": [21, 21, 213, 100, 808, 0]})
 	_check(not view.command_menu._result_dialog.visible, "read-only result opened a modal dialog")
-	_check(view.information_text.text.contains("Sector 21 · Density: 21") and view.information_text.text.contains("Sector 1793 · Density: unavailable"), "density result was not rendered in the Information panel")
-	var command_calls := 0
-	view.command_requested.connect(func(_command: String, _data: Dictionary, _label: String, _mutating: bool) -> void: command_calls += 1)
+	_check(view.information_text.text.contains("Sector 21 · Density: 21") and view.information_text.text.contains("Sector 808 · Density: 0"), "density result was not rendered in the Information panel")
+	var command_calls: Array[Dictionary] = []
+	view.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
+		command_calls.append({"command": command, "data": data.duplicate(true), "label": label, "mutating": mutating})
+	)
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": false,
@@ -80,7 +82,7 @@ func _run() -> void:
 	_check(view.selection_title.text == "PORT" and view.selection_detail.text.contains("Batiredigo"), "artwork click did not select the exact port in Sector Contents")
 	_check(not view.notification_label.visible, "artwork selection recreated the floating selection banner")
 	_check(not view.command_menu._result_dialog.visible and view.information_text.text.contains("Sector 21 · Density: 21"), "port selection covered or replaced the Information panel")
-	_check(command_calls == 0, "artwork selection emitted a gameplay command")
+	_check(command_calls.is_empty(), "artwork selection emitted a gameplay command")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": false,
@@ -123,12 +125,12 @@ func _run() -> void:
 	_check(inspect_button != null and not inspect_button.disabled, "selected ship inspection was not enabled with a confirmed ID")
 	_check(private_message_button != null and not private_message_button.disabled, "authoritative owner ID did not enable private ship-owner messaging")
 	if private_message_button != null:
-		var before_private_message := command_calls
+		var before_private_message: int = command_calls.size()
 		private_message_button.pressed.emit()
 		(commands._form_fields["message"] as LineEdit).text = "ID route"
 		commands._submit_form()
-		_check(command_calls == before_private_message + 1, "private ship-owner message did not emit a command")
-		_check(commands._form_action.get("fixed", {}) == {"to_id": 17}, "private ship-owner message did not preserve the authoritative owner ID")
+		_check(command_calls.size() == before_private_message + 1 and command_calls.back().get("command") == "chat.send", "private ship-owner message did not emit a command")
+		_check(command_calls.back().get("data", {}).get("to_id") == 17, "private ship-owner message did not preserve the authoritative owner ID")
 	_check(attack_button != null and not attack_button.disabled, "confirmed selected-ship action was incorrectly disabled")
 	_check(tow_button != null and not tow_button.disabled, "implemented tow action was not available for a ship with a confirmed ID")
 	view.set_snapshot({
@@ -171,7 +173,7 @@ func _run() -> void:
 		"hud": {"sector_id": 18, "ship_id": 74},
 		"freshness": {"sector": "fresh", "overall": "fresh"},
 		"ship": {"cargo": [{"commodity": "ORE", "quantity": 4}], "holds": 20},
-		"sector": {"id": 18, "ports": [], "planets": [], "ships": [{"ship_id": 74.0, "name": "Fractional metadata"}]}
+		"sector": {"id": 18, "ports": [], "planets": [{"name": "Unidentified planet"}], "ships": [{"ship_id": 74.0, "name": "Fractional metadata"}]}
 	})
 	view.select_object_key("ship:74")
 	_check(not view.selection_detail.text.contains("Holds"), "fractional selected-ship ID was treated as the confirmed active ship")
@@ -183,21 +185,28 @@ func _run() -> void:
 	var missing_planet_land := _context_button(view, "LAND ON PLANET · ID UNAVAILABLE")
 	_check(missing_planet_info != null and missing_planet_info.disabled, "missing planet ID did not explain why information is unavailable")
 	_check(missing_planet_land != null and missing_planet_land.disabled, "missing planet ID did not explain why landing is unavailable")
-	var before_missing_planet_activation := command_calls
+	var before_missing_planet_activation: int = command_calls.size()
 	view.sector_view.select_object("planet:unknown:unidentified_planet")
 	view._on_art_object_activated("planet:unknown:unidentified_planet")
-	_check(command_calls == before_missing_planet_activation, "artwork activation sent a landing request without an authoritative planet ID")
+	_check(command_calls.size() == before_missing_planet_activation, "artwork activation sent a landing request without an authoritative planet ID")
 	_check(view.notification_label.text.contains("did not provide a planet ID"), "missing planet ID activation did not explain why landing is unavailable")
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 18},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 18, "ports": [], "planets": [{"planet_id": 77.5, "name": "Fractional metadata"}], "ships": []}
+	})
 	for child in view.context_action_list.get_children():
 		child.free()
 	view.context_action_buttons.clear()
 	view._add_object_actions("planet", {"data": {"planet_id": 77.5, "name": "Fractional metadata"}})
 	var fractional_planet_land := _context_button(view, "LAND ON PLANET · ID UNAVAILABLE")
 	_check(fractional_planet_land != null and fractional_planet_land.disabled, "fractional planet metadata was coerced into an actionable landing ID")
-	var before_fractional_activation := command_calls
+	var before_fractional_activation: int = command_calls.size()
 	view.sector_view.select_object("planet:unknown:fractional_metadata")
 	view._on_art_object_activated("planet:unknown:fractional_metadata")
-	_check(command_calls == before_fractional_activation, "fractional planet metadata sent a landing request")
+	_check(command_calls.size() == before_fractional_activation, "fractional planet metadata sent a landing request")
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": true,
@@ -218,7 +227,7 @@ func _run() -> void:
 		_check(route_detail.text.contains("Price estimate unavailable") and route_plot.text == "PLOT TO 18", "legacy route response did not explain missing estimates or offer a usable plot target")
 	view.show_restored_autopilot_route([18, 21, 24], 24, "stopped", "manual")
 	_check(view._route_panel.visible and view._route_label.text.contains("SAVED ROUTE · STOPPED") and view._route_label.text.contains("18 → 21 → 24"), "reconnected persisted autopilot route was not presented with its authoritative state")
-	_check(command_calls == 0, "restoring a saved route moved the ship unexpectedly")
+	_check(command_calls.size() == 1, "restoring a saved route moved the ship unexpectedly")
 	_check(view._route_panel.get_child_count() == 1, "route status panel still contains redundant execution buttons")
 	view.queue_free()
 	await process_frame

@@ -937,7 +937,7 @@ func _format_density_result(payload: Dictionary) -> String:
 	return "\n".join(rows)
 
 func _authoritative_density_id(value: Variant) -> bool:
-	return _is_integral_number(value) and int(value) > 0
+	return typeof(value) == TYPE_INT and int(value) > 0
 
 func _is_integral_number(value: Variant) -> bool:
 	return (typeof(value) == TYPE_INT and int(value) >= 0) or (typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value))

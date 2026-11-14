@@ -1145,6 +1145,14 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 				gameplay_view.show_notification("%s was not displayed because the server returned an unexpected response type; refreshing confirmed sector state." % label)
 				_refresh_after_command(["sector"])
 				return
+			var reported_ship_id := _response_ship_id(data)
+			var requested_ship_id := _authoritative_positive_id(operation.get("data", {}).get("ship_id", 0))
+			if requested_ship_id <= 0 or reported_ship_id <= 0 or reported_ship_id != requested_ship_id:
+				gameplay_view.set_command_busy(false)
+				var ship_reason := "omitted a valid ship ID" if reported_ship_id <= 0 else "returned ship %d instead of selected ship %d" % [reported_ship_id, requested_ship_id]
+				gameplay_view.show_notification("%s was not displayed because the response %s; refreshing confirmed sector state." % [label, ship_reason])
+				_refresh_after_command(["sector"])
+				return
 		if command_name == "ship.transfer":
 			var transfer_type_valid: bool = typeof(response.get("type", null)) == TYPE_STRING and response.get("type") == "ship.transfer.response"
 			# A typed success envelope is not usable unless its payload is an
@@ -1227,14 +1235,6 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			gameplay_view.show_notification("Ship hull exchange confirmed · refreshing credits, ship and sector.")
 			_refresh_after_command(["player", "ship", "sector"])
 			return
-			var reported_ship_id := _response_ship_id(data)
-			var requested_ship_id := _authoritative_positive_id(operation.get("data", {}).get("ship_id", 0))
-			if requested_ship_id <= 0 or reported_ship_id <= 0 or reported_ship_id != requested_ship_id:
-				gameplay_view.set_command_busy(false)
-				var ship_reason := "omitted a valid ship ID" if reported_ship_id <= 0 else "returned ship %d instead of selected ship %d" % [reported_ship_id, requested_ship_id]
-				gameplay_view.show_notification("%s was not displayed because the response %s; refreshing confirmed sector state." % [label, ship_reason])
-				_refresh_after_command(["sector"])
-				return
 		if command_name == "combat.attack_planet":
 			var requested_planet_id := _authoritative_positive_id(operation.get("data", {}).get("planet_id", 0))
 			var attack_response_type: Variant = response.get("type", null)
@@ -1473,7 +1473,13 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 				_pending_trade["refresh_port_after"] = true
 			if _landed_planet_id > 0:
 				_request_planet_surface_records()
-			_refresh_after_command()
+			if str(operation.get("command", "")) == "hardware.buy":
+				# Equipment settlement changes both the player's credits and the
+				# active ship's installed hardware. A generic refresh omitted these
+				# domains, leaving the HUD stale until the next unrelated action.
+				_refresh_after_command(["player", "ship"])
+			else:
+				_refresh_after_command()
 		else:
 			gameplay_view.set_command_busy(false)
 	else:

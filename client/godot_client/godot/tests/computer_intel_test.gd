@@ -15,18 +15,21 @@ func _run() -> void:
 	menu.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
 		captured.append({"command": command, "data": data, "label": label, "mutating": mutating})
 	)
-	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 22}}
+	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 22}, "freshness": {"sector": "fresh"}}
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
 	await process_frame
 	for entry in [
-		{"label": "Current sector information", "command": "sector.info"},
-		{"label": "Detailed current-sector scan", "command": "sector.scan"},
-		{"label": "Trade history", "command": "trade.history", "data": {"limit": 20}},
-		{"label": "Outstanding fines", "command": "fine.list"},
+		{"category": "COMPUTER", "label": "Current sector information", "command": "sector.info"},
+		{"category": "NAVIGATION", "label": "Detailed current-sector scan", "command": "sector.scan"},
+		{"category": "TRADING", "label": "Trade history", "command": "trade.history", "data": {"limit": 20}},
+		{"category": "COMPUTER", "label": "Outstanding fines", "command": "fine.list"},
 	]:
+		menu._active_category = entry["category"]
+		menu._render_actions()
+		await process_frame
 		var button := _action_button(menu, entry["label"])
-		_check(button != null, "%s was not exposed in the computer" % entry["label"])
+		_check(button != null, "%s was not exposed in %s" % [entry["label"], entry["category"]])
 		if button != null:
 			button.pressed.emit()
 		var latest: Dictionary = captured.back() if not captured.is_empty() else {}
@@ -39,7 +42,7 @@ func _run() -> void:
 		menu._submit_form()
 		var fine_payment: Dictionary = captured.back() if not captured.is_empty() else {}
 		_check(fine_payment.get("command") == "fine.pay" and fine_payment.get("data") == {"fine_id": 12} and fine_payment.get("mutating", false), "fine payment did not use the published integer fine_id request")
-	menu._active_category = "OPERATIONS"
+	menu._active_category = "SECTOR"
 	menu._render_actions()
 	await process_frame
 	var status_button := _action_button(menu, "Combat status")
@@ -77,10 +80,9 @@ func _run() -> void:
 		quit(1)
 
 func _action_button(menu: CommandMenu, label_text: String) -> Button:
-	for row in menu._action_list.get_children():
-		for child in row.get_children():
-			if child is Button and (child as Button).text == label_text:
-				return child
+	for child in menu._action_list.get_children():
+		if child is Button and (child as Button).text == label_text:
+			return child
 	return null
 
 func _check(condition: bool, message: String) -> void:

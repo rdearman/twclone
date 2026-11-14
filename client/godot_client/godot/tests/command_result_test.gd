@@ -165,13 +165,13 @@ func _run() -> void:
 	_check(not app.gameplay_view.notification_label.text.contains("Invalid old password"), "password refusal echoed the server's raw credential-related message")
 	fake_refresh.calls.clear()
 	await app._finish_command_reply(
-		{"status": "ok", "data": {"ship": {"id": 99, "name": "Other ship"}}},
+		{"status": "ok", "type": "ship.inspect", "data": {"ship": {"ship_id": 99, "name": "Other ship"}}},
 		{"label": "Inspect ship details", "command": "ship.inspect", "data": {"ship_id": 61}, "mutating": false}
 	)
 	_check(app.gameplay_view.notification_label.text.contains("returned ship 99 instead of selected ship 61"), "mismatched ship inspection response was not rejected")
 	_check(fake_refresh.calls.size() == 1 and fake_refresh.calls[0] == ["sector"], "mismatched ship inspection did not refresh the confirmed sector")
 	await app._finish_command_reply(
-		{"status": "ok", "data": {"ship": {"name": "Unidentified ship"}}},
+		{"status": "ok", "type": "ship.inspect", "data": {"ship": {"name": "Unidentified ship"}}},
 		{"label": "Inspect ship details", "command": "ship.inspect", "data": {"ship_id": 61}, "mutating": false}
 	)
 	_check(app.gameplay_view.notification_label.text.contains("omitted a valid ship ID"), "ship inspection without an authoritative ID was rendered")
@@ -190,7 +190,7 @@ func _run() -> void:
 	_check(app.gameplay_view.notification_label.text.contains("omitted the authoritative current sector"), "warp without authoritative destination was presented as confirmed")
 	fake_refresh.calls.clear()
 	await app._finish_command_reply(
-		{"status": "ok", "type": "move.transwarp", "data": {"sector_id": 44, "hazards": []}},
+		{"status": "ok", "type": "move.transwarp", "data": {"sector_id": 44, "current_sector_id": 44, "status": "transwarp_complete", "hazards": []}},
 		{"label": "Transwarp to sector", "command": "move.transwarp", "data": {"to_sector_id": 44}, "mutating": true}
 	)
 	_check(app.gameplay_view.notification_label.text.contains("Transwarp confirmed · Sector 44"), "canonical transwarp destination was not presented")

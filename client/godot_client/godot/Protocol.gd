@@ -13,11 +13,27 @@ static func parse_frame(line: String) -> Dictionary:
 	var value = parser.data
 	if not (value is Dictionary):
 		return {"ok": false, "error": "Server sent an invalid response envelope."}
+	# Godot's JSON parser represents every JSON number as a float. Normalize
+	# finite whole-valued numbers back to integers before the typed V3 client
+	# validators see them; this preserves ordinary JSON integer IDs and counters
+	# while keeping fractional values fractional and therefore invalid for IDs.
+	value = _normalize_integral_numbers(value)
 	if not value.has("reply_to") and not value.has("event") and value.get("id", "") != "evt" and str(value.get("type", "")).is_empty():
 		return {"ok": false, "error": "Server response had no correlation or event type."}
 	if value.has("reply_to") and str(value.get("reply_to", "")).is_empty():
 		return {"ok": false, "error": "Server response had an empty correlation identifier."}
 	return {"ok": true, "frame": value}
+
+static func _normalize_integral_numbers(value: Variant) -> Variant:
+	if typeof(value) == TYPE_FLOAT and is_finite(value) and value == floor(value):
+		return int(value)
+	if value is Array:
+		for index in value.size():
+			value[index] = _normalize_integral_numbers(value[index])
+	elif value is Dictionary:
+		for key in value.keys():
+			value[key] = _normalize_integral_numbers(value[key])
+	return value
 
 static func response_status(frame: Dictionary) -> String:
 	var status := str(frame.get("status", "")).to_lower()

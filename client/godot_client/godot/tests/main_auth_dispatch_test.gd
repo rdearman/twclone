@@ -69,16 +69,16 @@ func _response_for(command: String, frame: Dictionary) -> Dictionary:
 	match command:
 		"auth.login":
 			base["type"] = "auth.session"
-			base["data"] = {"session": "test-token", "player_id": 1.0}
+			base["data"] = {"session": "test-token", "player_id": 1}
 		"player.my_info":
 			base["type"] = "player.info"
-			base["data"] = {"player": {"id": 1.0, "username": "newguy", "credits": 5000.0, "turns_remaining": 999999.0, "sector": 1.0, "ship_id": 1.0}}
+			base["data"] = {"player": {"id": 1, "username": "newguy", "credits": 5000, "turns_remaining": 999999, "sector": 1, "ship_id": 1}}
 		"ship.status":
 			base["type"] = "ship.status"
-			base["data"] = {"ship": {"id": 1.0, "name": "Hells Bells", "holds": 10.0, "fighters": 1.0, "shields": 1.0, "hull": 100.0}}
+			base["data"] = {"ship": {"id": 1, "name": "Hells Bells", "holds": 10, "fighters": 1, "shields": 1, "hull": 100}}
 		"sector.info":
 			base["type"] = "sector.info"
-			base["data"] = {"sector_id": 1.0, "name": "Fedspace 1", "adjacent_sectors": [{"to_sector": 2.0}], "ports": [], "planets": [], "ships": []}
+			base["data"] = {"sector_id": 1, "name": "Fedspace 1", "adjacent_sectors": [{"to_sector": 2}], "ports": [], "planets": [], "ships": []}
 		"subscribe.add":
 			base["type"] = "subscribe.ack_v1"
 		"move.autopilot.status":

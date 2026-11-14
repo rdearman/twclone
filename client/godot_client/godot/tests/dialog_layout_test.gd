@@ -25,8 +25,10 @@ func _run() -> void:
 		"fields": [["code", "text", "A deliberately long hardware item description that must wrap instead of colliding with the input", ""]]
 	})
 	await process_frame
-	_check(not form_label.visible, "command dialog description should stay hidden so it cannot overlap custom field labels")
-	var field_row: VBoxContainer = menu._form_content.get_child(0)
+	_check(menu._inline_form_panel.visible and not menu._form_dialog.visible, "gameplay form did not remain in the inline command rail")
+	# Gameplay forms now render in the persistent inline command rail; the
+	# confirmation dialog remains reserved for explicit confirm/cancel actions.
+	var field_row: VBoxContainer = menu._inline_form_content.get_child(1)
 	var field_label: Label = field_row.get_child(0)
 	_check(field_row.get_child_count() == 2, "command form field did not keep its label and input in one vertical row")
 	_check(field_label.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "long command field label does not wrap")
