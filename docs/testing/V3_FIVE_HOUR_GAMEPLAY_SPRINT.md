@@ -112,7 +112,7 @@ planetary combat, and all equipment combinations were not completed.
 | Combat sector-hazard PostgreSQL suite | **47 passed, 0 failed** | Includes repeatable ship recovery fixture. |
 | Ship-sale PostgreSQL suite | **18 passed, 0 failed** | Includes valuation and docked-hull acceptance cases. |
 | FedSpace MSL real-scheduler PostgreSQL suite | **44 passed, 0 failed** | Sector-specific asset removal, non-MSL retention, and player-authored text beacon preservation. |
-| Market-decay real-scheduler PostgreSQL suite | **14 passed, 0 failed** | Cluster pressure/volume decay and bounds, disabled pricing, repeated port decay. |
+| Market-decay real-scheduler PostgreSQL suite | **12 acceptance checks passed, 0 failed** | Two fixture setup steps and three real-scheduler waits; covers cluster pressure/volume decay and bounds, disabled pricing, repeated port decay. |
 | Actual V3 Docker image build | **Passed** | Built from the sprint source for the isolated PostgreSQL server. |
 | Python syntax, JSON parsing, `git diff --check` | **Passed** | Final checks run on the committed source/test changes. |
 

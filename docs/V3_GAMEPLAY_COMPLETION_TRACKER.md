@@ -452,7 +452,7 @@ also incorrectly set to `1`, causing the valid default `100` to trigger a
 fallback warning. Commit `5fb3877e` corrects both conditions and raises
 scheduler waits in the test to accommodate the 60-second engine tick. With one
 server scheduler attached to the isolated database, `suite_phase10_market_decay.json`
-passed 14/14 checks, including ORE pressure/volume decay, positive and negative
+passed all 12 acceptance checks with zero failures, including ORE pressure/volume decay, positive and negative
 pressure bounds, dynamic-pricing disablement, and a second port-decay cycle.
 
 The same commit makes four previously flaky PostgreSQL acceptance fixtures
