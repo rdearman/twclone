@@ -23,10 +23,11 @@ class ShipTransferRefusalContractTests(unittest.TestCase):
     def test_domain_refusal_is_not_reported_as_database_failure(self):
         body = self._handler_body()
         self.assertIn("repo_ships_transfer_primary", body)
-        self.assertIn("rc == ERR_TARGET_INVALID || rc == ERR_INVALID_ARG || rows == 0", body)
-        refusal = body.index("send_response_refused_steal")
-        db_failure = body.index("send_response_error", refusal)
-        self.assertLess(refusal, db_failure)
+        self.assertIn("if (rc == 0 && rows == 0)", body)
+        self.assertIn("else if (rc == ERR_TARGET_INVALID || rc == ERR_INVALID_ARG)", body)
+        self.assertIn("else if (rc != 0)", body)
+        self.assertIn("send_response_error (ctx, root, ERR_DB_QUERY_FAILED", body)
+        self.assertIn("Ship is not transferable or target is invalid", body)
 
     def test_transfer_still_uses_transaction_and_repository_boundary(self):
         body = self._handler_body()

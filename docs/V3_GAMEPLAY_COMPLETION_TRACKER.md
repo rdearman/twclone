@@ -441,6 +441,28 @@ not establish full beta playability; see
 [`V3_FIVE_HOUR_GAMEPLAY_SPRINT.md`](testing/V3_FIVE_HOUR_GAMEPLAY_SPRINT.md)
 for exact test counts, blockers and the complete evidence inventory.
 
+## Integration closure update — 14 November 2026
+
+The seven `tests.v2` failures were resolved without weakening behavioral
+assertions: five stale checks (three SHIP-02 catalog expectations, an expiry
+expression that rejected a valid trailing comma, and an obsolete ship-transfer
+source phrase), one missing MySQL base-schema counterpart set, and one Ferengi
+fixture that relied on host/default credentials. The explicit-credential
+Ferengi integration fixture skipped without QA credentials. Full result:
+249 passed, 7 skipped, 227 subtests, 0 failed. Python client regressions
+remain green at 802/802. New live evidence covers Python photon firing and
+retry, toll payment/passage between ordinary players, planet ORE harvest, and
+StarPort construction retry after server restart plus all three deliveries.
+See [`V3_INTEGRATION_CLOSURE_20261114.md`](testing/V3_INTEGRATION_CLOSURE_20261114.md)
+and [`V3_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_STARPORT_ACCEPTANCE_20261114.md).
+
+Godot remains unverified: Godot 4.5.2 import, asset catalogue, auth transport,
+and authoritative refresh checks passed, but `command_menu_test.gd` failed and
+no live Godot gameplay journey ran. StarPort concurrency/rollback, toll
+refusal, photon expiry, and complete planet class/slave production coverage
+also remain outstanding. Do not promote those mechanics or public beta
+readiness based on this partial integration run.
+
 ### Scheduler and repeatability evidence — 2026-11-14
 
 The market-decay real-engine regression exposed two defects in

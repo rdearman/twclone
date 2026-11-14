@@ -1558,7 +1558,7 @@ func _choose_action(action: Dictionary) -> void:
 			command_requested.emit(str(action["command"]), data, str(action["label"]), true)
 			return
 		if action.get("mutating", false):
-			_form_action = action
+			_form_action = action.duplicate(true)
 			_form_fields.clear()
 			_form_dialog.dialog_text = "Send %s? The server remains authoritative." % str(action.get("label", "this command"))
 			_form_dialog.get_label().visible = true
@@ -1570,7 +1570,7 @@ func _choose_action(action: Dictionary) -> void:
 		return
 	if bool(action.get("idempotency", false)):
 		data["idempotency_key"] = str(Time.get_ticks_usec())
-	_form_action = action
+	_form_action = action.duplicate(true)
 	_form_fields.clear()
 	for child in _inline_form_content.get_children():
 		child.queue_free()

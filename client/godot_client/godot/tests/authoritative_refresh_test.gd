@@ -142,15 +142,15 @@ func _run() -> void:
 	var identity_auth := FakeAuth.new()
 	identity_auth.player_id = 3
 	var identity_refresh := Refresh.new(identity_transport, identity_auth, identity_state)
-	var identity_failed := 0
-	identity_refresh.refresh_failed.connect(func(_snapshot: Dictionary) -> void: identity_failed += 1)
+	var identity_failed := [0]
+	identity_refresh.refresh_failed.connect(func(_snapshot: Dictionary) -> void: identity_failed[0] += 1)
 	_check(identity_refresh.refresh(false, ["player"]), "identity refresh did not start")
 	var identity_request_id: String = identity_transport.calls[0]["id"]
 	identity_refresh.handle_reply(identity_request_id, {
 		"status": "ok", "type": "player.info",
 		"data": {"player": {"id": 99, "ship_id": 44, "sector": 17}},
 	}, "player.my_info")
-	_check(identity_failed == 1, "cross-account player refresh was reported as fresh")
+	_check(identity_failed[0] == 1, "cross-account player refresh was reported as fresh")
 	_check(identity_state.player_availability == ClientState.PARTIAL, "cross-account player refresh was not marked partial")
 	_check(identity_state.player.is_empty(), "cross-account player data replaced the confirmed player state")
 

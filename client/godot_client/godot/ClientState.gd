@@ -359,9 +359,9 @@ static func _has_object(data: Dictionary, key: String) -> bool:
 
 static func _has_authoritative_sector_id(data: Dictionary) -> bool:
 	# Refresh responses establish the location used by every proximity-sensitive
-	# action. Godot parses JSON numbers as floats, so integral floats are valid
-	# wire representations; fractional, string and boolean values remain invalid.
-	if not data.has("sector_id") or not _is_authoritative_id(data["sector_id"]):
+	# action. The V3 sector identity field is an integer contract; accepting a
+	# JSON float here can make malformed location data actionable.
+	if not data.has("sector_id") or not _is_strict_authoritative_id(data["sector_id"]):
 		return false
 	return int(data["sector_id"]) > 0
 

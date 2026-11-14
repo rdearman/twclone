@@ -22,7 +22,7 @@ class Issue490Ship02ContractTests(unittest.TestCase):
         cls.catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
         cls.source = SHIP_SOURCE.read_text(encoding="utf-8")
 
-    def test_slice_is_next_unblocked_ordinary_player_readback_only(self):
+    def test_slice_is_next_unblocked_ordinary_player_transfer_acceptance(self):
         self.assertEqual(self.catalog["requirement_id"], "V3-SHIP-02")
         self.assertEqual(self.catalog["execution_status"], "next-unblocked-live-transfer-qa")
         self.assertTrue(self.catalog["ai_policy"]["ordinary_player"])

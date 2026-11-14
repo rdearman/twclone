@@ -23,7 +23,9 @@ class MySqlOpenOrderExpirySchemaTests(unittest.TestCase):
         self.assertIsNotNone(mysql_table)
         self.assertIsNotNone(pg_table)
         self.assertRegex(mysql_table.group(1), r"(?im)^\s*expires_at\s+TIMESTAMP\s+NULL,?\s*$")
-        self.assertRegex(pg_table.group(1), r"(?im)^\s*expires_at\s+timestamptz\s*$")
+        # PostgreSQL's nullable column may have a delimiter when another
+        # column follows it (currently cancellation_reason).
+        self.assertRegex(pg_table.group(1), r"(?im)^\s*expires_at\s+timestamptz\s*,?\s*$")
 
     def test_upgrade_adds_column_only_when_missing(self):
         migration = (ROOT / "sql/my/118_commodity_order_expiry.sql").read_text()

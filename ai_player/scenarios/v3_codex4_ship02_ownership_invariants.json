@@ -3,9 +3,9 @@
   "requirement_id": "V3-SHIP-02",
   "source": "docs/reports/V3_TW2002_CANONICAL_PARITY_AUDIT.md section 19",
   "execution_mode": "disposable-live-adapter-only",
-  "execution_status": "next-unblocked-qa-preparation",
+  "execution_status": "next-unblocked-live-transfer-qa",
   "simulation_fixture": false,
-  "dependency_note": "Run the read-only roster, status, inspect and refusal checks against a disposable QA universe after QA-INT-01 restores the socket server. Ownership transfer remains excluded because V3-CAN-00 has not pinned the lifecycle contract.",
+  "dependency_note": "Run read-only roster/status/inspect checks and the approved inactive-hull ownership-transfer/refusal cases against a disposable QA universe. Ship sale remains excluded until its separate valuation and settlement contract is approved.",
   "evidence_contract": {
     "each_command": [
       "sanitized request",
@@ -69,6 +69,35 @@
         "foreign ship disclosure is refused or redacted by the selected policy",
         "turns, active ship, ownership, cargo and credits are unchanged",
         "no knowledge or ownership row is written"
+      ]
+    },
+    {
+      "id": "foreign-transfer-refusal",
+      "commands": [{"command": "ship.transfer", "data": {"ship_id": "foreign_ship", "target_player_id": "ordinary_player"}}],
+      "expected": "refusal",
+      "assertions": [
+        "a ship not primarily owned by the caller cannot be transferred",
+        "both players' rosters and the ship's primary owner remain unchanged",
+        "turns, cargo and credits are unchanged"
+      ]
+    },
+    {
+      "id": "authorized-inactive-transfer",
+      "commands": [{"command": "ship.transfer", "data": {"ship_id": "owned_inactive", "target_player_id": "ordinary_player"}}],
+      "expected": "success",
+      "assertions": [
+        "the inactive hull becomes owned by the recipient exactly once",
+        "both authoritative rosters agree on the new primary owner",
+        "the active ship remains nontransferable and ship sale remains excluded"
+      ]
+    },
+    {
+      "id": "active-transfer-refusal",
+      "commands": [{"command": "ship.transfer", "data": {"ship_id": "owned_active", "target_player_id": "ordinary_player"}}],
+      "expected": "refusal",
+      "assertions": [
+        "the active ship cannot be transferred",
+        "ownership, player active-ship references, turns and cargo remain unchanged"
       ]
     },
     {

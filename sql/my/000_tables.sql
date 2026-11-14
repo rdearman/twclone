@@ -417,6 +417,8 @@ CREATE TABLE ports (
     `type` BIGINT DEFAULT 1,
     economy_curve_id bigint NOT NULL DEFAULT 1,
     porttype_id bigint,
+    durability integer NOT NULL DEFAULT 0,
+    defensive_strength integer NOT NULL DEFAULT 0,
     FOREIGN KEY (economy_curve_id) REFERENCES economy_curve (economy_curve_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id));
 
@@ -424,9 +426,18 @@ CREATE TABLE port_trade (
     port_trade_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     port_id bigint NOT NULL,
     maxproduct bigint,
+    capacity_level integer NOT NULL DEFAULT 0,
     commodity TEXT CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'SLV', 'WPN', 'DRG')),
     mode TEXT CHECK (mode IN ('buy', 'sell')),
     FOREIGN KEY (port_id) REFERENCES ports (port_id));
+
+CREATE TABLE v3_port_economy_rules (
+    rule_key VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+    rule_version integer NOT NULL,
+    value bigint NOT NULL CHECK (value >= 0),
+    description TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+
 
 CREATE TABLE sector_warps (
     from_sector bigint,
@@ -487,6 +498,33 @@ CREATE TABLE planets (
     terraform_turns_left bigint NOT NULL DEFAULT 1,
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id),
     FOREIGN KEY (type) REFERENCES planettypes (planettypes_id));
+
+CREATE TABLE planet_port_constructions (
+    construction_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    request_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    player_id bigint NOT NULL,
+    planet_id bigint NOT NULL,
+    sector_id bigint NOT NULL,
+    port_class integer NOT NULL CHECK (port_class BETWEEN 1 AND 8),
+    deliveries_completed integer NOT NULL DEFAULT 0,
+    deliveries_required integer NOT NULL,
+    delivery_amount integer NOT NULL,
+    delivery_interval_seconds integer NOT NULL,
+    next_delivery_at TIMESTAMP NOT NULL,
+    status VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    active_sector_id BIGINT GENERATED ALWAYS AS
+        (CASE WHEN status='building' THEN sector_id ELSE NULL END) STORED,
+    port_id bigint,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP NULL,
+    UNIQUE KEY uq_planet_port_request (player_id, request_id),
+    UNIQUE KEY uq_planet_port_active_sector (active_sector_id),
+    KEY idx_planet_port_due (status, next_delivery_at),
+    FOREIGN KEY (player_id) REFERENCES players (player_id),
+    FOREIGN KEY (planet_id) REFERENCES planets (planet_id),
+    FOREIGN KEY (sector_id) REFERENCES sectors (sector_id),
+    FOREIGN KEY (port_id) REFERENCES ports (port_id),
+    CHECK (status IN ('building','completed','cancelled')));
 
 -- ---------------- *******************************************
 CREATE TABLE chat (
@@ -678,6 +716,57 @@ CREATE TABLE sector_assets (
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id),
     FOREIGN KEY (owner_id) REFERENCES players (player_id)
 );
+
+CREATE TABLE sector_photon_effects (
+    sector_id bigint PRIMARY KEY,
+    source_player_id bigint NOT NULL,
+    expires_at bigint NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sector_id) REFERENCES sectors (sector_id) ON DELETE CASCADE,
+    FOREIGN KEY (source_player_id) REFERENCES players (player_id));
+
+CREATE TABLE photon_fire_requests (
+    request_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+    player_id bigint NOT NULL,
+    ship_id bigint NOT NULL,
+    sector_id bigint NOT NULL,
+    expires_at bigint NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (player_id) REFERENCES players (player_id),
+    FOREIGN KEY (ship_id) REFERENCES ships (ship_id),
+    FOREIGN KEY (sector_id) REFERENCES sectors (sector_id));
+
+CREATE TABLE toll_passage_offers (
+    offer_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+    request_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    player_id bigint NOT NULL,
+    ship_id bigint NOT NULL,
+    from_sector_id bigint NOT NULL,
+    to_sector_id bigint NOT NULL,
+    owner_player_id bigint NOT NULL,
+    fighter_count integer NOT NULL CHECK (fighter_count > 0),
+    unit_rate integer NOT NULL CHECK (unit_rate >= 0),
+    amount bigint NOT NULL CHECK (amount >= 0),
+    state VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    expires_at bigint NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP NULL,
+    UNIQUE KEY uq_toll_player_request (player_id, request_id),
+    FOREIGN KEY (player_id) REFERENCES players (player_id),
+    FOREIGN KEY (ship_id) REFERENCES ships (ship_id),
+    FOREIGN KEY (from_sector_id) REFERENCES sectors (sector_id),
+    FOREIGN KEY (to_sector_id) REFERENCES sectors (sector_id),
+    FOREIGN KEY (owner_player_id) REFERENCES players (player_id),
+    CHECK (state IN ('pending','accepted','refused')));
+
+CREATE TABLE toll_passage_payees (
+    offer_id VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    owner_player_id bigint NOT NULL,
+    fighter_count integer NOT NULL CHECK (fighter_count > 0),
+    amount bigint NOT NULL CHECK (amount >= 0),
+    PRIMARY KEY (offer_id, owner_player_id),
+    FOREIGN KEY (offer_id) REFERENCES toll_passage_offers (offer_id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_player_id) REFERENCES players (player_id));
 
 CREATE TABLE limpet_attached (
     limpet_attached_id BIGINT AUTO_INCREMENT PRIMARY KEY,

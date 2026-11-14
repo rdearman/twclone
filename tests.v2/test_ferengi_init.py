@@ -3,15 +3,38 @@ import os
 import time
 import subprocess
 import json
+import pytest
 
 # Add current dir to path to find twclient
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from twclient import TWClient
 
-def execute_sql(sql):
+def _qa_config():
+    required = {
+        "dbname": os.environ.get("QA_PGDATABASE"),
+        "user": os.environ.get("QA_PGUSER", "postgres"),
+        "host": os.environ.get("QA_PGHOST", "127.0.0.1"),
+        "port": os.environ.get("QA_PGPORT", "5432"),
+        "password": os.environ.get("QA_PGPASSWORD"),
+        "game_host": os.environ.get("TWCLONE_TEST_HOST", "127.0.0.1"),
+        "game_port": os.environ.get("TWCLONE_TEST_PORT", "1234"),
+    }
+    if not required["dbname"] or not required["password"]:
+        pytest.skip("set QA_PGDATABASE and QA_PGPASSWORD for isolated Ferengi PostgreSQL acceptance")
+    if not required["dbname"].startswith(("twclone_qa_", "twclone_v3qa_")):
+        pytest.fail("refusing Ferengi acceptance against a database not named twclone_qa_* or twclone_v3qa_*")
+    if required["host"] not in ("127.0.0.1", "localhost", "::1"):
+        pytest.fail("Ferengi acceptance requires a loopback PostgreSQL host")
+    if required["game_host"] not in ("127.0.0.1", "localhost", "::1"):
+        pytest.fail("Ferengi acceptance requires a loopback game server")
+    return required
+
+
+def execute_sql(sql, qa):
     env = os.environ.copy()
-    env["PGPASSWORD"] = "B1lb0 Bagg1ns!"
-    cmd = ["psql", "-h", "localhost", "-U", "postgres", "-d", "twclone", "-t", "-A", "-c", sql]
+    env["PGPASSWORD"] = qa["password"]
+    cmd = ["psql", "-h", qa["host"], "-p", qa["port"], "-U", qa["user"],
+           "-d", qa["dbname"], "-t", "-A", "-c", sql]
     res = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if res.returncode != 0:
         print(f"SQL Error: {res.stderr}")
@@ -19,21 +42,22 @@ def execute_sql(sql):
     return res.stdout.strip()
 
 def test_ferengi_init():
+    qa = _qa_config()
     print("--- Ferengi Auto-Creation Test ---")
     
     # 1. Setup Admin
-    c_admin = TWClient()
+    c_admin = TWClient(qa["game_host"], int(qa["game_port"]))
     c_admin.connect()
     if not c_admin.login("System", "BOT"):
         raise Exception("Admin login failed")
 
     # Resolve System ID
-    system_id = int(execute_sql("SELECT player_id FROM players WHERE name='System';"))
+    system_id = int(execute_sql("SELECT player_id FROM players WHERE name='System';", qa))
     print(f"System Player ID: {system_id}")
 
     # 2. Check if Ferengi Corp exists, if not trigger creation
     # Note: It might already exist if the server restarted during the conversation
-    res = execute_sql("SELECT name, owner_id FROM corporations WHERE tag='FENG';")
+    res = execute_sql("SELECT name, owner_id FROM corporations WHERE tag='FENG';", qa)
     
     if not res:
         print("Ferengi Corporation missing. Triggering Init...")
@@ -42,7 +66,7 @@ def test_ferengi_init():
         if resp.get("status") != "ok":
             raise Exception(f"Tick failed: {resp}")
         
-        res = execute_sql("SELECT name, owner_id FROM corporations WHERE tag='FENG';")
+        res = execute_sql("SELECT name, owner_id FROM corporations WHERE tag='FENG';", qa)
         if not res:
             raise Exception("Ferengi corporation was not created after tick")
     else:
@@ -62,7 +86,7 @@ def test_ferengi_init():
     if resp.get("status") != "ok":
         raise Exception(f"Second tick failed: {resp}")
 
-    count = int(execute_sql("SELECT count(*) FROM corporations WHERE tag='FENG';"))
+    count = int(execute_sql("SELECT count(*) FROM corporations WHERE tag='FENG';", qa))
     if count != 1:
         raise Exception(f"Duplicate corporations found! Count: {count}")
 

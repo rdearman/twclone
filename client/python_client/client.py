@@ -2072,6 +2072,11 @@ def _perform_warp(ctx: Context, target: int) -> bool:
         print(f"Warp outcome is uncertain after connection loss: {exc}")
         print("Reconnect before attempting another move so location, turns, and ship state can be refreshed.")
         return False
+    if not isinstance(resp, dict):
+        ctx.state["last_rpc"] = None
+        print("Warp returned a malformed response; destination could not be confirmed, refreshing confirmed player, ship and sector state.")
+        _safe_move_error_refresh(ctx)
+        return False
     if (resp.get("status") == "ok"
             and resp.get("type") == "move.toll_offer_v1"):
         offer = resp.get("data")

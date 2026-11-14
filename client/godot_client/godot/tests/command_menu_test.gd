@@ -528,6 +528,8 @@ func _run() -> void:
 	(menu._form_fields["old_password"] as LineEdit).text = "qa-old-ephemeral"
 	(menu._form_fields["new_password"] as LineEdit).text = "qa-new-ephemeral-a"
 	(menu._form_fields["confirm_password"] as LineEdit).text = "qa-new-ephemeral-b"
+	var old_password_field: LineEdit = menu._form_fields["old_password"]
+	var new_password_field: LineEdit = menu._form_fields["new_password"]
 	var before_password_change := captured.size()
 	menu._submit_form()
 	_check(captured.size() == before_password_change, "mismatched password confirmation reached the server")
@@ -538,7 +540,7 @@ func _run() -> void:
 		var password_request: Dictionary = captured.back()
 		_check(password_request["command"] == "auth.change_password" and password_request["mutating"], "password change used the wrong command or was not marked mutating")
 		_check(password_request["data"].keys().size() == 2 and password_request["data"].has("old_password") and password_request["data"].has("new_password"), "password confirmation leaked into or altered the published request fields")
-		_check(not password_request["data"].has("confirm_password") and (menu._form_fields["old_password"] as LineEdit).text.is_empty() and (menu._form_fields["new_password"] as LineEdit).text.is_empty(), "password values remained in the form after submission")
+		_check(not password_request["data"].has("confirm_password") and old_password_field.text.is_empty() and new_password_field.text.is_empty(), "password values remained in the form after submission")
 	var before_corporation_actions := captured.size()
 	menu._choose_action({"label": "Member roster", "command": "corp.roster", "context_player_corp_id": true})
 	_check(captured.size() == before_corporation_actions, "corporation roster guessed a missing corporation ID")

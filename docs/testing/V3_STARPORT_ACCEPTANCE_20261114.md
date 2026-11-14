@@ -38,3 +38,23 @@ Status: **implementation and live acceptance evidence recorded; not marked VERIF
 - Port combat uses separately persisted durability and defence; attack, turn debit, shield/fighter/hull retaliation, destruction, stock clearing, event and retry receipt are transactional. FedSpace Captain Z enforcement is applied before port damage.
 - The first attempt to force a rebuild invoked concurrent Autotools regeneration and failed in configure; the generated build-file changes were reverted. The regular build path was restored and the rebuilt server was then used for the live combat test. A disposable fixture initially attempted hull above the schema's 100-point bound and was rejected before gameplay; it was corrected to the valid 100-point maximum.
 - This evidence does not establish all possible concurrent upgrade/attack orderings, injected database rollback at every statement boundary, every port class mapping, or restart replay of construction receipts. Those remain follow-ups; therefore the tracker remains `IMPLEMENTED_UNVERIFIED`.
+
+## Integration closure follow-up — 14 November 2026
+
+Using a separate disposable PostgreSQL database and the ordinary Python player
+workflow, the construction receipt gap above was closed. Player 106 initiated
+class 1 construction from the landed surface. The test client deliberately
+dropped the successful reply, the disposable game server was restarted, and
+the player retried with the same pending request key through the surface menu.
+The client printed construction ID 1 and PostgreSQL returned the same
+`construction_id=1`, `idempotent_retry=true`, with exactly one request row.
+The three scheduled deliveries then completed; PostgreSQL recorded
+`status=completed`, `deliveries_completed=3`, and `port_id=192`. Port 192 was
+active in sector 7 with `porttype_id=1`, durability 10,000, and defence 1,000.
+Delivery timestamps and the scheduler due time were advanced only in the
+disposable QA database to avoid waiting a day between deliveries.
+
+Concurrent upgrade retries, concurrent attack refusals, and rollback under
+injected database failure remain unverified. This follow-up therefore closes
+restart replay and delivery completion only; it does not promote StarPort to
+fully verified.

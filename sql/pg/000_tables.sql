@@ -469,31 +469,6 @@ CREATE TABLE v3_port_economy_rules (
     updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE planet_port_constructions (
-    construction_id bigserial PRIMARY KEY,
-    request_id text NOT NULL,
-    player_id integer NOT NULL REFERENCES players(player_id),
-    planet_id integer NOT NULL REFERENCES planets(planet_id),
-    sector_id integer NOT NULL REFERENCES sectors(sector_id),
-    port_class integer NOT NULL CHECK (port_class BETWEEN 1 AND 8),
-    deliveries_completed integer NOT NULL DEFAULT 0,
-    deliveries_required integer NOT NULL,
-    delivery_amount integer NOT NULL,
-    delivery_interval_seconds integer NOT NULL,
-    next_delivery_at timestamptz NOT NULL,
-    status text NOT NULL CHECK (status IN ('building','completed','cancelled')),
-    port_id integer REFERENCES ports(port_id),
-    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at timestamptz,
-    UNIQUE(player_id, request_id)
-);
-
-CREATE UNIQUE INDEX planet_port_constructions_one_active_sector
-    ON planet_port_constructions(sector_id) WHERE status='building';
-
-CREATE INDEX planet_port_constructions_due
-    ON planet_port_constructions(next_delivery_at) WHERE status='building';
-
 CREATE TABLE sector_warps (
     from_sector bigint,
     to_sector bigint,
@@ -562,6 +537,31 @@ CREATE TABLE planets (
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id),
     FOREIGN KEY (type) REFERENCES planettypes (planettypes_id)
 );
+
+CREATE TABLE planet_port_constructions (
+    construction_id bigserial PRIMARY KEY,
+    request_id text NOT NULL,
+    player_id integer NOT NULL REFERENCES players(player_id),
+    planet_id integer NOT NULL REFERENCES planets(planet_id),
+    sector_id integer NOT NULL REFERENCES sectors(sector_id),
+    port_class integer NOT NULL CHECK (port_class BETWEEN 1 AND 8),
+    deliveries_completed integer NOT NULL DEFAULT 0,
+    deliveries_required integer NOT NULL,
+    delivery_amount integer NOT NULL,
+    delivery_interval_seconds integer NOT NULL,
+    next_delivery_at timestamptz NOT NULL,
+    status text NOT NULL CHECK (status IN ('building','completed','cancelled')),
+    port_id integer REFERENCES ports(port_id),
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at timestamptz,
+    UNIQUE(player_id, request_id)
+);
+
+CREATE UNIQUE INDEX planet_port_constructions_one_active_sector
+    ON planet_port_constructions(sector_id) WHERE status='building';
+
+CREATE INDEX planet_port_constructions_due
+    ON planet_port_constructions(next_delivery_at) WHERE status='building';
 
 CREATE TABLE chat (
     chat_id serial PRIMARY KEY,
