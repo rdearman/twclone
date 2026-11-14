@@ -1048,7 +1048,7 @@ func _build_feedback_ui() -> void:
 	_feedback_preview = ConfirmationDialog.new()
 	_feedback_preview.title = "Public issue preview · confirm to submit"
 	_feedback_preview.ok_button_text = "Submit report"
-	_feedback_preview.custom_minimum_size = Vector2(760, 620)
+	_feedback_preview.size = Vector2i(760, 620)
 	_feedback_preview_text = TextEdit.new()
 	_feedback_preview_text.editable = false
 	_feedback_preview_text.custom_minimum_size = Vector2(700, 470)
