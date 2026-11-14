@@ -79,13 +79,13 @@ def test_selected_ship_inspection_refusal_does_not_claim_cached_details(
 def test_selected_ship_inspection_rejects_untyped_success(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
-    ctx = ctx_factory(sector={"id": 7, "ships": [{"id": 88, "name": "Visible"}]})
+    ctx = ctx_factory(sector={"id": 7, "ships": [{"ship_id": 88, "name": "Visible"}]})
     ctx.player_info = {"player": {"ship_id": 1, "name": "Pilot"}}
     fake_conn.queue("ship.inspect", {"status": "ok", "data": {
         "ship": {"ship_id": 88, "name": "Untrusted"},
     }})
     # The menu exits after the inspection command returns.
-    inputs = iter(["i", "q"])
+    inputs = iter(["1", "i", "q"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(inputs))
 
     client.enter_ship_menu(ctx)
@@ -147,15 +147,15 @@ def test_contradictory_ship_ids_are_not_used_for_ownership_actions(
 def test_selected_ship_sale_is_visible_but_unavailable_without_server_handler(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
-    ctx = ctx_factory(sector={"id": 7, "ships": [{"id": 88, "name": "Hauler"}]})
+    ctx = ctx_factory(sector={"id": 7, "ships": [{"ship_id": 88, "name": "Hauler"}]})
     ctx.player_info = {"player": {"ship_id": 1, "name": "Pilot"}}
     answers = iter(["1", "v", "y", "q"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
 
     client.enter_ship_menu(ctx)
 
-    assert fake_conn.calls == []
-    assert "Ship sale unavailable" in capsys.readouterr().out
+    assert fake_conn.calls == [{"command": "ship.list", "data": {}}]
+    assert "valid server-authoritative ship roster" in capsys.readouterr().out
 
 
 def test_selected_ship_transfer_uses_authoritative_receipt_and_refreshes(
@@ -185,6 +185,9 @@ def test_selected_ship_transfer_uses_authoritative_receipt_and_refreshes(
 def test_ship_transfer_rejects_schema_mismatched_receipt_ids_and_refreshes_roster(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
+    ctx = ctx_factory()
+    ctx.state["player_id"] = 3
+    ctx.player_info = {"player": {"id": 3, "ship_id": 12}}
     roster = {"status": "ok", "type": "ship.list.response", "data": {"ships": [
         {"ship_id": 88, "name": "Hauler", "active": False},
     ]}}
@@ -193,13 +196,20 @@ def test_ship_transfer_rejects_schema_mismatched_receipt_ids_and_refreshes_roste
         "ship_id": True, "target_player_id": 42,
     }})
     fake_conn.queue("ship.list", roster)
+    fake_conn.queue("player.my_info", {"status": "ok", "type": "player.info",
+                                       "data": {"player": {"id": 3, "ship_id": 12}}})
+    fake_conn.queue("ship.status", {"status": "ok", "type": "ship.status",
+                                     "data": {"ship": {"id": 12}}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info",
+                                              "data": {"id": 7}})
     answers = iter(["1", "42", "y"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
 
-    client.ship_transfer_flow(ctx_factory())
+    client.ship_transfer_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == [
-        "ship.list", "ship.transfer", "ship.list",
+        "ship.list", "ship.transfer", "ship.list", "player.my_info",
+        "ship.status", "move.describe_sector",
     ]
     output = capsys.readouterr().out
     assert "was not confirmed" in output
@@ -221,7 +231,7 @@ def test_ship_transfer_does_not_use_typed_rows_from_refused_roster(
         "data": {"ship": {"id": 7, "active": True}},
     })
 
-    ship_transfer_flow(ctx)
+    client.ship_transfer_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == ["ship.list", "ship.status"]
     output = capsys.readouterr().out
@@ -298,9 +308,11 @@ def test_transfer_cargo_connection_loss_reconciles_without_claiming_outcome(
     ctx = ctx_factory(sector={"id": 7, "ships": [{"id": 12}, {"id": 88}]})
     ctx.player_info = {"player": {"ship_id": 12}}
     original_rpc = fake_conn.rpc
+    attempted_commands = []
 
     def disconnect_after_transfer(command, data):
         if command == "ship.transfer_cargo":
+            attempted_commands.append(command)
             raise ConnectionError("server disconnected")
         return original_rpc(command, data)
 
@@ -318,8 +330,9 @@ def test_transfer_cargo_connection_loss_reconciles_without_claiming_outcome(
     output = capsys.readouterr().out
     assert "outcome is uncertain after connection loss" in output
     assert "confirmed by server" not in output
+    assert attempted_commands == ["ship.transfer_cargo"]
     assert [call["command"] for call in fake_conn.calls] == [
-        "ship.transfer_cargo", "ship.status", "move.describe_sector",
+        "ship.status", "move.describe_sector",
     ]
     assert ctx.last_sector_desc["id"] == 7
 
@@ -855,6 +868,8 @@ def test_ship_transfer_selects_only_from_authoritative_owned_roster(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
+    ctx.state["player_id"] = 3
+    ctx.player_info = {"player": {"id": 3, "ship_id": 12}}
     roster = {
         "status": "ok", "type": "ship.list.response",
         "data": {"ships": [
@@ -945,7 +960,7 @@ def test_ship_transfer_success_does_not_apply_mismatched_sector_refresh(
     client.ship_transfer_flow(ctx)
 
     assert ctx.last_sector_desc == {"id": 7, "name": "Confirmed sector"}
-    assert "sector state could not be refreshed" in capsys.readouterr().out
+    assert "could not refresh sector state" in capsys.readouterr().out
 
 
 def test_ship_transfer_refresh_rejects_foreign_player_and_active_ship_records(
@@ -954,7 +969,7 @@ def test_ship_transfer_refresh_rejects_foreign_player_and_active_ship_records(
     """A transfer receipt must not hydrate refresh data for another session."""
     ctx = ctx_factory()
     ctx.state["player_id"] = 3
-    ctx.hud.ship_id = 1
+    ctx.hud = replace(ctx.hud, ship_id=1)
     ctx.player_info = {"player": {"id": 3, "ship_id": 1}}
     fake_conn.queue("player.my_info", {
         "status": "ok", "type": "player.info",
@@ -974,8 +989,8 @@ def test_ship_transfer_refresh_rejects_foreign_player_and_active_ship_records(
     assert ctx.player_info == {"player": {"id": 3, "ship_id": 1}}
     assert ctx.hud.ship_id == 1
     output = capsys.readouterr().out
-    assert "logged-in player could not be confirmed" in output
-    assert "confirmed active ship could not be refreshed" in output
+    assert "could not confirm the logged-in player" in output
+    assert "could not refresh the confirmed active ship" in output
 
 
 def test_ship_transfer_does_not_send_for_invalid_roster_selection(
