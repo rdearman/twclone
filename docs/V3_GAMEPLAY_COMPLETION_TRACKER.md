@@ -467,3 +467,18 @@ and opens a fresh daily sweep claim per occurrence; its real-scheduler run
 passed 44/44. These are protocol/database acceptance suites, not Python-client
 journeys. The unrelated working-tree file `tests.v2/regression_report.json.tmp`
 was intentionally left untouched.
+
+### Python suite failure triage — 2026-11-14
+
+The full Python client suite was rerun at HEAD `bb31270f`: baseline was
+609/799 passed and 190 failed. After correcting positive fake replies to
+include published V3 response types, replacing the stale harvest-unavailable
+test with workflow execution, and fixing confirmed client/test issues, the
+latest full run was 716/799 passed and 83 failed. No gameplay tracker row is
+promoted to `VERIFIED` from these client unit tests. The remaining failures
+cluster in planet/landing (54), trading (13), ship roster (6), navigation (4),
+combat/hazards (4), and other client contracts (3). Detailed classification,
+commands and the JUnit artifact path are in
+[`V3_PYTHON_FAILURE_TRIAGE_20261114.md`](testing/V3_PYTHON_FAILURE_TRIAGE_20261114.md).
+The 84 residuals remain open pending protocol-backed adjudication; the suite
+and Python gameplay are not certified by this run.

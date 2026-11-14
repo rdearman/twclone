@@ -1236,7 +1236,7 @@ def normalize_port_info(resp: dict) -> dict:
         # boolean/object/string to look actionable or reach money formatting.
         if isinstance(price, bool) or not isinstance(price, int) or price < 0:
             price = None
-        rows.append({
+        normalized_row = {
             # Preserve the authoritative server code exactly.  Commodity
             # identity is not a presentation value: Godot forwards this code
             # unchanged and the quote/receipt contract owns any canonical
@@ -1247,9 +1247,14 @@ def normalize_port_info(resp: dict) -> dict:
             "max_quantity": maximum if type(maximum) is int and maximum >= 0 else None,
             "base_price": price,
             # Fixed direction is server policy; never derive it from stock.
-            "sells": sells if isinstance(sells, bool) else None,
-            "buys": buys if isinstance(buys, bool) else None,
-        })
+            # Preserve omission as omission: _trade_rows distinguishes an
+            # undisclosed legacy flag from explicit malformed null metadata.
+        }
+        if isinstance(sells, bool):
+            normalized_row["sells"] = sells
+        if isinstance(buys, bool):
+            normalized_row["buys"] = buys
+        rows.append(normalized_row)
     return {"id": port_id, "name": raw.get("name") or "Port",
             "commodities": rows, "raw": raw}
 
@@ -4353,8 +4358,12 @@ def refresh_sector_and_display(ctx: Context):
         if not _response_type_matches(resp, "sector.info"):
             print("[Error] Sector refresh returned an unexpected response type; keeping the last confirmed state.")
             return False
+        payload = get_data(resp)
+        if not isinstance(payload, dict):
+            print("[Error] Sector refresh returned malformed data; keeping the last confirmed state.")
+            return False
         try:
-            refreshed = normalize_sector(get_data(resp))
+            refreshed = normalize_sector(payload)
         except (TypeError, ValueError, AttributeError):
             # A success envelope is not sufficient to replace the cache.  A
             # schema-mismatched reconciliation response must fail closed just

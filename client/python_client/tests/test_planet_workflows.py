@@ -602,16 +602,33 @@ def test_planet_menus_expose_existing_management_commands(menus):
     assert citadel["w"] == {"pycall": "planet_treasury_withdraw_flow"}
 
 
-def test_planet_harvest_is_visible_but_fail_closed_until_server_policy_exists(
-    menus, ctx_factory, fake_conn, capsys
+def test_planet_harvest_menu_runs_server_settlement(
+    menus, ctx_factory, fake_conn, monkeypatch, capsys
 ):
     surface = {item["key"]: item for item in menus["SURFACE"]["options"]}
-    assert surface["h"]["action"] == {"pycall": "planet_harvest_unavailable_flow"}
+    assert surface["h"]["action"] == {"pycall": "planet_harvest_flow"}
+    ctx = ctx_factory()
+    ctx.state.update({"on_planet": True, "current_planet_id": 77})
+    fake_conn.queue("planet.harvest", {
+        "status": "ok", "type": "planet.harvest_v1", "data": {
+            "planet_id": 77, "ore_harvested": 5, "organics_harvested": 2,
+            "equipment_harvested": 1, "turns_charged": 0,
+        },
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "data": {"ship": {"ship_id": 9, "cargo": []}},
+    })
+    fake_conn.queue("planet.info", _planet())
+    monkeypatch.setattr("builtins.input", lambda _prompt: "y")
 
-    client.planet_harvest_unavailable_flow(ctx_factory())
+    client.planet_harvest_flow(ctx)
 
-    assert fake_conn.calls == []
-    assert "authoritative server handler" in capsys.readouterr().out
+    assert fake_conn.calls[0] == {
+        "command": "planet.harvest", "data": {"planet_id": 77},
+    }
+    output = capsys.readouterr().out
+    assert "5; Organics: 2; Equipment: 1" in output
+    assert "Turns charged: 0" in output
 
 
 def test_planet_overview_presents_authoritative_fields(ctx_factory, fake_conn, capsys):

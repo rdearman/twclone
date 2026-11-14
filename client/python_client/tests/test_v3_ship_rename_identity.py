@@ -55,7 +55,7 @@ def test_ship_rename_rejects_untyped_success_and_refreshes_active_ship(
 ):
     ctx = ctx_factory()
     ctx.hud = replace(ctx.hud, ship_id=10)
-    fake_conn.queue("ship.rename", {
+    fake_conn.queue_untyped("ship.rename", {
         "status": "ok", "data": {"ship_id": 10, "name": "Aurora"},
     })
     fake_conn.queue("ship.status", {
@@ -69,4 +69,3 @@ def test_ship_rename_rejects_untyped_success_and_refreshes_active_ship(
     output = capsys.readouterr().out
     assert "unexpected response type" in output
     assert "confirmed by server" not in output
-

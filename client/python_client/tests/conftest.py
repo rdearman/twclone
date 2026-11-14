@@ -40,7 +40,58 @@ class FakeConn:
         self.connected = True
         self.events = EventQueue(maxlen=200)
 
-    def queue(self, command: str, response: Dict[str, Any]):
+    # Positive fixtures default to the schema the V3 server publishes. Tests
+    # for malformed or deliberately untyped replies use queue_untyped().
+    RESPONSE_TYPES = {
+        "player.my_info": "player.info",
+        "ship.status": "ship.status",
+        "move.describe_sector": "sector.info",
+        "sector.info": "sector.info",
+        "sector.scan": "sector.scan",
+        "sector.scan.density": "sector.density.scan",
+        "move.scan": "sector.scan",
+        "move.warp": "move.result",
+        "move.transwarp": "move.transwarp",
+        "planet.land": "planet.land.success",
+        "planet.launch": "planet.launch.success",
+        "planet.info": "planet.info",
+        "planet.rename": "planet.rename.success",
+        "planet.fighters.transfer": "planet.fighters.transferred_v1",
+        "planet.deposit": "planet.deposit",
+        "planet.withdraw": "planet.withdraw",
+        "planet.colonists.allocate": "planet.colonists.allocate",
+        "citadel.build": "citadel.upgrade_started",
+        "ship.rename": "ship.renamed",
+        "port.info": "trade.port_info",
+        "trade.quote": "trade.quote",
+        "trade.buy": "trade.buy_receipt_v1",
+        "trade.sell": "trade.sell_receipt_v1",
+    }
+
+    def queue(self, command: str, response: Any):
+        # A few malformed-response tests deliberately queue scalars or None;
+        # preserve those values so the client, rather than the fixture, handles
+        # the invalid envelope.
+        if not isinstance(response, dict):
+            self._queued.setdefault(command, []).append(response)
+            return
+        response = dict(response)
+        if "type" not in response:
+            if response.get("status") == "ok":
+                response_type = self.RESPONSE_TYPES.get(command)
+                if response_type:
+                    response["type"] = response_type
+            elif response.get("status") in ("refused", "error"):
+                response["type"] = "error"
+        self._queued.setdefault(command, []).append(response)
+
+    def queue_untyped(self, command: str, response: Any):
+        """Queue an intentionally malformed response with no ``type`` field."""
+        if not isinstance(response, dict):
+            self._queued.setdefault(command, []).append(response)
+            return
+        response = dict(response)
+        response.pop("type", None)
         self._queued.setdefault(command, []).append(response)
 
     def rpc(self, command: str, data: dict) -> dict:
@@ -48,17 +99,6 @@ class FakeConn:
         q = self._queued.get(command)
         if q:
             response = q.pop(0)
-            # The live server publishes one explicit response schema for each
-            # trade read/settlement.  Keep fixtures concise while still
-            # exercising the same contract consumed by the client.
-            if (command == "trade.quote"
-                    and response.get("status") == "ok"
-                    and "type" not in response):
-                response["type"] = "trade.quote"
-            elif (command in ("trade.buy", "trade.sell")
-                  and response.get("status") == "ok"
-                  and "type" not in response):
-                response["type"] = f"{command}_receipt_v1"
             return response
         # Sensible default: unknown command → ok with empty data, so tests
         # that don't care about a given call don't crash.

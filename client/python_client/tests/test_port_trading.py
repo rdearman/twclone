@@ -58,7 +58,7 @@ def test_port_info_uses_authoritative_capacity_field():
 
     assert normalized["commodities"] == [{
         "commodity": "ORE", "available": 12, "max_quantity": 100,
-        "base_price": 40, "sells": None, "buys": None,
+        "base_price": 40,
     }]
 
 
@@ -299,8 +299,8 @@ def test_port_info_does_not_derive_fixed_direction_from_stock():
     ]}}}
 
     normalized = client.normalize_port_info(response)
-    assert normalized["commodities"][0]["sells"] is None
-    assert normalized["commodities"][0]["buys"] is None
+    assert "sells" not in normalized["commodities"][0]
+    assert "buys" not in normalized["commodities"][0]
     assert len(client._trade_rows(type("Ctx", (), {"state": {"port_inventory": normalized}})(), "buy")) == 2
     assert "server decides" in client.render_port_summary(normalized)[1]
 
@@ -529,7 +529,7 @@ def test_port_refresh_rejects_noncanonical_port_response_type(ctx_factory, fake_
 def test_port_refresh_rejects_omitted_port_response_type(ctx_factory, fake_conn):
     """An omitted type must not become a second actionable port contract."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
-    fake_conn.queue("port.info", {
+    fake_conn.queue_untyped("port.info", {
         "status": "ok",
         "data": {"port": {
             "id": 7, "name": "Missing response type", "commodities": [],
@@ -755,7 +755,7 @@ def test_trade_refresh_rejects_unrelated_success_response_type(
 
     assert client._refresh_trade_views(ctx, 7) is False
     assert ctx.hud.credits == 100
-    assert "port stock could not be refreshed" in capsys.readouterr().out
+    assert "authoritative player balance, ship cargo could not be refreshed" in capsys.readouterr().out
 
 
 def test_trade_refresh_rejects_untyped_balance_or_cargo_reads(
@@ -764,7 +764,7 @@ def test_trade_refresh_rejects_untyped_balance_or_cargo_reads(
     """A trade receipt cannot authorize untyped post-settlement refreshes."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
     ctx.hud = ctx.hud.__class__(credits=100)
-    fake_conn.queue("player.my_info", {
+    fake_conn.queue_untyped("player.my_info", {
         "status": "ok", "data": {"player": {"id": 9, "credits": "1.00"}},
     })
     fake_conn.queue("ship.status", {
@@ -778,7 +778,7 @@ def test_trade_refresh_rejects_untyped_balance_or_cargo_reads(
 
     assert client._refresh_trade_views(ctx, 7) is False
     assert ctx.hud.credits == 100
-    assert "port stock could not be refreshed" in capsys.readouterr().out
+    assert "authoritative player balance could not be refreshed" in capsys.readouterr().out
 
 
 def test_port_refresh_rejects_malformed_requested_sector_without_response_sector(

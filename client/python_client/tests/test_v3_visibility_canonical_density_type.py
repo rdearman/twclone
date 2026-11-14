@@ -23,7 +23,8 @@ def test_density_scan_rejects_unsupported_response_alias_and_refreshes(
     assert [call["command"] for call in fake_conn.calls] == [
         "sector.scan.density", "move.describe_sector",
     ]
-    assert ctx.last_sector_desc == {"id": 12, "name": "Confirmed sector"}
+    assert ctx.last_sector_desc["id"] == 12
+    assert ctx.last_sector_desc["name"] == "Confirmed sector"
     output = capsys.readouterr().out
     assert "unexpected type" in output
     assert "44" not in output

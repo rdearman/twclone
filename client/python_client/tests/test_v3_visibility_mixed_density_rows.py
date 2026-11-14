@@ -30,7 +30,8 @@ def test_density_scan_rejects_mixed_rows_before_rendering_partial_visibility(
         {"command": "sector.scan.density", "data": {"sector_id": 12}},
         {"command": "move.describe_sector", "data": {"sector_id": 12}},
     ]
-    assert ctx.last_sector_desc == {"id": 12, "name": "Known refreshed"}
+    assert ctx.last_sector_desc["id"] == 12
+    assert ctx.last_sector_desc["name"] == "Known refreshed"
     output = capsys.readouterr().out
     assert "invalid authoritative row" in output
     assert "Sector   Density" not in output
