@@ -14,6 +14,7 @@
 #include "planet_fighter_production.h"
 #include "../../slave_population.h"
 #include "errors.h"
+#include "../../server_log.h"
 
 /* ==================================================================== */
 /* CRON HELPERS (Migrated from server_cron.c)                           */
@@ -1173,6 +1174,7 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
     int64_t weapons_workers;
     char commodity[16];
     int64_t quantity, stock_capacity, net_delta, normal_output, consumption;
+    int64_t next_worker_remainder;
     bool slave_population, unrest_stopped;
   } production_row_t;
 
@@ -1204,11 +1206,22 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
     "COALESCE(p.colonists_weapons, 0), "
     "pp.commodity_code, COALESCE(es.quantity, 0), pg.max_capacity, "
     "COALESCE(pp.base_prod_rate, 0) + CASE pp.commodity_code "
-    "WHEN 'ORE' THEN p.colonists_ore "
-    "WHEN 'ORG' THEN p.colonists_org * COALESCE(pt.organicsProduction, 0) "
-    "WHEN 'EQU' THEN p.colonists_eq * COALESCE(pt.equipmentProduction, 0) "
+    "WHEN 'ORE' THEN CASE WHEN pp.workers_per_unit > 0 THEN "
+    "FLOOR((COALESCE(p.colonists_ore,0)+COALESCE(p.ore_production_remainder,0))/NULLIF(pp.workers_per_unit,0)) "
+    "ELSE p.colonists_ore END "
+    "WHEN 'ORG' THEN CASE WHEN pp.workers_per_unit > 0 THEN "
+    "FLOOR((COALESCE(p.colonists_org,0)+COALESCE(p.organics_production_remainder,0))/NULLIF(pp.workers_per_unit,0)) "
+    "ELSE p.colonists_org * COALESCE(pt.organicsProduction, 0) END "
+    "WHEN 'EQU' THEN CASE WHEN pp.workers_per_unit > 0 THEN "
+    "FLOOR((COALESCE(p.colonists_eq,0)+COALESCE(p.equipment_production_remainder,0))/NULLIF(pp.workers_per_unit,0)) "
+    "ELSE p.colonists_eq * COALESCE(pt.equipmentProduction, 0) END "
     "WHEN 'FUE' THEN p.colonists_unassigned * COALESCE(pt.fuelProduction, 0) "
-    "ELSE p.colonists_unassigned END, COALESCE(pp.base_cons_rate, 0) "
+    "ELSE p.colonists_unassigned END, COALESCE(pp.base_cons_rate, 0), "
+    "CASE pp.commodity_code WHEN 'ORE' THEN "
+    "(COALESCE(p.colonists_ore,0)+COALESCE(p.ore_production_remainder,0)) % NULLIF(pp.workers_per_unit,0) "
+    "WHEN 'ORG' THEN (COALESCE(p.colonists_org,0)+COALESCE(p.organics_production_remainder,0)) % NULLIF(pp.workers_per_unit,0) "
+    "WHEN 'EQU' THEN (COALESCE(p.colonists_eq,0)+COALESCE(p.equipment_production_remainder,0)) % NULLIF(pp.workers_per_unit,0) "
+    "ELSE 0 END "
     "FROM planets p JOIN planet_production pp ON p.type = pp.planet_type_id "
     "JOIN planet_goods pg ON pg.planet_id = p.planet_id AND pg.commodity = pp.commodity_code "
     "LEFT JOIN entity_stock es ON es.entity_type = 'planet' AND es.entity_id = p.planet_id AND es.commodity_code = pp.commodity_code "
@@ -1217,7 +1230,7 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
     "WHERE COALESCE(p.production_last_tick, -1) < {1} AND "
     "(pp.base_prod_rate > 0 OR pp.base_cons_rate > 0 OR p.colonists_ore > 0 OR p.colonists_org > 0 OR p.colonists_eq > 0 OR p.colonists_weapons > 0 OR p.colonists_unassigned > 0) "
     "ORDER BY p.planet_id, pp.commodity_code FOR UPDATE OF p";
-  char select_sql[2048];
+  char select_sql[4096];
   if (sql_build (db, select_template, select_sql, sizeof select_sql) != 0)
     {
       db_tx_rollback (db, &err);
@@ -1275,6 +1288,7 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
       row->quantity = db_res_col_i64 (res, 12, &err);
       row->stock_capacity = db_res_col_i64 (res, 13, &err);
       row->normal_output = db_res_col_i64 (res, 14, &err);
+      row->next_worker_remainder = db_res_col_i64 (res, 16, &err);
       row->consumption = db_res_col_i64 (res, 15, &err);
       int64_t effective_output = slave_population_effective_output
         (row->normal_output, row->commodity, row->slave_population,
@@ -1358,9 +1372,32 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
                                       db_bind_i64 (now_s)},
                         4, &err))
             {
+              LOGE ("planet production stock settlement failed planet=%lld commodity=%s: %s",
+                    (long long) row->planet_id, row->commodity, err.message);
               free (rows);
               db_tx_rollback (db, &err);
               return err.code ? err.code : -1;
+            }
+
+          if (row->next_worker_remainder >= 0)
+            {
+              const char *remainder_sql =
+                "UPDATE planets SET ore_production_remainder = CASE WHEN {1}='ORE' THEN {2} ELSE ore_production_remainder END, "
+                "organics_production_remainder = CASE WHEN {1}='ORG' THEN {2} ELSE organics_production_remainder END, "
+                "equipment_production_remainder = CASE WHEN {1}='EQU' THEN {2} ELSE equipment_production_remainder END "
+                "WHERE planet_id={3};";
+              if (!db_exec (db, remainder_sql,
+                            (db_bind_t[]){db_bind_text (row->commodity),
+                                          db_bind_i64 (row->next_worker_remainder),
+                                          db_bind_i64 (row->planet_id)},
+                            3, &err))
+                {
+                  LOGE ("planet production remainder update failed planet=%lld commodity=%s: %s",
+                        (long long) row->planet_id, row->commodity, err.message);
+                  free (rows);
+                  db_tx_rollback (db, &err);
+                  return err.code ? err.code : -1;
+                }
             }
 
           int64_t produced_quantity = quantity - row->quantity;
@@ -1378,6 +1415,8 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
                                           db_bind_i64 (now_s)},
                             4, &err))
                 {
+                  LOGE ("planet production activity insert failed planet=%lld commodity=%s: %s",
+                        (long long) row->planet_id, row->commodity, err.message);
                   free (rows);
                   db_tx_rollback (db, &err);
                   return err.code ? err.code : -1;
@@ -1409,6 +1448,9 @@ db_cron_planet_update_production_stock (db_t *db, int64_t now_s)
            2, &affected, &err)
           || affected != 1)
         {
+          LOGE ("planet production tick update failed planet=%lld affected=%lld: %s",
+                (long long) planet->planet_id, (long long) affected,
+                err.message);
           free (rows);
           db_tx_rollback (db, &err);
           return err.code ? err.code : -1;
@@ -2824,9 +2866,9 @@ db_cron_planet_get_production_overview_json (db_t *db, int planet_id,
   const char *query =
     "SELECT pp.commodity_code, "
     "COALESCE(pp.base_prod_rate,0) + CASE pp.commodity_code "
-    "WHEN 'ORE' THEN COALESCE(p.colonists_ore,0) "
-    "WHEN 'ORG' THEN COALESCE(p.colonists_org,0)*COALESCE(pt.organicsProduction,0) "
-    "WHEN 'EQU' THEN COALESCE(p.colonists_eq,0)*COALESCE(pt.equipmentProduction,0) "
+    "WHEN 'ORE' THEN CASE WHEN pp.workers_per_unit>0 THEN FLOOR((COALESCE(p.colonists_ore,0)+COALESCE(p.ore_production_remainder,0))/NULLIF(pp.workers_per_unit,0)) ELSE COALESCE(p.colonists_ore,0) END "
+    "WHEN 'ORG' THEN CASE WHEN pp.workers_per_unit>0 THEN FLOOR((COALESCE(p.colonists_org,0)+COALESCE(p.organics_production_remainder,0))/NULLIF(pp.workers_per_unit,0)) ELSE COALESCE(p.colonists_org,0)*COALESCE(pt.organicsProduction,0) END "
+    "WHEN 'EQU' THEN CASE WHEN pp.workers_per_unit>0 THEN FLOOR((COALESCE(p.colonists_eq,0)+COALESCE(p.equipment_production_remainder,0))/NULLIF(pp.workers_per_unit,0)) ELSE COALESCE(p.colonists_eq,0)*COALESCE(pt.equipmentProduction,0) END "
     "ELSE 0 END, COALESCE(pp.base_cons_rate,0), p.population_type, "
     "COALESCE(p.slave_unrest_stopped,FALSE) "
     "FROM planets p JOIN planet_production pp ON pp.planet_type_id=p.type "

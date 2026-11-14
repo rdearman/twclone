@@ -543,8 +543,9 @@ class PlanetaryServerContractTests(unittest.TestCase):
             "db_cron_planet_get_production_overview_json", 1
         )[1]
         self.assertIn("db_cron_planet_get_production_overview_json", view)
-        self.assertIn("WHEN 'ORG' THEN COALESCE(p.colonists_org,0)*COALESCE(pt.organicsProduction,0)", production)
-        self.assertIn("WHEN 'EQU' THEN COALESCE(p.colonists_eq,0)*COALESCE(pt.equipmentProduction,0)", production)
+        self.assertIn("pp.workers_per_unit>0", production)
+        self.assertIn("ELSE COALESCE(p.colonists_org,0)*COALESCE(pt.organicsProduction,0)", production)
+        self.assertIn("ELSE COALESCE(p.colonists_eq,0)*COALESCE(pt.equipmentProduction,0)", production)
         self.assertIn("slave_population_effective_output", production)
         policy = (ROOT / "src/slave_population.h").read_text(encoding="utf-8")
         self.assertIn('strcmp (commodity_code, "ORE") == 0', policy)

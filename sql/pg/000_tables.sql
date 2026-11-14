@@ -515,6 +515,9 @@ CREATE TABLE planets (
     colonists_weapons bigint NOT NULL DEFAULT 0,
     fighter_production_remainder bigint NOT NULL DEFAULT 0,
     fighter_production_last_tick bigint NOT NULL DEFAULT -1,
+    ore_production_remainder bigint NOT NULL DEFAULT 0,
+    organics_production_remainder bigint NOT NULL DEFAULT 0,
+    equipment_production_remainder bigint NOT NULL DEFAULT 0,
     colonists_unassigned bigint NOT NULL DEFAULT 0,
     terraform_turns_left bigint NOT NULL DEFAULT 1,
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id),
@@ -947,6 +950,7 @@ CREATE TABLE planet_production (
     commodity_code text NOT NULL,
     base_prod_rate integer NOT NULL,
     base_cons_rate integer NOT NULL,
+    workers_per_unit integer NOT NULL DEFAULT 0,
     PRIMARY KEY (planet_type_id, commodity_code),
     FOREIGN KEY (planet_type_id) REFERENCES planettypes (planettypes_id) ON DELETE CASCADE,
     FOREIGN KEY (commodity_code) REFERENCES commodities (code) ON DELETE CASCADE

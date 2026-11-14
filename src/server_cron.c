@@ -1070,11 +1070,13 @@ h_planet_growth (db_t *db, int64_t now_s)
 
     // --- NEW: Update commodity quantities in entity_stock based on planet_production ---
 
-    if (db_cron_planet_update_production_stock (db, now_s) != 0)
+    int production_rc = db_cron_planet_update_production_stock (db, now_s);
+    if (production_rc != 0)
 
       {
 
-        LOGE ("planet_growth (commodities exec) failed");
+        LOGE ("planet_growth (commodities exec) failed with code %d",
+              production_rc);
 
         // Continue or return? Original returned rc.
 

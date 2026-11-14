@@ -320,7 +320,7 @@ Set the target number of colonists working in each production job on the planet 
 }
 ```
 
-Workers above planet-class capacity or beyond the available colony population are rejected. The difference from the previous assignments is returned to or taken from the unassigned pool. Every 10-minute planet growth tick grows a non-empty colony toward its class population cap and adds new colonists to the unassigned pool; the same tick applies class production multipliers and updates stored goods. The client should show assignments and estimated output separately from confirmed stock.
+Workers above planet-class capacity or beyond the available colony population are rejected. The difference from the previous assignments is returned to or taken from the unassigned pool. Every 10-minute planet growth tick grows a non-empty colony toward its class population cap and adds new colonists to the unassigned pool. For ORE/ORG/EQU, class rows in `planet_production.workers_per_unit` specify the number of assigned workers required for one unit per tick. Integer labor remainders persist per planet and commodity. Built-in class defaults are the noncanonical, versioned twclone V3 values in `V3_GAMEPLAY_DECISIONS.md`; custom classes may configure their own rate. The approved slave multiplier is applied after normal output is calculated. Fighter production remains a separate citadel-gated contract. The client should show assignments and estimated output separately from confirmed stock.
 
 ### `planet.genesis_create`
 Create a new planet using a Genesis Torpedo. Requires a Genesis Torpedo on the player's ship.
