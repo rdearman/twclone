@@ -12,6 +12,7 @@ class PlanetaryServerContractTests(unittest.TestCase):
         cls.planets = (ROOT / "src/server_planets.c").read_text(encoding="utf-8")
         cls.citadel = (ROOT / "src/server_citadel.c").read_text(encoding="utf-8")
         cls.combat = (ROOT / "src/server_combat.c").read_text(encoding="utf-8")
+        cls.schemas = (ROOT / "src/schemas.c").read_text(encoding="utf-8")
         cls.loop = (ROOT / "src/server_loop.c").read_text(encoding="utf-8")
         cls.universe = (ROOT / "src/server_universe.c").read_text(encoding="utf-8")
         cls.universe_repo = (ROOT / "src/db/repo/repo_universe.c").read_text(
@@ -273,6 +274,40 @@ class PlanetaryServerContractTests(unittest.TestCase):
             '"defender_hp_after"', '"sector_id"',
         ):
             self.assertIn(field, attack[event - 700:event + 500])
+
+    def test_hardware_catalog_lists_capacity_limited_deployment_assets(self):
+        state_query = self.stardock_repo.split(
+            "repo_stardock_get_ship_state", 1
+        )[1].split("repo_stardock_get_hardware_items", 1)[0]
+        self.assertIn("s.mines", state_query)
+        self.assertIn("st.maxmines", state_query)
+        listing = self.stardock.split(
+            "cmd_hardware_list", 1
+        )[1].split("cmd_hardware_buy", 1)[0]
+        for code, current, capacity in (
+            ("MINES", "current_mines", "max_mines"),
+            ("LIMPETS", "current_limpets", "max_limpets"),
+            ("PHOTONS", "current_photons", "max_photons"),
+            ("BEACONS", "current_beacons", "max_beacons"),
+        ):
+            self.assertIn(f'"{code}"', listing)
+            self.assertIn(current, listing)
+            self.assertIn(capacity, listing)
+
+    def test_mine_deployment_schema_accepts_selected_asset_type(self):
+        schema = self.schemas.split("schema_combat_deploy_mines (void)")[-1].split(
+            "schema_mines_recall", 1
+        )[0]
+        self.assertIn('json_array_append_new (required, json_string ("amount"))', schema)
+        self.assertNotIn('json_array_append_new (required, json_string ("offense"))', schema)
+        self.assertIn('json_object_set_new (props, "mine_type", mine_type_prop)', schema)
+        self.assertIn('json_string ("armid")', schema)
+        self.assertIn('json_string ("limpet")', schema)
+        self.assertIn('json_object_set_new (props, "offense", offense_prop)', schema)
+        fighters = self.schemas.split("schema_combat_deploy_fighters (void)")[-1].split(
+            "schema_combat_deploy_mines", 1
+        )[0]
+        self.assertIn('json_array_append_new (required, json_string ("offense"))', fighters)
 
     def test_treasury_is_not_authorized_by_landing_alone(self):
         info = self.planets.split("cmd_planet_info", 1)[1].split(

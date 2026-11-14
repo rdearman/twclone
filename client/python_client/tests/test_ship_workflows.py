@@ -24,6 +24,39 @@ def test_selected_ship_inspection_uses_authoritative_id_and_response(
     assert ctx.state["last_rpc"]["status"] == "ok"
 
 
+def test_mine_deployment_sends_selected_mine_type_not_fighter_mode(
+    ctx_factory, fake_conn, monkeypatch
+):
+    ctx = ctx_factory(sector={"id": 404})
+    fake_conn.queue("combat.deploy_mines", {
+        "status": "ok", "type": "combat.mines.deployed",
+        "data": {"asset_id": 9, "count_added": 3, "total_now": 3},
+    })
+    answers = iter(["3", "1"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    monkeypatch.setattr(client, "refresh_sector_and_display", lambda _ctx: True)
+
+    client.deploy_mines_flow(ctx)
+
+    assert fake_conn.calls == [{
+        "command": "combat.deploy_mines",
+        "data": {"amount": 3, "mine_type": "armid"},
+    }]
+
+
+def test_mine_deployment_rejects_unknown_type_without_rpc(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 404})
+    answers = iter(["3", "toll"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.deploy_mines_flow(ctx)
+
+    assert fake_conn.calls == []
+    assert "Invalid mine type" in capsys.readouterr().out
+
+
 def test_selected_ship_inspection_refusal_does_not_claim_cached_details(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):

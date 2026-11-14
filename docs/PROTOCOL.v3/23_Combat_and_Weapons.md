@@ -26,6 +26,12 @@ reinforced defenses or overwriting a newer capture.
 Attack a port.
 **Events**: Emits `player.port_strike.v1`.
 
+### `combat.deploy_mines`
+Deploy `amount` Armid mines or Limpets. `mine_type` accepts `"armid"` or
+`"limpet"` (integer aliases 1 and 4 are retained); omitted mine type defaults
+to Armid for older clients. The legacy `offense` field remains accepted but
+does not select a mine type; fighter offensive settings do not apply to mines.
+
 ## 1.1 Historical Photon and Toll-Fighter Mechanics
 
 The original TradeWars 2002 Player's Manual (1990–2000) establishes these

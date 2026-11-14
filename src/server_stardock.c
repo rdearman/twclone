@@ -134,10 +134,13 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
   // 3. Fetch current ship state and shiptype capabilities
   int current_holds = 0, current_fighters = 0, current_shields = 0;
   int current_genesis = 0, current_detonators = 0, current_probes = 0;
+  int current_mines = 0, current_limpets = 0, current_photons = 0;
+  int current_beacons = 0;
   int current_cloaks = 0;	// cloaking_devices in ships table
   int has_transwarp = 0, has_planet_scanner = 0, has_long_range_scanner = 0;
   int max_holds = 0, max_fighters = 0, max_shields = 0;
   int max_genesis = 0, max_detonators_st = 0, max_probes_st = 0;	// _st suffix for shiptype limits
+  int max_mines = 0, max_limpets = 0, max_photons = 0, max_beacons = 0;
   int can_transwarp = 0, can_planet_scan = 0, can_long_range_scan = 0;
   // Get ship current state
   db_res_t *res_state = NULL;
@@ -170,6 +173,14 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
       can_transwarp = (int) db_res_col_i64 (res_state, 16, &err);
       can_planet_scan = (int) db_res_col_i64 (res_state, 17, &err);
       can_long_range_scan = (int) db_res_col_i64 (res_state, 18, &err);
+      current_mines = (int) db_res_col_i64 (res_state, 20, &err);
+      current_limpets = (int) db_res_col_i64 (res_state, 21, &err);
+      current_photons = (int) db_res_col_i64 (res_state, 22, &err);
+      current_beacons = (int) db_res_col_i64 (res_state, 23, &err);
+      max_mines = (int) db_res_col_i64 (res_state, 24, &err);
+      max_limpets = (int) db_res_col_i64 (res_state, 25, &err);
+      max_photons = (int) db_res_col_i64 (res_state, 26, &err);
+      max_beacons = (int) db_res_col_i64 (res_state, 27, &err);
     }
   db_res_finalize (res_state);
 
@@ -253,6 +264,34 @@ cmd_hardware_list (client_ctx_t *ctx, json_t *root)
 
 	      max_purchase = MAX (0, limit - current_probes);
 	    }
+          else if (strcasecmp (code, "MINES") == 0)
+            {
+              int limit = max_mines;
+              if (max_per_ship_hw >= 0 && max_per_ship_hw < limit)
+                limit = max_per_ship_hw;
+              max_purchase = MAX (0, limit - current_mines);
+            }
+          else if (strcasecmp (code, "LIMPETS") == 0)
+            {
+              int limit = max_limpets;
+              if (max_per_ship_hw >= 0 && max_per_ship_hw < limit)
+                limit = max_per_ship_hw;
+              max_purchase = MAX (0, limit - current_limpets);
+            }
+          else if (strcasecmp (code, "PHOTONS") == 0)
+            {
+              int limit = max_photons;
+              if (max_per_ship_hw >= 0 && max_per_ship_hw < limit)
+                limit = max_per_ship_hw;
+              max_purchase = MAX (0, limit - current_photons);
+            }
+          else if (strcasecmp (code, "BEACONS") == 0)
+            {
+              int limit = max_beacons;
+              if (max_per_ship_hw >= 0 && max_per_ship_hw < limit)
+                limit = max_per_ship_hw;
+              max_purchase = MAX (0, limit - current_beacons);
+            }
 	  else
 	    {
 	      item_supported = false;	// Unknown special item

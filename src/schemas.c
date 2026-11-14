@@ -4112,7 +4112,6 @@ schema_combat_deploy_mines (void)
 
 
   json_array_append_new (required, json_string ("amount"));
-  json_array_append_new (required, json_string ("offense"));
   json_object_set_new (root, "required", required);
 
 
@@ -4149,8 +4148,25 @@ schema_combat_deploy_mines (void)
   json_t *mine_type_prop = json_object ();
 
 
-  json_object_set_new (mine_type_prop, "type", json_string ("integer"));
+  json_t *mine_type_type = json_array ();
+  json_array_append_new (mine_type_type, json_string ("string"));
+  json_array_append_new (mine_type_type, json_string ("integer"));
+  json_object_set_new (mine_type_prop, "type", mine_type_type);
+  json_t *mine_type_values = json_array ();
+  json_array_append_new (mine_type_values, json_string ("armid"));
+  json_array_append_new (mine_type_values, json_string ("limpet"));
+  json_array_append_new (mine_type_values, json_integer (1));
+  json_array_append_new (mine_type_values, json_integer (4));
+  json_object_set_new (mine_type_prop, "enum", mine_type_values);
   json_object_set_new (props, "mine_type", mine_type_prop);
+
+  json_t *type_prop = json_object ();
+  json_object_set_new (type_prop, "type", json_string ("string"));
+  json_t *type_values = json_array ();
+  json_array_append_new (type_values, json_string ("armid"));
+  json_array_append_new (type_values, json_string ("limpet"));
+  json_object_set_new (type_prop, "enum", type_values);
+  json_object_set_new (props, "type", type_prop);
 
 
   return root;

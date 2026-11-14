@@ -4467,22 +4467,23 @@ def deploy_mines_flow(ctx: Context):
         print("Cannot deploy mines: current sector ID is unknown.")
         return
 
-    # Prompt user for amount and offensive setting
+    # Mine type, rather than fighter offensive setting, selects Armid/Limpet.
     amount_str = input("Amount to deploy: ").strip()
     if not amount_str.isdigit():
         print("Invalid amount. Please enter a number.")
         return
     amount = int(amount_str)
 
-    offense_str = input("Offensive setting (1=TOLL, 2=DEFEND, 3=ATTACK): ").strip()
-    if not offense_str.isdigit() or int(offense_str) not in [1, 2, 3]:
-        print("Invalid offensive setting. Please choose 1, 2, or 3.")
+    print("Mine type: 1) Armid  2) Limpet")
+    choice = input("Mine type: ").strip().lower()
+    mine_type = {"1": "armid", "2": "limpet", "armid": "armid", "limpet": "limpet"}.get(choice)
+    if mine_type is None:
+        print("Invalid mine type. Choose armid or limpet.")
         return
-    offense = int(offense_str)
 
     deploy_resp = ctx.conn.rpc("combat.deploy_mines", {
         "amount": amount,
-        "offense": offense
+        "mine_type": mine_type
     })
 
     if deploy_resp.get("status") == "ok":

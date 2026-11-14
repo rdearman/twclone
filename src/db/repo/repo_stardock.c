@@ -495,7 +495,7 @@ int repo_stardock_get_port_by_sector(db_t *db, int32_t sector_id, int32_t *out_p
 int repo_stardock_get_ship_state(db_t *db, int32_t ship_id, db_res_t **out_res)
 {
     /* SQL_VERBATIM: Q2 */
-    const char *sql = "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1};";
+    const char *sql = "SELECT s.holds, s.fighters, s.shields, s.genesis, s.detonators, s.probes, s.cloaking_devices, s.has_transwarp, s.has_planet_scanner, s.has_long_range_scanner, st.maxholds, st.maxfighters, st.maxshields, st.maxgenesis, st.max_detonators, st.max_probes, st.can_transwarp, st.can_planet_scan, st.can_long_range_scan, st.max_cloaks, s.mines, s.limpets, s.photons, s.beacons, st.maxmines, st.maxlimpets, st.maxphotons, st.maxbeacons FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id WHERE s.ship_id = {1};";
     char sql_converted[1024];
     sql_build(db, sql, sql_converted, sizeof(sql_converted));
     db_error_t err;
