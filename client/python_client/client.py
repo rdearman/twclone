@@ -8368,8 +8368,18 @@ def shipyard_sell_flow(ctx: Context, selected_ship_id: Optional[int] = None):
         print(f"Ship sale confirmed: {present_money(receipt['sale_proceeds'])} credits received.")
         print(f"  Cargo forfeited: {bool(receipt.get('cargo_forfeited'))}; "
               f"insurance terminated: {bool(receipt.get('insurance_terminated'))}.")
-    _hud_rpc(ctx, "player.my_info", {})
-    _refresh_ship_after_move(ctx)
+    player_response = _hud_rpc(ctx, "player.my_info", {})
+    if (isinstance(player_response, dict)
+            and player_response.get("status") == "ok"
+            and _refresh_response_type_matches(player_response, "player.info")):
+        ctx.player_info = get_data(player_response)
+        replacement_ship_id = get_my_ship_id(ctx.conn, ctx)
+    else:
+        replacement_ship_id = None
+    if type(replacement_ship_id) is int and replacement_ship_id > 0:
+        _refresh_ship_after_move(ctx, expected_ship_id=replacement_ship_id)
+    else:
+        print("Warning: ship sale succeeded, but the active replacement ship could not be identified; ship HUD remains unchanged.")
     _refresh_sector_after_shipyard(ctx)
 
 

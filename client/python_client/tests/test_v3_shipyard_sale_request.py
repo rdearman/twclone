@@ -52,7 +52,7 @@ def test_shipyard_sale_confirms_receipt_and_reconciles_state(
                  "cargo_forfeited": True, "insurance_terminated": True},
     })
     fake_conn.queue("player.my_info", {"status": "ok", "type": "player.info", "data": {"ship_id": 8}})
-    fake_conn.queue("ship.status", {"status": "ok", "type": "ship.status", "data": {"ship": {"id": 8}}})
+    fake_conn.queue("ship.status", {"status": "ok", "type": "ship.status", "data": {"ship": {"id": 8, "name": "Replacement"}}})
     fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"id": 1}})
     answers = iter(["8", "y"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
@@ -60,3 +60,5 @@ def test_shipyard_sale_confirms_receipt_and_reconciles_state(
     client.shipyard_sell_flow(ctx)
 
     assert "Ship sale confirmed" in capsys.readouterr().out
+    assert ctx.hud.ship_id == 8
+    assert ctx.hud.ship_name == "Replacement"
