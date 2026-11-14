@@ -41,6 +41,7 @@ from settings_model import (
 from money import MoneyError, parse_credits, format_credits
 import hud as hud_module
 from events import render_event_text, targets_player_ship_destruction
+from diagnostics import sanitize_text
 
 
 def _hud_rpc(ctx: "Context", command: str, data: dict) -> dict:
@@ -9041,6 +9042,107 @@ def raw_json_handler(ctx: Context) -> None:
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
+@register("feedback_report_flow")
+def feedback_report_flow(ctx: Context) -> None:
+    """Submit a sanitized bug/suggestion report through the authenticated API."""
+    print("--- Report Bug / Suggest Improvement ---")
+    kind = input("Type (b)ug or (s)uggestion [b]: ").strip().lower() or "b"
+    if kind not in ("b", "s"):
+        print("Choose b or s.")
+        return
+    report_type = "bug" if kind == "b" else "suggestion"
+    failure = ctx.state.pop("feedback_failure_context", None)
+    default_subject = "Command failed: " + str(failure.get("command", "")) if isinstance(failure, dict) else ""
+    default_description = ("The server returned %s (error code %s) for %s." % (
+        str(failure.get("status", "error")), str(failure.get("error_code", "unknown")),
+        str(failure.get("command", "command")))) if isinstance(failure, dict) else ""
+    subject = input(("Subject [%s]: " % default_subject) if default_subject else "Subject: ").strip() or default_subject
+    description = input(("Description [%s]: " % default_description) if default_description else "Description: ").strip() or default_description
+    if not subject or not description:
+        print("A subject and description are required.")
+        return
+    expected = actual = ""
+    if report_type == "bug":
+        expected = input("Expected behaviour: ").strip()
+        actual = input("Actual behaviour: ").strip()
+        if not expected or not actual:
+            print("Bug reports require expected and actual behaviour.")
+            return
+    steps = input("Reproduction steps (optional): ").strip()
+    include = (input("Include recent diagnostics? [Y/n]: ").strip().lower() or "y") == "y"
+    count_raw = input("Recent exchanges (10/25/50/100) [25]: ").strip() or "25"
+    try:
+        count = int(count_raw)
+        diagnostics = ctx.conn.diagnostics.recent(count) if include else []
+    except ValueError:
+        print("Choose 10, 25, 50 or 100.")
+        return
+    report = {
+        "report_type": report_type, "subject": sanitize_text(subject),
+        "description": sanitize_text(description), "expected_behavior": sanitize_text(expected),
+        "actual_behavior": sanitize_text(actual), "reproduction_steps": sanitize_text(steps),
+    }
+    payload = {**report, "diagnostics": diagnostics, "client_name": "python",
+               "client_version": "3", "build_id": "", "protocol_version": "v3",
+               "idempotency_key": str(uuid.uuid4())}
+    try:
+        preview_response = ctx.conn.rpc("feedback.preview", payload)
+        preview_data = get_data(preview_response)
+        if preview_response.get("status") != "ok" or not preview_data.get("title") or not preview_data.get("body"):
+            print("The server could not prepare a safe public preview; report not submitted.")
+            return
+        print("\n--- Exact public issue preview ---\n" + str(preview_data["title"]) + "\n\n" + str(preview_data["body"]))
+        if input("Submit this report? Type YES to confirm: ").strip() != "YES":
+            print("Report cancelled.")
+            return
+        response = ctx.conn.rpc("feedback.submit", payload)
+        data = get_data(response)
+        if response.get("status") != "ok":
+            print("Report was not accepted: " + str((response.get("error") or {}).get("message", "server refused submission")))
+            return
+        print("Report reference: " + str(data.get("report_id", "unavailable")))
+        print("Submission status: " + str(data.get("state", "pending")))
+        if data.get("github_issue_url"):
+            print("GitHub issue: " + str(data["github_issue_url"]))
+    except Exception:
+        # Deliberately avoid printing raw exception text, which could contain
+        # endpoint or local-path information.
+        print("Report submission failed. It could not be queued locally because the server was unavailable.")
+
+
+@register("feedback_error_flow")
+def feedback_error_flow(ctx: Context) -> None:
+    """Open a report prefilled with the last failed player command metadata."""
+    failure = getattr(ctx.conn, "last_failed_command", None)
+    if not isinstance(failure, dict):
+        print("There is no recent failed command to report.")
+        return
+    ctx.state["feedback_failure_context"] = dict(failure)
+    feedback_report_flow(ctx)
+
+
+@register("feedback_status_flow")
+def feedback_status_flow(ctx: Context) -> None:
+    """Look up publication status for a report owned by this player."""
+    report_id = input("Feedback report UUID: ").strip()
+    if not report_id:
+        print("No report UUID entered.")
+        return
+    try:
+        response = ctx.conn.rpc("feedback.status", {"report_id": report_id})
+    except Exception:
+        print("Feedback status is unavailable while disconnected.")
+        return
+    if response.get("status") != "ok":
+        print("Feedback report was not found for this player.")
+        return
+    data = get_data(response)
+    print("Report reference: " + str(data.get("report_id", report_id)))
+    print("Submission status: " + str(data.get("state", "unknown")))
+    if data.get("github_issue_url"):
+        print("GitHub issue: " + str(data["github_issue_url"]))
+
 # ---------------------------
 # Quit
 # ---------------------------
@@ -9204,6 +9306,7 @@ def main():
             norm = normalize_sector(get_data(desc))
 
             ctx = Context(conn=conn, menus=menus, last_sector_desc=norm, capabilities=capabilities)
+            conn.ctx = ctx
             ctx.state["cli"] = {"host": args.host, "port": args.port, "user": user, "debug": bool(args.debug)}
             ctx.state["debug"] = bool(args.debug)
             initial_player = _authoritative_hud_record(my_info_resp, "player")

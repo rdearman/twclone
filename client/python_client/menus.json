@@ -104,6 +104,27 @@
           }
         },
         {
+          "key": "r",
+          "label": "(R) Report Bug / Suggest Improvement",
+          "action": {
+            "pycall": "feedback_report_flow"
+          }
+        },
+        {
+          "key": "z",
+          "label": "(Z) Check Feedback Report Status",
+          "action": {
+            "pycall": "feedback_status_flow"
+          }
+        },
+        {
+          "key": "x",
+          "label": "(X) Report This Error",
+          "action": {
+            "pycall": "feedback_error_flow"
+          }
+        },
+        {
           "key": "y",
           "label": "(Y) Testing Menu",
           "action": {
@@ -197,7 +218,9 @@
         {
           "key": "t",
           "label": "(T) Transwarp to Sector",
-          "show_if": ["has_authoritative_sector"],
+          "show_if": [
+            "has_authoritative_sector"
+          ],
           "action": {
             "pycall": "transwarp_flow"
           }
@@ -216,7 +239,6 @@
             "pycall": "saved_autopilot_route_flow"
           }
         },
-        
         {
           "key": "a",
           "label": "(A) Autopilot",
@@ -321,8 +343,12 @@
         {
           "key": "b",
           "label": "(B) Start StarPort Construction",
-          "action": {"pycall": "planet_port_construct_flow"},
-          "show_if": ["on_planet"]
+          "action": {
+            "pycall": "planet_port_construct_flow"
+          },
+          "show_if": [
+            "on_planet"
+          ]
         },
         {
           "key": "s",
@@ -435,7 +461,7 @@
           "action": {
             "pycall": "scan_sector"
           }
-	    },
+        },
         {
           "key": "r",
           "label": "(R) Rename Ship",
@@ -443,26 +469,38 @@
             "pycall": "rename_ship_flow"
           }
         },
-	    {
+        {
           "key": "i",
           "label": "(I) Current Sector Information",
-          "action": { "pycall": "sector_info_flow" }
+          "action": {
+            "pycall": "sector_info_flow"
+          }
         },
-	    {
+        {
           "key": "v",
           "label": "(V) Detailed Sector Scan",
-          "action": { "pycall": "detailed_sector_scan_flow" }
+          "action": {
+            "pycall": "detailed_sector_scan_flow"
+          }
         },
-	    {
+        {
           "key": "m",
           "label": "(M) Combat Status",
-          "action": { "rpc": { "command": "combat.status", "data": {} }, "post": "print_last_rpc" }
+          "action": {
+            "rpc": {
+              "command": "combat.status",
+              "data": {}
+            },
+            "post": "print_last_rpc"
+          }
         },
-	  {
-	      "key": "d",
-	      "label": "(D) Density Scan (sector.scan.density)",
-	      "action": { "pycall": "sector_density_scan_flow" }
-	  },
+        {
+          "key": "d",
+          "label": "(D) Density Scan (sector.scan.density)",
+          "action": {
+            "pycall": "sector_density_scan_flow"
+          }
+        },
         {
           "key": "h",
           "label": "(H) Hardware",
@@ -563,17 +601,23 @@
         {
           "key": "x",
           "label": "(X) Police status",
-          "action": { "pycall": "police_status_flow" }
+          "action": {
+            "pycall": "police_status_flow"
+          }
         },
         {
           "key": "w",
           "label": "(W) Offer a bribe",
-          "action": { "pycall": "police_bribe_flow" }
+          "action": {
+            "pycall": "police_bribe_flow"
+          }
         },
         {
           "key": "u",
           "label": "(U) Surrender to authorities",
-          "action": { "pycall": "police_surrender_flow" }
+          "action": {
+            "pycall": "police_surrender_flow"
+          }
         },
         {
           "key": "q",
@@ -593,7 +637,9 @@
           "action": {
             "pycall": "raw_json_handler"
           },
-          "show_if_ctx": ["debug"]
+          "show_if_ctx": [
+            "debug"
+          ]
         },
         {
           "key": "b",
@@ -612,7 +658,9 @@
         {
           "key": "u",
           "label": "(U) Upgrade commodity capacity",
-          "action": { "pycall": "port_upgrade_flow" }
+          "action": {
+            "pycall": "port_upgrade_flow"
+          }
         },
         {
           "key": "d",
@@ -635,7 +683,9 @@
             },
             "post": "pretty_print_trade_quote"
           },
-          "show_if_ctx": ["debug"]
+          "show_if_ctx": [
+            "debug"
+          ]
         },
         {
           "key": "k",
@@ -653,7 +703,9 @@
           "action": {
             "submenu": "SHIPYARD_MAIN"
           },
-          "show_if_ctx": ["is_shipyard_port"]
+          "show_if_ctx": [
+            "is_shipyard_port"
+          ]
         },
         {
           "key": "q",
@@ -866,7 +918,9 @@
           "action": {
             "pycall": "corp_create_flow"
           },
-          "show_if_ctx": ["not_in_corporation"]
+          "show_if_ctx": [
+            "not_in_corporation"
+          ]
         },
         {
           "key": "j",
@@ -874,7 +928,9 @@
           "action": {
             "pycall": "corp_join_flow"
           },
-          "show_if_ctx": ["not_in_corporation"]
+          "show_if_ctx": [
+            "not_in_corporation"
+          ]
         },
         {
           "key": "s",
@@ -886,15 +942,19 @@
             },
             "post": "pretty_print_corp_status"
           },
-          "show_if_ctx": ["in_corporation"]
+          "show_if_ctx": [
+            "in_corporation"
+          ]
         },
         {
           "key": "r",
           "label": "(R) Roster",
           "action": {
             "pycall": "corp_roster_flow"
-            },
-            "show_if_ctx": ["in_corporation"]
+          },
+          "show_if_ctx": [
+            "in_corporation"
+          ]
         },
         {
           "key": "l",
@@ -916,8 +976,10 @@
               "data": {}
             },
             "post": "pretty_print_corp_balance"
-            },
-            "show_if_ctx": ["in_corporation"]
+          },
+          "show_if_ctx": [
+            "in_corporation"
+          ]
         },
         {
           "key": "d",
@@ -925,7 +987,9 @@
           "action": {
             "pycall": "corp_deposit_flow"
           },
-          "show_if_ctx": ["in_corporation"]
+          "show_if_ctx": [
+            "in_corporation"
+          ]
         },
         {
           "key": "w",
@@ -933,7 +997,9 @@
           "action": {
             "pycall": "corp_withdraw_flow"
           },
-          "show_if_ctx": ["is_ceo_or_officer"]
+          "show_if_ctx": [
+            "is_ceo_or_officer"
+          ]
         },
         {
           "key": "t",
@@ -944,8 +1010,10 @@
               "data": {}
             },
             "post": "pretty_print_corp_statement"
-            },
-            "show_if_ctx": ["is_ceo_or_officer"]
+          },
+          "show_if_ctx": [
+            "is_ceo_or_officer"
+          ]
         },
         {
           "key": "i",
@@ -953,7 +1021,9 @@
           "action": {
             "pycall": "corp_invite_flow"
           },
-          "show_if_ctx": ["is_ceo_or_officer"]
+          "show_if_ctx": [
+            "is_ceo_or_officer"
+          ]
         },
         {
           "key": "a",
@@ -961,7 +1031,9 @@
           "action": {
             "pycall": "corp_member_asset_transfer_flow"
           },
-          "show_if_ctx": ["in_corporation"]
+          "show_if_ctx": [
+            "in_corporation"
+          ]
         },
         {
           "key": "k",
@@ -969,7 +1041,9 @@
           "action": {
             "pycall": "corp_kick_flow"
           },
-          "show_if_ctx": ["is_ceo_or_officer"]
+          "show_if_ctx": [
+            "is_ceo_or_officer"
+          ]
         },
         {
           "key": "p",
@@ -977,7 +1051,9 @@
           "action": {
             "pycall": "corp_transfer_ceo_flow"
           },
-          "show_if_ctx": ["is_ceo"]
+          "show_if_ctx": [
+            "is_ceo"
+          ]
         },
         {
           "key": "x",
@@ -985,7 +1061,9 @@
           "action": {
             "pycall": "corp_dissolve_flow"
           },
-          "show_if_ctx": ["is_ceo"]
+          "show_if_ctx": [
+            "is_ceo"
+          ]
         },
         {
           "key": "e",
@@ -993,8 +1071,9 @@
           "action": {
             "pycall": "corp_leave_flow"
           },
-          "show_if_ctx": ["in_corporation"]
-          
+          "show_if_ctx": [
+            "in_corporation"
+          ]
         },
         {
           "key": "q",
@@ -1036,7 +1115,10 @@
           "action": {
             "pycall": "stock_ipo_register_flow"
           },
-          "show_if_ctx": ["is_ceo", "corp_not_public"]
+          "show_if_ctx": [
+            "is_ceo",
+            "corp_not_public"
+          ]
         },
         {
           "key": "b",
@@ -1044,7 +1126,9 @@
           "action": {
             "pycall": "stock_buy_flow"
           },
-          "show_if_ctx": ["corp_is_public"]
+          "show_if_ctx": [
+            "corp_is_public"
+          ]
         },
         {
           "key": "d",
@@ -1052,7 +1136,9 @@
           "action": {
             "pycall": "stock_dividend_set_flow"
           },
-          "show_if_ctx": ["is_ceo"]
+          "show_if_ctx": [
+            "is_ceo"
+          ]
         },
         {
           "key": "q",
@@ -1829,7 +1915,9 @@
         {
           "key": "t",
           "label": "(T) Player trade offers",
-          "action": { "submenu": "PLAYER_TRADES" }
+          "action": {
+            "submenu": "PLAYER_TRADES"
+          }
         },
         {
           "key": "q",
@@ -1843,10 +1931,34 @@
     "PLAYER_TRADES": {
       "title": "--- Player Trade Offers ---",
       "options": [
-        {"key": "c", "label": "(C) Create offer", "action": {"pycall": "trade_offer_create_flow"}},
-        {"key": "a", "label": "(A) Accept offer by ID", "action": {"pycall": "trade_offer_accept_flow"}},
-        {"key": "x", "label": "(X) Cancel offer by ID", "action": {"pycall": "trade_offer_cancel_flow"}},
-        {"key": "q", "label": "(Q) Back", "action": {"back": true}}
+        {
+          "key": "c",
+          "label": "(C) Create offer",
+          "action": {
+            "pycall": "trade_offer_create_flow"
+          }
+        },
+        {
+          "key": "a",
+          "label": "(A) Accept offer by ID",
+          "action": {
+            "pycall": "trade_offer_accept_flow"
+          }
+        },
+        {
+          "key": "x",
+          "label": "(X) Cancel offer by ID",
+          "action": {
+            "pycall": "trade_offer_cancel_flow"
+          }
+        },
+        {
+          "key": "q",
+          "label": "(Q) Back",
+          "action": {
+            "back": true
+          }
+        }
       ]
     },
     "CHAT": {
@@ -1974,17 +2086,23 @@
         {
           "key": "a",
           "label": "(A) Attack Listed Ship",
-          "action": { "pycall": "combat_attack_flow" }
+          "action": {
+            "pycall": "combat_attack_flow"
+          }
         },
         {
           "key": "p",
           "label": "(P) Attack Listed Planet",
-          "action": { "pycall": "combat_attack_planet_flow" }
+          "action": {
+            "pycall": "combat_attack_planet_flow"
+          }
         },
         {
           "key": "o",
           "label": "(O) Attack Local StarPort",
-          "action": { "pycall": "combat_attack_port_flow" }
+          "action": {
+            "pycall": "combat_attack_port_flow"
+          }
         },
         {
           "key": "x",
@@ -1992,7 +2110,9 @@
           "action": {
             "rpc": {
               "command": "combat.fire_photon",
-              "data": {"sector_id": "<prompt:int:Adjacent target sector>"}
+              "data": {
+                "sector_id": "<prompt:int:Adjacent target sector>"
+              }
             },
             "post": "print_last_rpc"
           }
@@ -2063,7 +2183,9 @@
             },
             "post": [
               "print_last_rpc",
-              {"pycall": "refresh_sector_and_display"}
+              {
+                "pycall": "refresh_sector_and_display"
+              }
             ]
           }
         },

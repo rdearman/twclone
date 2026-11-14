@@ -566,3 +566,15 @@ planet identity. Python's full suite remains 802/802. Feedback reporting and
 GitHub integration were not implemented in this checkpoint; they are not
 represented as gameplay-complete. See the acceptance addendum for the exact
 scope and remaining verification limits.
+
+### Player feedback follow-up — 2026-11-14
+
+| ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
+|---|---|---|---|---|---|---|
+| FEEDBACK-V3-01 | Player bug reports, suggestions and diagnostics | PARTIAL | `src/server_feedback.c`, migration `188_v3_player_feedback_outbox.sql`, `tools/feedback_github_publisher.py`, Python report/status workflows, Godot feedback form and `ProtocolTransport` diagnostic buffer | `docs/testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`: ordinary Python preview/confirm/submit/status/diagnostics and ownership live on disposable PostgreSQL; exact preview bytes match the outbox; two-session duplicate, injected rollback, and planted metadata/diagnostic redaction verified; GitHub mocks cover create, reconciliation, failure, `Retry-After`, and label permission fallback; 812 Python client/mock tests and 259 `tests.v2` tests passed. Godot runtime was unavailable. | pending | Run Godot 4.5 acceptance, execute UI redaction regression, test server submission rate boundaries/global contention, and test GitHub App publication only in an authorised non-public test repository before claiming full cross-client verification. |
+
+The Docker startup fix now uses a writable per-start runtime directory. A
+serving-container restart and post-restart authenticated status request passed
+against the disposable database; see the StarPort acceptance addendum. This
+does not substitute for replaying StarPort construction and scheduled delivery
+after restart.

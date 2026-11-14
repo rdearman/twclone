@@ -27,12 +27,12 @@
         "summary": "Second-factor code"
       },
       {
-        "cmd": "auth.register",
-        "summary": "Create a new player"
-      },
-      {
         "cmd": "auth.refresh",
         "summary": "Refresh session token"
+      },
+      {
+        "cmd": "auth.register",
+        "summary": "Create a new player"
       },
       {
         "cmd": "bank.balance",
@@ -73,26 +73,6 @@
       {
         "cmd": "bulk.execute",
         "summary": "Execute a bulk command"
-      },
-      {
-        "cmd": "fine.list",
-        "summary": "List player outstanding fines"
-      },
-      {
-        "cmd": "fine.pay",
-        "summary": "Pay an outstanding fine"
-      },
-      {
-        "cmd": "insurance.policies.list",
-        "summary": "List player insurance policies"
-      },
-      {
-        "cmd": "insurance.policies.buy",
-        "summary": "Buy an insurance policy"
-      },
-      {
-        "cmd": "insurance.claim.file",
-        "summary": "File an insurance claim"
       },
       {
         "cmd": "chat.broadcast",
@@ -141,22 +121,6 @@
       {
         "cmd": "combat.sweep_mines",
         "summary": "Sweep for mines"
-      },
-      {
-        "cmd": "deploy.fighters.list",
-        "summary": "List deployed fighters"
-      },
-      {
-        "cmd": "deploy.mines.list",
-        "summary": "List deployed mines"
-      },
-      {
-        "cmd": "fighters.recall",
-        "summary": "Recall deployed fighters"
-      },
-      {
-        "cmd": "mines.recall",
-        "summary": "Recall deployed mines"
       },
       {
         "cmd": "corp.balance",
@@ -215,8 +179,44 @@
         "summary": "Withdraw from corporation"
       },
       {
+        "cmd": "deploy.fighters.list",
+        "summary": "List deployed fighters"
+      },
+      {
+        "cmd": "deploy.mines.list",
+        "summary": "List deployed mines"
+      },
+      {
         "cmd": "dock.status",
         "summary": "Check/set player docked status at current port"
+      },
+      {
+        "cmd": "feedback.diagnostics",
+        "summary": "Get sanitised report diagnostics"
+      },
+      {
+        "cmd": "feedback.preview",
+        "summary": "Preview sanitised feedback publication"
+      },
+      {
+        "cmd": "feedback.status",
+        "summary": "Get player feedback status"
+      },
+      {
+        "cmd": "feedback.submit",
+        "summary": "Submit a bug report or suggestion"
+      },
+      {
+        "cmd": "fighters.recall",
+        "summary": "Recall deployed fighters"
+      },
+      {
+        "cmd": "fine.list",
+        "summary": "List player outstanding fines"
+      },
+      {
+        "cmd": "fine.pay",
+        "summary": "Pay an outstanding fine"
       },
       {
         "cmd": "hardware.buy",
@@ -225,6 +225,18 @@
       {
         "cmd": "hardware.list",
         "summary": "List available ship hardware"
+      },
+      {
+        "cmd": "insurance.claim.file",
+        "summary": "File an insurance claim"
+      },
+      {
+        "cmd": "insurance.policies.buy",
+        "summary": "Buy an insurance policy"
+      },
+      {
+        "cmd": "insurance.policies.list",
+        "summary": "List player insurance policies"
       },
       {
         "cmd": "mail.delete",
@@ -241,6 +253,10 @@
       {
         "cmd": "mail.send",
         "summary": "Send mail"
+      },
+      {
+        "cmd": "mines.recall",
+        "summary": "Recall deployed mines"
       },
       {
         "cmd": "move.autopilot.start",
@@ -419,6 +435,10 @@
         "summary": "Current player info"
       },
       {
+        "cmd": "player.ping",
+        "summary": "Ping"
+      },
+      {
         "cmd": "player.rankings",
         "summary": "Player rankings"
       },
@@ -497,38 +517,6 @@
       {
         "cmd": "session.ping",
         "summary": "Ping"
-      },
-      {
-        "cmd": "player.ping",
-        "summary": "Ping"
-      },
-      {
-        "cmd": "sys.notice.create",
-        "summary": "Sysop command to create a notice"
-      },
-      {
-        "cmd": "system.capabilities",
-        "summary": "Feature flags, schemas, counts"
-      },
-      {
-        "cmd": "system.cmd_list",
-        "summary": "Flat list of all commands"
-      },
-      {
-        "cmd": "system.describe_schema",
-        "summary": "Describe commands in a schema"
-      },
-      {
-        "cmd": "system.disconnect",
-        "summary": "Disconnect"
-      },
-      {
-        "cmd": "system.hello",
-        "summary": "Handshake / hello"
-      },
-      {
-        "cmd": "system.schema_list",
-        "summary": "List all schema namespaces"
       },
       {
         "cmd": "ship.claim",
@@ -625,6 +613,34 @@
       {
         "cmd": "subscribe.remove",
         "summary": "Remove a subscription"
+      },
+      {
+        "cmd": "sys.notice.create",
+        "summary": "Sysop command to create a notice"
+      },
+      {
+        "cmd": "system.capabilities",
+        "summary": "Feature flags, schemas, counts"
+      },
+      {
+        "cmd": "system.cmd_list",
+        "summary": "Flat list of all commands"
+      },
+      {
+        "cmd": "system.describe_schema",
+        "summary": "Describe commands in a schema"
+      },
+      {
+        "cmd": "system.disconnect",
+        "summary": "Disconnect"
+      },
+      {
+        "cmd": "system.hello",
+        "summary": "Handshake / hello"
+      },
+      {
+        "cmd": "system.schema_list",
+        "summary": "List all schema namespaces"
       },
       {
         "cmd": "tavern.barcharts.get_prices_summary",

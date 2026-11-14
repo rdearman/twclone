@@ -76,6 +76,17 @@ failure, and the subsequent retry settled destruction once.
 
 ## Remaining state
 
+### Follow-up server restart check
+
+The read-only `/app/bin/bigbang.json` startup issue was fixed in
+`docker/entrypoint-server.sh`: each server start copies the image config into a
+private writable directory created with `mktemp`. A later isolated V3 server
+container using that entrypoint restarted and accepted an ordinary Python
+login plus `feedback.status` request against the same PostgreSQL database.
+This verifies the bootstrap fix and serving-process restart path generally;
+the full StarPort-specific construction-replay matrix was not repeated in
+that later feedback-focused database.
+
 - **IMPLEMENTED and focused-tested:** Godot menu reachability, response handling,
   authoritative refresh safeguards.
 - **VERIFIED against disposable PostgreSQL:** StarPort concurrent upgrades,

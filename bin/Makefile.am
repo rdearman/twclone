@@ -113,6 +113,7 @@ server_SOURCES = \
 	../src/server_cron.c \
 	../src/server_engine.c \
 	../src/server_envelope.c \
+	../src/server_feedback.c \
 	../src/server_log.c \
 	../src/server_loop.c \
 	../src/server_main.c \

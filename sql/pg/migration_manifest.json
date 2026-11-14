@@ -77,7 +77,8 @@
       "182_v3_planet_production_rates.sql",
       "183_v3_photon_effects.sql",
       "184_v3_toll_passage.sql",
-      "185_v3_starport_construction.sql"
+      "185_v3_starport_construction.sql",
+      "188_v3_player_feedback_outbox.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -780,6 +781,13 @@
     {
       "name": "187_v3_starport_sector_uniqueness.sql",
       "subsystem": "ports",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "188_v3_player_feedback_outbox.sql",
+      "subsystem": "player-feedback",
       "required": true,
       "v3_only": true,
       "diagnostic": false

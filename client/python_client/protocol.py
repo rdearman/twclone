@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import json
 import socket
+import sys
 import threading
 import time
 from collections import deque
 from typing import Any, Dict, List, Optional
+from diagnostics import DiagnosticBuffer, make_exchange
 
 # Event categories used to classify unsolicited server frames. This is a
 # closed, presentation-agnostic vocabulary; unrecognised type prefixes map to
@@ -131,6 +133,8 @@ class Conn:
         self.debug = debug
         self._seen_notices = set()   # for de-duping system.notice
         self.session_token = None
+        self.diagnostics = DiagnosticBuffer(100)
+        self.last_failed_command = None
 
         # Bounded queue of unsolicited events (notices/broadcasts/etc.).
         # Presentation code drains this at safe UI boundaries; Conn itself
@@ -209,14 +213,42 @@ class Conn:
             self.events.push("connection", "connection.lost", {"reason": reason})
 
     def rpc(self, command: str, data: dict) -> dict:
+        req_id = self._next_id()
+        request = {"id": req_id, "command": command, "data": data}
+        started = time.monotonic()
+        response = None
+        try:
+            response = self._rpc_exchange(request)
+            if isinstance(response, dict) and response.get("status") in ("error", "refused"):
+                error = response.get("error") if isinstance(response.get("error"), dict) else {}
+                self.last_failed_command = {"command": command, "status": response.get("status"),
+                                            "error_code": error.get("code")}
+            return response
+        finally:
+            hud = getattr(self.ctx, "hud", None)
+            if hud is not None and hasattr(hud, "__dict__"):
+                hud = vars(hud)
+            context = {"client": "python", "client_version": "3", "build_id": "",
+                       "protocol_version": "v3", "os": sys.platform}
+            if isinstance(hud, dict):
+                context.update({key: hud.get(key) for key in ("sector_id", "ship_id", "planet_id", "player_id")})
+            if self.ctx is not None:
+                context["menu"] = getattr(self.ctx, "current_menu", "")
+                state = getattr(self.ctx, "state", {})
+                if isinstance(state, dict):
+                    context["workflow"] = state.get("last_workflow", "")
+            self.diagnostics.append(make_exchange(request, response,
+                int((time.monotonic() - started) * 1000), context))
+
+    def _rpc_exchange(self, request: dict) -> dict:
         """
         Send an RPC and wait for its reply. While waiting, unsolicited
         event/broadcast frames (no reply_to) are classified and pushed onto
         `self.events` instead of being rendered here — Conn never prints
         server content. Also de-duplicate system.notice by notice id.
         """
-        req_id = self._next_id()
-        self.send({"id": req_id, "command": command, "data": data})
+        req_id = request["id"]
+        self.send(request)
 
         while True:
             resp = self.recv()

@@ -50,6 +50,16 @@ var _autopilot_mode := "continue"
 var _route_total_hops := 0
 var _route_completed_hops := 0
 var _route_current_sector := 0
+var _feedback_form: ConfirmationDialog
+var _feedback_preview: ConfirmationDialog
+var _feedback_result: AcceptDialog
+var _feedback_preview_text: TextEdit
+var _feedback_status_form: ConfirmationDialog
+var _feedback_status_input: LineEdit
+var _feedback_fields: Dictionary = {}
+var _feedback_payload: Dictionary = {}
+var _feedback_requests: Dictionary = {}
+var _last_failed_command: Dictionary = {}
 
 func _ready() -> void:
 	transport = ProtocolTransport.new(15.0, 200)
@@ -59,6 +69,7 @@ func _ready() -> void:
 	transport.transport_connected.connect(_on_transport_connected)
 	transport.transport_disconnected.connect(_on_transport_disconnected)
 	transport.reply_received.connect(_on_transport_reply)
+	_build_feedback_ui()
 	transport.request_timed_out.connect(_on_request_timed_out)
 	transport.request_failed.connect(_on_request_failed)
 	transport.protocol_error.connect(_on_protocol_error)
@@ -239,8 +250,36 @@ func _on_transport_disconnected(reason: String) -> void:
 		log_network("DISCONNECTED", reason)
 
 func _on_transport_reply(request_id: String, response: Dictionary, command: String) -> void:
+	if not command.begins_with("feedback.") and str(response.get("status", "")) in ["error", "refused"]:
+		var error_value = response.get("error", {})
+		_last_failed_command = {"command": command, "status": str(response.get("status", "error")), "error_code": error_value.get("code", null) if error_value is Dictionary else null}
 	print("[AUTH_TRACE] Main received reply command=%s request_id_present=%s response_type=%s" % [command, not request_id.is_empty(), str(response.get("type", ""))])
 	var reply_summary := "command=%s type=%s status=%s request_id_present=%s" % [command, str(response.get("type", "")), str(response.get("status", "")), not request_id.is_empty()]
+	if _feedback_requests.has(request_id):
+		var feedback_stage := str(_feedback_requests[request_id])
+		_feedback_requests.erase(request_id)
+		var feedback_result: Dictionary = Protocol.result_from_response(response)
+		if feedback_result.get("kind") != "ok":
+			gameplay_view.show_notification("Feedback request refused · %s" % str(feedback_result.get("message", "server refused the request")))
+			return
+		var feedback_data := _response_data_dictionary(feedback_result.get("data", {}))
+		if feedback_stage == "preview":
+			_feedback_payload["report_id"] = str(feedback_data.get("report_id", ""))
+			_feedback_preview_text.text = "%s\n\n%s" % [str(feedback_data.get("title", "")), str(feedback_data.get("body", ""))]
+			_feedback_preview.popup_centered(Vector2i(760, 620))
+		elif feedback_stage == "submit":
+			var message := "Report reference: %s\nStatus: %s" % [str(feedback_data.get("report_id", "unavailable")), str(feedback_data.get("state", "pending"))]
+			if feedback_data.has("github_issue_url"):
+				message += "\nGitHub issue: %s" % str(feedback_data["github_issue_url"])
+			_feedback_result.dialog_text = message
+			_feedback_result.popup_centered()
+		elif feedback_stage == "status":
+			var message := "Report reference: %s\nStatus: %s" % [str(feedback_data.get("report_id", "")), str(feedback_data.get("state", "unknown"))]
+			if feedback_data.has("github_issue_url"):
+				message += "\nGitHub issue: %s" % str(feedback_data["github_issue_url"])
+			_feedback_result.dialog_text = message
+			_feedback_result.popup_centered()
+		return
 	if command in ["move.scan", "sector.info"]:
 		log_network("REPLY", "%s response=%s" % [reply_summary, Protocol.diagnostic_json(response)])
 	else:
@@ -891,6 +930,26 @@ func _refresh_after_warp_attempt() -> void:
 		gameplay_view.show_notification("Could not refresh your location. The displayed sector may be stale.")
 
 func _on_command_requested(command: String, data: Dictionary, label: String, mutating: bool) -> void:
+	if command == "feedback.open":
+		if auth_session.is_authenticated():
+			_feedback_form.popup_centered(Vector2i(620, 620))
+		else:
+			gameplay_view.show_notification("Sign in before submitting player feedback.")
+		return
+	if command == "feedback.status.open":
+		_feedback_status_form.popup_centered()
+		return
+	if command == "feedback.error.open":
+		if _last_failed_command.is_empty():
+			gameplay_view.show_notification("There is no recent failed command to report.")
+			return
+		var failed_command := str(_last_failed_command.get("command", "command"))
+		(_feedback_fields["subject"] as LineEdit).text = "Command failed: " + failed_command
+		(_feedback_fields["description"] as TextEdit).text = "The server returned %s (error code %s) for %s." % [str(_last_failed_command.get("status", "error")), str(_last_failed_command.get("error_code", "unknown")), failed_command]
+		(_feedback_fields["expected"] as TextEdit).text = "The command completes according to its documented V3 behaviour."
+		(_feedback_fields["actual"] as TextEdit).text = "The server returned %s (error code %s)." % [str(_last_failed_command.get("status", "error")), str(_last_failed_command.get("error_code", "unknown"))]
+		_feedback_form.popup_centered(Vector2i(620, 620))
+		return
 	# Once the port workflow is open, clicks must never reopen the docking
 	# request behind it. This is a final guard against leaked UI mouse events.
 	if command == "port.info" and is_instance_valid(gameplay_view.port_workflow) and gameplay_view.port_workflow.visible:
@@ -950,6 +1009,115 @@ func _on_command_requested(command: String, data: Dictionary, label: String, mut
 	gameplay_view.set_command_busy(true)
 	if not is_planet_read:
 		gameplay_view.show_notification("%s · waiting for server confirmation." % label)
+
+func _build_feedback_ui() -> void:
+	_feedback_form = ConfirmationDialog.new()
+	_feedback_form.title = "Report Bug / Suggest Improvement"
+	_feedback_form.ok_button_text = "Preview"
+	var form_column := VBoxContainer.new()
+	var kind := OptionButton.new()
+	kind.add_item("Bug report", 0)
+	kind.add_item("Suggestion", 1)
+	var subject := LineEdit.new()
+	subject.placeholder_text = "Short subject"
+	var description := TextEdit.new()
+	description.placeholder_text = "Describe the issue or suggestion"
+	description.custom_minimum_size.y = 100
+	var expected := TextEdit.new()
+	expected.placeholder_text = "Expected behaviour (required for bugs)"
+	expected.custom_minimum_size.y = 65
+	var actual := TextEdit.new()
+	actual.placeholder_text = "Actual behaviour (required for bugs)"
+	actual.custom_minimum_size.y = 65
+	var steps := TextEdit.new()
+	steps.placeholder_text = "Reproduction steps (optional)"
+	steps.custom_minimum_size.y = 65
+	var include := CheckBox.new()
+	include.text = "Include recent sanitised diagnostics"
+	include.button_pressed = true
+	var count := OptionButton.new()
+	for value in [10, 25, 50, 100]:
+		count.add_item("%d recent exchanges" % value, value)
+	count.select(1)
+	for control in [kind, subject, description, expected, actual, steps, include, count]:
+		form_column.add_child(control)
+	_feedback_fields = {"kind": kind, "subject": subject, "description": description, "expected": expected, "actual": actual, "steps": steps, "include": include, "count": count}
+	_feedback_form.add_child(form_column)
+	add_child(_feedback_form)
+	_feedback_form.confirmed.connect(_on_feedback_form_confirmed)
+	_feedback_preview = ConfirmationDialog.new()
+	_feedback_preview.title = "Public issue preview · confirm to submit"
+	_feedback_preview.ok_button_text = "Submit report"
+	_feedback_preview.custom_minimum_size = Vector2(760, 620)
+	_feedback_preview_text = TextEdit.new()
+	_feedback_preview_text.editable = false
+	_feedback_preview_text.custom_minimum_size = Vector2(700, 470)
+	_feedback_preview.add_child(_feedback_preview_text)
+	add_child(_feedback_preview)
+	_feedback_preview.confirmed.connect(_submit_feedback_preview)
+	_feedback_status_form = ConfirmationDialog.new()
+	_feedback_status_form.title = "Check feedback report status"
+	_feedback_status_input = LineEdit.new()
+	_feedback_status_input.placeholder_text = "Report UUID"
+	_feedback_status_form.add_child(_feedback_status_input)
+	add_child(_feedback_status_form)
+	_feedback_status_form.confirmed.connect(_request_feedback_status)
+	_feedback_result = AcceptDialog.new()
+	_feedback_result.title = "Feedback report"
+	add_child(_feedback_result)
+
+func _on_feedback_form_confirmed() -> void:
+	var kind: OptionButton = _feedback_fields["kind"]
+	var subject: LineEdit = _feedback_fields["subject"]
+	var description: TextEdit = _feedback_fields["description"]
+	var expected: TextEdit = _feedback_fields["expected"]
+	var actual: TextEdit = _feedback_fields["actual"]
+	var steps: TextEdit = _feedback_fields["steps"]
+	if subject.text.strip_edges().is_empty() or description.text.strip_edges().is_empty():
+		gameplay_view.show_notification("A feedback subject and description are required.")
+		return
+	var report_type := "bug" if kind.selected == 0 else "suggestion"
+	if report_type == "bug" and (expected.text.strip_edges().is_empty() or actual.text.strip_edges().is_empty()):
+		gameplay_view.show_notification("Bug reports require expected and actual behaviour.")
+		return
+	var count: OptionButton = _feedback_fields["count"]
+	var diagnostics: Array = transport.diagnostic_snapshot(count.get_item_id(count.selected)) if bool((_feedback_fields["include"] as CheckBox).button_pressed) else []
+	var hud: Dictionary = gameplay_view._snapshot.get("hud", {})
+	var player: Dictionary = gameplay_view._snapshot.get("player", {})
+	var ship: Dictionary = gameplay_view._snapshot.get("ship", {})
+	var context := {"client": "godot", "client_version": "4.5.2", "build_id": "", "protocol_version": "v3", "sector_id": hud.get("sector_id"), "player_id": player.get("player_id"), "ship_id": ship.get("ship_id"), "planet_id": ship.get("onplanet"), "last_failed_command": _last_failed_command.get("command", "")}
+	var bytes := Crypto.new().generate_random_bytes(16)
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	var hex := bytes.hex_encode()
+	var idem := "%s-%s-%s-%s-%s" % [hex.substr(0, 8), hex.substr(8, 4), hex.substr(12, 4), hex.substr(16, 4), hex.substr(20, 12)]
+	_feedback_payload = {"report_type": report_type, "subject": subject.text.strip_edges(), "description": description.text.strip_edges(), "expected_behavior": expected.text.strip_edges(), "actual_behavior": actual.text.strip_edges(), "reproduction_steps": steps.text.strip_edges(), "diagnostics": {"exchanges": diagnostics, "context": context}, "client_name": "godot", "client_version": "4.5.2", "build_id": "", "protocol_version": "v3", "idempotency_key": idem}
+	var request_id: String = transport.request("feedback.preview", _feedback_payload, auth_session.session_token)
+	if not request_id.is_empty():
+		_feedback_requests[request_id] = "preview"
+	else:
+		gameplay_view.show_notification("Feedback preview could not be sent.")
+
+func _submit_feedback_preview() -> void:
+	if str(_feedback_payload.get("report_id", "")) != str(_feedback_payload.get("idempotency_key", "")):
+		gameplay_view.show_notification("Preview identity was not confirmed by the server; report not submitted.")
+		return
+	var request_id: String = transport.request("feedback.submit", _feedback_payload, auth_session.session_token)
+	if not request_id.is_empty():
+		_feedback_requests[request_id] = "submit"
+	else:
+		gameplay_view.show_notification("Feedback submission could not be sent.")
+
+func _request_feedback_status() -> void:
+	var report_id := _feedback_status_input.text.strip_edges()
+	if report_id.is_empty():
+		gameplay_view.show_notification("Enter the report UUID shown when it was submitted.")
+		return
+	var request_id: String = transport.request("feedback.status", {"report_id": report_id}, auth_session.session_token)
+	if not request_id.is_empty():
+		_feedback_requests[request_id] = "status"
+	else:
+		gameplay_view.show_notification("Feedback status could not be requested.")
 
 func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 	var result: Dictionary = Protocol.result_from_response(response)

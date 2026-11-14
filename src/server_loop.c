@@ -37,6 +37,7 @@
 #include "server_ships.h"
 #include "common.h"
 #include "server_envelope.h"
+#include "server_feedback.h"
 #include "server_players.h"
 #include "server_ports.h"
 #include "server_auth.h"
@@ -417,6 +418,10 @@ static const command_entry_t k_command_registry[] = {
   {"fine.list", cmd_fine_list, "List player outstanding fines",
    schema_fine_list, 0, false, NULL},
   {"fine.pay", cmd_fine_pay, "Pay an outstanding fine", schema_fine_pay, 0, false, NULL},
+  {"feedback.diagnostics", cmd_feedback_diagnostics, "Get sanitised report diagnostics", schema_placeholder, 0, false, NULL},
+  {"feedback.preview", cmd_feedback_preview, "Preview sanitised feedback publication", schema_placeholder, 0, false, NULL},
+  {"feedback.status", cmd_feedback_status, "Get player feedback status", schema_placeholder, 0, false, NULL},
+  {"feedback.submit", cmd_feedback_submit, "Submit a bug report or suggestion", schema_placeholder, 0, false, NULL},
   {"insurance.policies.list", cmd_insurance_policies_list,
    "List player insurance policies", schema_insurance_policies_list, 0, false, NULL},
   {"insurance.policies.buy", cmd_insurance_policies_buy,

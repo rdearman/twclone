@@ -28,6 +28,11 @@ var _events: Array = []
 var _connected_announced := false
 var _connecting := false
 var _connection_deadline_ms := 0
+var _diagnostics: Array[Dictionary] = []
+var _diagnostic_starts: Dictionary = {}
+const DIAGNOSTIC_CAPACITY := 100
+const SAFE_DIAGNOSTIC_FIELDS := ["id", "request_id", "reply_to", "command", "timestamp", "status", "type", "data", "meta", "error", "code", "error_code", "request", "response", "response_type", "duration_ms", "timeout", "client", "client_version", "build_id", "protocol_version", "os", "sector_id", "ship_id", "planet_id", "player_id", "quantity", "amount", "count", "level", "class", "action", "destination", "to_sector_id", "from_sector_id", "commodity", "port_id", "port_class", "turns_remaining", "credits", "cargo", "shields", "fighters", "hull", "message"]
+const SENSITIVE_DIAGNOSTIC_PARTS := ["pass", "token", "secret", "cookie", "auth", "email", "ip", "path", "private", "chat", "message"]
 
 func _init(timeout_seconds: float = 15.0, event_limit: int = 200, connect_timeout_seconds: float = DEFAULT_CONNECTION_TIMEOUT_SECONDS) -> void:
 	request_timeout_seconds = timeout_seconds
@@ -72,6 +77,7 @@ func poll(_delta: float = 0.0) -> void:
 	for expired in _requests.expire():
 		var request_id := str(expired["id"])
 		var command := str(expired["command"])
+		_record_timeout(request_id)
 		var result: Dictionary = Protocol.timeout_result(command)
 		request_timed_out.emit(request_id, command)
 		request_failed.emit(request_id, command, result)
@@ -84,6 +90,7 @@ func request(command: String, data: Dictionary, session_token: String = "") -> S
 	var envelope: Dictionary = Protocol.build_request(request_id, command, data, session_token)
 	print("[AUTH_TRACE] Transport writing request command=%s request_id=%s" % [command, request_id])
 	_requests.register(request_id, command)
+	_record_request(request_id, command, data)
 	_emit_diagnostic("SEND", envelope)
 	var error := _socket.put_data((JSON.stringify(envelope) + "\n").to_utf8_buffer())
 	if error != OK:
@@ -118,6 +125,100 @@ func drain_events() -> Array:
 	_events.clear()
 	return events
 
+func diagnostic_snapshot(count: int = 25) -> Array[Dictionary]:
+	if count not in [10, 25, 50, 100]:
+		return []
+	var start := maxi(0, _diagnostics.size() - count)
+	var result: Array[Dictionary] = []
+	for index in range(start, _diagnostics.size()):
+		result.append(_diagnostics[index].duplicate(true))
+	return result
+
+func _record_request(request_id: String, command: String, data: Dictionary) -> void:
+	_diagnostic_starts[request_id] = Time.get_ticks_msec()
+	var entry := {"timestamp": Time.get_unix_time_from_system(), "request_id": request_id, "command": command, "duration_ms": 0, "context": {"client": "godot", "client_version": "4.5.2", "protocol_version": "v3", "os": OS.get_name()}}
+	if command.begins_with("auth.") or command.begins_with("chat.") or command.begins_with("mail.") or command.begins_with("comm."):
+		entry["request"] = {"omitted": true}
+	else:
+		entry["request"] = _sanitize_diagnostic(data)
+	_diagnostics.append(entry)
+	while _diagnostics.size() > DIAGNOSTIC_CAPACITY:
+		_diagnostics.pop_front()
+
+func _record_response(request_id: String, command: String, response: Dictionary) -> void:
+	for index in range(_diagnostics.size() - 1, -1, -1):
+		if str(_diagnostics[index].get("request_id", "")) == request_id:
+			var entry := _diagnostics[index]
+			entry["duration_ms"] = maxi(0, Time.get_ticks_msec() - int(_diagnostic_starts.get(request_id, Time.get_ticks_msec())))
+			_diagnostic_starts.erase(request_id)
+			entry["response_type"] = str(response.get("type", ""))
+			entry["status"] = str(response.get("status", ""))
+			if command.begins_with("auth.") or command.begins_with("chat.") or command.begins_with("mail.") or command.begins_with("comm."):
+				entry["response"] = {"omitted": true}
+			else:
+				entry["response"] = _sanitize_diagnostic(response.get("data", {}))
+			var error_value = response.get("error", {})
+			if error_value is Dictionary:
+				entry["error_code"] = error_value.get("code", null)
+			_diagnostics[index] = entry
+			return
+
+func _record_timeout(request_id: String) -> void:
+	for index in range(_diagnostics.size() - 1, -1, -1):
+		if str(_diagnostics[index].get("request_id", "")) == request_id:
+			var entry := _diagnostics[index]
+			entry["timeout"] = true
+			entry["duration_ms"] = maxi(0, Time.get_ticks_msec() - int(_diagnostic_starts.get(request_id, Time.get_ticks_msec())))
+			_diagnostic_starts.erase(request_id)
+			_diagnostics[index] = entry
+			return
+
+func _sanitize_diagnostic(value, depth: int = 0):
+	if depth > 8:
+		return "[depth-limited]"
+	if value is Dictionary:
+		var clean := {}
+		for key in value:
+			var lower := str(key).to_lower()
+			var denied := false
+			for part in SENSITIVE_DIAGNOSTIC_PARTS:
+				if lower.contains(part):
+					denied = true
+					break
+			if not denied and str(key) in SAFE_DIAGNOSTIC_FIELDS:
+				clean[key] = _sanitize_diagnostic(value[key], depth + 1)
+		return clean
+	if value is Array:
+		var clean_array: Array = []
+		for item in value.slice(0, mini(value.size(), 100)):
+			clean_array.append(_sanitize_diagnostic(item, depth + 1))
+		return clean_array
+	if value is String:
+		var result := str(value)
+		result = result.replace("/home/", "[redacted-path]/").replace("/Users/", "[redacted-path]/").replace("/tmp/", "[redacted-path]/")
+		var email_regex := RegEx.new()
+		email_regex.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}")
+		result = email_regex.sub(result, "[redacted-email]", true)
+		var ip_regex := RegEx.new()
+		ip_regex.compile("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?::[0-9]{1,5})?|(?i)(?:[0-9a-f]{0,4}:){2,7}[0-9a-f:]{0,4}")
+		result = ip_regex.sub(result, "[redacted-ip]", true)
+		var bearer_regex := RegEx.new()
+		bearer_regex.compile("(?i)Bearer\\s+[A-Za-z0-9._~+/-]+=*")
+		result = bearer_regex.sub(result, "[redacted-credential]", true)
+		var assignment_regex := RegEx.new()
+		assignment_regex.compile("(?i)(password|passwd|token|secret|api[_-]?key|authorization)\\s*[:=]\\s*[^\\s,;]+")
+		result = assignment_regex.sub(result, "[redacted-credential]", true)
+		var jwt_regex := RegEx.new()
+		jwt_regex.compile("eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}")
+		result = jwt_regex.sub(result, "[redacted-credential]", true)
+		var path_regex := RegEx.new()
+		path_regex.compile("(?:/(?:home|Users|tmp|var|opt|mnt|private|Volumes)/|[A-Za-z]:\\\\)[^\\s\\\"']+")
+		result = path_regex.sub(result, "[redacted-path]", true)
+		var github_regex := RegEx.new()
+		github_regex.compile("(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")
+		return github_regex.sub(result, "[redacted-credential]", true).left(12000)
+	return value if value == null or value is bool or value is int or value is float else null
+
 func _read_available() -> void:
 	var available := _socket.get_available_bytes()
 	if available <= 0:
@@ -149,6 +250,7 @@ func _process_line(line: String) -> void:
 			protocol_warning.emit("Ignored a reply for an unknown or expired request.")
 			return
 		print("[AUTH_TRACE] Transport dispatching reply command=%s request_id=%s" % [str(request.get("command", "")), request_id])
+		_record_response(request_id, str(request.get("command", "")), frame)
 		reply_received.emit(request_id, frame, str(request.get("command", "")))
 		return
 	if _is_async_event(frame):
@@ -189,4 +291,4 @@ func _fail_pending(result: Dictionary) -> void:
 		request_failed.emit(str(pending["id"]), str(pending["command"]), result)
 
 func _emit_diagnostic(kind: String, payload) -> void:
-	diagnostic.emit(kind, Protocol.diagnostic_json(payload))
+	diagnostic.emit(kind, JSON.stringify(_sanitize_diagnostic(payload)))

@@ -18,6 +18,9 @@ const FIELD_TEXT := "text"
 const TAB_CATEGORIES := ["NAVIGATION", "SECTOR", "TRADING", "COMPUTER", "COMMUNICATIONS"]
 const COMMANDS := {
 	"COMPUTER": [
+		{"label": "Report Bug / Suggest Improvement", "local_feedback": true},
+		{"label": "Report This Error", "local_feedback_error": true},
+		{"label": "Check feedback report status", "local_feedback_status": true},
 		{"label": "Help · controls and command flow", "local_help": true},
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
@@ -1508,6 +1511,15 @@ func _authoritative_selection_id(source: Dictionary, preferred_key: String = "")
 	return selected_id if selected_id > 0 else null
 
 func _choose_action(action: Dictionary) -> void:
+	if bool(action.get("local_feedback", false)):
+		command_requested.emit("feedback.open", {}, str(action.get("label", "Report Bug / Suggest Improvement")), false)
+		return
+	if bool(action.get("local_feedback_status", false)):
+		command_requested.emit("feedback.status.open", {}, str(action.get("label", "Check feedback report status")), false)
+		return
+	if bool(action.get("local_feedback_error", false)):
+		command_requested.emit("feedback.error.open", {}, str(action.get("label", "Report This Error")), false)
+		return
 	if bool(action.get("local_reduced_motion", false)):
 		reduced_motion_toggle_requested.emit()
 		return

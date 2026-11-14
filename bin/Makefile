@@ -171,7 +171,8 @@ am_server_OBJECTS = ../src/common.$(OBJEXT) \
 	../src/server_config.$(OBJEXT) \
 	../src/server_corporation.$(OBJEXT) \
 	../src/server_cron.$(OBJEXT) ../src/server_engine.$(OBJEXT) \
-	../src/server_envelope.$(OBJEXT) ../src/server_log.$(OBJEXT) \
+	../src/server_envelope.$(OBJEXT) \
+	../src/server_feedback.$(OBJEXT) ../src/server_log.$(OBJEXT) \
 	../src/server_loop.$(OBJEXT) ../src/server_main.$(OBJEXT) \
 	../src/server_news.$(OBJEXT) ../src/server_planets.$(OBJEXT) \
 	../src/server_players.$(OBJEXT) ../src/server_police.$(OBJEXT) \
@@ -219,6 +220,7 @@ am__depfiles_remade = ../src/$(DEPDIR)/bigbang_pg_main.Po \
 	../src/$(DEPDIR)/server_cron.Po \
 	../src/$(DEPDIR)/server_engine.Po \
 	../src/$(DEPDIR)/server_envelope.Po \
+	../src/$(DEPDIR)/server_feedback.Po \
 	../src/$(DEPDIR)/server_log.Po ../src/$(DEPDIR)/server_loop.Po \
 	../src/$(DEPDIR)/server_main.Po \
 	../src/$(DEPDIR)/server_news.Po \
@@ -343,7 +345,7 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-ISODATE = 2026-11-08
+ISODATE = 2026-11-14
 LDFLAGS = 
 LIBOBJS = 
 LIBS = -lhistory -lreadline -lpthread -lm 
@@ -518,6 +520,7 @@ server_SOURCES = \
 	../src/server_cron.c \
 	../src/server_engine.c \
 	../src/server_envelope.c \
+	../src/server_feedback.c \
 	../src/server_log.c \
 	../src/server_loop.c \
 	../src/server_main.c \
@@ -799,6 +802,8 @@ bigbang$(EXEEXT): $(bigbang_OBJECTS) $(bigbang_DEPENDENCIES) $(EXTRA_bigbang_DEP
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_envelope.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
+../src/server_feedback.$(OBJEXT): ../src/$(am__dirstamp) \
+	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_loop.$(OBJEXT): ../src/$(am__dirstamp) \
 	../src/$(DEPDIR)/$(am__dirstamp)
 ../src/server_main.$(OBJEXT): ../src/$(am__dirstamp) \
@@ -868,6 +873,7 @@ include ../src/$(DEPDIR)/server_corporation.Po # am--include-marker
 include ../src/$(DEPDIR)/server_cron.Po # am--include-marker
 include ../src/$(DEPDIR)/server_engine.Po # am--include-marker
 include ../src/$(DEPDIR)/server_envelope.Po # am--include-marker
+include ../src/$(DEPDIR)/server_feedback.Po # am--include-marker
 include ../src/$(DEPDIR)/server_log.Po # am--include-marker
 include ../src/$(DEPDIR)/server_loop.Po # am--include-marker
 include ../src/$(DEPDIR)/server_main.Po # am--include-marker
@@ -1110,6 +1116,7 @@ distclean: distclean-am
 	-rm -f ../src/$(DEPDIR)/server_cron.Po
 	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
+	-rm -f ../src/$(DEPDIR)/server_feedback.Po
 	-rm -f ../src/$(DEPDIR)/server_log.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
@@ -1238,6 +1245,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../src/$(DEPDIR)/server_cron.Po
 	-rm -f ../src/$(DEPDIR)/server_engine.Po
 	-rm -f ../src/$(DEPDIR)/server_envelope.Po
+	-rm -f ../src/$(DEPDIR)/server_feedback.Po
 	-rm -f ../src/$(DEPDIR)/server_log.Po
 	-rm -f ../src/$(DEPDIR)/server_loop.Po
 	-rm -f ../src/$(DEPDIR)/server_main.Po
