@@ -95,6 +95,7 @@ config_set_defaults (void)
   g_cfg.shipyard_require_hardware_compat = 1;
   g_cfg.shipyard_tax_bp = 1000;
   g_cfg.planet_market_buy_order_expiry_seconds = 86400;
+  g_cfg.photon_effect_duration_seconds = 600;
   g_cfg.illegal_allowed_neutral = 1;
   g_cfg.illegal_min_experience = 400;
   /* --- Internal / Other defaults --- */
@@ -695,6 +696,15 @@ apply_db (db_t *db)
 	      else
 	        LOGW ("[config] Invalid planet market buy order expiry; using 86400 seconds.");
 	    }
+          else if (strcmp (key, "combat.photon_effect_duration_seconds") == 0)
+            {
+              int duration = 600;
+              cfg_parse_int (val, type, &duration);
+              if (duration >= 1 && duration <= 86400)
+                g_cfg.photon_effect_duration_seconds = duration;
+              else
+                LOGW ("[config] Invalid photon effect duration; using 600 seconds.");
+            }
 	  else if (strcmp (key, "illegal_allowed_neutral") == 0)
 	    {
 	      cfg_parse_int (val, type, &g_cfg.illegal_allowed_neutral);
@@ -1180,6 +1190,7 @@ config_load (void)
   c->shipyard_sale_factor_bp = g_cfg.shipyard_sale_factor_bp;
   c->galactic_exchange_liquidity_credits = g_cfg.galactic_exchange_liquidity_credits;
   c->shipyard_used_resale_factor_bp = g_cfg.shipyard_used_resale_factor_bp;
+  c->photon_effect_duration_seconds = g_cfg.photon_effect_duration_seconds;
   /* Keep the runtime starter-ship policy in the legacy config view used by
    * player provisioning.  Without this copy, spawn_starter_ship() receives
    * an empty type name even though g_cfg has the configured value. */

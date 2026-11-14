@@ -200,6 +200,7 @@ json_t *schema_combat_deploy_fighters (void);
 json_t *schema_combat_lay_mines (void);
 json_t *schema_combat_sweep_mines (void);
 json_t *schema_combat_status (void);
+json_t *schema_combat_fire_photon (void);
 json_t *schema_fighters_recall (void);
 json_t *schema_combat_deploy_mines (void);
 json_t *schema_mines_recall (void);

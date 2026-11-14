@@ -1207,6 +1207,13 @@ h_check_interdiction (db_t *db, int sector_id, int player_id, int corp_id)
       return 0;
     }
 
+  int photon_active = server_combat_sector_photon_active
+    (db, sector_id, (int64_t) time (NULL));
+  if (photon_active < 0)
+    return 1; /* Fail closed if temporary suppression state cannot be read. */
+  if (photon_active)
+    return 0;
+
   db_error_t err;
   db_res_t *res = repo_universe_get_interdictors (db, sector_id, &err);
   if (!res)

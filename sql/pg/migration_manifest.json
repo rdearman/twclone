@@ -74,7 +74,8 @@
       "172_v3_bank_standing_orders.sql",
       "173_v3_slave_unrest_policy_config.sql"
       ,"178_ship_sale_equipment_catalogue.sql",
-      "182_v3_planet_production_rates.sql"
+      "182_v3_planet_production_rates.sql",
+      "183_v3_photon_effects.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -742,6 +743,13 @@
     {
       "name": "182_v3_planet_production_rates.sql",
       "subsystem": "planets",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "183_v3_photon_effects.sql",
+      "subsystem": "combat",
       "required": true,
       "v3_only": true,
       "diagnostic": false

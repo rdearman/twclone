@@ -729,6 +729,22 @@ CREATE TABLE sector_assets (
     deployed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE sector_photon_effects (
+    sector_id integer PRIMARY KEY REFERENCES sectors (sector_id) ON DELETE CASCADE,
+    source_player_id integer NOT NULL REFERENCES players (player_id),
+    expires_at bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE photon_fire_requests (
+    request_id text PRIMARY KEY,
+    player_id integer NOT NULL REFERENCES players (player_id),
+    ship_id integer NOT NULL REFERENCES ships (ship_id),
+    sector_id integer NOT NULL REFERENCES sectors (sector_id),
+    expires_at bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE limpet_attached (
     limpet_attached_id serial PRIMARY KEY,
     ship_id integer NOT NULL,

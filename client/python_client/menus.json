@@ -1976,6 +1976,17 @@
           "action": { "pycall": "combat_attack_planet_flow" }
         },
         {
+          "key": "x",
+          "label": "(X) Fire Photon at Adjacent Sector",
+          "action": {
+            "rpc": {
+              "command": "combat.fire_photon",
+              "data": {"sector_id": "<prompt:int:Adjacent target sector>"}
+            },
+            "post": "print_last_rpc"
+          }
+        },
+        {
           "key": "f",
           "label": "(F) Deploy Fighters",
           "action": {

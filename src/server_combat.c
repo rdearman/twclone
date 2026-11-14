@@ -310,6 +310,226 @@ fighters_done:
 }
 
 int
+server_combat_sector_photon_active (db_t *db, int sector_id, int64_t now_s)
+{
+  if (!db || sector_id <= 0 || now_s <= 0) return 0;
+  db_res_t *res = NULL;
+  db_error_t err = {0};
+  if (!db_query (db,
+       "SELECT 1 FROM sector_photon_effects WHERE sector_id={1} AND expires_at>{2}",
+       (db_bind_t[]){db_bind_i32 (sector_id), db_bind_i64 (now_s)}, 2,
+       &res, &err))
+    return -1;
+  int active = db_res_step (res, &err) ? 1 : 0;
+  db_res_finalize (res);
+  return err.code ? -1 : active;
+}
+
+int
+cmd_combat_fire_photon (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root)) return 0;
+  json_t *data = json_object_get (root, "data");
+  int target_sector = 0;
+  json_t *jid = json_object_get (root, "id");
+  const char *request_id = json_is_string (jid) ? json_string_value (jid) : NULL;
+  if (!json_get_int_flexible (data, "sector_id", &target_sector)
+      || target_sector <= 0 || !request_id || !*request_id
+      || strlen (request_id) > 128)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "sector_id and request id are required");
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVICE_UNAVAILABLE,
+                           "Database unavailable");
+      return 0;
+    }
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "No active ship can fire a photon", NULL);
+      return 0;
+    }
+  db_error_t err = {0};
+  db_res_t *res = NULL;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin photon transaction");
+      return 0;
+    }
+
+  if (!db_query (db,
+       "SELECT player_id,ship_id,sector_id,expires_at FROM photon_fire_requests WHERE request_id={1}",
+       (db_bind_t[]){db_bind_text (request_id)}, 1, &res, &err))
+    goto photon_failed;
+  if (db_res_step (res, &err))
+    {
+      int prior_player = db_res_col_i32 (res, 0, &err);
+      int prior_ship = db_res_col_i32 (res, 1, &err);
+      int prior_sector = db_res_col_i32 (res, 2, &err);
+      int64_t expiry = db_res_col_i64 (res, 3, &err);
+      db_res_finalize (res); res = NULL;
+      db_tx_rollback (db, NULL);
+      if (err.code || prior_player != ctx->player_id || prior_ship != ship_id
+          || prior_sector != target_sector)
+        {
+          send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                       "Photon request id was already used", NULL);
+          return 0;
+        }
+      json_t *retry = json_pack ("{s:i,s:I,s:b}", "sector_id", target_sector,
+                                 "expires_at", (json_int_t) expiry,
+                                 "idempotent_retry", 1);
+      send_response_ok_take (ctx, root, "combat.photon_fired_v1", &retry);
+      return 0;
+    }
+  db_res_finalize (res); res = NULL;
+  if (err.code) goto photon_failed;
+
+  int current_sector = 0;
+  int64_t photons = 0;
+  const char *ship_type = NULL;
+  char ship_type_name[64] = {0};
+  if (!db_query (db,
+       "SELECT s.sector_id,COALESCE(s.photons,0),st.name FROM ships s "
+       "JOIN players p ON p.ship_id=s.ship_id "
+       "JOIN shiptypes st ON st.shiptypes_id=s.type_id "
+       "WHERE s.ship_id={1} AND p.player_id={2} AND s.destroyed=FALSE FOR UPDATE OF s",
+       (db_bind_t[]){db_bind_i32 (ship_id), db_bind_i32 (ctx->player_id)}, 2,
+       &res, &err)) goto photon_failed;
+  if (!db_res_step (res, &err))
+    {
+      db_res_finalize (res); res = NULL; db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Active ship is unavailable", NULL);
+      return 0;
+    }
+  current_sector = db_res_col_i32 (res, 0, &err);
+  photons = db_res_col_i64 (res, 1, &err);
+  ship_type = db_res_col_text (res, 2, &err);
+  if (ship_type)
+    snprintf (ship_type_name, sizeof ship_type_name, "%s", ship_type);
+  db_res_finalize (res); res = NULL;
+  if (err.code) goto photon_failed;
+  /* A request may have passed the first lookup while another identical RPC
+   * was still uncommitted. Recheck after locking the ship row so concurrent
+   * retries serialize and replay the committed result without spending ammo. */
+  if (!db_query (db,
+       "SELECT player_id,ship_id,sector_id,expires_at FROM photon_fire_requests WHERE request_id={1}",
+       (db_bind_t[]){db_bind_text (request_id)}, 1, &res, &err))
+    goto photon_failed;
+  if (db_res_step (res, &err))
+    {
+      int prior_player = db_res_col_i32 (res, 0, &err);
+      int prior_ship = db_res_col_i32 (res, 1, &err);
+      int prior_sector = db_res_col_i32 (res, 2, &err);
+      int64_t expiry = db_res_col_i64 (res, 3, &err);
+      db_res_finalize (res); res = NULL;
+      db_tx_rollback (db, NULL);
+      if (err.code || prior_player != ctx->player_id || prior_ship != ship_id
+          || prior_sector != target_sector)
+        {
+          send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                       "Photon request id was already used", NULL);
+          return 0;
+        }
+      json_t *retry = json_pack ("{s:i,s:I,s:b}", "sector_id", target_sector,
+                                 "expires_at", (json_int_t) expiry,
+                                 "idempotent_retry", 1);
+      send_response_ok_take (ctx, root, "combat.photon_fired_v1", &retry);
+      return 0;
+    }
+  db_res_finalize (res); res = NULL;
+  if (err.code) goto photon_failed;
+  bool eligible = ship_type_name[0]
+    && (!strcasecmp (ship_type_name, "Missile Frigate")
+        || !strcasecmp (ship_type_name, "Imperial Starship"));
+  if (!eligible || photons <= 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+          !eligible ? "This ship class cannot fire photons" : "No photons remain", NULL);
+      return 0;
+    }
+  if (target_sector == current_sector || !h_warp_exists (db, current_sector, target_sector))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_INVALID_ARG,
+                                   "Photon target must be adjacent", NULL);
+      return 0;
+    }
+  if (!db_query (db,
+       "SELECT 1 FROM planets p JOIN citadels c ON c.planet_id=p.planet_id "
+       "WHERE p.sector_id={1} AND COALESCE(c.planetaryShields,0)>0 LIMIT 1",
+       (db_bind_t[]){db_bind_i32 (target_sector)}, 1, &res, &err))
+    goto photon_failed;
+  bool shielded_planet = db_res_step (res, &err);
+  db_res_finalize (res); res = NULL;
+  if (err.code) goto photon_failed;
+  if (shielded_planet)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Planetary shields protect this target", NULL);
+      return 0;
+    }
+
+  int64_t now_s = (int64_t) time (NULL);
+  int duration = g_cfg.photon_effect_duration_seconds;
+  if (duration < 1 || duration > 86400 || now_s > INT64_MAX - duration)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Photon effect duration is invalid");
+      return 0;
+    }
+  int64_t expiry = now_s + duration, affected = 0;
+  if (!db_exec_rows_affected (db,
+       "UPDATE ships SET photons=photons-1 WHERE ship_id={1} AND photons>0",
+       (db_bind_t[]){db_bind_i32 (ship_id)}, 1, &affected, &err)
+      || affected != 1)
+    goto photon_failed;
+  if (!db_exec (db,
+       "INSERT INTO sector_photon_effects(sector_id,source_player_id,expires_at) VALUES({1},{2},{3}) "
+       "ON CONFLICT(sector_id) DO UPDATE SET source_player_id=EXCLUDED.source_player_id,expires_at=GREATEST(sector_photon_effects.expires_at,EXCLUDED.expires_at)",
+       (db_bind_t[]){db_bind_i32 (target_sector), db_bind_i32 (ctx->player_id),
+                     db_bind_i64 (expiry)}, 3, &err)
+      || !db_exec (db,
+       "INSERT INTO photon_fire_requests(request_id,player_id,ship_id,sector_id,expires_at) VALUES({1},{2},{3},{4},{5})",
+       (db_bind_t[]){db_bind_text (request_id), db_bind_i32 (ctx->player_id),
+                     db_bind_i32 (ship_id), db_bind_i32 (target_sector),
+                     db_bind_i64 (expiry)}, 5, &err))
+    goto photon_failed;
+  json_t *event = json_pack ("{s:i,s:i,s:i,s:i,s:I}", "ship_id", ship_id,
+      "sector_id", target_sector, "ammo_consumed", 1,
+      "duration_seconds", duration, "expires_at", (json_int_t) expiry);
+  if (!event || db_log_engine_event (now_s, "combat.photon_fired.v1", "player",
+                                     ctx->player_id, current_sector, event, db) != 0)
+    { if (event) json_decref (event); goto photon_failed; }
+  json_decref (event);
+  if (!db_tx_commit (db, &err)) goto photon_failed;
+  json_t *response = json_pack ("{s:i,s:i,s:i,s:i,s:I,s:b}",
+      "ship_id", ship_id, "sector_id", target_sector,
+      "ammo_remaining", (int) (photons - 1), "duration_seconds", duration,
+      "expires_at", (json_int_t) expiry, "idempotent_retry", 0);
+  send_response_ok_take (ctx, root, "combat.photon_fired_v1", &response);
+  return 0;
+
+photon_failed:
+  if (res) db_res_finalize (res);
+  db_tx_rollback (db, &err);
+  send_response_error (ctx, root, ERR_DB_TX,
+                       "Photon firing could not be committed");
+  return 0;
+}
+
+int
 cmd_combat_attack (client_ctx_t *ctx, json_t *root)
 {
   if (!require_auth (ctx, root))
@@ -1588,30 +1808,35 @@ server_combat_apply_entry_hazards_single (db_t *db, client_ctx_t *ctx, int secto
                                           json_t **report)
 {
   armid_encounter_t enc = { 0 };
+  int photon_active = server_combat_sector_photon_active
+    (db, sector_id, (int64_t) time (NULL));
+  if (photon_active < 0)
+    return -1; /* Do not enter armed sectors when photon state is unknown. */
 
-  /* 1. Quasars fire first */
-  int quasar_rc = apply_sector_quasar_on_entry (ctx, sector_id);
+  /* Photons temporarily neutralize armed sector defenses. Environmental
+   * hazards remain active. */
+  int quasar_rc = photon_active ? 0 : apply_sector_quasar_on_entry (ctx, sector_id);
   if (quasar_rc < 0)
     return -1;
   if (quasar_rc == 1)
     { ctx->sector_id = 1; return 1; } /* Ship destroyed and podded. */
 
   /* 2. Mines detonate next */
-  int mine_rc = apply_armid_mines_on_entry (ctx, sector_id, &enc);
+  int mine_rc = photon_active ? 0 : apply_armid_mines_on_entry (ctx, sector_id, &enc);
   if (mine_rc < 0)
     return -1;
   if (enc.destroyed)
     { ctx->sector_id = 1; return 1; }
 
   /* 3. Fighters engage */
-  int fighters_rc = apply_sector_fighters_on_entry (ctx, sector_id);
+  int fighters_rc = photon_active ? 0 : apply_sector_fighters_on_entry (ctx, sector_id);
   if (fighters_rc < 0)
     return -1;
   if (fighters_rc == 1)
     { ctx->sector_id = 1; return 1; }
 
   /* 4. Limpets attach last */
-  if (apply_limpet_mines_on_entry (ctx, sector_id, &enc) < 0)
+  if (!photon_active && apply_limpet_mines_on_entry (ctx, sector_id, &enc) < 0)
     return -1;
 
   /* 5. Environmental hazards resolve after existing armed defenses. */

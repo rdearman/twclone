@@ -433,6 +433,7 @@ extern json_t *schema_combat_deploy_fighters (void);
 extern json_t *schema_combat_lay_mines (void);
 extern json_t *schema_combat_sweep_mines (void);
 extern json_t *schema_combat_status (void);
+extern json_t *schema_combat_fire_photon (void);
 extern json_t *schema_fighters_recall (void);
 extern json_t *schema_combat_deploy_mines (void);
 extern json_t *schema_mines_recall (void);
@@ -633,6 +634,7 @@ static schema_entry_t g_schema_table[] = {
   {"combat.lay_mines", NULL, schema_combat_lay_mines},
   {"combat.sweep_mines", NULL, schema_combat_sweep_mines},
   {"combat.status", NULL, schema_combat_status},
+  {"combat.fire_photon", NULL, schema_combat_fire_photon},
   {"fighters.recall", NULL, schema_fighters_recall},
   {"combat.deploy_mines", NULL, schema_combat_deploy_mines},
   {"mines.recall", NULL, schema_mines_recall},
@@ -4045,6 +4047,29 @@ schema_combat_status (void)
   json_object_set_new (root, "type", json_string ("object"));
   json_object_set_new (root, "properties", json_object ());
   json_object_set_new (root, "additionalProperties", json_boolean (0));
+  return root;
+}
+
+json_t *
+schema_combat_fire_photon (void)
+{
+  json_t *props = json_object ();
+  json_t *sector_id = json_object ();
+  json_object_set_new (sector_id, "type", json_string ("integer"));
+  json_object_set_new (sector_id, "minimum", json_integer (1));
+  json_object_set_new (props, "sector_id", sector_id);
+
+  json_t *root = json_object ();
+  json_object_set_new (root, "$id",
+                       json_string ("ge://schema/combat.fire_photon.json"));
+  json_object_set_new (root, "$schema",
+                       json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (root, "type", json_string ("object"));
+  json_object_set_new (root, "properties", props);
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("sector_id"));
+  json_object_set_new (root, "required", required);
+  json_object_set_new (root, "additionalProperties", json_false ());
   return root;
 }
 

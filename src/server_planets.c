@@ -321,6 +321,16 @@ cmd_combat_attack_planet (client_ctx_t *ctx, json_t *root)
                            "Could not load planetary defenses");
       return 0;
     }
+  int photon_active = server_combat_sector_photon_active
+    (db, current_sector, (int64_t) time (NULL));
+  if (photon_active < 0)
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Could not determine photon suppression state");
+      return 0;
+    }
+  if (photon_active)
+    cit_reaction = 0; /* Photon effect disables citadel combat computers. */
   (void) has_active_citadel_defenses;
 
   int fighters_absorbed = 0;

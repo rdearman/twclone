@@ -67,6 +67,7 @@ extern "C"
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
     int planet_market_buy_order_expiry_seconds;
+    int photon_effect_duration_seconds;
     int illegal_min_experience;
     /* Phase 4: Ship Types Configuration */
     char starter_shiptype_name[128];
@@ -228,6 +229,7 @@ extern "C"
     int shipyard_require_hardware_compat;
     int shipyard_tax_bp;
     int planet_market_buy_order_expiry_seconds;
+    int photon_effect_duration_seconds;
     /* Zero means unrest policy has not been configured; effects stay dormant. */
     int64_t planet_slave_unrest_interval_days;
     int64_t planet_slave_unrest_stoppage_cycles;
