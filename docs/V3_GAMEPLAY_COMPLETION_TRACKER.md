@@ -537,3 +537,32 @@ See [`V3_PYTHON_PLAYABILITY_REPAIR_20261114.md`](testing/V3_PYTHON_PLAYABILITY_R
 for root-cause classification, exact commands and remaining runtime limits.
 Gameplay parity rows remain `IMPLEMENTED_UNVERIFIED` unless the precise server
 operation has separate database-backed acceptance evidence.
+
+### Godot and StarPort integration checkpoint — 2026-11-14
+
+The Godot 4.5.2 command-menu regression passed 196 focused checks. A real
+Godot UI journey against disposable PostgreSQL registered player 108, refreshed
+starting state, warped from sector 1 to 2 with one turn consumed, and scanned
+the current sector. The runnable harness is
+`client/godot_client/godot/tests/live_disposable_journey_test.gd`; exact scope
+and transcript summary are in
+[`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
+This does not verify Godot trade, planets, ships, corporations, or reconnect.
+
+StarPort concurrent upgrade, concurrent upgrade/attack, idempotent attack
+retry, upgrade transaction rollback, destruction/stock rollback, and database
+restart persistence were exercised against the disposable PostgreSQL server.
+The injected destruction rollback kept the port active, stocks and turn count
+unchanged; its later retry retained the historical inactive port and zeroed
+stock without salvage. The restart preserved DB state, but the disposable game
+container entrypoint failed before serving protocol requests after restart.
+Thus database persistence is verified while game-server restart recovery is
+blocked. A scheduler shield tick overlapped one rollback observation, so no
+claim is made about exact shield conservation in that interval.
+
+The complete Godot suite remains red at `planet_command_response_test.gd` due
+fixtures that fail to settle prior authoritative refreshes and use mismatched
+planet identity. Python's full suite remains 802/802. Feedback reporting and
+GitHub integration were not implemented in this checkpoint; they are not
+represented as gameplay-complete. See the acceptance addendum for the exact
+scope and remaining verification limits.
