@@ -2072,6 +2072,31 @@ def _perform_warp(ctx: Context, target: int) -> bool:
         print(f"Warp outcome is uncertain after connection loss: {exc}")
         print("Reconnect before attempting another move so location, turns, and ship state can be refreshed.")
         return False
+    if (resp.get("status") == "ok"
+            and resp.get("type") == "move.toll_offer_v1"):
+        offer = resp.get("data")
+        if not isinstance(offer, dict) or not isinstance(offer.get("offer_id"), str):
+            print("Toll offer response was incomplete; movement was not attempted.")
+            _safe_move_error_refresh(ctx)
+            return False
+        amount = offer.get("amount")
+        fighters = offer.get("fighter_count")
+        print(f"Toll fighters demand {amount} credits ({fighters} fighters).")
+        answer = input("Accept the toll and continue? [y/N]: ").strip().lower()
+        accept = answer in ("y", "yes")
+        try:
+            resp = ctx.conn.rpc("move.warp", {
+                "to_sector_id": target,
+                "toll_offer_id": offer["offer_id"],
+                "toll_accept": accept,
+            })
+        except (ConnectionError, OSError) as exc:
+            ctx.state["last_rpc"] = None
+            print(f"Toll passage outcome is uncertain after connection loss: {exc}")
+            print("Reconnect before retrying so the offer, credits, and location can be reconciled.")
+            return False
+        if not accept:
+            print("Toll refused; the toll fighters will treat your arrival as hostile.")
     ok, message = present_move_result(resp)
     if not _movement_response_type_matches(resp, "move.result"):
         print("Warp response had an unexpected type; destination could not be confirmed, refreshing confirmed player, ship and sector state.")

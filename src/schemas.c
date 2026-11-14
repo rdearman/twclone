@@ -1460,6 +1460,12 @@ schema_move_warp (void)
   json_t *to_sector_id_prop = json_object ();
   json_object_set_new (to_sector_id_prop, "type", json_string ("integer"));
   json_object_set_new (data_props, "to_sector_id", to_sector_id_prop);
+  json_t *toll_offer_id_prop = json_object ();
+  json_object_set_new (toll_offer_id_prop, "type", json_string ("string"));
+  json_object_set_new (data_props, "toll_offer_id", toll_offer_id_prop);
+  json_t *toll_accept_prop = json_object ();
+  json_object_set_new (toll_accept_prop, "type", json_string ("boolean"));
+  json_object_set_new (data_props, "toll_accept", toll_accept_prop);
 
 
   json_t *data_schema = json_object ();

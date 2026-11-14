@@ -50,6 +50,9 @@ typedef struct
   int connection_counted;
   time_t request_window_start;
   int request_count;
+  /* Sector whose toll fighters were explicitly refused on this movement. */
+  int toll_refused_sector_id;
+  int toll_paid_sector_id;
 
   /* --- bulk execution capture --- */
   json_t *captured_envelopes;	// If non-NULL, responses are appended here instead of sent

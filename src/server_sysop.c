@@ -53,6 +53,7 @@ static const sysop_cfg_def_t k_sysop_allowed_config[] = {
     {"bank_alert_threshold_corp", CFG_INT64, "Corp bank alert threshold", CFG_OFF(bank_alert_threshold_corp)},
     {"planet_market.buy_order_expiry_seconds", CFG_INT, "Planet buy-order lifetime in seconds (60-604800)", CFG_OFF(planet_market_buy_order_expiry_seconds)},
     {"combat.photon_effect_duration_seconds", CFG_INT, "Photon sector/citadel suppression duration in seconds (1-86400)", CFG_OFF(photon_effect_duration_seconds)},
+    {"combat.toll_credits_per_fighter", CFG_INT, "Credits demanded per hostile toll fighter (0-1000000)", CFG_OFF(toll_fighter_rate)},
     {"planet.slave_unrest_interval_days", CFG_INT64, "Slave unrest recurrence interval in days; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_interval_days)},
     {"planet.slave_unrest_stoppage_cycles", CFG_INT64, "Production cycles stopped per unrest event; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_stoppage_cycles)},
     {"planet.slave_unrest_population_loss", CFG_INT64, "Fixed slave population loss per unrest event; 0 means unset/disabled", CFG_OFF(planet_slave_unrest_population_loss)},
@@ -227,6 +228,15 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             return 0;
         }
     }
+    if (strcmp(key, "combat.toll_credits_per_fighter") == 0) {
+        char *end = NULL;
+        long rate = strtol(val_str, &end, 10);
+        if (end == val_str || *end != '\0' || rate < 0 || rate > 1000000) {
+            send_response_refused(ctx, root, 1407,
+                                  "Refused: toll rate must be 0-1000000 credits per fighter", NULL);
+            return 0;
+        }
+    }
     if (strcmp(key, "shipyard_sale_factor_bp") == 0) {
         char *end = NULL;
         long factor = strtol(val_str, &end, 10);
@@ -271,6 +281,7 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
     // Capture old value for audit
     int old_planet_market_expiry = g_cfg.planet_market_buy_order_expiry_seconds;
     int old_photon_effect_duration = g_cfg.photon_effect_duration_seconds;
+    int old_toll_fighter_rate = g_cfg.toll_fighter_rate;
     int old_shipyard_sale_factor = g_cfg.shipyard_sale_factor_bp;
     int64_t old_exchange_liquidity = g_cfg.galactic_exchange_liquidity_credits;
     int old_used_resale_factor = g_cfg.shipyard_used_resale_factor_bp;
@@ -313,6 +324,8 @@ int cmd_sysop_config_set(client_ctx_t *ctx, json_t *root) {
             g_cfg.planet_market_buy_order_expiry_seconds = old_planet_market_expiry;
         if (strcmp(key, "combat.photon_effect_duration_seconds") == 0)
             g_cfg.photon_effect_duration_seconds = old_photon_effect_duration;
+        if (strcmp(key, "combat.toll_credits_per_fighter") == 0)
+            g_cfg.toll_fighter_rate = old_toll_fighter_rate;
         if (strcmp(key, "shipyard_sale_factor_bp") == 0)
             g_cfg.shipyard_sale_factor_bp = old_shipyard_sale_factor;
         if (strcmp(key, "galactic_exchange_liquidity_credits") == 0)

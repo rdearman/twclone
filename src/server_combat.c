@@ -245,6 +245,10 @@ apply_sector_fighters_on_entry (client_ctx_t *ctx, int sector_id)
 	{
 	  continue;
 	}
+      if (modes[i] == OFFENSE_TOLL
+          && ctx->toll_paid_sector_id == sector_id
+          && ctx->toll_refused_sector_id != sector_id)
+        continue; /* Paid passage suppresses combat; refusal engages fighters. */
       int damage = quantities[i] * damage_per_unit;
       ship_t s = {.hull = ship.hull,.fighters = ship.fighters,.shields = ship.shields };
       armid_damage_breakdown_t breakdown = { 0 };

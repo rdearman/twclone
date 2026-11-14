@@ -12,6 +12,7 @@
 #include <string.h>
 #include <strings.h>
 #include <inttypes.h>
+#include <limits.h>
 
 /* local includes */
 #include "server_universe.h"
@@ -33,6 +34,7 @@
 #include "errors.h"
 #include "globals.h"
 #include "server_players.h"
+#include "server_config.h"
 #include "server_log.h"
 #include "server_combat.h"
 #include "db/repo/repo_combat.h"
@@ -1370,6 +1372,170 @@ validate_warp_rule (int from_sector, int to_sector)
   return 0;
 }
 
+/* Toll fighters require a player decision before sector entry. The first
+ * movement request creates a short-lived quote and returns without charging
+ * a turn. The same move command resumes with the quote identifier and a
+ * boolean decision, keeping payment and passage inside the movement tx. */
+static int
+move_warp_toll_offer (client_ctx_t *ctx, json_t *root, db_t *db, int to)
+{
+  if (!ctx || !root || !db || g_cfg.toll_fighter_rate <= 0)
+    return 0;
+  json_t *data = json_object_get (root, "data");
+  json_t *offer_value = json_object_get (data, "toll_offer_id");
+  if (json_is_string (offer_value))
+    return 0;
+  json_t *id_value = json_object_get (root, "id");
+  const char *request_id = json_is_string (id_value)
+    ? json_string_value (id_value) : NULL;
+  if (!request_id || !*request_id || strlen (request_id) > 128)
+    return -1;
+
+  db_error_t err = {0};
+  db_res_t *res = NULL;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    return -1;
+  if (!db_query (db,
+       "SELECT player_id FROM players WHERE player_id={1} FOR UPDATE",
+       (db_bind_t[]){db_bind_i32 (ctx->player_id)}, 1, &res, &err)
+      || !db_res_step (res, &err))
+    goto toll_offer_failed;
+  db_res_finalize (res); res = NULL;
+  if (!db_query (db,
+       "SELECT offer_id,fighter_count,unit_rate,amount,state,expires_at FROM toll_passage_offers "
+       "WHERE player_id={1} AND request_id={2} AND to_sector_id={3}",
+       (db_bind_t[]){db_bind_i32 (ctx->player_id), db_bind_text (request_id),
+                     db_bind_i32 (to)}, 3, &res, &err))
+    goto toll_offer_failed;
+  if (db_res_step (res, &err))
+    {
+      char offer_id[160] = {0};
+      const char *value = db_res_col_text (res, 0, &err);
+      if (value) snprintf (offer_id, sizeof offer_id, "%s", value);
+      int fighters = db_res_col_i32 (res, 1, &err);
+      int rate = db_res_col_i32 (res, 2, &err);
+      int64_t amount = db_res_col_i64 (res, 3, &err);
+      const char *state_value = db_res_col_text (res, 4, &err);
+      char state[16] = {0};
+      if (state_value) snprintf (state, sizeof state, "%s", state_value);
+      int64_t expires_at = db_res_col_i64 (res, 5, &err);
+      db_res_finalize (res); res = NULL;
+      if (err.code || !db_tx_commit (db, &err)) goto toll_offer_failed;
+      if (strcmp (state, "pending") != 0)
+        {
+          json_t *repeat = json_pack ("{s:i,s:i,s:b}", "sector_id", to,
+                                      "to_sector_id", to,
+                                      "idempotent_retry", 1);
+          send_response_ok_take (ctx, root, "move.result", &repeat);
+          return 1;
+        }
+      if (expires_at <= (int64_t) time (NULL))
+        {
+          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                               "Toll offer has expired; request a new passage");
+          return 1;
+        }
+      json_t *out = json_pack ("{s:s,s:i,s:i,s:I}", "offer_id", offer_id,
+                               "sector_id", to, "fighter_count", fighters,
+                               "amount", (json_int_t) amount);
+      if (out) json_object_set_new (out, "credits_per_fighter", json_integer (rate));
+      send_response_ok_take (ctx, root, "move.toll_offer_v1", &out);
+      return 1;
+    }
+  db_res_finalize (res); res = NULL;
+  if (err.code) goto toll_offer_failed;
+
+  if (!db_query (db,
+       "SELECT owner_id,COALESCE(SUM(quantity),0) FROM sector_assets "
+       "WHERE sector_id={1} AND asset_type=2 AND offensive_setting=1 AND quantity>0 "
+       "AND owner_id<>{2} AND (COALESCE(corporation_id,0)=0 OR corporation_id<>{3}) "
+       "GROUP BY owner_id ORDER BY owner_id",
+       (db_bind_t[]){db_bind_i32 (to), db_bind_i32 (ctx->player_id),
+                     db_bind_i32 (ctx->corp_id)}, 3, &res, &err))
+    goto toll_offer_failed;
+  int payee_count = 0, payee_capacity = 4, fighters = 0;
+  int *payee_ids = malloc ((size_t) payee_capacity * sizeof (int));
+  int *payee_fighters = malloc ((size_t) payee_capacity * sizeof (int));
+  if (!payee_ids || !payee_fighters)
+    {
+      free (payee_ids); free (payee_fighters);
+      db_res_finalize (res); res = NULL;
+      goto toll_offer_failed;
+    }
+  while (db_res_step (res, &err))
+    {
+      int owner = db_res_col_i32 (res, 0, &err);
+      int quantity = db_res_col_i32 (res, 1, &err);
+      if (err.code || owner <= 0 || quantity <= 0 || fighters > INT_MAX - quantity)
+        { err.code = err.code ? err.code : 1; break; }
+      if (payee_count == payee_capacity)
+        {
+          payee_capacity *= 2;
+          int *new_ids = realloc (payee_ids, (size_t) payee_capacity * sizeof (int));
+          int *new_fighters = realloc (payee_fighters,
+                                      (size_t) payee_capacity * sizeof (int));
+          if (!new_ids || !new_fighters)
+            {
+              free (new_ids ? new_ids : payee_ids);
+              free (new_fighters ? new_fighters : payee_fighters);
+              payee_ids = payee_fighters = NULL;
+              err.code = 1;
+              break;
+            }
+          payee_ids = new_ids; payee_fighters = new_fighters;
+        }
+      payee_ids[payee_count] = owner;
+      payee_fighters[payee_count++] = quantity;
+      fighters += quantity;
+    }
+  db_res_finalize (res); res = NULL;
+  if (err.code || payee_count == 0)
+    {
+      free (payee_ids); free (payee_fighters);
+      if (err.code) goto toll_offer_failed;
+      if (!db_tx_commit (db, &err)) goto toll_offer_failed;
+      return 0;
+    }
+  if (fighters <= 0
+      || (int64_t) fighters > INT64_MAX / g_cfg.toll_fighter_rate)
+    { free (payee_ids); free (payee_fighters); goto toll_offer_failed; }
+  int64_t amount = (int64_t) fighters * g_cfg.toll_fighter_rate;
+  char offer_id[160];
+  snprintf (offer_id, sizeof offer_id, "toll-%d-%s", ctx->player_id, request_id);
+  if (!db_exec (db,
+       "INSERT INTO toll_passage_offers(offer_id,request_id,player_id,ship_id,from_sector_id,to_sector_id,owner_player_id,fighter_count,unit_rate,amount,state,expires_at) "
+       "VALUES({1},{2},{3},{4},{5},{6},{7},{8},{9},{10},'pending',extract(epoch from now())::bigint+300)",
+       (db_bind_t[]){db_bind_text (offer_id), db_bind_text (request_id),
+                     db_bind_i32 (ctx->player_id), db_bind_i32 (h_get_active_ship_id (db, ctx->player_id)),
+                     db_bind_i32 (ctx->sector_id), db_bind_i32 (to), db_bind_i32 (payee_ids[0]),
+                     db_bind_i32 (fighters), db_bind_i32 (g_cfg.toll_fighter_rate),
+                     db_bind_i64 (amount)}, 10, &err)
+      )
+    { free (payee_ids); free (payee_fighters); goto toll_offer_failed; }
+  for (int i = 0; i < payee_count; i++)
+    {
+      int64_t payee_amount = (int64_t) payee_fighters[i] * g_cfg.toll_fighter_rate;
+      if (!db_exec (db,
+           "INSERT INTO toll_passage_payees(offer_id,owner_player_id,fighter_count,amount) VALUES({1},{2},{3},{4})",
+           (db_bind_t[]){db_bind_text (offer_id), db_bind_i32 (payee_ids[i]),
+                         db_bind_i32 (payee_fighters[i]), db_bind_i64 (payee_amount)},
+           4, &err))
+        { free (payee_ids); free (payee_fighters); goto toll_offer_failed; }
+    }
+  free (payee_ids); free (payee_fighters);
+  if (!db_tx_commit (db, &err)) goto toll_offer_failed;
+  json_t *out = json_pack ("{s:s,s:i,s:i,s:I,s:i}", "offer_id", offer_id,
+      "sector_id", to, "fighter_count", fighters, "amount", (json_int_t) amount,
+      "credits_per_fighter", g_cfg.toll_fighter_rate);
+  send_response_ok_take (ctx, root, "move.toll_offer_v1", &out);
+  return 1;
+
+toll_offer_failed:
+  if (res) db_res_finalize (res);
+  db_tx_rollback (db, &err);
+  return -1;
+}
+
 int
 cmd_move_warp (client_ctx_t *ctx, json_t *root)
 {
@@ -1378,11 +1544,88 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
     {
       return -1;
     }
+  db_res_t *res = NULL;
+  db_error_t err = {0};
   json_t *data = json_object_get (root, "data");
   int to = 0;
   if (!json_get_int_flexible (data, "to_sector_id", &to))
     {
       json_get_int_flexible (data, "sector_id", &to);
+    }
+
+  /* A completed toll movement may be retried after the player's location has
+   * already changed, so resolve its receipt before checking adjacency. */
+  json_t *toll_offer_value = json_object_get (data, "toll_offer_id");
+  json_t *request_id_value = json_object_get (root, "id");
+  const char *movement_request_id = json_is_string (request_id_value)
+    ? json_string_value (request_id_value) : NULL;
+  if (json_is_string (toll_offer_value) || movement_request_id)
+    {
+      const char *lookup = json_is_string (toll_offer_value)
+        ? "SELECT player_id,to_sector_id,state,expires_at FROM toll_passage_offers WHERE offer_id={1}"
+        : "SELECT player_id,to_sector_id,state,expires_at FROM toll_passage_offers WHERE player_id={1} AND request_id={2} AND to_sector_id={3}";
+      db_bind_t binds[3]; size_t bind_count = 1;
+      if (json_is_string (toll_offer_value))
+        binds[0] = db_bind_text (json_string_value (toll_offer_value));
+      else
+        {
+          binds[0] = db_bind_i32 (ctx->player_id);
+          binds[1] = db_bind_text (movement_request_id);
+          binds[2] = db_bind_i32 (to);
+          bind_count = 3;
+        }
+      if (!db_query (db, lookup, binds, bind_count, &res, &err))
+        {
+          send_response_error (ctx, root, ERR_DB,
+                               "Could not reconcile toll movement request");
+          return 0;
+        }
+      if (db_res_step (res, &err))
+        {
+          int offer_player = db_res_col_i32 (res, 0, &err);
+          int offer_to = db_res_col_i32 (res, 1, &err);
+          const char *state_value = db_res_col_text (res, 2, &err);
+          char state[16] = {0};
+          if (state_value) snprintf (state, sizeof state, "%s", state_value);
+          int64_t expires_at = db_res_col_i64 (res, 3, &err);
+          db_res_finalize (res); res = NULL;
+          if (err.code)
+            {
+              send_response_error (ctx, root, ERR_DB,
+                                   "Could not read toll movement receipt");
+              return 0;
+            }
+          if (offer_player != ctx->player_id || offer_to != to)
+            {
+              send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Toll receipt does not match this movement");
+              return 0;
+            }
+          if (strcmp (state, "pending") != 0)
+            {
+              json_t *repeat = json_pack ("{s:i,s:i,s:b}", "sector_id", to,
+                                          "to_sector_id", to,
+                                          "idempotent_retry", 1);
+              send_response_ok_take (ctx, root, "move.result", &repeat);
+              return 0;
+            }
+          if (expires_at <= (int64_t) time (NULL))
+            {
+              send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Toll offer has expired; request a new passage");
+              return 0;
+            }
+        }
+      else
+        {
+          db_res_finalize (res); res = NULL;
+          if (err.code)
+            {
+              send_response_error (ctx, root, ERR_DB,
+                                   "Could not read toll movement receipt");
+              return 0;
+            }
+        }
     }
 
   /* Check warp link exists */
@@ -1416,6 +1659,16 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       }
   }
 
+  int toll_offer_rc = move_warp_toll_offer (ctx, root, db, to);
+  if (toll_offer_rc > 0)
+    return 0;
+  if (toll_offer_rc < 0)
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not prepare toll fighter passage");
+      return 0;
+    }
+
   /* Movement and entry hazards are one gameplay mutation.  Keep the outer
    * transaction open so a failed hazard lookup/application cannot leave the
    * player moved (or charged) without its entry outcome. */
@@ -1428,6 +1681,110 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  json_t *toll_accept_value = json_object_get (data, "toll_accept");
+  if (json_is_string (toll_offer_value))
+    {
+      const char *offer_id = json_string_value (toll_offer_value);
+      if (!json_is_boolean (toll_accept_value))
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_INVALID_ARG,
+                               "Toll offer decision must be accept or refuse");
+          return 0;
+        }
+      if (!db_query (db,
+           "SELECT player_id,ship_id,from_sector_id,to_sector_id,owner_player_id,amount,state,expires_at FROM toll_passage_offers WHERE offer_id={1} FOR UPDATE",
+           (db_bind_t[]){db_bind_text (offer_id)}, 1, &res, &txerr))
+        goto toll_movement_failed;
+      if (!db_res_step (res, &txerr))
+        {
+          db_res_finalize (res); res = NULL;
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_NOT_FOUND,
+                               "Toll offer was not found or has expired");
+          return 0;
+        }
+      int offer_player = db_res_col_i32 (res, 0, &txerr);
+      int offer_ship = db_res_col_i32 (res, 1, &txerr);
+      int offer_from = db_res_col_i32 (res, 2, &txerr);
+      int offer_to = db_res_col_i32 (res, 3, &txerr);
+      (void) db_res_col_i32 (res, 4, &txerr);
+      int64_t amount = db_res_col_i64 (res, 5, &txerr);
+      const char *state_text = db_res_col_text (res, 6, &txerr);
+      char state[16] = {0};
+      if (state_text) snprintf (state, sizeof state, "%s", state_text);
+      int64_t expires_at = db_res_col_i64 (res, 7, &txerr);
+      db_res_finalize (res); res = NULL;
+      if (txerr.code) goto toll_movement_failed;
+      if (offer_player != ctx->player_id)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                               "Toll offer does not match this passage");
+          return 0;
+        }
+      if (strcmp (state, "pending") != 0)
+        {
+          db_tx_rollback (db, NULL);
+          json_t *repeat = json_pack ("{s:i,s:i,s:b}", "sector_id", offer_to,
+                                      "to_sector_id", offer_to,
+                                      "idempotent_retry", 1);
+          send_response_ok_take (ctx, root, "move.result", &repeat);
+          return 0;
+        }
+      if (offer_ship != h_get_active_ship_id (db, ctx->player_id)
+          || offer_from != ctx->sector_id || offer_to != to)
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                               "Toll offer does not match this passage");
+          return 0;
+        }
+      if (expires_at <= (int64_t) time (NULL))
+        {
+          db_tx_rollback (db, NULL);
+          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                               "Toll offer has expired");
+          return 0;
+        }
+      bool accept_toll = json_is_true (toll_accept_value);
+      if (accept_toll
+          && (h_deduct_player_petty_cash_unlocked (db, ctx->player_id,
+                                                    amount, NULL) != 0))
+        {
+          db_tx_rollback (db, NULL);
+          send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS,
+                                       "Not enough credits to pay this toll", NULL);
+          return 0;
+        }
+      if (accept_toll)
+        {
+          if (!db_query (db,
+               "SELECT owner_player_id,amount FROM toll_passage_payees WHERE offer_id={1} ORDER BY owner_player_id",
+               (db_bind_t[]){db_bind_text (offer_id)}, 1, &res, &txerr))
+            goto toll_movement_failed;
+          int payees = 0;
+          while (db_res_step (res, &txerr))
+            {
+              int payee = db_res_col_i32 (res, 0, &txerr);
+              int64_t payee_amount = db_res_col_i64 (res, 1, &txerr);
+              if (txerr.code || h_add_player_petty_cash_unlocked
+                  (db, payee, payee_amount, NULL) != 0)
+                { txerr.code = txerr.code ? txerr.code : 1; break; }
+              payees++;
+            }
+          db_res_finalize (res); res = NULL;
+          if (txerr.code || payees == 0) goto toll_movement_failed;
+        }
+      if (!db_exec (db,
+           "UPDATE toll_passage_offers SET state={1},resolved_at=CURRENT_TIMESTAMP WHERE offer_id={2} AND state='pending'",
+           (db_bind_t[]){db_bind_text (accept_toll ? "accepted" : "refused"),
+                         db_bind_text (offer_id)}, 2, &txerr))
+        goto toll_movement_failed;
+      ctx->toll_refused_sector_id = accept_toll ? 0 : to;
+      ctx->toll_paid_sector_id = accept_toll ? to : 0;
+    }
+
   int previous_sector = ctx->sector_id;
 
   /* Consume turn */
@@ -1435,6 +1792,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
   if (tc != TURN_CONSUME_SUCCESS)
     {
       db_tx_rollback (db, NULL);
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
       return handle_turn_consumption_error (ctx, tc, "move.warp", root, NULL);
     }
 
@@ -1465,6 +1824,8 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       json_t *hazard_report = NULL;
       int hazard_rc = server_combat_apply_entry_hazards_report
         (db, ctx, to, &hazard_report);
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
       if (hazard_rc < 0)
         {
           if (hazard_report)
@@ -1526,9 +1887,20 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_DB, "Failed");
       ctx->sector_id = previous_sector;
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
       return 0;
     }
 
+  return 0;
+
+toll_movement_failed:
+  if (res) db_res_finalize (res);
+  ctx->toll_refused_sector_id = 0;
+  ctx->toll_paid_sector_id = 0;
+  db_tx_rollback (db, &txerr);
+  send_response_error (ctx, root, ERR_DB_TX,
+                       "Toll passage could not be committed");
   return 0;
 }
 

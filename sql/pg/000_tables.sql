@@ -745,6 +745,32 @@ CREATE TABLE photon_fire_requests (
     created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE toll_passage_offers (
+    offer_id text PRIMARY KEY,
+    request_id text NOT NULL,
+    player_id integer NOT NULL REFERENCES players(player_id),
+    ship_id integer NOT NULL REFERENCES ships(ship_id),
+    from_sector_id integer NOT NULL REFERENCES sectors(sector_id),
+    to_sector_id integer NOT NULL REFERENCES sectors(sector_id),
+    owner_player_id integer NOT NULL REFERENCES players(player_id),
+    fighter_count integer NOT NULL CHECK (fighter_count > 0),
+    unit_rate integer NOT NULL CHECK (unit_rate >= 0),
+    amount bigint NOT NULL CHECK (amount >= 0),
+    state text NOT NULL CHECK (state IN ('pending','accepted','refused')),
+    expires_at bigint NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at timestamptz,
+    UNIQUE(player_id, request_id)
+);
+
+CREATE TABLE toll_passage_payees (
+    offer_id text NOT NULL REFERENCES toll_passage_offers(offer_id) ON DELETE CASCADE,
+    owner_player_id integer NOT NULL REFERENCES players(player_id),
+    fighter_count integer NOT NULL CHECK (fighter_count > 0),
+    amount bigint NOT NULL CHECK (amount >= 0),
+    PRIMARY KEY (offer_id, owner_player_id)
+);
+
 CREATE TABLE limpet_attached (
     limpet_attached_id serial PRIMARY KEY,
     ship_id integer NOT NULL,

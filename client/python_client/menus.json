@@ -1495,12 +1495,7 @@
           "key": "f",
           "label": "(F) Force Move (force_move)",
           "action": {
-            "rpc": {
-              "command": "move.warp",
-              "data": {
-                "to_sector_id": "<prompt:int:Target sector ID>"
-              }
-            }
+            "pycall": "warp_flow"
           }
         },
         {

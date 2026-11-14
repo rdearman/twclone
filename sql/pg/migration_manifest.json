@@ -75,7 +75,8 @@
       "173_v3_slave_unrest_policy_config.sql"
       ,"178_ship_sale_equipment_catalogue.sql",
       "182_v3_planet_production_rates.sql",
-      "183_v3_photon_effects.sql"
+      "183_v3_photon_effects.sql",
+      "184_v3_toll_passage.sql"
     ],
     "diagnostics": [
       "130_insurance_ledger_invariants.sql",
@@ -749,6 +750,13 @@
     },
     {
       "name": "183_v3_photon_effects.sql",
+      "subsystem": "combat",
+      "required": true,
+      "v3_only": true,
+      "diagnostic": false
+    },
+    {
+      "name": "184_v3_toll_passage.sql",
       "subsystem": "combat",
       "required": true,
       "v3_only": true,
