@@ -39,12 +39,12 @@ func _run() -> void:
 	})
 
 	await app._finish_command_reply({
-		"status": "ok", "type": "sector.info.result",
+		"status": "ok", "type": "sector.info",
 		"data": {"sector_id": 999, "name": "Untrusted remote sector"},
 	}, {
 		"label": "Current sector information", "command": "sector.info", "mutating": false,
 	})
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12,
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12,
 		"mismatched sector.info replaced the confirmed sector")
 	_check(not str(app.gameplay_view.notification_label.text).contains("Untrusted remote sector"),
 		"mismatched sector.info payload was rendered")
@@ -58,7 +58,7 @@ func _run() -> void:
 
 	app.refresh_coordinator.calls.clear()
 	await app._finish_command_reply({
-		"status": "ok", "type": "sector.info.result",
+		"status": "ok", "type": "sector.info",
 		"data": {"name": "Unidentified remote sector"},
 	}, {
 		"label": "Current sector information", "command": "sector.info", "mutating": false,

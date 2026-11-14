@@ -24,6 +24,9 @@ func _run() -> void:
 	view.tavern_entered.connect(func() -> void: tavern_enters += 1)
 	view.tavern_exited.connect(func() -> void: tavern_exits += 1)
 	view.tavern_enter_requested.connect(func() -> void: tavern_requests += 1)
+	view.set_player_hold({"holds": 20, "cargo": [
+		{"commodity": "ORE", "quantity": 4}, {"commodity": "ORG", "quantity": 4},
+	]})
 	view.show_port({"port": {"id": 7, "name": "Helix", "commodities": [
 		{"code": "ORE", "quantity": 8.0, "max_quantity": 30.0, "price": "40.00"},
 		{"code": "ORG", "quantity": 0.0, "max_quantity": 30.0, "price": "50.00"},
@@ -119,7 +122,7 @@ func _run() -> void:
 	view.close_for_location_change()
 	view.show_port({"port": {"id": 7, "name": "Malformed location", "commodities": [
 		{"code": "ORE", "quantity": 8, "max_quantity": 30, "sells": true, "buys": true}
-	]}}, 17.0)
+	]}}, 17.5)
 	_check(not view.visible, "malformed sector identity opened an actionable port workflow")
 	_check(view._authoritative_port_id() == 0, "malformed sector identity retained an actionable port ID")
 	view.show_port({"port": {"id": 7, "sector": 18, "name": "Stale location", "commodities": [
@@ -132,7 +135,7 @@ func _run() -> void:
 	]}}, 17)
 	_check(not view.visible and view._authoritative_port_id() == 0,
 		"malformed port.info sector opened an actionable workflow")
-	for malformed_id in [true, 7.0, "7", 0, -7]:
+	for malformed_id in [true, 7.5, "7", 0, -7]:
 		view.show_port({"port": {"id": malformed_id, "name": "Malformed", "commodities": [{"code": "ORE", "quantity": 8, "max_quantity": 30}]}}, 17)
 		var captured_before := captured.duplicate(true)
 		view._choose_trade("buy", "ORE", {"code": "ORE", "quantity": 8, "max_quantity": 30})

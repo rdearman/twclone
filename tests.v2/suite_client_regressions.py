@@ -18,8 +18,12 @@ ROOT = Path(__file__).resolve().parent.parent
 GODOT_TEST_DIR = ROOT / "client/godot_client/godot/tests"
 
 
-def run(command, *, cwd, env=None):
-    result = subprocess.run(command, cwd=cwd, env=env, check=False)
+def run(command, *, cwd, env=None, timeout=None):
+    try:
+        result = subprocess.run(command, cwd=cwd, env=env, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"TIMEOUT after {timeout}s: {' '.join(map(str, command))}", file=sys.stderr)
+        return False
     return result.returncode == 0
 
 
@@ -62,12 +66,16 @@ def main():
             if not run([godot, "--headless", "--editor", "--path", str(project), "--import", "--quit"], cwd=ROOT, env=env):
                 print("Godot asset import failed.", file=sys.stderr)
                 return 1
+            failed_scripts = []
             for path in scripts:
                 script = "res://tests/" + path.name
-                if not run([godot, "--headless", "--path", str(project), "--script", script], cwd=ROOT, env=env):
+                if not run([godot, "--headless", "--path", str(project), "--script", script], cwd=ROOT, env=env, timeout=5):
                     print(f"Godot client regression failed: {script}", file=sys.stderr)
                     godot_ok = False
-                    break
+                    failed_scripts.append(path.name)
+            print(f"Godot client regressions: {len(scripts) - len(failed_scripts)} passed, {len(failed_scripts)} failed, {len(scripts)} total.")
+            if failed_scripts:
+                print("Failed Godot scripts: " + ", ".join(failed_scripts), file=sys.stderr)
 
     if not run([sys.executable, "assets/tools/validate_catalog.py"], cwd=ROOT):
         print("Shared asset catalogue validation failed.", file=sys.stderr)
