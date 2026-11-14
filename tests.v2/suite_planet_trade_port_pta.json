@@ -59,14 +59,28 @@
       "save": { "pta_planet_id": "data.rows.0.0" }
     },
     {
-      "name": "Seed planet stock, clear port ORE and fund its account",
+      "name": "Register ORE as a supported planetary commodity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_goods (planet_id,commodity,quantity,max_capacity,production_rate) VALUES (@{pta_planet_id},'ORE',100,10000,0) ON CONFLICT (planet_id,commodity) DO UPDATE SET quantity=100,max_capacity=10000,production_rate=0;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed ORE planet inventory",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity) VALUES ('planet',@{pta_planet_id},'ORE',100) ON CONFLICT (entity_type,entity_id,commodity_code) DO UPDATE SET quantity=100;" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Seed planet stock for a commodity the port does not buy",
+      "name": "Register a planetary commodity the port does not buy",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO planet_goods (planet_id,commodity,quantity,max_capacity,production_rate) VALUES (@{pta_planet_id},'@{pta_not_bought_code}',10,10000,0) ON CONFLICT (planet_id,commodity) DO UPDATE SET quantity=10,max_capacity=10000,production_rate=0;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed inventory for the supported commodity the port does not buy",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "INSERT INTO entity_stock (entity_type,entity_id,commodity_code,quantity) VALUES ('planet',@{pta_planet_id},'@{pta_not_bought_code}',10) ON CONFLICT (entity_type,entity_id,commodity_code) DO UPDATE SET quantity=10;" },

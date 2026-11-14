@@ -317,11 +317,20 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id=1, onplanet=FALSE, has_transwarp=TRUE, hull=100, shields=0, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='hazard_victim');"
+        "sql": "UPDATE ships SET type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Merchant Cruiser'), holds=(SELECT maxholds FROM shiptypes WHERE name='Merchant Cruiser'), name='Hazard Test Ship', sector_id=1, onplanet=FALSE, has_transwarp=TRUE, hull=100, shields=0, fighters=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='hazard_victim');"
       },
       "expect": {
         "status": "ok"
       }
+    },
+    {
+      "name": "Rig: Clear transit ship cargo before refueling",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM ship_cargo WHERE ship_id=(SELECT ship_id FROM players WHERE name='hazard_victim');"
+      },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Rig: Seed fuel for the transwarp entry",

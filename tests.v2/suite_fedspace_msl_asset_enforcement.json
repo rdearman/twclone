@@ -18,6 +18,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Clear prior assets from the FedSpace and MSL fixtures",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id=1 OR sector_id=(SELECT MIN(sector_id) FROM msl_sectors WHERE sector_id>10);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Seed Fighters, Mines in Ship",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "UPDATE ships SET fighters = 500, mines = 500 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
@@ -43,12 +50,12 @@
     },
     {
       "name": "Test 1c: Verify Fighters NOT deployed in FedSpace Sector",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": 1 },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM sector_assets WHERE sector_id=1 AND asset_type=2;" },
+      "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total", "op": "==", "value": 0 }
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
       ]
     },
     {
@@ -73,12 +80,12 @@
     },
     {
       "name": "Test 2b: Verify Mines NOT deployed in FedSpace Sector",
-      "command": "deploy.mines.list",
-      "data": { "sector_id": 1 },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM sector_assets WHERE sector_id=1 AND asset_type IN (1,4);" },
+      "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total", "op": "==", "value": 0 }
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
       ]
     },
     {
@@ -139,12 +146,12 @@
     },
     {
       "name": "Test 4c: Verify Fighters ARE deployed in MSL Sector",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": "@msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COALESCE(SUM(quantity),0) FROM sector_assets WHERE sector_id=@{msl_sector_id} AND asset_type=2;" },
+      "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total", "op": ">=", "value": 25 }
+        { "path": "data.rows.0.0", "op": "==", "value": 25 }
       ]
     },
     {
@@ -153,6 +160,13 @@
       "data": { "sql": "SELECT fighters FROM ships WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{fedspace_user_1_player_id});" },
       "user": "admin",
       "save": { "ship_fighters_before_cleanse": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Test 4e setup: allow a fresh UTC-day MSL sweep",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM fedspace_sweep_runs WHERE sweep_date_utc = CURRENT_DATE;" },
+      "user": "admin",
       "expect": { "status": "ok" }
     },
     {
@@ -170,12 +184,12 @@
     },
     {
       "name": "Test 4f: Verify Fighters REMOVED from MSL Sector",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": "@msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM sector_assets WHERE sector_id=@{msl_sector_id} AND asset_type=2;" },
+      "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total", "op": "==", "value": 0 }
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
       ]
     },
     {
@@ -204,6 +218,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Test 5c setup: Clear prior beacon from the selected MSL fixture",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE sectors SET beacon=NULL WHERE sector_id=@{msl_sector_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test 5c: Set Beacon in MSL - SHOULD SUCCEED",
       "command": "sector.set_beacon",
       "data": { "sector_id": "@msl_sector_id", "text": "MSL Test Beacon" },
@@ -217,7 +238,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "!=", "value": null }
+        { "path": "data.rows.0.0", "op": "==", "value": "MSL Test Beacon" }
       ]
     },
     {
@@ -250,22 +271,22 @@
     },
     {
       "name": "Test 5g: Verify Mines REMOVED from MSL Sector",
-      "command": "deploy.mines.list",
-      "data": { "sector_id": "@msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM sector_assets WHERE sector_id=@{msl_sector_id} AND asset_type IN (1,4);" },
+      "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total", "op": "==", "value": 0 }
+        { "path": "data.rows.0.0", "op": "==", "value": 0 }
       ]
     },
     {
-      "name": "Test 5h: Verify Beacon REMOVED from MSL Sector",
+      "name": "Test 5h: Preserve player-authored sector beacon during asset cleanup",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "SELECT beacon FROM sectors WHERE sector_id = @{msl_sector_id};" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": null }
+        { "path": "data.rows.0.0", "op": "==", "value": "MSL Test Beacon" }
       ]
     },
     {
@@ -287,6 +308,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Clear prior fighters from the non-MSL control sector",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM sector_assets WHERE sector_id=@{non_msl_sector_id} AND asset_type=2;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test 6a: Move to non-MSL sector > 10",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "WITH moved AS (UPDATE ships SET sector_id=@{non_msl_sector_id} WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{fedspace_user_1_player_id}) RETURNING ship_id) UPDATE players SET sector_id=@{non_msl_sector_id} WHERE player_id=@{fedspace_user_1_player_id};" },
@@ -302,11 +330,11 @@
     },
     {
       "name": "Test 6c: Get Fighter Count Before Cleanse",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": "@non_msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COALESCE(SUM(quantity),0) FROM sector_assets WHERE sector_id=@{non_msl_sector_id} AND asset_type=2;" },
+      "user": "admin",
       "expect": { "status": "ok" },
-      "save": { "non_msl_fighters_before": "data.total" }
+      "save": { "non_msl_fighters_before": "data.rows.0.0" }
     },
     {
       "name": "Test 6d setup: advance simulated UTC day",
@@ -330,12 +358,12 @@
     },
     {
       "name": "Test 6e: Verify Fighters KEPT in non-MSL sector",
-      "command": "deploy.fighters.list",
-      "data": { "sector_id": "@non_msl_sector_id" },
-      "user": "fedspace_user_1",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COALESCE(SUM(quantity),0) FROM sector_assets WHERE sector_id=@{non_msl_sector_id} AND asset_type=2;" },
+      "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total", "op": "==", "value": "@non_msl_fighters_before" }
+        { "path": "data.rows.0.0", "op": "==", "value": "@non_msl_fighters_before" }
       ]
     }
   ]

@@ -27,10 +27,10 @@ repo_market_decay_port_state(db_t *db, int decay_num, int decay_den)
     "    updated_at = CURRENT_TIMESTAMP "
     "WHERE rolling_volume > 0;";
 
-  if (db_exec(db, sql, (db_bind_t[]){
+  if (!db_exec(db, sql, (db_bind_t[]){
                     db_bind_i32(decay_num),
                     db_bind_i32(decay_den)
-                }, 2, &err) != 0)
+                }, 2, &err))
     {
       LOGE("repo_market_decay_port_state: SQL error");
       return -1;
@@ -74,12 +74,12 @@ repo_market_decay_cluster_state(
     "    updated_at = CURRENT_TIMESTAMP "
     "WHERE pressure != 0 OR rolling_volume > 0;";
 
-  if (db_exec(db, sql, (db_bind_t[]){
+  if (!db_exec(db, sql, (db_bind_t[]){
                     db_bind_i32(decay_num),
                     db_bind_i32(decay_den),
                     db_bind_i32(max_pressure),
                     db_bind_i32(min_pressure)
-                }, 4, &err) != 0)
+                }, 4, &err))
     {
       LOGE("repo_market_decay_cluster_state: SQL error");
       return -1;

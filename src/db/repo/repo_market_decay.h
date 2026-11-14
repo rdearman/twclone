@@ -29,7 +29,7 @@
 #define MARKET_DECAY_MIN_NUM 1
 #define MARKET_DECAY_MIN_DEN 1
 #define MARKET_DECAY_MAX_NUM 100
-#define MARKET_DECAY_MAX_DEN 1
+#define MARKET_DECAY_MAX_DEN 100
 
 /* Default pressure bounds (prevent unbounded accumulation) */
 #define MARKET_PRESSURE_DEFAULT_MIN -50000

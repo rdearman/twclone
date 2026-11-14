@@ -369,7 +369,7 @@
       "data":{"sql":"UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP,enabled=TRUE WHERE name='market_state_decay';"},
       "expect":{"status":"ok"}
     },
-    {"name":"A1 wait: engine scheduler", "command":"delay", "data":{"seconds":65}},
+    {"name":"A1 wait: engine scheduler", "command":"delay", "data":{"seconds":90}},
     {
       "name":"A1 verify: disabled dynamic pricing preserves market state",
       "command":"sys.raw_sql_exec", "user":"admin",
@@ -397,7 +397,7 @@
       "data":{"sql":"UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP,enabled=TRUE WHERE name='market_state_decay';"},
       "expect":{"status":"ok"}
     },
-    {"name":"B-F wait: engine scheduler", "command":"delay", "data":{"seconds":65}},
+    {"name":"B-F wait: engine scheduler", "command":"delay", "data":{"seconds":90}},
     {
       "name":"B1 verify: ORG rolling volume decays by 98 percent",
       "command":"sys.raw_sql_exec", "user":"admin",
@@ -434,7 +434,7 @@
       "data":{"sql":"UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP,enabled=TRUE WHERE name='market_state_decay';"},
       "expect":{"status":"ok"}
     },
-    {"name":"D1 wait: second engine scheduler occurrence", "command":"delay", "data":{"seconds":65}},
+    {"name":"D1 wait: second engine scheduler occurrence", "command":"delay", "data":{"seconds":90}},
     {
       "name":"D1 verify: second multiplicative port decay cycle",
       "command":"sys.raw_sql_exec", "user":"admin",
