@@ -129,6 +129,8 @@ void free_trade_lines (TradeLine * lines, size_t n);
 #include "server_envelope.h"
 #include "server_cmds.h"
 #include "server_ships.h"
+#include "server_rules.h"
+#include "server_loop.h"
 #include "server_sector_notices.h"
 #include "server_players.h"
 #include "server_cron.h"
@@ -2092,8 +2094,9 @@ cmd_trade_port_info (client_ctx_t *ctx, json_t *root)
 	json_string_value (json_object_get (commodity_obj, "code"));
       int illegal =
 	(int) json_integer_value (json_object_get (commodity_obj, "illegal"));
-      json_object_set_new (commodity_obj, "max_quantity",
-			   json_integer (port_size * 1000));
+      json_t *capacity_value=json_object_get(commodity_obj,"max_quantity");
+      int max_quantity=json_is_integer(capacity_value)?(int)json_integer_value(capacity_value):port_size*1000;
+      json_object_set_new (commodity_obj, "max_quantity",json_integer(max_quantity));
       json_object_set_new (commodity_obj, "illegal", json_boolean (illegal));
 
       /* The stock table's `price` is a legacy single-price field.  The
@@ -4807,6 +4810,139 @@ h_get_port_commodity_details (db_t *db,
     }
 
   return db_ports_get_commodity_details (db, port_id, commodity_code,
-					 quantity_out, max_capacity_out,
-					 buys_out, sells_out);
+					     quantity_out, max_capacity_out,
+					     buys_out, sells_out);
+}
+
+static int64_t
+v3_port_rule(db_t *db,const char *key,db_error_t *err)
+{
+  db_res_t *res=NULL;int64_t value=-1;
+  if(db_query(db,"SELECT value FROM v3_port_economy_rules WHERE rule_key={1}",
+      (db_bind_t[]){db_bind_text((char *)key)},1,&res,err)&&db_res_step(res,err))value=db_res_col_i64(res,0,err);
+  if(res)db_res_finalize(res);
+  return value;
+}
+
+static int
+v3_port_claim(db_t *db,int player,const char *key,const char *action,json_t *payload,json_t **replay,db_error_t *err)
+{
+  char *p=json_dumps(payload,JSON_COMPACT|JSON_SORT_KEYS);if(!p)return -1;int64_t rows=0;
+  int ok=db_exec_rows_affected(db,"INSERT INTO v3_port_action_receipts(player_id,request_id,action,payload,result) VALUES({1},{2},{3},{4}::jsonb,'{}'::jsonb) ON CONFLICT DO NOTHING",
+    (db_bind_t[]){db_bind_i32(player),db_bind_text((char *)key),db_bind_text((char *)action),db_bind_text(p)},4,&rows,err);free(p);if(!ok)return -1;if(rows==1)return 1;
+  db_res_t *res=NULL;if(!db_query(db,"SELECT action,payload::text,result::text FROM v3_port_action_receipts WHERE player_id={1} AND request_id={2} FOR UPDATE",
+    (db_bind_t[]){db_bind_i32(player),db_bind_text((char *)key)},2,&res,err)||!db_res_step(res,err)){if(res)db_res_finalize(res);return -1;}
+  const char *a=db_res_col_text(res,0,err),*ps=db_res_col_text(res,1,err),*rs=db_res_col_text(res,2,err);json_error_t je;
+  json_t *saved=ps?json_loads(ps,0,&je):NULL,*out=rs?json_loads(rs,0,&je):NULL;int same=a&&strcmp(a,action)==0&&saved&&json_equal(saved,payload);
+  db_res_finalize(res);if(saved)json_decref(saved);if(!same||!out){if(out)json_decref(out);return -2;}*replay=out;return 0;
+}
+
+int
+cmd_port_upgrade(client_ctx_t *ctx,json_t *root)
+{
+  json_t *data=json_object_get(root,"data");int port=json_integer_value(json_object_get(data,"port_id"));
+  const char *code=json_string_value(json_object_get(data,"commodity")),*key=json_string_value(json_object_get(data,"idempotency_key"));
+  const char *col=code&&strcmp(code,"ORE")==0?"ore":code&&strcmp(code,"ORG")==0?"organics":code&&strcmp(code,"EQU")==0?"equipment":NULL;
+  if(!ctx||ctx->player_id<=0){send_response_error(ctx,root,ERR_NOT_AUTHENTICATED,"Authentication required");return 0;}
+  if(!json_is_object(data)||port<=0||!col||!key||!*key||strlen(key)>128){send_response_error(ctx,root,ERR_INVALID_ARG,"Invalid StarPort upgrade request");return 0;}
+  db_t *db=game_db_get_handle();db_error_t err={0};db_res_t *res=NULL;json_t *replay=NULL;
+  if(!db||!db_tx_begin(db,DB_TX_DEFAULT,&err)){send_response_error(ctx,root,ERR_DB_TX,"Could not begin StarPort upgrade");return 0;}
+  json_t *payload=json_pack("{s:i,s:s}","port_id",port,"commodity",code);int claim=payload?v3_port_claim(db,ctx->player_id,key,"upgrade",payload,&replay,&err):-1;json_decref(payload);
+  if(claim==0){db_tx_commit(db,&err);send_response_ok_take(ctx,root,"port.upgrade.v1",&replay);return 0;}
+  if(claim<0){db_tx_rollback(db,NULL);send_response_error(ctx,root,claim==-2?ERR_DUPLICATE_REQUEST:ERR_DB_TX,"StarPort upgrade retry could not be reconciled");return 0;}
+  int ship=h_get_active_ship_id(db,ctx->player_id),level=0;bool located=false;
+  if(ship>0&&db_query(db,"SELECT port_id FROM ports WHERE port_id={1} AND sector_id={2} AND is_active=TRUE FOR UPDATE",(db_bind_t[]){db_bind_i32(port),db_bind_i32(ctx->sector_id)},2,&res,&err))located=db_res_step(res,&err);
+  if(res){db_res_finalize(res);res=NULL;}
+  if(!located||!db_query(db,"SELECT capacity_level FROM port_trade WHERE port_id={1} AND commodity={2} FOR UPDATE",(db_bind_t[]){db_bind_i32(port),db_bind_text((char *)code)},2,&res,&err)||!db_res_step(res,&err))
+    {if(res)db_res_finalize(res);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_PERMISSION_DENIED,"A matching active port and commodity are required");return 0;}
+  level=db_res_col_i32(res,0,&err);db_res_finalize(res);res=NULL;
+  int64_t max=v3_port_rule(db,"upgrade_max_level",&err),credits=v3_port_rule(db,"upgrade_credits_per_level",&err),materials=v3_port_rule(db,"upgrade_material_per_level",&err),capacity=v3_port_rule(db,"upgrade_capacity_per_level",&err);
+  if(err.code||max<=0||level>=max||credits<0||materials<0||capacity<=0){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_BAD_STATE,"Commodity capacity is at its configured maximum");return 0;}
+  if(!db_query(db,"SELECT sector_id,onplanet,destroyed FROM ships WHERE ship_id={1} FOR UPDATE",(db_bind_t[]){db_bind_i32(ship)},1,&res,&err)||!db_res_step(res,&err))
+    {if(res)db_res_finalize(res);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_PERMISSION_DENIED,"Active ship not found");return 0;}
+  int sector=db_res_col_i32(res,0,&err);bool onplanet=db_res_col_bool(res,1,&err),destroyed=db_res_col_bool(res,2,&err);db_res_finalize(res);res=NULL;
+  if(err.code||sector!=ctx->sector_id||onplanet||destroyed){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_PERMISSION_DENIED,"Your active ship must be at the StarPort");return 0;}
+  int64_t cost=credits*(level+1),material=materials*(level+1),affected=0;char sql[256];
+  snprintf(sql,sizeof sql,"UPDATE ships SET %s=%s-{1} WHERE ship_id={2} AND %s>={1}",col,col,col);
+  if(!db_exec_rows_affected(db,sql,(db_bind_t[]){db_bind_i64(material),db_bind_i32(ship)},2,&affected,&err)||affected!=1)
+    {db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_INSUFFICIENT_FUNDS,"Your ship lacks the selected commodity upgrade materials");return 0;}
+  if(h_deduct_player_petty_cash_unlocked(db,ctx->player_id,cost,NULL)!=0||!db_exec(db,"UPDATE ports SET petty_cash=petty_cash+{1} WHERE port_id={2} AND is_active=TRUE",(db_bind_t[]){db_bind_i64(cost),db_bind_i32(port)},2,&err)||!db_exec(db,"UPDATE port_trade SET capacity_level=capacity_level+1 WHERE port_id={1} AND commodity={2}",(db_bind_t[]){db_bind_i32(port),db_bind_text((char *)code)},2,&err))
+    {db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_INSUFFICIENT_FUNDS,"StarPort upgrade payment could not be settled");return 0;}
+  json_t *out=json_pack("{s:i,s:s,s:i,s:I,s:I,s:I}","port_id",port,"commodity",code,"level",level+1,"credits_spent",(json_int_t)cost,"material_spent",(json_int_t)material,"capacity_increment",(json_int_t)capacity);
+  char *out_text=out?json_dumps(out,JSON_COMPACT|JSON_SORT_KEYS):NULL;
+  if(!out_text||!db_exec(db,"UPDATE v3_port_action_receipts SET result={1}::jsonb WHERE player_id={2} AND request_id={3}",(db_bind_t[]){db_bind_text(out_text),db_bind_i32(ctx->player_id),db_bind_text((char *)key)},3,&err)||!db_tx_commit(db,&err))
+    {free(out_text);if(out)json_decref(out);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"StarPort upgrade rolled back");return 0;}
+  free(out_text);send_response_ok_take(ctx,root,"port.upgrade.v1",&out);return 0;
+}
+
+int
+cmd_combat_attack_port(client_ctx_t *ctx,json_t *root)
+{
+  json_t *data=json_object_get(root,"data");int port=json_integer_value(json_object_get(data,"port_id"));
+  const char *key=json_string_value(json_object_get(data,"idempotency_key"));
+  if(!ctx||ctx->player_id<=0){send_response_error(ctx,root,ERR_NOT_AUTHENTICATED,"Authentication required");return 0;}
+  if(!json_is_object(data)||port<=0||!key||!*key||strlen(key)>128){send_response_error(ctx,root,ERR_INVALID_ARG,"Invalid StarPort attack request");return 0;}
+  db_t *db=game_db_get_handle();db_error_t err={0};db_res_t *res=NULL;json_t *replay=NULL;
+  if(!db||!db_tx_begin(db,DB_TX_DEFAULT,&err)){send_response_error(ctx,root,ERR_DB_TX,"Could not begin StarPort combat");return 0;}
+  json_t *payload=json_pack("{s:i}","port_id",port);int claim=payload?v3_port_claim(db,ctx->player_id,key,"attack",payload,&replay,&err):-1;json_decref(payload);
+  if(claim==0){
+    db_tx_commit(db,&err);
+    json_t *refused_code=replay?json_object_get(replay,"_refused_code"):NULL;
+    if(json_is_integer(refused_code)){
+      int code=(int)json_integer_value(refused_code);const char *message=json_string_value(json_object_get(replay,"_refused_message"));
+      send_response_refused_steal(ctx,root,code,message?message:"Captain Z intervenes: aggression in FedSpace is forbidden.",NULL);json_decref(replay);return 0;
+    }
+    send_response_ok_take(ctx,root,"combat.port_strike.v1",&replay);return 0;
+  }
+  if(claim<0){db_tx_rollback(db,NULL);send_response_error(ctx,root,claim==-2?ERR_DUPLICATE_REQUEST:ERR_DB_TX,"StarPort attack retry could not be reconciled");return 0;}
+  int ship=h_get_active_ship_id(db,ctx->player_id),durability=0,defence=0,sector=0;
+  if(ship<=0||!db_query(db,"SELECT sector_id,durability,defensive_strength FROM ports WHERE port_id={1} AND is_active=TRUE FOR UPDATE",(db_bind_t[]){db_bind_i32(port)},1,&res,&err)||!db_res_step(res,&err))
+    {if(res)db_res_finalize(res);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_NOT_FOUND,"Active StarPort not found");return 0;}
+  sector=db_res_col_i32(res,0,&err);durability=db_res_col_i32(res,1,&err);defence=db_res_col_i32(res,2,&err);db_res_finalize(res);res=NULL;
+  repo_combat_ship_full_t attacker={0};
+  if(err.code||sector!=ctx->sector_id||db_combat_load_ship_full_locked(db,ship,&attacker,false)!=0||attacker.player_id!=ctx->player_id||attacker.sector!=sector)
+    {db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_PERMISSION_DENIED,"Attack requires your active ship in the StarPort sector");return 0;}
+  if(sector>=1&&sector<=10){
+    ship_kill_context_t kill={.victim_player_id=ctx->player_id,.victim_ship_id=ship,.killer_player_id=0,.cause=KILL_CAUSE_OTHER,.sector_id=sector};
+    if(handle_ship_destruction(db,&kill)!=0){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"Captain Z enforcement could not be committed");return 0;}
+    json_t *refusal=json_pack("{s:i,s:i,s:b,s:i,s:s}","port_id",port,"sector_id",sector,"fedspace_enforced",1,"_refused_code",ERR_PERMISSION_DENIED,"_refused_message","Captain Z intervenes: aggression in FedSpace is forbidden.");
+    char *saved=refusal?json_dumps(refusal,JSON_COMPACT|JSON_SORT_KEYS):NULL;
+    ctx->sector_id=1;
+    if(!saved||!db_exec(db,"UPDATE v3_port_action_receipts SET result={1}::jsonb WHERE player_id={2} AND request_id={3}",(db_bind_t[]){db_bind_text(saved),db_bind_i32(ctx->player_id),db_bind_text((char *)key)},3,&err)||!db_tx_commit(db,&err))
+      {free(saved);if(refusal)json_decref(refusal);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"Captain Z enforcement could not be committed");return 0;}
+    free(saved);json_decref(refusal);
+    h_send_message_to_player(db,ctx->player_id,2,"Captain Z - FedSpace Violation","Your attempted StarPort attack in protected FedSpace resulted in ship destruction and escape-pod recovery.");
+    send_response_refused_steal(ctx,root,ERR_PERMISSION_DENIED,"Captain Z intervenes: aggression in FedSpace is forbidden.",NULL);return 0;
+  }
+  int64_t turn_cost=v3_port_rule(db,"port_attack_turn_cost",&err),new_durability=0;
+  int damage=attacker.max_attack-defence;if(damage<1)damage=1;
+  if(turn_cost<=0||h_consume_player_turn(db,ctx,(int)turn_cost)!=TURN_CONSUME_SUCCESS){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_BAD_STATE,"A turn is required to attack the StarPort");return 0;}
+  new_durability=(int64_t)durability-damage;if(new_durability<0)new_durability=0;
+  bool destroyed=new_durability==0;
+  int retaliation=defence;
+  int shield_loss=attacker.shields<retaliation?attacker.shields:retaliation;
+  attacker.shields-=shield_loss;int remaining=retaliation-shield_loss;
+  int fighter_loss=attacker.fighters<remaining?attacker.fighters:remaining;
+  attacker.fighters-=fighter_loss;remaining-=fighter_loss;
+  int hull_loss=attacker.hull<remaining?attacker.hull:remaining;attacker.hull-=hull_loss;
+  if(err.code||!db_exec(db,"UPDATE ports SET durability={1},is_active=CASE WHEN {2}=1 THEN FALSE ELSE is_active END WHERE port_id={3} AND is_active=TRUE",
+      (db_bind_t[]){db_bind_i64(new_durability),db_bind_i32(destroyed?1:0),db_bind_i32(port)},3,&err))
+    {db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"StarPort attack could not be saved");return 0;}
+  if(destroyed&&!db_exec(db,"UPDATE entity_stock SET quantity=0,last_updated_ts=extract(epoch from now())::bigint WHERE entity_type='port' AND entity_id={1}",(db_bind_t[]){db_bind_i32(port)},1,&err))
+    {db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"Destroyed StarPort stock could not be cleared");return 0;}
+  if(attacker.hull<=0){ship_kill_context_t kill={.victim_player_id=ctx->player_id,.victim_ship_id=ship,.killer_player_id=0,.cause=KILL_CAUSE_COMBAT,.sector_id=sector};if(handle_ship_destruction(db,&kill)!=0){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"Retaliation destruction could not be settled");return 0;}}
+  else if(db_combat_persist_ship_damage(db,ship,attacker.hull,attacker.shields,fighter_loss)!=0){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"Retaliation damage could not be saved");return 0;}
+  json_t *out=json_pack("{s:i,s:i,s:i,s:i,s:i,s:b,s:i}","port_id",port,"sector_id",sector,"damage",damage,"durability_remaining",(int)new_durability,"retaliation",retaliation,"destroyed",destroyed,"shields_lost",shield_loss);
+  json_object_set_new(out,"hull_lost",json_integer(hull_loss));
+  json_object_set_new(out,"fighters_lost",json_integer(fighter_loss));
+  json_t *event=json_deep_copy(out);
+  if(!event||db_log_engine_event((long long)time(NULL),destroyed?"port.destroyed.v1":"port.attacked.v1","player",ctx->player_id,sector,event,db)!=0)
+    {if(event)json_decref(event);json_decref(out);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"StarPort combat event could not be committed");return 0;}
+  json_decref(event);
+  char *out_text=out?json_dumps(out,JSON_COMPACT|JSON_SORT_KEYS):NULL;
+  if(!out_text||!db_exec(db,"UPDATE v3_port_action_receipts SET result={1}::jsonb WHERE player_id={2} AND request_id={3}",(db_bind_t[]){db_bind_text(out_text),db_bind_i32(ctx->player_id),db_bind_text((char *)key)},3,&err)||!db_tx_commit(db,&err))
+    {free(out_text);if(out)json_decref(out);db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DB_TX,"StarPort combat transaction rolled back");return 0;}
+  free(out_text);
+  json_t *evt=json_deep_copy(out);if(evt){server_deliver_to_player(ctx->player_id,"player.port_strike.v1",evt);json_decref(evt);}
+  send_response_ok_take(ctx,root,"combat.port_strike.v1",&out);return 0;
 }

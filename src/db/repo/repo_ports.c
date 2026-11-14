@@ -86,7 +86,7 @@ int db_ports_get_buy_eligibility(db_t *db, int port_id, const char *commodity_co
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q2 */
-    const char *q2 = "SELECT es.quantity, p.size * 1000 AS max_capacity FROM ports p JOIN entity_stock es ON p.port_id = es.entity_id WHERE es.entity_type = 'port' AND es.commodity_code = {2} AND p.port_id = {1} LIMIT 1;";
+    const char *q2 = "SELECT es.quantity, p.size * 1000 + COALESCE((SELECT capacity_level FROM port_trade WHERE port_id=p.port_id AND commodity={2} LIMIT 1),0) * COALESCE((SELECT value FROM v3_port_economy_rules WHERE rule_key='upgrade_capacity_per_level'),1000) AS max_capacity FROM ports p JOIN entity_stock es ON p.port_id = es.entity_id WHERE p.is_active=TRUE AND es.entity_type = 'port' AND es.commodity_code = {2} AND p.port_id = {1} LIMIT 1;";
     char sql[1024]; sql_build(db, q2, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         *quantity = db_res_col_int(res, 0, &err);
@@ -145,7 +145,7 @@ int db_ports_get_price_info(db_t *db, int port_id, const char *commodity_code, i
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q5 */
-    const char *q5 = "SELECT c.base_price, c.volatility,        es.quantity,        p.size * 1000 AS max_capacity,        p.techlevel,        ec.price_elasticity,        ec.volatility_factor FROM commodities c JOIN ports p ON p.port_id = {1} JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id WHERE c.code = {2} LIMIT 1;";
+    const char *q5 = "SELECT c.base_price, c.volatility, es.quantity, p.size * 1000 + COALESCE((SELECT capacity_level FROM port_trade WHERE port_id=p.port_id AND commodity=c.code LIMIT 1),0) * COALESCE((SELECT value FROM v3_port_economy_rules WHERE rule_key='upgrade_capacity_per_level'),1000) AS max_capacity, p.techlevel, ec.price_elasticity, ec.volatility_factor FROM commodities c JOIN ports p ON p.port_id = {1} AND p.is_active=TRUE JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = c.code JOIN economy_curve ec ON p.economy_curve_id = ec.economy_curve_id WHERE c.code = {2} LIMIT 1;";
     char sql[1024]; sql_build(db, q5, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (base_price) *base_price = db_res_col_int(res, 0, &err);
@@ -198,7 +198,7 @@ int db_ports_get_market_move_info(db_t *db, int port_id, const char *commodity_c
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q8 */
-    const char *q8 = "SELECT es.quantity, p.size * 1000 AS max_capacity FROM ports p LEFT JOIN entity_stock es   ON p.port_id = es.entity_id  AND es.entity_type = 'port'  AND es.commodity_code = {2} WHERE p.port_id = {1};";
+    const char *q8 = "SELECT es.quantity, p.size * 1000 + COALESCE((SELECT capacity_level FROM port_trade WHERE port_id=p.port_id AND commodity={2} LIMIT 1),0) * COALESCE((SELECT value FROM v3_port_economy_rules WHERE rule_key='upgrade_capacity_per_level'),1000) AS max_capacity FROM ports p LEFT JOIN entity_stock es ON p.port_id = es.entity_id AND es.entity_type = 'port' AND es.commodity_code = {2} WHERE p.port_id = {1} AND p.is_active=TRUE;";
     char sql[1024]; sql_build(db, q8, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id), db_bind_text(commodity_code) }, 2, &res, &err) && db_res_step(res, &err)) {
         if (db_res_col_is_null(res, 0)) *current_quantity = 0;
@@ -298,7 +298,7 @@ int db_ports_get_header_by_id(db_t *db, int port_id, json_t **port_obj, int *por
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q14 */
-    const char *q14 = "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type FROM ports WHERE port_id = {1} LIMIT 1;";
+    const char *q14 = "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type FROM ports WHERE port_id = {1} AND is_active=TRUE LIMIT 1;";
     char sql[512]; sql_build(db, q14, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *port_obj = json_object();
@@ -325,7 +325,7 @@ int db_ports_get_header_by_sector(db_t *db, int sector_id, json_t **port_obj, in
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q15 */
-    const char *q15 = "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type FROM ports WHERE sector_id = {1} LIMIT 1;";
+    const char *q15 = "SELECT port_id, number, name, sector_id, size, techlevel, petty_cash, type FROM ports WHERE sector_id = {1} AND is_active=TRUE LIMIT 1;";
     char sql[512]; sql_build(db, q15, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *port_obj = json_object();
@@ -356,11 +356,13 @@ int db_ports_get_commodities(db_t *db, int port_id, json_t **commodities_array) 
     const char *q16 = "SELECT es.commodity_code, es.quantity, es.price, c.illegal, "
                       "       MAX(CASE WHEN pt.mode = 'buy' THEN 1 ELSE 0 END) AS buys, "
                       "       MAX(CASE WHEN pt.mode = 'sell' THEN 1 ELSE 0 END) AS sells "
+                      ", p.size * 1000 + COALESCE(MAX(pt.capacity_level),0) * COALESCE((SELECT value FROM v3_port_economy_rules WHERE rule_key='upgrade_capacity_per_level'),1000) AS max_capacity "
                       "FROM entity_stock es "
+                      "JOIN ports p ON p.port_id=es.entity_id "
                       "JOIN commodities c ON es.commodity_code = c.code "
                       "LEFT JOIN port_trade pt ON pt.port_id = es.entity_id AND pt.commodity = es.commodity_code "
                       "WHERE es.entity_type = 'port' AND es.entity_id = {1} "
-                      "GROUP BY es.commodity_code, es.quantity, es.price, c.illegal;";
+                      "GROUP BY es.commodity_code, es.quantity, es.price, c.illegal, p.size;";
     char sql[1024]; sql_build(db, q16, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err)) {
         while (db_res_step(res, &err)) {
@@ -372,6 +374,7 @@ int db_ports_get_commodities(db_t *db, int port_id, json_t **commodities_array) 
             json_object_set_new(obj, "illegal", json_integer(db_res_col_i32(res, 3, &err)));
             json_object_set_new(obj, "buys", json_boolean(db_res_col_i32(res, 4, &err) != 0));
             json_object_set_new(obj, "sells", json_boolean(db_res_col_i32(res, 5, &err) != 0));
+            json_object_set_new(obj, "max_quantity", json_integer(db_res_col_i32(res, 6, &err)));
             json_array_append_new(*commodities_array, obj);
         }
         db_res_finalize(res);
@@ -743,7 +746,7 @@ int db_ports_check_port_id(db_t *db, int port_id, bool *exists) {
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q34 */
-    const char *q34 = "SELECT port_id FROM ports WHERE port_id = {1} LIMIT 1;";
+    const char *q34 = "SELECT port_id FROM ports WHERE port_id = {1} AND is_active=TRUE LIMIT 1;";
     char sql[256]; sql_build(db, q34, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err)) {
         *exists = db_res_step(res, &err);
@@ -758,7 +761,7 @@ int db_ports_check_port_sector(db_t *db, int sector_id, int *port_id) {
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q35 */
-    const char *q35 = "SELECT port_id FROM ports WHERE sector_id = {1} LIMIT 1;";
+    const char *q35 = "SELECT port_id FROM ports WHERE sector_id = {1} AND is_active=TRUE LIMIT 1;";
     char sql[256]; sql_build(db, q35, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *port_id = (int)db_res_col_i64(res, 0, &err);
@@ -807,7 +810,7 @@ int db_ports_check_port_id_buy(db_t *db, int port_id, int *found_id) {
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q40 */
-    const char *q40 = "SELECT port_id FROM ports WHERE port_id = {1} LIMIT 1;";
+    const char *q40 = "SELECT port_id FROM ports WHERE port_id = {1} AND is_active=TRUE LIMIT 1;";
     char sql[256]; sql_build(db, q40, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(port_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *found_id = (int)db_res_col_i64(res, 0, &err);
@@ -823,7 +826,7 @@ int db_ports_check_port_sector_buy(db_t *db, int sector_id, int *found_id) {
     db_error_t err;
     db_error_clear(&err);
     /* SQL_VERBATIM: Q41 */
-    const char *q41 = "SELECT port_id FROM ports WHERE sector_id = {1} LIMIT 1;";
+    const char *q41 = "SELECT port_id FROM ports WHERE sector_id = {1} AND is_active=TRUE LIMIT 1;";
     char sql[256]; sql_build(db, q41, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *found_id = (int)db_res_col_i64(res, 0, &err);
@@ -902,7 +905,7 @@ int db_ports_get_commodity_details(db_t *db, int port_id, const char *commodity_
      * Query port_trade to check if this port buys/sells this commodity (no hardcoding)
      */
     const char *q_template = 
-        "SELECT es.quantity, p.size * 1000 AS max_capacity, "
+        "SELECT es.quantity, p.size * 1000 + MAX(COALESCE(pt.capacity_level,0)) * COALESCE((SELECT value FROM v3_port_economy_rules WHERE rule_key='upgrade_capacity_per_level'),1000) AS max_capacity, "
         "       MAX(CASE WHEN pt.mode = 'buy' THEN 1 ELSE 0 END) AS buys_commodity, "
         "       MAX(CASE WHEN pt.mode = 'sell' THEN 1 ELSE 0 END) AS sells_commodity "
         "FROM ports p "

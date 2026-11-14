@@ -3475,6 +3475,172 @@ cmd_planet_market_sell (client_ctx_t *ctx, json_t *root)
  * from planet.market.sell: PTA goods transfer to a local port, not the
  * Galactic Exchange. */
 int
+cmd_planet_port_construct (client_ctx_t *ctx, json_t *root)
+{
+  if (!require_auth (ctx, root)) return 0;
+  db_t *db = game_db_get_handle ();
+  json_t *data = root ? json_object_get (root, "data") : NULL;
+  int planet_id = 0, port_class = 0;
+  json_t *jid = root ? json_object_get (root, "id") : NULL;
+  const char *request_id = json_string_value(json_object_get(data,"idempotency_key"));
+  if(!request_id) request_id = json_is_string (jid) ? json_string_value (jid) : NULL;
+  if (!db || !json_get_int_flexible (data, "planet_id", &planet_id)
+      || !json_get_int_flexible (data, "port_class", &port_class)
+      || planet_id <= 0 || port_class < 1 || port_class > 8
+      || !request_id || !*request_id || strlen (request_id) > 128)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "planet_id, port_class (1-8), and request id are required");
+      return 0;
+    }
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NO_ACTIVE_SHIP,
+                           "An active ship is required to construct a StarPort");
+      return 0;
+    }
+  db_error_t err = {0};
+  db_res_t *res = NULL;
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin StarPort construction");
+      return 0;
+    }
+  if(!db_query(db,"SELECT pg_advisory_xact_lock({1},hashtext({2}))",
+      (db_bind_t[]){db_bind_i32(ctx->player_id),db_bind_text((char *)request_id)},2,&res,&err)
+      || !db_res_step(res,&err)) goto port_construct_failed;
+  db_res_finalize(res);res=NULL;
+  if (!db_query (db,
+       "SELECT construction_id,sector_id,port_class,deliveries_completed,deliveries_required,status,port_id,next_delivery_at,planet_id "
+       "FROM planet_port_constructions WHERE player_id={1} AND request_id={2}",
+       (db_bind_t[]){db_bind_i32 (ctx->player_id),db_bind_text (request_id)},2,&res,&err))
+    goto port_construct_failed;
+  if (db_res_step (res, &err))
+    {
+      int64_t construction_id=db_res_col_i64(res,0,&err);
+      int sector=db_res_col_i32(res,1,&err);
+      int stored_class=db_res_col_i32(res,2,&err);
+      int completed=db_res_col_i32(res,3,&err);
+      int required=db_res_col_i32(res,4,&err);
+      const char *status_value=db_res_col_text(res,5,&err);
+      char status[16]={0}; if(status_value) snprintf(status,sizeof status,"%s",status_value);
+      int port_id=db_res_col_i32(res,6,&err);
+      int64_t next_due=db_res_col_i64(res,7,&err);
+      int stored_planet=db_res_col_i32(res,8,&err);
+      db_res_finalize(res); res=NULL;
+      if(stored_planet!=planet_id||stored_class!=port_class){db_tx_rollback(db,NULL);send_response_error(ctx,root,ERR_DUPLICATE_REQUEST,"Construction idempotency key was already used for a different planet or class");return 0;}
+      if(err.code || !db_tx_commit(db,&err)) goto port_construct_failed;
+      json_t *out=json_pack("{s:I,s:i,s:i,s:i,s:s,s:I,s:b}",
+          "construction_id",(json_int_t)construction_id,"sector_id",sector,
+          "port_class",stored_class,"deliveries_completed",completed,
+          "status",status,"next_delivery_at",(json_int_t)next_due,
+          "idempotent_retry",1);
+      json_object_set_new(out,"deliveries_required",json_integer(required));
+      json_object_set_new(out,"planet_id",json_integer(planet_id));
+      if(port_id>0) json_object_set_new(out,"port_id",json_integer(port_id));
+      send_response_ok_take(ctx,root,"planet.port_construction_v1",&out);
+      return 0;
+    }
+  db_res_finalize(res); res=NULL;
+  if(err.code) goto port_construct_failed;
+
+  if (!db_query (db,
+       "SELECT p.owner_id,COALESCE(p.owner_type,''),p.sector_id,s.sector_id "
+       "FROM planets p JOIN ships s ON s.ship_id={1} WHERE p.planet_id={2} FOR UPDATE OF p,s",
+       (db_bind_t[]){db_bind_i32(ship_id),db_bind_i32(planet_id)},2,&res,&err))
+    goto port_construct_failed;
+  if(!db_res_step(res,&err))
+    { db_res_finalize(res); res=NULL; db_tx_rollback(db,NULL);
+      send_response_error(ctx,root,ERR_NOT_FOUND,"Planet not found"); return 0; }
+  int owner_id=db_res_col_i32(res,0,&err);
+  const char *owner_value=db_res_col_text(res,1,&err);
+  char owner_type[24]={0}; if(owner_value) snprintf(owner_type,sizeof owner_type,"%s",owner_value);
+  int sector_id=db_res_col_i32(res,2,&err);
+  int ship_sector=db_res_col_i32(res,3,&err);
+  db_res_finalize(res); res=NULL;
+  if(err.code) goto port_construct_failed;
+  bool authorized = strcmp(owner_type,"player")==0 && owner_id==ctx->player_id;
+  if(!authorized && (strcmp(owner_type,"corp")==0 || strcmp(owner_type,"corporation")==0)
+      && owner_id==ctx->corp_id)
+    {
+      char role[32]={0};
+      int role_rc=repo_corp_lock_member_role(db,owner_id,ctx->player_id,role,sizeof role);
+      authorized=role_rc==0 && (strcasecmp(role,"Leader")==0 || strcasecmp(role,"Officer")==0);
+    }
+  if(!authorized || ship_sector!=sector_id || ctx->sector_id!=sector_id)
+    { db_tx_rollback(db,NULL); send_response_refused_steal(ctx,root,ERR_PERMISSION_DENIED,
+        "Construction requires an authorized planet and a ship in its sector",NULL); return 0; }
+  if(!db_query(db,
+       "SELECT 1 FROM ports WHERE sector_id={1} AND is_active=TRUE UNION ALL "
+       "SELECT 1 FROM planet_port_constructions WHERE sector_id={1} AND status='building' LIMIT 1",
+       (db_bind_t[]){db_bind_i32(sector_id)},1,&res,&err)) goto port_construct_failed;
+  bool occupied=db_res_step(res,&err); db_res_finalize(res); res=NULL;
+  if(err.code) goto port_construct_failed;
+  if(occupied)
+    { db_tx_rollback(db,NULL); send_response_refused_steal(ctx,root,ERR_PERMISSION_DENIED,
+        "The sector already has an active port or construction",NULL); return 0; }
+
+  const char *rule_names[5]={"build_credits","initial_materials_each","delivery_amount_each","delivery_count","delivery_interval_seconds"};
+  int64_t rules[5]={0};
+  for(int i=0;i<5;i++)
+    {
+      if(!db_query(db,"SELECT value FROM v3_port_economy_rules WHERE rule_key={1}",
+                   (db_bind_t[]){db_bind_text((char *)rule_names[i])},1,&res,&err)
+          || !db_res_step(res,&err)) goto port_construct_failed;
+      rules[i]=db_res_col_i64(res,0,&err); db_res_finalize(res); res=NULL;
+      if(err.code || rules[i]<=0) goto port_construct_failed;
+    }
+  if(h_deduct_player_petty_cash_unlocked(db,ctx->player_id,rules[0],NULL)!=0)
+    { db_tx_rollback(db,NULL); send_response_refused_steal(ctx,root,ERR_INSUFFICIENT_FUNDS,
+        "Not enough credits to fund StarPort construction",NULL); return 0; }
+  const char *codes[3]={"ORE","ORG","EQU"};
+  for(int i=0;i<3;i++)
+    {
+      int64_t rows=0;
+      if(!db_exec_rows_affected(db,
+           "UPDATE entity_stock SET quantity=quantity-{1},last_updated_ts=extract(epoch from now())::bigint "
+           "WHERE entity_type='planet' AND entity_id={2} AND commodity_code={3} AND quantity>={1}",
+           (db_bind_t[]){db_bind_i64(rules[1]),db_bind_i32(planet_id),db_bind_text((char *)codes[i])},3,&rows,&err)
+          || rows!=1)
+        { db_tx_rollback(db,NULL); send_response_refused_steal(ctx,root,ERR_INSUFFICIENT_FUNDS,
+            "Planet lacks the initial ORE, ORG or EQU construction materials",NULL); return 0; }
+    }
+  int64_t next_due=(int64_t)time(NULL)+rules[4];
+  if(!db_query(db,
+       "INSERT INTO planet_port_constructions(request_id,player_id,planet_id,sector_id,port_class,deliveries_required,delivery_amount,delivery_interval_seconds,next_delivery_at,status) "
+       "VALUES({1},{2},{3},{4},{5},{6},{7},{8},to_timestamp({9}),'building') RETURNING construction_id",
+       (db_bind_t[]){db_bind_text(request_id),db_bind_i32(ctx->player_id),db_bind_i32(planet_id),
+         db_bind_i32(sector_id),db_bind_i32(port_class),db_bind_i32((int)rules[3]),
+         db_bind_i32((int)rules[2]),db_bind_i32((int)rules[4]),db_bind_i64(next_due)},9,&res,&err)
+      || !db_res_step(res,&err)) goto port_construct_failed;
+  int64_t construction_id=db_res_col_i64(res,0,&err);
+  db_res_finalize(res); res=NULL;
+  if(err.code) goto port_construct_failed;
+  json_t *event=json_pack("{s:I,s:i,s:i,s:i,s:i}","construction_id",(json_int_t)construction_id,
+      "planet_id",planet_id,"sector_id",sector_id,"port_class",port_class,"initial_credits",(json_int_t)rules[0]);
+  if(!event || db_log_engine_event((long long)time(NULL),"port.construction.started.v1",
+       "player",ctx->player_id,sector_id,event,db)!=0)
+    { if(event)json_decref(event); goto port_construct_failed; }
+  json_decref(event);
+  if(!db_tx_commit(db,&err)) goto port_construct_failed;
+  json_t *out=json_pack("{s:I,s:i,s:i,s:i,s:s,s:I,s:b}","construction_id",(json_int_t)construction_id,
+      "sector_id",sector_id,"port_class",port_class,"deliveries_completed",0,
+      "status","building","next_delivery_at",(json_int_t)next_due,"idempotent_retry",0);
+  json_object_set_new(out,"deliveries_required",json_integer((int)rules[3]));
+  json_object_set_new(out,"planet_id",json_integer(planet_id));
+  send_response_ok_take(ctx,root,"planet.port_construction_v1",&out);
+  return 0;
+
+port_construct_failed:
+  if(res) db_res_finalize(res);
+  db_tx_rollback(db,&err);
+  send_response_error(ctx,root,ERR_DB_TX,"StarPort construction could not be committed");
+  return 0;
+}
+
+int
 cmd_planet_trade_port (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();

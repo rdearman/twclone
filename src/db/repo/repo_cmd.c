@@ -2248,7 +2248,7 @@ db_get_port_id_by_sector (db_t *db, int sid)
      dock.status protocol does not carry a port id, so selecting an arbitrary
      row could bypass StarDock-only behaviour such as limpet decontamination. */
   const char *sql_template =
-    "SELECT port_id FROM ports WHERE sector_id = {1} "
+    "SELECT port_id FROM ports WHERE sector_id = {1} AND is_active=TRUE "
     "ORDER BY CASE WHEN type = 9 THEN 0 ELSE 1 END, port_id LIMIT 1;";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
@@ -2294,7 +2294,7 @@ db_get_sector_info (int sid,
   int rc = -1;
   // Using sector_ops view for aggregation
   const char *sql = "SELECT s.name, 1 as safe_zone, "
-                    "(SELECT COUNT(*) FROM ports WHERE sector_id={1}) as pc, "
+                    "(SELECT COUNT(*) FROM ports WHERE sector_id={1} AND is_active=TRUE) as pc, "
                     "(SELECT COUNT(*) FROM ships WHERE sector_id={1}) as sc, "
                     "(SELECT COUNT(*) FROM planets WHERE sector_id={1}) as plc, "
                     "s.beacon "
@@ -2682,7 +2682,7 @@ db_sector_info_json (db_t *db, int sector_id, json_t **out)
   /* 2) Counts */
   const char *sql_counts =
     "SELECT "
-    "  (SELECT COUNT(*) FROM ports WHERE sector_id={1}) as pc, "
+    "  (SELECT COUNT(*) FROM ports WHERE sector_id={1} AND is_active=TRUE) as pc, "
     "  (SELECT COUNT(*) FROM ships WHERE sector_id={1}) as sc, "
     "  (SELECT COUNT(*) FROM planets WHERE sector_id={1}) as plc;";
 
@@ -3182,7 +3182,7 @@ db_ports_at_sector_json (db_t *db, int sid, json_t **out)
   db_error_t err = {0};
   int rc = -1;
 
-  const char *sql_template = "SELECT port_id, name, type FROM ports WHERE sector_id = {1};";
+  const char *sql_template = "SELECT port_id, name, type FROM ports WHERE sector_id = {1} AND is_active=TRUE;";
   char sql[256];
   sql_build(db, sql_template, sql, sizeof sql);
 
@@ -3930,7 +3930,7 @@ db_sector_scan_core (db_t *db, int sector_id, json_t **out_obj)
   /* Rich scan query using sector_ops view logic or subqueries */
   const char *sql =
     "SELECT s.sector_id, s.name, 1 as safe_zone, "
-    "(SELECT COUNT(*) FROM ports WHERE sector_id={1}) as port_count, "
+    "(SELECT COUNT(*) FROM ports WHERE sector_id={1} AND is_active=TRUE) as port_count, "
     "(SELECT COUNT(*) FROM ships WHERE sector_id={1}) as ship_count, "
     "(SELECT COUNT(*) FROM planets WHERE sector_id={1}) as planet_count, "
     "s.beacon as beacon_text "

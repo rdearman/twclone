@@ -442,18 +442,57 @@ CREATE TABLE ports (
     type BIGINT DEFAULT 1,
     economy_curve_id bigint NOT NULL DEFAULT 1,
     porttype_id integer,
+    durability integer NOT NULL DEFAULT 0,
+    defensive_strength integer NOT NULL DEFAULT 0,
     FOREIGN KEY (economy_curve_id) REFERENCES economy_curve (economy_curve_id),
     FOREIGN KEY (sector_id) REFERENCES sectors (sector_id)
 );
+
+CREATE UNIQUE INDEX ports_one_active_per_sector
+    ON ports(sector_id) WHERE is_active=TRUE;
 
 CREATE TABLE port_trade (
     port_trade_id serial PRIMARY KEY,
     port_id integer NOT NULL,
     maxproduct bigint,
+    capacity_level integer NOT NULL DEFAULT 0,
     commodity text CHECK (commodity IN ('ORE', 'ORG', 'EQU', 'SLV', 'WPN', 'DRG')),
     mode text CHECK (mode IN ('buy', 'sell')),
     FOREIGN KEY (port_id) REFERENCES ports (port_id)
 );
+
+CREATE TABLE v3_port_economy_rules (
+    rule_key text PRIMARY KEY,
+    rule_version integer NOT NULL,
+    value bigint NOT NULL CHECK (value >= 0),
+    description text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE planet_port_constructions (
+    construction_id bigserial PRIMARY KEY,
+    request_id text NOT NULL,
+    player_id integer NOT NULL REFERENCES players(player_id),
+    planet_id integer NOT NULL REFERENCES planets(planet_id),
+    sector_id integer NOT NULL REFERENCES sectors(sector_id),
+    port_class integer NOT NULL CHECK (port_class BETWEEN 1 AND 8),
+    deliveries_completed integer NOT NULL DEFAULT 0,
+    deliveries_required integer NOT NULL,
+    delivery_amount integer NOT NULL,
+    delivery_interval_seconds integer NOT NULL,
+    next_delivery_at timestamptz NOT NULL,
+    status text NOT NULL CHECK (status IN ('building','completed','cancelled')),
+    port_id integer REFERENCES ports(port_id),
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at timestamptz,
+    UNIQUE(player_id, request_id)
+);
+
+CREATE UNIQUE INDEX planet_port_constructions_one_active_sector
+    ON planet_port_constructions(sector_id) WHERE status='building';
+
+CREATE INDEX planet_port_constructions_due
+    ON planet_port_constructions(next_delivery_at) WHERE status='building';
 
 CREATE TABLE sector_warps (
     from_sector bigint,

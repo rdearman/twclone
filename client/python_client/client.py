@@ -7198,6 +7198,56 @@ def planet_trade_port_flow(ctx: Context):
     _refresh_planet_overview(ctx, planet_id)
 
 
+@register("planet_port_construct_flow")
+def planet_port_construct_flow(ctx: Context):
+    """Fund a new local StarPort from an authorized planet's materials."""
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("StarPort construction requires a server-confirmed planetary landing.")
+        return
+    classes = {
+        1: "SBB", 2: "SSB", 3: "BSS", 4: "BSB",
+        5: "BBS", 6: "SBS", 7: "BBB", 8: "SSS",
+    }
+    for number, code in classes.items():
+        print(f"  {number}) {code}")
+    try:
+        port_class = int(input("New StarPort trading class: ").strip())
+    except ValueError:
+        print("Choose a class from 1 through 8.")
+        return
+    if port_class not in classes:
+        print("Choose a class from 1 through 8.")
+        return
+    if input(f"Start class {classes[port_class]} construction from planet {planet_id}? [y/N]: ").strip().lower() != "y":
+        print("StarPort construction cancelled.")
+        return
+    pending = ctx.state.get("pending_port_construction")
+    if not isinstance(pending, dict) or pending.get("planet_id") != planet_id or pending.get("port_class") != port_class:
+        pending = {"planet_id": planet_id, "port_class": port_class, "idempotency_key": str(uuid.uuid4())}
+        ctx.state["pending_port_construction"] = pending
+    try:
+        response = ctx.conn.rpc("planet.port.construct", dict(pending))
+    except (ConnectionError, OSError) as exc:
+        print(f"Construction outcome is uncertain; retry the same planet and class after reconnecting: {exc}")
+        return
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] StarPort construction refused: {_planet_error(response)}")
+        return
+    if response.get("type") != "planet.port_construction_v1":
+        print("[Error] StarPort construction returned an unexpected receipt type.")
+        return
+    result = get_data(response)
+    if not isinstance(result, dict) or result.get("planet_id") != planet_id:
+        print("[Error] Construction receipt did not identify this planet.")
+        return
+    ctx.state.pop("pending_port_construction", None)
+    print(f"StarPort construction {result.get('construction_id')} started; "
+          f"{result.get('deliveries_required')} scheduled deliveries remain.")
+    _refresh_planet_overview(ctx, planet_id)
+
+
 @register("corp_member_asset_transfer_flow")
 def corp_member_asset_transfer_flow(ctx: Context):
     """Transfer a supported asset to a fellow corporation member."""
@@ -7355,6 +7405,45 @@ def combat_attack_flow(ctx: Context):
     _hud_rpc(ctx, "ship.status", {})
     sector_response = ctx.conn.rpc("sector.info", {})
     if isinstance(sector_response, dict) and sector_response.get("status") == "ok":
+        ctx.last_sector_desc = normalize_sector(get_data(sector_response))
+
+
+@register("combat_attack_port_flow")
+def combat_attack_port_flow(ctx: Context):
+    """Attack only the active StarPort authoritatively present in this sector."""
+    ctx_refresh_port_context(ctx)
+    info = ctx.state.get("port_inventory")
+    port = info if isinstance(info, dict) else None
+    port_id = _authoritative_positive_integer_id(port.get("id")) if isinstance(port, dict) else None
+    if port_id is None:
+        print("No active StarPort is confirmed in this sector.")
+        return
+    pending = ctx.state.get("pending_port_attack")
+    if not isinstance(pending, dict) or pending.get("port_id") != port_id:
+        pending = {"port_id": port_id, "idempotency_key": str(uuid.uuid4())}
+        ctx.state["pending_port_attack"] = pending
+    if not _trade_confirmation(f"Attack StarPort {port_id}?", default_no=True):
+        print("Attack cancelled; no command was sent.")
+        return
+    try:
+        response = ctx.conn.rpc("combat.attack.port", dict(pending))
+    except (ConnectionError, OSError) as exc:
+        print(f"Attack outcome is uncertain; retry the same port after reconnecting: {exc}")
+        return
+    ctx.state["last_rpc"] = response
+    result = get_data(response) if isinstance(response, dict) else None
+    if (not isinstance(response, dict) or response.get("status") != "ok"
+            or response.get("type") != "combat.port_strike.v1" or not isinstance(result, dict)
+            or result.get("port_id") != port_id):
+        print("StarPort attack was not confirmed:")
+        _pp(response)
+        return
+    ctx.state.pop("pending_port_attack", None)
+    print("Server combat result:")
+    _pp(result)
+    _hud_rpc(ctx, "ship.status", {})
+    sector_response = ctx.conn.rpc("sector.info", {})
+    if isinstance(sector_response, dict) and sector_response.get("status") == "ok" and _response_type_matches(sector_response, "sector.info"):
         ctx.last_sector_desc = normalize_sector(get_data(sector_response))
 
 
@@ -8513,6 +8602,42 @@ def ship_repair_flow(ctx: Context):
     ship = _refresh_ship_after_move(ctx)
     if player.get("status") != "ok" or not _refresh_response_type_matches(ship, "ship.status"):
         print("Warning: repair succeeded, but authoritative credits or ship state could not be refreshed.")
+
+
+@register("port_upgrade_flow")
+def port_upgrade_flow(ctx: Context):
+    """Upgrade one traded commodity's capacity at the local StarPort."""
+    port = (ctx.state.get("port_inventory") or {}).get("port") or {}
+    port_id = _authoritative_positive_integer_id(port.get("id"))
+    if port_id is None:
+        port_id = _authoritative_positive_integer_id((ctx.last_sector_desc.get("port") or {}).get("id"))
+    if port_id is None:
+        print("StarPort upgrade unavailable: refresh this sector's port details first.")
+        return
+    commodity = input("Commodity capacity to upgrade [ORE/ORG/EQU]: ").strip().upper()
+    if commodity not in {"ORE", "ORG", "EQU"}:
+        print("Choose ORE, ORG, or EQU.")
+        return
+    pending = ctx.state.get("pending_port_upgrade")
+    if not isinstance(pending, dict) or pending.get("port_id") != port_id or pending.get("commodity") != commodity:
+        pending = {"port_id": port_id, "commodity": commodity, "idempotency_key": str(uuid.uuid4())}
+        ctx.state["pending_port_upgrade"] = pending
+    try:
+        response = ctx.conn.rpc("port.upgrade", dict(pending))
+    except (ConnectionError, OSError) as exc:
+        print(f"Upgrade outcome is uncertain; retry the same commodity after reconnecting: {exc}")
+        return
+    ctx.state["last_rpc"] = response
+    result = get_data(response) if isinstance(response, dict) else None
+    if (not isinstance(response, dict) or response.get("status") != "ok"
+            or response.get("type") != "port.upgrade.v1" or not isinstance(result, dict)
+            or result.get("port_id") != port_id or result.get("commodity") != commodity):
+        print("StarPort upgrade was not confirmed:")
+        _pp(response)
+        return
+    ctx.state.pop("pending_port_upgrade", None)
+    print("StarPort commodity capacity upgraded:")
+    _pp(result)
 
 
 @register("shipyard_upgrade_flow")

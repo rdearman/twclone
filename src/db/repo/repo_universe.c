@@ -432,7 +432,7 @@ int repo_universe_get_sector_density(db_t *db, int sector_id, int *density_out) 
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q15 */
-    const char *q15 = "SELECT COALESCE((SELECT SUM(quantity) FROM sector_assets WHERE sector_id = {1} AND asset_type = 2), 0) + COALESCE((SELECT SUM(quantity) FROM sector_assets WHERE sector_id = {1} AND (asset_type = 1 OR asset_type = 4)), 0) + CASE WHEN EXISTS(SELECT 1 FROM sectors WHERE sector_id = {1} AND beacon IS NOT NULL) THEN 1 ELSE 0 END + (SELECT COALESCE(COUNT(*), 0) * 10 FROM ships WHERE sector_id = {1}) + (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = {1}) + (SELECT COALESCE(COUNT(*), 0) * 100 FROM ports WHERE sector_id = {1}) as total_density;";
+    const char *q15 = "SELECT COALESCE((SELECT SUM(quantity) FROM sector_assets WHERE sector_id = {1} AND asset_type = 2), 0) + COALESCE((SELECT SUM(quantity) FROM sector_assets WHERE sector_id = {1} AND (asset_type = 1 OR asset_type = 4)), 0) + CASE WHEN EXISTS(SELECT 1 FROM sectors WHERE sector_id = {1} AND beacon IS NOT NULL) THEN 1 ELSE 0 END + (SELECT COALESCE(COUNT(*), 0) * 10 FROM ships WHERE sector_id = {1}) + (SELECT COALESCE(COUNT(*), 0) * 100 FROM planets WHERE sector_id = {1}) + (SELECT COALESCE(COUNT(*), 0) * 100 FROM ports WHERE sector_id = {1} AND is_active=TRUE) as total_density;";
     char sql[2048]; sql_build(db, q15, sql, sizeof(sql));
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {
         *density_out = (int)db_res_col_i64(res, 0, &err);
@@ -472,7 +472,7 @@ int repo_universe_sector_has_port(db_t *db, int sector_id, int *has_port_out) {
     db_res_t *res = NULL;
     db_error_t err;
     /* SQL_VERBATIM: Q18 */
-    const char *q18 = "SELECT 1 FROM ports WHERE sector_id={1} LIMIT 1;";
+    const char *q18 = "SELECT 1 FROM ports WHERE sector_id={1} AND is_active=TRUE LIMIT 1;";
     char sql[512]; sql_build(db, q18, sql, sizeof(sql));
     *has_port_out = 0;
     if (db_query(db, sql, (db_bind_t[]){ db_bind_i64(sector_id) }, 1, &res, &err) && db_res_step(res, &err)) {

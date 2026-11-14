@@ -25,6 +25,8 @@ int cmd_dock_status (client_ctx_t * ctx, json_t * root);
 int cmd_port_rob (client_ctx_t * ctx, json_t * root);
 int cmd_trade_jettison (client_ctx_t * ctx, json_t * root);
 int cmd_trade_quote (client_ctx_t * ctx, json_t * root);
+int cmd_port_upgrade (client_ctx_t * ctx, json_t * root);
+int cmd_combat_attack_port (client_ctx_t * ctx, json_t * root);
 
 int h_get_ship_cargo_and_holds (db_t * db,
 				int ship_id,

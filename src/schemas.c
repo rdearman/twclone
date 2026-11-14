@@ -379,6 +379,7 @@ extern json_t *schema_planet_launch (void);
 extern json_t *schema_planet_transfer_ownership (void);
 extern json_t *schema_planet_harvest (void);
 extern json_t *schema_planet_trade_port (void);
+extern json_t *schema_planet_port_construct (void);
 extern json_t *schema_planet_deposit (void);
 extern json_t *schema_planet_colonists_allocate (void);
 extern json_t *schema_planet_withdraw (void);
@@ -501,6 +502,7 @@ static schema_entry_t g_schema_table[] = {
   {"hardware.list", NULL, schema_hardware_list},
   {"hardware.buy", NULL, schema_hardware_buy},
   {"port.info", NULL, schema_port_info},
+  {"port.upgrade", NULL, schema_port_upgrade},
   {"port.status", NULL, schema_port_status},
   {"port.describe", NULL, schema_port_describe},
   {"port.rob", NULL, schema_port_rob},
@@ -553,6 +555,7 @@ static schema_entry_t g_schema_table[] = {
   {"planet.transfer_ownership", NULL, schema_planet_transfer_ownership},
   {"planet.harvest", NULL, schema_planet_harvest},
   {"planet.trade.port", NULL, schema_planet_trade_port},
+  {"planet.port.construct", NULL, schema_planet_port_construct},
   {"planet.harvest_v1", NULL, schema_planet_harvest_response},
   {"planet.deposit", NULL, schema_planet_deposit},
   {"planet.colonists.allocate", NULL, schema_planet_colonists_allocate},
@@ -629,6 +632,7 @@ static schema_entry_t g_schema_table[] = {
   {"citadel.build", NULL, schema_citadel_build},
   {"citadel.upgrade", NULL, schema_citadel_upgrade},
   {"combat.attack", NULL, schema_combat_attack},
+  {"combat.attack.port", NULL, schema_combat_attack_port},
   {"combat.attack_planet", NULL, schema_combat_attack_planet},
   {"combat.deploy_fighters", NULL, schema_combat_deploy_fighters},
   {"combat.lay_mines", NULL, schema_combat_lay_mines},
@@ -3660,6 +3664,37 @@ schema_planet_trade_port (void)
 }
 
 json_t *
+schema_planet_port_construct (void)
+{
+  json_t *schema = json_object ();
+  json_t *properties = json_object ();
+  json_t *planet_id = json_object ();
+  json_t *port_class = json_object ();
+  json_object_set_new (planet_id, "type", json_string ("integer"));
+  json_object_set_new (planet_id, "minimum", json_integer (1));
+  json_object_set_new (port_class, "type", json_string ("integer"));
+  json_object_set_new (port_class, "minimum", json_integer (1));
+  json_object_set_new (port_class, "maximum", json_integer (8));
+  json_object_set_new (properties, "planet_id", planet_id);
+  json_object_set_new (properties, "port_class", port_class);
+  json_t *idempotency_key=json_object();
+  json_object_set_new(idempotency_key,"type",json_string("string"));
+  json_object_set_new(idempotency_key,"minLength",json_integer(1));
+  json_object_set_new(idempotency_key,"maxLength",json_integer(128));
+  json_object_set_new(properties,"idempotency_key",idempotency_key);
+  json_object_set_new (schema, "$id", json_string ("ge://schema/planet.port.construct.json"));
+  json_object_set_new (schema, "$schema", json_string ("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new (schema, "type", json_string ("object"));
+  json_object_set_new (schema, "properties", properties);
+  json_t *required = json_array ();
+  json_array_append_new (required, json_string ("planet_id"));
+  json_array_append_new (required, json_string ("port_class"));
+  json_object_set_new (schema, "required", required);
+  json_object_set_new (schema, "additionalProperties", json_false ());
+  return schema;
+}
+
+json_t *
 schema_planet_harvest_response (void)
 {
   json_t *properties = json_object ();
@@ -3711,6 +3746,34 @@ schema_planet_colonists_allocate (void)
   json_object_set_new (root, "additionalProperties", json_boolean (0));
   return root;
 }
+
+static json_t *
+schema_port_action (const char *id, bool upgrade)
+{
+  json_t *props=json_object(), *port=json_object(), *key=json_object();
+  json_object_set_new(port,"type",json_string("integer"));
+  json_object_set_new(port,"minimum",json_integer(1));
+  json_object_set_new(key,"type",json_string("string"));
+  json_object_set_new(key,"minLength",json_integer(1));
+  json_object_set_new(key,"maxLength",json_integer(128));
+  json_object_set_new(props,"port_id",port);
+  json_object_set_new(props,"idempotency_key",key);
+  if(upgrade){json_t *commodity=json_object();json_object_set_new(commodity,"type",json_string("string"));json_object_set_new(commodity,"enum",json_pack("[s,s,s]","ORE","ORG","EQU"));json_object_set_new(props,"commodity",commodity);}
+  json_t *root=json_object(), *required=json_array();
+  json_object_set_new(root,"$id",json_string(id));
+  json_object_set_new(root,"$schema",json_string("https://json-schema.org/draft/2020-12/schema"));
+  json_object_set_new(root,"type",json_string("object"));
+  json_object_set_new(root,"properties",props);
+  json_array_append_new(required,json_string("port_id"));
+  json_array_append_new(required,json_string("idempotency_key"));
+  if(upgrade)json_array_append_new(required,json_string("commodity"));
+  json_object_set_new(root,"required",required);
+  json_object_set_new(root,"additionalProperties",json_false());
+  return root;
+}
+
+json_t *schema_port_upgrade(void){return schema_port_action("ge://schema/port.upgrade.json",true);}
+json_t *schema_combat_attack_port(void){return schema_port_action("ge://schema/combat.attack.port.json",false);}
 
 
 json_t *

@@ -319,6 +319,12 @@
           }
         },
         {
+          "key": "b",
+          "label": "(B) Start StarPort Construction",
+          "action": {"pycall": "planet_port_construct_flow"},
+          "show_if": ["on_planet"]
+        },
+        {
           "key": "s",
           "label": "(S) Planet Stock Transfer",
           "action": {
@@ -602,6 +608,11 @@
           "action": {
             "pycall": "simple_sell_handler"
           }
+        },
+        {
+          "key": "u",
+          "label": "(U) Upgrade commodity capacity",
+          "action": { "pycall": "port_upgrade_flow" }
         },
         {
           "key": "d",
@@ -1969,6 +1980,11 @@
           "key": "p",
           "label": "(P) Attack Listed Planet",
           "action": { "pycall": "combat_attack_planet_flow" }
+        },
+        {
+          "key": "o",
+          "label": "(O) Attack Local StarPort",
+          "action": { "pycall": "combat_attack_port_flow" }
         },
         {
           "key": "x",

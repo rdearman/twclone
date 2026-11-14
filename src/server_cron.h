@@ -27,6 +27,7 @@ int h_tavern_notice_expiry_cron (db_t * db, int64_t now_s);
 int h_loan_shark_interest_cron (db_t * db, int64_t now_s);
 int h_daily_stock_price_recalculation (db_t * db, int64_t now_s);
 int h_port_economy_tick (db_t * db, int64_t now_s);
+int h_port_construction_tick (db_t * db, int64_t now_s);
 int h_planet_market_tick (db_t * db, int64_t now_s);
 int h_reset_turns_for_player (db_t * db, int64_t now_s);
 int h_daily_corp_tax (db_t * db, int64_t now_s);

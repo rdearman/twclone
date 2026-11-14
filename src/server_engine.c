@@ -115,6 +115,7 @@ static const CronHandler CRON_REGISTRY[] = {
   {"cluster_black_market", cluster_black_market_step},
   {"daily_stock_price_recalculation", h_daily_stock_price_recalculation},
   {"port_economy", h_port_economy_tick},
+  {"port_construction", h_port_construction_tick},
   {"port_hardware_restock", h_port_hardware_restock_tick},
   {"market_shock_tick", h_market_shock_tick},
   {"daily_planet_tax", h_daily_planet_tax_tick},
