@@ -245,11 +245,9 @@ func _actions_for_category(category: String) -> Array:
 			actions.append_array(COMMANDS.get("NAVIGATION", []))
 			for action in COMMANDS.get("COMPUTER", []):
 				var label := str(action.get("label", ""))
-				if label in ["Scan adjacent sectors", "Sector density scan", "Holographic adjacent-sector scan"]:
+				if label in ["Scan adjacent sectors", "Sector density scan", "Detailed current-sector scan", "Holographic adjacent-sector scan"]:
 					var scanner: Dictionary = action.duplicate(true)
-					if label == "Sector density scan":
-						scanner["label"] = "Density scan"
-					elif label == "Scan adjacent sectors":
+					if label == "Scan adjacent sectors":
 						scanner["label"] = "Scan adjacent sectors"
 					actions.append(scanner)
 		"SECTOR":
@@ -259,10 +257,14 @@ func _actions_for_category(category: String) -> Array:
 			actions.append_array(COMMANDS.get("MARKET", []))
 			for action in COMMANDS.get("COMPUTER", []):
 				var label := str(action.get("label", ""))
-				if label in ["Trade history", "Trade routes"] or (_ferengi_offer_available and label in ["Ferengi traders and open offers", "Accept Ferengi offer", "Reject Ferengi offer"]):
+				if label in [
+					"Trade history", "Trade routes", "Shipyard catalogue",
+					"Sell current ship · unavailable", "Hardware catalogue",
+					"Buy ship hardware", "Ship equipment upgrade · unavailable",
+				] or (_ferengi_offer_available and label in ["Ferengi traders and open offers", "Accept Ferengi offer", "Reject Ferengi offer"]):
 					actions.append(action)
 			for action in COMMANDS.get("NEWS & RECORDS", []):
-				if str(action.get("label", "")).contains("Insurance"):
+				if str(action.get("label", "")).to_lower().contains("insurance"):
 					actions.append(action)
 		"COMPUTER":
 			var hidden: Array[String] = [
@@ -279,6 +281,15 @@ func _actions_for_category(category: String) -> Array:
 				if not _player_has_corporation() and label in ["Create corporation", "Join corporation"]:
 					actions.append(action)
 			actions.append_array(COMMANDS.get("TAVERN", []) if _tavern_access else [])
+		"PORT":
+			# A selected port has its own contextual category in the visible
+			# selector. Keep its server-backed workflows reachable there instead
+			# of relying on the legacy, non-visible PORT registry key.
+			actions = [
+				{"label": "Dock · open port screen", "command": "port.info", "context_id": "port_id", "fixed": {}},
+				{"label": "Request commodity quote", "command": "trade.quote", "context_id": "port_id", "fields": [["commodity", FIELD_TEXT, "Commodity code or name", ""], ["quantity", FIELD_INT, "Quantity", "1"]]},
+				{"label": "Shipyard · choose eligible hull", "command": "shipyard.list", "requires_shipyard_dock": true},
+			]
 		"CORPORATION":
 			if _player_has_corporation():
 				actions.append_array(COMMANDS.get("CORPORATION", []))
@@ -507,7 +518,9 @@ func update_snapshot(snapshot: Dictionary) -> void:
 
 func set_tavern_access(available: bool) -> void:
 	_tavern_access = available
-	if not available and _active_category == "TAVERN":
+	if available:
+		_active_category = "TAVERN"
+	elif _active_category == "TAVERN":
 		_active_category = "COMPUTER"
 	(get_meta("context_label") as Label).text = _context_description()
 	_rebuild_categories()
@@ -1135,6 +1148,8 @@ func _categories() -> Array[String]:
 			result.append(kind.to_upper())
 	for category in TAB_CATEGORIES:
 		result.append(category)
+	if _tavern_access:
+		result.append("TAVERN")
 	if _player_has_corporation():
 		result.append("CORPORATION")
 	return result
@@ -1190,7 +1205,7 @@ func open_settings_category() -> void:
 
 func invoke_local_action(label: String) -> bool:
 	# Used by the gear menu for actions that do not belong in a gameplay tab.
-	for group_name in ["SETTINGS & NOTES", "SESSION"]:
+	for group_name in ["SETTINGS & NOTES", "SESSION", "HELP"]:
 		for action in COMMANDS.get(group_name, []):
 			if str(action.get("label", "")) == label:
 				_choose_action(action)
