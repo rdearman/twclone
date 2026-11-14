@@ -414,3 +414,30 @@ not release certification.
 | ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
 |---|---|---|---|---|---|---|
 | CORP-XFER-01 | Atomic same-sector transfer of on-hand credits and active-ship fighters, mines, or shield charge between members of the same corporation | VERIFIED | `src/server_corporation.c::cmd_corp_member_transfer`; `src/db/repo/repo_corporation.c::repo_corp_transfer_member_asset`; schema/registry in `src/schemas.c`, `src/server_loop.c` | `tests.v2/suite_corp_member_asset_transfers.json`: 31/31 passed on 2026-11-12 against real V3 server and isolated disposable PostgreSQL; concurrent duplicate fighter-transfer requests: one success/one refusal, persisted total preserved (sender 0, recipient 2); `make -j2` sanitizer build passed; `git diff --check` passed | `485fc0b5` | Broader V3 regression/release certification remains separate; no remaining CORP-XFER-01 work identified |
+## Five-hour Python playability sprint evidence — 2026-11-14
+
+This supplement records only work exercised against the isolated Docker
+PostgreSQL server with the Python menu/workflow client. It supersedes earlier
+`IMPLEMENTED_UNVERIFIED` notes only for the exact operations below; it does
+not promote an entire subsystem based on partial journey evidence.
+
+| Mechanic / operation | Evidence status | Runtime evidence and remaining scope |
+|---|---|---|
+| Port trading | PARTIAL | SprintAlpha sold ORE, bought ORG and resold it at a second port through the Python menus. Credits, port inventory, cargo and turns reconciled; PTA sale and trigger-injected rollback were also exercised. Reversal-mode refusal and general rollback remain incomplete. |
+| Equipment and hull lifecycle | PARTIAL | Python client bought Genesis and shield equipment, purchased/repaired/renamed hulls and sold an active ship. The replacement became active and the HUD refreshed. A second replacement hull was a deterministic fixture. Upgrade matrix and ship destruction/recovery variants remain incomplete. |
+| Cargo transfer | PARTIAL | Three ORE moved between two owned ships through the Computer menu; total quantity remained four. A database-trigger failure after source debit rolled back both ship records. |
+| Fast Scan | VERIFIED for the exercised current-sector scan | Python output showed adjacent sectors `292,404` and counts matching the authoritative sector result. Other visibility states remain unverified. |
+| Planet genesis, landing, transport and harvest | PARTIAL | Python workflows created and landed on a planet, moved colonists, allocated workers, harvested ORE/ORG/EQU within ship capacity, and transferred planet stock to ship cargo. Planet/ship quantities reconciled; insufficient-stock refusal left both unchanged. Production/citadel coverage below is separate. |
+| Citadel construction | PARTIAL | The Python Citadel menu started level 1; SQL confirmed requirement deductions and upgrading state. After the disposable fixture advanced construction time and the automatic scheduler completed it, the client re-landed and displayed level 1. Later levels and authorization rollback remain unverified. |
+| Planetary Trade Agreement | VERIFIED for same-sector sale and injected rollback | Beta sold planetary ORE to the local port through the Python surface menu; planet stock, port stock, credits, turn count and trade receipt reconciled. A test-only database trigger caused rollback with all four unchanged. |
+| Corporation membership and asset transfer | PARTIAL | Both players created/joined through Python workflows. Alpha transferred credits and fighters; Beta transferred 100 credits back through its own member menu. Credits conserved. Beta's fighter transfer with no carried fighters was refused without balance change. Role changes/removal and mine/shield permissions remain unverified. |
+| Fighter deployment and recall | VERIFIED for one ordinary-player cycle | Python deployed five ship fighters and recalled the listed sector asset. Database inventory plus deployed quantity conserved. A separate three-fighter deployment also reconciled to 12 aboard plus 3 deployed from a 15-fighter fixture balance. Mines were not exercised. |
+| PvP ship attack | PARTIAL | Two ordinary Python clients attacked in the same sector. Three accepted attacks each applied ten hull damage to Beta; persisted `combat.hit` events contain attacker, defender, weapon, damage, post-hit hull and sector. The protocol event renderer exists, but display of this pushed event in the defender's interactive screen was not confirmed. Turns, retreat, attacker selection, defense rules and combat destruction/recovery remain unverified. |
+| Planet production | BLOCKED on an approved rule contract | Fresh database has zero `planet_production` rows and seeded class production ratios are zero, so no ordinary fresh-install production cycle can generate goods. The current V3 code/tests call class fields output-per-worker multipliers, while the historical TW2002 reference gives workers-per-output ratios. No formula was changed because that would alter the approved V3 contract without a pinned decision. |
+
+The disposable fixtures seeded test cargo, spare hulls, planet stocks and
+citadel colonists; no SysOp command was used in any player journey. Database
+time was advanced only to exercise scheduled citadel completion. The run did
+not establish full beta playability; see
+[`V3_FIVE_HOUR_GAMEPLAY_SPRINT.md`](testing/V3_FIVE_HOUR_GAMEPLAY_SPRINT.md)
+for exact test counts, blockers and the complete evidence inventory.

@@ -23,6 +23,7 @@
 #include "server_ports.h"
 #include "server_ships.h"
 #include "server_sector_notices.h"
+#include "server_loop.h"
 #include "game_db.h"
 #include "repo_cmd.h"
 #include "repo_combat.h"
@@ -1153,6 +1154,25 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
       send_response_error (ctx, root, ERR_DB_TX,
                            "Could not commit combat transaction");
       return 0;
+    }
+
+  /* Persist the hit for the defender and push the canonical event to their
+   * connected sessions. The current attack request has no weapon selection
+   * and applies fixed ten-point damage; report only damage actually applied
+   * after shield absorption, with the protocol's documented laser default. */
+  if (def.player_id > 0)
+    {
+      json_t *hit = json_pack
+        ("{s:i,s:i,s:i,s:s,s:i,s:i,s:i}",
+         "v", 1, "attacker_id", ctx->player_id,
+         "defender_id", def.player_id, "weapon", "laser_mk1",
+         "damage", s_lost + h_lost, "defender_hp_after", def.hull,
+         "sector_id", ctx->sector_id);
+      if (hit)
+        {
+          (void) server_deliver_to_player (def.player_id, "combat.hit", hit);
+          json_decref (hit);
+        }
     }
 
   send_response_ok_take (ctx, root, "combat.attack.result", &resp);

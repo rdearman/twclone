@@ -261,6 +261,19 @@ class PlanetaryServerContractTests(unittest.TestCase):
         self.assertIn("handle_ship_destruction (db, &kill_ctx)", attack)
         self.assertIn("KILL_CAUSE_COMBAT", attack)
 
+    def test_pvp_attack_delivers_canonical_hit_to_defender_after_settlement(self):
+        attack = self.combat.split("int\nhandle_ship_attack (", 1)[1].split(
+            "\nint\ncmd_combat_attack", 1
+        )[0]
+        committed = attack.index("if (!db_tx_commit")
+        event = attack.index('server_deliver_to_player (def.player_id, "combat.hit"')
+        self.assertLess(committed, event)
+        for field in (
+            '"attacker_id"', '"defender_id"', '"weapon"', '"damage"',
+            '"defender_hp_after"', '"sector_id"',
+        ):
+            self.assertIn(field, attack[event - 700:event + 500])
+
     def test_treasury_is_not_authorized_by_landing_alone(self):
         info = self.planets.split("cmd_planet_info", 1)[1].split(
             "cmd_planet_fighters_transfer", 1
