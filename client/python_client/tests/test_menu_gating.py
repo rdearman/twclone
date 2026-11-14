@@ -99,6 +99,17 @@ def test_normal_mode_excludes_debug_only_menu_entries(ctx_factory, menus):
     assert "equity.portfolio.list" in exchange_commands
 
 
+def test_corporation_member_can_reach_leave_workflow(ctx_factory, menus):
+    ctx = ctx_factory()
+    ctx.state["in_corporation"] = True
+    ctx.state["is_ceo"] = False
+
+    corporation_keys = {
+        o["key"] for o in _visible_options(menus["CORPORATION_MAIN"], ctx)
+    }
+
+    assert "e" in corporation_keys
+
 def test_transwarp_requires_authoritative_current_sector(ctx_factory, menus):
     """NAV-02: do not expose a movement mutation without a server-owned ID."""
     stale_ctx = ctx_factory(debug=False)

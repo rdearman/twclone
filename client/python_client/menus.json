@@ -982,7 +982,7 @@
           "action": {
             "pycall": "corp_leave_flow"
           },
-          "show_if_ctx": ["in_corporation", "not_is_ceo"]
+          "show_if_ctx": ["in_corporation"]
           
         },
         {
@@ -2075,17 +2075,7 @@
           "key": "d",
           "label": "(D) Deploy Mines",
           "action": {
-            "rpc": {
-              "command": "combat.deploy_mines",
-              "data": {
-                "amount": "<prompt:int:Amount to deploy>",
-                "offense": "<prompt:int:Offensive setting (1=TOLL, 2=DEFEND, 3=ATTACK)>"
-              }
-            },
-            "post": [
-              "print_last_rpc",
-              {"pycall": "refresh_sector_and_display"}
-            ]
+            "pycall": "deploy_mines_flow"
           }
         },
         {
