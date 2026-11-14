@@ -128,7 +128,8 @@ def extract_ship_fields(resp: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(cargo, list):
         used = 0
         for item in cargo:
-            qty = item.get("qty") if isinstance(item, dict) else None
+            qty = (item.get("quantity", item.get("qty"))
+                   if isinstance(item, dict) else None)
             if isinstance(qty, int):
                 used += qty
         out["cargo_used"] = used

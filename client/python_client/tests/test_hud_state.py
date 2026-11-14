@@ -90,6 +90,18 @@ def test_zero_is_a_valid_distinct_value_from_unknown():
     assert fields["cargo_used"] is not None
 
 
+def test_ship_status_counts_canonical_quantity_field_in_cargo_rows():
+    response = {"status": "ok", "data": {"ship": {
+        "id": 7, "holds": 40,
+        "cargo": [
+            {"commodity": "ore", "quantity": 3},
+            {"commodity": "organics", "qty": 2},
+        ],
+    }}}
+
+    assert extract_ship_fields(response)["cargo_used"] == 5
+
+
 @pytest.mark.parametrize("invalid_id", [None, 0, -1, True, 7.0, "7"])
 def test_ship_status_without_positive_authoritative_id_does_not_refresh_state(invalid_id):
     resp = {"status": "ok", "data": {"ship": {
