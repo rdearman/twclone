@@ -441,3 +441,29 @@ time was advanced only to exercise scheduled citadel completion. The run did
 not establish full beta playability; see
 [`V3_FIVE_HOUR_GAMEPLAY_SPRINT.md`](testing/V3_FIVE_HOUR_GAMEPLAY_SPRINT.md)
 for exact test counts, blockers and the complete evidence inventory.
+
+### Scheduler and repeatability evidence — 2026-11-14
+
+The market-decay real-engine regression exposed two defects in
+`repo_market_decay.c`: `db_exec` returns `true` on success, but both repository
+functions treated that return as an error, so the port update ran and the
+cycle returned before updating cluster pressure. The denominator maximum was
+also incorrectly set to `1`, causing the valid default `100` to trigger a
+fallback warning. Commit `5fb3877e` corrects both conditions and raises
+scheduler waits in the test to accommodate the 60-second engine tick. With one
+server scheduler attached to the isolated database, `suite_phase10_market_decay.json`
+passed 14/14 checks, including ORE pressure/volume decay, positive and negative
+pressure bounds, dynamic-pricing disablement, and a second port-decay cycle.
+
+The same commit makes four previously flaky PostgreSQL acceptance fixtures
+repeatable: planetary PTA registers supported commodity rows, corporation
+players are co-located and the previous named fixture is removed, the combat
+hazard fixture restores a cargo-capable hull, and ship-sale fixtures account
+for installed shields and docking. The reruns passed: PTA 32/32, corporation
+asset transfers 33/33, sector combat hazards 47/47, and ship sale 18/18.
+FedSpace MSL cleanup now clears only its intended asset fixtures, checks
+sector-specific persisted asset rows, preserves player-authored sector text,
+and opens a fresh daily sweep claim per occurrence; its real-scheduler run
+passed 44/44. These are protocol/database acceptance suites, not Python-client
+journeys. The unrelated working-tree file `tests.v2/regression_report.json.tmp`
+was intentionally left untouched.
