@@ -14,14 +14,15 @@ def test_landing_does_not_open_surface_for_mismatched_player_refresh(
         "status": "ok", "data": {"player": {"id": 4, "turns": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"id": 9, "onplanet": 1}},
     })
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"sector_id": 17, "planets": [{"planet_id": 77}]}})
 
     client.land_flow(ctx)
 
     assert ctx.state["on_planet"] is False
     assert ctx.menu_stack == ["MAIN"]
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]

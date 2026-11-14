@@ -146,7 +146,7 @@ def test_combat_refusal_reconciles_authoritative_escape_pod(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     """A refusal may still destroy the attacker before the server replies."""
-    ctx = ctx_factory(sector={"id": 3, "name": "FedSpace", "ships": [
+    ctx = ctx_factory(sector={"id": 11, "name": "Open Space", "ships": [
         {"id": 88, "name": "Target"},
     ]})
     ctx.player_info = {"player": {"id": 3, "ship_id": 9}}

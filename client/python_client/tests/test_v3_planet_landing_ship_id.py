@@ -20,8 +20,8 @@ def test_landing_does_not_open_surface_without_authoritative_ship_id(
     client.land_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]
     assert ctx.menu_stack[-1] != "SURFACE"
     assert ctx.state["current_planet_id"] == 77
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out

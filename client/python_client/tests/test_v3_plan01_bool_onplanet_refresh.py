@@ -22,13 +22,14 @@ def test_landing_does_not_open_surface_for_boolean_onplanet_refresh(
         "type": "ship.status",
         "data": {"ship": {"ship_id": 9, "onplanet": True, "hull": 100}},
     })
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"sector_id": 17, "planets": [{"planet_id": 77}]}})
 
     client.land_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]
     assert ctx.state.get("on_planet") is False
     assert ctx.state.get("current_planet_id") == 77
     assert ctx.menu_stack[-1] != "SURFACE"
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out

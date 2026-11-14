@@ -159,7 +159,7 @@ db_res_t* repo_players_get_subscriptions(db_t *db, int player_id, db_error_t *er
 
 db_res_t* repo_players_get_my_info(db_t *db, int player_id, db_error_t *err) {
     /* SQL_VERBATIM: Q13 */
-    const char *q13 = "SELECT p.name, p.credits, t.turns_remaining, p.sector_id, p.ship_id, p.alignment, p.experience, cm.corporation_id FROM players p LEFT JOIN turns t ON t.player_id = p.player_id LEFT JOIN corp_members cm ON cm.player_id = p.player_id WHERE p.player_id = {1}";
+    const char *q13 = "SELECT p.name, p.credits, t.turns_remaining, p.sector_id, p.ship_id, p.alignment, p.experience, cm.corporation_id, p.lastplanet FROM players p LEFT JOIN turns t ON t.player_id = p.player_id LEFT JOIN corp_members cm ON cm.player_id = p.player_id WHERE p.player_id = {1}";
     char sql[1024]; sql_build(db, q13, sql, sizeof(sql));
     db_res_t *res = NULL;
     db_query(db, sql, (db_bind_t[]){ db_bind_i64(player_id) }, 1, &res, err);

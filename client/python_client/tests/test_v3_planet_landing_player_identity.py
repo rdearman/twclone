@@ -14,15 +14,16 @@ def test_landing_refresh_without_player_id_stays_non_actionable(
         "status": "ok", "data": {"player": {"turns_remaining": 39}},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "onplanet": 77}},
+        "status": "ok", "data": {"ship": {"id": 9, "onplanet": 1}},
     })
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"sector_id": 17, "planets": [{"planet_id": 77}]}})
 
     client.land_flow(ctx)
 
     assert ctx.state["on_planet"] is False
     assert ctx.menu_stack[-1] != "SURFACE"
     assert ctx.hud.turns_remaining is None
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out
 
 
 def test_landing_refresh_without_player_id_does_not_merge_partial_hud(

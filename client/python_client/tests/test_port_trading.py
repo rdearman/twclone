@@ -8,6 +8,7 @@ import pytest
 
 PORT_RESPONSE = {
     "status": "ok",
+    "type": "trade.port_info",
     "data": {"port": {"id": 7, "name": "New Dawn", "commodities": [
         {"code": "ORE", "quantity": 12, "max_quantity": 100, "price": 40,
          "sells": True, "buys": True},
@@ -440,7 +441,7 @@ def test_quote_reconciliation_disconnect_fails_closed_without_raising(ctx_factor
 
     assert client._safe_refresh_port_info(ctx, {"port_id": 7, "sector_id": 9}) is False
     assert "port_inventory" not in ctx.state
-    assert "connection lost" in ctx.state["trade_refresh_error"]
+    assert "socket closed" in ctx.state["trade_refresh_error"]
     assert "Reconnect before attempting another trade" in capsys.readouterr().out
 
 
@@ -492,6 +493,7 @@ def test_dock_context_accepts_authoritative_stardock_type(ctx_factory, fake_conn
 def test_port_refresh_rejects_explicit_cross_sector_port_record(ctx_factory, fake_conn):
     """A port response from another sector must not become trade context."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     fake_conn.queue("port.info", {
         "status": "ok",
         "type": "trade.port_info",
@@ -511,6 +513,7 @@ def test_port_refresh_rejects_explicit_cross_sector_port_record(ctx_factory, fak
 def test_port_refresh_rejects_noncanonical_port_response_type(ctx_factory, fake_conn):
     """The port-info command aliases still publish one trade.port_info schema."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     fake_conn.queue("port.info", {
         "status": "ok",
         "type": "port.info",
@@ -529,6 +532,7 @@ def test_port_refresh_rejects_noncanonical_port_response_type(ctx_factory, fake_
 def test_port_refresh_rejects_omitted_port_response_type(ctx_factory, fake_conn):
     """An omitted type must not become a second actionable port contract."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     fake_conn.queue_untyped("port.info", {
         "status": "ok",
         "data": {"port": {
@@ -546,7 +550,7 @@ def test_port_refresh_rejects_omitted_port_response_type(ctx_factory, fake_conn)
 def test_port_summary_uses_indicative_prices_and_port_name():
     lines = client.render_port_summary(client.normalize_port_info(PORT_RESPONSE))
     assert lines[0] == "--- Port: New Dawn ---"
-    assert "ORE: stock 12/100; sell/buy; base ~40" in lines[1]
+    assert "ORE: stock 12/100; buy/sell; base ~40 cr" in lines[1]
 
 
 def test_port_summary_maps_server_directions_to_player_actions():
@@ -563,6 +567,7 @@ def test_port_summary_maps_server_directions_to_player_actions():
 
 def test_cancelled_buy_quotes_but_does_not_mutate(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "type": "trade.quote", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
@@ -583,6 +588,7 @@ def test_malformed_typed_quote_refuses_and_refreshes_before_mutation(
 ):
     """A typed quote with non-object data must not crash or authorize settlement."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {
         "status": "ok", "type": "trade.quote", "data": malformed_data,
@@ -609,6 +615,7 @@ def test_typed_quote_with_malformed_price_refuses_before_settlement(
 ):
     """Malformed quote money must not authorize a trade mutation."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     quote_data = {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -631,6 +638,7 @@ def test_typed_quote_with_malformed_price_refuses_before_settlement(
 
 def test_confirmed_buy_uses_uuid_and_refreshes_state(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 1
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "type": "trade.quote", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
@@ -641,6 +649,9 @@ def test_confirmed_buy_uses_uuid_and_refreshes_state(ctx_factory, fake_conn, mon
         "total_cost": "82.00", "fees": "2.00", "credits_remaining": "18.00",
         "lines": [{"commodity": "ORE", "quantity": 2, "unit_price": "40.00"}],
     }})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "credits": "18.00"}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 4, "cargo": []}}})
+    fake_conn.queue("port.info", PORT_RESPONSE)
     answers = iter(["1", "2", "", "y"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
     monkeypatch.setattr(uuid, "uuid4", lambda: uuid.UUID("12345678-1234-5678-1234-567812345678"))
@@ -656,6 +667,7 @@ def test_successful_trade_receipt_does_not_claim_port_refresh_when_refused(
 ):
     """A receipt is shown, but stock remains explicitly un-reconciled."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "type": "trade.quote", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -676,7 +688,8 @@ def test_successful_trade_receipt_does_not_claim_port_refresh_when_refused(
     output = capsys.readouterr().out
     assert "Trade Receipt" in output
     assert "port stock could not be refreshed" in output
-    assert ctx.state["trade_refresh_error"] == "port is no longer current"
+    assert ctx.state["trade_refresh_error"] == "authoritative port stock refresh failed"
+    assert ctx.state["port_info_error"] == "port is no longer current"
     assert "port_inventory" not in ctx.state
 
 
@@ -685,6 +698,7 @@ def test_trade_refresh_does_not_claim_reconciliation_when_player_read_refused(
 ):
     """A successful port read cannot mask a failed balance refresh."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "type": "trade.quote", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -731,7 +745,7 @@ def test_trade_refresh_rejects_cross_account_or_ship_success(
     assert client._refresh_trade_views(ctx, 7) is False
     assert ctx.hud.credits == 100
     assert ctx.hud.ship_id == 4
-    assert "authoritative port stock could not be refreshed" in capsys.readouterr().out
+    assert "authoritative player balance, ship cargo could not be refreshed" in capsys.readouterr().out
 
 
 def test_trade_refresh_rejects_unrelated_success_response_type(
@@ -739,6 +753,7 @@ def test_trade_refresh_rejects_unrelated_success_response_type(
 ):
     """A delayed response from another read cannot refresh trade HUD state."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.hud = ctx.hud.__class__(credits=100)
     fake_conn.queue("player.my_info", {
         "status": "ok", "type": "ship.status",
@@ -755,7 +770,7 @@ def test_trade_refresh_rejects_unrelated_success_response_type(
 
     assert client._refresh_trade_views(ctx, 7) is False
     assert ctx.hud.credits == 100
-    assert "authoritative player balance, ship cargo could not be refreshed" in capsys.readouterr().out
+    assert "authoritative player balance could not be refreshed" in capsys.readouterr().out
 
 
 def test_trade_refresh_rejects_untyped_balance_or_cargo_reads(
@@ -763,6 +778,7 @@ def test_trade_refresh_rejects_untyped_balance_or_cargo_reads(
 ):
     """A trade receipt cannot authorize untyped post-settlement refreshes."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.hud = ctx.hud.__class__(credits=100)
     fake_conn.queue_untyped("player.my_info", {
         "status": "ok", "data": {"player": {"id": 9, "credits": "1.00"}},
@@ -786,6 +802,7 @@ def test_port_refresh_rejects_malformed_requested_sector_without_response_sector
 ):
     """A malformed location selector must not make a port snapshot actionable."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     fake_conn.queue("port.info", {
         "status": "ok", "type": "trade.port_info",
         "data": {"port": {"id": 7, "commodities": []}},
@@ -804,6 +821,7 @@ def test_buy_uses_authoritative_quote_commodity_casing(
 ):
     """A canonical quote may normalize the display commodity spelling."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ore", "quantity": 1,
@@ -827,16 +845,20 @@ def test_buy_uses_authoritative_quote_commodity_casing(
 
 def test_sell_receipt_describes_net_total(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
         "sell_price": 35.0, "total_sell_price": 70,
     }})
     fake_conn.queue("trade.sell", {"status": "ok", "type": "trade.sell_receipt_v1", "data": {
-        "port_id": 7, "sector_id": 9, "player_id": 1,
+        "port_id": 7, "sector_id": 9, "player_id": 9,
         "total_cost": "68.00", "fees": "2.00", "credits_remaining": "68.00",
         "lines": [{"commodity": "ORE", "quantity": 2}]
     }})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 9, "credits": "68.00"}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 4, "cargo": []}}})
+    fake_conn.queue("port.info", PORT_RESPONSE)
     monkeypatch.setattr("builtins.input", lambda _prompt: {"Commodity number: ": "1",
                                                             "Quantity of ORE: ": "2",
                                                                 "Trade account [S]aved preference / [P]etty cash / [B]ank (default S): ": "",
@@ -848,6 +870,7 @@ def test_sell_receipt_describes_net_total(ctx_factory, fake_conn, monkeypatch, c
 def test_mismatched_quote_is_not_used_for_trade(ctx_factory, fake_conn, monkeypatch, capsys):
     """A quote for another line cannot authorize a mutating trade request."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 8, "commodity": "ORG", "quantity": 99,
@@ -869,6 +892,7 @@ def test_mismatched_quote_response_type_is_not_used_for_trade(
 ):
     """An explicit non-quote envelope cannot authorize a mutating trade."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {
         "status": "ok", "type": "trade.sell_receipt_v1", "data": {
@@ -892,6 +916,7 @@ def test_trade_receipt_requires_authoritative_settlement_lines(
 ):
     """A typed success without the contract's settlement line is not a receipt."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -919,6 +944,7 @@ def test_trade_receipt_requires_authoritative_settlement_lines(
 
 def test_confirmed_buy_can_use_bank_account(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
@@ -941,6 +967,7 @@ def test_confirmed_buy_can_use_saved_server_trade_preference(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
@@ -966,15 +993,19 @@ def test_confirmed_buy_defaults_to_saved_server_trade_preference(
 ):
     """Pressing Enter must preserve the server's saved account preference."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "type": "trade.quote", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
         "buy_price": 40, "total_buy_price": 40,
     }})
     fake_conn.queue("trade.buy", {"status": "ok", "type": "trade.buy_receipt_v1", "data": {
-        "port_id": 7, "sector_id": 9, "total_cost": "40.00",
+        "port_id": 7, "sector_id": 9, "player_id": 9, "total_cost": "40.00",
         "lines": [{"commodity": "ORE", "quantity": 1}],
     }})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 9, "credits": "20.00"}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 4, "cargo": []}}})
+    fake_conn.queue("port.info", PORT_RESPONSE)
     answers = iter(["1", "1", "", "y"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
 
@@ -983,7 +1014,7 @@ def test_confirmed_buy_defaults_to_saved_server_trade_preference(
     trade = next(call for call in fake_conn.calls if call["command"] == "trade.buy")
     assert "account" not in trade["data"]
     output = capsys.readouterr().out
-    assert "default S" in output
+    assert "Trade account: saved server preference." in output
 
 
 def test_mismatched_trade_receipt_is_not_presented_and_refreshes_state(
@@ -991,6 +1022,7 @@ def test_mismatched_trade_receipt_is_not_presented_and_refreshes_state(
 ):
     """A receipt for another port/sector cannot be shown as this trade's settlement."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -1023,6 +1055,7 @@ def test_mismatched_trade_receipt_type_is_not_presented_and_refreshes_state(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -1052,6 +1085,7 @@ def test_mismatched_trade_receipt_player_is_not_presented_and_refreshes_state(
 ):
     """A receipt for another authenticated player cannot be shown as settlement."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     ctx.state["player_id"] = 14
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
@@ -1060,7 +1094,7 @@ def test_mismatched_trade_receipt_player_is_not_presented_and_refreshes_state(
     }})
     fake_conn.queue("trade.buy", {"status": "ok", "data": {
         "port_id": 7, "sector_id": 9, "player_id": 99,
-        "total_cost": "40.00", "lines": [],
+        "total_cost": "40.00", "lines": [{"commodity": "ORE", "quantity": 1}],
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 14}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "cargo": []}}})
@@ -1083,6 +1117,7 @@ def test_trade_receipt_without_player_id_is_not_presented_when_session_identity_
 ):
     """A receipt missing required player identity cannot authorize settlement."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     ctx.state["player_id"] = 14
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
@@ -1090,7 +1125,8 @@ def test_trade_receipt_without_player_id_is_not_presented_when_session_identity_
         "buy_price": 40, "total_buy_price": 40,
     }})
     fake_conn.queue("trade.buy", {"status": "ok", "data": {
-        "port_id": 7, "sector_id": 9, "total_cost": "40.00", "lines": [],
+        "port_id": 7, "sector_id": 9, "total_cost": "40.00",
+        "lines": [{"commodity": "ORE", "quantity": 1}],
     }})
     fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 14}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "cargo": []}}})
@@ -1112,6 +1148,7 @@ def test_mismatched_trade_receipt_line_is_not_presented_and_refreshes_state(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 1,
@@ -1121,7 +1158,7 @@ def test_mismatched_trade_receipt_line_is_not_presented_and_refreshes_state(
         "port_id": 7, "sector_id": 9, "total_cost": "40.00",
         "lines": [{"commodity": "ORG", "quantity": 1}],
     }})
-    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"credits": 20}}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 9, "credits": 20}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "cargo": []}}})
     fake_conn.queue("port.info", PORT_RESPONSE)
     monkeypatch.setattr("builtins.input", lambda prompt: {
@@ -1141,13 +1178,14 @@ def test_refused_trade_refreshes_authoritative_state_without_claiming_mutation(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
         "buy_price": 40.0, "total_buy_price": 80,
     }})
     fake_conn.queue("trade.buy", {"status": "refused", "error": {"message": "Stock exhausted"}})
-    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"credits": 20}}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 9, "credits": 20}}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "cargo": []}}})
     fake_conn.queue("port.info", PORT_RESPONSE)
     answers = iter(["1", "2", "", "y"])
@@ -1168,6 +1206,7 @@ def test_trade_disconnect_does_not_claim_or_retry_mutation(
 ):
     """A lost settlement reply must wait for authoritative reconnect refresh."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
@@ -1203,6 +1242,7 @@ def test_quote_disconnect_does_not_crash_or_open_settlement(
 ):
     """A lost quote reply must not cross into the mutating trade command."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
 
     def disconnect_on_quote(command, data):
@@ -1232,13 +1272,14 @@ def test_trade_refresh_disconnect_does_not_crash_or_show_stale_summary(
 ):
     """A confirmed trade still requires reconnect when reconciliation is lost."""
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "ok", "type": "trade.quote", "data": {
         "port_id": 7, "commodity": "ORE", "quantity": 2,
         "buy_price": 40.0, "total_buy_price": 80,
     }})
     fake_conn.queue("trade.buy", {"status": "ok", "type": "trade.buy_receipt_v1", "data": {
-        "port_id": 7, "sector_id": 9, "player_id": 1,
+        "port_id": 7, "sector_id": 9, "player_id": 9,
         "lines": [{"commodity": "ORE", "quantity": 2}],
         "total_cost": 80,
     }})
@@ -1267,6 +1308,7 @@ def test_refused_quote_refreshes_authoritative_port_without_claiming_trade(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {"status": "refused", "error": {"message": "Port moved"}})
     fake_conn.queue("port.info", PORT_RESPONSE)
@@ -1299,6 +1341,7 @@ def test_invalid_authoritative_port_id_sends_no_trade_request(
 
 def test_invalid_trade_account_cancels_before_quote(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     answers = iter(["1", "2", "corporation"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
@@ -1309,6 +1352,7 @@ def test_invalid_trade_account_cancels_before_quote(ctx_factory, fake_conn, monk
 
 def test_interactive_buy_uses_canonical_quoted_port_flow(ctx_factory, fake_conn, monkeypatch, capsys):
     ctx = ctx_factory({"id": 9, "port": {"id": 7, "name": "New Dawn"}})
+    ctx.state["player_id"] = 9
     ctx.state["port_inventory"] = client.normalize_port_info(PORT_RESPONSE)
     fake_conn.queue("trade.quote", {
         "status": "refused",

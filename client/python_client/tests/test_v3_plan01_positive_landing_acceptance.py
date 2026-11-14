@@ -23,8 +23,9 @@ def test_typed_landing_refreshes_player_and_active_ship_before_surface(
     fake_conn.queue("ship.status", {
         "status": "ok",
         "type": "ship.status",
-        "data": {"ship": {"ship_id": 9, "onplanet": 77, "hull": 100}},
+        "data": {"ship": {"ship_id": 9, "onplanet": 1, "hull": 100}},
     })
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"sector_id": 17, "planets": [{"planet_id": 77}]}})
     fake_conn.queue("planet.info", {
         "status": "ok",
         "type": "planet.info",
@@ -38,5 +39,5 @@ def test_typed_landing_refreshes_player_and_active_ship_before_surface(
     assert ctx.state["current_planet_id"] == 77
     assert ctx.menu_stack[-1] == "SURFACE"
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status", "planet.info",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector", "planet.info",
     ]

@@ -33,7 +33,7 @@ def test_landing_refusal_diagnostic_cannot_open_reported_planet_surface(
     )
     fake_conn.queue(
         "move.describe_sector",
-        {"status": "ok", "data": {"id": 17, "planets": [{"id": 77}]}},
+        {"status": "ok", "type": "sector.info", "data": {"sector_id": 17, "planets": [{"planet_id": 77}]}},
     )
 
     client.land_flow(ctx)
@@ -44,10 +44,9 @@ def test_landing_refusal_diagnostic_cannot_open_reported_planet_surface(
         "ship.status",
         "move.describe_sector",
     ]
-    assert ctx.state["current_planet_id"] == 12
+    assert "current_planet_id" not in ctx.state
     assert ctx.state["on_planet"] is False
     assert ctx.menu_stack == ["MAIN"]
     output = capsys.readouterr().out
-    assert "Landing failed: Planetary defenses refused landing." in output
+    assert "Landing response had unexpected type planet.land.success" in output
     assert "Landed on planet 77." not in output
-

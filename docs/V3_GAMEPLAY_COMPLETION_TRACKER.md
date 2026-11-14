@@ -482,3 +482,37 @@ commands and the JUnit artifact path are in
 [`V3_PYTHON_FAILURE_TRIAGE_20261114.md`](testing/V3_PYTHON_FAILURE_TRIAGE_20261114.md).
 The 84 residuals remain open pending protocol-backed adjudication; the suite
 and Python gameplay are not certified by this run.
+
+### Python player-facing contract repair — 2026-11-14
+
+The next bounded repair pass began from `05de7ede`. It reproduced the
+planet/landing group, reconciled successful landing fixtures to the published
+typed player, ship, sector and planet responses, and added reconnect coverage.
+One actual landing defect was fixed: `player.my_info` now reports persisted
+`last_planet_id`, allowing the Python client to restore a landed surface only
+after matching player, active ship (`onplanet == 1`), planet ID and sector
+snapshots agree. A live Docker/PostgreSQL Python-client journey registered
+`PlanetJourney1794651252`, landed on Terra, read the surface overview, logged
+out, reconnected into the restored surface, and launched. Read-only SQL showed
+`lastplanet=1` and `onplanet=true` after landing; after launch it showed
+`lastplanet=NULL`, `onplanet=false`, sector 1, ship 40 and 119 turns. Client
+transcripts and command output are retained under
+`/tmp/twclone-planet-landing-triage-20261114/`. This proves the landing,
+surface-read, reconnect and departure workflow only; it is not full planet
+parity or beta certification.
+
+The same pass aligned stale test fixtures and diagnostics for the V3 port,
+trade receipt, movement, hazard, combat and ship-roster contracts. Confirmed
+client corrections include specific trade receipt identity diagnostics,
+active-ship confirmation before displaying an empty owned-ship roster, avoiding
+a redundant roster mutation-path retry after malformed data, and persisted
+landing restoration. Malformed and mismatched response checks remain
+fail-closed. The full suite now reports **802 passed, 0 failed** (the original
+799-test suite plus three focused reconnect tests), up from the immediately
+preceding 716/799 pass result. These are client tests; they do not verify
+server combat, production, ship transactions or the complete player journey.
+
+See [`V3_PYTHON_PLAYABILITY_REPAIR_20261114.md`](testing/V3_PYTHON_PLAYABILITY_REPAIR_20261114.md)
+for root-cause classification, exact commands and remaining runtime limits.
+Gameplay parity rows remain `IMPLEMENTED_UNVERIFIED` unless the precise server
+operation has separate database-backed acceptance evidence.

@@ -240,6 +240,7 @@ def test_launch_refusal_refresh_disconnect_is_controlled(
             if command == "planet.launch":
                 return {
                     "status": "refused",
+                    "type": "error",
                     "error": {
                         "message": "Entry hazard stopped launch.",
                         "data": {"hazards": [{"hazard_type": "minefield", "hull_lost": 7}]},
@@ -383,7 +384,8 @@ def test_transwarp_success_refreshes_authoritative_state_before_rendering_destin
     fake_conn.queue("move.transwarp", {
         "status": "ok",
         "data": {
-            "to_sector_id": 44,
+            "sector_id": 44,
+            "status": "transwarp_complete",
             "hazards": [{"hazard_type": "minefield", "hull_lost": 12}],
         },
     })

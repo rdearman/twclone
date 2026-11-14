@@ -31,4 +31,4 @@ def test_landing_success_does_not_open_surface_when_player_refresh_disconnects(
     assert ctx.state["current_planet_id"] == 77
     assert ctx.player_info == {"player": {"id": 3, "turns": 40}}
     assert ctx.menu_stack[-1] != "SURFACE"
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out

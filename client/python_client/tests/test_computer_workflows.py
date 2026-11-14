@@ -174,12 +174,17 @@ def test_attack_reports_server_refusal_without_refresh_or_retry(
     fake_conn.queue("combat.attack", {
         "status": "refused", "error": {"message": "Target is protected."},
     })
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 3, "ship_id": 10}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"id": 22, "ships": [{"id": 20, "name": "Target"}]}})
     answers = iter(["20", "y"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
 
     client.combat_attack_flow(ctx)
 
-    assert fake_conn.calls == [{"command": "combat.attack", "data": {"target_ship_id": 20}}]
+    assert [call["command"] for call in fake_conn.calls] == [
+        "combat.attack", "player.my_info", "ship.status", "move.describe_sector",
+    ]
     assert "Target is protected" in capsys.readouterr().out
 
 

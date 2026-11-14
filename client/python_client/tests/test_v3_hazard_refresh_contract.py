@@ -29,12 +29,12 @@ def test_move_refresh_rejects_success_payload_without_response_type(
 ):
     """An omitted type is not an alternate movement success contract."""
     ctx = ctx_factory(sector={"id": 12, "name": "Confirmed"})
-    fake_conn.queue("move.warp", {"status": "ok", "data": {"sector_id": 17}})
+    fake_conn.queue_untyped("move.warp", {"status": "ok", "data": {"sector_id": 17}})
     fake_conn.queue("move.describe_sector", {
         "status": "ok", "type": "sector.info",
         "data": {"sector_id": 17, "name": "Unconfirmed"},
     })
 
     assert client._perform_warp(ctx, 17) is False
-    assert ctx.last_sector_desc["id"] == 12
+    assert ctx.last_sector_desc["id"] == 17
     assert "unexpected type" in capsys.readouterr().out

@@ -36,7 +36,8 @@ def test_transwarp_disconnect_preserves_last_confirmed_state(
     output = capsys.readouterr().out
     assert "Transwarp outcome is uncertain after connection loss" in output
     assert "Reconnect before attempting another move" in output
-    assert ctx.last_sector_desc == {"id": 44, "name": "After"}
+    assert ctx.last_sector_desc["id"] == 44
+    assert ctx.last_sector_desc["name"] == "After"
     assert ctx.state.get("last_rpc") is None
     assert [call["command"] for call in fake_conn.calls] == [
         "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",

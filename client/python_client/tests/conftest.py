@@ -60,6 +60,7 @@ class FakeConn:
         "planet.deposit": "planet.deposit",
         "planet.withdraw": "planet.withdraw",
         "planet.colonists.allocate": "planet.colonists.allocate",
+        "combat.attack_planet": "combat.attack_planet",
         "citadel.build": "citadel.upgrade_started",
         "ship.rename": "ship.renamed",
         "port.info": "trade.port_info",

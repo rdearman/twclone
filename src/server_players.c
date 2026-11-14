@@ -1430,6 +1430,7 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 	  int align = db_res_col_int (res, 5, &err);
 	  long long exp = db_res_col_i64 (res, 6, &err);
 	  int corp_id = db_res_col_int (res, 7, &err);
+	  int last_planet_id = db_res_col_int (res, 8, &err);
 
 	  json_t *player_obj = json_object ();
 
@@ -1450,6 +1451,8 @@ cmd_player_my_info (client_ctx_t *ctx, json_t *root)
 	  json_object_set_new (player_obj, "sector", json_integer (sector));
 	  json_object_set_new (player_obj, "ship_id", json_integer (ship_id));
 	  json_object_set_new (player_obj, "corp_id", json_integer (corp_id));
+	  json_object_set_new (player_obj, "last_planet_id",
+	                       json_integer (last_planet_id > 0 ? last_planet_id : 0));
 	  json_object_set_new (player_obj, "alignment", json_integer (align));
 	  json_object_set_new (player_obj, "experience", json_integer (exp));
 

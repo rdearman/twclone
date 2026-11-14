@@ -88,7 +88,7 @@ def test_transwarp_accepts_canonical_error_envelope_and_reports_terminal_hazard(
 
     output = capsys.readouterr().out
     assert "minefield" in output and "hull lost: 100" in output
-    assert "Transwarp refused" in output
+    assert "Ship destroyed by sector hazards during transwarp" in output
     assert [call["command"] for call in fake_conn.calls] == [
         "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
     ]

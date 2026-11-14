@@ -20,6 +20,7 @@ def test_colonist_transfer_uses_confirmed_landing_id(
 ):
     ctx = ctx_factory(sector={"id": 17})
     ctx.state["current_planet_id"] = 77
+    ctx.state["on_planet"] = True
     fake_conn.queue("planet.colonists.get", {
         "status": "ok",
         "data": {"planet_colonists": 10, "ship_colonists": 2, "ship_holds_available": 4},

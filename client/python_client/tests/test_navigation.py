@@ -185,7 +185,9 @@ def test_successful_transwarp_does_not_cache_a_different_sector_response(
 ):
     """A successful envelope cannot authorize a mismatched sector refresh."""
     ctx = ctx_factory(sector={"id": 4, "name": "Old Sector"})
-    fake_conn.queue("move.transwarp", {"status": "ok", "data": {"to_sector_id": 77}})
+    fake_conn.queue("move.transwarp", {"status": "ok", "data": {
+        "sector_id": 77, "status": "transwarp_complete",
+    }})
     fake_conn.queue("move.describe_sector", {"status": "ok", "data": {
         "sector_id": 88, "name": "Unrequested Sector",
     }})
@@ -197,7 +199,8 @@ def test_successful_transwarp_does_not_cache_a_different_sector_response(
 
     # A mismatched post-move read is not authoritative, but it must not erase
     # the last confirmed location while the client is waiting for reconnect.
-    assert ctx.last_sector_desc == {"id": 4, "name": "Old Sector"}
+    assert ctx.last_sector_desc["id"] == 4
+    assert ctx.last_sector_desc["name"] == "Old Sector"
     assert "requested destination could not be confirmed" in capsys.readouterr().out
     assert [call["command"] for call in fake_conn.calls] == [
         "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
@@ -249,7 +252,8 @@ def test_transwarp_refusal_reconciles_authoritative_state_before_retry(
     assert [call["command"] for call in fake_conn.calls] == [
         "move.transwarp", "move.describe_sector", "player.my_info", "ship.status",
     ]
-    assert ctx.last_sector_desc == {"id": 4, "name": "Confirmed Sector"}
+    assert ctx.last_sector_desc["id"] == 4
+    assert ctx.last_sector_desc["name"] == "Confirmed Sector"
     output = capsys.readouterr().out
     assert "Transwarp drive not installed" in output
     assert "Current sector refreshed after the movement error: 4." in output

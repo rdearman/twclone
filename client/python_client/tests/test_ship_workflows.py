@@ -168,10 +168,10 @@ def test_selected_ship_transfer_uses_authoritative_receipt_and_refreshes(
         "status": "ok", "type": "ship.transfer.response",
         "data": {"ship_id": 88, "from_player_id": 1, "target_player_id": 42},
     })
-    fake_conn.queue("player.my_info", {"status": "ok", "type": "player.info", "data": {"player_id": 1}})
+    fake_conn.queue("player.my_info", {"status": "ok", "type": "player.info", "data": {"player": {"id": 1, "ship_id": 1}}})
     fake_conn.queue("ship.status", {"status": "ok", "type": "ship.status", "data": {"ship": {"id": 1}}})
     fake_conn.queue("move.describe_sector", {"status": "ok", "type": "sector.info", "data": {"id": 7, "ships": []}})
-    fake_conn.queue("ship.list", {"status": "ok", "type": "ship.list.response", "data": {"ships": []}})
+    fake_conn.queue("ship.list", {"status": "ok", "type": "ship.list.response", "data": {"ships": [{"ship_id": 1, "name": "Escape Pod", "active": True}]}})
     answers = iter(["1", "t", "y", "42", "q"])
     monkeypatch.setattr("builtins.input", lambda *_: next(answers))
 

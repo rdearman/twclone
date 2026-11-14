@@ -51,16 +51,7 @@ def test_landing_success_uses_listed_id_and_refreshes_authoritative_state(
     fake_conn.queue("planet.land", {
         "status": "ok", "type": "planet.land.success", "data": {"planet_id": 77},
     })
-    fake_conn.queue("player.my_info", {
-        "status": "ok", "data": {"player": {"id": 3, "turns": 41}},
-    })
-    fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100, "onplanet": 77}},
-    })
-    fake_conn.queue("move.describe_sector", {
-        "status": "ok", "type": "sector.info",
-        "data": {"id": 17, "name": "Confirmed sector", "planets": [{"id": 77, "name": "Terra"}]},
-    })
+    _queue_confirmed_landing_refreshes(fake_conn, turns=41)
     fake_conn.queue("planet.info", _planet(planet_id=77, sector_id=17))
 
     client.land_flow(ctx)
@@ -83,18 +74,7 @@ def test_landing_success_applies_canonical_hud_refresh_before_surface(
     fake_conn.queue("planet.land", {
         "status": "ok", "type": "planet.land.success", "data": {"planet_id": 77},
     })
-    fake_conn.queue("player.my_info", {
-        "status": "ok", "type": "player.info",
-        "data": {"player": {"id": 3, "turns_remaining": 39}},
-    })
-    fake_conn.queue("ship.status", {
-        "status": "ok", "type": "ship.status",
-        "data": {"ship": {"id": 9, "hull": 100, "onplanet": 77}},
-    })
-    fake_conn.queue("move.describe_sector", {
-        "status": "ok", "type": "sector.info",
-        "data": {"id": 17, "name": "Confirmed sector", "planets": [{"id": 77, "name": "Terra"}]},
-    })
+    _queue_confirmed_landing_refreshes(fake_conn)
     fake_conn.queue("planet.info", _planet(planet_id=77, sector_id=17))
 
     client.land_flow(ctx)
@@ -130,22 +110,25 @@ def test_landing_success_with_mismatched_player_refresh_stays_non_actionable(
         "status": "ok", "type": "planet.land.success", "data": {"planet_id": 77},
     })
     fake_conn.queue("player.my_info", {
-        "status": "ok", "data": {"player": {"id": 99, "turns": 39}},
+        "status": "ok", "data": {"player": {
+            "id": 99, "ship_id": 9, "turns_remaining": 39,
+        }},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"ship_id": 9, "hull": 100}},
+        "status": "ok", "data": {"ship": {"id": 9, "hull": 100, "onplanet": 1}},
     })
+    _queue_landing_sector_refresh(fake_conn)
 
     client.land_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]
     assert ctx.player_info == {"player": {"id": 3, "turns": 40}}
     assert ctx.state.get("on_planet") is False
     assert ctx.state["current_planet_id"] == 77
     assert ctx.menu_stack[-1] != "SURFACE"
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out
 
 
 def test_landing_wrong_response_type_does_not_claim_landing_and_refreshes(
@@ -327,7 +310,7 @@ def test_landing_malformed_reply_refreshes_without_crashing(
 ):
     """An unusable server reply must not become a locally claimed landing."""
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 77, "name": "Terra"}]})
-    fake_conn.queue("planet.land", [])
+    fake_conn.queue_untyped("planet.land", [])
     fake_conn.queue("player.my_info", {
         "status": "ok", "data": {"player": {"id": 3, "turns": 40}},
     })
@@ -344,7 +327,7 @@ def test_landing_malformed_reply_refreshes_without_crashing(
         "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]
     assert ctx.state.get("on_planet") is not True
-    assert "malformed landing response" in capsys.readouterr().out
+    assert "unexpected type None" in capsys.readouterr().out
 
 
 def test_landing_partial_success_does_not_infer_planet_context(
@@ -589,6 +572,38 @@ def _planet(**overrides):
     return {"status": "ok", "type": "planet.info", "data": data}
 
 
+def _confirmed_landing(ctx, planet_id=77):
+    """Model the state written only after typed landing and HUD reconciliation."""
+    ctx.state.update({"on_planet": True, "current_planet_id": planet_id})
+
+
+def _queue_landing_sector_refresh(fake_conn, sector_id=17, planet_id=77):
+    """Queue the current-sector read that follows every landing attempt."""
+    fake_conn.queue("move.describe_sector", {
+        "status": "ok", "type": "sector.info",
+        "data": {"sector_id": sector_id, "planets": [{
+            "planet_id": planet_id, "name": "Terra",
+        }]},
+    })
+
+
+def _queue_confirmed_landing_refreshes(
+    fake_conn, *, sector_id=17, planet_id=77, player_id=3, ship_id=9, turns=39
+):
+    """Model the server's typed player, ship-flag and sector refreshes."""
+    fake_conn.queue("player.my_info", {
+        "status": "ok", "type": "player.info", "data": {"player": {
+            "id": player_id, "ship_id": ship_id, "turns_remaining": turns,
+        }},
+    })
+    fake_conn.queue("ship.status", {
+        "status": "ok", "type": "ship.status", "data": {"ship": {
+            "id": ship_id, "hull": 100, "onplanet": 1,
+        }},
+    })
+    _queue_landing_sector_refresh(fake_conn, sector_id, planet_id)
+
+
 def test_planet_menus_expose_existing_management_commands(menus):
     surface = {item["key"]: item["action"] for item in menus["SURFACE"]["options"]}
     citadel = {item["key"]: item["action"] for item in menus["CITADEL"]["options"]}
@@ -633,7 +648,7 @@ def test_planet_harvest_menu_runs_server_settlement(
 
 def test_planet_overview_presents_authoritative_fields(ctx_factory, fake_conn, capsys):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
 
     client.planet_overview_flow(ctx)
@@ -648,7 +663,7 @@ def test_workforce_allocation_sends_all_four_job_targets_and_refreshes(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
     fake_conn.queue("planet.colonists.allocate", {
         "status": "ok", "data": {
@@ -677,7 +692,7 @@ def test_workforce_rejects_population_overassignment_without_rpc(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
     answers = iter(["100", "100", "1", "0"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
@@ -692,7 +707,7 @@ def test_workforce_displays_server_resource_or_ownership_refusal(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
     fake_conn.queue("planet.colonists.allocate", {
         "status": "refused", "error": {"message": "You do not control this planet."},
@@ -710,7 +725,7 @@ def test_planet_stock_deposit_uses_existing_payload_and_refreshes(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
     fake_conn.queue("planet.deposit", {
         "status": "ok", "data": {"planet_quantity": 75, "ship_quantity": 25},
@@ -735,7 +750,7 @@ def test_planet_stock_transfer_rejects_contradictory_authoritative_planet_id(
 ):
     """A transfer reply for another planet must not be presented as success."""
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
     fake_conn.queue("planet.deposit", {
         "status": "ok",
@@ -760,7 +775,7 @@ def test_treasury_withdraw_uses_credit_contract_and_reports_balance(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet())
     fake_conn.queue("planet.withdraw", {
         "status": "ok", "data": {"planet_treasury_balance": 900, "player_credits": 1200},
@@ -783,7 +798,7 @@ def test_planet_fighter_transfer_uses_documented_direction_and_authoritative_res
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet(fighters=12))
     fake_conn.queue("planet.fighters.transfer", {
         "status": "ok", "type": "planet.fighters.transferred_v1",
@@ -810,7 +825,7 @@ def test_planet_fighter_transfer_refusal_does_not_retry_or_refresh(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet(fighters=12))
     fake_conn.queue("planet.fighters.transfer", {
         "status": "error", "error": {"message": "You do not control this planet."},
@@ -830,7 +845,7 @@ def test_citadel_build_uses_existing_command_and_reports_server_timing(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet(citadel_level=0))
     fake_conn.queue("citadel.build", {
         "status": "ok", "type": "citadel.upgrade_started",
@@ -852,7 +867,7 @@ def test_citadel_build_rejects_malformed_authoritative_level(
 ):
     """A schema-mismatched level must not authorize a build request."""
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet(citadel_level="0"))
     monkeypatch.setattr("builtins.input", lambda _prompt: "y")
 
@@ -866,7 +881,7 @@ def test_citadel_insufficient_resource_refusal_is_presented(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.info", _planet(citadel_level=0))
     fake_conn.queue("citadel.build", {
         "status": "refused", "error": {"message": "Insufficient equipment."},
@@ -883,7 +898,7 @@ def test_planet_rename_validates_input_and_uses_server_payload(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.rename", {"status": "ok", "data": {"name": "New Terra"}})
     fake_conn.queue("planet.info", _planet(name="New Terra"))
     monkeypatch.setattr("builtins.input", lambda _prompt: "New Terra")
@@ -900,7 +915,7 @@ def test_planet_rename_server_error_is_displayed_without_refresh(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory()
-    ctx.state["current_planet_id"] = 77
+    _confirmed_landing(ctx)
     fake_conn.queue("planet.rename", {
         "status": "error", "error": {"message": "Database temporarily unavailable."},
     })
@@ -1051,9 +1066,8 @@ def test_planet_landing_enters_surface_only_for_authoritative_id(
         "status": "ok", "type": "planet.land.success",
         "data": {"planet_id": 77},
     })
-    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"id": 1, "sector": 42, "turns": 98}}})
-    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "onplanet": 77}}})
-    fake_conn.queue("planet.info", _planet())
+    _queue_confirmed_landing_refreshes(fake_conn, sector_id=42, player_id=1)
+    fake_conn.queue("planet.info", _planet(planet_id=77, sector_id=42))
 
     client.land_flow(ctx)
 
@@ -1074,21 +1088,24 @@ def test_planet_landing_does_not_open_surface_for_ship_on_different_planet(
         "status": "ok", "type": "planet.land.success", "data": {"planet_id": 77},
     })
     fake_conn.queue("player.my_info", {
-        "status": "ok", "data": {"player": {"id": 1, "sector": 42, "turns": 98}},
+        "status": "ok", "data": {"player": {
+            "id": 1, "ship_id": 9, "sector": 42, "turns_remaining": 98,
+        }},
     })
     fake_conn.queue("ship.status", {
-        "status": "ok", "data": {"ship": {"id": 9, "onplanet": 88}},
+        "status": "ok", "data": {"ship": {"id": 9, "onplanet": 0}},
     })
+    _queue_landing_sector_refresh(fake_conn, sector_id=42)
 
     client.land_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]
     assert ctx.state["on_planet"] is False
     assert ctx.state["current_planet_id"] == 77
     assert ctx.menu_stack[-1] != "SURFACE"
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out
 
 
 def test_planet_landing_warns_when_post_landing_refresh_is_refused(
@@ -1098,6 +1115,7 @@ def test_planet_landing_warns_when_post_landing_refresh_is_refused(
     fake_conn.queue("planet.land", {"status": "ok", "data": {"planet_id": 77}})
     fake_conn.queue("player.my_info", {"status": "refused", "error": {"message": "Session is stale."}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9}}})
+    _queue_landing_sector_refresh(fake_conn, sector_id=42)
     fake_conn.queue("planet.info", _planet())
 
     client.land_flow(ctx)
@@ -1105,7 +1123,7 @@ def test_planet_landing_warns_when_post_landing_refresh_is_refused(
     output = capsys.readouterr().out
     assert ctx.state["on_planet"] is False
     assert ctx.state["current_planet_id"] == 77
-    assert "post-landing HUD refresh was incomplete" in output
+    assert "post-landing authoritative refresh was incomplete" in output
     assert "displayed state may be stale" in output
 
 
@@ -1119,13 +1137,14 @@ def test_incomplete_relanding_does_not_leave_stale_surface_menu_reachable(
     fake_conn.queue("planet.land", {"status": "ok", "data": {"planet_id": 77}})
     fake_conn.queue("player.my_info", {"status": "refused", "error": {"message": "Session is stale."}})
     fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9, "onplanet": 88}}})
+    _queue_landing_sector_refresh(fake_conn, sector_id=42)
 
     client.land_flow(ctx)
 
     assert ctx.state["on_planet"] is False
     assert ctx.state["current_planet_id"] == 77
     assert ctx.menu_stack == ["MAIN"]
-    assert "post-landing HUD refresh was incomplete" in capsys.readouterr().out
+    assert "post-landing authoritative refresh was incomplete" in capsys.readouterr().out
 
 
 def test_successful_relanding_replaces_stale_surface_frame(
@@ -1138,12 +1157,7 @@ def test_successful_relanding_replaces_stale_surface_frame(
     fake_conn.queue("planet.land", {
         "status": "ok", "type": "planet.land.success", "data": {"planet_id": 77},
     })
-    fake_conn.queue("player.my_info", {
-        "status": "ok", "type": "player.info", "data": {"player": {"id": 3, "turns": 39}},
-    })
-    fake_conn.queue("ship.status", {
-        "status": "ok", "type": "ship.status", "data": {"ship": {"id": 9, "onplanet": 77}},
-    })
+    _queue_confirmed_landing_refreshes(fake_conn, sector_id=42)
     fake_conn.queue("planet.info", _planet(planet_id=77, sector_id=42))
 
     client.land_flow(ctx)
@@ -1175,13 +1189,13 @@ def test_planet_landing_does_not_open_surface_after_refresh_disconnect(
     client.land_flow(ctx)
 
     assert [call["command"] for call in fake_conn.calls] == [
-        "planet.land", "player.my_info", "ship.status",
+        "planet.land", "player.my_info", "ship.status", "move.describe_sector",
     ]
     assert ctx.state["on_planet"] is False
     assert ctx.state["current_planet_id"] == 77
     assert ctx.menu_stack[-1] != "SURFACE"
     output = capsys.readouterr().out
-    assert "post-landing HUD refresh was incomplete" in output
+    assert "post-landing authoritative refresh was incomplete" in output
     assert "Reconnect before relying on turns" in output
 
 
@@ -1249,7 +1263,7 @@ def test_planet_landing_warns_when_successful_hud_refresh_payload_is_malformed(
     assert ctx.state["current_planet_id"] == 77
     assert ctx.player_info == original_player
     output = capsys.readouterr().out
-    assert "post-landing HUD refresh was incomplete" in output
+    assert "post-landing authoritative refresh was incomplete" in output
     assert "displayed state may be stale" in output
 
 
@@ -1487,7 +1501,7 @@ def test_planet_attack_delegates_protection_and_loss_to_server(ctx_factory, fake
     ctx.last_sector_desc = {"id": 17, "planets": [{"id": 1, "name": "Terra"}]}
     fake_conn.queue("combat.attack_planet", {"status": "refused", "error": {"message": "Terra sanction"}})
     client.combat_attack_planet_flow(ctx)
-    assert fake_conn.calls[-1] == {"command": "combat.attack_planet", "data": {"planet_id": 1}}
+    assert {"command": "combat.attack_planet", "data": {"planet_id": 1}} in fake_conn.calls
     assert "Terra sanction" in capsys.readouterr().out
 
 
@@ -1516,7 +1530,7 @@ def test_planet_attack_without_canonical_response_type_refreshes_only(
     ctx_factory, fake_conn, monkeypatch, capsys
 ):
     ctx = ctx_factory(sector={"id": 17, "planets": [{"id": 80, "name": "Nereid"}]})
-    fake_conn.queue("combat.attack_planet", {"status": "ok", "data": {
+    fake_conn.queue_untyped("combat.attack_planet", {"status": "ok", "data": {
         "planet_id": 80, "attacker_remaining_fighters": 12,
         "defender_remaining_fighters": 0, "captured": True,
     }})
