@@ -53,7 +53,11 @@ container restart, but not game-server recovery with that broken entrypoint.
 All actions below used two ordinary accounts authenticated to the disposable
 V3 server. Direct SQL only staged deterministic test state, injected database
 faults, and read authoritative outcomes. The two contenders were synchronized
-to issue actual concurrent requests.
+to issue actual concurrent requests: player IDs 109 and 110, port ID 1 in
+sector 11. The server-level request outcomes and before/after PostgreSQL values
+were observed during execution. PostgreSQL transaction IDs and a sanitized
+request-by-request transcript were not retained as standalone artifacts, so
+the reproducibility/evidence packaging requirement remains incomplete.
 
 | Case | Result and database evidence |
 |---|---|
