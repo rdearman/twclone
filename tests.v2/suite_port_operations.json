@@ -11,20 +11,11 @@
       "password": "password"
     },
     {
-      "name": "Rig: Place player at port 1's actual sector",
+      "name": "Rig: Place player and active ship at port 1's current sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 2 WHERE player_id = @{port_user_player_id}"
-      },
-      "expect": { "status": "ok" }
-    },
-    {
-      "name": "Rig: Place ship at port 1's actual sector",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_user_player_id})"
+        "sql": "WITH moved_active_ship AS (UPDATE ships SET sector_id = (SELECT sector_id FROM ports WHERE port_id = 1) WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{port_user_player_id})) UPDATE players SET sector_id = (SELECT sector_id FROM ports WHERE port_id = 1) WHERE player_id = @{port_user_player_id};"
       },
       "expect": { "status": "ok" }
     },

@@ -9,20 +9,20 @@
       "password": "password"
     },
     {
-      "name": "Rig: Place the scan ship in the sector with the known port",
+      "name": "Rig: Place Stardock in a free scan sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 2 WHERE player_id = @{scan_user_player_id};"
+        "sql": "UPDATE ports SET sector_id = (SELECT MAX(s.sector_id) FROM sectors s WHERE NOT EXISTS (SELECT 1 FROM ports p WHERE p.is_active = TRUE AND p.port_id <> 9 AND p.sector_id = s.sector_id)), is_active = TRUE WHERE port_id = 9;"
       },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Place the scan ship in sector one",
+      "name": "Rig: Place scan player and active ship at Stardock",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{scan_user_player_id});"
+        "sql": "WITH moved_active_ship AS (UPDATE ships SET sector_id = (SELECT sector_id FROM ports WHERE port_id = 9) WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{scan_user_player_id})) UPDATE players SET sector_id = (SELECT sector_id FROM ports WHERE port_id = 9) WHERE player_id = @{scan_user_player_id};"
       },
       "expect": { "status": "ok" }
     },
@@ -39,13 +39,13 @@
       "command": "sector.scan",
       "expect": { "status": "ok", "type": "sector.scan" },
       "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 2 },
+        { "path": "data.sector_id", "op": "==", "value": { "sql_int": "SELECT sector_id FROM ports WHERE port_id = 9" } },
         { "path": "data.name", "op": "exists" },
         { "path": "data.adjacent_sectors", "op": "exists" },
         { "path": "data.ships_present", "op": "exists" },
         { "path": "data.ports", "op": "exists" },
-        { "path": "data.ports.*[port_id=1].name", "op": "==", "value": "Tavern Central" },
-        { "path": "data.ports.*[port_id=1].type", "op": "==", "value": null },
+        { "path": "data.ports.*[port_id=9].name", "op": "==", "value": "Stardock Prime" },
+        { "path": "data.ports.*[port_id=9].type", "op": "==", "value": null },
         { "path": "data.celestial_objects", "op": "exists" },
         { "path": "data.counts", "op": "exists" },
         { "path": "data.server_tick", "op": "exists" }

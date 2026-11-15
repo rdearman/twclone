@@ -7,6 +7,8 @@ var app
 var registered_username := ""
 var test_password := "Temporary-QA-Password-42"
 var login_existing_account := false
+var acceptance_port_id := 9
+var acceptance_planet_id := 700
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -17,6 +19,10 @@ func _run() -> void:
 		quit(0)
 		return
 	login_existing_account = OS.get_environment("TWCLONE_GODOT_LOGIN") == "1"
+	if not OS.get_environment("TWCLONE_GODOT_PORT_ID").is_empty():
+		acceptance_port_id = int(OS.get_environment("TWCLONE_GODOT_PORT_ID"))
+	if not OS.get_environment("TWCLONE_GODOT_PLANET_ID").is_empty():
+		acceptance_planet_id = int(OS.get_environment("TWCLONE_GODOT_PLANET_ID"))
 	if login_existing_account:
 		registered_username = OS.get_environment("TWCLONE_GODOT_USERNAME")
 		test_password = OS.get_environment("TWCLONE_GODOT_PASSWORD")
@@ -86,11 +92,13 @@ func _run() -> void:
 	_check(moved, "Godot warp action did not settle at the selected connected sector")
 	var after_move: Dictionary = app.client_state.snapshot()
 	_check(int(after_move.get("hud", {}).get("turns_remaining", initial_turns)) == initial_turns - 1, "Godot warp did not consume exactly one turn")
-	# The disposable acceptance fixture places its StarDock and owned planet in
-	# sector 2. Existing-account runs can start in either connected sector, so
-	# return to the fixture sector through the ordinary navigation menu before
-	# exercising those workflows.
-	if int(after_move.get("hud", {}).get("sector_id", 0)) != 2:
+	# The acceptance harness selects its target port and planet from the
+	# disposable fixture. Existing-account runs can start in another connected
+	# sector, so return to the sector confirmed at login before those workflows.
+	var fixture_sector := int(OS.get_environment("TWCLONE_GODOT_FIXTURE_SECTOR"))
+	if fixture_sector <= 0:
+		fixture_sector = initial_sector
+	if int(after_move.get("hud", {}).get("sector_id", 0)) != fixture_sector:
 		menu.select_category("NAVIGATION")
 		await process_frame
 		var fixture_warp_button := _find_button(menu._action_list, "Warp to sector number")
@@ -98,10 +106,10 @@ func _run() -> void:
 		if fixture_warp_button != null and not fixture_warp_button.disabled:
 			fixture_warp_button.pressed.emit()
 			if menu._form_fields.has("to_sector_id"):
-				(menu._form_fields["to_sector_id"] as LineEdit).text = "2"
+				(menu._form_fields["to_sector_id"] as LineEdit).text = str(fixture_sector)
 				menu._inline_submit.pressed.emit()
 				var reached_fixture_sector := await _wait_until(func() -> bool:
-					return int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == 2 and not menu._busy,
+					return int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == fixture_sector and not menu._busy,
 					240
 				)
 				_check(reached_fixture_sector, "ordinary-player warp did not return to the disposable port and planet sector")
@@ -126,7 +134,7 @@ func _run() -> void:
 	# Visit a real StarDock port using the sector selection and contextual
 	# command menu. Docking and trading are driven through the same buttons and
 	# handlers used by a player; the test never sends protocol requests itself.
-	var port_id := 1
+	var port_id := acceptance_port_id
 	var port_key := "port:%d" % port_id
 	var sector_snapshot: Dictionary = app.client_state.snapshot().get("sector", {})
 	var port_rows: Array = sector_snapshot.get("ports", [])
@@ -287,7 +295,7 @@ func _run() -> void:
 											)
 										_check(undocked, "undock action did not refresh authoritative ship state")
 										if undocked:
-											app.gameplay_view.select_object_key("planet:4")
+											app.gameplay_view.select_object_key("planet:%d" % acceptance_planet_id)
 											var selected_planet: Dictionary = app.gameplay_view.sector_view.selected_object()
 											menu.open_for(app.client_state.snapshot(), selected_planet)
 											await process_frame
@@ -307,7 +315,7 @@ func _run() -> void:
 													240
 												)
 												_check(surface_ready, "planet surface reads did not settle before gameplay actions")
-												app.gameplay_view.select_object_key("planet:4")
+												app.gameplay_view.select_object_key("planet:%d" % acceptance_planet_id)
 												menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
 												await process_frame
 												var harvest_button := _find_button(menu._action_list, "Harvest planet production")
@@ -331,7 +339,7 @@ func _run() -> void:
 														240
 													)
 													_check(surface_mutation_settled, "harvest refresh did not settle before launch")
-													app.gameplay_view.select_object_key("planet:4")
+													app.gameplay_view.select_object_key("planet:%d" % acceptance_planet_id)
 													menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
 													await process_frame
 													var launch_button := _find_button(menu._action_list, "Launch from planet")
