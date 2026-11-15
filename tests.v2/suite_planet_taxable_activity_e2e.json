@@ -78,6 +78,14 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Choose an empty sector for this taxable planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id > 10 AND NOT EXISTS (SELECT 1 FROM planets p WHERE p.sector_id = s.sector_id) ORDER BY s.sector_id LIMIT 1;" },
+      "expect": { "status": "ok" },
+      "save": { "taxable_activity_sector_id": "data.rows.0.0" }
+    },
+    {
       "name": "Grant genesis device for planet creation",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -88,7 +96,7 @@
       "name": "Create isolated market activity planet",
       "command": "planet.create",
       "user": "taxable_activity_seller",
-      "data": { "sector_id": 11, "name": "V2 taxable activity test", "owner_entity_type": "player" },
+      "data": { "sector_id": "@{taxable_activity_sector_id}", "name": "V2 taxable activity test", "owner_entity_type": "player" },
       "expect": { "status": "ok" },
       "save": { "test_planet_id": "data.planet_id" }
     },

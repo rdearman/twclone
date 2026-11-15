@@ -57,7 +57,7 @@
       "name": "Position and repair test ship",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE ships SET sector_id = 1, hull = 100, shields = 100, fighters = 20 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
+      "data": { "sql": "UPDATE ships SET sector_id = 1, type_id = 1, holds = 20, hull = 100, shields = 100, fighters = 20, ore = 0, organics = 0, equipment = 0, slaves = 0, weapons = 0, drugs = 0, colonists = 0 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
       "expect": { "status": "ok" }
     },
     {
@@ -114,7 +114,7 @@
       "name": "Enable transwarp and restore defenses",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE ships SET sector_id = 1, hull = 100, shields = 100, fighters = 20, has_transwarp = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
+      "data": { "sql": "UPDATE ships SET sector_id = 1, type_id = 1, holds = 20, hull = 100, shields = 100, fighters = 20, has_transwarp = TRUE WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
       "expect": { "status": "ok" }
     },
     {

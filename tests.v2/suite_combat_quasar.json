@@ -13,7 +13,7 @@
     {
       "name": "Rig: Find Quasar Planet",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "WITH target AS (SELECT p.planet_id FROM planets p JOIN citadels c ON p.planet_id = c.planet_id WHERE c.level >= 3 AND c.qCannonSector > 0 AND c.qCannonAtmosphere > 0 ORDER BY p.planet_id LIMIT 1), moved AS (UPDATE planets p SET sector_id=11 FROM target t WHERE p.planet_id=t.planet_id RETURNING p.planet_id) SELECT planet_id, 11 FROM moved;" },
+      "data": { "sql": "WITH safe_sector AS (SELECT s.sector_id FROM sectors s WHERE s.sector_id > 100 AND NOT EXISTS (SELECT 1 FROM planets p2 JOIN citadels c2 ON c2.planet_id = p2.planet_id WHERE p2.sector_id = s.sector_id AND c2.level >= 3 AND c2.qCannonSector > 0) ORDER BY s.sector_id DESC LIMIT 1), target AS (SELECT p.planet_id, safe_sector.sector_id FROM planets p JOIN citadels c ON p.planet_id = c.planet_id CROSS JOIN safe_sector WHERE c.level >= 3 AND c.qCannonSector > 0 AND c.qCannonAtmosphere > 0 ORDER BY p.planet_id LIMIT 1), moved AS (UPDATE planets p SET sector_id = t.sector_id FROM target t WHERE p.planet_id = t.planet_id RETURNING p.planet_id, t.sector_id) SELECT planet_id, sector_id FROM moved;" },
       "user": "admin",
       "expect": { "status": "ok" },
       "save": { "target_planet_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }
@@ -24,6 +24,15 @@
       "user": "admin",
       "data": {
         "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, @{target_sector_id}), (@{target_sector_id}, 1) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Set survivable deterministic Quasar strengths",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE citadels SET qCannonSector = 1, qCannonAtmosphere = 1 WHERE planet_id = @{target_planet_id};"
       },
       "expect": { "status": "ok" }
     },
