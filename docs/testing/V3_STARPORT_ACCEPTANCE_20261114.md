@@ -97,3 +97,47 @@ restart on current HEAD. This closes that specific replay case only. It does
 not promote all StarPort behavior to `VERIFIED`; concurrent and injected
 rollback cases remain separate acceptance requirements. GitHub App publisher
 configuration was absent, so this run created no public issue.
+
+## Scheduled-delivery restart and rollback — 15 November 2026
+
+The scheduler replay and two rollback boundaries were exercised on a fresh
+PostgreSQL 16 database and server image built from the `d453d116` source tree.
+The unique Docker network and server listener were isolated; the game port was
+bound to loopback `127.0.0.1:12783`, and PostgreSQL had no host publication.
+An ordinary player registered through the Python client. SQL only initialized
+the deterministic planet/player fixture, accelerated due timestamps in this
+disposable database, and installed/removes fault-injection triggers.
+Construction and landing used `sector_info_flow`, `land_flow`, and
+`planet_port_construct_flow`.
+
+Construction 1 in sector 151 completed all three scheduled deliveries. The
+server was restarted before each due delivery. Progress and planet inventory
+were observed at each checkpoint: construction settled 1,000 ORE/ORG/EQU up
+front, then each scheduled delivery debited exactly 100 of each; after three
+deliveries the construction was `completed`, port 190 was active, and the
+planet retained 700 of each commodity. A second restart plus ordinary Python
+login, `player.my_info`, and `ship.status` left the completed receipt, stock,
+and single active port unchanged.
+
+Before delivery 2, a PostgreSQL trigger raised on the EQU stock debit after
+the ORE and ORG statements. The scheduled transaction left progress at 1 and
+all three commodity balances at 900. After removing the trigger and restarting
+the server, the due delivery committed once, advancing progress to 2 and
+reducing each stock to 800. This demonstrates transaction rollback and retry
+of a delivery after server restart. The five-second interval was test-only;
+production delivery policy was not changed.
+
+A separate ordinary Python construction request ran with a PostgreSQL trigger
+that failed on persistence of the construction row after the server's
+transaction had begun settlement. The client received a generic error, credit
+balance remained 9,900,000, second-planet ORE/ORG/EQU stayed at 2,000 each,
+and no construction row was persisted. This confirms atomic rollback at that
+construction boundary.
+
+No PostgreSQL transaction IDs were captured. No failure was injected at every
+individual statement. Previously reported concurrent upgrade/attack and
+upgrade/destruction rollback cases remain documented in
+[`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
+This addendum closes the named scheduled-delivery replay and construction
+rollback checks, but does not claim exhaustive failure-boundary coverage or
+promote the complete StarPort feature to `VERIFIED`.

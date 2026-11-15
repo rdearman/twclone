@@ -629,3 +629,27 @@ server. Exact StarPort restart and Godot journey evidence is in
 Do not infer beta readiness from these subsystem passes: live GitHub publishing,
 scheduled-delivery replay after restart, other StarPort concurrency/rollback
 cases, live GitHub publication, and external deployment are still unverified.
+
+### Release-candidate audit — 2026-11-15
+
+StarPort scheduled-delivery replay and selected transaction rollback boundaries
+were exercised against a fresh PostgreSQL 16 database and a V3 image built from
+the current `d453d116` source tree. A construction received each of three
+deliveries across serving-process restarts; progress and material debits
+persisted exactly once, and the completed port/stock remained unchanged after
+another restart and authenticated Python requests. An injected fault during
+the second delivery preserved progress and all material balances; after
+removing the fault, restart/retry committed the delivery once. A separate
+ordinary Python construction attempt with an injected persistence failure left
+credits, materials and construction rows unchanged. See
+`docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md`, “Scheduled-delivery restart
+and rollback”. StarPort remains `IMPLEMENTED_UNVERIFIED` because injection
+coverage is not exhaustive and transaction IDs were not captured.
+
+`docs/testing/V3_RELEASE_CANDIDATE_AUDIT_20261115.md` reviews deployment
+configuration, authentication, permissions, migrations, feedback security,
+recovery and rollback. It records external deployment as **BLOCKED** by
+unresolved credential rotation, target ownership/firewall review and designated
+QA authentication. The deleted `tests.v2/regression_report.json.tmp` remains
+untouched and unstaged; no recovery copy was used to overwrite the prior user
+file.
