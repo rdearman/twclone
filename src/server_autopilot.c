@@ -327,8 +327,10 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
     }
 
   /* pass 1: count edges */
-  if (repo_autopilot_get_warp_count (db, &edges) != 0 || edges < 0)
+  int edge_count_rc = repo_autopilot_get_warp_count (db, &edges);
+  if (edge_count_rc != 0 || edges < 0)
     {
+      LOGE ("autopilot pathfind: unable to count warp edges (from=%d to=%d rc=%d edges=%d)", from, to, edge_count_rc, edges);
       free (head);
       free (avoid);
       free (seen);
@@ -361,6 +363,7 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
     db_error_t err;
     if (repo_autopilot_get_all_warps (db, &res) != 0)
       {
+	LOGE ("autopilot pathfind: unable to read warp edges (from=%d to=%d)", from, to);
 	free (to_v);
 	free (next);
 	free (head);
@@ -375,7 +378,11 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
       }
 
     int e = 0;
-
+    /* repo_autopilot_get_all_warps initializes the query error only; the
+     * result iterator does not clear it on EOF.  Initialise it before reading
+     * rows so an uninitialised stack value cannot turn a successful scan into
+     * a pathfinding failure. */
+    db_error_clear (&err);
 
     while (db_res_step (res, &err))
       {
@@ -402,6 +409,7 @@ cmd_move_autopilot_start (db_t *db, client_ctx_t *ctx, json_t *root)
 
     if (err.code != 0)
       {
+	LOGE ("autopilot pathfind: warp edge iteration failed (from=%d to=%d code=%d)", from, to, err.code);
 	free (to_v);
 	free (next);
 	free (head);

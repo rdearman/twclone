@@ -175,7 +175,8 @@ func _run() -> void:
 									and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
 								240
 							)
-							_check(bought, "ordinary-player port purchase did not update the authoritative cargo snapshot")
+							var ore_after_purchase := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
+							_check(bought, "ordinary-player port purchase did not update the authoritative cargo snapshot; before=%d after=%d ship=%s pending=%s refresh=%s trade=%s" % [before_ore, ore_after_purchase, str(app.client_state.snapshot().get("ship", {})), str(app._pending_game_commands.is_empty()), str(app._command_refresh_pending), str(app._pending_trade)])
 							if bought:
 								var equipment_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("EQU", {})
 								_check(equipment_controls.has("sell") and not (equipment_controls.get("sell") as Button).disabled, "port workflow did not expose the configured equipment sale")
@@ -245,11 +246,12 @@ func _run() -> void:
 												hull_button = hull_row as Button
 												break
 										_check(hull_button != null, "shipyard did not expose an eligible replacement hull")
+										var old_ship_id := int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0))
+										var old_ship_type := int(app.client_state.snapshot().get("ship", {}).get("type_id", 0))
+										var selected_ship_type := 0
 										if hull_button != null:
-											var old_ship_id := int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0))
-											var old_ship_type := int(app.client_state.snapshot().get("ship", {}).get("type_id", 0))
 											hull_button.pressed.emit()
-											var selected_ship_type := int(menu._shipyard_type_id)
+											selected_ship_type = int(menu._shipyard_type_id)
 											menu._shipyard_name_input.text = "Disposable QA Upgrade"
 											menu._shipyard_name_dialog.get_ok_button().pressed.emit()
 											ship_upgraded = await _wait_until(func() -> bool:
@@ -260,7 +262,8 @@ func _run() -> void:
 													and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
 												240
 											)
-										_check(ship_upgraded, "shipyard.upgrade did not replace the active ship through its confirmed receipt")
+										var ship_after_upgrade: Dictionary = app.client_state.snapshot().get("ship", {})
+										_check(ship_upgraded, "shipyard.upgrade did not replace the active ship through its confirmed receipt; selected=%d old_id=%d current_id=%d old_type=%d current_type=%d name=%s pending=%s refresh=%s" % [selected_ship_type, old_ship_id, int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0)), old_ship_type, int(ship_after_upgrade.get("type_id", 0)), str(ship_after_upgrade.get("name", "")), str(app._pending_game_commands.is_empty()), str(app._command_refresh_pending)])
 								# Leave the port through its contextual action, then land on
 										# an owned disposable planet and harvest using the surface UI.
 										app.gameplay_view.port_workflow._back_button.pressed.emit()
@@ -321,7 +324,7 @@ func _run() -> void:
 															and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
 														240
 													)
-												_check(harvested and app.gameplay_view.notification_label.text.contains("Planet harvest confirmed"), "ordinary-player harvest did not apply the typed receipt and authoritative cargo change")
+												_check(harvested and app.gameplay_view.notification_label.text.contains("Planet harvest confirmed"), "ordinary-player harvest did not apply the typed receipt and authoritative cargo change; client message was: " + str(app.gameplay_view.notification_label.text))
 												if harvested:
 													var surface_mutation_settled := await _wait_until(func() -> bool:
 														return app._pending_game_commands.is_empty() and app._planet_pending_count == 0 and not menu._busy,
@@ -375,12 +378,15 @@ func _run() -> void:
 					(menu._form_fields["name"] as LineEdit).text = "Disposable QA Corp %d" % int(app.auth_session.player_id)
 					menu._inline_submit.pressed.emit()
 				var created_corp := await _wait_until(func() -> bool:
-					return int(app.client_state.snapshot().get("player", {}).get("corp_id", 0)) > 0 and app._pending_game_commands.is_empty(),
+					return (int(app.client_state.snapshot().get("player", {}).get("corp_id", 0)) > 0
+						and app._pending_game_commands.is_empty() and not app._command_refresh_pending
+						and not menu._busy),
 					240
 				)
 				_check(created_corp, "corp.create did not persist and refresh the player's corporation membership")
 		var corp_menu_refreshed := await _wait_until(func() -> bool:
-			return int(menu._snapshot.get("player", {}).get("corp_id", 0)) > 0,
+			return (int(menu._snapshot.get("player", {}).get("corp_id", 0)) > 0
+				and not app._command_refresh_pending and not menu._busy),
 			120
 		)
 		_check(corp_menu_refreshed, "corporation category did not refresh from authoritative player state")
