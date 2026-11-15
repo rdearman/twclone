@@ -117,6 +117,10 @@ def main():
     # 3. Ports
     if "ports" in rig and not args.skip_ports:
         print("Rigging Ports...")
+        # The fixture moves fixed port IDs between sectors. Temporarily
+        # deactivate ports already occupying fixture sectors so the active
+        # port-per-sector constraint is satisfied during each upsert.
+        execute_sql("UPDATE ports SET is_active = FALSE WHERE port_id IN (1, 2, 9) OR sector_id IN (1, 2, 3);", **db_config)
         for p in rig["ports"]:
             sql = f"""
             INSERT INTO ports (port_id, sector_id, type, name) 
@@ -124,7 +128,8 @@ def main():
             ON CONFLICT (port_id) DO UPDATE SET 
                 sector_id = {p['sector_id']}, 
                 type = {p['type']}, 
-                name = '{p['name']}';
+                name = '{p['name']}',
+                is_active = TRUE;
             """
             execute_sql(sql, **db_config)
 

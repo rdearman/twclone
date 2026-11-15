@@ -13,7 +13,7 @@
     {
       "name": "Rig: Find Quasar Planet",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT p.planet_id, p.sector_id FROM planets p JOIN citadels c ON p.planet_id = c.planet_id WHERE c.level >= 3 AND c.qCannonSector > 0 LIMIT 1;" },
+      "data": { "sql": "WITH target AS (SELECT p.planet_id FROM planets p JOIN citadels c ON p.planet_id = c.planet_id WHERE c.level >= 3 AND c.qCannonSector > 0 AND c.qCannonAtmosphere > 0 ORDER BY p.planet_id LIMIT 1), moved AS (UPDATE planets p SET sector_id=11 FROM target t WHERE p.planet_id=t.planet_id RETURNING p.planet_id) SELECT planet_id, 11 FROM moved;" },
       "user": "admin",
       "expect": { "status": "ok" },
       "save": { "target_planet_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }
@@ -86,17 +86,36 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Test Atmosphere Quasar Shot (Planet Landing)",
-      "command": "planet.info",
-      "data": { "planet_id": "@target_planet_id" },
+      "name": "Capture hull before hostile planetary landing",
+      "command": "combat.status",
       "user": "victim_user",
       "expect": { "status": "ok" },
       "save": { "hull_before_atmosphere": "data.hull" }
     },
     {
+      "name": "Atmosphere Quasar fires during an unauthorized landing attempt",
+      "command": "planet.land",
+      "data": { "planet_id": "@target_planet_id" },
+      "user": "victim_user",
+      "expect": { "status": "error", "error_code": 402 },
+      "asserts": [
+        { "path": "error.data.combat.0.defense", "op": "==", "value": "atmosphere_quasar" },
+        { "path": "error.data.landing_allowed", "op": "==", "value": false }
+      ]
+    },
+    {
+      "name": "Atmosphere Quasar hull damage persists",
+      "command": "combat.status",
+      "user": "victim_user",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.hull", "op": "<", "value": "@hull_before_atmosphere" }
+      ]
+    },
+    {
       "name": "Verify Event Logging - Check Combat Log",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT COUNT(*) as quasar_shots FROM engine_events WHERE type IN ('combat.hit.quasar', 'combat.hit.fighters') AND actor_player_id = @{victim_user_player_id};" },
+      "data": { "sql": "SELECT COUNT(*) FROM engine_events WHERE type='combat.hit.quasar' AND actor_player_id=@{victim_user_player_id} AND payload::jsonb->>'source'='Planet atmosphere Quasar' AND (payload::jsonb->>'planet_id')::int=@{target_planet_id};" },
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [

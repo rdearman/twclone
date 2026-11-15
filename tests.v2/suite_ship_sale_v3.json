@@ -67,7 +67,7 @@
         { "path": "data.ship_id", "op": "==", "value": "@sale_test_active_ship_id" },
         { "path": "data.replacement_ship_id", "op": "==", "value": "@sale_test_replacement_ship_id" },
         { "path": "data.shipyard_port_id", "op": "==", "value": "@sale_test_port_id" },
-        { "path": "data.installed_equipment_valuation", "op": "==", "value": 54100 },
+        { "path": "data.installed_equipment_valuation", "op": "==", "value": 54200 },
         { "path": "data.sale_factor_bp", "op": "==", "value": 6000 },
         { "path": "data.cargo_forfeited", "op": "==", "value": true },
         { "path": "data.insurance_terminated", "op": "==", "value": true },

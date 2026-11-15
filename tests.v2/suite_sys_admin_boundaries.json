@@ -17,6 +17,13 @@
       "password": "password"
     },
     {
+      "name": "Rig: Grant SysOp role to privileged test account",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE players SET type = 1 WHERE name = 'sys_admin';" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Boundary: admin.notice (Deny)",
       "command": "admin.notice",
       "user": "sys_hacker",

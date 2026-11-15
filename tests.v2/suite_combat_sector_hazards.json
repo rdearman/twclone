@@ -21,7 +21,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 679), (679, 1) ON CONFLICT DO NOTHING;"
+        "sql": "INSERT INTO sector_warps (from_sector, to_sector) VALUES (1, 679), (679, 1), (1, 680), (680, 1) ON CONFLICT DO NOTHING;"
       },
       "expect": {
         "status": "ok"

@@ -72,10 +72,14 @@
     },
     {
         "name": "Verify Player Disconnected",
-        "command": "player.my_info",
-        "user": "target_user",
-        "expect": { "status": "error" },
-        "comment": "Should fail due to disconnect/socket close or session invalidation if implemented"
+        "command": "sys.raw_sql_exec",
+        "user": "admin",
+        "data": { "sql": "SELECT COUNT(*)=0 FROM sessions WHERE player_id=@{target_id};" },
+        "expect": { "status": "ok" },
+        "asserts": [
+          { "path": "data.rows.0.0", "op": "==", "value": "t" }
+        ],
+        "comment": "Kick revokes durable sessions; a fresh login is a separate player action."
     }
   ]
 }

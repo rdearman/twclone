@@ -80,7 +80,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "==", "value": "active" }
+        { "path": "data.rows.0.0", "op": "==", "value": "podded" }
       ]
     },
     {

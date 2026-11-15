@@ -8,9 +8,19 @@
       "password": "password"
     },
     {
+      "name": "Rig: Select a hidden sector outside known adjacent exits",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id<>1 AND NOT EXISTS (SELECT 1 FROM sector_warps w WHERE w.from_sector=1 AND w.to_sector=s.sector_id) AND NOT EXISTS (SELECT 1 FROM player_visited_sectors v WHERE v.player_id=@{mover_pathfind_player_id} AND v.sector_id=s.sector_id) ORDER BY s.sector_id LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "hidden_sector_id": "data.rows.0.0" }
+    },
+    {
       "name": "Pathfind refuses an unvisited destination",
       "command": "move.pathfind",
-      "data": { "from_sector_id": 1, "to_sector_id": 10 },
+      "data": { "from_sector_id": 1, "to_sector_id": "@{hidden_sector_id}" },
       "user": "mover_pathfind",
       "expect": { "status": "error", "error_code": 403 }
     },

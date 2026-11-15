@@ -8,6 +8,14 @@
       "password": "password"
     },
     {
+      "name": "Read prior Galactic Exchange liquidity setting",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": { "key": "galactic_exchange_liquidity_credits" },
+      "expect": { "status": "ok", "data": { "type": "int" } },
+      "save": { "original_exchange_liquidity": "data.value" }
+    },
+    {
       "name": "Setup: Grant Genesis Torpedoes",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "UPDATE ships SET genesis = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{trader_player_1_player_id});" },
@@ -110,10 +118,24 @@
       "expect": { "status": "error", "error_code": 401 }
     },
     {
+      "name": "Fund deterministic Exchange purchase",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "galactic_exchange_liquidity_credits", "value": 1000000, "confirm": true, "note": "Disposable V3 planet-sale acceptance" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "planet.market.sell - Positive",
       "command": "planet.market.sell",
       "data": { "planet_id": "@{test_planet_id}", "commodity": "ORE", "quantity": 10 },
       "user": "trader_player_1",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore Galactic Exchange liquidity setting",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": { "key": "galactic_exchange_liquidity_credits", "value": "@{original_exchange_liquidity}", "confirm": true, "note": "Restore pre-test value" },
       "expect": { "status": "ok" }
     },
     {

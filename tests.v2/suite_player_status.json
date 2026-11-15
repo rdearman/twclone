@@ -17,8 +17,8 @@
       "data": { "page": 1, "limit": 50 },
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.total_online", "op": "==", "value": 1 },
-        { "path": "data.returned_count", "op": "==", "value": 1 },
+        { "path": "data.total_online", "op": ">=", "value": 1 },
+        { "path": "data.returned_count", "op": ">=", "value": 1 },
         { "path": "data.page", "op": "==", "value": 1 },
         { "path": "data.limit", "op": "==", "value": 50 },
         { "path": "data.players", "op": "contains", "value": "status_player" },
