@@ -102,3 +102,51 @@ that later feedback-focused database.
 
 No public GitHub issues were created. The existing beta and production systems
 were not used or modified.
+
+## Acceptance closure — 15 November 2026
+
+All new evidence below used disposable PostgreSQL on loopback and the isolated
+V3 server container. The server was restarted after fixture reset so its
+in-memory NPC state matched the database.
+
+### Godot 4.5.2
+
+`tests.v2/suite_client_regressions.py` completed with Python **807 passed** and
+Godot **104 passed, 0 failed, 1 skipped** (the live-server journey is run
+separately). `command_menu_test.gd` passed **206 checks** and
+`planet_command_response_test.gd` passed **115 checks**. The Godot 4.5.2 live
+journey executed the actual `Main.tscn`, `LoginView`, menu handlers and network
+transport against the disposable server. It passed login, navigation, turns,
+scan, docking, commodity buy/sell, hardware purchase, shipyard upgrade, planet
+landing, harvest, launch, corporation creation/deposit, logout, reconnect and
+queue-only feedback. Output included
+`LIVE_DISPOSABLE_PASS journey=existing-login,navigation,turns,scan,docking,port-workflow,commodity-buy,commodity-sale,hardware-purchase,shipyard-upgrade,planet-landing,harvest,launch,corporation,logout,reconnect,feedback`.
+No Godot error, script error, ObjectDB or resource-leak diagnostic was emitted.
+The feedback row remained pending locally; no public issue was created.
+
+### StarPort upgrade and server restart
+
+Player 5567 (`planet_gov`) used the disposable server to upgrade ORE capacity
+at active port 9 in sector 1. Deterministic fixture setup supplied 100 ORE and
+adequate holds. The authenticated response reported level 1, 10,000 credits
+spent and 100 material spent. Repeating the same idempotency key returned the
+same successful result. After restarting the serving game-server container,
+the same player authenticated and `port.status` succeeded. SQL assertions
+showed credits reduced by exactly 10,000, ship ORE reduced from 100 to 0, port
+petty cash increased by 10,000, ORE capacity level persisted at 1, and exactly
+one action receipt existed for the idempotency key. This closes the post-restart
+serving request and upgrade persistence case.
+
+### Full server-suite fixture correction
+
+The 155-suite run executed 2,340 cases: 2,339 passed, 1 failed, 4 skipped. The
+only failure was `suite_planet_market_buy_order_lifecycle.json`: its shared
+seller port also had unrelated open commodity orders, so scheduled settlement
+changed the port balance during the isolated assertion. The fixture now cancels
+open orders at its selected port before creating its scenario. The affected
+suite was rerun after database reset/server restart and passed **29/29** cases.
+After the fixture correction, the complete run executed **155 suites, 2,341
+cases passed, 0 failed, 4 skipped** (one suite declared those four skipped
+cases). The report and transcript are under
+`/tmp/twclone-acceptance-d5b11270/tests-v2-full-final-report.json` and
+`/tmp/twclone-acceptance-d5b11270/tests-v2-full-final.log`.

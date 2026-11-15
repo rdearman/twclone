@@ -90,7 +90,7 @@
     {"ship_id": 1019, "name": "ObserverShip", "type_id": 1, "owner_username": "observer_user", "sector_id": 1},
       {"ship_id": 1020, "name": "ActorShip", "type_id": 1, "owner_username": "actor_user", "sector_id": 2},
       {"ship_id": 1021, "name": "TraderOneShip", "type_id": 1, "owner_username": "trader_player_1", "sector_id": 2, "genesis": 5},
-      {"ship_id": 1022, "name": "PlanetGovShip", "type_id": 1, "owner_username": "planet_gov", "sector_id": 1, "holds": 50},
+      {"ship_id": 1022, "name": "PlanetGovShip", "type_id": 1, "owner_username": "planet_gov", "sector_id": 1, "holds": 50, "cargo": [{"commodity_code": "ORG", "quantity": 2}]},
       {"ship_id": 1023, "name": "PlanetLordShip", "type_id": 1, "owner_username": "planet_lord", "sector_id": 1, "holds": 50},
       {"ship_id": 9001, "name": "CLAIMShip", "type_id": 1, "owner_username": "", "sector_id": 1, "ore": 5}
   ],
@@ -120,7 +120,8 @@
     },
     {
       "planet_id": 700, "num": 1, "sector_id": 1, "name": "MyWorld",
-      "owner_username": "planet_gov", "class": "M"
+      "owner_username": "planet_gov", "class": "M",
+      "goods": {"ORE": 3}
     },
     {
       "planet_id": 200, "num": 1, "sector_id": 1, "name": "Dune",

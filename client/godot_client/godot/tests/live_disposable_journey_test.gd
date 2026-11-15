@@ -18,6 +18,7 @@ func _run() -> void:
 		print("SKIP: set TWCLONE_GODOT_LIVE=1 for a dedicated disposable server journey")
 		quit(0)
 		return
+	root.size = Vector2i(1280, 720)
 	login_existing_account = OS.get_environment("TWCLONE_GODOT_LOGIN") == "1"
 	if not OS.get_environment("TWCLONE_GODOT_PORT_ID").is_empty():
 		acceptance_port_id = int(OS.get_environment("TWCLONE_GODOT_PORT_ID"))
@@ -84,6 +85,14 @@ func _run() -> void:
 		return
 	(menu._form_fields["to_sector_id"] as LineEdit).text = str(destination)
 	menu._inline_submit.pressed.emit()
+	var toll_was_offered := await _wait_until(func() -> bool:
+		return app._toll_offer_dialog.visible or int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == destination,
+		240
+	)
+	_check(toll_was_offered, "warp did not complete or return the expected server-side toll decision")
+	if toll_was_offered and app._toll_offer_dialog.visible:
+		_check(app._toll_offer_dialog.dialog_text.contains("toll fighters") and app._toll_offer_dialog.dialog_text.contains("credits"), "toll offer did not explain the amount and hostile-refusal consequence")
+		app._toll_offer_dialog.get_ok_button().pressed.emit()
 	var moved := await _wait_until(func() -> bool:
 		return (int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == destination
 			and not app.gameplay_view.command_menu._busy),
@@ -131,232 +140,15 @@ func _run() -> void:
 	else:
 		_finish()
 		return
-	# Visit a real StarDock port using the sector selection and contextual
-	# command menu. Docking and trading are driven through the same buttons and
-	# handlers used by a player; the test never sends protocol requests itself.
-	var port_id := acceptance_port_id
-	var port_key := "port:%d" % port_id
-	var sector_snapshot: Dictionary = app.client_state.snapshot().get("sector", {})
-	var port_rows: Array = sector_snapshot.get("ports", [])
-	var visible_port := false
-	for port_row in port_rows:
-		if port_row is Dictionary and int(port_row.get("id", port_row.get("port_id", 0))) == port_id:
-			visible_port = true
-	_check(visible_port, "server-confirmed current sector did not show the disposable StarDock fixture")
-	if visible_port:
-		app.gameplay_view.select_object_key(port_key)
-		menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
-		await process_frame
-		var dock_button := _find_button(menu._action_list, "Dock at selected port")
-		_check(dock_button != null and not dock_button.disabled, "selected StarDock did not expose the dock action")
-		if dock_button != null and not dock_button.disabled:
-			dock_button.pressed.emit()
-			_check(menu._form_dialog.visible, "docking did not require player confirmation")
-			(menu._form_dialog.get_ok_button() as Button).pressed.emit()
-			var docked := await _wait_until(func() -> bool:
-				return int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == port_id and not menu._busy,
-				240
-			)
-			_check(docked, "server-confirmed dock operation did not refresh the active ship")
-			if docked:
-				app.gameplay_view.select_object_key(port_key)
-				menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
-				await process_frame
-				var port_info_button := _find_button(menu._action_list, "Dock · open port screen")
-				_check(port_info_button != null and not port_info_button.disabled, "selected port did not expose its port workflow")
-				if port_info_button != null and not port_info_button.disabled:
-					port_info_button.pressed.emit()
-					var port_open := await _wait_until(func() -> bool:
-						return app.gameplay_view.port_workflow.visible and not menu._busy,
-						180
-					)
-					_check(port_open, "port.info did not open the server-backed trade workflow")
-					if port_open:
-						var ore_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("ORE", {})
-						_check(ore_controls.has("buy") and not (ore_controls.get("buy") as Button).disabled, "port workflow did not expose the configured ORE purchase")
-						if ore_controls.has("buy") and not (ore_controls.get("buy") as Button).disabled:
-							var before_ore := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
-							(ore_controls["quantity"] as LineEdit).text = "2"
-							(ore_controls["buy"] as Button).pressed.emit()
-							var bought := await _wait_until(func() -> bool:
-								return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE") == before_ore + 2
-									and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-								240
-							)
-							var ore_after_purchase := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
-							_check(bought, "ordinary-player port purchase did not update the authoritative cargo snapshot; before=%d after=%d ship=%s pending=%s refresh=%s trade=%s" % [before_ore, ore_after_purchase, str(app.client_state.snapshot().get("ship", {})), str(app._pending_game_commands.is_empty()), str(app._command_refresh_pending), str(app._pending_trade)])
-							if bought:
-								var equipment_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("EQU", {})
-								_check(equipment_controls.has("sell") and not (equipment_controls.get("sell") as Button).disabled, "port workflow did not expose the configured equipment sale")
-								if equipment_controls.has("sell") and not (equipment_controls.get("sell") as Button).disabled:
-									var before_equipment := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "EQU")
-									(equipment_controls["quantity"] as LineEdit).text = "1"
-									(equipment_controls["sell"] as Button).pressed.emit()
-									var sold := await _wait_until(func() -> bool:
-										return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "EQU") == before_equipment - 1
-											and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-										240
-									)
-									_check(sold, "ordinary-player port sale did not update the authoritative cargo snapshot")
-									if sold:
-										# Exercise hardware and shipyard actions through their visible
-										# catalogue dialogs while the ordinary player remains docked.
-										menu.select_category("TRADING")
-										await process_frame
-										var hardware_button := _find_button(menu._action_list, "Hardware catalogue")
-										_check(hardware_button != null and not hardware_button.disabled, "docked StarDock did not expose the hardware catalogue")
-										var hardware_ready := false
-										if hardware_button != null and not hardware_button.disabled:
-											hardware_button.pressed.emit()
-											hardware_ready = await _wait_until(func() -> bool:
-												return menu._shipyard_dialog.visible and not menu._busy,
-												180
-											)
-										_check(hardware_ready, "hardware.list did not open its server-backed catalogue")
-										var shield_button: Button
-										var hardware_bought := false
-										for hardware_row in menu._shipyard_rows.get_children():
-											if hardware_row is Button and str((hardware_row as Button).text).contains("[SHIELDS]"):
-												shield_button = hardware_row as Button
-										_check(shield_button != null and not shield_button.disabled, "server catalogue did not expose purchasable shield equipment")
-										if shield_button != null and not shield_button.disabled:
-											var before_shields := int(app.client_state.snapshot().get("ship", {}).get("shields", 0))
-											shield_button.pressed.emit()
-											if menu._form_fields.has("quantity"):
-												(menu._form_fields["quantity"] as LineEdit).text = "1"
-												menu._inline_submit.pressed.emit()
-												hardware_bought = await _wait_until(func() -> bool:
-													return (int(app.client_state.snapshot().get("ship", {}).get("shields", 0)) > before_shields
-													and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-													240
-													)
-										_check(hardware_bought, "hardware.buy did not confirm and refresh the installed shield equipment")
-												# The shipyard catalogue and named hull exchange are distinct
-										# player actions and are both reached through the port context.
-										app.gameplay_view.select_object_key(port_key)
-										menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
-										await process_frame
-										var shipyard_button := _find_button(menu._action_list, "Shipyard · choose eligible hull")
-										_check(shipyard_button != null and not shipyard_button.disabled, "StarDock did not expose its shipyard workflow")
-										var shipyard_ready := false
-										if shipyard_button != null and not shipyard_button.disabled:
-											shipyard_button.pressed.emit()
-											shipyard_ready = await _wait_until(func() -> bool:
-												return menu._shipyard_dialog.visible and not menu._busy,
-												180
-											)
-										await process_frame # Retire queued hardware rows before selecting a hull row.
-										_check(shipyard_ready, "shipyard.list did not return its server-backed catalogue")
-										var hull_button: Button
-										var ship_upgraded := false
-										for hull_row in menu._shipyard_rows.get_children():
-											if hull_row is Button and not (hull_row as Button).disabled:
-												hull_button = hull_row as Button
-												break
-										_check(hull_button != null, "shipyard did not expose an eligible replacement hull")
-										var old_ship_id := int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0))
-										var old_ship_type := int(app.client_state.snapshot().get("ship", {}).get("type_id", 0))
-										var selected_ship_type := 0
-										if hull_button != null:
-											hull_button.pressed.emit()
-											selected_ship_type = int(menu._shipyard_type_id)
-											menu._shipyard_name_input.text = "Disposable QA Upgrade"
-											menu._shipyard_name_dialog.get_ok_button().pressed.emit()
-											ship_upgraded = await _wait_until(func() -> bool:
-												return (int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0)) == old_ship_id
-													and selected_ship_type > 0 and selected_ship_type != old_ship_type
-													and int(app.client_state.snapshot().get("ship", {}).get("type_id", 0)) == selected_ship_type
-													and str(app.client_state.snapshot().get("ship", {}).get("name", "")) == "Disposable QA Upgrade"
-													and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-												240
-											)
-										var ship_after_upgrade: Dictionary = app.client_state.snapshot().get("ship", {})
-										_check(ship_upgraded, "shipyard.upgrade did not replace the active ship through its confirmed receipt; selected=%d old_id=%d current_id=%d old_type=%d current_type=%d name=%s pending=%s refresh=%s" % [selected_ship_type, old_ship_id, int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0)), old_ship_type, int(ship_after_upgrade.get("type_id", 0)), str(ship_after_upgrade.get("name", "")), str(app._pending_game_commands.is_empty()), str(app._command_refresh_pending)])
-								# Leave the port through its contextual action, then land on
-										# an owned disposable planet and harvest using the surface UI.
-										app.gameplay_view.port_workflow._back_button.pressed.emit()
-										await process_frame
-										app.gameplay_view.select_object_key(port_key)
-										menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
-										await process_frame
-										var undock_button := _find_button(menu._action_list, "Undock from selected port")
-										_check(undock_button != null and not undock_button.disabled, "docked player could not reach the undock workflow")
-										var undocked := false
-										if undock_button != null and not undock_button.disabled:
-											undock_button.pressed.emit()
-											if menu._form_dialog.visible:
-												(menu._form_dialog.get_ok_button() as Button).pressed.emit()
-											undocked = await _wait_until(func() -> bool:
-												var current_snapshot: Dictionary = app.client_state.snapshot()
-												return (int(current_snapshot.get("ship", {}).get("ported", 0)) == 0
-													and app._pending_game_commands.is_empty() and not app._command_refresh_pending
-													and current_snapshot.get("freshness", {}).get("sector") == "fresh"),
-												240
-											)
-										_check(undocked, "undock action did not refresh authoritative ship state")
-										if undocked:
-											app.gameplay_view.select_object_key("planet:%d" % acceptance_planet_id)
-											var selected_planet: Dictionary = app.gameplay_view.sector_view.selected_object()
-											menu.open_for(app.client_state.snapshot(), selected_planet)
-											await process_frame
-											var land_button := _find_button(menu._action_list, "Land on planet")
-											_check(land_button != null and not land_button.disabled, "owned planet did not expose player landing")
-											var landed := false
-											if land_button != null and not land_button.disabled:
-												land_button.pressed.emit()
-												landed = await _wait_until(func() -> bool:
-													return app._landing_surface_ready and app._landed_planet_id == 4 and app.gameplay_view.planet_workflow.visible,
-													240
-												)
-											_check(landed, "ordinary-player landing did not expose the server-confirmed planet surface")
-											if landed:
-												var surface_ready := await _wait_until(func() -> bool:
-													return app._pending_game_commands.is_empty() and app._planet_pending_count == 0 and not menu._busy,
-													240
-												)
-												_check(surface_ready, "planet surface reads did not settle before gameplay actions")
-												app.gameplay_view.select_object_key("planet:%d" % acceptance_planet_id)
-												menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
-												await process_frame
-												var harvest_button := _find_button(menu._action_list, "Harvest planet production")
-												_check(harvest_button != null and not harvest_button.disabled, "landed owner could not reach the published harvest workflow")
-												var harvested := false
-												if harvest_button != null and not harvest_button.disabled:
-													var ore_before_harvest := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
-													harvest_button.pressed.emit()
-													_check(menu._form_dialog.visible, "planet harvest did not require mutation confirmation")
-													if menu._form_dialog.visible:
-														(menu._form_dialog.get_ok_button() as Button).pressed.emit()
-													harvested = await _wait_until(func() -> bool:
-														return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE") == ore_before_harvest + 3
-															and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-														240
-													)
-												_check(harvested and app.gameplay_view.notification_label.text.contains("Planet harvest confirmed"), "ordinary-player harvest did not apply the typed receipt and authoritative cargo change; client message was: " + str(app.gameplay_view.notification_label.text))
-												if harvested:
-													var surface_mutation_settled := await _wait_until(func() -> bool:
-														return app._pending_game_commands.is_empty() and app._planet_pending_count == 0 and not menu._busy,
-														240
-													)
-													_check(surface_mutation_settled, "harvest refresh did not settle before launch")
-													app.gameplay_view.select_object_key("planet:%d" % acceptance_planet_id)
-													menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
-													await process_frame
-													var launch_button := _find_button(menu._action_list, "Launch from planet")
-													_check(launch_button != null and not launch_button.disabled, "landed player could not reach launch")
-													var departed := false
-													if launch_button != null and not launch_button.disabled:
-														launch_button.pressed.emit()
-														if menu._form_dialog.visible:
-															(menu._form_dialog.get_ok_button() as Button).pressed.emit()
-													departed = await _wait_until(func() -> bool:
-														var current_snapshot: Dictionary = app.client_state.snapshot()
-														return (int(current_snapshot.get("ship", {}).get("onplanet", 1)) == 0
-															and app._landed_planet_id == 0 and not app.gameplay_view.planet_workflow.visible
-															and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-														240
-														)
-													_check(departed, "launch did not close the surface after authoritative departure refresh")
+	# Commodity exchange and StarDock services use distinct port classes in the
+	# published V3 rules. Complete a buy and sale at the ordinary trading port
+	# through its UI, then return to the StarDock for hardware and shipyard work.
+	var trade_journey := await _perform_port_trade(2, 3, fixture_sector)
+	_check(trade_journey, "ordinary-player commodity buy/sell journey did not complete at the configured trading port")
+	var starport_journey := await _perform_starport_services(acceptance_port_id)
+	_check(starport_journey, "StarDock hardware or shipyard workflow did not complete through the Godot UI")
+	var planet_journey := await _perform_planet_journey(acceptance_planet_id)
+	_check(planet_journey, "ordinary-player planet landing, harvest or launch journey did not complete through the Godot UI")
 	if OS.get_environment("TWCLONE_GODOT_CORPORATION") == "1":
 		# Exercise corporation creation and treasury access through the visible
 		# Computer and Corporation menu workflows. Deposit into the player's bank
@@ -498,6 +290,293 @@ func _run() -> void:
 		print("LIVE_DISPOSABLE_PASS journey=%s,navigation,turns,scan,docking,port-workflow,commodity-buy,commodity-sale,hardware-purchase,shipyard-upgrade,planet-landing,harvest,launch,corporation,logout,reconnect%s player_id=%d origin=%d destination=%d ship_id=%d" % [auth_journey, feedback_journey, persisted_player_id, initial_sector, destination, ship_id])
 	_finish()
 
+func _warp_via_menu(destination: int) -> bool:
+	var menu = app.gameplay_view.command_menu
+	if int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == destination:
+		return true
+	menu.select_category("NAVIGATION")
+	await process_frame
+	var warp_button := _find_button(menu._action_list, "Warp to sector number")
+	if warp_button == null or warp_button.disabled:
+		return false
+	warp_button.pressed.emit()
+	if not menu._form_fields.has("to_sector_id"):
+		return false
+	(menu._form_fields["to_sector_id"] as LineEdit).text = str(destination)
+	menu._inline_submit.pressed.emit()
+	var response_ready := await _wait_until(func() -> bool:
+		return app._toll_offer_dialog.visible or int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == destination,
+		240
+	)
+	if not response_ready:
+		return false
+	if app._toll_offer_dialog.visible:
+		app._toll_offer_dialog.get_ok_button().pressed.emit()
+	return await _wait_until(func() -> bool:
+		return (int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)) == destination
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+
+func _perform_port_trade(port_id: int, sector_id: int, return_sector: int) -> bool:
+	if not await _warp_via_menu(sector_id):
+		return false
+	var menu = app.gameplay_view.command_menu
+	var port_key := "port:%d" % port_id
+	var visible := false
+	for row in app.client_state.snapshot().get("sector", {}).get("ports", []):
+		if row is Dictionary and int(row.get("id", row.get("port_id", 0))) == port_id:
+			visible = true
+	if not visible:
+		return false
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var dock_button := _find_button(menu._action_list, "Dock at selected port")
+	if dock_button == null or dock_button.disabled:
+		return false
+	dock_button.pressed.emit()
+	if menu._form_dialog.visible:
+		menu._form_dialog.get_ok_button().pressed.emit()
+	var docked := await _wait_until(func() -> bool:
+		return int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == port_id and not menu._busy,
+		240
+	)
+	if not docked:
+		return false
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var open_button := _find_button(menu._action_list, "Dock · open port screen")
+	if open_button == null or open_button.disabled:
+		return false
+	open_button.pressed.emit()
+	var opened := await _wait_until(func() -> bool:
+		return app.gameplay_view.port_workflow.visible and not menu._busy,
+		180
+	)
+	if not opened:
+		return false
+	var controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("ORE", {})
+	if not controls.has("buy") or (controls["buy"] as Button).disabled:
+		return false
+	var initial_ore := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
+	var initial_organics := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG")
+	(controls["quantity"] as LineEdit).text = "2"
+	(controls["buy"] as Button).pressed.emit()
+	var bought := await _wait_until(func() -> bool:
+		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE") == initial_ore + 2
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	print("LIVE_STAGE trade_buy=%s sector=%d ported=%s pending=%d" % [bought, int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)), str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")), app._pending_game_commands.size()])
+	if not bought:
+		return false
+	var organics_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("ORG", {})
+	if not organics_controls.has("sell") or (organics_controls["sell"] as Button).disabled:
+		return false
+	(organics_controls["quantity"] as LineEdit).text = "1"
+	(organics_controls["sell"] as Button).pressed.emit()
+	var sold := await _wait_until(func() -> bool:
+		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG") == 1
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	print("LIVE_STAGE trade_sell=%s sector=%d ported=%s pending=%d org_initial=%d org_now=%d cargo=%s notification=%s" % [sold, int(app.client_state.snapshot().get("hud", {}).get("sector_id", 0)), str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")), app._pending_game_commands.size(), initial_organics, _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG"), str(app.client_state.snapshot().get("ship", {}).get("cargo", [])), app.gameplay_view.notification_label.text])
+	app.gameplay_view.port_workflow._back_button.pressed.emit()
+	await process_frame
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var undock_button := _find_button(menu._action_list, "Undock from selected port")
+	if undock_button == null or undock_button.disabled:
+		return false
+	undock_button.pressed.emit()
+	if menu._form_dialog.visible:
+		menu._form_dialog.get_ok_button().pressed.emit()
+	var undocked := await _wait_until(func() -> bool:
+		return (int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == 0
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	print("LIVE_STAGE port_undock=%s ported=%s pending=%d" % [undocked, str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")), app._pending_game_commands.size()])
+	return sold and undocked and await _warp_via_menu(return_sector)
+
+func _perform_starport_services(port_id: int) -> bool:
+	var menu = app.gameplay_view.command_menu
+	var port_key := "port:%d" % port_id
+	var visible := false
+	for row in app.client_state.snapshot().get("sector", {}).get("ports", []):
+		if row is Dictionary and int(row.get("id", row.get("port_id", 0))) == port_id:
+			visible = true
+	if not visible:
+		return false
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var dock_button := _find_button(menu._action_list, "Dock at selected port")
+	if dock_button == null or dock_button.disabled:
+		return false
+	dock_button.pressed.emit()
+	if menu._form_dialog.visible:
+		menu._form_dialog.get_ok_button().pressed.emit()
+	var docked := await _wait_until(func() -> bool:
+		return int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == port_id and not menu._busy,
+		240
+	)
+	if not docked:
+		return false
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var port_button := _find_button(menu._action_list, "Dock · open port screen")
+	if port_button == null or port_button.disabled:
+		return false
+	port_button.pressed.emit()
+	var port_open := await _wait_until(func() -> bool: return app.gameplay_view.port_workflow.visible and not menu._busy, 180)
+	if not port_open:
+		return false
+	app.gameplay_view.port_workflow._back_button.pressed.emit()
+	menu.select_category("TRADING")
+	await process_frame
+	var hardware_button := _find_button(menu._action_list, "Hardware catalogue")
+	if hardware_button == null or hardware_button.disabled:
+		return false
+	hardware_button.pressed.emit()
+	var hardware_ready := await _wait_until(func() -> bool: return menu._shipyard_dialog.visible and not menu._busy, 180)
+	if not hardware_ready:
+		return false
+	var shield_button: Button
+	for row in menu._shipyard_rows.get_children():
+		if row is Button and str((row as Button).text).contains("[SHIELDS]"):
+			shield_button = row as Button
+	if shield_button == null or shield_button.disabled:
+		return false
+	var shields_before := int(app.client_state.snapshot().get("ship", {}).get("shields", 0))
+	shield_button.pressed.emit()
+	if not menu._form_fields.has("quantity"):
+		return false
+	(menu._form_fields["quantity"] as LineEdit).text = "1"
+	menu._inline_submit.pressed.emit()
+	var hardware_bought := await _wait_until(func() -> bool:
+		return (int(app.client_state.snapshot().get("ship", {}).get("shields", 0)) > shields_before
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	if not hardware_bought:
+		return false
+	await process_frame
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var shipyard_button := _find_button(menu._action_list, "Shipyard · choose eligible hull")
+	if shipyard_button == null or shipyard_button.disabled:
+		return false
+	shipyard_button.pressed.emit()
+	var shipyard_ready := await _wait_until(func() -> bool: return menu._shipyard_dialog.visible and not menu._busy, 180)
+	await process_frame
+	if not shipyard_ready:
+		return false
+	var hull_button: Button
+	for row in menu._shipyard_rows.get_children():
+		if row is Button and not (row as Button).disabled:
+			hull_button = row as Button
+			break
+	if hull_button == null:
+		return false
+	var old_ship_type := int(app.client_state.snapshot().get("ship", {}).get("type_id", 0))
+	hull_button.pressed.emit()
+	var selected_type := int(menu._shipyard_type_id)
+	menu._shipyard_name_input.text = "Disposable QA Upgrade"
+	menu._shipyard_name_dialog.get_ok_button().pressed.emit()
+	var upgraded := await _wait_until(func() -> bool:
+		var ship: Dictionary = app.client_state.snapshot().get("ship", {})
+		return (selected_type > 0 and selected_type != old_ship_type
+			and int(ship.get("type_id", 0)) == selected_type
+			and str(ship.get("name", "")) == "Disposable QA Upgrade"
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	if not upgraded:
+		return false
+	app.gameplay_view.select_object_key(port_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var undock_button := _find_button(menu._action_list, "Undock from selected port")
+	if undock_button == null or undock_button.disabled:
+		return false
+	undock_button.pressed.emit()
+	if menu._form_dialog.visible:
+		menu._form_dialog.get_ok_button().pressed.emit()
+	return await _wait_until(func() -> bool:
+		return (int(app.client_state.snapshot().get("ship", {}).get("ported", 0)) == 0
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+
+func _perform_planet_journey(planet_id: int) -> bool:
+	var menu = app.gameplay_view.command_menu
+	var planet_key := "planet:%d" % planet_id
+	app.gameplay_view.select_object_key(planet_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var land_button := _find_button(menu._action_list, "Land on planet")
+	if land_button == null or land_button.disabled:
+		return false
+	land_button.pressed.emit()
+	var landed := await _wait_until(func() -> bool:
+		return app._landing_surface_ready and app._landed_planet_id == planet_id and app.gameplay_view.planet_workflow.visible,
+		240
+	)
+	if not landed:
+		return false
+	var surface_ready := await _wait_until(func() -> bool:
+		return app._pending_game_commands.is_empty() and app._planet_pending_count == 0 and not menu._busy,
+		240
+	)
+	if not surface_ready:
+		return false
+	app.gameplay_view.select_object_key(planet_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var harvest_button := _find_button(menu._action_list, "Harvest planet production")
+	if harvest_button == null or harvest_button.disabled:
+		return false
+	var ore_before := _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE")
+	harvest_button.pressed.emit()
+	if menu._form_dialog.visible:
+		menu._form_dialog.get_ok_button().pressed.emit()
+	var harvested := await _wait_until(func() -> bool:
+		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE") == ore_before + 3
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+	print("LIVE_STAGE planet_harvest=%s ore_before=%d ore_now=%d message=%s" % [harvested, ore_before, _cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORE"), app.gameplay_view.notification_label.text])
+	if not harvested or not app.gameplay_view.notification_label.text.contains("Planet harvest confirmed"):
+		return false
+	var mutation_settled := await _wait_until(func() -> bool:
+		return app._pending_game_commands.is_empty() and app._planet_pending_count == 0 and not menu._busy,
+		240
+	)
+	if not mutation_settled:
+		return false
+	app.gameplay_view.select_object_key(planet_key)
+	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+	await process_frame
+	var launch_button := _find_button(menu._action_list, "Launch from planet")
+	if launch_button == null or launch_button.disabled:
+		return false
+	launch_button.pressed.emit()
+	if menu._form_dialog.visible:
+		menu._form_dialog.get_ok_button().pressed.emit()
+	return await _wait_until(func() -> bool:
+		var snapshot: Dictionary = app.client_state.snapshot()
+		return (int(snapshot.get("ship", {}).get("onplanet", 1)) == 0
+			and app._landed_planet_id == 0 and not app.gameplay_view.planet_workflow.visible
+			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+		240
+	)
+
 func _wait_until(predicate: Callable, frames: int) -> bool:
 	for _frame in frames:
 		if predicate.call():
@@ -524,7 +603,7 @@ func _cargo_quantity(ship: Variant, commodity: String) -> int:
 	var aliases := {"EQUIPMENT": "EQU", "ORGANICS": "ORG", "SLAVES": "SLV", "DRUGS": "DRG", "WEAPONS": "WPN"}
 	for item in cargo:
 		if item is Dictionary:
-			var raw_code := str(item.get("commodity", "")).to_upper()
+			var raw_code := str(item.get("commodity", item.get("code", item.get("commodity_code", "")))).to_upper()
 			if str(aliases.get(raw_code, raw_code)) == commodity:
 				return int(item.get("quantity", -1))
 	return 0

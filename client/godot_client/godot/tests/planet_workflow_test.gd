@@ -52,6 +52,17 @@ func _run() -> void:
 	_check(captured.size() == 3 and captured[2]["command"] == "planet.colonists.allocate", "workforce save did not use the existing allocation command")
 	if captured.size() > 2:
 		_check(captured[2]["data"].get("weapons") == 11, "weapons worker target was omitted from allocation payload")
+	var nullable_planet_fields: Dictionary = confirmed_planet_info.duplicate(true)
+	nullable_planet_fields["max_colonists_ore"] = null
+	nullable_planet_fields["max_colonists_organics"] = null
+	nullable_planet_fields["max_colonists_equipment"] = null
+	nullable_planet_fields["colonists_ore"] = null
+	nullable_planet_fields["colonists_org"] = null
+	nullable_planet_fields["colonists_eq"] = null
+	nullable_planet_fields["colonists_weapons"] = null
+	nullable_planet_fields["goods"] = [{"commodity": "ORE", "quantity": null, "max_capacity": null}]
+	workflow.set_planet_info(nullable_planet_fields)
+	_check(workflow._labor_max["ore"] == 0 and workflow._labor_ore.value == 0, "nullable server production fields were not handled safely")
 	workflow._fighter_quantity.value = 3
 	workflow._confirm_fighter_transfer("ship_to_planet")
 	var fighter_dialog: ConfirmationDialog = workflow.get_child(workflow.get_child_count() - 1)

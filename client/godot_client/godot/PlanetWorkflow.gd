@@ -267,15 +267,15 @@ func set_planet_info(data: Dictionary) -> void:
 	for key in ["name", "planet_name", "class", "type_name", "type_description", "owner", "owner_name", "owner_id", "owner_type", "sector_id", "population", "population_type", "morale_status", "fighters", "citadel_level", "citadel"]:
 		if data.has(key):
 			lines.append("%s: %s" % [key.replace("_", " ").capitalize(), str(data[key])])
-	_labor_max = {"ore": int(data.get("max_colonists_ore", 0)), "organics": int(data.get("max_colonists_organics", 0)), "equipment": int(data.get("max_colonists_equipment", 0)), "weapons": int(data.get("population", 0))}
+	_labor_max = {"ore": _safe_nonnegative_int(data.get("max_colonists_ore")), "organics": _safe_nonnegative_int(data.get("max_colonists_organics")), "equipment": _safe_nonnegative_int(data.get("max_colonists_equipment")), "weapons": _safe_nonnegative_int(data.get("population"))}
 	_labor_ore.max_value = int(_labor_max["ore"])
 	_labor_organics.max_value = int(_labor_max["organics"])
 	_labor_equipment.max_value = int(_labor_max["equipment"])
 	_labor_weapons.max_value = int(_labor_max["weapons"])
-	_labor_ore.value = int(data.get("colonists_ore", 0))
-	_labor_organics.value = int(data.get("colonists_org", 0))
-	_labor_equipment.value = int(data.get("colonists_eq", 0))
-	_labor_weapons.value = int(data.get("colonists_weapons", 0))
+	_labor_ore.value = _safe_nonnegative_int(data.get("colonists_ore"))
+	_labor_organics.value = _safe_nonnegative_int(data.get("colonists_org"))
+	_labor_equipment.value = _safe_nonnegative_int(data.get("colonists_eq"))
+	_labor_weapons.value = _safe_nonnegative_int(data.get("colonists_weapons"))
 	_update_labor_limits(data)
 	_update_labor_summary(data)
 	_update_goods(data.get("goods", []))
@@ -302,8 +302,8 @@ func _update_goods(goods: Variant) -> void:
 			var code := str(item.get("commodity", ""))
 			if code.is_empty() or code == "COLONISTS":
 				continue
-			var quantity := int(item.get("quantity", 0))
-			var capacity := int(item.get("max_capacity", 0))
+			var quantity := _safe_nonnegative_int(item.get("quantity"))
+			var capacity := _safe_nonnegative_int(item.get("max_capacity"))
 			display.append("%s: %s / %s" % [code, quantity, capacity])
 			_stock_commodity.add_item(code)
 			_stock_commodity.set_item_metadata(_stock_commodity.item_count - 1, code)
@@ -365,6 +365,10 @@ func _authoritative_nonnegative_int(value: Variant) -> Variant:
 	if typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value):
 		return int(value)
 	return null
+
+func _safe_nonnegative_int(value: Variant) -> int:
+	var parsed: Variant = _authoritative_nonnegative_int(value)
+	return int(parsed) if parsed != null else 0
 
 func set_busy(busy: bool) -> void:
 	_busy = busy
@@ -596,7 +600,7 @@ func _labor_row_layout(compact: bool) -> void:
 func _update_labor_limits(data: Dictionary) -> void:
 	if not is_instance_valid(_labor_ore):
 		return
-	var unassigned := int(data.get("colonists_unassigned", data.get("planet_colonists", 0)))
+	var unassigned := _safe_nonnegative_int(data.get("colonists_unassigned", data.get("planet_colonists")))
 	var assigned := int(_labor_ore.value) + int(_labor_organics.value) + int(_labor_equipment.value) + int(_labor_weapons.value)
 	var available_population := maxi(0, unassigned + assigned)
 	for entry in [
@@ -612,14 +616,14 @@ func _update_labor_limits(data: Dictionary) -> void:
 		entry["spin"].max_value = mini(class_limit, population_limit) if class_limit > 0 else population_limit
 
 func _update_labor_summary(data: Dictionary) -> void:
-	var unassigned := int(data.get("colonists_unassigned", 0))
-	var ore_rate := int(data.get("colonists_ore", 0))
-	var org_rate := int(data.get("colonists_org", 0)) * int(data.get("organics_production_per_worker", 0))
-	var equipment_rate := int(data.get("colonists_eq", 0)) * int(data.get("equipment_production_per_worker", 0))
+	var unassigned := _safe_nonnegative_int(data.get("colonists_unassigned"))
+	var ore_rate := _safe_nonnegative_int(data.get("colonists_ore"))
+	var org_rate := _safe_nonnegative_int(data.get("colonists_org")) * _safe_nonnegative_int(data.get("organics_production_per_worker"))
+	var equipment_rate := _safe_nonnegative_int(data.get("colonists_eq")) * _safe_nonnegative_int(data.get("equipment_production_per_worker"))
 	_labor_status.text = "Unassigned: %s · Workers — ore %s, organics %s, equipment %s, weapons %s\nEstimated per growth tick: ore %s, organics %s, equipment %s. Fighter output also depends on citadel level, EQU stock and planet capacity." % [
-		_format_count(unassigned), _format_count(int(data.get("colonists_ore", 0))),
-		_format_count(int(data.get("colonists_org", 0))), _format_count(int(data.get("colonists_eq", 0))),
-		_format_count(int(data.get("colonists_weapons", 0))),
+		_format_count(unassigned), _format_count(_safe_nonnegative_int(data.get("colonists_ore"))),
+		_format_count(_safe_nonnegative_int(data.get("colonists_org"))), _format_count(_safe_nonnegative_int(data.get("colonists_eq"))),
+		_format_count(_safe_nonnegative_int(data.get("colonists_weapons"))),
 		_format_count(ore_rate), _format_count(org_rate), _format_count(equipment_rate)
 	]
 	_labor_save.disabled = _busy or _planet_id <= 0

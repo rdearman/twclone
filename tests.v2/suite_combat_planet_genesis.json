@@ -15,6 +15,24 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Clear planet goods in Sector 1",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "DELETE FROM planet_goods WHERE planet_id IN (SELECT planet_id FROM planets WHERE sector_id = 1 AND planet_id > 1 AND planet_id != 200);"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Clear planet stock in Sector 1",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "DELETE FROM entity_stock WHERE entity_type = 'planet' AND entity_id IN (SELECT planet_id FROM planets WHERE sector_id = 1 AND planet_id > 1 AND planet_id != 200);"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Clear Planets in Sector 1",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "DELETE FROM planets WHERE sector_id = 1 AND planet_id > 1 AND planet_id != 200;" },

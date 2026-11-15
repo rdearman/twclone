@@ -604,3 +604,27 @@ serving-container restart and post-restart authenticated status request passed
 against the disposable database; see the StarPort acceptance addendum. This
 does not substitute for replaying StarPort construction and scheduled delivery
 after restart.
+
+### Acceptance closeout — 2026-11-15
+
+This evidence supersedes the earlier Godot and StarPort blockers above.
+
+| Workstream | Status | Evidence |
+|---|---|---|
+| Godot regression/runtime | **PASS (Godot 4.5.2)** | `suite_client_regressions.py`: 104 passed, 0 failed, 1 skipped; Python client 807 passed. `command_menu_test.gd`: 206 checks. `planet_command_response_test.gd`: 115 checks. |
+| Godot player journey | **PASS against disposable PostgreSQL** | Actual `Main.tscn`, login/menu handlers and network transport completed navigation, turn use, scan, docking, commodity buy/sell, hardware, shipyard upgrade, planet landing/harvest/launch, corporation deposit, logout/reconnect, and local feedback submission. No error or resource-leak output. |
+| StarPort post-restart | **PASS for capacity upgrade and serving recovery** | Player 5567 upgraded port 9 ORE capacity using 100 ORE and 10,000 credits. After game-server restart, authenticated `port.status` succeeded; capacity level 1, one receipt, credits/materials and port petty cash matched the exact transaction. Earlier concurrent upgrade/attack, idempotent attack, and rollback evidence remains in the acceptance report. |
+| Disposable fixture hygiene | **REPAIRED** | Test rig now clears the no-FK Exchange transaction ledger when reusing planet IDs and restarts the server after DB reset for full acceptance. Planet market fixture now cancels unrelated open orders at its selected port. The affected market lifecycle suite passed 29/29. |
+| GitHub live publication | **UNVERIFIED** | No project GitHub App publisher credentials were configured. Queue-only local reports and mock publication tests remain verified; no public issue was created. |
+| StarPort construction restart replay | **PARTIAL** | Construction retry/delivery and general serving restart have prior disposable-server evidence. This run did not replay construction deliveries after the server restart. |
+
+The final complete server protocol regression executed **155 suites, 2,341
+cases passed, 0 failed, 4 skipped**; the one skipped suite declared those four
+cases. The Python client run passed 807 tests, and `pytest -q tests.v2` passed
+262 tests with 7 skips and 227 subtests. Godot 4.5.2 passed 104 client scripts,
+206 menu checks, and 115 planet-response checks; one live journey script is
+excluded from the suite and was executed separately against the disposable
+server. Exact StarPort restart and Godot journey evidence is in
+[`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
+Do not infer beta readiness from these subsystem passes: live GitHub publishing,
+some construction-restart cases, and external deployment are still unverified.

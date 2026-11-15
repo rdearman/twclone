@@ -28,6 +28,8 @@ var _connection_started := false
 var _authenticated_once := false
 var _pending_game_commands: Dictionary = {}
 var _pending_event_subscriptions: Dictionary = {}
+var _toll_offer_dialog: ConfirmationDialog
+var _pending_toll_offer: Dictionary = {}
 var _registration_payload: Dictionary = {}
 var _pending_registration_request_id := ""
 var _warp_refresh_pending := false
@@ -70,6 +72,7 @@ func _ready() -> void:
 	transport.transport_connected.connect(_on_transport_connected)
 	transport.transport_disconnected.connect(_on_transport_disconnected)
 	transport.reply_received.connect(_on_transport_reply)
+	_build_toll_offer_ui()
 	_build_feedback_ui()
 	transport.request_timed_out.connect(_on_request_timed_out)
 	transport.request_failed.connect(_on_request_failed)
@@ -892,6 +895,35 @@ func _on_tavern_enter_requested() -> void:
 	gameplay_view.show_notification("Checking for an active tavern in this StarDock sector…")
 
 func _finish_warp_reply(response: Dictionary, destination: int) -> void:
+	if str(response.get("status", "")) == "ok" and str(response.get("type", "")) == "move.toll_offer_v1":
+		var offer_value: Variant = response.get("data", {})
+		if not offer_value is Dictionary:
+			gameplay_view.set_action_pending(false)
+			gameplay_view.show_notification("Toll passage offer was malformed · refreshing confirmed movement state.")
+			_refresh_after_warp_attempt()
+			return
+		var offer: Dictionary = offer_value
+		var offer_id := str(offer.get("offer_id", ""))
+		var offer_sector := _authoritative_positive_id(offer.get("to_sector_id", offer.get("sector_id", 0)))
+		var fighter_count := int(offer.get("fighter_count", 0))
+		var amount := int(offer.get("amount", -1))
+		var rate := int(offer.get("credits_per_fighter", 0))
+		if offer_id.is_empty() or offer_sector <= 0 or offer_sector != destination or fighter_count <= 0 or amount < 0 or rate < 0:
+			gameplay_view.set_action_pending(false)
+			gameplay_view.show_notification("Toll passage offer did not match the requested sector · refreshing confirmed state.")
+			_refresh_after_warp_attempt()
+			return
+		_pending_toll_offer = {
+			"offer_id": offer_id,
+			"destination": offer_sector,
+			"fighter_count": fighter_count,
+			"amount": amount,
+			"rate": rate,
+		}
+		_toll_offer_dialog.dialog_text = "%d toll fighters demand %d credits (%d credits per fighter) to enter Sector %d. Accept payment and passage, or refuse and face the hostile encounter?" % [fighter_count, amount, rate, offer_sector]
+		_toll_offer_dialog.popup_centered(Vector2i(560, 240))
+		gameplay_view.show_notification("Toll fighters are waiting for your decision · no passage has been authorized yet.")
+		return
 	var result: Dictionary = Protocol.result_from_response(response)
 	if not _movement_response_type_matches(response, "move.result"):
 		gameplay_view.show_notification("Warp response was not recognized · refreshing confirmed player, ship and sector state.")
@@ -922,6 +954,49 @@ func _finish_warp_reply(response: Dictionary, destination: int) -> void:
 		_refresh_after_command(["player", "ship", "sector"])
 	else:
 		_refresh_after_warp_attempt()
+
+func _build_toll_offer_ui() -> void:
+	_toll_offer_dialog = ConfirmationDialog.new()
+	_toll_offer_dialog.title = "Toll fighters demand payment"
+	_toll_offer_dialog.ok_button_text = "PAY TOLL AND PASS"
+	_toll_offer_dialog.exclusive = false
+	_toll_offer_dialog.confirmed.connect(_resolve_toll_offer.bind(true))
+	_toll_offer_dialog.close_requested.connect(_resolve_toll_offer.bind(false))
+	add_child(_toll_offer_dialog)
+	var refuse_button := _toll_offer_dialog.get_cancel_button()
+	refuse_button.text = "REFUSE · HOSTILE ENCOUNTER"
+	refuse_button.pressed.connect(_resolve_toll_offer.bind(false))
+
+func _resolve_toll_offer(accept: bool) -> void:
+	if _pending_toll_offer.is_empty():
+		_toll_offer_dialog.hide()
+		return
+	var offer := _pending_toll_offer.duplicate(true)
+	_pending_toll_offer.clear()
+	_toll_offer_dialog.hide()
+	var destination := _authoritative_positive_id(offer.get("destination", 0))
+	var offer_id := str(offer.get("offer_id", ""))
+	if destination <= 0 or offer_id.is_empty() or not auth_session.is_authenticated():
+		gameplay_view.set_action_pending(false)
+		gameplay_view.show_notification("Toll response was not sent · reconnect and reconcile your confirmed sector before moving.")
+		_refresh_after_warp_attempt()
+		return
+	var request_id: String = transport.request("move.warp", {
+		"to_sector_id": destination,
+		"toll_offer_id": offer_id,
+		"toll_accept": accept,
+	}, auth_session.session_token)
+	if request_id.is_empty():
+		gameplay_view.set_action_pending(false)
+		gameplay_view.show_notification("Toll response could not be sent · refresh confirmed movement state before retrying.")
+		_refresh_after_warp_attempt()
+		return
+	_pending_game_commands[request_id] = {
+		"kind": "warp",
+		"destination": destination,
+		"toll_resolution": "accepted" if accept else "refused",
+	}
+	gameplay_view.show_notification("Toll accepted · awaiting server-confirmed passage." if accept else "Toll refused · awaiting the server's hostile encounter result.")
 
 func _movement_response_type_matches(response: Dictionary, expected: String) -> bool:
 	# Successful movement replies must identify their published response schema.

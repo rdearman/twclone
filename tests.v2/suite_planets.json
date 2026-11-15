@@ -65,6 +65,15 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Clear inherited Genesis stock before testing a new torpedo purchase",
+      "command": "sys.raw_sql_exec",
+      "data": {
+        "sql": "UPDATE ships SET genesis = 0 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{planet_tester_1_player_id});"
+      },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Exchange starter ship for a Genesis-capable hull",
       "command": "shipyard.upgrade",
       "data": { "new_type_id": 1, "new_ship_name": "Q" },
