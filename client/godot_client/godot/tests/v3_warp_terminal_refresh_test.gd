@@ -22,7 +22,7 @@ func _run() -> void:
 	app.refresh_coordinator = fake_refresh
 
 	await app._finish_warp_reply({
-		"status": "ok",
+		"status": "ok", "type": "move.result",
 		"data": {
 			"current_sector": 88,
 			"ship_destroyed": true,

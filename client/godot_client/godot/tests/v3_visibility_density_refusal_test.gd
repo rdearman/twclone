@@ -50,7 +50,7 @@ func _run() -> void:
 		"label": "Sector density scan", "command": "sector.scan.density", "mutating": false,
 	})
 
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12,
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12,
 		"refused density scan replaced the confirmed sector")
 	_check(not str(app.gameplay_view.information_text.text).contains("42"),
 		"refused density payload was rendered as authoritative")
@@ -72,7 +72,7 @@ func _run() -> void:
 	}, {
 		"label": "Sector density scan", "command": "sector.scan.density", "mutating": false,
 	})
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12,
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12,
 		"mismatched density response replaced the confirmed sector")
 	_check(not str(app.gameplay_view.information_text.text).contains("77"),
 		"mismatched density response rendered an untrusted payload")

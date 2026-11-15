@@ -15,7 +15,7 @@ func _run() -> void:
 	menu.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
 		captured.append({"command": command, "data": data, "label": label, "mutating": mutating})
 	)
-	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 17}, "freshness": {"sector": "fresh"}}
+	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 17}, "freshness": {"sector": "fresh"}, "ship": {"id": 3, "sector_id": 17, "transwarp": true}}
 	menu._active_category = "COMPUTER"
 	menu._render_actions()
 	await process_frame
@@ -36,9 +36,13 @@ func _run() -> void:
 	var transwarp_button := _action_button(menu, "Transwarp to sector")
 	_check(transwarp_button != null, "transwarp was not reachable in navigation")
 	if transwarp_button != null:
+		_check(not transwarp_button.disabled, "transwarp was unavailable with a fresh authenticated sector: %s" % transwarp_button.tooltip_text)
 		transwarp_button.pressed.emit()
-		menu._form_fields["to_sector_id"].text = "77"
-		menu._submit_form()
+		if menu._form_fields.has("to_sector_id"):
+			menu._form_fields["to_sector_id"].text = "77"
+			menu._submit_form()
+		else:
+			_check(false, "transwarp form did not open")
 	_check(captured.size() == 3 and captured[2]["command"] == "move.transwarp" and captured[2]["data"] == {"to_sector_id": 77}, "transwarp did not use the documented destination payload")
 	# NAV-02 boundary: a stale sector snapshot must not issue a long-range move.
 	# The server remains authoritative for fuel/interdiction and rollback; the
@@ -50,7 +54,7 @@ func _run() -> void:
 	_check(stale_transwarp_button != null, "transwarp disappeared instead of becoming unavailable while stale")
 	if stale_transwarp_button != null:
 		stale_transwarp_button.pressed.emit()
-		if menu._form_dialog != null:
+		if menu._form_fields.has("to_sector_id"):
 			menu._form_fields["to_sector_id"].text = "88"
 			menu._submit_form()
 	_check(captured.size() == 3, "stale transwarp origin issued a request before authoritative refresh")
@@ -71,10 +75,9 @@ func _run() -> void:
 		quit(1)
 
 func _action_button(menu: CommandMenu, label_text: String) -> Button:
-	for row in menu._action_list.get_children():
-		for child in row.get_children():
-			if child is Button and (child as Button).text == label_text:
-				return child
+	for child in menu._action_list.get_children():
+		if child is Button and (child as Button).text == label_text:
+			return child
 	return null
 
 func _check(condition: bool, message: String) -> void:

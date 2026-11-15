@@ -242,7 +242,7 @@ func _run() -> void:
 	_check(app.refresh_coordinator.calls.size() == 1, "successful launch did not refresh authoritative state")
 	if app.refresh_coordinator.calls.size() == 1:
 		_check(app.refresh_coordinator.calls[0]["domains"] == ["player", "ship", "sector"], "successful launch refreshed the wrong state domains")
-	await app._on_refresh_finished({"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"}, "player": {"id": 3}, "ship": {"id": 9, "onplanet": 0}, "sector": {"id": 20}})
+	await app._on_refresh_finished({"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"}, "player": {"id": 3, "ship_id": 9, "last_planet_id": 0}, "ship": {"id": 9, "onplanet": 0}, "sector": {"id": 20}})
 	_check(not app._pending_launch_departure, "confirmed launch remained pending after a complete authoritative refresh")
 	_check(app._landed_planet_id == 0 and not app.gameplay_view.planet_workflow.visible, "confirmed launch restored stale planet actions")
 
@@ -278,12 +278,28 @@ func _run() -> void:
 	_check(fake_transport.calls.size() == 2, "failed stock transfer did not refresh the confirmed planet records")
 	await _settle_fake_planet_reads(app, fake_transport)
 
+	app.gameplay_view._snapshot["hud"] = {"ship_id": 9}
+	var harvest_receipt := {
+		"planet_id": 77, "ship_id": 9, "ore_harvested": 12,
+		"organics_harvested": 3, "equipment_harvested": 1,
+		"holds_remaining": 4, "turns_charged": 0,
+	}
 	await app._finish_command_reply(
-		{"status": "refused", "error": {"message": "Planet harvest is unavailable."}},
-		{"label": "Harvest planet production", "command": "planet.harvest", "mutating": true},
+		{"status": "ok", "type": "planet.harvest_v1", "data": harvest_receipt},
+		{"label": "Harvest planet production", "command": "planet.harvest", "data": {"planet_id": 77}, "mutating": true},
 	)
-	_check(app.gameplay_view.notification_label.text.contains("Planet harvest is unavailable"), "harvest refusal was not shown")
-	_check(fake_transport.calls.size() == 2, "harvest refusal did not refresh the confirmed planet records")
+	_check(app.gameplay_view.notification_label.text.contains("Planet harvest confirmed") and app.gameplay_view.notification_label.text.contains("ORE 12"), "valid harvest receipt was not presented from authoritative result values")
+	_check(fake_transport.calls.size() == 2, "confirmed harvest did not refresh the landed planet records")
+	await _settle_fake_planet_reads(app, fake_transport)
+	app.refresh_coordinator.calls.clear()
+	var mismatched_harvest_receipt := harvest_receipt.duplicate(true)
+	mismatched_harvest_receipt["planet_id"] = 78
+	await app._finish_command_reply(
+		{"status": "ok", "type": "planet.harvest_v1", "data": mismatched_harvest_receipt},
+		{"label": "Harvest planet production", "command": "planet.harvest", "data": {"planet_id": 77}, "mutating": true},
+	)
+	_check(app.gameplay_view.notification_label.text.contains("not confirmed by a matching"), "mismatched planet harvest identity was presented as success")
+	_check(app.refresh_coordinator.calls.size() == 1 and app.refresh_coordinator.calls[0]["domains"] == ["player", "ship"], "invalid harvest receipt did not reconcile authoritative player and ship state")
 	await _settle_fake_planet_reads(app, fake_transport)
 
 	await app._finish_command_reply(
@@ -319,7 +335,7 @@ func _run() -> void:
 	_check(app.refresh_coordinator.calls.size() == 1, "successful landing did not refresh player, ship, and sector state")
 	if app.refresh_coordinator.calls.size() == 1:
 		_check(app.refresh_coordinator.calls[0]["domains"] == ["player", "ship", "sector"], "successful landing refreshed the wrong state domains")
-	await app._on_refresh_finished({"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"}, "player": {"id": 3}, "ship": {"id": 9, "onplanet": 0}, "sector": {"id": 20}})
+	await app._on_refresh_finished({"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"}, "player": {"id": 3, "ship_id": 9, "last_planet_id": 0}, "ship": {"id": 9, "onplanet": 0}, "sector": {"id": 20}})
 	_check(not app.gameplay_view.planet_workflow.visible, "landing opened the surface while authoritative ship state remained off-planet")
 	_check(app.gameplay_view.notification_label.text.contains("refresh was incomplete"), "off-planet refresh did not keep the surface unavailable")
 
@@ -334,13 +350,14 @@ func _run() -> void:
 		"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"},
 		"ship": {"id": 9},
 	})
-	_check(app._landed_planet_id == 0, "launch refresh without onplanet retained stale planet identity")
-	_check(not app.gameplay_view.planet_workflow.visible, "launch refresh without onplanet left the surface open")
+	_check(app._landed_planet_id == 77, "incomplete launch refresh discarded the last confirmed planet identity")
+	_check(app.gameplay_view.planet_workflow.visible, "incomplete launch refresh hid the last confirmed planet surface")
+	_check(not app._landing_surface_ready, "incomplete launch refresh left planet actions enabled")
 	_check(app.gameplay_view.notification_label.text.contains("Launch state was incomplete"), "missing onplanet was not surfaced as incomplete launch state")
 	app._pending_landing_surface_id = 77
 	app._command_refresh_pending = true
 	app._landed_planet_id = 77
-	await app._on_refresh_finished({"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"}, "player": {"id": 3}, "ship": {"id": 9, "onplanet": 77}, "sector": {"id": 20}})
+	await app._on_refresh_finished({"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"}, "player": {"id": 3, "ship_id": 9, "last_planet_id": 77}, "ship": {"id": 9, "onplanet": 1}, "sector": {"id": 20}})
 	_check(app.gameplay_view.planet_workflow.visible, "successful landing did not open the surface after authoritative on-planet refresh")
 	_check(fake_transport.calls.size() == 2, "successful landing did not request both authoritative planet records: %s" % str(fake_transport.calls.map(func(call: Dictionary) -> String: return str(call.get("command", "")))))
 	if fake_transport.calls.size() == 2:

@@ -223,6 +223,9 @@ func open_planet(planet_id: Variant) -> void:
 func refresh_details() -> void:
 	_request_details()
 
+func set_surface_actionable(actionable: bool) -> void:
+	_set_surface_identity_confirmed(actionable)
+
 func _request_details() -> void:
 	if _planet_id <= 0:
 		return
@@ -245,8 +248,7 @@ func set_planet_info(data: Dictionary) -> void:
 		_development_status.text = "Planet development records are unavailable until the confirmed planet is refreshed."
 		return
 	var reported_sector_id: Variant = data.get("sector_id")
-	var sector_id_valid: bool = (typeof(reported_sector_id) == TYPE_INT and int(reported_sector_id) > 0) \
-		or (typeof(reported_sector_id) == TYPE_FLOAT and is_finite(reported_sector_id) and reported_sector_id > 0.0 and reported_sector_id == floor(reported_sector_id))
+	var sector_id_valid: bool = typeof(reported_sector_id) == TYPE_INT and int(reported_sector_id) > 0
 	if not sector_id_valid:
 		_set_surface_identity_confirmed(false)
 		_info_label.text = "Planet information was not applied because the server returned an invalid sector ID."
@@ -343,8 +345,6 @@ func _authoritative_planet_id(data: Dictionary) -> int:
 			var value: Variant = data.get(key)
 			if typeof(value) == TYPE_INT and int(value) > 0:
 				return int(value)
-			if typeof(value) == TYPE_FLOAT and is_finite(value) and value > 0.0 and value == floor(value):
-				return int(value)
 			return 0
 	var nested: Variant = data.get("planet", null)
 	if nested is Dictionary:
@@ -352,8 +352,6 @@ func _authoritative_planet_id(data: Dictionary) -> int:
 			if nested.has(key):
 				var nested_value: Variant = nested.get(key)
 				if typeof(nested_value) == TYPE_INT and int(nested_value) > 0:
-					return int(nested_value)
-				if typeof(nested_value) == TYPE_FLOAT and is_finite(nested_value) and nested_value > 0.0 and nested_value == floor(nested_value):
 					return int(nested_value)
 				return 0
 	return 0

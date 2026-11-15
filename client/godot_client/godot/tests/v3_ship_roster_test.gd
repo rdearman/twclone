@@ -43,6 +43,8 @@ func _run() -> void:
 		"data": {"ship_id": 7, "target_player_id": 42}})
 	_check(app.gameplay_view.notification_label.text.contains("was not confirmed"), "transfer from another owner was presented as confirmed")
 	_check(refresh.calls.size() == 2 and refresh.calls[1] == ["player", "ship", "sector"], "mismatched transfer receipt did not refresh ownership and sector state")
+	refresh.calls.clear()
+	app._command_refresh_pending = false
 
 	await app._finish_command_reply({
 		"status": "ok", "type": "ship.list.response",
@@ -50,6 +52,8 @@ func _run() -> void:
 	}, {"label": "Owned ship roster", "command": "ship.list", "mutating": false})
 	_check(not app.gameplay_view.information_text.text.contains("Untrusted"), "malformed ship ID was presented")
 	_check(refresh.calls.size() == 1 and refresh.calls[0] == ["player", "ship"], "malformed roster did not refresh authoritative ship state")
+	refresh.calls.clear()
+	app._command_refresh_pending = false
 
 	await app._finish_command_reply({
 		"status": "ok", "type": "ship.list.response",
@@ -58,8 +62,9 @@ func _run() -> void:
 			{"ship_id": 7, "name": "Duplicate", "active": false},
 		]},
 	}, {"label": "Owned ship roster", "command": "ship.list", "mutating": false})
-	_check(app.gameplay_view.information_text.text.contains("incomplete ship roster"), "duplicate ship IDs were presented")
-	_check(refresh.calls.size() == 2 and refresh.calls[1] == ["player", "ship"], "duplicate roster did not refresh authoritative ship state")
+	_check(app.gameplay_view.notification_label.text.contains("incomplete ship roster"), "duplicate ship IDs were presented")
+	_check(refresh.calls.size() == 1 and refresh.calls[0] == ["player", "ship"], "duplicate roster did not refresh authoritative ship state")
+	app._command_refresh_pending = false
 
 	await app._finish_command_reply({
 		"status": "ok", "type": "ship.list.response",
@@ -74,13 +79,13 @@ func _run() -> void:
 		"status": "ok", "type": "ship.list.response",
 		"data": {"ships": []},
 	}, {"label": "Owned ship roster", "command": "ship.list", "mutating": false})
-	_check(refresh.calls.size() == 2, "valid empty roster triggered an unnecessary refresh")
-	_check(app.gameplay_view.information_text.text.contains("Ships · 0 entries"), "empty authoritative roster was not presented")
+	_check(refresh.calls.size() == 1, "valid empty roster triggered an unnecessary refresh")
+	_check(app.gameplay_view.information_text.text.contains("No ships are currently owned."), "empty authoritative roster was not presented")
 
 	await app._finish_command_reply({
 		"status": "refused", "error": {"message": "Ship roster is unavailable."},
 	}, {"label": "Owned ship roster", "command": "ship.list", "mutating": false})
-	_check(refresh.calls.size() == 3 and refresh.calls[2] == ["player", "ship"], "ship roster refusal did not refresh authoritative ship state")
+	_check(refresh.calls.size() == 2 and refresh.calls[1] == ["player", "ship"], "ship roster refusal did not refresh authoritative ship state")
 	_check(app.gameplay_view.notification_label.text.contains("Ship roster is unavailable."), "ship roster refusal was not surfaced")
 
 	app.queue_free()
@@ -88,9 +93,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 ship roster tests: 8 checks passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:

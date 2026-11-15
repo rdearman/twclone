@@ -97,6 +97,27 @@ func _run() -> void:
 	menu._render_actions()
 	await process_frame
 	captured.clear()
+	var undock_action_button := _action_button(menu, "Undock from selected port")
+	_check(undock_action_button != null and not undock_action_button.disabled, "confirmed dock state did not expose undocking")
+	menu._snapshot["ship"]["ported"] = 0
+	menu._render_actions()
+	await process_frame
+	var dock_action_button := _action_button(menu, "Dock at selected port")
+	_check(dock_action_button != null and not dock_action_button.disabled, "undocked ship did not expose docking at the selected port")
+	if dock_action_button != null:
+		dock_action_button.pressed.emit()
+		_check(menu._form_dialog.visible, "docking mutation did not require confirmation")
+		(menu._form_dialog.get_ok_button() as Button).pressed.emit()
+	_check(captured.size() == 1 and captured[0]["command"] == "dock.status" and captured[0]["data"] == {"action": "dock"} and captured[0]["mutating"], "dock action did not use the canonical state transition contract: %s" % str(captured))
+	menu._snapshot["ship"]["ported"] = 55
+	menu._render_actions()
+	await process_frame
+	undock_action_button = _action_button(menu, "Undock from selected port")
+	if undock_action_button != null:
+		undock_action_button.pressed.emit()
+		(menu._form_dialog.get_ok_button() as Button).pressed.emit()
+	_check(captured.size() == 2 and captured[1]["command"] == "dock.status" and captured[1]["data"] == {"action": "undock"}, "undock action did not use the canonical state transition contract: %s" % str(captured))
+	captured.clear()
 	var dock_button := _action_button(menu, "Dock · open port screen")
 	_check(dock_button != null and not dock_button.disabled, "selected port docking action was unavailable")
 	if dock_button != null:
@@ -148,20 +169,31 @@ func _run() -> void:
 	menu._submit_form()
 	_check(captured.size() == 4 and captured.back()["data"] == {"target_ship_id": 61}, "tow action did not bind selected ship identity")
 	menu._selection = {"kind": "planet", "name": "Nereid", "data": {"planet_id": 19}}
-	menu._snapshot["ship"] = {"onplanet": 19}
+	menu._snapshot["ship"] = {"id": 88, "onplanet": 1}
+	menu._snapshot["player"] = {"ship_id": 88, "last_planet_id": 19}
 	menu._active_category = "PLANET"
 	menu._render_actions()
-	var harvest_button := _action_button(menu, "Harvest planet production · unavailable")
-	_check(harvest_button != null and harvest_button.disabled and harvest_button.tooltip_text.contains("authoritative server implementation"), "unavailable planet harvest was hidden or presented as usable")
-	var before_unavailable_harvest := captured.size()
+	var harvest_button := _action_button(menu, "Harvest planet production")
+	_check(harvest_button != null and not harvest_button.disabled, "landed planet harvest workflow was unavailable despite its published V3 contract")
+	var before_harvest := captured.size()
 	if harvest_button != null:
 		harvest_button.pressed.emit()
-	_check(captured.size() == before_unavailable_harvest, "unavailable planet harvest emitted a fabricated server request")
+		_check(menu._form_dialog.visible, "planet harvest did not require confirmation before its mutating request")
+		if menu._form_dialog.visible:
+			(menu._form_dialog.get_ok_button() as Button).pressed.emit()
+	_check(captured.size() == before_harvest + 1, "confirmed planet harvest did not dispatch the server command")
+	if captured.size() > before_harvest:
+		_check(captured[before_harvest]["command"] == "planet.harvest", "harvest workflow dispatched the wrong command")
+		_check(captured[before_harvest]["data"] == {"planet_id": 19}, "harvest workflow did not bind the selected authoritative planet ID")
+		_check(captured[before_harvest]["mutating"], "harvest workflow was not marked as a server mutation")
+	# Keep the surrounding legacy command-count assertions independent of this
+	# focused harvest dispatch check.
+	captured.resize(before_harvest)
 	menu._choose_action({"label": "Planet information", "command": "planet.info", "context_id": "planet_id"})
-	_check(captured.size() == before_unavailable_harvest + 1, "planet information did not emit a command")
-	if captured.size() > before_unavailable_harvest:
-		_check(captured[before_unavailable_harvest]["command"] == "planet.info", "planet command name changed")
-		_check(captured[before_unavailable_harvest]["data"] == {"planet_id": 19}, "planet ID was not bound from authoritative selection")
+	_check(captured.size() == before_harvest + 1, "planet information did not emit a command")
+	if captured.size() > before_harvest:
+		_check(captured[before_harvest]["command"] == "planet.info", "planet command name changed")
+		_check(captured[before_harvest]["data"] == {"planet_id": 19}, "planet ID was not bound from authoritative selection")
 	var before_invalid_planet := captured.size()
 	menu._selection = {"kind": "planet", "name": "Unidentified planet", "data": {"planet_id": 0}}
 	menu._choose_action({"label": "Land on planet", "command": "planet.land", "context_id": "planet_id", "mutating": true})
@@ -181,10 +213,10 @@ func _run() -> void:
 	menu._choose_action({"label": "Attack this planet", "command": "combat.attack_planet", "context_id": "planet_id", "mutating": true})
 	_check(captured.size() == before_malformed_planet, "malformed planet metadata emitted a request while rendering planet actions")
 	menu._selection = {"kind": "planet", "name": "Malformed landing context", "data": {"planet_id": 19}}
-	menu._snapshot["ship"] = {"onplanet": true}
+	menu._snapshot["ship"] = {"id": 88, "onplanet": true}
 	menu._render_actions()
 	_check(_action_button(menu, "Launch from planet") == null, "boolean onplanet metadata exposed a launch action")
-	menu._snapshot["ship"] = {"onplanet": 19.0}
+	menu._snapshot["ship"] = {"id": 88, "onplanet": 1.0}
 	menu._render_actions()
 	_check(_action_button(menu, "Launch from planet") == null, "floating-point onplanet metadata exposed a launch action")
 	menu._selection = {"kind": "ship", "name": "Unidentified vessel", "data": {"ship_id": "not-a-number"}}
@@ -336,6 +368,10 @@ func _run() -> void:
 	menu._submit_form()
 	_check(captured.size() == 22 and captured[21]["command"] == "move.warp" and captured[21]["data"] == {"to_sector_id": 18} and captured[21]["mutating"], "numeric warp did not use the direct authoritative move command")
 	menu._snapshot["disconnected"] = false
+	menu._active_category = "COMPUTER"
+	menu._render_actions()
+	await process_frame
+	_check(_action_button(menu, "Log out to login screen") != null, "logout was registered but unavailable from a player-facing menu")
 	var session_commands: Array = CommandMenu.COMMANDS.get("SESSION", [])
 	_check(session_commands.size() == 1 and session_commands[0].get("local_logout", false), "session category does not expose confirmed logout")
 	menu._choose_action(session_commands[0])
@@ -661,7 +697,8 @@ func _run() -> void:
 	if upgrade_button != null:
 		upgrade_button.pressed.emit()
 	_check(captured.size() == before_upgrade, "uncatalogued ship equipment upgrade emitted a request")
-	menu._snapshot["ship"] = {"onplanet": 19}
+	menu._snapshot["ship"] = {"id": 88, "onplanet": 1}
+	menu._snapshot["player"] = {"ship_id": 88, "last_planet_id": 19}
 	menu._selection = {"kind": "planet", "name": "Landed planet", "data": {"planet_id": 19}}
 	menu._active_category = "PLANET"
 	menu._render_actions()

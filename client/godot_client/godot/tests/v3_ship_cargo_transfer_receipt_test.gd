@@ -29,7 +29,7 @@ func _run() -> void:
 			"quantity": 3, "source_remaining": 4, "target_quantity": 7},
 	}, operation)
 	_check(refresh.calls == [[]], "valid cargo receipt did not refresh all authoritative domains")
-	_check(app.gameplay_view.information_text.text.contains("Transfer cargo"), "valid cargo transfer was not presented")
+	_check(app.gameplay_view.information_title.text == "TRANSFER CARGO", "valid cargo transfer result was not presented in the Information panel")
 
 	await app._finish_command_reply({
 		"status": "ok", "type": "ship.cargo_transferred_v1",
@@ -51,9 +51,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 ship cargo transfer receipt tests: 6 checks passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:

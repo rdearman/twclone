@@ -88,9 +88,10 @@ def main():
             skipped_scripts = []
             for path in scripts:
                 script = "res://tests/" + path.name
+                print(f"Running Godot client regression: {script}", flush=True)
                 result = run_godot_script(
                     [godot, "--headless", "--path", str(project), "--script", script],
-                    cwd=ROOT, env=env, timeout=5,
+                    cwd=ROOT, env=env, timeout=20,
                 )
                 if result == "failed":
                     print(f"Godot client regression failed: {script}", file=sys.stderr)

@@ -24,7 +24,7 @@ func _run() -> void:
 	app.gameplay_view.enter_planet_workflow(77)
 
 	await app._finish_command_reply({
-		"status": "ok",
+		"status": "ok", "type": "planet.launch.success",
 		"data": {"message": "Launch processed", "in_space": false},
 	}, {
 		"label": "Launch from planet", "command": "planet.launch", "mutating": true,

@@ -21,12 +21,13 @@ func _run() -> void:
 	app._command_refresh_pending = true
 
 	await app._on_refresh_finished({
-		"freshness": {"player": "fresh", "ship": "fresh"},
-		"ship": {"id": 9, "onplanet": 77.5},
+		"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"},
+		"player": {"id": 3, "ship_id": 9, "last_planet_id": 77},
+		"ship": {"id": 9, "onplanet": 1.5},
 	})
 
-	_check(not app.gameplay_view.planet_workflow.visible, "fractional onplanet identity opened the planet surface")
-	_check(not app._landing_surface_ready, "fractional onplanet identity marked the surface ready")
+	_check(not app.gameplay_view.planet_workflow.visible, "non-boolean onplanet state opened the planet surface")
+	_check(not app._landing_surface_ready, "non-boolean onplanet state marked the surface ready")
 	_check(app._pending_landing_surface_id == 0, "malformed landing refresh remained pending")
 	_check(app.gameplay_view.notification_label.text.contains("refresh was incomplete"), "malformed landing refresh was not explained")
 
@@ -50,9 +51,9 @@ func _run() -> void:
 	confirmed._command_refresh_pending = true
 
 	await confirmed._on_refresh_finished({
-		"freshness": {"player": "fresh", "ship": "fresh"},
-		"player": {"id": 3},
-		"ship": {"id": 9, "onplanet": 77},
+		"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"},
+		"player": {"id": 3, "ship_id": 9, "last_planet_id": 77},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 	_check(confirmed._landing_surface_ready, "matching landed-planet identity did not mark the surface ready")
 	_check(confirmed.gameplay_view.planet_workflow.visible, "matching landed-planet identity did not open the surface")
@@ -77,8 +78,8 @@ func _run() -> void:
 
 	await malformed_player._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh"},
-		"player": {"id": 3.0},
-		"ship": {"id": 9, "onplanet": 77},
+		"player": {"id": 3.0, "ship_id": 9, "last_planet_id": 77},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 	_check(not malformed_player._landing_surface_ready, "integral-float player identity authorized the planet surface")
 	_check(malformed_player._landed_planet_id == 0, "schema-mismatched player identity was retained")

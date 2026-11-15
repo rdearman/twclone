@@ -11,7 +11,11 @@ Land on a planet (if within range).
 `{ "message": "Landed successfully.", "planet_id": 123 }`. The client must
 match the returned planet ID to the requested ID and then confirm the active
 ship's `onplanet` field through the authoritative player/ship/sector refresh
-before exposing planet actions.
+before exposing planet actions. In `ship.status`, `onplanet` is an integer
+boolean (`0` in space, `1` landed); the matching planet identity is
+`player.info.data.player.last_planet_id`. Clients must also confirm that the
+refreshed ship ID matches `player.info.data.player.ship_id`. A stale last
+planet ID while `onplanet` is `0` does not authorize surface actions.
 
 The planet owner and authorized members of its owning corporation land without
 hostile-fire checks. An unauthorized attempt resolves active atmosphere Quasar

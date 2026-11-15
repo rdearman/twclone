@@ -13,7 +13,7 @@ func _run() -> void:
 	root.add_child(view)
 	await process_frame
 	var expected := {
-		"NAVIGATION": ["SCAN ADJACENT SECTORS", "PLOT ROUTE", "EXPRESS", "SINGLE STEP", "PAUSE", "RESUME", "CANCEL"],
+		"NAVIGATION": ["DENSITY SCAN", "PLOT ROUTE", "EXPRESS", "SINGLE STEP", "PAUSE", "RESUME", "CANCEL"],
 		"TRADING": ["DOCK · OPEN PORT", "PORT INFORMATION", "BANK BALANCE"],
 		"COMMUNICATIONS": ["CHAT", "MAIL", "BROADCASTS", "NOTICES", "OFFERS", "BOUNTIES", "PLAYERS"],
 		"COMPUTER": ["PLAYER INFO", "SHIP STATUS", "SECTOR INFO", "DETAILED SCAN"],
@@ -38,7 +38,7 @@ func _run() -> void:
 	view._on_workspace_tab_changed(0)
 	await process_frame
 	_check(view.center_split.visible, "Sector workspace did not show the graphical sector viewport")
-	_check(_find_button(view.command_panel, "SCAN ADJACENT SECTORS") != null, "Sector viewport menu did not expose adjacent-sector scanning")
+	_check(_find_button(view.command_panel, "DENSITY SCAN") != null, "Sector viewport menu did not expose adjacent-sector scanning")
 	view._on_workspace_tab_changed(1)
 	await process_frame
 	var destination := view.workspace_controls_column.find_child("NavigationDestination", true, false) as LineEdit
@@ -49,6 +49,7 @@ func _run() -> void:
 	_check(express != null and express.disabled, "Express was enabled before a route was plotted")
 	if destination != null:
 		destination.text = "999"
+		destination.text_changed.emit(destination.text)
 	_check(plot_route != null and not plot_route.disabled, "Plot Route did not enable for a valid destination")
 	_check(express != null and express.disabled, "Express enabled before the route was plotted")
 	view.show_planned_route([1, 2, 999], 999)

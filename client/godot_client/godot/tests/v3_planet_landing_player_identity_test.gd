@@ -22,7 +22,7 @@ func _run() -> void:
 	await app._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh"},
 		"player": {"id": 99},
-		"ship": {"id": 9, "onplanet": 77},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 
 	_check(not app._landing_surface_ready, "a different player's fresh state authorized the planet surface")
@@ -34,9 +34,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 landing player-identity tests passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:

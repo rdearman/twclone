@@ -4,6 +4,7 @@ const Main = preload("res://Main.gd")
 
 class FakeAuth extends RefCounted:
 	var session_token := "test-session"
+	var player_id := 1
 	func is_authenticated() -> bool: return true
 	func invalidate(_reason: String) -> void: pass
 
@@ -51,6 +52,7 @@ class FakeRefresh extends RefCounted:
 		return true
 	func handle_disconnect() -> void: pass
 	func accepts_request(_request_id: String) -> bool: return false
+	func is_active() -> bool: return false
 
 class FakeLogin extends Control:
 	func set_overlay_mode(_enabled: bool) -> void: pass
@@ -89,24 +91,26 @@ func _run() -> void:
 	main._pending_trade.clear()
 	main._pending_game_commands.clear()
 	main._on_trade_requested("buy", 7, 17, "ORE", 0, 1)
-	assert(transport.calls.size() == 1 and main.refresh_coordinator.calls == 0, "zero-quantity trade crossed the protocol boundary")
+	assert(transport.calls.size() == 2 and main.refresh_coordinator.calls == 0, "zero-quantity trade crossed the protocol boundary")
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 2)
-	assert(transport.calls.size() == 1 and main.refresh_coordinator.calls == 0, "invalid trade account crossed the protocol boundary")
+	assert(transport.calls.size() == 2 and main.refresh_coordinator.calls == 0, "invalid trade account crossed the protocol boundary")
 	main._on_trade_requested("buy", 7, 17, "   ", 1, 0)
-	assert(transport.calls.size() == 1 and main.refresh_coordinator.calls == 0, "blank commodity crossed the protocol boundary")
+	assert(transport.calls.size() == 2 and main.refresh_coordinator.calls == 0, "blank commodity crossed the protocol boundary")
 	main._pending_trade.clear()
 	main._pending_game_commands.clear()
 	main._on_trade_requested("buy", 8, 17, "ORE", 1, 0)
-	assert(transport.calls.size() == 1 and main.refresh_coordinator.calls == 1)
+	assert(transport.calls.size() == 2 and main.refresh_coordinator.calls == 1)
 	assert(view.messages.back().contains("not the confirmed current port"))
 	main.refresh_coordinator.calls = 0
 	main._pending_game_commands.clear()
+	main._command_refresh_pending = false
 	view._snapshot.freshness.sector = "stale"
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
-	assert(transport.calls.size() == 1 and main.refresh_coordinator.calls == 1)
+	assert(transport.calls.size() == 2 and main.refresh_coordinator.calls == 1)
 	assert(view.messages.back().contains("current sector is stale"))
 	view._snapshot.freshness.sector = "fresh"
 	main._command_refresh_pending = false
+	main.refresh_coordinator.calls = 0
 	main._pending_game_commands.clear()
 	main._pending_trade = {"direction": "buy", "port_id": 7, "sector_id": 17, "commodity": "ORE", "quantity": 3, "account": 1}
 	main._finish_trade_quote({"status": "ok", "type": "trade.quote", "data": {"port_id": 7, "commodity": "ORE", "quantity": 3, "buy_price": 40, "total_buy_price": 120}})
@@ -120,24 +124,24 @@ func _run() -> void:
 	assert(not main._port_response_type_matches({"status": "ok", "type": ""}), "port refresh accepted an empty response schema type")
 	assert(not main._port_response_type_matches({"status": "ok", "type": "port.info"}), "port refresh accepted a command name as a response schema")
 	main._on_trade_confirmation(false)
-	assert(main._pending_trade.is_empty() and transport.calls.size() == 1)
+	assert(main._pending_trade.is_empty() and transport.calls.size() == 2)
 	main._on_trade_requested("sell", 7, 17, "org", 2, 1)
 	main._pending_game_commands.clear()
 	main._finish_trade_quote({"status": "ok", "type": "trade.quote", "data": {"port_id": 7, "commodity": "ORG", "quantity": 2, "sell_price": 40, "total_sell_price": 80}})
 	assert(view.quotes[1].commodity == "ORG", "trade confirmation did not use the quote's canonical commodity code")
 	main._on_trade_confirmation(true)
-	assert(transport.calls.size() == 3 and transport.calls[2].command == "trade.sell")
-	var payload: Dictionary = transport.calls[2].data
+	assert(transport.calls.size() == 4 and transport.calls[3].command == "trade.sell")
+	var payload: Dictionary = transport.calls[3].data
 	assert(payload.account == 1 and payload.port_id == 7 and payload.sector_id == 17)
 	assert(payload.items == [{"commodity": "ORG", "quantity": 2}] and not str(payload.idempotency_key).is_empty())
-	var operation: Dictionary = main._pending_game_commands["request-3"]
+	var operation: Dictionary = main._pending_game_commands["request-4"]
 	main._pending_game_commands.clear()
 	await main._finish_command_reply({"status": "ok", "type": "trade.sell_receipt_v1", "data": {"port_id": 7, "sector_id": 17, "player_id": 1, "lines": [{"commodity": "ORG", "quantity": 2}]}}, operation)
 	assert(main.refresh_coordinator.calls == 1 and main._command_refresh_pending)
 	main._on_refresh_finished({})
 	assert(transport.calls.back().command == "port.info")
 	assert(transport.calls.back().data == {"port_id": 7}, "post-trade port refresh did not use the confirmed port ID")
-	await main._on_transport_reply("request-4", {"status": "ok", "data": {"port": {"port_id": 7}}}, "port.info")
+	await main._on_transport_reply("request-5", {"status": "ok", "type": "trade.port_info", "data": {"port": {"port_id": 7}}}, "port.info")
 	assert(view.ports.size() == 1 and main._pending_trade.is_empty())
 	main._pending_game_commands["request-port"] = {"kind": "command", "command": "port.info", "label": "Open port", "data": {"port_id": 7}}
 	await main._finish_command_reply({"status": "ok", "type": "trade.port_info", "data": {"port": {"id": 7}}}, main._pending_game_commands["request-port"])
@@ -150,12 +154,12 @@ func _run() -> void:
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
 	main._finish_trade_quote({"status": "refused", "error": {"message": "Unavailable"}})
 	assert(main._pending_trade.is_empty() and not view.busy and view.messages.back().contains("Unavailable") and view.messages.back().contains("refreshing port stock"), "quote refusal left the trade workflow locked")
-	assert(transport.calls.back().command == "port.info" and main._pending_game_commands.has("request-6"))
+	assert(transport.calls.back().command == "port.info" and main._pending_game_commands.has("request-7"))
 	main._pending_game_commands.clear()
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
 	main._finish_trade_quote({"status": "ok", "type": "trade.quote", "data": {"port_id": 8, "commodity": "ORE", "quantity": 1, "buy_price": 1, "total_buy_price": 1}})
 	assert(main._pending_trade.is_empty() and view.quotes.size() == 2 and view.messages.back().contains("did not match"))
-	assert(transport.calls.back().command == "port.info" and main._pending_game_commands.has("request-8"))
+	assert(transport.calls.back().command == "port.info" and main._pending_game_commands.has("request-9"))
 	assert(not main._valid_trade_quote({"port_id": {}, "quantity": 1, "commodity": "ORE", "buy_price": 1, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"))
 	assert(not main._valid_trade_quote({"port_id": 7, "quantity": 1, "commodity": "ORE", "buy_price": INF, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"))
 	assert(not main._valid_trade_quote({"port_id": true, "quantity": 1, "commodity": "ORE", "buy_price": 1, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"))
@@ -163,7 +167,7 @@ func _run() -> void:
 	assert(not main._valid_trade_quote({"port_id": 0, "quantity": 1, "commodity": "ORE", "buy_price": 1, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"), "zero quote port ID was accepted")
 	assert(not main._valid_trade_quote({"port_id": 7, "quantity": 0, "commodity": "ORE", "buy_price": 1, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"), "zero quote quantity was accepted")
 	assert(not main._valid_trade_quote({"port_id": 7, "quantity": 3.0, "commodity": "ORE", "buy_price": 1, "total_buy_price": 3}, {"port_id": 7, "quantity": 3, "commodity": "ORE"}, "buy_price", "total_buy_price"))
-	assert(not main._valid_trade_quote({"port_id": 7, "quantity": 1, "commodity": "ORE", "buy_price": 1.0, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"))
+	assert(main._valid_trade_quote({"port_id": 7, "quantity": 1, "commodity": "ORE", "buy_price": 1.0, "total_buy_price": 1}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"), "schema-valid JSON numeric prices were rejected")
 	assert(main._valid_trade_quote({"port_id": 7, "quantity": 1, "commodity": "ORE"}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"), "schema-valid quote without optional price fields was rejected")
 	assert(not main._valid_trade_quote({"port_id": 7, "quantity": 1, "commodity": " ORE "}, {"port_id": 7, "quantity": 1, "commodity": "ORE"}, "buy_price", "total_buy_price"), "whitespace-padded quote commodity was accepted")
 	assert(not main._valid_trade_receipt({"port_id": 7, "sector_id": 17}, {"direction": "buy", "port_id": 7, "sector_id": 17}))
@@ -181,13 +185,13 @@ func _run() -> void:
 	assert(not main._valid_trade_receipt({"port_id": 7, "sector_id": 17}, {"direction": "buy", "port_id": 7, "sector_id": 17}, "trade.buy_receipt_v1", "buy", 14), "receipt without player identity was accepted")
 	main._pending_game_commands.clear()
 	main._request_port_refresh()
-	main._on_request_timed_out("request-9", "port.info")
+	main._on_request_timed_out("request-10", "port.info")
 	assert(view.port_workflow.closed and view.messages.back().contains("reopen"))
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
 	main._pending_game_commands.clear()
 	main._finish_trade_quote({"status": "ok", "type": "trade.quote", "data": {"port_id": 7, "commodity": "ORE", "quantity": 1, "buy_price": 3, "total_buy_price": 3}})
 	main._on_trade_confirmation(true)
-	operation = main._pending_game_commands["request-11"]
+	operation = main._pending_game_commands["request-12"]
 	main._pending_game_commands.clear()
 	await main._finish_command_reply({"status": "refused", "error": {"message": "Stock exhausted"}}, operation)
 	assert(main._pending_trade.get("refresh_port_after", false) and view.messages.back().contains("Stock exhausted") and main.refresh_coordinator.calls == 2)
@@ -201,7 +205,7 @@ func _run() -> void:
 	main._on_transport_disconnected("test")
 	assert(main._pending_trade.is_empty() and view.quote_dismissed and view.port_workflow.closed and not view.command_menu.tavern_access)
 	main._on_trade_confirmation(true)
-	assert(transport.calls.size() == 13)
+	assert(transport.calls.size() == 14)
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
 	main._pending_game_commands.clear()
 	main._finish_trade_quote({"status": "ok", "type": "trade.quote", "data": {"port_id": 7, "commodity": "ORE", "quantity": 1, "buy_price": 3.0, "total_buy_price": 3.0}})
@@ -214,23 +218,25 @@ func _run() -> void:
 	main._on_trade_requested("buy", 7, 17, "ORE", 1, 0)
 	main._finish_trade_quote({"status": "ok", "type": "trade.quote", "data": {"port_id": 7, "commodity": "ORE", "quantity": 1, "buy_price": 3.25, "total_buy_price": 3.25}})
 	assert(not main._pending_trade.is_empty(), "schema-valid real-valued trade quote was rejected")
-	main._on_request_failed("request-15", "trade.buy", {"kind": "disconnected", "message": "Connection lost"})
+	main._on_trade_confirmation(true)
+	main._on_request_failed("request-18", "trade.buy", {"kind": "disconnected", "message": "Connection lost"})
 	assert(main._pending_trade.is_empty() and view.messages.back().contains("outcome is uncertain"))
-	main._pending_game_commands["request-17"] = {"kind": "command", "command": "trade.buy", "label": "Buy", "data": {}}
-	main._on_request_failed("request-17", "trade.buy", {"kind": "transport", "message": "reply channel failed"})
+	main._pending_game_commands["request-18"] = {"kind": "command", "command": "trade.buy", "label": "Buy", "data": {}}
+	main._on_request_failed("request-18", "trade.buy", {"kind": "transport", "message": "reply channel failed"})
 	assert(main._pending_trade.get("refresh_port_after", false), "trade request failure did not retain the port-refresh reconciliation marker")
 	assert(main.refresh_coordinator.calls == 3 and main.refresh_coordinator.domains.back() == ["player", "ship", "sector"], "trade request failure did not refresh authoritative player, ship, and sector state")
 	assert(view.messages.back().contains("refreshing confirmed balances, cargo and port stock"))
 	main._pending_trade = {"direction": "buy", "port_id": 7, "sector_id": 17, "commodity": "ORE", "quantity": 1, "account": 0}
 	main._pending_game_commands.clear()
-	main._on_request_timed_out("request-16", "trade.quote")
+	main._pending_game_commands["request-17"] = {"kind": "trade_quote", "command": "trade.quote", "label": "Trade quote"}
+	main._on_request_timed_out("request-17", "trade.quote")
 	assert(main._pending_trade.is_empty() and view.messages.back().contains("refreshing port stock"), "quote timeout did not reconcile cached port stock")
-	assert(transport.calls.back().command == "port.info" and main._pending_game_commands.has("request-16"), "quote timeout did not request an authoritative port refresh")
+	assert(transport.calls.back().command == "port.info" and main._pending_game_commands.has("request-19"), "quote timeout did not request an authoritative port refresh: calls=%d pending=%s last=%s" % [transport.calls.size(), str(main._pending_game_commands.keys()), str(transport.calls.back())])
 	main._pending_trade = {"direction": "buy", "port_id": 7, "sector_id": 17, "commodity": "ORE", "quantity": 1, "account": -1}
 	main._on_trade_confirmation(true)
 	var saved_preference_payload: Dictionary = transport.calls.back().data
 	assert(not saved_preference_payload.has("account"), "server trade-account preference was serialized as account -1")
-	assert(main._pending_trade.is_empty() and view.busy, "confirmed trade did not remain busy while awaiting the server")
+	assert(not main._pending_trade.is_empty() and view.busy, "confirmed trade did not remain locked while awaiting the authoritative server reply")
 	transport.return_empty = true
 	main._on_trade_confirmation(true)
 	assert(main._pending_trade.is_empty() and not view.busy, "unsent trade left the client command rail busy")

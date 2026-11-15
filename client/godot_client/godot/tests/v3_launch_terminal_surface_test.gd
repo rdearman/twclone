@@ -25,7 +25,7 @@ func _run() -> void:
 	app.gameplay_view.enter_planet_workflow(77)
 
 	await app._finish_command_reply({
-		"status": "ok",
+		"status": "ok", "type": "planet.launch.success",
 		"data": {
 			"in_space": false,
 			"ship_destroyed": true,

@@ -24,7 +24,7 @@ func _run() -> void:
 	# A refusal that carries a terminal hazard report still requires a complete
 	# authoritative refresh because movement/hazard application is server-owned.
 	await app._finish_warp_reply({
-		"status": "refused",
+		"status": "refused", "type": "error",
 		"error": {"message": "Entry hazard stopped movement.", "data": {
 			"hazards": [{"hazard_type": "fighter", "hull_lost": 9}],
 		}},

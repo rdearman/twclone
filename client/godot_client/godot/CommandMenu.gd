@@ -21,6 +21,7 @@ const COMMANDS := {
 		{"label": "Report Bug / Suggest Improvement", "local_feedback": true},
 		{"label": "Report This Error", "local_feedback_error": true},
 		{"label": "Check feedback report status", "local_feedback_status": true},
+		{"label": "Log out to login screen", "local_logout": true},
 		{"label": "Help · controls and command flow", "local_help": true},
 		{"label": "Player information", "command": "player.my_info"},
 		{"label": "Ship information", "command": "ship.info"},
@@ -288,11 +289,19 @@ func _actions_for_category(category: String) -> Array:
 			# A selected port has its own contextual category in the visible
 			# selector. Keep its server-backed workflows reachable there instead
 			# of relying on the legacy, non-visible PORT registry key.
+			var selected_port_id: Variant = _authoritative_selection_id(_selection.get("data", {}), "port_id")
+			var ship_snapshot: Variant = _snapshot.get("ship", {})
+			var ported_value: Variant = ship_snapshot.get("ported", null) if ship_snapshot is Dictionary else null
 			actions = [
 				{"label": "Dock · open port screen", "command": "port.info", "context_id": "port_id", "fixed": {}},
 				{"label": "Request commodity quote", "command": "trade.quote", "context_id": "port_id", "fields": [["commodity", FIELD_TEXT, "Commodity code or name", ""], ["quantity", FIELD_INT, "Quantity", "1"]]},
 				{"label": "Shipyard · choose eligible hull", "command": "shipyard.list", "requires_shipyard_dock": true},
 			]
+			if typeof(selected_port_id) == TYPE_INT:
+				if typeof(ported_value) == TYPE_INT and int(ported_value) == int(selected_port_id):
+					actions.append({"label": "Undock from selected port", "command": "dock.status", "fixed": {"action": "undock"}, "mutating": true})
+				else:
+					actions.append({"label": "Dock at selected port", "command": "dock.status", "fixed": {"action": "dock"}, "mutating": true})
 		"CORPORATION":
 			if _player_has_corporation():
 				actions.append_array(COMMANDS.get("CORPORATION", []))
@@ -868,7 +877,7 @@ func _scan_count(data: Dictionary, counts: Dictionary, key: String, aliases: Arr
 		var value = counts.get(field, data.get(field, null))
 		# Scan measurements are authoritative JSON integers. Do not coerce
 		# booleans, strings, or floating-point values into displayable counts.
-		if _is_integral_number(value) and int(value) >= 0:
+		if typeof(value) == TYPE_INT and int(value) >= 0:
 			return str(int(value))
 	return "unknown"
 
@@ -885,7 +894,7 @@ func _scan_list(value: Variant) -> String:
 		# Adjacent-sector identifiers are server-owned JSON integers. Ignore
 		# malformed rows rather than turning arbitrary payload text into a
 		# seemingly actionable location.
-		if _is_integral_number(sector_id) and int(sector_id) > 0:
+		if typeof(sector_id) == TYPE_INT and int(sector_id) > 0:
 			values.append(str(int(sector_id)))
 	if values.is_empty():
 		return "unknown"
@@ -946,7 +955,7 @@ func _is_integral_number(value: Variant) -> bool:
 	return (typeof(value) == TYPE_INT and int(value) >= 0) or (typeof(value) == TYPE_FLOAT and is_finite(value) and value >= 0.0 and value == floor(value))
 
 func _authoritative_positive_id(value: Variant) -> int:
-	return int(value) if _is_integral_number(value) and int(value) > 0 else 0
+	return int(value) if typeof(value) == TYPE_INT and int(value) > 0 else 0
 
 func _format_visibility_refusal(payload: Dictionary, operation: String) -> String:
 	var error: Variant = payload.get("error", {})
@@ -958,7 +967,7 @@ func _format_visibility_refusal(payload: Dictionary, operation: String) -> Strin
 	return "%s refused: %s" % [operation, message]
 
 func _authoritative_density_value(value: Variant) -> bool:
-	return _is_integral_number(value)
+	return typeof(value) == TYPE_INT and int(value) >= 0
 
 func _sector_identifier(value: Variant) -> String:
 	if value is float and is_finite(value) and value == floor(value):
@@ -1222,22 +1231,23 @@ func _render_actions() -> void:
 	if _active_category == "PLANET":
 		actions = [{"label": "Planet information", "command": "planet.info", "context_id": "planet_id"}]
 		var ship_state: Dictionary = _snapshot.get("ship", {})
-		var landed_planet_id: Variant = ship_state.get("onplanet", null)
-		# `onplanet` is a server-owned planet ID. Do not coerce booleans or
-		# floating-point metadata into an actionable launch/surface workflow.
+		var landed_state: Variant = ship_state.get("onplanet", null)
+		var player_state: Dictionary = _snapshot.get("player", {})
+		var landed_planet_id: Variant = player_state.get("last_planet_id", null)
+		# The published V3 ship schema encodes onplanet as 0/1. Player identity
+		# supplies the last planet ID; neither field alone authorizes surface use.
 		var selected_planet_id: Variant = _authoritative_selection_id(_selection.get("data", {}), "planet_id")
-		var selected_is_landed_planet := selected_planet_id != null and typeof(landed_planet_id) == TYPE_INT and int(landed_planet_id) > 0 and int(selected_planet_id) == int(landed_planet_id)
+		var active_ship_matches := typeof(player_state.get("ship_id", null)) == TYPE_INT and typeof(ship_state.get("id", null)) == TYPE_INT and int(player_state.get("ship_id", 0)) > 0 and int(player_state.get("ship_id", 0)) == int(ship_state.get("id", 0))
+		var is_landed := typeof(landed_state) == TYPE_INT and int(landed_state) == 1 and active_ship_matches
+		var selected_is_landed_planet := selected_planet_id != null and is_landed and typeof(landed_planet_id) == TYPE_INT and int(landed_planet_id) > 0 and int(selected_planet_id) == int(landed_planet_id)
 		if selected_is_landed_planet:
 			actions.append({"label": "Launch from planet", "command": "planet.launch", "fixed": {}, "mutating": true})
 			actions.append({"label": "Planet colonist status", "command": "planet.colonists.get", "context_id": "planet_id"})
 			actions.append({"label": "Allocate planet colonists", "command": "planet.colonists.allocate", "context_id": "planet_id", "fields": [["ore", FIELD_INT, "Ore colonists", "0"], ["organics", FIELD_INT, "Organics colonists", "0"], ["equipment", FIELD_INT, "Equipment colonists", "0"]], "mutating": true})
-			# The server exposes a harvest schema, but the handler is currently
-			# unavailable and V3 has no pinned harvest semantics. Keep the
-			# capability visible without fabricating a request or local formula.
-			actions.append({"label": "Harvest planet production · unavailable", "command": "planet.harvest", "context_id": "planet_id", "unavailable_reason": "Planet harvest is unavailable until the authoritative server implementation and V3 policy are released."})
+			actions.append({"label": "Harvest planet production", "command": "planet.harvest", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Build planet citadel", "command": "citadel.build", "context_id": "planet_id", "mutating": true})
 			actions.append({"label": "Upgrade planet citadel", "command": "citadel.upgrade", "context_id": "planet_id", "mutating": true})
-		elif typeof(landed_planet_id) == TYPE_INT and int(landed_planet_id) > 0:
+		elif is_landed:
 			# A ship can only use surface commands for the exact server-confirmed
 			# planet it occupies.  Keep the selected planet's read action visible,
 			# but fail closed for launch/colonist/citadel operations instead of
@@ -1255,11 +1265,19 @@ func _render_actions() -> void:
 		if selected_metadata.has("planet_id") and _authoritative_selection_id(selected_metadata, "planet_id") == null:
 			_add_unavailable("Selected planet has no valid planet ID; server actions are unavailable.")
 	elif _active_category == "PORT":
+		var selected_port_id: Variant = _authoritative_selection_id(_selection.get("data", {}), "port_id")
+		var ship_snapshot: Variant = _snapshot.get("ship", {})
+		var ported_value: Variant = ship_snapshot.get("ported", null) if ship_snapshot is Dictionary else null
 		actions = [
 			{"label": "Dock · open port screen", "command": "port.info", "context_id": "port_id", "fixed": {}},
 			{"label": "Request commodity quote", "command": "trade.quote", "context_id": "port_id", "fields": [["commodity", FIELD_TEXT, "Commodity code or name", ""], ["quantity", FIELD_INT, "Quantity", "1"]]},
 			{"label": "Shipyard · choose eligible hull", "command": "shipyard.list", "requires_shipyard_dock": true},
 		]
+		if typeof(selected_port_id) == TYPE_INT:
+			if typeof(ported_value) == TYPE_INT and int(ported_value) == int(selected_port_id):
+				actions.append({"label": "Undock from selected port", "command": "dock.status", "fixed": {"action": "undock"}, "mutating": true})
+			else:
+				actions.append({"label": "Dock at selected port", "command": "dock.status", "fixed": {"action": "dock"}, "mutating": true})
 	elif _active_category == "SHIP":
 		var ship_data: Dictionary = _selection.get("data", {})
 		# Keep the command rail fail-closed until the selected object carries a

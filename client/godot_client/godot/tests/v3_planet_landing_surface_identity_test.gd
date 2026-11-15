@@ -12,7 +12,7 @@ func _run() -> void:
 	root.add_child(menu)
 	await process_frame
 
-	menu._snapshot = {"ship": {"onplanet": 77}, "hud": {"sector_id": 20}}
+	menu._snapshot = {"player": {"ship_id": 9, "last_planet_id": 77}, "ship": {"id": 9, "onplanet": 1}, "hud": {"sector_id": 20}}
 	menu._selection = {"kind": "planet", "data": {"planet_id": 88}}
 	menu._active_category = "PLANET"
 	menu._render_actions()
@@ -34,9 +34,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 planet landing surface identity tests passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _action_button(menu, label: String) -> Button:
 	for child in menu._action_list.get_children():

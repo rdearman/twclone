@@ -77,10 +77,13 @@ func _check(condition: bool, message: String) -> void:
 func _test_player_normalization() -> void:
 	var player: Dictionary = ClientState.normalize_player({"player": {
 		"id": 7, "username": "Alice", "credits": "1200.00", "turns_remaining": 4,
-		"sector": 9, "ship_id": 12, "corp_id": 3,
+		"sector": 9, "ship_id": 12, "corp_id": 3, "last_planet_id": 19,
 	}})
 	_check(player["id"] == 7 and player["sector_id"] == 9, "player identifiers were not normalized")
 	_check(player["credits"] == 1200 and player["turns_remaining"] == 4, "player values were not normalized")
+	_check(player["last_planet_id"] == 19, "authoritative player planet identity was not normalized")
+	var malformed_planet_id := ClientState.normalize_player({"player": {"last_planet_id": 19.5}})
+	_check(not malformed_planet_id.has("last_planet_id"), "fractional player planet identity was accepted")
 
 func _test_ship_normalization() -> void:
 	var ship: Dictionary = ClientState.normalize_ship({"ship": {
@@ -125,19 +128,19 @@ func _test_published_subscription_responses() -> void:
 
 func _test_json_numeric_normalization() -> void:
 	var player := ClientState.normalize_player({"player": {
-		"id": 3.0, "username": "newguy", "credits": "5000.00", "turns_remaining": 999999.0,
-		"sector": 1.0, "ship_id": 3.0,
+		"id": 3, "username": "newguy", "credits": "5000.00", "turns_remaining": 999999.0,
+		"sector": 1, "ship_id": 3,
 	}})
 	var ship := ClientState.normalize_ship({"ship": {
-		"id": 3.0, "name": "Bit Banger", "type_id": 2.0, "holds": 10.0,
+		"id": 3, "name": "Bit Banger", "type_id": 2.0, "holds": 10.0,
 		"fighters": 1.0, "shields": 1.0, "cargo": [],
 	}})
 	var sector := ClientState.normalize_sector({
-		"sector_id": 1.0, "name": "Fedspace 1", "beacon": "The Federation -- Do Not Dump!",
-		"adjacent_sectors": [{"to_sector": 2.0}, {"to_sector": 3.0}],
-		"celestial_objects": [{"name": "Terra", "planet_id": 1.0, "type": 1.0}],
-		"ships_present": [{"name": "Bit Banger", "ship_id": 3.0}],
-		"counts": {"fighters": 0.0, "mines": 0.0},
+		"sector_id": 1, "name": "Fedspace 1", "beacon": "The Federation -- Do Not Dump!",
+		"adjacent_sectors": [{"to_sector": 2}, {"to_sector": 3}],
+		"celestial_objects": [{"name": "Terra", "planet_id": 1, "type": 1.0}],
+		"ships_present": [{"name": "Bit Banger", "ship_id": 3}],
+		"counts": {"fighters": 0, "mines": 0},
 	})
 	_check(player.get("sector_id") == 1 and player.get("turns_remaining") == 999999, "integral JSON player numbers were discarded")
 	_check(ship.get("holds") == 10 and ship.get("fighters") == 1 and ship.get("shields") == 1, "integral JSON ship numbers were discarded")

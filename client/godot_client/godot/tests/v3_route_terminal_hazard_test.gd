@@ -21,10 +21,11 @@ func _run() -> void:
 	var fake_refresh := FakeRefresh.new()
 	app.refresh_coordinator = fake_refresh
 	app._route_running = true
-	app._planned_route = [19, 20]
+	var route: Array[int] = [19, 20]
+	app._planned_route = route
 
 	await app._finish_route_warp({
-		"status": "ok",
+		"status": "ok", "type": "move.result",
 		"data": {
 			"sector_id": 18,
 			"hazards": [{"hazard_type": "minefield", "hull_lost": 100}],

@@ -26,7 +26,7 @@ func _run() -> void:
 	_check(not view.trade_quote_dialog.visible, "ordinary trade unexpectedly opened a confirmation dialog")
 	_check(commands is PanelContainer, "general commands are not a docked panel")
 	_check(commands.get_parent() == view.workspace_stack, "command panel is not placed in the viewport command column")
-	_check(view.primary_tabs.tab_count == 5, "primary gameplay workspaces were not created")
+	_check(view.workspace_buttons.size() == 5, "primary gameplay workspaces were not created")
 	view._on_workspace_tab_changed(1)
 	_check(view._active_workspace == "NAVIGATION" and commands._active_category == "NAVIGATION", "Navigation workspace did not select the existing navigation command category")
 	view._on_workspace_tab_changed(0)

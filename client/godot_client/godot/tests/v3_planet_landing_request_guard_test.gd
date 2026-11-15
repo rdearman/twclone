@@ -16,9 +16,9 @@ func _run() -> void:
 
 	for malformed_id in [null, true, 77.0, "77"]:
 		requests.clear()
-		var before := app.gameplay_view.context_action_list.get_child_count()
+		var before: int = app.gameplay_view.context_action_list.get_child_count()
 		app.gameplay_view._add_object_actions("planet", {"data": {"planet_id": malformed_id, "id": 9001}})
-		var added := app.gameplay_view.context_action_list.get_child_count() - before
+		var added: int = app.gameplay_view.context_action_list.get_child_count() - before
 		_check(added == 2, "malformed planet ID %s did not render both unavailable actions" % str(malformed_id))
 		for index in range(before, before + added):
 			var action: Button = app.gameplay_view.context_action_list.get_child(index)
@@ -32,9 +32,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 planet landing request guard tests passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _capture_request(command: String, data: Dictionary, _label: String, _mutating: bool) -> void:
 	requests.append({"command": command, "data": data})

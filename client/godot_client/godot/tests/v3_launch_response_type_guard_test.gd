@@ -43,9 +43,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 launch response type guard tests: 3 checks passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:

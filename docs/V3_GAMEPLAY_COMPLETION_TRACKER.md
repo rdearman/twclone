@@ -538,6 +538,32 @@ for root-cause classification, exact commands and remaining runtime limits.
 Gameplay parity rows remain `IMPLEMENTED_UNVERIFIED` unless the precise server
 operation has separate database-backed acceptance evidence.
 
+### Godot gameplay verification — 2026-11-15
+
+The previous 45-script failure checkpoint is superseded by the current
+Godot 4.5.1 run: **103 scripts passed, 0 failed, 1 live-server script skipped
+without its opt-in environment, 104 total**. The command menu passed 206
+checks. The complete Python client suite passed 807/807; `tests.v2` passed
+259, skipped 7, and passed 227 subtests.
+
+The live disposable PostgreSQL journey exercised authenticated player UI
+navigation, turn consumption, scanning, docking, commodity purchase and sale,
+planet landing, harvesting, launch, feedback preview/submit/status, logout and
+reconnect. Database assertions after the run showed the ship held ORE 5 and
+ORG 2, while the planet's corresponding entity stock was depleted from ORE 3
+and ORG 2; the ship was back in sector 2 with `onplanet=false` and the player
+recorded no current planet. The exchange was driven through Godot menu actions.
+GitHub publication remained queue-only; no public issue was created.
+
+The landing failure was a V3 schema mismatch in Godot: `ship.status.onplanet`
+is a 0/1 flag, while `player.info.last_planet_id` carries the planet identity.
+Godot now requires both fields and active-ship identity before opening the
+surface or treating a refresh as proof of departure. The protocol text and
+fixtures now use the published schema. The headless live journey still prints
+renderer/ObjectDB resource-leak warnings on exit; gameplay assertions pass,
+but clean teardown remains unverified. Godot 4.5.2 compatibility is also not
+verified; the available runtime was 4.5.1.
+
 ### Godot and StarPort integration checkpoint — 2026-11-14
 
 The Godot 4.5.2 command-menu regression passed 196 focused checks. A real
@@ -571,7 +597,7 @@ scope and remaining verification limits.
 
 | ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
 |---|---|---|---|---|---|---|
-| FEEDBACK-V3-01 | Player bug reports, suggestions and diagnostics | PARTIAL | `src/server_feedback.c`, migration `188_v3_player_feedback_outbox.sql`, `tools/feedback_github_publisher.py`, Python report/status workflows, Godot feedback form and `ProtocolTransport` diagnostic buffer | `docs/testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`: ordinary Python preview/confirm/submit/status/diagnostics and ownership live on disposable PostgreSQL; exact preview bytes match the outbox; two-session duplicate, injected rollback, and planted metadata/diagnostic redaction verified; GitHub mocks cover create, reconciliation, failure, `Retry-After`, and label permission fallback; 812 Python client/mock tests and 259 `tests.v2` tests passed. Godot runtime was unavailable. | pending | Run Godot 4.5 acceptance, execute UI redaction regression, test server submission rate boundaries/global contention, and test GitHub App publication only in an authorised non-public test repository before claiming full cross-client verification. |
+| FEEDBACK-V3-01 | Player bug reports, suggestions and diagnostics | PARTIAL | `src/server_feedback.c`, migration `188_v3_player_feedback_outbox.sql`, `tools/feedback_github_publisher.py`, Python report/status workflows, Godot feedback form and `ProtocolTransport` diagnostic buffer | `docs/testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`: ordinary Python preview/confirm/submit/status/diagnostics and ownership live on disposable PostgreSQL; exact preview bytes match the outbox; two-session duplicate, injected rollback, and planted metadata/diagnostic redaction verified; GitHub mocks cover create, reconciliation, failure, `Retry-After`, and label permission fallback; Python feedback UI passed against disposable PostgreSQL, and the Godot live UI completed preview, confirmed submission and ownership-scoped status retrieval in queue-only mode. The Godot report persisted as `pending`; no public issue was created. Current broader runs: 807 Python client tests and 259 `tests.v2` tests passed. | pending | Verify Godot 4.5.2 separately, exercise Godot planted-secret redaction through the live preview, test server submission rate boundaries/global contention, and validate GitHub App publication with authorised credentials before claiming live publication. |
 
 The Docker startup fix now uses a writable per-start runtime directory. A
 serving-container restart and post-restart authenticated status request passed

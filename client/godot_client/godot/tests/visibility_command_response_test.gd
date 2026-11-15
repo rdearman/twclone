@@ -49,7 +49,7 @@ func _run() -> void:
 		"command": "sector.scan",
 		"mutating": false,
 	})
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12, "refused scan replaced the confirmed sector with response payload data")
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12, "refused scan replaced the confirmed sector with response payload data")
 	_check(not str(app.gameplay_view.notification_label.text).contains("Untrusted remote sector"), "refused scan displayed untrusted response data")
 	_check(app.gameplay_view.notification_label.text.contains("Detailed scan requires the current sector"), "scan refusal reason was not shown")
 	_check(app.refresh_coordinator.calls.size() == 1, "refused scan did not request an authoritative sector refresh")
@@ -77,7 +77,7 @@ func _run() -> void:
 	}, {
 		"label": "Describe sector", "command": "move.describe_sector", "mutating": false,
 	})
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12, "describe-sector refusal replaced the confirmed sector")
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12, "describe-sector refusal replaced the confirmed sector")
 	_check(not str(app.gameplay_view.notification_label.text).contains("Untrusted remote sector"), "describe-sector refusal displayed untrusted response data")
 	_check(app.gameplay_view.notification_label.text.contains("Sector details are unavailable from this location"), "describe-sector refusal reason was not shown")
 	_check(app.refresh_coordinator.calls.size() == 1, "describe-sector refusal did not request an authoritative sector refresh")
@@ -91,7 +91,7 @@ func _run() -> void:
 	}, {
 		"label": "Detailed current-sector scan", "command": "sector.scan", "mutating": false,
 	})
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12, "scan for another sector replaced the confirmed sector")
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12, "scan for another sector replaced the confirmed sector")
 	_check(not str(app.gameplay_view.notification_label.text).contains("Contradictory remote sector"), "contradictory scan payload was rendered")
 	_check(app.gameplay_view.notification_label.text.contains("confirmed location is sector 12"), "contradictory scan was not explained")
 	_check(app.refresh_coordinator.calls.size() == 1, "contradictory scan did not request a current-sector refresh")
@@ -148,7 +148,7 @@ func _run() -> void:
 		"label": "Detailed current-sector scan", "command": "sector.scan", "mutating": false,
 	})
 	_check(not app.gameplay_view.information_text.text.contains("Cached float identity"), "scan matched a malformed floating-point cached sector ID")
-	_check(app.gameplay_view.notification_label.text.contains("omitted a valid sector ID"), "malformed cached sector ID was not refused")
+	_check(app.gameplay_view.notification_label.text.contains("no valid confirmed sector ID"), "malformed cached sector ID was not refused")
 	_check(app.refresh_coordinator.calls.size() == 1 and app.refresh_coordinator.calls[0]["domains"] == ["sector"], "malformed cached sector ID did not refresh the confirmed sector")
 
 	app.refresh_coordinator.calls.clear()
@@ -158,7 +158,7 @@ func _run() -> void:
 	}, {
 		"label": "Detailed current-sector scan", "command": "sector.scan", "mutating": false,
 	})
-	_check(app.gameplay_view._snapshot["sector"]["sector_id"] == 12, "floating-point sector ID replaced the confirmed sector")
+	_check(app.gameplay_view._snapshot["sector"]["id"] == 12, "floating-point sector ID replaced the confirmed sector")
 	_check(not str(app.gameplay_view.notification_label.text).contains("Schema-mismatched sector"), "floating-point sector ID was rendered as authoritative")
 	_check(app.gameplay_view.notification_label.text.contains("omitted a valid sector ID"), "floating-point sector ID was not rejected as malformed")
 	_check(app.refresh_coordinator.calls.size() == 1, "floating-point sector ID did not request an authoritative refresh")
@@ -270,21 +270,23 @@ func _run() -> void:
 
 	app.refresh_coordinator.calls.clear()
 	await app._finish_command_reply({
-		"status": "ok", "type": null,
+		"status": "ok", "type": "trade.port_info",
 		"data": {"port": {"id": 8, "name": "Known port", "commodities": []}},
 	}, {
 		"label": "Open port", "command": "port.info", "mutating": false,
+		"data": {"port_id": 8},
 	})
-	_check(app.gameplay_view.port_workflow.visible, "explicit null port response type was rejected despite the optional envelope contract")
-	_check(app.refresh_coordinator.calls.is_empty(), "valid null-type port.info triggered an unnecessary sector refresh")
+	_check(app.gameplay_view.port_workflow.visible, "canonical port.info response was rejected")
+	_check(app.refresh_coordinator.calls.is_empty(), "valid port.info triggered an unnecessary sector refresh")
 	app.gameplay_view.port_workflow.close_for_location_change()
 
 	app.refresh_coordinator.calls.clear()
 	await app._finish_command_reply({
-		"status": "ok", "type": "port.info",
+		"status": "ok", "type": "trade.port_info",
 		"data": {"port": {"name": "Unidentified port"}, "commodities": []},
 	}, {
 		"label": "Open port", "command": "port.info", "mutating": false,
+		"data": {"port_id": 8},
 	})
 	_check(not app.gameplay_view.port_workflow.visible, "port.info without an ID opened a port workflow")
 	_check(not str(app.gameplay_view.notification_label.text).contains("Unidentified port"), "port.info without an ID displayed untrusted port data")
@@ -295,7 +297,7 @@ func _run() -> void:
 
 	app.refresh_coordinator.calls.clear()
 	await app._finish_command_reply({
-		"status": "ok", "type": "ship.inspect.result",
+		"status": "ok", "type": "ship.inspect",
 		"data": {"ship": {"ship_id": 88.0, "name": "Schema-mismatched ship"}},
 	}, {
 		"label": "Inspect ship", "command": "ship.inspect", "mutating": false,

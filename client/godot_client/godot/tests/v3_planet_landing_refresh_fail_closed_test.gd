@@ -18,7 +18,7 @@ func _run() -> void:
 
 	await app._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh"},
-		"ship": {"id": 9, "onplanet": 88},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 
 	_check(app._landed_planet_id == 0, "contradictory refresh retained the pending planet identity")
@@ -31,9 +31,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 landing fail-closed tests: %d checks passed" % checks)
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	checks += 1

@@ -92,7 +92,6 @@ var _note_input: LineEdit
 var _note_status: Label
 var _note_content: VBoxContainer
 var _note_toggle: Button
-var primary_tabs: TabBar
 var workspace_buttons: Array[Button] = []
 var workspace_status: Label
 var _holographic_scan_buttons: Array[Button] = []
@@ -107,6 +106,13 @@ func _ready() -> void:
 	resized.connect(_on_gameplay_resized)
 	_update_responsive_layout()
 	call_deferred("_move_port_workflow_to_window_overlay")
+
+func _exit_tree() -> void:
+	# The trade surface is reparented to the window so it can cover the full
+	# viewport. It is therefore outside this control's ownership subtree and
+	# must be explicitly queued for deletion when GameplayView is removed.
+	if is_instance_valid(port_workflow) and port_workflow.get_parent() != self:
+		port_workflow.queue_free()
 
 func _on_gameplay_resized() -> void:
 	print("[PORT_UI] gameplay_resized size=%s workflow=%s" % [str(size), str(port_workflow) if is_instance_valid(port_workflow) else "invalid"])
@@ -347,21 +353,8 @@ func _build() -> void:
 	_apply_button_style(help_button, false)
 	top_row.add_child(help_button)
 
-	primary_tabs = TabBar.new()
-	primary_tabs.custom_minimum_size.y = 42
-	primary_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for workspace in WORKSPACES:
-		primary_tabs.add_tab(workspace.capitalize())
-	primary_tabs.tab_changed.connect(_on_workspace_tab_changed)
-	primary_tabs.current_tab = 0
-	primary_tabs.add_theme_font_size_override("font_size", 14)
-	primary_tabs.add_theme_color_override("font_selected_color", Color(0.92, 1.0, 0.98))
-	primary_tabs.add_theme_color_override("font_unselected_color", Color(0.64, 0.76, 0.79))
-	# Keep the native tab state for keyboard/state compatibility. Godot's
-	# dynamically-created TabBar can lose its label rendering when adjacent
-	# panels are hidden, so the visible presentation uses ordinary accessible
-	# buttons bound to the same workspace state.
-	primary_tabs.visible = false
+	# Visible accessible buttons are the single source for workspace selection.
+	# A hidden native TabBar added no UI and leaked theme-created labels at exit.
 	var workspace_row := HBoxContainer.new()
 	workspace_row.custom_minimum_size.y = 42
 	workspace_row.add_theme_constant_override("separation", 4)
@@ -379,6 +372,7 @@ func _build() -> void:
 		workspace_buttons.append(workspace_button)
 	_sync_workspace_buttons()
 	workspace_status = _label("SECTOR WORKSPACE · select an object or scan the current sector", 10, Color(0.48, 0.78, 0.78))
+	workspace_row.add_child(workspace_status)
 	# Context is retained for accessibility/state updates but no longer consumes
 	# a separate row above the flexible viewport.
 	workspace_status.visible = false
@@ -978,7 +972,8 @@ func _render_selection(object: Dictionary) -> void:
 	action_button = null
 	if object.is_empty():
 		var sector: Dictionary = _snapshot.get("sector", {})
-		var sector_id := int(_snapshot.get("hud", {}).get("sector_id", sector.get("sector_id", 0)))
+		var raw_sector_id: Variant = _snapshot.get("hud", {}).get("sector_id", sector.get("sector_id", 0))
+		var sector_id := int(raw_sector_id) if typeof(raw_sector_id) == TYPE_INT else 0
 		var ports: Array = sector.get("ports", []) if sector.get("ports", []) is Array else []
 		var planets: Array = sector.get("planets", []) if sector.get("planets", []) is Array else []
 		var ships: Array = sector.get("ships_present", []) if sector.get("ships_present", []) is Array else []
@@ -1509,7 +1504,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	if event.alt_pressed and event.keycode >= KEY_1 and event.keycode <= KEY_5:
-		primary_tabs.current_tab = event.keycode - KEY_1
+		_on_workspace_button_pressed(event.keycode - KEY_1)
 		get_viewport().set_input_as_handled()
 		return
 	if command_menu.capture_shortcut(event):
@@ -1573,8 +1568,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _on_workspace_tab_changed(index: int) -> void:
 	if index < 0 or index >= WORKSPACES.size():
 		return
-	if is_instance_valid(primary_tabs) and primary_tabs.current_tab != index:
-		primary_tabs.current_tab = index
 	_active_workspace = WORKSPACES[index]
 	# Computer and Communications open directly into their integrated command
 	# surface. Trading and Navigation use their purpose-built controls and do
@@ -1893,10 +1886,7 @@ func _comm_button(label: String, callback: Callable) -> Button:
 
 
 func _on_workspace_button_pressed(index: int) -> void:
-	if is_instance_valid(primary_tabs):
-		primary_tabs.current_tab = index
-	else:
-		_on_workspace_tab_changed(index)
+	_on_workspace_tab_changed(index)
 
 func _sync_workspace_buttons() -> void:
 	for index in workspace_buttons.size():

@@ -38,9 +38,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 planet landing authoritative-ID test passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _capture_request(command: String, data: Dictionary, _label: String, _mutating: bool) -> void:
 	requests.append({"command": command, "data": data})

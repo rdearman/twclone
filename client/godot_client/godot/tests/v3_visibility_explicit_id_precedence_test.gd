@@ -35,9 +35,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("V3 visibility explicit-ID precedence tests: 4 checks passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:

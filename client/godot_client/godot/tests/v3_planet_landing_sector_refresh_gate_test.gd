@@ -22,7 +22,7 @@ func _run() -> void:
 	await app._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh", "sector": "partially available"},
 		"player": {"id": 3},
-		"ship": {"id": 9, "onplanet": 77},
+		"ship": {"id": 9, "onplanet": 1},
 		"sector": {"id": 17},
 	})
 
@@ -36,9 +36,10 @@ func _run() -> void:
 	if failures.is_empty():
 		print("Godot V3 planet landing sector-refresh gate test passed")
 		quit(0)
-	for failure in failures:
-		push_error(failure)
-	quit(1)
+	else:
+		for failure in failures:
+			push_error(failure)
+		quit(1)
 
 func _check(condition: bool, message: String) -> void:
 	if not condition:

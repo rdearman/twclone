@@ -23,7 +23,8 @@ func _run() -> void:
 	app._route_running = true
 	app._route_stop_requested = true
 	app._route_stop_after_next = true
-	app._planned_route = [42, 43]
+	var route: Array[int] = [42, 43]
+	app._planned_route = route
 	app._route_destination = 43
 	app.gameplay_view.show_planned_route(app._planned_route, app._route_destination)
 

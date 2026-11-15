@@ -15,6 +15,7 @@ class FakeTransport extends RefCounted:
 
 class FakeAuth extends RefCounted:
 	var player_id := 3
+	var session_token := "test-session"
 
 	func is_authenticated() -> bool:
 		return true

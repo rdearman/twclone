@@ -50,6 +50,7 @@ func _run() -> void:
 	var menu = CommandMenu.new()
 	root.add_child(menu)
 	await process_frame
+	menu._snapshot = {"authenticated": true, "disconnected": false, "hud": {"sector_id": 12}, "freshness": {"sector": "fresh"}}
 	var scan := menu._format_scan_result({"data": {
 		"sector_id": 12, "ports": [{"id": 8, "type": 9}], "counts": {"ships": 0},
 	}})
@@ -145,8 +146,8 @@ func _run() -> void:
 		"sector": unknown_sector,
 	})
 	_check(_find_text(view.contents_list, "Not reported by the server"), "undisclosed sector fields were presented as an empty sector")
-	_check(view._authoritative_object_id({"planet_id": null, "id": 19}, ["planet_id", "id"]) == 19, "planet view did not fall back to a valid server planet ID")
-	_check(view._authoritative_object_id({"planet_id": 0, "id": 20}, ["planet_id", "id"]) == 20, "planet view did not reject a non-positive primary ID")
+	_check(view._authoritative_object_id({"id": 19}, ["planet_id", "id"]) == 19, "planet view did not fall back when the canonical field was absent")
+	_check(view._authoritative_object_id({"planet_id": 0, "id": 20}, ["planet_id", "id"]) == 0, "planet view fell through a non-positive primary ID")
 	_check(view._authoritative_object_id({"planet_id": null, "id": 0}, ["planet_id", "id"]) == 0, "planet view invented an ID when the server supplied none")
 	_check(view._authoritative_object_id({"planet_id": "77", "id": 20}, ["planet_id", "id"]) == 0, "planet view fell back after an explicit malformed ID")
 	menu.queue_free()

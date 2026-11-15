@@ -57,16 +57,9 @@ func handle_response(response: Dictionary) -> bool:
 		return false
 	var raw_player_id: Variant = data.get("player_id", null)
 	print("[AUTH_TRACE] AuthSession response player_id_type=%s" % [type_string(typeof(raw_player_id))])
-	# The authenticated player identity is the binding used by subsequent
-	# authoritative refreshes and landing reconciliation. Godot's JSON parser
-	# can represent an integer JSON number as an integral float, so normalize
-	# that wire representation without accepting fractional, string, or boolean
-	# values as an identity.
-	var player_id_valid := false
-	if typeof(raw_player_id) == TYPE_INT:
-		player_id_valid = int(raw_player_id) > 0
-	elif typeof(raw_player_id) == TYPE_FLOAT:
-		player_id_valid = is_finite(raw_player_id) and raw_player_id > 0.0 and raw_player_id == floor(raw_player_id)
+	# Protocol identities are JSON integers. Reject numeric coercion to preserve
+	# the server's authoritative player/session binding.
+	var player_id_valid := typeof(raw_player_id) == TYPE_INT and int(raw_player_id) > 0
 	if not player_id_valid:
 		_login_in_flight = false
 		state = State.UNAUTHENTICATED

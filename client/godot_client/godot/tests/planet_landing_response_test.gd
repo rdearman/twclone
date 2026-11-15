@@ -146,7 +146,7 @@ func _run() -> void:
 
 	fake_refresh.calls.clear()
 	await app._finish_command_reply({
-		"status": "ok", "type": "planet.land.success", "data": {"planet_id": 77.0},
+		"status": "ok", "type": "planet.land.success", "data": {"planet_id": 77},
 	}, {
 		"label": "Land on planet", "command": "planet.land",
 		"data": {"planet_id": 77}, "mutating": true,
@@ -185,8 +185,8 @@ func _run() -> void:
 	app.auth_session.player_id = 42
 	await app._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"},
-		"player": {"id": 42},
-		"ship": {"onplanet": 77},
+		"player": {"id": 42, "ship_id": 9, "last_planet_id": 77},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 	_check(app.gameplay_view.planet_workflow.visible, "confirmed landing did not open the planet workflow after refresh")
 	_check(app._landing_surface_ready, "successful landing refresh did not enable surface reads")
@@ -229,7 +229,8 @@ func _run() -> void:
 	fake_refresh.calls.clear()
 	await app._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh"},
-		"ship": {"onplanet": 88},
+		"player": {"id": 42, "ship_id": 9, "last_planet_id": 88},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 	_check(not app._landing_surface_ready, "refresh for another planet opened the requested surface")
 	_check(not app.gameplay_view.planet_workflow.visible, "contradictory landed planet ID left surface actions visible")

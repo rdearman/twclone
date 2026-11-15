@@ -36,7 +36,8 @@ func _run() -> void:
 	app._command_refresh_pending = true
 	await app._on_refresh_finished({
 		"freshness": {"player": "fresh", "ship": "fresh", "sector": "fresh"},
-		"ship": {"id": 9, "onplanet": 77},
+		"player": {"id": 3, "ship_id": 9, "last_planet_id": 77},
+		"ship": {"id": 9, "onplanet": 1},
 	})
 	_check(app._landed_planet_id == 77, "contradictory launch refresh cleared confirmed planet identity")
 	_check(app.gameplay_view.planet_workflow.visible, "contradictory launch refresh hid the confirmed planet surface")

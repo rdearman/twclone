@@ -221,13 +221,17 @@ static func normalize_player(data: Dictionary) -> Dictionary:
 		return {}
 	var source: Dictionary = data["player"]
 	var result := {}
-	_copy_int(source, result, "id")
+	_copy_authoritative_id(source, result, "id")
 	_copy_string(source, result, "username")
 	_copy_money(source, result, "credits")
 	_copy_int(source, result, "turns_remaining")
-	_copy_int(source, result, "sector", "sector_id")
-	_copy_int(source, result, "ship_id")
-	_copy_int(source, result, "corp_id")
+	_copy_authoritative_id(source, result, "sector", "sector_id")
+	_copy_authoritative_id(source, result, "ship_id")
+	# `ship.onplanet` is the server's boolean state encoded as 0/1; the
+	# authoritative planet identity is `player.last_planet_id`.
+	_copy_nonnegative_authoritative_id(source, result, "last_planet_id")
+	if source.has("corp_id") and typeof(source["corp_id"]) == TYPE_INT and int(source["corp_id"]) >= 0:
+		result["corp_id"] = int(source["corp_id"])
 	_copy_int(source, result, "alignment")
 	_copy_int(source, result, "experience")
 	return result
@@ -237,7 +241,7 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 		return {}
 	var source: Dictionary = data["ship"]
 	var result := {}
-	_copy_int(source, result, "id")
+	_copy_authoritative_id(source, result, "id")
 	_copy_string(source, result, "name")
 	_copy_int(source, result, "type_id")
 	_copy_int(source, result, "holds")
@@ -247,8 +251,8 @@ static func normalize_ship(data: Dictionary) -> Dictionary:
 		result["has_long_range_scanner"] = source["has_long_range_scanner"]
 	if source.has("hull") and _is_integral_number(source["hull"]) and source["hull"] >= 0 and source["hull"] <= 100:
 		result["hull"] = int(source["hull"])
-	_copy_int(source, result, "onplanet")
-	_copy_int(source, result, "ported")
+	_copy_nonnegative_authoritative_id(source, result, "onplanet")
+	_copy_nonnegative_authoritative_id(source, result, "ported")
 	if source.has("cargo") and source["cargo"] is Array:
 		var cargo := []
 		var used := 0
@@ -324,8 +328,8 @@ static func normalize_sector(data: Dictionary) -> Dictionary:
 	}
 	if data.has("counts") and data["counts"] is Dictionary:
 		var counts := {}
-		_copy_int(data["counts"], counts, "fighters")
-		_copy_int(data["counts"], counts, "mines")
+		_copy_strict_nonnegative_int(data["counts"], counts, "fighters")
+		_copy_strict_nonnegative_int(data["counts"], counts, "mines")
 		result["counts"] = counts
 	_copy_int(data, result, "server_tick")
 	return result
@@ -380,6 +384,16 @@ static func _copy_authoritative_id(source: Dictionary, target: Dictionary, sourc
 	if source.has(source_key) and _is_authoritative_id(source[source_key]):
 		target[key] = int(source[source_key])
 
+static func _copy_nonnegative_authoritative_id(source: Dictionary, target: Dictionary, source_key: String, target_key: String = "") -> void:
+	var key := target_key if not target_key.is_empty() else source_key
+	if source.has(source_key) and typeof(source[source_key]) == TYPE_INT and int(source[source_key]) >= 0:
+		target[key] = int(source[source_key])
+
+static func _copy_strict_nonnegative_int(source: Dictionary, target: Dictionary, source_key: String, target_key: String = "") -> void:
+	var key := target_key if not target_key.is_empty() else source_key
+	if source.has(source_key) and typeof(source[source_key]) == TYPE_INT and int(source[source_key]) >= 0:
+		target[key] = int(source[source_key])
+
 static func _is_strict_authoritative_id(value: Variant) -> bool:
 	# Visibility IDs are JSON integer contract fields. Godot may parse generic
 	# numeric values as floats, but an integral float is still schema-mismatched
@@ -387,7 +401,7 @@ static func _is_strict_authoritative_id(value: Variant) -> bool:
 	return typeof(value) == TYPE_INT and int(value) > 0
 
 static func _is_authoritative_id(value: Variant) -> bool:
-	return _is_integral_number(value) and int(value) > 0
+	return typeof(value) == TYPE_INT and int(value) > 0
 
 static func _is_integral_number(value: Variant) -> bool:
 	if typeof(value) == TYPE_INT:
