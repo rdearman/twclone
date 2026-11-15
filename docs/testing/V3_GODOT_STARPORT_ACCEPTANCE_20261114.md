@@ -150,3 +150,32 @@ cases passed, 0 failed, 4 skipped** (one suite declared those four skipped
 cases). The report and transcript are under
 `/tmp/twclone-acceptance-d5b11270/tests-v2-full-final-report.json` and
 `/tmp/twclone-acceptance-d5b11270/tests-v2-full-final.log`.
+
+### Concurrent StarPort operations and retry accounting
+
+Two ordinary sessions were synchronized with a thread barrier against port 9.
+The first pair issued two concurrent ORE capacity upgrades from level 0. Both
+returned success at serialized levels 1 and 2. Final PostgreSQL state was
+capacity level 2, petty cash +30,000, each player's credits debited by the
+response amount, and ship ORE debited by 100 and 200 respectively. Both
+idempotency receipts were present exactly once. Reissuing both keys
+concurrently returned the same results and left capacity, balances, materials,
+and the two receipt rows unchanged.
+
+A second barrier-synchronized pair issued an ORE upgrade and a port attack
+against port 9 in unprotected sector 11. Both succeeded. The upgrade advanced
+level 2 to 3, spending 30,000 credits and 300 ORE; the attack applied 650
+damage and 100 retaliation. PostgreSQL showed port durability 10,000 to 9,350,
+capacity 2 to 3, petty cash 40,000 to 70,000, the upgrading player's credits
+100,000 to 70,000 and ORE 300 to 0. The attacking player's credits were
+unchanged, turns went 1,000 to 999, shields 100 to 0, and hull/fighters stayed
+100/20. The port stayed active and both action receipts recorded one result.
+After restarting the serving game container, the attacker authenticated and a
+fresh `port.status` request succeeded; all listed state remained unchanged.
+
+Sanitised concurrent request/response and SQL snapshots are retained under
+`/tmp/twclone-acceptance-d5b11270/starport-concurrent-upgrades.log`,
+`starport-concurrent-upgrade-retries.log`, and
+`starport-concurrent-upgrade-attack.log`. The receipt schema does not store a
+PostgreSQL transaction ID, so request IDs and durable receipt keys are the
+available transaction correlation evidence.
