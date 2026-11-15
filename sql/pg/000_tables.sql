@@ -306,12 +306,13 @@ CREATE TABLE alignment_band (
 );
 
 CREATE TABLE trade_idempotency (
-    key TEXT PRIMARY KEY,
+    key TEXT NOT NULL,
     player_id integer NOT NULL,
     sector_id integer NOT NULL,
     request_json text NOT NULL,
     response_json text NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (key, player_id)
 );
 
 CREATE TABLE used_sectors (

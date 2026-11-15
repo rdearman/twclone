@@ -9,11 +9,20 @@
       "password": "password"
     },
     {
-      "name": "Rig: Mark test port as Stardock",
+      "name": "Rig: Move Captain and active ship to isolated port sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ports SET sector_id = (SELECT sector_id FROM players WHERE name = 'captain_crunch'), type = 9, porttype_id = (SELECT porttype_id FROM porttypes WHERE code = 'STARDOCK') WHERE port_id = 9;"
+        "sql": "WITH moved_ship AS (UPDATE ships SET sector_id = 9999 WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'captain_crunch') RETURNING ship_id) UPDATE players SET sector_id = 9999 WHERE name = 'captain_crunch' AND EXISTS (SELECT 1 FROM moved_ship);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Mark isolated test port as Stardock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ports SET sector_id = 9999, type = 9, porttype_id = (SELECT porttype_id FROM porttypes WHERE code = 'STARDOCK') WHERE port_id = 9;"
       },
       "expect": { "status": "ok" }
     },

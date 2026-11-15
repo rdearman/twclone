@@ -56,7 +56,16 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE planets SET owner_id = @{planet_gov_player_id}, owner_type = 'player', colonist = 50000000, ore_on_hand = 10000, organics_on_hand = 10000, equipment_on_hand = 10000 WHERE planet_id = @{target_planet_id};"
+        "sql": "UPDATE planets SET type = (SELECT planettypes_id FROM planettypes WHERE code = 'M'), class = 'M', owner_id = @{planet_gov_player_id}, owner_type = 'player', population = 50000000, colonist = 50000000, colonists_unassigned = 50000000, ore_on_hand = 10000, organics_on_hand = 10000, equipment_on_hand = 10000 WHERE planet_id = @{target_planet_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Seed authoritative citadel construction stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock (entity_type, entity_id, commodity_code, quantity) VALUES ('planet', @{target_planet_id}, 'ORE', 10000), ('planet', @{target_planet_id}, 'ORG', 10000), ('planet', @{target_planet_id}, 'EQU', 10000) ON CONFLICT (entity_type, entity_id, commodity_code) DO UPDATE SET quantity = EXCLUDED.quantity;"
       },
       "expect": { "status": "ok" }
     },

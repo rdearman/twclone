@@ -17,6 +17,15 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Clear unrelated route-sector defenses",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id IN (678,679);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Connect the two-hop route",
       "command": "sys.raw_sql_exec",
       "user": "admin",

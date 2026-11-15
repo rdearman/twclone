@@ -278,12 +278,13 @@ CREATE TABLE alignment_band (
     notes TEXT);
 
 CREATE TABLE trade_idempotency (
-    `key` VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY,
+    `key` VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     player_id bigint NOT NULL,
     sector_id bigint NOT NULL,
     request_json TEXT NOT NULL,
     response_json TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`key`, player_id));
 
 CREATE TABLE used_sectors (
     used bigint);
