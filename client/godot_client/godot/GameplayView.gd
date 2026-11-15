@@ -105,12 +105,10 @@ func _ready() -> void:
 	_render_snapshot(_snapshot)
 	resized.connect(_on_gameplay_resized)
 	_update_responsive_layout()
-	call_deferred("_move_port_workflow_to_window_overlay")
 
 func _exit_tree() -> void:
-	# The trade surface is reparented to the window so it can cover the full
-	# viewport. It is therefore outside this control's ownership subtree and
-	# must be explicitly queued for deletion when GameplayView is removed.
+	# In a standalone GameplayView test the trade surface is attached to the
+	# Window root as a sibling; release it when the view goes away.
 	if is_instance_valid(port_workflow) and port_workflow.get_parent() != self:
 		port_workflow.queue_free()
 
@@ -120,23 +118,16 @@ func _on_gameplay_resized() -> void:
 		port_workflow._ui_trace("gameplay_resized gameplay_size=%s workflow_size=%s workflow_parent=%s" % [str(size), str(port_workflow.size), str(port_workflow.get_parent())])
 	_update_responsive_layout()
 
-func _move_port_workflow_to_window_overlay() -> void:
-	if not is_instance_valid(port_workflow):
-		return
-	var window_root := get_parent()
-	if window_root == null or port_workflow.get_parent() == window_root:
-		return
-	remove_child(port_workflow)
-	window_root.add_child(port_workflow)
-	port_workflow.z_index = 1000
-	port_workflow.move_to_front()
-
 func set_snapshot(snapshot: Dictionary) -> void:
 	var previous_sector = _snapshot.get("hud", {}).get("sector_id", null)
 	var next_sector = snapshot.get("hud", {}).get("sector_id", null)
 	if port_workflow != null and port_workflow.visible and previous_sector != null and next_sector != null and int(previous_sector) != int(next_sector):
 		port_workflow.close_for_location_change()
 		command_menu.set_tavern_access(false)
+	if command_menu != null and previous_sector != null and next_sector != null and int(previous_sector) != int(next_sector):
+		command_menu.clear_confirmed_port_context()
+	if command_menu != null and int(snapshot.get("ship", {}).get("ported", 0)) <= 0:
+		command_menu.clear_confirmed_port_context()
 	_snapshot = snapshot.duplicate(true)
 	_render_snapshot(_snapshot)
 	_sync_holographic_scan_controls()
@@ -548,9 +539,13 @@ func _build() -> void:
 		command_menu.set_tavern_access(false)
 	)
 	port_workflow.visibility_changed.connect(_on_port_workflow_visibility_changed)
-	# It starts here so its controls receive _ready() normally. It is moved to
-	# the fixed window overlay after GameplayView has finished building.
-	add_child(port_workflow)
+	# Attach the trade surface to the window overlay from the outset. Reparenting
+	# it after _ready() temporarily detaches its controls and popup ownership.
+	var overlay_root := get_parent()
+	if overlay_root != null:
+		overlay_root.add_child.call_deferred(port_workflow)
+	else:
+		add_child(port_workflow)
 	sector_view.set_interaction_enabled(true)
 	planet_workflow = PlanetWorkflowScript.new()
 	planet_workflow.command_requested.connect(func(command: String, data: Dictionary, label: String, mutating: bool) -> void:
@@ -1363,7 +1358,10 @@ func enter_port_workflow(data: Dictionary) -> void:
 		return
 	port_workflow.set_player_hold(_snapshot.get("ship", {}), _snapshot.get("hud", {}).get("credits", null))
 	port_workflow.show_port(data, sector_id)
-	sector_view.set_interaction_enabled(false)
+	if port_workflow.visible:
+		if is_instance_valid(command_menu):
+			command_menu.set_confirmed_port_context(data, sector_id)
+		sector_view.set_interaction_enabled(false)
 
 func _on_port_workflow_visibility_changed() -> void:
 	if is_instance_valid(sector_view) and is_instance_valid(port_workflow):

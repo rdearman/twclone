@@ -321,6 +321,27 @@ var _pinned_actions: Array[Dictionary] = []
 var _key_bindings: Dictionary = {}
 var _awaiting_binding_command := ""
 var _owned_ship_ids: Dictionary = {}
+var _confirmed_port_context: Dictionary = {}
+
+func set_confirmed_port_context(port_payload: Dictionary, sector_id: int) -> void:
+	var port: Variant = port_payload.get("port", port_payload)
+	if not port is Dictionary:
+		_confirmed_port_context.clear()
+		return
+	var port_id: Variant = port.get("id", port.get("port_id", null))
+	var port_sector: Variant = port.get("sector", sector_id)
+	var port_type: Variant = port.get("type", null)
+	if (typeof(port_id) != TYPE_INT or int(port_id) <= 0
+			or typeof(port_type) != TYPE_INT
+			or typeof(port_sector) != TYPE_INT or int(port_sector) != sector_id):
+		_confirmed_port_context.clear()
+		return
+	_confirmed_port_context = {"port_id": int(port_id), "sector_id": sector_id, "type": int(port_type)}
+	_render_actions()
+
+func clear_confirmed_port_context() -> void:
+	_confirmed_port_context.clear()
+	_render_actions()
 
 func set_owned_ship_roster(data: Dictionary) -> void:
 	# Remember only IDs from the latest validated ship.list.response.
@@ -1372,6 +1393,10 @@ func _is_docked_at_shipyard() -> bool:
 	var docked_port_id := int(ship.get("ported", 0))
 	if docked_port_id <= 0:
 		return false
+	var current_sector_id := int(_snapshot.get("hud", {}).get("sector_id", 0))
+	if (int(_confirmed_port_context.get("port_id", 0)) == docked_port_id
+			and int(_confirmed_port_context.get("sector_id", 0)) == current_sector_id):
+		return int(_confirmed_port_context.get("type", -1)) in [9, 10]
 	var sector: Dictionary = _snapshot.get("sector", {})
 	for port in sector.get("ports", []):
 		if not (port is Dictionary):
@@ -1387,6 +1412,10 @@ func _is_docked_at_supported_hardware() -> bool:
 	var docked_port_id := int(ship.get("ported", 0))
 	if docked_port_id <= 0:
 		return false
+	var current_sector_id := int(_snapshot.get("hud", {}).get("sector_id", 0))
+	if (int(_confirmed_port_context.get("port_id", 0)) == docked_port_id
+			and int(_confirmed_port_context.get("sector_id", 0)) == current_sector_id):
+		return int(_confirmed_port_context.get("type", -1)) in [9, 10]
 	var sector: Dictionary = _snapshot.get("sector", {})
 	for port in sector.get("ports", []):
 		if port is Dictionary and int(port.get("id", port.get("port_id", 0))) == docked_port_id:

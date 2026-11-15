@@ -47,7 +47,7 @@ func _run() -> void:
 			and freshness.get("ship") == "fresh" and freshness.get("sector") == "fresh",
 		240
 	)
-	_check(authenticated, "ordinary-player authentication through the Godot LoginView did not complete")
+	_check(authenticated, "ordinary-player authentication through the Godot LoginView did not complete: " + str(login.status_label.text))
 	if not authenticated:
 		_finish()
 		return
@@ -190,7 +190,78 @@ func _run() -> void:
 									)
 									_check(sold, "ordinary-player port sale did not update the authoritative cargo snapshot")
 									if sold:
-										# Leave the port through its contextual action, then land on
+										# Exercise hardware and shipyard actions through their visible
+										# catalogue dialogs while the ordinary player remains docked.
+										menu.select_category("TRADING")
+										await process_frame
+										var hardware_button := _find_button(menu._action_list, "Hardware catalogue")
+										_check(hardware_button != null and not hardware_button.disabled, "docked StarDock did not expose the hardware catalogue")
+										var hardware_ready := false
+										if hardware_button != null and not hardware_button.disabled:
+											hardware_button.pressed.emit()
+											hardware_ready = await _wait_until(func() -> bool:
+												return menu._shipyard_dialog.visible and not menu._busy,
+												180
+											)
+										_check(hardware_ready, "hardware.list did not open its server-backed catalogue")
+										var shield_button: Button
+										var hardware_bought := false
+										for hardware_row in menu._shipyard_rows.get_children():
+											if hardware_row is Button and str((hardware_row as Button).text).contains("[SHIELDS]"):
+												shield_button = hardware_row as Button
+										_check(shield_button != null and not shield_button.disabled, "server catalogue did not expose purchasable shield equipment")
+										if shield_button != null and not shield_button.disabled:
+											var before_shields := int(app.client_state.snapshot().get("ship", {}).get("shields", 0))
+											shield_button.pressed.emit()
+											if menu._form_fields.has("quantity"):
+												(menu._form_fields["quantity"] as LineEdit).text = "1"
+												menu._inline_submit.pressed.emit()
+												hardware_bought = await _wait_until(func() -> bool:
+													return (int(app.client_state.snapshot().get("ship", {}).get("shields", 0)) > before_shields
+													and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+													240
+													)
+										_check(hardware_bought, "hardware.buy did not confirm and refresh the installed shield equipment")
+												# The shipyard catalogue and named hull exchange are distinct
+										# player actions and are both reached through the port context.
+										app.gameplay_view.select_object_key(port_key)
+										menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
+										await process_frame
+										var shipyard_button := _find_button(menu._action_list, "Shipyard · choose eligible hull")
+										_check(shipyard_button != null and not shipyard_button.disabled, "StarDock did not expose its shipyard workflow")
+										var shipyard_ready := false
+										if shipyard_button != null and not shipyard_button.disabled:
+											shipyard_button.pressed.emit()
+											shipyard_ready = await _wait_until(func() -> bool:
+												return menu._shipyard_dialog.visible and not menu._busy,
+												180
+											)
+										await process_frame # Retire queued hardware rows before selecting a hull row.
+										_check(shipyard_ready, "shipyard.list did not return its server-backed catalogue")
+										var hull_button: Button
+										var ship_upgraded := false
+										for hull_row in menu._shipyard_rows.get_children():
+											if hull_row is Button and not (hull_row as Button).disabled:
+												hull_button = hull_row as Button
+												break
+										_check(hull_button != null, "shipyard did not expose an eligible replacement hull")
+										if hull_button != null:
+											var old_ship_id := int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0))
+											var old_ship_type := int(app.client_state.snapshot().get("ship", {}).get("type_id", 0))
+											hull_button.pressed.emit()
+											var selected_ship_type := int(menu._shipyard_type_id)
+											menu._shipyard_name_input.text = "Disposable QA Upgrade"
+											menu._shipyard_name_dialog.get_ok_button().pressed.emit()
+											ship_upgraded = await _wait_until(func() -> bool:
+												return (int(app.client_state.snapshot().get("hud", {}).get("ship_id", 0)) == old_ship_id
+													and selected_ship_type > 0 and selected_ship_type != old_ship_type
+													and int(app.client_state.snapshot().get("ship", {}).get("type_id", 0)) == selected_ship_type
+													and str(app.client_state.snapshot().get("ship", {}).get("name", "")) == "Disposable QA Upgrade"
+													and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+												240
+											)
+										_check(ship_upgraded, "shipyard.upgrade did not replace the active ship through its confirmed receipt")
+								# Leave the port through its contextual action, then land on
 										# an owned disposable planet and harvest using the surface UI.
 										app.gameplay_view.port_workflow._back_button.pressed.emit()
 										await process_frame
@@ -262,18 +333,72 @@ func _run() -> void:
 													await process_frame
 													var launch_button := _find_button(menu._action_list, "Launch from planet")
 													_check(launch_button != null and not launch_button.disabled, "landed player could not reach launch")
+													var departed := false
 													if launch_button != null and not launch_button.disabled:
 														launch_button.pressed.emit()
 														if menu._form_dialog.visible:
 															(menu._form_dialog.get_ok_button() as Button).pressed.emit()
-														var departed := await _wait_until(func() -> bool:
-															var current_snapshot: Dictionary = app.client_state.snapshot()
-															return (int(current_snapshot.get("ship", {}).get("onplanet", 1)) == 0
-																and app._landed_planet_id == 0 and not app.gameplay_view.planet_workflow.visible
-																and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
-															240
+													departed = await _wait_until(func() -> bool:
+														var current_snapshot: Dictionary = app.client_state.snapshot()
+														return (int(current_snapshot.get("ship", {}).get("onplanet", 1)) == 0
+															and app._landed_planet_id == 0 and not app.gameplay_view.planet_workflow.visible
+															and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
+														240
 														)
-														_check(departed, "launch did not close the surface after authoritative departure refresh")
+													_check(departed, "launch did not close the surface after authoritative departure refresh")
+	if OS.get_environment("TWCLONE_GODOT_CORPORATION") == "1":
+		# Exercise corporation creation and treasury access through the visible
+		# Computer and Corporation menu workflows. Deposit into the player's bank
+		# first when a new corporation is needed; corp.create charges that balance.
+		if int(app.client_state.snapshot().get("player", {}).get("corp_id", 0)) <= 0:
+			menu.select_category("TRADING")
+			await process_frame
+			var bank_deposit_button := _find_button(menu._action_list, "Deposit credits")
+			_check(bank_deposit_button != null and not bank_deposit_button.disabled, "Trading menu did not expose player bank deposit")
+			if bank_deposit_button != null and not bank_deposit_button.disabled:
+				bank_deposit_button.pressed.emit()
+				if menu._form_fields.has("amount"):
+					(menu._form_fields["amount"] as LineEdit).text = "5000"
+					menu._inline_submit.pressed.emit()
+				var bank_deposit_settled := await _wait_until(func() -> bool:
+					return app._pending_game_commands.is_empty() and not menu._busy,
+					240
+				)
+				_check(bank_deposit_settled, "bank.deposit did not complete through the player-facing workflow")
+			menu.select_category("COMPUTER")
+			await process_frame
+			var create_corp_button := _find_button(menu._action_list, "Create corporation")
+			_check(create_corp_button != null and not create_corp_button.disabled, "Computer menu did not expose corporation creation")
+			if create_corp_button != null and not create_corp_button.disabled:
+				create_corp_button.pressed.emit()
+				if menu._form_fields.has("name"):
+					(menu._form_fields["name"] as LineEdit).text = "Disposable QA Corp %d" % int(app.auth_session.player_id)
+					menu._inline_submit.pressed.emit()
+				var created_corp := await _wait_until(func() -> bool:
+					return int(app.client_state.snapshot().get("player", {}).get("corp_id", 0)) > 0 and app._pending_game_commands.is_empty(),
+					240
+				)
+				_check(created_corp, "corp.create did not persist and refresh the player's corporation membership")
+		var corp_menu_refreshed := await _wait_until(func() -> bool:
+			return int(menu._snapshot.get("player", {}).get("corp_id", 0)) > 0,
+			120
+		)
+		_check(corp_menu_refreshed, "corporation category did not refresh from authoritative player state")
+		if corp_menu_refreshed:
+			menu.select_category("CORPORATION")
+			await process_frame
+			var deposit_button := _find_button(menu._action_list, "Deposit to treasury")
+			_check(deposit_button != null and not deposit_button.disabled, "Corporation menu did not expose authorised treasury deposit")
+			if deposit_button != null and not deposit_button.disabled:
+				deposit_button.pressed.emit()
+				if menu._form_fields.has("amount"):
+					(menu._form_fields["amount"] as LineEdit).text = "100"
+					menu._inline_submit.pressed.emit()
+			var deposited := await _wait_until(func() -> bool:
+				return app._pending_game_commands.is_empty() and not menu._busy,
+				240
+			)
+			_check(deposited, "corp.deposit did not complete through the authorised Corporation menu")
 	if OS.get_environment("TWCLONE_GODOT_FEEDBACK") == "1":
 		# Use the actual Computer menu and player-facing feedback dialogs, including
 		# the server-generated public preview and final submit confirmation.
@@ -355,7 +480,8 @@ func _run() -> void:
 			await _wait_until(func() -> bool: return not app.auth_session.is_authenticated(), 120)
 	var auth_journey := "existing-login" if login_existing_account else "registration"
 	var feedback_journey := ",feedback" if OS.get_environment("TWCLONE_GODOT_FEEDBACK") == "1" else ""
-	print("LIVE_DISPOSABLE_PASS journey=%s,navigation,turns,scan,docking,port-workflow,commodity-buy,commodity-sale,planet-landing,harvest,launch%s,logout,reconnect player_id=%d origin=%d destination=%d ship_id=%d" % [auth_journey, feedback_journey, persisted_player_id, initial_sector, destination, ship_id])
+	if failures.is_empty():
+		print("LIVE_DISPOSABLE_PASS journey=%s,navigation,turns,scan,docking,port-workflow,commodity-buy,commodity-sale,hardware-purchase,shipyard-upgrade,planet-landing,harvest,launch,corporation,logout,reconnect%s player_id=%d origin=%d destination=%d ship_id=%d" % [auth_journey, feedback_journey, persisted_player_id, initial_sector, destination, ship_id])
 	_finish()
 
 func _wait_until(predicate: Callable, frames: int) -> bool:
@@ -400,11 +526,21 @@ func _finish() -> void:
 	for _frame in 3:
 		await process_frame
 	if is_instance_valid(app):
+		# Window nodes are top-level subwindows. Close and release them explicitly
+		# so headless Godot does not leave their internal labels detached when the
+		# parent scene is destroyed.
+		for window in app.find_children("*", "Window", true, true):
+			(window as Window).hide()
+			window.queue_free()
+		await process_frame
 		var finished_app = app
 		finished_app.queue_free()
 		await finished_app.tree_exited
 	for _frame in 6:
 		await process_frame
+	for child in root.get_children():
+		if child != self:
+			print("LIVE_CLEANUP_ROOT_CHILD type=%s name=%s path=%s queued=%s" % [child.get_class(), child.name, str(child.get_path()), str(child.is_queued_for_deletion())])
 	await create_timer(0.1).timeout
 	if failures.is_empty():
 		quit(0)

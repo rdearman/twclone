@@ -88,11 +88,14 @@ func _run() -> void:
 		shipyard_sale_button.pressed.emit()
 	_check(captured.size() == before_shipyard_sale, "unavailable shipyard sale emitted a fabricated server request")
 	menu._snapshot["ship"] = {"ported": 55}
-	menu._snapshot["sector"] = {"ports": [{"id": 55, "type": 9}]}
+	# Sector scans intentionally omit port class. A correlated port.info response
+	# supplies local eligibility context only after docking.
+	menu._snapshot["sector"] = {"ports": [{"port_id": 55, "name": "StarDock"}]}
+	menu.set_confirmed_port_context({"port": {"id": 55, "type": 9, "sector": 17}}, 17)
 	menu._render_actions()
 	await process_frame
 	shipyard_action_button = _action_button(menu, "Shipyard catalogue")
-	_check(shipyard_action_button != null and not shipyard_action_button.disabled, "shipyard action stayed disabled for a confirmed docked StarDock")
+	_check(shipyard_action_button != null and not shipyard_action_button.disabled, "server-confirmed docked StarDock did not enable its shipyard action when sector scan omits port class")
 	menu._active_category = "PORT"
 	menu._render_actions()
 	await process_frame
@@ -543,6 +546,7 @@ func _run() -> void:
 	var repair_button := _action_button(menu, "Repair ship at shipyard")
 	_check(repair_button != null and repair_button.disabled, "ship repair was available without a shipyard dock")
 	menu._snapshot["ship"] = {"ported": 55}
+	menu.set_confirmed_port_context({"port": {"id": 55, "type": 9, "sector": 17}}, 17)
 	menu._render_actions()
 	await process_frame
 	repair_button = _action_button(menu, "Repair ship at shipyard")
