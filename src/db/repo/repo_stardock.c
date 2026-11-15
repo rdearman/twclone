@@ -1283,7 +1283,10 @@ int repo_stardock_update_loan_repayment(db_t *db, int32_t player_id, int64_t new
 int repo_stardock_get_commodity_prices(db_t *db, db_res_t **out_res)
 {
     /* SQL_VERBATIM: Q39 */
-    const char *sql = "SELECT p.sector_id, c.name, pt.mode, pt.maxproduct, (c.base_price * (10000 + c.volatility * (RANDOM() % 200 - 100)) / 10000) AS price "
+    /* Barcharts are a stable public market summary. RANDOM() % is invalid
+       for PostgreSQL's floating-point RANDOM() and is not portable to MySQL;
+       report the authoritative configured base price instead. */
+    const char *sql = "SELECT p.sector_id, c.name, pt.mode, pt.maxproduct, c.base_price AS price "
                       "FROM ports p JOIN port_trade pt ON p.port_id = pt.port_id JOIN commodities c ON c.code = pt.commodity "
                       "ORDER BY price DESC LIMIT 5;";
     char sql_converted[512];

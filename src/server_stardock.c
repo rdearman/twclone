@@ -1768,7 +1768,7 @@ check_loan_default (db_t *db, int player_id, int current_time)
   int due_date = 0;
   int is_defaulted = 0;
   if (get_player_loan
-      (db, player_id, &principal, NULL, &due_date, &is_defaulted) == DB_OK)
+      (db, player_id, &principal, NULL, &due_date, &is_defaulted))
     {
       if (is_defaulted == 0 && current_time > due_date && principal > 0)
 	{
@@ -2904,7 +2904,7 @@ cmd_tavern_loan_take (client_ctx_t *ctx, json_t *root)
 
   if (get_player_loan
       (db, ctx->player_id, &current_loan_principal, NULL, NULL,
-       NULL) == DB_OK && current_loan_principal > 0)
+       NULL) && current_loan_principal > 0)
     {
       send_response_error (ctx, root, ERR_TAVERN_LOAN_OUTSTANDING,
 			   "You already have an outstanding loan.");
@@ -2997,10 +2997,10 @@ cmd_tavern_loan_pay (client_ctx_t *ctx, json_t *root)
   int current_loan_is_defaulted = 0;
 
 
-  if (get_player_loan
+  if (!get_player_loan
       (db, ctx->player_id, &current_loan_principal,
        &current_loan_interest_rate, &current_loan_due_date,
-       &current_loan_is_defaulted) != DB_OK || current_loan_principal <= 0)
+       &current_loan_is_defaulted) || current_loan_principal <= 0)
     {
       send_response_error (ctx, root, ERR_TAVERN_NO_LOAN,
 			   "You do not have an outstanding loan.");

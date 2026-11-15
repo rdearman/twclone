@@ -26,6 +26,7 @@
 #include "server_log.h"		// Explicitly include server_log.h
 #include "sysop_interaction.h"	// Explicitly include sysop_interaction.h
 #include "server_cron.h"
+#include "server_stardock.h"
 #include "globals.h"
 #include "repo_cmd.h"
 #include "db/repo/repo_engine.h"
@@ -379,6 +380,15 @@ main (void)
                       && db_backend (startup_db) != DB_BACKEND_MYSQL))
     {
       LOGE ("FATAL: No supported database backend is available.");
+      return EXIT_FAILURE;
+    }
+
+  /* Tavern handlers run in this process. Load their DB-backed limits here;
+     loading them only in the scheduler child leaves every live command with
+     zero-initialized limits and disabled services. */
+  if (tavern_settings_load () != 0)
+    {
+      LOGE ("Failed to load tavern settings for player command handling.");
       return EXIT_FAILURE;
     }
 
