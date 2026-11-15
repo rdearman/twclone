@@ -13,7 +13,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE players SET sector_id = 1 WHERE player_id = @{scan_user_player_id};"
+        "sql": "UPDATE players SET sector_id = 2 WHERE player_id = @{scan_user_player_id};"
       },
       "expect": { "status": "ok" }
     },
@@ -22,7 +22,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id = 1 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{scan_user_player_id});"
+        "sql": "UPDATE ships SET sector_id = 2 WHERE ship_id = (SELECT ship_id FROM players WHERE player_id = @{scan_user_player_id});"
       },
       "expect": { "status": "ok" }
     },
@@ -39,7 +39,7 @@
       "command": "sector.scan",
       "expect": { "status": "ok", "type": "sector.scan" },
       "asserts": [
-        { "path": "data.sector_id", "op": "==", "value": 1 },
+        { "path": "data.sector_id", "op": "==", "value": 2 },
         { "path": "data.name", "op": "exists" },
         { "path": "data.adjacent_sectors", "op": "exists" },
         { "path": "data.ships_present", "op": "exists" },

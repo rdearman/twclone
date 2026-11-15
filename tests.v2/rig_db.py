@@ -328,6 +328,43 @@ def main():
                 sql = f"INSERT INTO player_prefs (player_prefs_id, key, type, value) VALUES ({owner_id}, '{p['key']}', '{p['type']}', '{p['value']}') ON CONFLICT (player_prefs_id, key) DO UPDATE SET value = '{p['value']}';"
                 execute_sql(sql, **db_config)
 
+    # Fixtures deliberately use stable explicit IDs for reproducible ship
+    # references. PostgreSQL sequences do not advance for those inserts, so
+    # reconcile every owned sequence before ordinary auth.register requests.
+    execute_sql("""
+    DO $$
+    DECLARE
+      r RECORD;
+      seq_name TEXT;
+      max_value BIGINT;
+      has_rows BOOLEAN;
+    BEGIN
+      FOR r IN
+        SELECT table_ns.nspname AS table_schema,
+               table_rel.relname AS table_name,
+               attr.attname AS column_name
+          FROM pg_class AS seq_rel
+          JOIN pg_depend AS dep ON dep.objid = seq_rel.oid
+          JOIN pg_class AS table_rel ON table_rel.oid = dep.refobjid
+          JOIN pg_namespace AS table_ns ON table_ns.oid = table_rel.relnamespace
+          JOIN pg_attribute AS attr ON attr.attrelid = table_rel.oid
+                                   AND attr.attnum = dep.refobjsubid
+         WHERE seq_rel.relkind = 'S'
+           AND dep.deptype IN ('a', 'i')
+           AND table_ns.nspname = current_schema()
+      LOOP
+        seq_name := pg_get_serial_sequence(
+          format('%I.%I', r.table_schema, r.table_name), r.column_name);
+        EXECUTE format('SELECT max(%I), count(*) > 0 FROM %I.%I',
+                       r.column_name, r.table_schema, r.table_name)
+          INTO max_value, has_rows;
+        IF seq_name IS NOT NULL THEN
+          PERFORM setval(seq_name::regclass, COALESCE(max_value, 1), has_rows);
+        END IF;
+      END LOOP;
+    END $$;
+    """, **db_config)
+
     print("Rigging Complete.")
     execute_sql("ALTER TABLE corp_members ENABLE TRIGGER corp_one_leader_guard;", **db_config)
 
