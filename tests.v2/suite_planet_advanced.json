@@ -11,6 +11,20 @@
       "password": "password"
     },
     {
+      "name": "Rig: Restore owned planet fixture",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, population, type, creator, created_by, colonist) VALUES (700, 1, 1, 'MyWorld', @{planet_gov_player_id}, 'player', 'M', 1000000, (SELECT planettypes_id FROM planettypes WHERE code='M'), 'tests.v2', @{planet_gov_player_id}, 1000000) ON CONFLICT (planet_id) DO UPDATE SET sector_id=1, owner_id=EXCLUDED.owner_id, owner_type='player', class='M', population=1000000, type=EXCLUDED.type, colonist=1000000;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Position player and ship with planet owner",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "WITH moved_ship AS (UPDATE ships SET sector_id=1, onplanet=FALSE WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{planet_gov_player_id}) RETURNING ship_id) UPDATE players SET sector_id=1 WHERE player_id=@{planet_gov_player_id} AND EXISTS (SELECT 1 FROM moved_ship);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Planet Info",
       "command": "planet.info",
       "data": { "planet_id": 700 },

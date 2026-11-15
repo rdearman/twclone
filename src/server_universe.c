@@ -1447,11 +1447,12 @@ move_warp_toll_offer (client_ctx_t *ctx, json_t *root, db_t *db, int to)
 
   if (!db_query (db,
        "SELECT owner_id,COALESCE(SUM(quantity),0) FROM sector_assets "
-       "WHERE sector_id={1} AND asset_type=2 AND offensive_setting=1 AND quantity>0 "
+       "WHERE sector_id={1} AND asset_type=2 AND offensive_setting={4} AND quantity>0 "
        "AND owner_id<>{2} AND (COALESCE(corporation_id,0)=0 OR corporation_id<>{3}) "
        "GROUP BY owner_id ORDER BY owner_id",
        (db_bind_t[]){db_bind_i32 (to), db_bind_i32 (ctx->player_id),
-                     db_bind_i32 (ctx->corp_id)}, 3, &res, &err))
+                     db_bind_i32 (ctx->corp_id), db_bind_i32 (OFFENSE_TOLL)},
+       4, &res, &err))
     goto toll_offer_failed;
   int payee_count = 0, payee_capacity = 4, fighters = 0;
   int *payee_ids = malloc ((size_t) payee_capacity * sizeof (int));

@@ -87,6 +87,9 @@ def main():
     if args.reset:
         print("Resetting test data...")
         execute_sql("ALTER TABLE corp_members DISABLE TRIGGER corp_one_leader_guard;", **db_config)
+        # Test rigs reuse fixed ship IDs. Clear their destruction idempotency
+        # ledger so a reset can replay ship-loss scenarios deterministically.
+        execute_sql("DELETE FROM engine_events WHERE idem_key LIKE 'ship-destruction-%';", **db_config)
         execute_sql("TRUNCATE sessions, corp_members, citadels, planets, ships, ship_ownership, bank_accounts, turns, players, corporations, sector_assets, entity_stock CASCADE;", **db_config)
         # The world (and its ports) survives this player-fixture reset. Rebuild
         # the port settlement accounts that BigBang created before the reset;

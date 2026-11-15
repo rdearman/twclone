@@ -98,9 +98,11 @@ typedef enum
 #endif // ASSET_TYPE_T_DEFINED
 typedef enum
 {
-  OFFENSE_TOLL = 1,
+  /* Values are part of the persisted sector_assets.offensive_setting contract.
+   * Mode 3 is toll collection in the V3 protocol and existing world fixtures. */
+  OFFENSE_ATTACK = 1,
   OFFENSE_DEFEND = 2,
-  OFFENSE_ATTACK = 3
+  OFFENSE_TOLL = 3
 } offense_type_t;
 #ifndef START_FIGHTERS
 #define START_FIGHTERS 20

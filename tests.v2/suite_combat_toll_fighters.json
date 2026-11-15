@@ -26,6 +26,15 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Remove unrelated defenses from toll destination",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id = 2 AND owner_id <> @{toll_collector_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Rig: Position toll_victim player at Sector 1",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -44,9 +53,22 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Victim Warps to Toll Sector (Should Auto-Pay)",
+      "name": "Victim requests passage and receives a toll offer",
       "command": "move.warp",
       "data": { "to_sector_id": 2 },
+      "user": "toll_victim",
+      "expect": { "status": "ok", "type": "move.toll_offer_v1" },
+      "asserts": [
+        { "path": "data.sector_id", "op": "==", "value": 2 },
+        { "path": "data.fighter_count", "op": "==", "value": 30 },
+        { "path": "data.amount", "op": "==", "value": 30 }
+      ],
+      "save": { "toll_offer_id": "data.offer_id" }
+    },
+    {
+      "name": "Victim accepts the offer and passes atomically",
+      "command": "move.warp",
+      "data": { "to_sector_id": 2, "toll_offer_id": "@{toll_offer_id}", "toll_accept": true },
       "user": "toll_victim",
       "expect": { "status": "ok" },
       "asserts": [
@@ -60,7 +82,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": "<", "value": 100000 }
+        { "path": "data.rows.0.0", "op": "==", "value": 99970 }
       ]
     },
     {
@@ -70,7 +92,7 @@
       "user": "admin",
       "expect": { "status": "ok" },
       "asserts": [
-        { "path": "data.rows.0.0", "op": ">", "value": 1000000 }
+        { "path": "data.rows.0.0", "op": "==", "value": 1000000030 }
       ]
     }
   ]
