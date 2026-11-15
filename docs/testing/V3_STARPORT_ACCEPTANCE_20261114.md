@@ -58,3 +58,42 @@ Concurrent upgrade retries, concurrent attack refusals, and rollback under
 injected database failure remain unverified. This follow-up therefore closes
 restart replay and delivery completion only; it does not promote StarPort to
 fully verified.
+
+## Current-HEAD construction replay — 15 November 2026
+
+The construction lost-reply/restart/retry case was repeated against a fresh
+PostgreSQL 16 container and a V3 server image built from current HEAD
+`eda8bf00f8a410dd5271fd7dea761c86e6b483fa` (image
+`sha256:1c898a2256f6e41073cd7bffa75ba9dcff771e900b97a81838e5e3ae44767`).
+Both services used a uniquely named Docker network; the game and PostgreSQL
+ports were bound to loopback only. Neither beta containers nor host PostgreSQL
+were used.
+
+An ordinary account registered through the Python client was landed on its
+fixture planet through `land_flow`. The test then used
+`planet_port_construct_flow` to start class 1 construction. The disposable
+client transport received the committed success frame and deliberately dropped
+it before returning it to the workflow, exercising the client's uncertain
+outcome path. The client retained the same pending request key. The game
+container was restarted; the player logged in again, and the Python client's
+authoritative login restoration confirmed the same player, ship, sector and
+landed planet before the same surface menu workflow retried the request.
+
+The retry returned `planet.port_construction_v1`, construction ID **2**, and
+`idempotent_retry=true`. PostgreSQL before and after retry showed the same
+construction ID, status `building`, and exactly one row for the player and
+planet. Credits remained at **400,000** from the initial **500,000**; planetary
+ORE, ORG and EQU each remained at **1,000** from the initial **2,000**. These
+balances show one 100,000-credit and 1,000-each-material deduction, with no
+second debit on replay. The PostgreSQL construction schema does not persist a
+transaction ID; no snapshot query ID is reported as the construction
+transaction ID.
+
+Sanitised client transcript and database snapshot summary were retained at
+`/tmp/twclone-starport-replay-acceptance-20261115.txt`.
+
+**Result: PASS** for construction lost-reply replay after a serving V3 process
+restart on current HEAD. This closes that specific replay case only. It does
+not promote all StarPort behavior to `VERIFIED`; concurrent and injected
+rollback cases remain separate acceptance requirements. GitHub App publisher
+configuration was absent, so this run created no public issue.
