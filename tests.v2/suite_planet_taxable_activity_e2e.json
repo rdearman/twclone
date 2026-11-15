@@ -22,6 +22,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Isolate ORE settlement fixture from stale disposable orders",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE commodity_orders SET status = 'cancelled', cancellation_reason = 'isolated Exchange settlement fixture' WHERE commodity_id = (SELECT commodities_id FROM commodities WHERE code = 'ORE') AND status = 'open';" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Remove prior isolated planet goods",
       "command": "sys.raw_sql_exec",
       "user": "admin",

@@ -8,6 +8,13 @@
       "password": "password"
     },
     {
+      "name": "Clear previous disposable tavern loan",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM tavern_loans WHERE player_id = (SELECT player_id FROM players WHERE name = 'tavern_gambler')" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Positive: Take Loan",
       "command": "tavern.loan.take",
       "data": { "amount": 1000 },

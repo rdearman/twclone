@@ -104,6 +104,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Clear prior normalized cargo before transwarp fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ship_cargo WHERE ship_id = (SELECT ship_id FROM players WHERE name = 'hazard_victim')" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Enable transwarp and restore defenses",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -121,7 +128,7 @@
       "name": "Seed authoritative Fuel Ore for transwarp",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 6 FROM players WHERE name='hazard_victim' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity=6;" },
+      "data": { "sql": "INSERT INTO ship_cargo (ship_id, commodity_code, quantity) SELECT ship_id, 'ORE', 3 FROM players WHERE name='hazard_victim' ON CONFLICT (ship_id, commodity_code) DO UPDATE SET quantity=3;" },
       "expect": { "status": "ok" }
     },
     {

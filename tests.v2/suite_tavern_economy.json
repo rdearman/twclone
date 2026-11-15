@@ -9,6 +9,13 @@
       "password": "password"
     },
     {
+      "name": "Clear previous disposable tavern loan",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM tavern_loans WHERE player_id = (SELECT player_id FROM players WHERE name = 'tavern_gambler')" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Tavern: Play Dice (Win/Loss Structure Check)",
       "command": "tavern.dice.play",
       "user": "tavern_gambler",
