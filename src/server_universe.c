@@ -3204,7 +3204,25 @@ fer_init_once (db_t *db)
 {
   if (g_fer_inited)
     {
-      return 1;
+      if (!db)
+	db = g_fer_db;
+      int32_t current_corp_id = 0;
+      int32_t current_player_id = 0;
+      if (db && repo_universe_get_ferengi_corp_info
+	  (db, &current_corp_id, &current_player_id) == 0)
+	{
+	  /* The durable universe may have been restored or re-rigged while this
+	   * process remained alive.  Refresh cached identity from PostgreSQL so a
+	   * stale in-memory initialized flag cannot suppress NPC recovery. */
+	  g_fer_db = db;
+	  g_fer_corp_id = current_corp_id;
+	  g_fer_player_id = current_player_id;
+	  return 1;
+	}
+
+      g_fer_inited = 0;
+      g_fer_corp_id = 0;
+      g_fer_player_id = 0;
     }
   if (!db)
     {
@@ -3574,7 +3592,7 @@ int cmd_ferengi_deal_reject (client_ctx_t *ctx, json_t *root)
 void
 fer_tick (db_t *db, int64_t now_ms)
 {
-  if (!g_fer_inited && !fer_init_once (db)) return;
+  if (!fer_init_once (db)) return;
   if (!db) db = g_fer_db;
   if (!db) return;
   int64_t now_s = (int64_t) time (NULL);
