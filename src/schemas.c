@@ -6138,6 +6138,8 @@ schema_move_transwarp (void)
   json_t *properties = json_object ();
   schema_nav_add_field (properties, "to_sector_id", "integer", 1);
   schema_nav_add_field (properties, "sector_id", "integer", 1);
+  schema_nav_add_field (properties, "toll_offer_id", "string", 0);
+  schema_nav_add_field (properties, "toll_accept", "boolean", 0);
   return schema_player_simple ("ge://schema/move.transwarp.json",
                                properties, json_array (), 0);
 }

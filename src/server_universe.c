@@ -1377,7 +1377,8 @@ validate_warp_rule (int from_sector, int to_sector)
  * a turn. The same move command resumes with the quote identifier and a
  * boolean decision, keeping payment and passage inside the movement tx. */
 static int
-move_warp_toll_offer (client_ctx_t *ctx, json_t *root, db_t *db, int to)
+move_warp_toll_offer (client_ctx_t *ctx, json_t *root, db_t *db, int to,
+                      bool transwarp)
 {
   if (!ctx || !root || !db || g_cfg.toll_fighter_rate <= 0)
     return 0;
@@ -1402,7 +1403,7 @@ move_warp_toll_offer (client_ctx_t *ctx, json_t *root, db_t *db, int to)
     goto toll_offer_failed;
   db_res_finalize (res); res = NULL;
   if (!db_query (db,
-       "SELECT offer_id,fighter_count,unit_rate,amount,state,expires_at FROM toll_passage_offers "
+       "SELECT offer_id,fighter_count,unit_rate,amount,state,expires_at,from_sector_id FROM toll_passage_offers "
        "WHERE player_id={1} AND request_id={2} AND to_sector_id={3}",
        (db_bind_t[]){db_bind_i32 (ctx->player_id), db_bind_text (request_id),
                      db_bind_i32 (to)}, 3, &res, &err))
@@ -1419,14 +1420,34 @@ move_warp_toll_offer (client_ctx_t *ctx, json_t *root, db_t *db, int to)
       char state[16] = {0};
       if (state_value) snprintf (state, sizeof state, "%s", state_value);
       int64_t expires_at = db_res_col_i64 (res, 5, &err);
+      int from_sector = db_res_col_i32 (res, 6, &err);
       db_res_finalize (res); res = NULL;
       if (err.code || !db_tx_commit (db, &err)) goto toll_offer_failed;
       if (strcmp (state, "pending") != 0)
         {
-          json_t *repeat = json_pack ("{s:i,s:i,s:b}", "sector_id", to,
-                                      "to_sector_id", to,
-                                      "idempotent_retry", 1);
-          send_response_ok_take (ctx, root, "move.result", &repeat);
+          json_t *repeat = NULL;
+          if (transwarp)
+            {
+              int distance = 0;
+              if (repo_universe_get_transwarp_distance (db, from_sector, to,
+                                                        &distance) != 0)
+                {
+                  send_response_error (ctx, root, ERR_DB,
+                                       "Could not reconcile transwarp toll retry");
+                  return 1;
+                }
+              repeat = json_pack ("{s:i,s:s,s:i,s:I,s:b}", "sector_id", to,
+                  "status", "transwarp_complete", "distance_sectors", distance,
+                  "fuel_ore_consumed", (json_int_t) distance * 3,
+                  "idempotent_retry", 1);
+              send_response_ok_take (ctx, root, "move.transwarp", &repeat);
+            }
+          else
+            {
+              repeat = json_pack ("{s:i,s:i,s:b}", "sector_id", to,
+                                  "to_sector_id", to, "idempotent_retry", 1);
+              send_response_ok_take (ctx, root, "move.result", &repeat);
+            }
           return 1;
         }
       if (expires_at <= (int64_t) time (NULL))
@@ -1535,6 +1556,117 @@ toll_offer_failed:
   if (res) db_res_finalize (res);
   db_tx_rollback (db, &err);
   return -1;
+}
+
+/* Settle the same durable toll quote used by ordinary warp, inside the
+ * transwarp mutation transaction. Return 0 to continue movement, 1 when a
+ * refusal/error/retry response was already sent, and -1 for a DB failure. */
+static int
+move_transwarp_toll_settle (client_ctx_t *ctx, json_t *root, db_t *db,
+                            int destination, db_res_t **res,
+                            db_error_t *txerr)
+{
+  json_t *data = json_object_get (root, "data");
+  json_t *offer_value = json_object_get (data, "toll_offer_id");
+  if (!json_is_string (offer_value)) return 0;
+  const char *offer_id = json_string_value (offer_value);
+  json_t *accept_value = json_object_get (data, "toll_accept");
+  if (!json_is_boolean (accept_value))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+                           "Toll offer decision must be accept or refuse");
+      return 1;
+    }
+  if (!db_query (db,
+       "SELECT player_id,ship_id,from_sector_id,to_sector_id,amount,state,expires_at FROM toll_passage_offers WHERE offer_id={1} FOR UPDATE",
+       (db_bind_t[]){db_bind_text (offer_id)}, 1, res, txerr))
+    return -1;
+  if (!db_res_step (*res, txerr))
+    {
+      db_res_finalize (*res); *res = NULL;
+      if (txerr->code) return -1;
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_NOT_FOUND,
+                           "Toll offer was not found or has expired");
+      return 1;
+    }
+  int offer_player = db_res_col_i32 (*res, 0, txerr);
+  int offer_ship = db_res_col_i32 (*res, 1, txerr);
+  int offer_from = db_res_col_i32 (*res, 2, txerr);
+  int offer_to = db_res_col_i32 (*res, 3, txerr);
+  int64_t amount = db_res_col_i64 (*res, 4, txerr);
+  const char *state_value = db_res_col_text (*res, 5, txerr);
+  char state[16] = {0};
+  if (state_value) snprintf (state, sizeof state, "%s", state_value);
+  int64_t expires_at = db_res_col_i64 (*res, 6, txerr);
+  db_res_finalize (*res); *res = NULL;
+  if (txerr->code) return -1;
+  if (offer_player != ctx->player_id || offer_to != destination)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "Toll offer does not match this transwarp");
+      return 1;
+    }
+  if (strcmp (state, "pending") != 0)
+    {
+      int distance = 0;
+      if (repo_universe_get_transwarp_distance (db, offer_from, offer_to,
+                                                &distance) != 0)
+        return -1;
+      db_tx_rollback (db, NULL);
+      json_t *repeat = json_pack ("{s:i,s:s,s:i,s:I,s:b}",
+          "sector_id", offer_to, "status", "transwarp_complete",
+          "distance_sectors", distance, "fuel_ore_consumed",
+          (json_int_t) distance * 3, "idempotent_retry", 1);
+      send_response_ok_take (ctx, root, "move.transwarp", &repeat);
+      return 1;
+    }
+  if (offer_ship != h_get_active_ship_id (db, ctx->player_id)
+      || offer_from != ctx->sector_id || expires_at <= (int64_t) time (NULL))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "Toll offer no longer matches the active transwarp");
+      return 1;
+    }
+  bool accept = json_is_true (accept_value);
+  if (accept && h_deduct_player_petty_cash_unlocked
+      (db, ctx->player_id, amount, NULL) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_refused_steal (ctx, root, ERR_INSUFFICIENT_FUNDS,
+                                   "Not enough credits to pay this toll", NULL);
+      return 1;
+    }
+  if (accept)
+    {
+      if (!db_query (db,
+           "SELECT owner_player_id,amount FROM toll_passage_payees WHERE offer_id={1} ORDER BY owner_player_id",
+           (db_bind_t[]){db_bind_text (offer_id)}, 1, res, txerr))
+        return -1;
+      int payees = 0;
+      while (db_res_step (*res, txerr))
+        {
+          int payee = db_res_col_i32 (*res, 0, txerr);
+          int64_t payee_amount = db_res_col_i64 (*res, 1, txerr);
+          if (txerr->code || h_add_player_petty_cash_unlocked
+              (db, payee, payee_amount, NULL) != 0)
+            { txerr->code = txerr->code ? txerr->code : 1; break; }
+          payees++;
+        }
+      db_res_finalize (*res); *res = NULL;
+      if (txerr->code || payees == 0) return -1;
+    }
+  if (!db_exec (db,
+       "UPDATE toll_passage_offers SET state={1},resolved_at=CURRENT_TIMESTAMP WHERE offer_id={2} AND state='pending'",
+       (db_bind_t[]){db_bind_text (accept ? "accepted" : "refused"),
+                     db_bind_text (offer_id)}, 2, txerr))
+    return -1;
+  ctx->toll_refused_sector_id = accept ? 0 : destination;
+  ctx->toll_paid_sector_id = accept ? destination : 0;
+  return 0;
 }
 
 int
@@ -1660,7 +1792,7 @@ cmd_move_warp (client_ctx_t *ctx, json_t *root)
       }
   }
 
-  int toll_offer_rc = move_warp_toll_offer (ctx, root, db, to);
+  int toll_offer_rc = move_warp_toll_offer (ctx, root, db, to, false);
   if (toll_offer_rc > 0)
     return 0;
   if (toll_offer_rc < 0)
@@ -2654,6 +2786,7 @@ int
 cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
+  db_res_t *res = NULL;
   if (!db)
     {
       send_response_error (ctx, root, ERR_DB_CLOSED, "No database handle");
@@ -2724,6 +2857,18 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
       send_response_refused_steal (ctx, root, REF_TRANSWARP_UNAVAILABLE,
 				   "Ship does not have transwarp capability.",
 				   NULL);
+      return 0;
+    }
+
+  /* Transwarp arrival uses the same durable toll quote as normal warp. The
+   * quote is created before the movement transaction and charges nothing;
+   * fuel, turns, payment/refusal and entry combat settle together below. */
+  int toll_offer_rc = move_warp_toll_offer (ctx, root, db, to_sector_id, true);
+  if (toll_offer_rc > 0) return 0;
+  if (toll_offer_rc < 0)
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not prepare toll fighter passage");
       return 0;
     }
 
@@ -2823,10 +2968,28 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
+  int toll_settle_rc = move_transwarp_toll_settle
+    (ctx, root, db, to_sector_id, &res, &txerr);
+  if (toll_settle_rc != 0)
+    {
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
+      if (toll_settle_rc < 0)
+        {
+          if (res) db_res_finalize (res);
+          db_tx_rollback (db, &txerr);
+          send_response_error (ctx, root, ERR_DB_TX,
+                               "Toll transwarp could not be committed");
+        }
+      return 0;
+    }
+
   cargo_rc = repo_cargo_consume_locked (db, ship_id, "ORE", fuel_required);
   if (cargo_rc != 0)
     {
       db_tx_rollback (db, NULL);
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
       send_response_error (ctx, root, ERR_DB,
                            "Could not debit transwarp Fuel Ore.");
       return 0;
@@ -2837,6 +3000,8 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   if (tc != TURN_CONSUME_SUCCESS)
     {
       db_tx_rollback (db, NULL);
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
       return handle_turn_consumption_error (ctx, tc, "move.transwarp", root,
 					    NULL);
     }
@@ -2848,6 +3013,8 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
                                           to_sector_id) != 0)
     {
       db_tx_rollback (db, NULL);
+      ctx->toll_refused_sector_id = 0;
+      ctx->toll_paid_sector_id = 0;
       send_response_error (ctx, root, ERR_DB,
 			   "Database error during transwarp");
       return 0;
@@ -2859,6 +3026,8 @@ cmd_move_transwarp (client_ctx_t *ctx, json_t *root)
   json_t *hazard_report = NULL;
   int hazard_rc = server_combat_apply_entry_hazards_report
     (db, ctx, to_sector_id, &hazard_report);
+  ctx->toll_refused_sector_id = 0;
+  ctx->toll_paid_sector_id = 0;
   if (hazard_rc < 0)
     {
       if (hazard_report)

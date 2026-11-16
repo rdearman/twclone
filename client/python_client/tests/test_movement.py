@@ -207,6 +207,63 @@ def test_transwarp_uses_authoritative_request_and_response_envelope(
     assert "Transwarped to sector 50." in capsys.readouterr().out
 
 
+def test_transwarp_toll_offer_accepts_with_same_authoritative_offer_id(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 1})
+    fake_conn.queue("move.transwarp", {
+        "status": "ok", "type": "move.toll_offer_v1",
+        "data": {"offer_id": "transwarp-offer-1", "sector_id": 50,
+                 "fighter_count": 3, "amount": 3, "credits_per_fighter": 1},
+    })
+    fake_conn.queue("move.transwarp", {
+        "status": "ok", "type": "move.transwarp",
+        "data": {"sector_id": 50, "status": "transwarp_complete",
+                 "distance_sectors": 4, "fuel_ore_consumed": 12},
+    })
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 50}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"sector": 50}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 9}}})
+    answers = iter(["50", "y"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    assert client.transwarp_flow(ctx) is True
+    assert fake_conn.calls[:2] == [
+        {"command": "move.transwarp", "data": {"to_sector_id": 50}},
+        {"command": "move.transwarp", "data": {
+            "to_sector_id": 50, "toll_offer_id": "transwarp-offer-1",
+            "toll_accept": True,
+        }},
+    ]
+    assert "Transwarped to sector 50." in capsys.readouterr().out
+
+
+def test_transwarp_toll_refusal_preserves_server_terminal_combat_result(
+    ctx_factory, fake_conn, monkeypatch, capsys
+):
+    ctx = ctx_factory(sector={"id": 1})
+    fake_conn.queue("move.transwarp", {
+        "status": "ok", "type": "move.toll_offer_v1",
+        "data": {"offer_id": "transwarp-offer-2", "sector_id": 50,
+                 "fighter_count": 1, "amount": 1, "credits_per_fighter": 1},
+    })
+    fake_conn.queue("move.transwarp", {
+        "status": "error", "type": "error",
+        "error": {"message": "Ship destroyed by sector hazards during transwarp.",
+                  "data": {"sector_id": 50, "current_sector_id": 1,
+                           "ship_destroyed": True}},
+    })
+    fake_conn.queue("move.describe_sector", {"status": "ok", "data": {"sector_id": 1}})
+    fake_conn.queue("player.my_info", {"status": "ok", "data": {"player": {"sector": 1}}})
+    fake_conn.queue("ship.status", {"status": "ok", "data": {"ship": {"id": 10}}})
+    answers = iter(["50", "n"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    assert client.transwarp_flow(ctx) is False
+    assert fake_conn.calls[1]["data"]["toll_accept"] is False
+    assert "toll fighters will treat your arrival as hostile" in capsys.readouterr().out
+
+
 def test_error_hazard_report_uses_server_error_data():
     lines = client.present_move_hazards({"status": "error", "error": {"data": {
         "hazards": [{"hazard_type": "nebula", "hull_lost": 4}],

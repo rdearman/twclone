@@ -1839,6 +1839,32 @@ def transwarp_flow(ctx: Context):
         _safe_move_error_refresh(ctx)
         print("Reconnect before attempting another move so location, turns, and ship state can be refreshed.")
         return False
+    if (isinstance(response, dict) and response.get("status") == "ok"
+            and response.get("type") == "move.toll_offer_v1"):
+        offer = get_data(response)
+        if (not isinstance(offer, dict)
+                or not isinstance(offer.get("offer_id"), str)
+                or offer.get("sector_id", offer.get("to_sector_id")) != target):
+            print("Transwarp toll offer was incomplete or did not match the requested sector.")
+            _safe_move_error_refresh(ctx)
+            return False
+        print(f"Toll fighters demand {offer.get('amount')} credits ({offer.get('fighter_count')} fighters).")
+        answer = input("Accept the toll and continue? [y/N]: ").strip().lower()
+        accept = answer in ("y", "yes")
+        try:
+            response = ctx.conn.rpc("move.transwarp", {
+                "to_sector_id": target,
+                "toll_offer_id": offer["offer_id"],
+                "toll_accept": accept,
+            })
+        except (ConnectionError, OSError) as exc:
+            ctx.state["last_rpc"] = None
+            print(f"Transwarp toll outcome is uncertain after connection loss: {exc}")
+            _safe_move_error_refresh(ctx)
+            print("Reconnect before retrying so toll, fuel, turns, location, and ship state can be reconciled.")
+            return False
+        if not accept:
+            print("Toll refused; the toll fighters will treat your arrival as hostile.")
     ok, message = present_move_result(response)
     if not _movement_response_type_matches(response, "move.transwarp"):
         print("Transwarp response had an unexpected type; refreshing confirmed player, ship and sector state.")

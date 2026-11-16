@@ -1,0 +1,104 @@
+{
+  "name": "Transwarp Toll Passage Acceptance",
+  "version": "2.0.0",
+  "tests": [
+    {
+      "name": "Setup transwarp toll player",
+      "setup": "macro_auth_user",
+      "username": "mover_transwarp",
+      "password": "password"
+    },
+    {
+      "name": "Rig transwarp position, capability and Fuel Ore",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "UPDATE players SET sector_id=1 WHERE name='mover_transwarp'"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Rig transwarp ship and cargo",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "UPDATE ships SET sector_id=1,holds=50,has_transwarp=TRUE,ore=30 WHERE ship_id=(SELECT ship_id FROM players WHERE name='mover_transwarp')"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Rig exactly one directed warp hop",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES(1,10) ON CONFLICT DO NOTHING"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Rig thirty Fuel Ore in transwarp ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) SELECT ship_id,'ORE',30 FROM players WHERE name='mover_transwarp' ON CONFLICT(ship_id,commodity_code) DO UPDATE SET quantity=30"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Clear owned destination defenses",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "DELETE FROM sector_assets WHERE sector_id=10 AND owner_id=(SELECT player_id FROM players WHERE name='toll_collector')"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Deploy three toll fighters at destination",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,deployed_at) SELECT 10,player_id,0,2,3,3,now() FROM players WHERE name='toll_collector'"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Deploy homing fighter at destination",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,deployed_at) SELECT 10,player_id,0,2,1,2,now() FROM players WHERE name='mover_transwarp'"},
+      "expect": {"status": "ok"}
+    },
+    {
+      "name": "Transwarp arrival offers toll before movement",
+      "command": "move.transwarp",
+      "user": "mover_transwarp",
+      "data": {"to_sector_id": 10},
+      "expect": {"status": "ok", "type": "move.toll_offer_v1"},
+      "asserts": [
+        {"path": "data.sector_id", "op": "==", "value": 10},
+        {"path": "data.fighter_count", "op": "==", "value": 3},
+        {"path": "data.amount", "op": "==", "value": 3}
+      ],
+      "save": {"transwarp_toll_offer": "data.offer_id"}
+    },
+    {
+      "name": "Accept transwarp toll and pass",
+      "command": "move.transwarp",
+      "user": "mover_transwarp",
+      "data": {"to_sector_id": 10, "toll_offer_id": "@{transwarp_toll_offer}", "toll_accept": true},
+      "expect": {"status": "ok", "type": "move.transwarp"},
+      "asserts": [{"path": "data.fuel_ore_consumed", "op": "==", "value": 3}]
+    },
+    {
+      "name": "Repeated accepted offer is idempotent",
+      "command": "move.transwarp",
+      "user": "mover_transwarp",
+      "data": {"to_sector_id": 10, "toll_offer_id": "@{transwarp_toll_offer}", "toll_accept": true},
+      "expect": {"status": "ok", "type": "move.transwarp"},
+      "asserts": [{"path": "data.idempotent_retry", "op": "==", "value": true}]
+    },
+    {
+      "name": "Verify payment, fuel and location were committed exactly once",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {"sql": "SELECT p.sector_id,p.credits,c.quantity,(SELECT credits FROM players WHERE name='toll_collector'),(SELECT count(*) FROM toll_passage_offers WHERE offer_id='@{transwarp_toll_offer}') FROM players p JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mover_transwarp';"},
+      "expect": {"status": "ok"},
+      "asserts": [
+        {"path": "data.rows.0.0", "op": "==", "value": 10},
+        {"path": "data.rows.0.1", "op": "==", "value": 4997},
+        {"path": "data.rows.0.2", "op": "==", "value": 27},
+        {"path": "data.rows.0.3", "op": ">=", "value": 1000000003},
+        {"path": "data.rows.0.4", "op": "==", "value": 1}
+      ]
+    }
+  ]
+}

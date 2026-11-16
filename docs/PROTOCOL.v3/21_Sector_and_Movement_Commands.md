@@ -95,6 +95,17 @@ authoritative respawn sector (sector 1).
 ### `move.transwarp`
 Long-range jump (requires equipment).
 **Args**: `{ "to_sector_id": 50 }`; legacy clients may use `{ "sector_id": 50 }`.
+When hostile toll fighters control the destination, the first request returns
+`move.toll_offer_v1` with a durable `offer_id`, fighter count, configured rate
+and amount. No movement, turn, fuel or credit is consumed while the offer is
+pending. The client resumes `move.transwarp` with
+`{ "to_sector_id": 50, "toll_offer_id": "…", "toll_accept": true }` or
+`false`. Acceptance debits the payer and credits each eligible fighter owner
+atomically with fuel, turn, movement and entry hazards. Refusal settles no
+payment and resolves the toll fighters as hostile entry defenses. Replaying a
+settled offer returns the movement completion without a second payment, fuel
+debit or turn charge. Self-owned and same-corporation toll assets do not make
+an offer.
 **Hazard Trigger**: Triggers all entry hazards (fighters, mines, limpets) at the destination sector.
 The same persistence and event behavior applies to transwarp entry. A refused
 movement does not invoke the entry resolver or consume sector assets.

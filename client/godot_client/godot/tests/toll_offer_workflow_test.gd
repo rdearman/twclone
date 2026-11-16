@@ -59,11 +59,26 @@ func _run() -> void:
 		_check(fake.calls[1]["data"] == {"to_sector_id": 43, "toll_offer_id": "offer-refused", "toll_accept": false}, "refusal did not preserve the offer ID and explicit false choice")
 	_check(app._pending_toll_offer.is_empty(), "resolved toll offer remained locally actionable")
 
+	app._pending_game_commands["transwarp-offer-reply"] = {
+		"kind": "command", "command": "move.transwarp",
+		"data": {"to_sector_id": 44}, "mutating": true,
+	}
+	app._on_transport_reply("transwarp-offer-reply", {
+		"status": "ok", "type": "move.toll_offer_v1",
+		"data": {"offer_id": "transwarp-offer", "sector_id": 44,
+			"fighter_count": 2, "amount": 2, "credits_per_fighter": 1},
+	}, "move.transwarp")
+	_check(app._toll_offer_dialog.visible, "transwarp toll response did not open the shared payment/refusal prompt")
+	app._toll_offer_dialog.get_cancel_button().pressed.emit()
+	_check(fake.calls.size() == 3 and fake.calls[2]["command"] == "move.transwarp", "transwarp toll resolution did not resume the same movement command")
+	if fake.calls.size() == 3:
+		_check(fake.calls[2]["data"] == {"to_sector_id": 44, "toll_offer_id": "transwarp-offer", "toll_accept": false}, "transwarp refusal did not preserve the server offer identity and explicit decision")
+
 	app.queue_free()
 	await process_frame
 	fake.free()
 	if failures.is_empty():
-		print("Godot toll offer workflow test: 9 checks passed")
+		print("Godot toll offer workflow test: 13 checks passed")
 		quit(0)
 	else:
 		for failure in failures:
