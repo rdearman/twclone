@@ -1,8 +1,13 @@
 # V3 gameplay and acceptance status
 
-Reviewed: 15 November 2026. This is a concise current summary; detailed test
+Reviewed: 16 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
+
+The current requirement-by-requirement reconciliation is
+[`V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md`](testing/V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md).
+It supersedes stale implementation-status remarks in older focused reports,
+while preserving their historical test evidence.
 
 ## Release-level regression results
 
@@ -10,15 +15,22 @@ The latest recorded gates are:
 
 | Area | Result | Scope |
 |---|---:|---|
-| Server protocol regression | 2,341 passed, 0 failed, 4 skipped | 155 suites; disposable PostgreSQL acceptance environment |
-| Python client | 807 passed | Current reported run |
-| `tests.v2` | 262 passed, 7 skipped, 227 subtests | Regression harness |
-| Godot 4.5.2 | 104 passed, 0 failed, 1 skipped | Godot client suite |
+| Server protocol regression | 2,352 passed, 3 failed, 4 skipped | 155 suites; current disposable PostgreSQL run; one failing police incident suite |
+| Python client | 807 passed | Current run |
+| `tests.v2` | 266 passed, 7 skipped, 227 subtests | Current regression harness run |
+| Godot 4.5.1 | 104 passed, 0 failed, 1 skipped | `/home/rick/bin/gdot` client regression run |
 | Godot command menu | 206 checks passed | Menu regression |
 | Planet response | 115 checks passed | Response/identity regression |
 
 These are the latest reported counts, not a claim that every gameplay operation
 or deployment has been verified.
+
+The server run skipped the four TLS smoke cases because the disposable game
+listener was plain TCP. Its only failing suite was
+`suite_police_phase_b_incidents.json`: three assertions confirm that successful
+robbery does not persist the expected suspicion or wanted progression. This is
+a confirmed P0 gameplay defect, not a fixture correction. The exact report and
+sanitized transcript are linked from the parity-closure report.
 
 ## Player-facing acceptance
 
@@ -32,6 +44,11 @@ server restart. Refer to
 [`testing/V3_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_STARPORT_ACCEPTANCE_20261114.md),
 and [`testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`](testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md)
 for exact evidence and limits.
+
+That journey is a verified subset, not a complete continuous V3 gameplay loop.
+Combat/destruction/recovery, planetary capture and citadel progression, and the
+full corporation transfer workflow still lack live UI evidence through both
+clients. The latest parity-closure report lists the journey gaps separately.
 
 ## Mechanics with focused acceptance evidence
 
