@@ -7,7 +7,7 @@ Reviewed: 16 November 2026, following commits `97f32ceb`, `0f8c9b21`, and `1c42d
 ## Current measures
 
 - Parent requirements: 67 (13 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 3 BLOCKED; unchanged).
-- Base clause rows: 227 (56 VERIFIED, 171 IMPLEMENTED_UNTESTED). Addenda identify 4 additional verified behavior slices, 3 concrete incomplete behaviors, and the 3 exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
+- Base clause rows: 227 (65 VERIFIED, 162 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 3 exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - Ten simple arithmetic/date clauses were executed in this run. They do not promote POP-03 or BANK-03 as whole requirements.
 
@@ -26,6 +26,23 @@ Reviewed: 16 November 2026, following commits `97f32ceb`, `0f8c9b21`, and `1c42d
 | `BANK-03/invalid month rejection` | month 13 returns invalid schedule (epoch 0) | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` | VERIFIED |
 | `BANK-03/invalid day rejection` | day 0 returns invalid schedule (epoch 0) | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` | VERIFIED |
 
+## Ten smallest remaining behavior gaps closed in this run
+
+These are independently testable behavior slices. They do not promote a parent requirement unless every parent clause has evidence.
+
+| Clause slice | Acceptance condition | Executed evidence | Result |
+|---|---|---|---|
+| `PARITY-TOLL-01/transwarp offer` | Transwarp arrival offers the configured toll before movement | `suite_movement_transwarp_tolls.json::case-0012` | VERIFIED |
+| `PARITY-TOLL-01/transwarp payment` | Accepting the offer pays once and permits passage | `suite_movement_transwarp_tolls.json::case-0013`, `case-0015` | VERIFIED |
+| `PARITY-TOLL-01/transwarp replay` | Repeated accepted request returns idempotent result without second charge | `suite_movement_transwarp_tolls.json::case-0014`, `case-0015` | VERIFIED |
+| `PARITY-TOLL-01/transwarp insufficient funds` | Payment refusal preserves pending offer, turns, sector, credits and fuel | `suite_movement_transwarp_toll_edges.json::case-0014`, `case-0015` | VERIFIED |
+| `PARITY-TOLL-01/transwarp funded retry` | A pending offer succeeds after exact funding, with one settlement | `suite_movement_transwarp_toll_edges.json::case-0017`, `case-0018` | VERIFIED |
+| `PARITY-TOLL-01/self protection` | A player's own toll fighters do not stop or charge that player | `suite_movement_transwarp_toll_edges.json::case-0029`, `case-0030` | VERIFIED |
+| `PARITY-TOLL-01/corporation protection` | Same-corporation toll fighters do not stop or charge a member | `suite_movement_transwarp_toll_edges.json::case-0043`, `case-0044` | VERIFIED |
+| `PARITY-TOLL-01/refusal encounter` | Refusal follows hostile-arrival combat, does not pay, and applies damage once | `suite_movement_transwarp_toll_edges.json::case-0055`–`case-0057` | VERIFIED |
+| `POP-02/remote population` | Remote colonist transfer is refused without changing either population pool | `suite_planet_colonist_transfers.json::case-0010`, `case-0011` | VERIFIED |
+| `POP-01/transfer rollback` | Failed colonist-to-slave transfer rolls back ship cargo and planet population | `suite_planet_colonist_transfers.json::case-0018`, `case-0019` | VERIFIED |
+
 ## Clause ledger
 
 | Requirement | Clause | Acceptance condition | Clause status | Evidence / next action |
@@ -38,7 +55,7 @@ Reviewed: 16 November 2026, following commits `97f32ceb`, `0f8c9b21`, and `1c42d
 | `POP-02` | clause 1 | Evil players may buy slaves or choose enslavement on successful conquest | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `POP-02` | clause 2 | Neutral may inherit but cannot buy/enslave | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `POP-02` | clause 3 | Good cannot retain slaves after qualifying capture | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-02` | clause 4 | Never create remote planetary population without safe transport | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
+| `POP-02` | clause 4 | Never create remote planetary population without safe transport | VERIFIED | Remote pickup refusal and unchanged DB state: `suite_planet_colonist_transfers.json::case-0010`–`case-0011`; landed population transfers and rollback: `case-0013`–`case-0019`; current landed slave delivery and cargo/population state: `suite_planet_fighter_transfers.json::case-0043`–`case-0044`. |
 | `POP-03` | ORE output | floor(normal_output * 50 / 100) for ORE | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `POP-03` | ORG output | floor(normal_output * 50 / 100) for ORG | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `POP-03` | EQU output | floor(normal_output * 50 / 100) for EQU | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
@@ -218,15 +235,15 @@ Reviewed: 16 November 2026, following commits `97f32ceb`, `0f8c9b21`, and `1c42d
 | `PARITY-TW-HOMING-01` | clause 1 | A deployed destination-sector fighter is the homing reference | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `PARITY-TW-HOMING-01` | clause 2 | validate and lock it inside the movement transaction before turn/location mutations | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `MOVE-05` | clause 1 | TWGS 3.13 baseline: 3 Fuel Ore per sector of distance, measured as the shortest directed warp-hop count in the authoritative universe graph | VERIFIED | `tests.v2/suite_movement_move_transwarp.json`. |
-| `V3-PLANET-RATE-01` | clause 1 | Per 10-minute production tick, workers required per unit (ORE/ORG/EQU): M 100/100/100 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PLANET-RATE-01` | clause 2 | L 50/100/100 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PLANET-RATE-01` | clause 3 | O 100/50/100 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PLANET-RATE-01` | clause 4 | K 50/100/100 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PLANET-RATE-01` | clause 5 | H 50/100/50 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PLANET-RATE-01` | clause 6 | C 100/100/100 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-PLANET-RATE-01` | clause 7 | U disabled | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `V3-PLANET-RATE-01` | clause 1 | Per 10-minute production tick, workers required per unit (ORE/ORG/EQU): M 100/100/100 | VERIFIED | All 21 built-in class/commodity rows read from migrated PostgreSQL and asserted individually by `suite_planet_production_rate_values.json` (21 assertions). Values remain explicitly noncanonical twclone defaults. |
+| `V3-PLANET-RATE-01` | clause 2 | L 50/100/100 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
+| `V3-PLANET-RATE-01` | clause 3 | O 100/50/100 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
+| `V3-PLANET-RATE-01` | clause 4 | K 50/100/100 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
+| `V3-PLANET-RATE-01` | clause 5 | H 50/100/50 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
+| `V3-PLANET-RATE-01` | clause 6 | C 100/100/100 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
+| `V3-PLANET-RATE-01` | clause 7 | U disabled | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
 | `V3-PLANET-RATE-01` | clause 8 | Integer remainder carries per planet and commodity | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `V3-TOLL-RATE-01` | clause 1 | Default 1 credit per deployed toll fighter, charged once per attempted sector entry | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `V3-TOLL-RATE-01` | clause 1 | Default 1 credit per deployed toll fighter, charged once per attempted sector entry | VERIFIED | Three deployed toll fighters produced a 3-credit offer and single payment: `suite_movement_transwarp_tolls.json::case-0012`–`case-0015`. Noncanonical twclone default. |
 | `V3-TOLL-RATE-01` | clause 2 | configurable integer credits per fighter, minimum 0 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `V3-PHOTON-DURATION-01` | clause 1 | Default 600 seconds from successful launch | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `V3-PHOTON-DURATION-01` | clause 2 | configurable duration in seconds, minimum 1 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -267,25 +284,32 @@ The parent status is intentionally not copied onto every child clause. In partic
 |---|---|---|---|
 | `POP-01` | Complete capture/acquisition transitions among colonist, slave, and unpopulated states with counts and allocations preserved | DEFECTIVE_OR_INCOMPLETE | Decision register says complete acquisition/capture transitions are required; no end-to-end transition acceptance identified. |
 | `EXC-09` | Demonstrate sustainable NPC/commodity balancing under normal production and market depletion | DEFECTIVE_OR_INCOMPLETE | Decision register explicitly leaves broader balancing required; no acceptance threshold is approved for a full balance pass. |
-| `PARITY-TOLL-01` | Toll offer and settlement on transwarp sector entry | DEFECTIVE_OR_INCOMPLETE | `docs/testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md` records that transwarp arrivals do not present toll offers. |
+| `PARITY-TOLL-01` | Toll offer and settlement on transwarp sector entry | VERIFIED | `suite_movement_transwarp_tolls.json` and `suite_movement_transwarp_toll_edges.json`; ordinary authenticated server requests and PostgreSQL state assertions listed above. |
 | `POP-05` | Approve daily recurrence interval, stoppage duration, and population-loss amount | BLOCKED | The V3 decision register leaves these three numeric policy values unset. |
 | `NPC-FER-01` | Approve the canonical bounty amount | BLOCKED | Existing 5,000-credit source value is not an approved canonical rule. |
 | `NPC-ORI-01` | Define eligible hostile targets and alliance/faction targeting restrictions | BLOCKED | No approved targeting rule resolves this boundary. |
 | `COMBAT-01` | Ordinary-player ship destruction, escape-pod respawn, and recovery after server restart | VERIFIED | Godot live acceptance `live_two_player_combat_test.gd` and `live_combat_recovery_test.gd`; disposable PostgreSQL evidence recorded in the 16 Nov completion tracker. This does not verify all destruction side effects or independence from installed escape-pod equipment. |
 | `PARITY-PORT-ATTACK-01` | One ordinary-player StarPort attack destroys the seeded port, applies retaliation, consumes a turn, clears stock, and persists the attack receipt | VERIFIED | Godot `live_starport_attack_test.gd`; Python menu path and authoritative PostgreSQL readback recorded in the 16 Nov completion tracker. This does not cover every durability/defence or FedSpace case. |
 | `PARITY-PHOTON-01` | Adjacent eligible firing, ammo debit, same-request/concurrent retry, and expiry persistence | VERIFIED | `docs/testing/V3_PHOTON_ACCEPTANCE_20261114.md`, ordinary Python menu journey against disposable PostgreSQL. Shield/citadel suppression, defense neutralization at arrival, effect-expiry behavior, and fault rollback remain unverified. |
-| `PARITY-TOLL-01` | Normal-warp acceptance/refusal, atomic payment, insufficient-funds refusal, and duplicate/concurrent retry | VERIFIED | `docs/testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md`, ordinary Python warp workflow and PostgreSQL balances/receipts. Transwarp, mixed ownership, and destruction during refusal remain incomplete/unverified. |
+| `PARITY-TOLL-01` | Normal-warp acceptance/refusal, atomic payment, insufficient-funds refusal, and duplicate/concurrent retry | VERIFIED | `docs/testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md`; ordinary Python warp workflow and PostgreSQL balances/receipts. Transwarp and self/same-corporation protection now also pass as detailed above. Mixed-owner toll settlement and destruction during refusal remain unverified. |
 
 ## Exact remaining specification blockers
 
 - `POP-05`: numerical daily recurrence interval, stoppage duration, and population-loss amount.
 - `NPC-FER-01`: approved bounty amount.
 - `NPC-ORI-01`: targeting/faction eligibility rules for the Orion Blockader.
+- `EXC-09`: no measurable numeric sustainability target or evaluation horizon is approved. The qualitative “enjoyable, sustainable” principle cannot be turned into a balancing pass/fail rule without an approved metric; no economy-balancing constant was invented.
 
 No defaults were added for these blockers.
 
 ## Executed focused gates
 
+- Disposable PostgreSQL / actual V3 server: four focused suites, **136 passed, 0 failed** (`suite_combat_advanced.json` 44; `suite_movement_transwarp_toll_edges.json` 57; `suite_movement_transwarp_tolls.json` 15; `suite_planet_colonist_transfers.json` 20). The run retained response capture under `/tmp/twclone-v3-toll-population-verified-transcript.json`.
+- Disposable PostgreSQL / actual V3 server: existing landed slave delivery, harvest, fighter transfer, emancipation and access-control regression `suite_planet_fighter_transfers.json` — **49 passed, 0 failed**.
+- Disposable PostgreSQL / actual V3 server: `suite_planet_production_rate_values.json` **1 passed, 0 failed; 21 assertions passed**, validating the approved versioned noncanonical class-rate rows after migration.
+- `gdot --headless --path client/godot_client/godot --script res://tests/toll_offer_workflow_test.gd` — **13 checks passed** (Godot 4.5.1). `XDG_DATA_HOME=/tmp/twclone-godot-xdg` was used because the default Godot user log path is not writable in this sandbox.
+- Python client plus focused server contracts: `python3 -m pytest -q client/python_client/tests tests.v2/test_planetary_server_contract.py tests.v2/test_v3_planet_production_rates.py` — **866 passed**.
+- `bash tests.v2/run_engine_regressions.sh` — PASS (planet fighter production arithmetic, slave population loss allocation, gameplay engine regression unit tests).
 - `tests.v2/run_engine_regressions.sh` — PASS; slave-output/loss allocation, fighter-production arithmetic, and bank schedule runners completed.
 - `python3 -m pytest -q tests.v2/test_v3_planet_production_rates.py tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_sysop_session_kick_contract.py tests.v2/test_ship_sale_equipment_catalog.py tests.v2/test_insurance_server_contract.py` — **72 passed, 17 subtests passed**.
 - These checks do not claim database-backed acceptance for broader production or standing-order requirements. Next, select the smallest remaining `IMPLEMENTED_UNTESTED` clauses and run their exact contract, then PostgreSQL persistence tests where state is involved.

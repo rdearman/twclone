@@ -4481,137 +4481,166 @@ cmd_planet_colonists_set (client_ctx_t *ctx, json_t *root)
       return 0;
     }
 
-  /* Terra may only be used as a colonist source. Pickup is the sole
-   * persistent action permitted there; drop-off and all other planet
-   * mutations are refused below or by their respective handlers. */
-  if (h_planet_is_terra (db, planet_id) && strcmp (action, "pickup") != 0)
+  bool pickup = strcmp (action, "pickup") == 0;
+  bool dropoff = strcmp (action, "dropoff") == 0;
+  if (!pickup && !dropoff)
     {
+      send_response_error (ctx, root, ERR_INVALID_ARG, "Unknown action");
+      return 0;
+    }
+
+  int ship_id = h_get_active_ship_id (db, ctx->player_id);
+  if (ship_id <= 0)
+    {
+      send_response_error (ctx, root, ERR_NOT_FOUND,
+                           "Player has no active ship");
+      return 0;
+    }
+
+  db_error_t err = {0};
+  if (!db_tx_begin (db, DB_TX_IMMEDIATE, &err))
+    {
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not begin colonist transfer.");
+      return 0;
+    }
+
+  const char *landing_template =
+    "SELECT p.sector_id, pl.ship_id, COALESCE(pl.lastplanet,0), "
+    "s.sector_id, COALESCE(s.onplanet,FALSE) "
+    "FROM planets p JOIN players pl ON pl.player_id={1} "
+    "JOIN ships s ON s.ship_id=pl.ship_id "
+    "WHERE p.planet_id={2} AND pl.ship_id={3}";
+  char lock_clause[96], query_template[1024], sql[1024];
+  if (sql_for_update_of (db, "p, pl, s", lock_clause, sizeof lock_clause) != 0
+      || snprintf (query_template, sizeof query_template, "%s%s;",
+                   landing_template, lock_clause)
+           >= (int) sizeof query_template
+      || sql_build (db, query_template, sql, sizeof sql) != 0)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Could not validate colonist transfer.");
+      return 0;
+    }
+  db_res_t *landing = NULL;
+  db_error_t query_err = {0};
+  if (!db_query (db, sql,
+                 (db_bind_t[]){db_bind_i32 (ctx->player_id),
+                               db_bind_i32 (planet_id),
+                               db_bind_i32 (ship_id)},
+                 3, &landing, &query_err)
+      || !landing || !db_res_step (landing, &query_err))
+    {
+      if (landing)
+        db_res_finalize (landing);
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "You must have your active ship landed on this planet.");
+      return 0;
+    }
+  int planet_sector = db_res_col_i32 (landing, 0, &query_err);
+  int active_ship_id = db_res_col_i32 (landing, 1, &query_err);
+  int landed_planet = db_res_col_i32 (landing, 2, &query_err);
+  int ship_sector = db_res_col_i32 (landing, 3, &query_err);
+  bool onplanet = db_res_col_bool (landing, 4, &query_err);
+  db_res_finalize (landing);
+  if (query_err.code || active_ship_id != ship_id
+      || landed_planet != planet_id || !onplanet
+      || ship_sector != planet_sector)
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+                           "You must have your active ship landed on this planet.");
+      return 0;
+    }
+
+  /* Terra is public for colonist pickup only; all other population changes
+   * there remain forbidden. */
+  bool is_terra = h_planet_is_terra (db, planet_id);
+  if (is_terra && !pickup)
+    {
+      db_tx_rollback (db, NULL);
       send_response_error (ctx, root, ERR_PERMISSION_DENIED,
                            "Terra accepts colonist pickup only.");
       return 0;
     }
 
-  if (h_planet_is_terra (db, planet_id) && strcmp (action, "pickup") == 0)
+  int ore = 0, organics = 0, equipment = 0, colonists = 0;
+  int slaves = 0, weapons = 0, drugs = 0, holds = 0;
+  int rc = h_get_ship_cargo_and_holds (db, ship_id, &ore, &organics,
+                                        &equipment, &colonists, &slaves,
+                                        &weapons, &drugs, &holds);
+  if (rc != 0)
     {
-      int landed_planet = 0;
-      int ship_id_for_landing = h_get_active_ship_id (db, ctx->player_id);
-      if (ship_id_for_landing <= 0
-          || repo_citadel_get_onplanet (db, ship_id_for_landing,
-                                        &landed_planet) != 0
-          || landed_planet != planet_id)
-        {
-          send_response_error (ctx, root, ERR_PERMISSION_DENIED,
-                               "You must be landed on Terra to pick up colonists.");
-          return 0;
-        }
-    }
-
-  /* Get active ship */
-  int ship_id = h_get_active_ship_id (db, ctx->player_id);
-  if (ship_id <= 0)
-    {
-      send_response_error (ctx, root, ERR_NOT_FOUND, "Player has no active ship");
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB, "Failed to get ship info");
       return 0;
     }
 
-  if (strcmp(action, "pickup") == 0)
+  int next_ship_colonists = 0;
+  if (pickup)
     {
-      /* Pick up colonists from planet and add to ship */
       int64_t available = 0;
       if (db_planets_get_colonists_unassigned (db, planet_id, &available) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Database error");
-          return 0;
-        }
-
-      if (available < quantity)
-        {
-          send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS, 
-                              "Not enough unassigned colonists on this planet");
-          return 0;
-        }
-
-      /* Get ship cargo info */
-      int ore, organics, equipment, colonists, slaves, weapons, drugs, holds;
-      if (repo_ships_get_cargo_and_holds(db, ship_id, &ore, &organics, &equipment, 
-                                         &colonists, &slaves, &weapons, &drugs, &holds) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Failed to get ship info");
-          return 0;
-        }
-
-      /* Check hold capacity (colonists + current cargo) */
-      int total_cargo = ore + organics + equipment + colonists + slaves + weapons + drugs;
-      if (total_cargo + quantity > holds)
-        {
-          send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS, "Not enough hold space");
-          return 0;
-        }
-
-      /* Update ship colonists */
-      if (repo_ships_update_cargo_column(db, ship_id, "colonists", colonists + quantity) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Failed to add colonists to ship");
-          return 0;
-        }
-
-      /* Update planet colonists (subtract) */
-      if (db_planets_add_colonists_unassigned (db, planet_id, -quantity) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Failed to remove colonists from planet");
-          return 0;
-        }
-
-      json_t *payload = json_object ();
-      json_object_set_new (payload, "action", json_string ("pickup"));
-      json_object_set_new (payload, "quantity", json_integer (quantity));
-      json_object_set_new (payload, "planet_id", json_integer (planet_id));
-      json_object_set_new (payload, "ship_colonists", json_integer (colonists + quantity));
-      send_response_ok_take (ctx, root, "planet.colonists.set", &payload);
-    }
-  else if (strcmp(action, "dropoff") == 0)
-    {
-      /* Get ship cargo info */
-      int ore, organics, equipment, colonists, slaves, weapons, drugs, holds;
-      if (repo_ships_get_cargo_and_holds(db, ship_id, &ore, &organics, &equipment, 
-                                         &colonists, &slaves, &weapons, &drugs, &holds) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Failed to get ship info");
-          return 0;
-        }
-
-      if (colonists < quantity)
-        {
-          send_response_error (ctx, root, ERR_INSUFFICIENT_TURNS, "Not enough colonists on ship");
-          return 0;
-        }
-
-      /* Update ship colonists (subtract) */
-      if (repo_ships_update_cargo_column(db, ship_id, "colonists", colonists - quantity) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Failed to remove colonists from ship");
-          return 0;
-        }
-
-      /* Update planet colonists (add) */
-      if (db_planets_add_colonists_unassigned (db, planet_id, quantity) != 0)
-        {
-          send_response_error (ctx, root, ERR_DB, "Failed to add colonists to planet");
-          return 0;
-        }
-
-      json_t *payload = json_object ();
-      json_object_set_new (payload, "action", json_string ("dropoff"));
-      json_object_set_new (payload, "quantity", json_integer (quantity));
-      json_object_set_new (payload, "planet_id", json_integer (planet_id));
-      json_object_set_new (payload, "ship_colonists", json_integer (colonists - quantity));
-      send_response_ok_take (ctx, root, "planet.colonists.set", &payload);
+        rc = ERR_DB;
+      else if (available < quantity)
+        rc = ERR_INSUFFICIENT_TURNS;
+      int64_t used = (int64_t) ore + organics + equipment + colonists
+        + slaves + weapons + drugs;
+      if (rc == 0 && (used + quantity > holds || colonists > INT_MAX - quantity))
+        rc = ERR_INSUFFICIENT_TURNS;
+      next_ship_colonists = colonists + quantity;
+      if (rc == 0
+          && h_update_ship_cargo (db, ship_id, "COL", quantity, NULL) != 0)
+        rc = ERR_DB;
+      if (rc == 0
+          && db_planets_add_colonists_unassigned (db, planet_id, -quantity) != 0)
+        rc = ERR_DB_CONSTRAINT;
     }
   else
     {
-      send_response_error (ctx, root, ERR_INVALID_ARG, "Unknown action");
+      if (colonists < quantity)
+        rc = ERR_INSUFFICIENT_TURNS;
+      next_ship_colonists = colonists - quantity;
+      if (rc == 0
+          && h_update_ship_cargo (db, ship_id, "COL", -quantity, NULL) != 0)
+        rc = ERR_DB;
+      if (rc == 0
+          && db_planets_add_colonists_unassigned (db, planet_id, quantity) != 0)
+        rc = ERR_DB_CONSTRAINT;
+    }
+  if (rc != 0)
+    {
+      db_tx_rollback (db, NULL);
+      if (rc == ERR_INSUFFICIENT_TURNS)
+        send_response_error (ctx, root, rc,
+                             pickup ? "Not enough colonists or hold space."
+                                    : "Not enough colonists on ship.");
+      else if (rc == ERR_DB_CONSTRAINT)
+        send_response_error (ctx, root, ERR_BAD_STATE,
+                             "Colonists cannot be mixed with slave population.");
+      else
+        send_response_error (ctx, root, ERR_DB,
+                             "Could not update colonist transfer.");
+      return 0;
+    }
+  if (!db_tx_commit (db, &err))
+    {
+      db_tx_rollback (db, NULL);
+      send_response_error (ctx, root, ERR_DB_TX,
+                           "Could not commit colonist transfer.");
+      return 0;
     }
 
+  json_t *payload = json_object ();
+  json_object_set_new (payload, "action",
+                       json_string (pickup ? "pickup" : "dropoff"));
+  json_object_set_new (payload, "quantity", json_integer (quantity));
+  json_object_set_new (payload, "planet_id", json_integer (planet_id));
+  json_object_set_new (payload, "ship_colonists",
+                       json_integer (next_ship_colonists));
+  send_response_ok_take (ctx, root, "planet.colonists.set", &payload);
   return 0;
 }
 

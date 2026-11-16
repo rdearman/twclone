@@ -318,7 +318,7 @@ Transfer cargo/colonists between ship and planet.
 Planet commodity balances are read and written through `entity_stock`. A commodity is transferable only when the planet has a matching `planet_goods` row; that row's `max_capacity` is the storage limit. `planet.info.goods` reports the server-confirmed quantity and configured capacity. Colonists remain a population field and are not stored as a commodity balance.
 
 ### `planet.colonists.get` / `planet.colonists.set`
-Read the number of unassigned planet colonists and the ship's available holds, then move colonists between the landed player's ship and the planet. A drop-off adds colonists to the unassigned pool; it does not automatically start production.
+Read the number of unassigned planet colonists and the ship's available holds, then move colonists between the landed player's active ship and the planet. Both pickup and drop-off require that ship to be landed on the requested planet. The ship-cargo update and planet population update commit atomically; failures preserve both sides. A drop-off adds colonists to the unassigned pool; it does not automatically start production. Terra permits pickup only.
 
 Universe setup seeds Terra (planet 1) in sector 1 with unassigned colonists. There is no separate colonist purchase command; to collect the starting population, land on Terra and use the pickup transfer. The daily `terra_replenish` task restores Terra's commodity stock, not its colonist population.
 

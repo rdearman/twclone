@@ -59,6 +59,36 @@ by itself close any of the 67 decision-register requirements.
 
 ## Mechanics with focused acceptance evidence
 
+### Additional clause-level acceptance from the `b3fcb7d9` work batch
+
+- **Transwarp toll arrival:** on the disposable PostgreSQL V3 server, normal
+  toll quotes were reused for transwarp arrival. Acceptance covered offer-before-
+  movement, one-time payment/fuel/turn settlement, accepted-request replay,
+  insufficient-credit rollback and funded retry, self/same-corporation
+  exemptions, and refusal combat with one-time damage. Test IDs are listed in
+  [`V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`](testing/V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md).
+- **Planet population transport:** `planet.colonists.set` now requires the
+  active ship landed at the target and applies ship cargo and planet population
+  changes atomically through the authoritative cargo layer. A PostgreSQL suite
+  confirms remote refusal, pickup/drop-off conservation, and full rollback when
+  a drop-off would mix colonists with slave population. This does not verify
+  the full acquisition/migration transition matrix or restart recovery for
+  every transition.
+- **Production numeric rules:** the disposable database confirmed all 21
+  built-in class/commodity rate rows for the seven approved noncanonical V3
+  defaults. This verifies migrated configuration values; it does not verify
+  every scheduled production tick, persisted remainder, or class-rate override.
+- Focused result: four PostgreSQL suites **136 passed, 0 failed**; production
+  rate migration suite **1 passed, 21 assertions**; Python client plus two
+  focused server contracts **866 passed**; Godot 4.5.1 toll workflow **13
+  checks passed**; existing slave-delivery/harvest/fighter/emancipation suite
+  **49 passed**; engine regression script passed. These are focused gates, not
+  the full server regression suite.
+- Defects fixed in this batch: transwarp did not request/settle toll offers;
+  colonist transfer lacked a non-Terra landed-ship check and split population
+  mutation from cargo mutation; the old path wrote only legacy ship cargo and
+  left authoritative `ship_cargo` stale.
+
 - **StarPorts:** construction retry after lost reply and server restart,
   scheduled deliveries across serving-process restarts, selected rollback
   boundaries, concurrent upgrades, upgrade/attack serialization, and

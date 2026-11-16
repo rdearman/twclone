@@ -124,9 +124,16 @@
       "save": { "target_planet_id": "data.rows.0.0", "target_planet_sector_id": "data.rows.0.1" }
     },
     {
-      "name": "Rig: Seed Planet Fighters",
+      "name": "Rig: Seed bounded colonist capture with owned assets",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "UPDATE planets SET fighters = 50 WHERE planet_id = @{target_planet_id};" },
+      "data": { "sql": "UPDATE planets SET fighters=50,owner_id=(SELECT player_id FROM players WHERE name='planet_lord'),owner_type='player',population=1000,population_type='COLONIST',colonists_unassigned=600,colonists_ore=100,colonists_org=100,colonists_eq=100,colonists_weapons=100,ore_on_hand=123,organics_on_hand=234,equipment_on_hand=345 WHERE planet_id=@{target_planet_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig planet treasury in citadel bank record",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO citadels(planet_id,level,treasury) VALUES(@{target_planet_id},1,456) ON CONFLICT(planet_id) DO UPDATE SET level=1,treasury=456;" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
@@ -154,8 +161,134 @@
         { "path": "data", "op": "contains", "value": "planet_id" },
         { "path": "data", "op": "contains", "value": "attacker_remaining_fighters" },
         { "path": "data", "op": "contains", "value": "defender_remaining_fighters" },
-        { "path": "data", "op": "contains", "value": "captured" }
+        { "path": "data.captured", "op": "==", "value": true }
       ]
+    },
+    {
+      "name": "Assert evil capture preserves colonists, allocations, planet assets and ownership accounting",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN owner_id=@{combat_ace_player_id} AND owner_type='player' AND population=1000 AND population_type='COLONIST' AND colonists_unassigned=600 AND colonists_ore=100 AND colonists_org=100 AND colonists_eq=100 AND colonists_weapons=100 AND fighters=0 AND (SELECT treasury FROM citadels WHERE planet_id=@{target_planet_id})=456 AND ore_on_hand=123 AND organics_on_hand=234 AND equipment_on_hand=345 THEN 1 ELSE 0 END FROM planets WHERE planet_id=@{target_planet_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Reset attacker and planet for explicit evil enslavement",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment=-501 WHERE player_id=@{combat_ace_player_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore attacker fighters for second invasion",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters=100 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{combat_ace_player_id})" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset target as colonist world for evil enslavement choice",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE planets SET owner_id=(SELECT player_id FROM players WHERE name='planet_lord'),owner_type='player',fighters=50,population=1000,population_type='COLONIST',colonists_unassigned=600,colonists_ore=100,colonists_org=100,colonists_eq=100,colonists_weapons=100 WHERE planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Evil attacker explicitly enslaves colonists on successful capture",
+      "command": "combat.attack_planet",
+      "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": true },
+      "user": "combat_ace",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.captured", "op": "==", "value": true }]
+    },
+    {
+      "name": "Assert enslavement changes only population type and combat ownership/defenses",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN owner_id=@{combat_ace_player_id} AND owner_type='player' AND population=1000 AND population_type='SLAVE' AND colonists_unassigned=600 AND colonists_ore=100 AND colonists_org=100 AND colonists_eq=100 AND colonists_weapons=100 AND fighters=0 AND (SELECT treasury FROM citadels WHERE planet_id=@{target_planet_id})=456 AND ore_on_hand=123 AND organics_on_hand=234 AND equipment_on_hand=345 THEN 1 ELSE 0 END FROM planets WHERE planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Set attacker to good alignment for slave liberation capture",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment=501 WHERE player_id=@{combat_ace_player_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore attacker fighters for liberation invasion",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters=100 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{combat_ace_player_id})" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset target as slave world for good capture",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE planets SET owner_id=(SELECT player_id FROM players WHERE name='planet_lord'),owner_type='player',fighters=50,population=1000,population_type='SLAVE' WHERE planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Good attacker automatically liberates slaves on successful capture",
+      "command": "combat.attack_planet",
+      "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": false },
+      "user": "combat_ace",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.captured", "op": "==", "value": true }]
+    },
+    {
+      "name": "Assert liberation preserves population, allocations, treasury and planetary stock",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN owner_id=@{combat_ace_player_id} AND owner_type='player' AND population=1000 AND population_type='COLONIST' AND colonists_unassigned=600 AND colonists_ore=100 AND colonists_org=100 AND colonists_eq=100 AND colonists_weapons=100 AND fighters=0 AND (SELECT treasury FROM citadels WHERE planet_id=@{target_planet_id})=456 AND ore_on_hand=123 AND organics_on_hand=234 AND equipment_on_hand=345 THEN 1 ELSE 0 END FROM planets WHERE planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Set attacker to neutral alignment for inherited-slave capture",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment=0 WHERE player_id=@{combat_ace_player_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore attacker fighters for neutral invasion",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET fighters=100 WHERE ship_id=(SELECT ship_id FROM players WHERE player_id=@{combat_ace_player_id})" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reset target as slave world for neutral capture",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE planets SET owner_id=(SELECT player_id FROM players WHERE name='planet_lord'),owner_type='player',fighters=50,population=1000,population_type='SLAVE' WHERE planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Neutral attacker inherits slave population on successful capture",
+      "command": "combat.attack_planet",
+      "data": { "planet_id": "@{target_planet_id}", "enslave_colonists": false },
+      "user": "combat_ace",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.captured", "op": "==", "value": true }]
+    },
+    {
+      "name": "Assert neutral capture retains slaves and planetary assets",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN owner_id=@{combat_ace_player_id} AND owner_type='player' AND population=1000 AND population_type='SLAVE' AND colonists_unassigned=600 AND colonists_ore=100 AND colonists_org=100 AND colonists_eq=100 AND colonists_weapons=100 AND fighters=0 AND (SELECT treasury FROM citadels WHERE planet_id=@{target_planet_id})=456 AND ore_on_hand=123 AND organics_on_hand=234 AND equipment_on_hand=345 THEN 1 ELSE 0 END FROM planets WHERE planet_id=@{target_planet_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Restore evil alignment for the existing port robbery case",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET alignment=-501 WHERE player_id=@{combat_ace_player_id}" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     },
     {
       "name": "Rig: Move to Port Sector (Player)",

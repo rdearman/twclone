@@ -1,0 +1,38 @@
+{
+  "name": "V3 Versioned Planet Production Rate Defaults",
+  "version": "2.0.0",
+  "tests": [
+    {
+      "name": "Read all versioned production rate defaults from migrated PostgreSQL",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='M' AND pp.commodity_code='ORE')=100 THEN 1 ELSE 0 END AS m_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='M' AND pp.commodity_code='ORG')=100 THEN 1 ELSE 0 END AS m_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='M' AND pp.commodity_code='EQU')=100 THEN 1 ELSE 0 END AS m_equ, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='L' AND pp.commodity_code='ORE')=50 THEN 1 ELSE 0 END AS l_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='L' AND pp.commodity_code='ORG')=100 THEN 1 ELSE 0 END AS l_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='L' AND pp.commodity_code='EQU')=100 THEN 1 ELSE 0 END AS l_equ, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='O' AND pp.commodity_code='ORE')=100 THEN 1 ELSE 0 END AS o_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='O' AND pp.commodity_code='ORG')=50 THEN 1 ELSE 0 END AS o_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='O' AND pp.commodity_code='EQU')=100 THEN 1 ELSE 0 END AS o_equ, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='K' AND pp.commodity_code='ORE')=50 THEN 1 ELSE 0 END AS k_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='K' AND pp.commodity_code='ORG')=100 THEN 1 ELSE 0 END AS k_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='K' AND pp.commodity_code='EQU')=100 THEN 1 ELSE 0 END AS k_equ, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='H' AND pp.commodity_code='ORE')=50 THEN 1 ELSE 0 END AS h_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='H' AND pp.commodity_code='ORG')=100 THEN 1 ELSE 0 END AS h_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='H' AND pp.commodity_code='EQU')=50 THEN 1 ELSE 0 END AS h_equ, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='C' AND pp.commodity_code='ORE')=100 THEN 1 ELSE 0 END AS c_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='C' AND pp.commodity_code='ORG')=100 THEN 1 ELSE 0 END AS c_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='C' AND pp.commodity_code='EQU')=100 THEN 1 ELSE 0 END AS c_equ, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='U' AND pp.commodity_code='ORE')=0 THEN 1 ELSE 0 END AS u_ore, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='U' AND pp.commodity_code='ORG')=0 THEN 1 ELSE 0 END AS u_org, CASE WHEN (SELECT pp.workers_per_unit FROM planet_production pp JOIN planettypes pt ON pt.planettypes_id=pp.planet_type_id WHERE pt.code='U' AND pp.commodity_code='EQU')=0 THEN 1 ELSE 0 END AS u_equ"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 },
+        { "path": "data.rows.0.1", "op": "==", "value": 1 },
+        { "path": "data.rows.0.2", "op": "==", "value": 1 },
+        { "path": "data.rows.0.3", "op": "==", "value": 1 },
+        { "path": "data.rows.0.4", "op": "==", "value": 1 },
+        { "path": "data.rows.0.5", "op": "==", "value": 1 },
+        { "path": "data.rows.0.6", "op": "==", "value": 1 },
+        { "path": "data.rows.0.7", "op": "==", "value": 1 },
+        { "path": "data.rows.0.8", "op": "==", "value": 1 },
+        { "path": "data.rows.0.9", "op": "==", "value": 1 },
+        { "path": "data.rows.0.10", "op": "==", "value": 1 },
+        { "path": "data.rows.0.11", "op": "==", "value": 1 },
+        { "path": "data.rows.0.12", "op": "==", "value": 1 },
+        { "path": "data.rows.0.13", "op": "==", "value": 1 },
+        { "path": "data.rows.0.14", "op": "==", "value": 1 },
+        { "path": "data.rows.0.15", "op": "==", "value": 1 },
+        { "path": "data.rows.0.16", "op": "==", "value": 1 },
+        { "path": "data.rows.0.17", "op": "==", "value": 1 },
+        { "path": "data.rows.0.18", "op": "==", "value": 1 },
+        { "path": "data.rows.0.19", "op": "==", "value": 1 },
+        { "path": "data.rows.0.20", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}
