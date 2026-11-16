@@ -29,6 +29,49 @@
       "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
     },
     {
+      "name": "Fixture: Create an ordinary persisted Orion NPC identity",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO players (player_id,name,passwd,sector_id,commission_id,is_npc) SELECT 987654,'V3 Orion persistence QA',(SELECT passwd FROM players WHERE name='admin' LIMIT 1),(SELECT MIN(cs.sector_id) FROM cluster_sectors cs JOIN clusters c ON c.clusters_id=cs.cluster_id WHERE c.role='ORION'),1,TRUE ON CONFLICT (player_id) DO UPDATE SET sector_id=EXCLUDED.sector_id,is_npc=TRUE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: Attach Orion NPC to an Orion corporation",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO corporations (corporation_id,name,owner_id,tag,ship_personality) VALUES (987654,'V3 Orion persistence QA',987654,'ORION','blockader') ON CONFLICT (corporation_id) DO UPDATE SET owner_id=987654,tag='ORION',ship_personality='blockader';" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: Confirm Orion owner membership",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT COUNT(*) FROM corp_members WHERE corporation_id=987654 AND player_id=987654 AND role='Leader';" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Fixture: Create an Orion-owned blockader ship",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO ships (ship_id,name,type_id,sector_id,personality) SELECT 987654,'V3 Orion persistence QA ship',1,sector_id,'blockader' FROM players WHERE player_id=987654 ON CONFLICT (ship_id) DO UPDATE SET sector_id=EXCLUDED.sector_id,personality='blockader',destroyed=FALSE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: Assign the Orion ship to its NPC owner",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO ship_ownership (ship_id,player_id,role_id,is_primary) VALUES (987654,987654,1,TRUE) ON CONFLICT (ship_id,player_id,role_id) DO UPDATE SET is_primary=TRUE;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: Set Orion active ship",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE players SET ship_id=987654 WHERE player_id=987654;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Phase 3: Schedule an NPC engine tick through cron_tasks",
       "command": "sys.raw_sql_exec",
       "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP, enabled = TRUE WHERE name = 'npc_step';" },

@@ -11,7 +11,7 @@
       "name": "Choose a funded port that buys ORE and sells another planetary commodity",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "SELECT p.port_id,p.sector_id,(SELECT pt2.commodity FROM port_trade pt2 WHERE pt2.port_id=p.port_id AND pt2.commodity IN ('ORG','EQU') AND pt2.mode='sell' ORDER BY pt2.commodity LIMIT 1) FROM ports p JOIN port_trade pt ON pt.port_id=p.port_id AND pt.commodity='ORE' AND pt.mode='buy' JOIN bank_accounts b ON b.owner_type='port' AND b.owner_id=p.port_id AND b.currency='CRD' AND b.is_active=TRUE WHERE p.sector_id>10 AND EXISTS (SELECT 1 FROM port_trade pt2 WHERE pt2.port_id=p.port_id AND pt2.commodity IN ('ORG','EQU') AND pt2.mode='sell') ORDER BY p.port_id LIMIT 1;" },
+      "data": { "sql": "SELECT p.port_id,p.sector_id,(SELECT pt2.commodity FROM port_trade pt2 WHERE pt2.port_id=p.port_id AND pt2.commodity IN ('ORG','EQU') AND pt2.mode='sell' AND NOT EXISTS (SELECT 1 FROM port_trade pt3 WHERE pt3.port_id=pt2.port_id AND pt3.commodity=pt2.commodity AND pt3.mode='buy') ORDER BY pt2.commodity LIMIT 1) FROM ports p JOIN port_trade pt ON pt.port_id=p.port_id AND pt.commodity='ORE' AND pt.mode='buy' JOIN bank_accounts b ON b.owner_type='port' AND b.owner_id=p.port_id AND b.currency='CRD' AND b.is_active=TRUE WHERE p.sector_id>10 AND EXISTS (SELECT 1 FROM port_trade pt2 WHERE pt2.port_id=p.port_id AND pt2.commodity IN ('ORG','EQU') AND pt2.mode='sell' AND NOT EXISTS (SELECT 1 FROM port_trade pt3 WHERE pt3.port_id=pt2.port_id AND pt3.commodity=pt2.commodity AND pt3.mode='buy')) ORDER BY p.port_id LIMIT 1;" },
       "expect": { "status": "ok" },
       "save": { "pta_port_id": "data.rows.0.0", "pta_sector_id": "data.rows.0.1", "pta_not_bought_code": "data.rows.0.2" }
     },

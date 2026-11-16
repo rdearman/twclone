@@ -45,7 +45,7 @@
         { "path": "data.ships_present", "op": "exists" },
         { "path": "data.ports", "op": "exists" },
         { "path": "data.ports.*[port_id=9].name", "op": "==", "value": "Stardock Prime" },
-        { "path": "data.ports.*[port_id=9].type", "op": "==", "value": null },
+        { "path": "data.ports.*[port_id=9].type", "op": "not_exists" },
         { "path": "data.celestial_objects", "op": "exists" },
         { "path": "data.counts", "op": "exists" },
         { "path": "data.server_tick", "op": "exists" }

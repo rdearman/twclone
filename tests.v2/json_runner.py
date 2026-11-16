@@ -6,10 +6,13 @@ import time
 import sys
 import uuid
 import argparse
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 
 # Import TWClient - assuming it's available in the same directory or PYTHONPATH
 from twclient import TWClient
+
+_MISSING = object()
 
 class JsonSuiteRunner:
     def __init__(self, host: str, port: int, timeout: int = 25, macros_path: str = "tests.v2/macros.json",
@@ -566,8 +569,9 @@ class JsonSuiteRunner:
         # Custom assertions
         if "asserts" in test:
             for assertion in test["asserts"]:
-                actual = self._get_path(resp, assertion["path"])
-                expected = assertion.get("value")
+                path = assertion["path"]
+                actual, found = self._resolve_assertion_path(resp, path)
+                expected = self._expand_vars(assertion.get("value"))
                 if isinstance(expected, dict) and "sql_int" in expected:
                     sql = self._expand_vars(expected["sql_int"])
                     admin = self._get_admin_client()
@@ -575,50 +579,17 @@ class JsonSuiteRunner:
                     sql_resp = admin.recv_next_non_notice()
                     if sql_resp.get("status") == "ok" and sql_resp["data"]["rows"]:
                         expected = sql_resp["data"]["rows"][0][0]
-                
+
                 op = assertion["op"]
-                if op == "==":
-                    if actual != expected:
-                        print(f"FAIL (Assert: {actual} != {expected})")
-                        self._current_failure_reason = (
-                            f"assertion failed at {assertion['path']}: expected {expected!r}, got {actual!r}"
-                        )
-                        return False
-                elif op == "is_string_array":
-                    if not isinstance(actual, list) or any(
-                            not isinstance(item, str) for item in actual):
-                        print(f"FAIL (Assert: {actual} is not an array of strings)")
-                        self._current_failure_reason = (
-                            f"assertion failed at {assertion['path']}: expected an array of strings, got {actual!r}"
-                        )
-                        return False
-                elif op == "keys_eq":
-                    if not isinstance(actual, dict) or set(actual) != set(expected):
-                        print(f"FAIL (Assert: {actual} keys do not equal {expected})")
-                        self._current_failure_reason = (
-                            f"assertion failed at {assertion['path']}: expected keys {expected!r}, got {actual!r}"
-                        )
-                        return False
-                elif op == "contains":
-                    if isinstance(actual, list):
-                        found = False
-                        for item in actual:
-                            if expected == item or str(expected) in str(item):
-                                found = True
-                                break
-                        if not found:
-                            print(f"FAIL (Assert: {actual} does not contain {expected})")
-                            self._current_failure_reason = (
-                                f"assertion failed at {assertion['path']}: {actual!r} does not contain {expected!r}"
-                            )
-                            return False
-                    else:
-                        if str(expected) not in str(actual):
-                            print(f"FAIL (Assert: {actual} does not contain {expected})")
-                            self._current_failure_reason = (
-                                f"assertion failed at {assertion['path']}: {actual!r} does not contain {expected!r}"
-                            )
-                            return False
+                passed, detail = self._evaluate_assertion(op, actual, expected, found)
+                if not passed:
+                    msg = assertion.get("msg") or detail
+                    print(f"FAIL (Assert {op} at {path}: {msg})")
+                    self._current_failure_reason = f"assertion failed at {path}: {detail}"
+                    if xfail:
+                        print("XFAIL")
+                        return True
+                    return False
 
         if xfail:
             print("XPASS (unexpected pass)")
@@ -628,34 +599,132 @@ class JsonSuiteRunner:
         if user is None: client.close()
         return True
 
+    def _resolve_assertion_path(self, response: Any, path: str):
+        """Resolve a response or saved-variable path, preserving absent/null."""
+        if path in self.vars:
+            return self.vars[path], True
+        for name in sorted(self.vars, key=len, reverse=True):
+            if path.startswith(name + "."):
+                return self._get_path_raw(self.vars[name], path[len(name) + 1:])
+        return self._get_path_raw(response, path)
+
     def _get_path(self, obj: Any, path: str) -> Any:
-        if not path: return obj
+        value, found = self._get_path_raw(obj, path)
+        return value if found else None
+
+    @staticmethod
+    def _get_path_raw(obj: Any, path: str):
+        if not path:
+            return obj, True
         parts = re.split(r'\.(?![^\[]*\])', path)
         curr = obj
-        for p in parts:
-            if isinstance(curr, dict):
-                curr = curr.get(p)
-            elif isinstance(curr, list):
-                if p.isdigit():
-                    idx = int(p)
-                    curr = curr[idx] if idx < len(curr) else None
-                elif p.startswith("*[") and p.endswith("]"):
-                    inner = p[2:-1]
-                    if "=" in inner:
-                        fk, fv = inner.split("=", 1)
-                        found = None
-                        for item in curr:
-                            if isinstance(item, dict) and str(item.get(fk)) == fv:
-                                found = item
-                                break
-                        curr = found
-                    else:
-                        return None
+        for part in parts:
+            if part.startswith("*[") and part.endswith("]"):
+                if not isinstance(curr, list) or "=" not in part[2:-1]:
+                    return None, False
+                key, expected = part[2:-1].split("=", 1)
+                curr = next((item for item in curr
+                             if isinstance(item, dict) and str(item.get(key)) == expected),
+                            _MISSING)
+                if curr is _MISSING:
+                    return None, False
+                continue
+            base, bracket, suffix = part.partition("[")
+            if base:
+                if isinstance(curr, dict) and base in curr:
+                    curr = curr[base]
+                elif isinstance(curr, list) and base.isdigit() and int(base) < len(curr):
+                    curr = curr[int(base)]
                 else:
-                    return None
-            else:
+                    return None, False
+            rest = ("[" + suffix) if bracket else ""
+            while rest:
+                match = re.match(r"^\[([^\]]+)\](.*)$", rest)
+                if not match:
+                    return None, False
+                token, rest = match.groups()
+                if not isinstance(curr, list):
+                    return None, False
+                if token.isdigit():
+                    index = int(token)
+                    if index >= len(curr):
+                        return None, False
+                    curr = curr[index]
+                elif token.startswith("?(") and token.endswith(")"):
+                    condition = re.fullmatch(
+                        r"\?\(@\.([A-Za-z0-9_]+)\s*==\s*'([^']*)'\)", token
+                    )
+                    if not condition:
+                        return None, False
+                    key, expected = condition.groups()
+                    curr = [item for item in curr
+                            if isinstance(item, dict) and str(item.get(key)) == expected]
+                elif token.startswith("*") and "=" in token:
+                    key, expected = token[1:].split("=", 1)
+                    curr = next((item for item in curr
+                                 if isinstance(item, dict) and str(item.get(key)) == expected),
+                                _MISSING)
+                    if curr is _MISSING:
+                        return None, False
+                else:
+                    return None, False
+        return curr, True
+
+    @staticmethod
+    def _numeric(value):
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float, Decimal)):
+            return Decimal(str(value))
+        if isinstance(value, str):
+            try:
+                return Decimal(value)
+            except InvalidOperation:
                 return None
-        return curr
+        return None
+
+    @classmethod
+    def _evaluate_assertion(cls, op, actual, expected, found):
+        if op == "exists":
+            passed = found
+        elif op == "not_exists":
+            passed = not found
+        elif not found:
+            return False, "path is missing from the response and saved variables"
+        elif op in ("==", "equals"):
+            left, right = cls._numeric(actual), cls._numeric(expected)
+            passed = left == right if left is not None and right is not None else actual == expected
+        elif op in (">", ">=", "<", "<=", "greater_than"):
+            left, right = cls._numeric(actual), cls._numeric(expected)
+            if left is None or right is None:
+                passed = False
+            else:
+                operator = ">" if op == "greater_than" else op
+                passed = {">": left > right, ">=": left >= right,
+                          "<": left < right, "<=": left <= right}[operator]
+        elif op == "contains":
+            if isinstance(actual, list):
+                passed = any(expected == item or str(expected) in str(item) for item in actual)
+            elif isinstance(actual, (tuple, dict, str)):
+                passed = expected in actual
+            else:
+                passed = False
+        elif op == "keys_eq":
+            passed = isinstance(actual, dict) and set(actual) == set(expected)
+        elif op == "is_string_array":
+            passed = isinstance(actual, list) and all(isinstance(item, str) for item in actual)
+        elif op == "is_array":
+            passed = isinstance(actual, list)
+        elif op == "is_empty":
+            passed = isinstance(actual, (list, dict, str)) and len(actual) == 0
+        elif op == "len_gt":
+            count = cls._numeric(len(actual)) if isinstance(actual, (list, dict, str)) else None
+            right = cls._numeric(expected)
+            passed = count is not None and right is not None and count > right
+        else:
+            return False, f"unsupported assertion operator {op!r}"
+        return passed, ("passed" if passed else
+                        f"actual value {actual!r} did not satisfy {op} {expected!r}")
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run one JSON RPC integration suite")

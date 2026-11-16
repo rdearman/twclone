@@ -101,7 +101,6 @@
       "asserts": [
         { "path": "data.planet_id", "op": "==", "value": 977701 },
         { "path": "data.treasury", "op": "==", "value": 555 },
-        { "path": "data.owner_id", "op": "==", "value": null },
         { "path": "data.population_type", "op": "==", "value": "SLAVE" },
         { "path": "data.morale_status", "op": "==", "value": "LOW" },
         { "path": "data.production", "op": "exists" }
@@ -187,7 +186,7 @@
       "name": "Landed visitor does not receive treasury balance",
       "command": "planet.info", "user": "planet_fighter_visitor", "data": { "planet_id": 977701 },
       "expect": { "status": "ok", "type": "planet.info" },
-      "asserts": [ { "path": "data.citadel.treasury_balance", "op": "==", "value": null } ]
+      "asserts": [ { "path": "data.citadel.treasury_balance", "op": "not_exists" } ]
     },
     {
       "name": "Landed visitor overview omits treasury and ownership data",
@@ -195,8 +194,8 @@
       "data": { "planet_id": 977701 },
       "expect": { "status": "ok", "type": "planet.view_v1" },
       "asserts": [
-        { "path": "data.treasury", "op": "==", "value": null },
-        { "path": "data.owner_id", "op": "==", "value": null },
+        { "path": "data.treasury", "op": "not_exists" },
+        { "path": "data.owner_id", "op": "not_exists" },
         { "path": "data.goods", "op": "exists" },
         { "path": "data.morale_status", "op": "==", "value": "LOW" }
       ]

@@ -28,6 +28,15 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Fixture: clear the player's prior port knowledge",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM player_known_ports WHERE player_id = (SELECT player_id FROM players WHERE name = 'loop_player')"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Initial Route Request (Empty)",
       "command": "player.computer.recommend_routes",
       "user": "loop_player",
@@ -44,13 +53,22 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT p1.port_id, p1.sector_id, p2.port_id, p2.sector_id FROM sector_warps sw JOIN ports p1 ON p1.sector_id = sw.from_sector JOIN ports p2 ON p2.sector_id = sw.to_sector AND p2.port_id > p1.port_id JOIN port_trade pt1 ON pt1.port_id = p1.port_id JOIN port_trade pt2 ON pt2.port_id = p2.port_id AND pt2.commodity = pt1.commodity GROUP BY p1.port_id, p1.sector_id, p2.port_id, p2.sector_id, pt1.commodity HAVING SUM(CASE WHEN pt1.mode = 'sell' AND pt2.mode = 'buy' THEN 1 ELSE 0 END) > 0 AND SUM(CASE WHEN pt2.mode = 'sell' AND pt1.mode = 'buy' THEN 1 ELSE 0 END) > 0 ORDER BY p1.port_id, p2.port_id LIMIT 1"
+        "sql": "SELECT p1.port_id, p1.sector_id, p2.port_id, p2.sector_id FROM ports p1 JOIN sector_warps sw ON sw.from_sector = p1.sector_id JOIN sector_warps back ON back.from_sector = sw.to_sector AND back.to_sector = sw.from_sector JOIN ports p2 ON p2.sector_id = sw.to_sector AND p2.port_id > p1.port_id WHERE p1.is_active AND p2.is_active ORDER BY p1.port_id, p2.port_id LIMIT 1"
       },
       "save": {
         "route_port_a_id": "data.rows.0.0",
         "route_sector_a_id": "data.rows.0.1",
         "route_port_b_id": "data.rows.0.2",
         "route_sector_b_id": "data.rows.0.3"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: configure a two-way ORE market on the selected ports",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH selected AS (SELECT port_id FROM ports WHERE port_id IN (@{route_port_a_id}, @{route_port_b_id})), normalized AS (UPDATE port_trade pt SET mode = 'buy' FROM selected s WHERE pt.port_id = s.port_id AND pt.commodity = 'ORE' RETURNING pt.port_id), inserted AS (INSERT INTO port_trade (port_id, maxproduct, commodity, mode) SELECT DISTINCT port_id, 1000000, 'ORE', 'sell' FROM normalized RETURNING port_id) SELECT count(*) FROM inserted"
       },
       "expect": { "status": "ok" }
     },

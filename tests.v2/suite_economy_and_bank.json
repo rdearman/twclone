@@ -5,6 +5,10 @@
   "description": "Coverage for bank transactions, deposits, withdrawals",
   "tests": [
     {
+      "name": "Setup: Admin fixtures",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
       "name": "Setup: User",
       "setup": "macro_auth_user",
       "username": "bank_user",
@@ -17,6 +21,15 @@
       "password": "password"
     },
     {
+      "name": "Fixture: isolate standing orders for repeatable listing",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM bank_orders WHERE player_id = (SELECT player_id FROM players WHERE name = 'bank_user')"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Bank Balance (Initial)",
       "command": "bank.balance",
       "user": "bank_user",
@@ -27,6 +40,15 @@
       "command": "bank.deposit",
       "data": { "amount": 100 },
       "user": "bank_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: make petty cash insufficient for the negative deposit",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits = 100 WHERE name = 'bank_user'"
+      },
       "expect": { "status": "ok" }
     },
     {
@@ -48,6 +70,15 @@
       "command": "bank.withdraw",
       "data": { "amount": 50 },
       "user": "bank_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Fixture: clear the bank balance for the negative withdrawal",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE bank_accounts SET balance = 100 WHERE owner_type = 'player' AND owner_id = (SELECT player_id FROM players WHERE name = 'bank_user') AND is_active = TRUE"
+      },
       "expect": { "status": "ok" }
     },
     {

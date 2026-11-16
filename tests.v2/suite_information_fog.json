@@ -112,7 +112,7 @@
       "expect": { "status": "ok", "type": "sector.scan" },
       "asserts": [
         { "path": "data.ports.*[port_id=1].name", "op": "==", "value": { "sql_int": "SELECT name FROM ports WHERE port_id = 1" } },
-        { "path": "data.ports.*[port_id=1].type", "op": "==", "value": null }
+        { "path": "data.ports.*[port_id=1].type", "op": "not_exists" }
       ]
     },
     {

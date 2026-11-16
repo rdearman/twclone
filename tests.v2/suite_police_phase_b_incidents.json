@@ -25,7 +25,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id JOIN ports p ON p.sector_id = cs.sector_id WHERE c.role = 'RANDOM' ORDER BY cs.sector_id LIMIT 1;"
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id JOIN ports p ON p.sector_id = cs.sector_id WHERE c.role = 'RANDOM' AND c.law_severity > 0 AND cs.sector_id > 10 ORDER BY cs.sector_id LIMIT 1;"
       },
       "expect": { "status": "ok" },
       "save": { "random_sector": "data.rows.0.0" }
@@ -52,7 +52,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(suspicion, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE((SELECT suspicion FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0);"
       },
       "expect": { "status": "ok" },
       "save": { "initial_suspicion": "data.rows.0.0" },
@@ -67,7 +67,7 @@
       "user": "phase_b_player",
       "expect": { "status": "error" },
       "asserts": [
-        { "path": "error.code", "op": "equals", "value": 502, "msg": "Surrender with no incident should return not-implemented (Phase B stub)" }
+        { "path": "error.code", "op": "equals", "value": 1413, "msg": "Surrender with no incident should return the established no-incident error" }
       ]
     },
     {
@@ -119,7 +119,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(suspicion, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE((SELECT suspicion FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0);"
       },
       "expect": { "status": "ok" },
       "save": { "suspicion_after_1": "data.rows.0.0" },
@@ -132,7 +132,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(wanted_level, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE((SELECT wanted_level FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0);"
       },
       "expect": { "status": "ok" },
       "save": { "wanted_after_1": "data.rows.0.0" },
@@ -152,7 +152,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(suspicion, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE((SELECT suspicion FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0);"
       },
       "expect": { "status": "ok" },
       "save": { "suspicion_after_2": "data.rows.0.0" },
@@ -172,7 +172,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(suspicion, 0), COALESCE(wanted_level, 0) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE((SELECT suspicion FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0), COALESCE((SELECT wanted_level FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0);"
       },
       "expect": { "status": "ok" },
       "save": { "incident_state": "data.rows.0" },
@@ -193,7 +193,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT COALESCE(suspicion, 0), COALESCE(wanted_level, 0), COALESCE(banned, false) FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+        "sql": "SELECT COALESCE((SELECT suspicion FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0), COALESCE((SELECT wanted_level FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), 0), CASE WHEN COALESCE((SELECT banned FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id}), FALSE) THEN 1 ELSE 0 END;"
       },
       "expect": { "status": "ok" },
       "save": { "cleared_state": "data.rows.0" },

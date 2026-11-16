@@ -10,7 +10,7 @@ class PasswordAuthWiringTest(unittest.TestCase):
     def test_clients_use_the_authoritative_passwd_contract(self):
         python_client = (ROOT / "client/python_client/client.py").read_text()
         godot_auth = (ROOT / "client/godot_client/godot/AuthSession.gd").read_text()
-        godot_protocol = (ROOT / "client/godot_client/godot/PROTOCOL.v3/05_Authentication_and_Security.md").read_text()
+        godot_protocol = (ROOT / "docs/PROTOCOL.v3/05_Authentication_and_Security.md").read_text()
         self.assertIn('"passwd": password', python_client)
         self.assertIn('"passwd": password', godot_auth)
         self.assertIn('"passwd": "password"', godot_protocol)
