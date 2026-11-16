@@ -36,6 +36,14 @@ def test_competing_claims_cannot_assign_one_ship_to_two_players():
             flags bigint
         );
         CREATE TABLE players (player_id integer PRIMARY KEY, sector_id integer, ship_id integer REFERENCES ships(ship_id));
+        -- Migration 168's claim function reads this production table. Keep the
+        -- isolated schema faithful enough for PL/pgSQL to plan the function;
+        -- the empty fixture leaves the concurrency claim scenario unchanged.
+        CREATE TABLE federation_protected_assets (
+            asset_kind text NOT NULL, asset_id integer NOT NULL,
+            reason text NOT NULL, enabled boolean NOT NULL DEFAULT TRUE,
+            PRIMARY KEY (asset_kind, asset_id)
+        );
         INSERT INTO shiptypes VALUES (1, true, true, 10, 30, 100, 100);
         {MIGRATION.read_text()}
         INSERT INTO ships VALUES (10,1,false,1,0),(11,1,false,1,0),(20,1,false,1,0);

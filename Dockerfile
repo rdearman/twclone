@@ -15,6 +15,10 @@ RUN autoreconf -fi \
 
 FROM debian:bookworm-slim AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
+# The runtime image is intentionally non-root and /app is read-only. Keep the
+# default server log in a writable, ephemeral location unless deployment config
+# explicitly selects a persistent log path.
+ENV TWCLONE_LOG_PATH=/tmp/twclone.log
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libjansson4 libpq5 libssl3 libreadline8 libargon2-1 libbsd0 \
     postgresql-client python3 python3-psycopg python3-jwt python3-cryptography \
