@@ -2570,6 +2570,7 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 {
   db_t *db = game_db_get_handle ();
   json_t *data = json_object_get (root, "data");
+  int responses_before = ctx ? ctx->responses_sent : 0;
 
 
   if (!json_is_object (data))
@@ -3009,35 +3010,26 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
 			       xp_gain,
 			       align_change_success, "port.rob.success");
 
-      int susp_inc = is_evil_cluster ? 1 : 2;
-
-
-      if (cluster_id > 0)
+      /* A successful robbery is one lawful crime. Record its one suspicion
+       * point and possible wanted promotion in the same transaction as the
+       * loot and last-rob marker. repo_clusters_record_crime also excludes
+       * lawless clusters and FedSpace. */
+      if (repo_clusters_record_crime (db, ctx->player_id, sector_id,
+				      CRIME_ATTACK_PORT, 1) != 0)
 	{
-	  if (db_ports_increase_suspicion
-	      (db, cluster_id, ctx->player_id, susp_inc) != 0)
-	    {
-	      goto fail_tx;
-	    }
+	  goto fail_tx;
 	}
 
-      db_ports_update_last_rob_success (db, ctx->player_id, port_id);
+      if (db_ports_update_last_rob_success (db, ctx->player_id, port_id) != 0)
+	{
+	  goto fail_tx;
+	}
 
       if (!db_tx_commit (db, &dberr))
 	{
 	  goto fail_tx;
 	}
       we_started_tx = 0;
-
-      /* Phase D1: Record CRIME_ATTACK_PORT (port robbery counts as port aggression) */
-      {
-        int crime_rc = repo_clusters_record_crime(db, ctx->player_id, sector_id, 
-                                                   CRIME_ATTACK_PORT, 2);
-        if (crime_rc < 0) {
-          LOGE("Failed to record port robbery crime for player %d in sector %d", 
-               ctx->player_id, sector_id);
-        }
-      }
 
       json_object_set_new (res_data, "rob_result", json_string ("success"));
       json_object_set_new (res_data, "credits_stolen",
@@ -3107,6 +3099,11 @@ fail_tx:
   if (we_started_tx)
     {
       db_tx_rollback (db, NULL);
+    }
+  if (ctx && ctx->responses_sent == responses_before)
+    {
+      send_response_error (ctx, root, ERR_DB,
+                           "Port robbery could not be committed.");
     }
   if (res_data)
     {

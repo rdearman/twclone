@@ -294,9 +294,9 @@ int repo_clusters_upsert_player_status(db_t *db, int cluster_id, int player_id, 
         "INSERT INTO cluster_player_status (cluster_id, player_id, suspicion, bust_count, last_bust_at) "
         "VALUES ({1}, {2}, {3}, {4}, CASE WHEN {5}=1 THEN CURRENT_TIMESTAMP ELSE NULL END) "
         "%s UPDATE SET "
-        "suspicion = suspicion + {6}, "
-        "bust_count = bust_count + {7}, "
-        "last_bust_at = CASE WHEN {8}=1 THEN CURRENT_TIMESTAMP ELSE last_bust_at END;",
+        "suspicion = cluster_player_status.suspicion + {6}, "
+        "bust_count = cluster_player_status.bust_count + {7}, "
+        "last_bust_at = CASE WHEN {8}=1 THEN CURRENT_TIMESTAMP::text ELSE cluster_player_status.last_bust_at END;",
         conflict_clause);
     char sql[1024]; sql_build(db, sql_template, sql, sizeof(sql));
     if (!db_exec (db, sql, (db_bind_t[]){ db_bind_i64(cluster_id), db_bind_i64(player_id), db_bind_i64(susp_inc), db_bind_i64(busted ? 1 : 0), db_bind_i64(busted), db_bind_i64(susp_inc), db_bind_i64(busted ? 1 : 0), db_bind_i64(busted) }, 8, &err)) return err.code;
@@ -388,7 +388,7 @@ int repo_clusters_promote_wanted_from_suspicion(db_t *db, int cluster_id, int pl
     if (suspicion >= 3) {
         wanted_level++;
         /* Reset suspicion after promotion */
-        const char *q_upd = "UPDATE cluster_player_status SET suspicion = 0, wanted_level = {1}, banned = CASE WHEN {1} >= 3 THEN 1 ELSE banned END WHERE cluster_id = {2} AND player_id = {3}";
+        const char *q_upd = "UPDATE cluster_player_status SET suspicion = 0, wanted_level = {1}, banned = CASE WHEN {1} >= 3 THEN TRUE ELSE banned END WHERE cluster_id = {2} AND player_id = {3}";
         char sql_upd[512]; sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
         if (!db_exec (db, sql_upd, (db_bind_t[]){ db_bind_i64(wanted_level), db_bind_i64(cluster_id), db_bind_i64(player_id) }, 3, &err)) {
             return err.code;
@@ -439,7 +439,7 @@ int repo_clusters_reduce_incident_by_tier(db_t *db, int cluster_id, int player_i
     /* Clear banned if wanted_level drops below 3 */
     int new_banned = (wanted_level >= 3) ? 1 : 0;
     
-    const char *q_upd = "UPDATE cluster_player_status SET suspicion = {1}, wanted_level = {2}, banned = {3} WHERE cluster_id = {4} AND player_id = {5}";
+    const char *q_upd = "UPDATE cluster_player_status SET suspicion = {1}, wanted_level = {2}, banned = CASE WHEN {3} <> 0 THEN TRUE ELSE FALSE END WHERE cluster_id = {4} AND player_id = {5}";
     char sql_upd[512];
     sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     
@@ -480,7 +480,7 @@ int repo_clusters_apply_bribe_success(db_t *db, int cluster_id, int player_id) {
     /* Clear banned if wanted_level drops below 3 */
     int new_banned = (wanted_level >= 3) ? 1 : 0;
     
-    const char *q_upd = "UPDATE cluster_player_status SET suspicion = {1}, wanted_level = {2}, banned = {3} WHERE cluster_id = {4} AND player_id = {5}";
+    const char *q_upd = "UPDATE cluster_player_status SET suspicion = {1}, wanted_level = {2}, banned = CASE WHEN {3} <> 0 THEN TRUE ELSE FALSE END WHERE cluster_id = {4} AND player_id = {5}";
     char sql_upd[512];
     sql_build(db, q_upd, sql_upd, sizeof(sql_upd));
     

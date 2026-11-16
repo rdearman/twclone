@@ -530,7 +530,7 @@ int db_ports_update_last_rob_attempt(db_t *db, int player_id, int port_id) {
 
 
     /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0);";
+    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, FALSE);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(port_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
@@ -611,7 +611,7 @@ int db_ports_update_last_rob_success(db_t *db, int player_id, int port_id) {
 
 
     /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 1);";
+    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, TRUE);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(port_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
@@ -705,7 +705,7 @@ int db_ports_update_last_rob_fail(db_t *db, int player_id, int port_id) {
 
 
     /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, 0);";
+    const char *q_ins = "INSERT INTO player_last_rob (player_id, port_id, last_attempt_at, was_success) VALUES ({1}, {2}, {3}, FALSE);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     db_bind_t ins_params[] = { db_bind_i64(player_id), db_bind_i64(port_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {
