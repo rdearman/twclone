@@ -45,6 +45,32 @@ func _run() -> void:
 	view.set_snapshot({
 		"authenticated": true,
 		"disconnected": false,
+		"hud": {"sector_id": 17, "credits": 1000},
+		"ship": {"id": 91, "ported": 7, "holds": 10, "cargo": []},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 17, "adjacent_sector_ids": [], "ports": [], "planets": [], "ships": []},
+	})
+	view.enter_port_workflow({"port": {"id": 7, "sector": 17, "commodities": [
+		{"code": "ORG", "quantity": 5, "max_quantity": 50, "buys": true, "sells": false},
+	]}})
+	var org_controls: Dictionary = view.port_workflow._row_controls.get("ORG", {})
+	_check(org_controls.has("sell") and (org_controls["sell"] as Button).disabled,
+		"sell became available before the authoritative ship snapshot contained cargo")
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 17, "credits": 900},
+		"ship": {"id": 91, "ported": 7, "holds": 10, "cargo": [{"commodity": "organics", "quantity": 1}]},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 17, "adjacent_sector_ids": [], "ports": [], "planets": [], "ships": []},
+	})
+	org_controls = view.port_workflow._row_controls.get("ORG", {})
+	_check(org_controls.has("sell") and not (org_controls["sell"] as Button).disabled,
+		"open port workflow did not enable SELL after an authoritative cargo refresh")
+	view.port_workflow.hide()
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
 		"hud": {"sector_id": 44, "credits": 42850, "turns_remaining": 318, "cargo_used": 24, "cargo_total": 50, "shields": 80, "hull": 43, "fighters": 120},
 		"freshness": {"sector": "fresh", "overall": "fresh"},
 		"sector": {"id": 44, "adjacent_sector_ids": [45, 91], "ports": [], "planets": [], "ships": []}

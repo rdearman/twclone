@@ -129,6 +129,12 @@ func set_snapshot(snapshot: Dictionary) -> void:
 	if command_menu != null and int(snapshot.get("ship", {}).get("ported", 0)) <= 0:
 		command_menu.clear_confirmed_port_context()
 	_snapshot = snapshot.duplicate(true)
+	# The port workflow stays open while a trade command refreshes the player's
+	# ship. Keep its cargo/credit view aligned with the newest authoritative
+	# snapshot so a buy can enable a subsequent sale without closing the panel.
+	if is_instance_valid(port_workflow) and port_workflow.visible:
+		port_workflow.set_player_hold(_snapshot.get("ship", {}),
+			_snapshot.get("hud", {}).get("credits", null))
 	_render_snapshot(_snapshot)
 	_sync_holographic_scan_controls()
 

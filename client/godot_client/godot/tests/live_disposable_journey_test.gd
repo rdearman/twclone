@@ -373,12 +373,16 @@ func _perform_port_trade(port_id: int, sector_id: int, return_sector: int) -> bo
 	if not bought:
 		return false
 	var organics_controls: Dictionary = app.gameplay_view.port_workflow._row_controls.get("ORG", {})
+	print("LIVE_STAGE trade_sell_precheck org_cargo=%d enabled=%s" % [
+		_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG"),
+		str(organics_controls.has("sell") and not (organics_controls["sell"] as Button).disabled),
+	])
 	if not organics_controls.has("sell") or (organics_controls["sell"] as Button).disabled:
 		return false
 	(organics_controls["quantity"] as LineEdit).text = "1"
 	(organics_controls["sell"] as Button).pressed.emit()
 	var sold := await _wait_until(func() -> bool:
-		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG") == 1
+		return (_cargo_quantity(app.client_state.snapshot().get("ship", {}), "ORG") == initial_organics - 1
 			and app._pending_game_commands.is_empty() and not app._command_refresh_pending),
 		240
 	)
@@ -503,6 +507,12 @@ func _perform_starport_services(port_id: int) -> bool:
 	menu.open_for(app.client_state.snapshot(), app.gameplay_view.sector_view.selected_object())
 	await process_frame
 	var undock_button := _find_button(menu._action_list, "Undock from selected port")
+	print("LIVE_STAGE stardock_undock_check ported=%s active_category=%s button_present=%s disabled=%s" % [
+		str(app.client_state.snapshot().get("ship", {}).get("ported", "missing")),
+		menu._active_category,
+		str(undock_button != null),
+		str(undock_button.disabled if undock_button != null else true),
+	])
 	if undock_button == null or undock_button.disabled:
 		return false
 	undock_button.pressed.emit()
