@@ -5,10 +5,8 @@ conflicting legacy prose and implementation assumptions. Detailed command
 contracts are in `docs/PROTOCOL.v3/`; economic settlement is specified in
 [`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_GALACTIC_EXCHANGE_CONTRACT.md). The
 parity checklist is [`V3_GAMEPLAY_PARITY.md`](V3_GAMEPLAY_PARITY.md).
-Requirement-by-requirement status and evidence are tracked in
-[`V3_GAMEPLAY_COMPLETION_TRACKER.md`](V3_GAMEPLAY_COMPLETION_TRACKER.md); the
-resumable implementation sequence is
-[`V3_GAMEPLAY_WORKPLAN.md`](V3_GAMEPLAY_WORKPLAN.md).
+Current acceptance status and evidence are summarized in
+[`V3_GAMEPLAY_COMPLETION_TRACKER.md`](V3_GAMEPLAY_COMPLETION_TRACKER.md).
 
 Status vocabulary: **APPROVED** means policy is decided; **EXISTING** means
 source currently has a corresponding path (not proof it is correct); **REQUIRED**

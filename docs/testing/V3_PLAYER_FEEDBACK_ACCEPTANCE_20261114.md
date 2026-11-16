@@ -1,4 +1,9 @@
-# V3 player feedback acceptance — 14 November 2026
+# V3 player feedback acceptance
+
+Evidence collected 14–15 November 2026. Current project regression counts are
+maintained in [`../V3_GAMEPLAY_COMPLETION_TRACKER.md`](../V3_GAMEPLAY_COMPLETION_TRACKER.md);
+the intermediate test totals below are historical results from this focused
+feedback run.
 
 ## Scope and environment
 
@@ -90,19 +95,15 @@ limit, not a test failure.
   reconciliation, worker success-state update, and sanitised retryable failure
   handling, `Retry-After` rate-limit delay, queue-only defaults, and issue
   creation when label permissions are unavailable. Ten focused feedback tests passed.
-- **NOT VERIFIED:** Godot runtime/interface execution. No Godot executable is
-  installed; the available `godot3` package candidate is not compatible with
-  this Godot 4.5 project. `gdlint` also could not open files in this managed
-  read-only lint execution context, so no lint result is claimed.
+- **VERIFIED AGAINST LIVE DISPOSABLE SERVER:** Godot 4.5.2 UI preview,
+  confirmed queue-only submission and ownership-scoped status retrieval are
+  covered by the later live journey in
+  [`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
 - **NOT VERIFIED:** real GitHub App authentication/publication. No credentials
   were requested or supplied, and tests did not contact GitHub.
 - **NOT VERIFIED:** exact server per-player/global submission-limit boundary
   and global-limit contention. GitHub API `Retry-After` behavior is mock-tested.
-- **NOT RUN:** full Godot suite (196 command-menu cases and the
-  `planet_command_response_test.gd` regression), actual Godot gameplay journey,
-  and full StarPort concurrency/rollback suite in this feedback-focused
-  checkpoint.
-
-No change is made to external beta readiness. Python feedback is useful and
-live-tested, but Godot feedback and the outstanding gameplay acceptance suite
-remain unverified.
+Live public GitHub publication remains unverified because no project GitHub
+App credentials were configured. Queue-only reporting is the supported tested
+mode. This report does not change external beta readiness; see the current
+[release-candidate audit](V3_RELEASE_CANDIDATE_AUDIT_20261115.md).

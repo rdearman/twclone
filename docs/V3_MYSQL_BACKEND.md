@@ -7,13 +7,14 @@ the game SQL surface is portable.
 
 ## Dependencies and build
 
-The enabled build needs a C compiler, Autoconf/Automake, and either Oracle's
-MySQL client development package (`libmysqlclient-dev` on Debian/Ubuntu) or
-MariaDB Connector/C development package (`libmariadb-dev`). The package must
-provide `mysql_config` or `mariadb_config`; the build also needs the matching
-client library. A database server is required for integration tests only.
-See [the MySQL test README](../tests/mysql/README.md) for Debian/Ubuntu
-installation, disposable database setup, and test environment variables.
+The optional driver build needs a C compiler, Autoconf/Automake, and either
+Oracle's MySQL client development package (`libmysqlclient-dev` on
+Debian/Ubuntu) or MariaDB Connector/C development package (`libmariadb-dev`).
+The package must provide `mysql_config` or `mariadb_config`; the build also
+needs the matching client library. Current MySQL checks in `tests.v2/` are
+static migration/schema contracts. This repository has no active
+`tests/mysql/run.sh` integration harness, so do not treat a removed historical
+test README or driver-only build as live MySQL acceptance.
 
 From the repository root:
 
@@ -31,20 +32,8 @@ through `db_config_t.backend = DB_BACKEND_MYSQL` and the `mysql_host`,
 `mysql_user`, `mysql_password`, `mysql_database`, `mysql_port`, and
 `mysql_unix_socket` fields.
 
-Run the disposable integration suite with:
-
-```sh
-MYSQL_TEST_HOST=127.0.0.1 \
-MYSQL_TEST_USER=twclone_test \
-MYSQL_TEST_PASSWORD='local-test-password' \
-MYSQL_TEST_DATABASE=twclone_mysql_test \
-tests/mysql/run.sh
-```
-
-The runner exits 77 with a reason when client development tools or required
-test connection settings are absent. A configured but unreachable server,
-failed compile, or failed assertion is a real test failure. The suite uses a
-connection-local temporary table and must only use a disposable test DB.
+Run the current static portability checks through the documented Python test
+suite. They do not connect to or prove compatibility with a MySQL server.
 
 ## Driver contract and implementation
 

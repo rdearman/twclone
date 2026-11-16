@@ -1,655 +1,76 @@
-# V3 Gameplay Completion Tracker
+# V3 gameplay and acceptance status
 
-This cumulative tracker covers every requirement ID in the master V3 gameplay
-completion assignment. Status is conservative: source presence is not test
-verification. `VERIFIED` is reserved for tests actually executed against the
-relevant behavior. The policy source is [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md);
-Exchange requirements additionally use [`V3_GALACTIC_EXCHANGE_CONTRACT.md`](V3_GALACTIC_EXCHANGE_CONTRACT.md).
+Reviewed: 15 November 2026. This is a concise current summary; detailed test
+logs and transactions belong in the linked acceptance reports. Do not infer
+that an entire subsystem is verified from a focused scenario.
 
-Status values: `NOT_STARTED`, `PARTIAL`, `IMPLEMENTED_UNVERIFIED`, `VERIFIED`,
-`BLOCKED`. Verification listed here is evidence already executed, not a plan.
-Database-backed evidence for the 2026-11-10 QA integration pass is appended below;
-it does not convert source/contract coverage into runtime verification unless
-the specific workflow was exercised.
+## Release-level regression results
 
-## Current-state reconciliation (2026-11-11)
+The latest recorded gates are:
 
-The earlier baseline contained 97 requirement rows. The current register has
-105 unique requirement IDs: 91 `IMPLEMENTED_UNVERIFIED`, 7 verified entries
-(four scoped-path variants plus three `VERIFIED`), 4 `PARTIAL` requirements,
-and 3 `BLOCKED` requirements. Four former partials
-(`EXC-003/004/006/011`) have source paths for
-the approved behavior; their outstanding work is specifically runtime,
-restart, or concurrency evidence, so they are not described as missing code.
-`MOVE-001` now describes the approved synchronous, atomic transwarp behavior;
-mid-flight interruption is explicitly excluded from V3 acceptance absent a
-future canonical trigger. `SYS-004` is now
-`IMPLEMENTED_UNVERIFIED`: policy permits below-replacement coverage, and source
-honors the configured payout; DB settlement remains unverified. The 89
-unverified items must not be read as 89 missing implementations; their
-row-level source and evidence fields state
-the known verification gap. This count is a source/tracker reconciliation,
-not release certification.
+| Area | Result | Scope |
+|---|---:|---|
+| Server protocol regression | 2,341 passed, 0 failed, 4 skipped | 155 suites; disposable PostgreSQL acceptance environment |
+| Python client | 807 passed | Current reported run |
+| `tests.v2` | 262 passed, 7 skipped, 227 subtests | Regression harness |
+| Godot 4.5.2 | 104 passed, 0 failed, 1 skipped | Godot client suite |
+| Godot command menu | 206 checks passed | Menu regression |
+| Planet response | 115 checks passed | Response/identity regression |
 
-| ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
-|---|---|---|---|---|---|---|
-| SHIP-001 | Eligible sale locations | IMPLEMENTED_UNVERIFIED | `src/server_ships.c`, `src/server_stardock.c`, `src/db/repo/repo_stardock.c` | Sale JSON scenario authored and parsed; no runtime execution | `bcaf3e93` | Verify database classifications/police restrictions |
-| SHIP-002 | Integer 60% hull+equipment valuation | IMPLEMENTED_UNVERIFIED | `repo_stardock.c`, `server_stardock.c`; migrations `178_ship_sale_equipment_catalogue.sql`, MySQL `130_ship_sale_equipment_catalogue.sql` | Historical classic TWGS 3.13 price reference recorded in `docs/V3_EQUIPMENT_CATALOGUE.md`; 62 focused tests passed (including catalogue, manifest, and ship-contract checks); JSON sale case asserts exact 54,100-credit equipment subtotal; ASan/UBSan build passed; DB/server runtime not executed | `b6c0777b` | Execute migration and `suite_ship_sale_v3.json` against disposable PostgreSQL; verify exact equipment subtotal and purchase limits |
-| SHIP-003 | Cargo forfeiture | IMPLEMENTED_UNVERIFIED | used-sale transaction in `repo_stardock.c` | JSON scenario asserts legacy and normalized cargo cleared; not runtime-run | `bcaf3e93` | Verify loss in DB-backed flow |
-| SHIP-004 | Equipment remains with used hull | IMPLEMENTED_UNVERIFIED | `repo_stardock.c`, migration 170/122 | JSON scenario checks persistent ship identity and used inventory reference; not runtime-run | `bcaf3e93` | Verify identifiable used-hull contents |
-| SHIP-005 | Used hull is purchasable | IMPLEMENTED_UNVERIFIED | `cmd_shipyard_list`, `cmd_shipyard_upgrade`, `repo_stardock_purchase_used_ship`; migration 177 | `test_planetary_server_contract.py` static source test added; executed as part of 69 passing tests; no DB runtime | `6bf7dcd2` | DB verify identity/equipment/condition preservation, active ownership switch, price and rollback |
-| SHIP-006 | Last/active ship restrictions and replacement | IMPLEMENTED_UNVERIFIED | `server_ships.c`, `server_stardock.c`, `repo_stardock.c` | Sale JSON scenario asserts active replacement; error cases authored, not runtime-run | `bcaf3e93`, `b7ff3720` | Runtime ownership/active-state checks |
-| SHIP-007 | Sale terminates insurance without refund | IMPLEMENTED_UNVERIFIED | `repo_stardock.c` | Sale JSON scenario asserts response; DB insurance status not yet asserted at runtime | `bcaf3e93` | Runtime verify |
-| SHIP-008 | Atomic sale settlement | IMPLEMENTED_UNVERIFIED | `repo_stardock.c`, migration 170/122 | Transactional repository source; JSON scenario asserts persisted sale, inventory and credits; not runtime-run | `bcaf3e93` | Runtime rollback/concurrency verification |
-| SHIP-009 | `ship.sell`, `shipyard.sell`, separate sale factor | IMPLEMENTED_UNVERIFIED | `server_ships.c`, `server_stardock.c`, `server_config.c` | ASan/UBSan build passed; `python3 -m pytest -q client/python_client/tests/test_v3_shipyard_sale_request.py` 2 passed; JSON parsed, no server runtime | `bcaf3e93` | End-to-end server verification |
-| HARV-001 | Transfer ORE/ORG/EQU | IMPLEMENTED_UNVERIFIED | `cmd_planet_harvest`, `repo_planets_harvest` | Harvest JSON cases authored; `test_planetary_server_contract.py`: 32 passed; runtime not run | — | Execute protocol scenario and verify DB result |
-| HARV-002 | Only accumulated stock | IMPLEMENTED_UNVERIFIED | repository reads `entity_stock`; conditional decrement | Static contract suite 32 passed; no DB runtime | — | Runtime conservation verification |
-| HARV-003 | Destination is currently landed ship | IMPLEMENTED_UNVERIFIED | repository revalidates active ship, lastplanet, onplanet and sector under locks | Static contract suite 32 passed; no DB runtime | — | Runtime verify stale-ship rejection |
-| HARV-004 | Capacity-aware partial harvest | IMPLEMENTED_UNVERIFIED | deterministic ORE/ORG/EQU allocation to aggregate free holds | JSON case asserts five-hold partial transfer; not runtime-run; static contract suite 32 passed | — | Verify cargo limits and stock remainder against real DB |
-| HARV-005 | Zero turns | IMPLEMENTED_UNVERIFIED | response sets zero; repository does not mutate turns | Static contract suite 32 passed; JSON case authored | — | Runtime verify player turns unchanged |
-| HARV-006 | Existing owner/corporation withdrawal permissions | IMPLEMENTED_UNVERIFIED | owner or corporation Leader/Officer; active landing revalidated | Static contract suite 32 passed | — | Runtime verify permission matrix |
-| HARV-007 | Locking and atomic stock/cargo transfer | IMPLEMENTED_UNVERIFIED | locks planet/player/ship; conditional stock debit and cargo repository updates inside outer transaction | Sanitised build and static contract suite 32 passed; no DB runtime | — | Exercise rollback/concurrency |
-| HARV-008 | Exchange-sold goods unavailable to harvest | IMPLEMENTED_UNVERIFIED | `cmd_planet_market_sell` atomically debits planet stock and credits `entity_stock(exchange,1)`; `repo_planets_harvest` reads/debits only remaining planetary stock | Focused planetary source-contract suite passed; no DB concurrency/runtime | `6bf7dcd2` | Verify sale-versus-harvest race and conservation in DB-backed test |
-| VIEW-001 | Read-only overview | IMPLEMENTED_UNVERIFIED | `cmd_planet_view` in `server_planets.c` | Planet suite authored; Python static suite 28 passed (not runtime) | — | Verify read-only response via JSON runtime |
-| VIEW-002 | Keep detailed `planet.info` | IMPLEMENTED_UNVERIFIED | `cmd_planet_info` | Same | — | Verify management fields preserved |
-| VIEW-003 | Population/type/status | IMPLEMENTED_UNVERIFIED | `cmd_planet_view`, `cmd_planet_info`; Godot `PlanetWorkflow.gd` displays population type and morale status | `suite_planet_fighter_transfers.json`; client assertions added, Godot runner unavailable | `b7ff3720` | Run Godot client test and protocol scenario |
-| VIEW-004 | Current production disclosure | IMPLEMENTED_UNVERIFIED | `db_cron_planet_get_production_overview_json` in `repo_cron.c`; `cmd_planet_view` | Sanitised build; static contract suite 32 passed; no runtime test | — | Runtime compare overview values with production tick |
-| VIEW-005 | Morale representation | IMPLEMENTED_UNVERIFIED | response reports slave `LOW` | Static tests only | — | Runtime verify; no dynamic recovery |
-| VIEW-006 | Treasury privacy in view/info | IMPLEMENTED_UNVERIFIED | owner/corporation authorization in handlers | Static suite 28 passed; no DB runtime | — | Verify unauthorized response redaction |
-| PLAYER-001 | `player.list_online` | IMPLEMENTED_UNVERIFIED | `src/server_players.c` | `suite_player_status.json` covers authenticated listing and invalid page; JSON parsed, not runtime-run | `a07b3bf4` | Run protocol case |
-| PLAYER-002 | 1-based page/limit | IMPLEMENTED_UNVERIFIED | `server_players.c`, schema | Source validates page>=1 and limit 1..1000; JSON acceptance authored; no runtime | `a07b3bf4` | Verify edge pages |
-| PLAYER-003 | Public field allowlist | IMPLEMENTED_UNVERIFIED | `server_players.c`, `schemas.c` | Exact public response keys asserted; no runtime | `a07b3bf4` | Verify no private fields |
-| PLAYER-004 | Deduplicate authenticated users | IMPLEMENTED_UNVERIFIED | `server_players.c` | Session snapshot deduplicates IDs before pagination; no multi-session runtime case | `a07b3bf4` | Verify multi-session case |
-| PLAYER-005 | Stable order | IMPLEMENTED_UNVERIFIED | `server_players.c` | Source sorts unique IDs ascending before slicing; runtime pagination test outstanding | `a07b3bf4` | Verify pagination stability |
-| PLAYER-006 | Include corporation/alignment | IMPLEMENTED_UNVERIFIED | `server_players.c`, response schema | Query and schema include corporation (null when absent) and alignment; JSON exact-key check authored | `a07b3bf4` | Verify representations |
-| BANK-001 | Create/list/cancel | IMPLEMENTED_UNVERIFIED | `cmd_bank_orders_create/list/cancel`, registry and request/response schemas | `suite_economy_and_bank.json` cases added; runtime not run | — | Run protocol flow and verify persistence/ownership |
-| BANK-002 | Daily/weekly/monthly | IMPLEMENTED_UNVERIFIED | `bank_order_first_run`, recurrence advancement in `db_bank_process_orders` | Daily/weekly/monthly JSON cases added; scheduler runtime not run | — | Verify calendar edges and overdue occurrences |
-| BANK-003 | Persisted specified UTC time | IMPLEMENTED_UNVERIFIED | migrations 172/124; UTC fields and `next_run_at`; one-minute durable cron task | Build passed; no database migration/runtime | — | Verify scheduler time behavior and restart |
-| BANK-004 | Any existing-player recipient | IMPLEMENTED_UNVERIFIED | create command locks and validates player row; processor rechecks and locks recipient | JSON uses an existing non-corporate player; not runtime-run | — | Verify recipient eligibility and deletion race |
-| BANK-005 | Skip insufficient occurrence | IMPLEMENTED_UNVERIFIED | processor records `skipped_insufficient_funds`, advances next run and uses no debt | No DB test | — | Verify account and next occurrence state |
-| BANK-006 | Monthly last-day adjustment | IMPLEMENTED_UNVERIFIED | `bank_schedule_monthly_at` is shared by first-run and recurrence calculation; retains configured `month_day` | `tests.v2/run_engine_regressions.sh` verifies February 28/29, Gregorian century boundaries, 30-day month, and invalid inputs; sanitizer build passed; scheduler/DB runtime unverified | `8fa4d08e` | Verify persisted monthly schedule and occurrence advancement through server/DB runtime |
-| BANK-007 | Deleted recipient cancellation | IMPLEMENTED_UNVERIFIED | processor disables order and records cancellation outcome when recipient absent | No DB test | — | Verify deleted-recipient scenario |
-| BANK-008 | Immediate cancellation | IMPLEMENTED_UNVERIFIED | cancel and processor serialize on order row in transaction | JSON cancellation and wrong-owner cases added; not runtime-run | — | Verify concurrent cancel/execute order |
-| BANK-009 | Exactly once per occurrence | IMPLEMENTED_UNVERIFIED | occurrence table unique `(bank_orders_id,scheduled_for)`; transfer and advancement in same transaction; stale due-ID snapshots now skip if the locked row has advanced | `python3 -m pytest -q tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 44 passed; `make -C bin -j2`: passed with ASan/UBSan; database retry/restart test absent | `1f24988f` | Verify concurrent workers and restart |
-| BANK-010 | Atomic debit/credit | IMPLEMENTED_UNVERIFIED | locked bank accounts, existing debit/credit ledger functions within order transaction | No DB test | — | Verify rollback and ledger pair |
-| BANK-011 | No arbitrary order limit | IMPLEMENTED_UNVERIFIED | create has no active-order cap | Source inspection; no protocol execution | — | Keep limit absent; validate large-account list pagination |
-| POP-001 | Exclusive population type | IMPLEMENTED_UNVERIFIED | migrations 171/123; planet handlers | `test_planetary_server_contract.py`: 28 passed | — | DB migration/runtime constraint verification |
-| POP-002 | Existing population migration | IMPLEMENTED_UNVERIFIED | migrations 171/123 | No DB migration test in this session | — | Validate migration on both backends |
-| POP-003 | Evil acquisition rules | IMPLEMENTED_UNVERIFIED | `server_ports.c::cmd_trade_buy` checks the authoritative E-VIL band at preflight and again inside settlement; `cmd_planet_deposit`, `repo_planets_deposit_slaves` | `test_planetary_server_contract.py`: evil-only/race guard; focused planetary/hazard tests: 37 passed; no DB runtime | `477bc1ed`, `434cd2c8` | Runtime verify port stock/credit/capacity and neutral/good refusal |
-| POP-004 | Explicit evil conquest choice | IMPLEMENTED_UNVERIFIED | `cmd_combat_attack_planet`, `db_planets_capture` | Sanitised build passed; combat JSON request updated; static tests passed, no DB runtime | — | Test alignment-specific capture outcomes and rollback |
-| POP-005 | Neutral inheritance/no acquisition | IMPLEMENTED_UNVERIFIED | capture retains existing SLAVE type; delivery requires existing alignment-band evil flag | Static contract suite 32 passed; no runtime | — | Test neutral capture and attempted purchase |
-| POP-006 | Good auto-liberation | IMPLEMENTED_UNVERIFIED | capture transaction conversion | Build passed; no dedicated executed test | — | JSON scenario and runtime validation |
-| POP-007 | Evil may retain slave population | IMPLEMENTED_UNVERIFIED | capture path leaves SLAVE unchanged | No runtime test | — | JSON scenario |
-| POP-008 | Slave production at 50% | IMPLEMENTED_UNVERIFIED | shared `slave_population_effective_output` used by both production tick and read-only overview | `tests.v2/run_engine_regressions.sh` tests floor arithmetic for ORE/ORG/EQU, zero/odd/even values, stoppage and no second colonist modifier; DB tick unverified | `6c790d40` | Verify persisted production quantities and stoppage against DB |
-| POP-009 | Permanently low morale, no second penalty | IMPLEMENTED_UNVERIFIED | `server_planets.c`, `repo_cron.c` | Source/static only | — | Verify production and API |
-| POP-010 | Deterministic daily unrest | IMPLEMENTED_UNVERIFIED | `h_daily_slave_unrest`, `db_cron_apply_slave_unrest`, engine registry; migrations 176/128 | Source contract checks daily handler, idempotent event, proportional split and zero-config disable; included in focused pytest run | `6bf7dcd2`, `b75e3403` | Database verify daily execution, stoppage duration, exact loss and no duplicate event |
-| POP-011 | No unapproved defaults | IMPLEMENTED_UNVERIFIED | `server_config.c`, `server_sysop.c`; zero sentinel is unset/disabled, negative values rejected | JSON config scenario authored; sanitised build passed; 41 focused source/manifest tests passed; not runtime-run | `5f7bb98c` | Verify SysOp set/get and startup parsing in protocol runtime |
-| POP-012 | Restart-safe unrest idempotency | IMPLEMENTED_UNVERIFIED | persisted next/last event state, unique `(planet_id, scheduled_at)` event, row-locked daily worker; migrations 171/176 and MySQL equivalents | Static contract test executed; no DB restart/replay execution | `6bf7dcd2` | Verify replay/restart and competing workers in DB runtime |
-| POP-013 | Whole-population emancipation | IMPLEMENTED_UNVERIFIED | `cmd_planet_emancipate`, `repo_planets_emancipate` | Sanitised build; static contract suite 32 passed; no DB runtime | — | Test corp roles and transaction |
-| POP-014 | Atomic acquisition/conversion/conquest | IMPLEMENTED_UNVERIFIED | `server_ports.c::cmd_trade_buy` repeats the evil-alignment gate within purchase settlement; `repo_planets_deposit_slaves`, `repo_planets_emancipate`, and `db_planets_capture` transact deposit, emancipation and capture conversions | `test_planetary_server_contract.py` asserts alignment recheck, cargo-based deposit, exclusive population and transaction paths; no DB runtime | Existing source; current focused test suite passed (51 tests) | Exercise concurrent purchase/deposit/capture and rollback in DB-backed protocol tests |
-| EXC-001 | Persistent exchange market | VERIFIED | migration 174 extends `entity_stock` with virtual `exchange/1`; Exchange actor/location supported in orders | Clean disposable QA database applied migrations through 177; end-to-end planet sale and port purchase read/write Exchange stock | `6bf7dcd2` | Verify restart recovery and supported MySQL migration path |
-| EXC-002 | Sale into ring-fenced inventory and funded payout | VERIFIED | `cmd_planet_market_sell`; virtual system clearing account `system/70000001`; unique Exchange transaction record; configurable SysOp liquidity; account lookup now handles repository `ERR_DB_NOT_FOUND` | `suite_planet_taxable_activity_e2e.json`: 23/23 passed against real V3 server/PostgreSQL; asserted seller stock -10, Exchange stock +10, one transaction | `6bf7dcd2`, current working change | Extend verification to concurrent requests, retries and liquidity boundaries |
-| EXC-003 | Exchange purchases to planet/port | IMPLEMENTED_UNVERIFIED | `h_daily_market_settlement` handles both `port` and `planet` destinations, with destination-capacity checks and `h_market_move_*_stock` settlement | Disposable PostgreSQL JSON scenario verified Exchange-to-port transfer, ledger rows and account balances (35/35 cases); planet buyer path has source support but no runtime case | `6bf7dcd2`, `81a366ce` | Add/run planet-buyer success, capacity/funds refusal, and restart scenarios |
-| EXC-004 | Ring-fenced stock | IMPLEMENTED_UNVERIFIED | Planet sale transfers exact quantity to `entity_stock(exchange,1)`; matching conditionally debits that stock; harvesting reads only remaining planet inventory | PostgreSQL JSON verified planet -10, Exchange +10, Exchange -10, port +10 and no duplicate on a second tick; sale-versus-harvest race not run | `6bf7dcd2`, `81a366ce` | Verify sale/harvest/construction contention and concurrent buyers |
-| EXC-005 | Virtual transport | IMPLEMENTED_UNVERIFIED | Exchange is a virtual inventory location; no vessel entities | Source inspection/build | `6bf7dcd2` | Preserve no-ship behavior in runtime acceptance |
-| EXC-006 | Open order lifecycle | IMPLEMENTED_UNVERIFIED | `repo_market.c`, `server_cron.c`; matcher locks and rereads open orders, records partial fills, expires/cancels non-executable orders, and commits fills atomically | Real matcher partially filled port demand and persisted a trade; second tick did not repeat it. Cancellation/expiry JSON scenarios exist but current-HEAD execution is absent | `6bf7dcd2`, `81a366ce` | Runtime-test partial remainder, cancellation, expiry, retry, and restart together |
-| EXC-007 | Port demand purchases | VERIFIED (port path) | port shortage BUY orders match the Exchange offer; clearing account settles port debit/system credit | `suite_planet_taxable_activity_e2e.json`, focused disposable PostgreSQL run 35/35; port stock +10, port balance -1,000, clearing balance +1,000 | current working change | Verify other port classes and insufficient-balance behavior |
-| EXC-008 | Commodity conservation | VERIFIED (tested path) | immediate sale transfers planet stock to Exchange; fill conditionally debits Exchange and credits port stock | Focused PostgreSQL JSON run verified planet 100→90, Exchange 0→10→0, port 0→10; all quantities conserved | current working change | Verify planet buyers and simultaneous sales/harvest |
-| EXC-009 | Financial integrity and game liquidity | VERIFIED (tested settlement) | clearing account and explicit `SYSTEM_LIQUIDITY`; matcher records actual debit/credit `bank_transactions` IDs in `commodity_trades` | Focused PostgreSQL JSON run verified port debit and clearing credit, equal amounts, and no second debit on retry; ASan/UBSan build passed | current working change | Concurrent settlement and liquidity boundary/restart tests remain |
-| EXC-010 | Audit named market paths | VERIFIED (targeted paths) | `cmd_planet_market_sell`, `h_daily_market_settlement`, `h_market_move_port_stock`, market/bank repositories | Actual V3 server/PostgreSQL exercised planet sale→Exchange→port purchase, credit/ledger settlement and retry | current working change | Extend runtime evidence to other buyer types and simultaneous requests |
-| EXC-011 | No loss/duplication/oversell | IMPLEMENTED_UNVERIFIED | `h_daily_market_settlement` locks inventory/account locations in deterministic order, then locks and rereads both order rows in ascending order ID before settlement; repository handles disappeared candidates | Source/ASan tests pass; concurrent PostgreSQL matcher test is absent. A 36/36 sequential settlement run is prior evidence, not concurrency evidence | `c12668c2`, `81a366ce` | Run two-worker same-order and limited-inventory contention against isolated PostgreSQL; assert no duplicate receipt/credits, oversell, deadlock or stuck order |
-| EXC-012 | Authoritative contract | VERIFIED | `docs/V3_GALACTIC_EXCHANGE_CONTRACT.md` | Documentation commit `434d81a6` | `434d81a6` | Keep source status synchronized; contract documentation only |
-| COMBAT-001 | Universal escape-pod respawn | IMPLEMENTED_UNVERIFIED | `repo_ships_handle_destruction`; command, NPC/player combat, Captain Z, engine self-destruct and legacy repository entry points converge via `handle_ship_destruction` | Added lethal-NPC and lethal-PvP assertions, including NPC-owner exclusion; focused planetary/hazard tests: 41 passed; ASan/UBSan build passed; runtime unverified | `63169074`, `aaf8a02e`, `6d2e36f0` | Exercise NPC- and player-caused lethal combat through JSON and verify pod/insurance state |
-| COMBAT-002 | No starter-ship respawn | IMPLEMENTED_UNVERIFIED | shared repository creates canonical Escape Pod at sector 1 and assigns it active | Source contract and ASan/UBSan build; no server/DB runtime | `63169074` | JSON state assertion / runtime test |
-| COMBAT-003 | No duplicate hull/pod/loss | IMPLEMENTED_UNVERIFIED | player/hull locking, conditional destroyed update, ownership removal, one pod and per-hull event key | Source contract and ASan/UBSan build; no DB concurrency/runtime test | `63169074` | Verify retries and simultaneous lethal paths |
-| COMBAT-004 | Cargo/equipment loss | IMPLEMENTED_UNVERIFIED | shared destruction update zeroes cargo and ship equipment/defence quantities | Source inspection/build only | `63169074` | Protocol/database assertion |
-| COMBAT-005 | Preserve bank/planet/corporate assets | IMPLEMENTED_UNVERIFIED | shared destruction transaction; Terra enforcement no longer calls asset-seizure SQL, checks settlement result, and retains the existing `sanctioned` event field | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 43 passed; `make -C bin -j2`: passed with ASan/UBSan; runtime state preservation unverified | `63169074`, `0e81209c`, `5195480b`, `6027d878`, `ef07c811` | Runtime state-preservation assertion |
-| INS-001 | Hull-only coverage | IMPLEMENTED_UNVERIFIED | purchase schema, handler, and `repo_ships_insurance_buy_policy` restrict subjects to ships; `settle_destruction_insurance` caps covered payout at shiptype replacement value, excluding cargo/equipment | Added non-hull JSON refusal case and repository-boundary source contract assertion; focused tests/build recorded below; server/DB runtime not run | `dfdcd791`, current source change | Execute protocol rejection and hull-payout/loss-exclusion flow; preserve existing per-policy premium and coverage inputs |
-| INS-002 | Qualifying destruction | IMPLEMENTED_UNVERIFIED | player-held active policy selected only when start/expiry epoch bounds include destruction time | Source inspection/build; no runtime | `15821cd8` | Verify time bounds and voluntary/nonqualifying loss cases |
-| INS-003 | Credit bank account | IMPLEMENTED_UNVERIFIED | locked CRD account credited in destruction and portable explicit-claim transactions; funded payout uses `ADJUSTMENT`, guaranteed system funding uses `INSURANCE_GUARANTEE` | ASan/UBSan build and focused source tests pass; no DB runtime | `6bf7dcd2`, working change | Verify player balance, ledger label and rollback on both backends |
-| INS-004 | Pod independent of policy | IMPLEMENTED_UNVERIFIED | unconditional pod creation is independent of insurance result | Source contract/build only | `63169074`, `15821cd8` | Verify insured and uninsured runtime cases |
-| INS-005 | Exactly-once payout | IMPLEMENTED_UNVERIFIED | destruction locks player/hull, conditional destroyed update and per-hull event key; explicit claim repository locks claim/policy/account and returns idempotently when paid | `test_insurance_server_contract.py` plus related focus: 51 passed; ASan/UBSan build passed; DB not tested | `6bf7dcd2`, working change | Verify retry/concurrency, account/ledger rollback on PostgreSQL and MySQL |
-| INS-006 | Sale terminates without refund | IMPLEMENTED_UNVERIFIED | `repo_stardock.c` sale transaction | Ship-sale JSON suite authored, not run | `bcaf3e93` | DB-backed verify |
-| CAP-001 | Defeat defenses | IMPLEMENTED_UNVERIFIED | `cmd_combat_attack_planet`; uses `db_planets_get_citadel_defenses_ex` and aborts on repository failure rather than treating unavailable defenses as absent | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 44 passed; `make -C bin -j2`: passed with ASan/UBSan; no DB runtime | `5195480b` | Run combat JSON scenario against disposable server; verify citadel/fighter settlement |
-| CAP-002 | Successful invasion required | IMPLEMENTED_UNVERIFIED | existing fighter comparison determines success | Combat JSON suite authored, not run | — | Validate combat outcome tests |
-| CAP-003 | Ownership transfer | IMPLEMENTED_UNVERIFIED | `db_planets_capture` compare-and-updates expected owner, population type and observed planetary fighters; capture and attack events share the combat transaction | `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py`: 45 passed; `make -C bin -j2`: passed with ASan/UBSan; DB runtime/concurrency unverified | `0abc2c09`, `212e6f34` | Run capture/concurrent reinforcement protocol scenario and verify state/event rollback |
-| CAP-004 | Resources/entire treasury remain with planet | IMPLEMENTED_UNVERIFIED | capture updates ownership/population only | Source inspection; no DB runtime | — | Verify associated stock/accounts stay linked |
-| CAP-005 | Unrelated assets stay put | IMPLEMENTED_UNVERIFIED | capture does not mutate external accounts/assets | Source inspection only | — | Verify via JSON/DB journey |
-| CAP-006 | Population transition atomic | IMPLEMENTED_UNVERIFIED | `db_planets_capture` conditional owner/population update in combat tx | Build passed; no runtime test | — | Add full capture population matrix |
-| MOVE-001 | Atomic synchronous transwarp; mid-flight interruption excluded | VERIFIED | `cmd_move_transwarp` locks player/ship state, calculates directed warp-hop distance, checks/debits fuel, consumes a turn, relocates and resolves hazards transactionally | PostgreSQL-backed `suite_movement_move_transwarp.json`: 20/20 passed; validated refusal preserves turns/location and successful arrival/fuel persistence. Hazards are separately tracked under MOVE-003/004. QA database was dropped by the runner after the suite. | `6fff1d50`; QA runner `3272451d`, `1d02ee3d` | Continue with hazard-specific runtime cases |
-| MOVE-05 | Three Fuel Ore per sector of distance for TWGS 3.13; distance is directed warp-hop count | VERIFIED | `cmd_move_transwarp`; `repo_universe_get_transwarp_distance`; `repo_cargo_consume_locked` | PostgreSQL-backed `suite_movement_move_transwarp.json`: exact one-hop 3-unit debit, destination sector 10, cargo row absent/zero after debit; 20/20 cases passed on 2026-11-12. | `6fff1d50`; QA runner `3272451d`, `1d02ee3d` | None for fuel rule; retain longer-route boundary coverage as future enhancement |
-| MOVE-002 | Rejected validation does not consume fuel | VERIFIED | preflight validation precedes transaction and turn consumption in `cmd_move_transwarp` | PostgreSQL-backed suite verified out-of-universe and insufficient-fuel refusals preserve turns, location and cargo; 20/20 cases passed on 2026-11-12. | `6fff1d50`; QA runner `3272451d`, `1d02ee3d` | None for these refusal paths |
-| MOVE-003 | Immediate entry hazards | IMPLEMENTED_UNVERIFIED | `cmd_move_warp`, `cmd_move_transwarp`, shared `server_combat_apply_entry_hazards_report` | Lethal transwarp JSON case added; JSON validation/build pending, runtime not run | — | Execute normal/transwarp hazard scenarios |
-| MOVE-004 | Hazard destruction uses common lifecycle | IMPLEMENTED_UNVERIFIED | shared hazard resolver delegates lethal outcomes to `handle_ship_destruction`; session context reset to sector 1 | New JSON case verifies attempted/current sectors and Escape Pod state; runtime not run | — | Execute lethal movement case against disposable server |
-| PARITY-TW-HOMING-01 | Destination fighter required for transwarp homing | VERIFIED | `repo_universe_lock_sector_fighter` locks one positive fighter asset inside the transwarp transaction before turn/location mutation | PostgreSQL-backed suite passed with a deployed destination fighter. A preceding runtime probe without one was refused before movement with the documented homing-fighter error. | QA runner `3272451d`, `1d02ee3d` | Add a durable missing-fighter refusal case to the JSON suite when extending this scenario |
-| PTA-V3-01 | Local planetary bulk sale to buying port | IMPLEMENTED_UNVERIFIED | `cmd_planet_trade_port`; schema/registration; transaction locks port and rechecks planet authority/location, then moves stock, settles port/player credits, writes trade log and idempotency receipt | `pytest -q tests.v2/test_starport_sector_and_pta_contract.py tests.v2/test_transwarp_server_contract.py` (7 passed); JSON suite and migration manifest parse; ASan/UBSan server build passed; PTA JSON/runtime not executed | Working tree | Execute acceptance against disposable PostgreSQL; verify stock/credit conservation and idempotent retry |
-| STARPORT-V3-01 | Construct/select class, upgrade and destroy StarPort | IMPLEMENTED_UNVERIFIED (migrations 185–187; live acceptance partial) | Ordinary Python workflows construct a funded port from a landed planet, upgrade port commodity capacity, and attack a port; scheduled deliveries complete construction, class directions are fixed, upgrades consume ship cargo and credits atomically, port durability/defence are separate, and destruction preserves an inactive tombstone while clearing stock. Defaults and configuration are documented as noncanonical in `V3_GAMEPLAY_DECISIONS.md`. | `docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md`: ordinary Python + disposable PostgreSQL confirmed funded construction, three scheduled deliveries, classed port state, upgrade and idempotent replay, insufficient-material rollback, FedSpace Captain Z refusal/retry, fighter-first retaliation then hull damage, ship loss/recovery, concurrent destruction replay, stock clearing, and post-restart tombstone persistence. Focused regressions: 14 passed; full suite result recorded in the acceptance report. | `26a2e6fe` | Fresh construction lost-reply/restart replay passed on current HEAD on 2026-11-15; complete remaining concurrent and injected-rollback matrix before VERIFIED |
-| PARITY-PHOTON-01 | Photon firing/effects | IMPLEMENTED_UNVERIFIED | `cmd_combat_fire_photon`; persisted `sector_photon_effects` and request receipts; Python `DEPLOYMENT_MAIN` menu option; configured expiry and entry/interdictor/citadel reaction suppression | Disposable PostgreSQL live acceptance: actual Python menu dispatch, adjacent firing, nonadjacent refusal, same-ID replay, two concurrent duplicate requests, one ammo debit per unique request, expiry row persisted across server restart; migration 183 applied. Focused regression 60 passed; ASan/UBSan build passed. `docs/testing/V3_PHOTON_ACCEPTANCE_20261114.md` | `a2d92c9a` | Verify live shield restrictions, arrival suppression, expiry behavior, and injected rollback before VERIFIED |
-| PARITY-TOLL-01 | Toll fighter payment workflow | IMPLEMENTED_UNVERIFIED | `move.warp` issues a persistent quote, Python warp flow asks accept/refuse, and movement transaction pays hostile toll-fighter owners or runs refusal combat; configurable `combat.toll_credits_per_fighter` | Disposable PostgreSQL live acceptance: accept paid 3 credits and passed without combat; refusal preserved credits, turns, location and fighter stock; concurrent duplicate offer returned one pending receipt; completed offer/payment replay did not charge or move twice. See `docs/testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md`. Migration 184 applied. `transwarp` and restart replay of pending offers remain unverified. | `a14aaacc` | Integrate and verify toll offers for transwarp arrivals; test mixed ownership, ship destruction during refusal, and restart/replay of pending offers before VERIFIED |
-| TRADE-001 | No haggling | IMPLEMENTED_UNVERIFIED | fixed-price ports, dynamic pricing | Port tests not run here | — | Confirm no haggling command path |
-| TRADE-002 | Dynamic pricing retained | IMPLEMENTED_UNVERIFIED | port price repositories | No test executed | — | Verify supply/demand prices |
-| TRADE-003 | Direction, stock, cargo, policing | IMPLEMENTED_UNVERIFIED | `server_ports.c`, repositories | No test executed | — | Runtime contract verification |
-| SYS-001 | 60% ship sale setting | IMPLEMENTED_UNVERIFIED | `server_config.c`, `server_sysop.c` | Build passed, no runtime | `bcaf3e93` | Confirm default and bounds via protocol |
-| SYS-002 | Fixed 50% slave productivity | IMPLEMENTED_UNVERIFIED | `src/slave_population.h`, shared by `repo_cron.c` production and overview | Existing engine C runner tests exact integer floor and stoppage; DB runtime unverified | `6c790d40` | Verify actual production tick against persisted stock |
-| SYS-003 | Configurable deterministic unrest | IMPLEMENTED_UNVERIFIED | config keys/parser, SysOp validation, daily scheduler, PG migrations 173/176 and MySQL 125/128 | Focused source suite (69 passed, 200 subtests) and ASan/UBSan build passed; protocol/DB runtime not run | `6bf7dcd2` | Verify SysOp setting and daily scheduler against DB; zero disables effects |
-| SYS-004 | Insurance policy payout / hull replacement valuation | IMPLEMENTED_UNVERIFIED | `insurance.policies.buy` persists per-policy `premium` and `payout`; `settle_destruction_insurance` pays configured amounts in policy-ID order, capped at aggregate shiptype hull replacement value; no global valuation setting is required | `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py`: 57 passed, including underinsured payout source assertion; DB settlement not executed | Current source | Runtime-verify underinsured payout, overlapping policy cap, guarantee funding and exactly-once credit |
-| SYS-005 | Economy config | IMPLEMENTED_UNVERIFIED | `galactic_exchange_liquidity_credits`, default zero, nonnegative configured target; explicit `SYSTEM_LIQUIDITY` ledger | ASan/UBSan build and focused source/migration suite (69 passed, 200 subtests); protocol/DB runtime unverified | `6bf7dcd2` | Verify migration and SysOp setting plus market top-up |
-| SYS-006 | Config documentation | IMPLEMENTED_UNVERIFIED | `docs/SYSOP_MENU.md`, protocol 29, protocol 24 | Documentation commits `434d81a6`, `5f7bb98c` | `5f7bb98c` | Keep parameter descriptions synchronized with any approved policy changes |
-| SYS-007 | SysOp kick invalidates all target sessions | IMPLEMENTED_UNVERIFIED | `cmd_sysop_player_kick` calls `repo_session_revoke_player_sessions` before closing active sockets | Existing JSON case `test_sysop_players.json::case-0014` observed post-kick `player.my_info` succeed; source-contract test 1/1 and ASan/UBSan build passed; runtime rerun blocked | `2f03808b` | Run the JSON case against isolated QA and verify the same session token is rejected |
-| NPC-FER-01 | Ferengi wanted bounty and captain pursuit | PARTIAL | `src/server_universe.c::ferengi_handle_hostile_attack`, Ferengi scheduler; `src/server_combat.c::handle_ship_attack` | Added persistence-failure/rollback source-contract assertion; `test_planetary_server_contract.py`: 35 passed; ASan/UBSan build passed; no DB runtime | `e4954ef7` | Ferengi flow exists, but bounty amount is hardcoded 5000 without an approved amount and runtime pursuit is unverified; define amount and verify scheduler/action persistence |
-| NPC-ORI-01 | Orion blockader hold/deploy/attack behavior | PARTIAL | `src/server_universe.c::ori_move_all_ships` | Blockade assets/attacks now gated to assigned post; source-contract assertions; `test_planetary_server_contract.py`: 35 passed; ASan/UBSan build passed; no DB runtime | `ed08c3be` | Current target exclusion is Orion ownership; clarify whether hostile/allied player targeting requires additional policy, then verify home-sector hold and deployment at runtime |
+These are the latest reported counts, not a claim that every gameplay operation
+or deployment has been verified.
 
-## Execution evidence log
+## Player-facing acceptance
 
-- INS-005 ledger audit alignment: migration 179 updates
-  `insurance_ledger_invariant_snapshot` to accept both funded
-  `ADJUSTMENT/CREDIT` and guaranteed `INSURANCE_GUARANTEE/CREDIT` rows. The
-  existing SQL invariant fixture now includes a guaranteed paid claim.
-  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py
-  tests.v2/test_planetary_server_contract.py` passed (55); runtime SQL
-  execution is still pending. Migration/view commit: `ea095363`; fixture
-  search-path correction: `37d12e4f`; verification checkpoint: `f947e67b`.
-- 2026-11-11 QA attempt: sandbox `pg_isready` reported no response on the
-  isolated loopback QA port 55438. Following explicit user authorization, the
-  host-access bridge returned exit 0 but no identity output and no new report
-  artifact; retained report timestamps were unchanged. This is not evidence of
-  successful DB access or regression execution. No connection to port 5432 or
-  a remote host was made. Continue local work; retry QA only when the allowed
-  path yields observable identity and test artifacts.
-- SHIP-002 local validation on the current tree: `python3 -m pytest -q
-  tests.v2/test_ship_sale_equipment_catalog.py
-  tests.v2/test_bigbang_sql_selection.py
-  tests.v2/test_mysql_migration_portability.py
-  tests.v2/test_insurance_server_contract.py` passed (29 tests, 217 subtests);
-  `tests.v2/run_engine_regressions.sh` passed all three C engine checks. This
-  does not apply migrations or exercise ship-sale JSON against a server.
+The live Godot journey against disposable PostgreSQL exercised registration
+and authentication, navigation and scanning, port trading, hardware purchase,
+shipyard upgrade, planet landing/harvest/launch, corporation deposit,
+logout/reconnect and queue-only feedback submission. Python journeys exercised
+ordinary-player workflows, including StarPort construction replay after a
+server restart. Refer to
+[`testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md),
+[`testing/V3_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_STARPORT_ACCEPTANCE_20261114.md),
+and [`testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`](testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md)
+for exact evidence and limits.
 
-- Portable insurance command batch: `make -C bin -j2` passed with ASan/UBSan
-  after adding shared C repository transactions for policy purchase and
-  explicit claim settlement; focused
-  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
-  passed (51 tests); `git diff --check` passed. No PostgreSQL/MySQL runtime.
-  Committed as `a6290ad6`.
-- Shared slave production policy follow-up: both production-tick settlement
-  and overview now call the same pure integer output function. The existing
-  engine runner passes exact floor checks for ORE/ORG/EQU, zero/odd/even values,
-  stoppage and unchanged non-slave output; focused pytest passes (51 tests),
-  ASan/UBSan build is up to date, and `git diff --check` passes. DB production
-  persistence remains unverified; committed as `6c790d40`.
-- Exchange lock-order correction: market matches now lock both inventory
-  locations in deterministic `(type,id)` order, consistent with the clearing
-  account-before-planet order used by immediate planet sales. The ASan/UBSan
-  build passed; `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_bank_standing_order_contract.py`
-  passed (47 tests); `tests.v2/run_engine_regressions.sh` passed; and
-  `git diff --check` passed. No database concurrency test was run.
-- Exchange stale-order concurrency correction (current source change, not yet
-  committed): each candidate settlement now locks inventory/clearing-account
-  locations in deterministic order, then locks and rereads both order rows in
-  ascending ID order inside the transaction. It revalidates open status,
-  expiry, remaining quantity and crossing price before settlement; disappeared
-  or already-settled candidates are skipped, and expired rows are persisted as
-  expired under lock. This closes the stale-snapshot double-settlement path at
-  source level while preserving planet-before-order lock order used by order
-  cancellation. Verification: `python3 -m pytest -q
-  tests.v2/test_planetary_server_contract.py` passed (49);
-  `tests.v2/run_engine_regressions.sh` passed; `make -C bin -j2` passed with
-  ASan/UBSan; `git diff --check` passed. PostgreSQL concurrency/runtime remains
-  unverified. No new full regression run was possible: sandbox QA access and
-  game-server runtime are unavailable, and a prior access escalation was
-  denied. The historical 74-failure inventory is unchanged, not a new run.
-- Insurance hull-only contract correction: `insurance.policies.buy` schema and
-  handler reject cargo/planet subjects; `suite_economy_insurance.json` now
-  covers the non-hull refusal. JSON validation passed, focused
-  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_planetary_server_contract.py`
-  passed (51 tests), ASan/UBSan build passed, and `git diff --check` passed.
-  No live protocol/DB runtime was run.
-- Bank monthly scheduling now shares one UTC calendar-clamping helper between
-  initial run calculation and recurrence advancement. Existing engine runner
-  verifies leap/non-leap February, Gregorian century rules, 30-day months and
-  invalid input. `tests.v2/run_engine_regressions.sh`, focused bank/planet
-  pytest (47 passed), ASan/UBSan build and `git diff --check` passed. No DB
-  schedule execution was run.
-- Current Exchange/unrest/insurance/used-hull batch: `make -C bin -j2` passed
-  with ASan/UBSan after the ship-sale ownership-count correction;
-  `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_insurance_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_mysql_migration_portability.py tests.v2/test_mysql_migration_110_hazards.py`
-  passed (69 tests, 200 subtests); PostgreSQL manifest JSON validation and
-  `git diff --check` passed. No database or server runtime was run.
-- Unrest allocation was extracted to the production-used pure helper
-  `src/slave_population.h`; `tests.v2/run_engine_regressions.sh` now executes
-  deterministic proportional/largest-remainder, tie-order, zero, full-loss and
-  invalid-input cases. The runner passed; the sanitized server build passed;
-  focused pytest remained 69 passed / 200 subtests. This test/helper change is
-  uncommitted as of this checkpoint; DB scheduling and restart behavior remain
-  unverified.
-- `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 50 passed after stale-defense compare-and-update; `make -C bin -j2` — passed with ASan/UBSan; `git diff --check` — passed. Tests are source/contract tests; no server/DB runtime.
-- `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 49 passed after transactional capture-event change; `make -C bin -j2` — passed with ASan/UBSan; `git diff --check` — passed. No DB/server runtime.
-- `python3 -m pytest -q tests.v2/test_insurance_server_contract.py tests.v2/test_transwarp_server_contract.py tests.v2/test_bank_standing_order_contract.py tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` — 48 passed; source/contract tests only, not DB or server runtime.
-- Sanitised server build: `make -C bin -j2` — passed after unrest configuration changes (existing unused-variable warnings remain).
-- Focused tests: `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py tests.v2/test_bigbang_sql_selection.py tests.v2/test_pg_bigbang_sql_selection.py` — 41 passed. These are source-contract/manifest selection checks, not database runtime.
-- Migration selection tests include new PG migration 173; MySQL migration 125 was not executed.
-- JSON syntax: `python3 -m json.tool tests.v2/suite_planet_slave_unrest_config_v3.json` — passed; configuration acceptance cases were not run against a server.
-- Bank order JSON acceptance cases were added to `suite_economy_and_bank.json`; JSON syntax passed, but cases have not been run against a server.
-- JSON syntax: `python3 -m json.tool tests.v2/suite_combat_advanced.json` and `python3 -m json.tool tests.v2/suite_planet_fighter_transfers.json` — passed.
-- Bank standing-order source and migrations are committed in `0c444420`; runtime and migration application remain unverified.
-- `5f7bb98c` commits the policy config fields, SysOp validation, PG migration 173, MySQL migration 125, JSON scenario and docs. No PostgreSQL/MySQL migration execution or JSON protocol runtime was performed.
-- `434cd2c8` closes the slave-purchase alignment race by revalidating the evil band after transaction start and before port stock/cargo mutation. `make -C bin -j2` passed with ASan/UBSan; focused `test_planetary_server_contract.py` and `test_sector_entry_server_contract.py` passed (37 tests); no DB protocol runtime.
-- Ferengi retaliation persistence now fails combat closed: `handle_ship_attack` rolls back when bounty/hunt-state recording fails; `ferengi_handle_hostile_attack` propagates captain lookup, intelligence upsert and action-completion failures. Orion blockader source assertions cover home-sector targeting, defensive deployment and Orion exclusion. `make -C bin -j2` passed with ASan/UBSan; `python3 -m pytest -q tests.v2/test_planetary_server_contract.py` passed (35 tests). No DB-backed NPC runtime test was run. This work is committed as `e4954ef7` and `ed08c3be`.
-- Orion blockaders displaced from home now return without deploying assets or attacking from the wrong sector; those actions run only in the configured home sector (or current sector when no home is configured). `make -C bin -j2` passed with ASan/UBSan; focused source-contract tests remained 35/35; `git diff --check` passed. Runtime behavior remains unverified.
-- Lethal NPC attacks against player ships now call the same destruction/insurance/escape-pod transaction instead of persisting a zero-hull active ship; destroyed cargo is cleared before the NPC loot step. `python3 -m pytest -q tests.v2/test_planetary_server_contract.py tests.v2/test_sector_entry_server_contract.py` passed (40 tests); `make -C bin -j2` passed with ASan/UBSan; `git diff --check` passed. No JSON server/DB runtime was performed. Committed as `aaf8a02e`.
-- Lethal PvP hits now use shared destruction settlement when the target owner is a real player; the authoritative NPC-owner flag is queried first so NPC hulls are not routed through player podding. If ownership classification fails, combat rolls back. Combined focused tests passed (41); sanitized build and `git diff --check` passed. No JSON/DB runtime; committed as `6d2e36f0`.
-- Other recent gameplay commits: ship sale `bcaf3e93`; evil-only slave acquisition `477bc1ed`; online listing `a07b3bf4`; Godot ship-sale/population display `b7ff3720`; universal destruction `63169074`; funded hull insurance `15821cd8`.
-- `git diff --check` — passed.
-- A combined pytest command once referenced nonexistent `test_v3_population_contract.py`; that command failed collection and is not counted as a test pass. The valid focused command above was run separately and passed.
-- Prior checkpoint note (superseded by the disposable PostgreSQL integration
-  evidence immediately below): no PostgreSQL integration, server protocol run,
-  full regression or Godot test had been performed at that time.
+## Mechanics with focused acceptance evidence
 
-### Disposable PostgreSQL integration evidence — 2026-11-10
+- **StarPorts:** construction retry after lost reply and server restart,
+  scheduled deliveries across serving-process restarts, selected rollback
+  boundaries, concurrent upgrades, upgrade/attack serialization, and
+  post-restart requests passed for the documented cases. This is not exhaustive
+  fault-injection coverage. See the two StarPort reports above and the
+  [release-candidate audit](testing/V3_RELEASE_CANDIDATE_AUDIT_20261115.md).
+- **Photon missiles:** focused disposable PostgreSQL firing, eligibility,
+  ammunition, retry and expiry cases are recorded in
+  [`testing/V3_PHOTON_ACCEPTANCE_20261114.md`](testing/V3_PHOTON_ACCEPTANCE_20261114.md).
+- **Toll fighters:** focused payment, refusal, insufficient funds and retry
+  cases are recorded in
+  [`testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md`](testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md).
+- **Planet production:** ratio/default and production acceptance is recorded
+  in [`testing/V3_PLANET_PRODUCTION_RATE_ACCEPTANCE_20261114.md`](testing/V3_PLANET_PRODUCTION_RATE_ACCEPTANCE_20261114.md).
+- **Player feedback:** PostgreSQL queueing, ownership, redaction and mock
+  publisher paths are recorded in
+  [`testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`](testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md).
+  Live public GitHub publication has not been tested.
 
-- QA target was verified as PostgreSQL at `127.0.0.1:55438`, role
-  `twclone_qa_runner`, with `CREATEDB`; no connection was made to production
-  port 5432 or a remote host. An isolated runner-generated database was
-  migrated from clean state through migration 177 and then removed after the
-  tests. The system PostgreSQL client wrapper was unusable in the sandbox;
-  using the direct PostgreSQL 16 client with inherited `PGPASSWORD` unset and
-  the configured `.pgpass` succeeded. No password or role was changed.
-- Full real-server JSON execution completed all supported suites: 169 JSON
-  files / 161 suites discovered; 157 suites executed; 2,225 cases executed,
-  2,133 passed and 92 failed; 1 TLS suite blocked; 3 nested-DSL suites
-  unsupported; 0 not-executed cases. The runner retained this as an incomplete
-  `/tmp` report and did not replace the prior completed baseline. Server log
-  records clean engine shutdown and no crash/transport cascade.
-- Focused JSON execution: `suite_combat_sector_hazards.json` 45/45,
-  `suite_economy_insurance.json` 12/12,
-  `suite_planet_slave_unrest_config_v3.json` 11/11, and
-  `suite_planet_taxable_activity_e2e.json` 23/23 passed (91/91 total). The
-  planet sale workflow verified seller stock decreases by 10, Exchange stock
-  increases by 10, and exactly one sale transaction is recorded. This
-  verifies immediate Exchange accounting for this sale path, not subsequent
-  Exchange-to-port settlement.
-- Focused follow-up: `suite_economy_and_bank.json` 29/30 and
-  `suite_planet_market_buy_order_lifecycle.json` 25/27 (54/57 total). Standing
-  order creation/list/cancel protocol paths passed; the remaining bank failure
-  is an undocumented exact error-code expectation (implementation returns
-  403 for another player's order, while protocol only requires ownership).
-  Market matching did not settle the seeded port-to-planet pair: both orders
-  remained open, no trade was recorded, and inventories/credits were unchanged.
-  This is a reproduced runtime failure; its underlying matcher cause remains
-  unisolated and must not be reported as fixed.
-- Supplementary PostgreSQL checks: `test_pg_bank_debit_concurrency.py` passed;
-  `test_pg_ship_claim_concurrency.py` failed in its fixture because the claim
-  function resolves `federation_protected_assets` from the shared public
-  schema but the isolated test schema does not define it. Insurance settlement
-  and insurance ledger SQL scripts passed. The ship-lifecycle restart snapshot
-  script failed because included migrations commit and discard its
-  `SET LOCAL search_path`, leaving its later snapshot view unresolved. These
-  are fixture/script execution failures, not evidence of gameplay pass/fail.
-- Fresh schema inspection confirmed `taverns.enabled BOOLEAN NOT NULL DEFAULT
-  TRUE`, matching the canonical PostgreSQL migration. The previous `bigint`
-  report was not reproduced on a clean migration.
-- Source correction in this batch: `h_get_system_account_id_unlocked` now
-  recognizes the repository's `ERR_DB_NOT_FOUND` result and creates the
-  Exchange clearing account. `test_planetary_server_contract.py` passes 47
-  tests; ASan/UBSan build passed; JSON syntax validation and
-  `git diff --check` are pending final local verification. Market order
-  matching remains the next integration defect to isolate.
-- Exchange matcher correction: `h_daily_market_settlement` now treats the
-  positive inserted `commodity_trades` ID as success (the repository returns
-  a row ID, not a boolean status), and records the actual buyer-debit and
-  seller-credit `bank_transactions` IDs instead of zero in the trade receipt.
-  This resolves both the prior rollback at trade-record interpretation and
-  the settlement FK failure. Verification: `make -C bin -j2` passed with
-  ASan/UBSan; `python3 -m pytest -q
-  tests.v2/test_planetary_server_contract.py` passed (48); focused actual V3
-  server/PostgreSQL `suite_planet_taxable_activity_e2e.json` passed 36/36,
-  after the fixture funded the intended full port purchase. It verifies
-  planet→Exchange→port stock/credit conservation, ledger linkage and repeat-tick
-  idempotency. Concurrent matcher execution and server-restart recovery remain
-  unverified. The latest full execution ran 2,242 cases: 2,168 passed, 74
-  failed, 1 blocked and 3 unsupported; zero crashes. The report is incomplete
-  because of its blocked TLS suite, not a server failure. Relative to the prior
-  92-failure report, 21 failures resolved and 3 appeared (net -18); exactly two
-  resolved cases directly evidenced the Exchange clearing-account failure.
-  See `tests.v2/REGRESSION_FAILURE_CLASSIFICATION.md` for all 74 case records.
-- `suite_combat_port_rob.json::case-0009` was a fixture defect: the fixture
-  selected an arbitrary port, potentially in FedSpace, where protocol §23
-  mandates refusal of aggression. It now selects a stable port outside sectors
-  1–10. This correction has not yet been runtime-rerun.
-- Re-running `make regression-full` in the sandbox stopped before migration or
-  gameplay execution: BigBang could not connect to its admin DB. A read-only
-  connection made with approved QA credentials confirmed `postgres`,
-  `127.0.0.1:55438`, user `twclone_qa_runner`. The runner could not be retried
-  outside the sandbox because the permission review rejected that command;
-  this is not evidence of a bad password or a gameplay failure. No production
-  or remote database was contacted.
-- The remaining failed Ferengi roster case (`case-0036`) is a fixture issue,
-  not a spawn regression: the test added a definition after the active NPC
-  population had already reached its configured 2%-of-sectors cap. The fixture
-  now temporarily raises the cap by exactly one slot, restores the original
-  value, and reconciles population afterward. Classification is updated to
-  FIXTURE_DEFECT; this fixture correction is JSON-validated but runtime
-  verification remains blocked by the sandbox's QA connection failure.
-- The six formerly UNCLASSIFIED failures have been classified from retained
-  evidence: two MFA requests are protocol-name mismatches with no authoritative
-  V3 MFA contract; three legacy SysOp requests have no V3 contract or approved
-  removal; one post-kick session remained usable, violating
-  `29_SysOp_Commands.md`. The latter is corrected by revoking durable session
-  tokens before socket closure. Two independent citadel failures previously
-  labeled missing implementations are now UNCLASSIFIED: the handler reads
-  `planettypes` values that canonical seed SQL provides, but the failed report
-  omitted the selected type/value needed to explain the nonpositive duration.
-  The shipyard-upgrade schema's missing mutually exclusive alternatives is
-  corrected; planet-deposit and bank-refusal fixtures/assertions are also
-  corrected based on their captured evidence. Focused source test passed (1),
-  ASan/UBSan build passed, JSON parsing and classification sum passed. No QA
-  runtime/full regression ran. Totals remain 74: 2 implementation defects,
-  3 protocol mismatches, 6 specification blockers, 37 fixture defects, 16
-  obsolete V2 tests, 8 infrastructure failures, 0 missing implementations and
-  2 unclassified. No new full run was available.
-- QA regression retry policy: the restricted sandbox cannot reach the QA
-  PostgreSQL service for BigBang; one approved-identity read-only check outside
-  it had previously verified `127.0.0.1:55438` / `twclone_qa_runner`, but the
-  subsequent test-run escalation was denied. Do not retry outside the permitted
-  environment or modify credentials/security configuration. Focused Ferengi,
-  FedSpace and concurrent Exchange runtime scenarios remain pending.
-- Insurance scope audit: `repo_ships_insurance_buy_policy` previously accepted
-  `cargo` and `planet` subjects even though the approved INS-01 contract and
-  public schema permit hull-only policies. The repository now rejects every
-  non-`ship` subject before opening a transaction, and its ownership lock is
-  ship-only. Added a repository-boundary assertion to
-  `test_insurance_server_contract.py`. Verification actually run:
-  `python3 -m pytest -q tests.v2/test_insurance_server_contract.py
-  tests.v2/test_planetary_server_contract.py` (56 passed),
-  `make -C bin -j2` (ASan/UBSan build passed),
-  `tests.v2/run_engine_regressions.sh` (all existing engine regression unit
-  checks passed), and `git diff --check` (passed). PostgreSQL/server runtime
-  was not run. This is a source-verified correctness fix, not runtime
-  verification.
-- Approved insurance valuation update: per-policy payout may be below hull
-  replacement value and governs settlement; a separate SysOp valuation setting
-  is unnecessary. `SYS-004` is now IMPLEMENTED_UNVERIFIED. Added a focused
-  assertion that destruction settlement uses the configured payout and clamps
-  only when it exceeds remaining hull value. Updated the insurance protocol
-  contract and decision register. `python3 -m pytest -q
-  tests.v2/test_insurance_server_contract.py
-  tests.v2/test_planetary_server_contract.py` passed (57 tests), including the
-  underinsured payout assertion. Database-backed settlement remains
-  unverified.
-- Approved parity scope update: corporate equity/stock-market expansion is
-  excluded from V3 parity/release acceptance; existing `NOT_IMPLEMENTED`
-  responses may remain. It is not one of the 97 approved master requirement
-  rows. This decision does not defer unrelated corporate requirements.
-- MOVE-001 policy supersession: transwarp is explicitly atomic and synchronous;
-  eligibility/fuel/destination checks precede movement, success completes at
-  the destination, and entry hazards resolve after arrival. Mid-flight
-  interruption is excluded from V3 acceptance unless a canonical trigger is
-  later established. Source inspection found no existing pre-arrival event.
-  Added a focused source-order assertion; database/runtime verification remains
-  outstanding.
-- QA and transwarp verification update — 2026-11-12: BigBang's `FATAL:
-  connect admin:` was caused by the regression runner inheriting the generic
-  `bin/bigbang.json` role (`postgres`) instead of the dedicated QA role
-  (`twclone_qa_runner`) whose credential is configured in `.pgpass`. The
-  runner now selects the QA role explicitly, removes unrelated inherited
-  `PGPASSWORD`, uses the direct versioned `psql`, verifies loopback/port/role
-  and the QA database namespace with a read-only query, retains BigBang logs,
-  and refuses cleanup unless identity was verified. It does not inspect the
-  restricted `data_directory` setting. The focused scenario required a
-  destination fighter per the V3 homing contract; its persistence assertion
-  now treats the repository's deleted zero-cargo row as quantity zero. Against
-  the documented QA cluster (`127.0.0.1:55438`, role
-  `twclone_qa_runner`), a disposable clean database migrated and the real V3
-  server ran `suite_movement_move_transwarp.json` with `--skip-rig-ports`;
-  all 20 cases passed against disposable DB
-  `twclone_v3qa_regression_1130793_1794475504`; report:
-  `/tmp/twclone-transwarp-qa-focused-verified.json`. The skip avoids unrelated legacy fixture ports that
-  collide with BigBang-generated ports under the one-active-port-per-sector
-  invariant. A read-only post-run query confirmed the exact disposable DB was
-  absent. Focused QA runner tests: 17 passed; Python compilation, JSON parse
-  and `git diff --check` passed. No full regression suite was run.
+## Remaining limits
 
-## Added gameplay requirement — corporation member transfers
+- The release-candidate audit does not clear external deployment. Credential
+  rotation, host/database exposure ownership, designated QA authentication and
+  deployment-specific checks remain blockers.
+- Live GitHub issue publication is unverified; local queue-only reporting is
+  available and tested.
+- Focused subsystem evidence is not proof of every original TW2002 edge case.
+  Consult [`V3_GAMEPLAY_PARITY.md`](V3_GAMEPLAY_PARITY.md) and the approved
+  [`V3_GAMEPLAY_DECISIONS.md`](V3_GAMEPLAY_DECISIONS.md) for scope and open
+  parity gaps.
+- Full V3 server runtime on MySQL is not supported or established; PostgreSQL
+  is the verified runtime target.
 
-| ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
-|---|---|---|---|---|---|---|
-| CORP-XFER-01 | Atomic same-sector transfer of on-hand credits and active-ship fighters, mines, or shield charge between members of the same corporation | VERIFIED | `src/server_corporation.c::cmd_corp_member_transfer`; `src/db/repo/repo_corporation.c::repo_corp_transfer_member_asset`; schema/registry in `src/schemas.c`, `src/server_loop.c` | `tests.v2/suite_corp_member_asset_transfers.json`: 31/31 passed on 2026-11-12 against real V3 server and isolated disposable PostgreSQL; concurrent duplicate fighter-transfer requests: one success/one refusal, persisted total preserved (sender 0, recipient 2); `make -j2` sanitizer build passed; `git diff --check` passed | `485fc0b5` | Broader V3 regression/release certification remains separate; no remaining CORP-XFER-01 work identified |
-## Five-hour Python playability sprint evidence — 2026-11-14
+## Evidence policy
 
-This supplement records only work exercised against the isolated Docker
-PostgreSQL server with the Python menu/workflow client. It supersedes earlier
-`IMPLEMENTED_UNVERIFIED` notes only for the exact operations below; it does
-not promote an entire subsystem based on partial journey evidence.
-
-| Mechanic / operation | Evidence status | Runtime evidence and remaining scope |
-|---|---|---|
-| Port trading | PARTIAL | SprintAlpha sold ORE, bought ORG and resold it at a second port through the Python menus. Credits, port inventory, cargo and turns reconciled; PTA sale and trigger-injected rollback were also exercised. Reversal-mode refusal and general rollback remain incomplete. |
-| Equipment and hull lifecycle | PARTIAL | Python client bought Genesis, shields and Armid mines, purchased/repaired/renamed hulls and sold an active ship. The replacement became active and the HUD refreshed. Alpha's ordinary Python client entered a one-mine sector hazard, lost its hull and recovered as an Escape Pod in FedSpace, then followed a player-plotted route to Stardock and exchanged the pod for a Merchant Cruiser; PostgreSQL confirmed hull 100, active ship ID 48 and the 41,300 cr debit. Alpha then transferred its inactive Fixture Cargo Hauler to Beta through the Python Computer menu while both players and the ship were in sector 404; SQL confirmed ownership changed from player 106 to 107 and the ship's 3 ORE cargo and sector remained intact. Beta's Python owned-ship roster showed the received hull after reconnect. Broader equipment combinations and ship destruction variants remain incomplete. |
-| Cargo transfer | PARTIAL | Three ORE moved between two owned ships through the Computer menu; total quantity remained four. A database-trigger failure after source debit rolled back both ship records. |
-| Fast Scan | VERIFIED for the exercised current-sector scan | Python output showed adjacent sectors `292,404` and counts matching the authoritative sector result. Other visibility states remain unverified. |
-| Planet genesis, landing, transport and harvest | PARTIAL | Python workflows created and landed on a planet, moved colonists, allocated workers, harvested ORE/ORG/EQU within ship capacity, and transferred planet stock to ship cargo. Planet/ship quantities reconciled; insufficient-stock refusal left both unchanged. Production/citadel coverage below is separate. |
-| Citadel construction | PARTIAL | The Python Citadel menu started level 1; SQL confirmed requirement deductions and upgrading state. After the disposable fixture advanced construction time and the automatic scheduler completed it, the client re-landed and displayed level 1. Later levels and authorization rollback remain unverified. |
-| Planetary Trade Agreement | VERIFIED for same-sector sale and injected rollback | Beta sold planetary ORE to the local port through the Python surface menu; planet stock, port stock, credits, turn count and trade receipt reconciled. A test-only database trigger caused rollback with all four unchanged. |
-| Corporation membership and asset transfer | PARTIAL | Both players created/joined through Python workflows. Alpha transferred credits and fighters; Beta transferred 100 credits back through its own member menu. Credits conserved. Beta's fighter transfer with no carried fighters was refused without balance change. After fixing the stale CEO menu gate, Beta left through the Python Corporation menu; PostgreSQL confirmed no membership row remained. Officer removal and mine/shield transfer permissions remain unverified. |
-| Fighter and Armid mine deployment/recall | VERIFIED for exercised ordinary-player cycles | Python deployed/recalled five fighters and Armid mines. Database inventory plus deployed quantity conserved. The mine journey bought a Merchant Cruiser and five mines through Python; a 46-mine purchase beyond the remaining ship capacity was refused with credits and inventory unchanged. The old client sent fighter `offense` for mines and schema rejected `mine_type`; catalogue, schema and client workflow were repaired, then repeated successfully. Beta deployed one Armid through its Python client; Alpha entering sector 216 was destroyed by the hazard and moved to an Escape Pod in sector 1. PostgreSQL confirmed the deployed mine was consumed, Beta retained four mines and Alpha's active ship changed to the pod. Limpet trigger effects and mine rollback remain unverified. |
-| PvP ship attack | PARTIAL | Two ordinary Python clients attacked in the same sector. Three accepted attacks each applied ten hull damage to Beta; persisted `combat.hit` events contain attacker, defender, weapon, damage, post-hit hull and sector. The protocol event renderer exists, but display of this pushed event in the defender's interactive screen was not confirmed. Turns, retreat, attacker selection, defense rules and combat destruction/recovery remain unverified. |
-| Planet production | IMPLEMENTED_UNVERIFIED (migration 182; noncanonical V3 rates) | `planet_production.workers_per_unit` stores versioned class rates; per-planet ORE/ORG/EQU labor remainders persist transactionally; migration 182 initializes built-in class rows for existing and newly created planets. The approved slave-output and citadel-gated fighter contracts are preserved. Defaults are configurable and explicitly noncanonical in `V3_GAMEPLAY_DECISIONS.md`. | Disposable PostgreSQL + ordinary Python client acceptance landed, allocated workers, and harvested; a production scheduler tick generated ORE. Migration test covered replay, override preservation, built-in class rates, and existing-planet remainder initialization. See sprint report for exact runtime limits. | `99184019` | Verify all classes/commodities, slave-output and stoppage behavior, remainder restart persistence, and rollback before VERIFIED |
-
-The disposable fixtures seeded test cargo, spare hulls, planet stocks and
-citadel colonists; no SysOp command was used in any player journey. Database
-time was advanced only to exercise scheduled citadel completion. The run did
-not establish full beta playability; see
-[`V3_FIVE_HOUR_GAMEPLAY_SPRINT.md`](testing/V3_FIVE_HOUR_GAMEPLAY_SPRINT.md)
-for exact test counts, blockers and the complete evidence inventory.
-
-## Integration closure update — 14 November 2026
-
-The seven `tests.v2` failures were resolved without weakening behavioral
-assertions: five stale checks (three SHIP-02 catalog expectations, an expiry
-expression that rejected a valid trailing comma, and an obsolete ship-transfer
-source phrase), one missing MySQL base-schema counterpart set, and one Ferengi
-fixture that relied on host/default credentials. The explicit-credential
-Ferengi integration fixture skipped without QA credentials. Full result:
-249 passed, 7 skipped, 227 subtests, 0 failed. Python client regressions
-remain green at 802/802. New live evidence covers Python photon firing and
-retry, toll payment/passage between ordinary players, planet ORE harvest, and
-StarPort construction retry after server restart plus all three deliveries.
-See [`V3_INTEGRATION_CLOSURE_20261114.md`](testing/V3_INTEGRATION_CLOSURE_20261114.md)
-and [`V3_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_STARPORT_ACCEPTANCE_20261114.md).
-
-Godot remains unverified: Godot 4.5.2 import, asset catalogue, auth transport,
-and authoritative refresh checks passed, but `command_menu_test.gd` failed and
-no live Godot gameplay journey ran. StarPort concurrency/rollback, toll
-refusal, photon expiry, and complete planet class/slave production coverage
-also remain outstanding. Do not promote those mechanics or public beta
-readiness based on this partial integration run.
-
-### Scheduler and repeatability evidence — 2026-11-14
-
-The market-decay real-engine regression exposed two defects in
-`repo_market_decay.c`: `db_exec` returns `true` on success, but both repository
-functions treated that return as an error, so the port update ran and the
-cycle returned before updating cluster pressure. The denominator maximum was
-also incorrectly set to `1`, causing the valid default `100` to trigger a
-fallback warning. Commit `5fb3877e` corrects both conditions and raises
-scheduler waits in the test to accommodate the 60-second engine tick. With one
-server scheduler attached to the isolated database, `suite_phase10_market_decay.json`
-passed all 12 acceptance checks with zero failures, including ORE pressure/volume decay, positive and negative
-pressure bounds, dynamic-pricing disablement, and a second port-decay cycle.
-
-The same commit makes four previously flaky PostgreSQL acceptance fixtures
-repeatable: planetary PTA registers supported commodity rows, corporation
-players are co-located and the previous named fixture is removed, the combat
-hazard fixture restores a cargo-capable hull, and ship-sale fixtures account
-for installed shields and docking. The reruns passed: PTA 32/32, corporation
-asset transfers 33/33, sector combat hazards 47/47, and ship sale 18/18.
-FedSpace MSL cleanup now clears only its intended asset fixtures, checks
-sector-specific persisted asset rows, preserves player-authored sector text,
-and opens a fresh daily sweep claim per occurrence; its real-scheduler run
-passed 44/44. These are protocol/database acceptance suites, not Python-client
-journeys. The unrelated working-tree file `tests.v2/regression_report.json.tmp`
-was intentionally left untouched.
-
-### Python suite failure triage — 2026-11-14
-
-The full Python client suite was rerun at HEAD `bb31270f`: baseline was
-609/799 passed and 190 failed. After correcting positive fake replies to
-include published V3 response types, replacing the stale harvest-unavailable
-test with workflow execution, and fixing confirmed client/test issues, the
-latest full run was 716/799 passed and 83 failed. No gameplay tracker row is
-promoted to `VERIFIED` from these client unit tests. The remaining failures
-cluster in planet/landing (54), trading (13), ship roster (6), navigation (4),
-combat/hazards (4), and other client contracts (3). Detailed classification,
-commands and the JUnit artifact path are in
-[`V3_PYTHON_FAILURE_TRIAGE_20261114.md`](testing/V3_PYTHON_FAILURE_TRIAGE_20261114.md).
-The 84 residuals remain open pending protocol-backed adjudication; the suite
-and Python gameplay are not certified by this run.
-
-### Python player-facing contract repair — 2026-11-14
-
-The next bounded repair pass began from `05de7ede`. It reproduced the
-planet/landing group, reconciled successful landing fixtures to the published
-typed player, ship, sector and planet responses, and added reconnect coverage.
-One actual landing defect was fixed: `player.my_info` now reports persisted
-`last_planet_id`, allowing the Python client to restore a landed surface only
-after matching player, active ship (`onplanet == 1`), planet ID and sector
-snapshots agree. A live Docker/PostgreSQL Python-client journey registered
-`PlanetJourney1794651252`, landed on Terra, read the surface overview, logged
-out, reconnected into the restored surface, and launched. Read-only SQL showed
-`lastplanet=1` and `onplanet=true` after landing; after launch it showed
-`lastplanet=NULL`, `onplanet=false`, sector 1, ship 40 and 119 turns. Client
-transcripts and command output are retained under
-`/tmp/twclone-planet-landing-triage-20261114/`. This proves the landing,
-surface-read, reconnect and departure workflow only; it is not full planet
-parity or beta certification.
-
-The same pass aligned stale test fixtures and diagnostics for the V3 port,
-trade receipt, movement, hazard, combat and ship-roster contracts. Confirmed
-client corrections include specific trade receipt identity diagnostics,
-active-ship confirmation before displaying an empty owned-ship roster, avoiding
-a redundant roster mutation-path retry after malformed data, and persisted
-landing restoration. Malformed and mismatched response checks remain
-fail-closed. The full suite now reports **802 passed, 0 failed** (the original
-799-test suite plus three focused reconnect tests), up from the immediately
-preceding 716/799 pass result. These are client tests; they do not verify
-server combat, production, ship transactions or the complete player journey.
-
-See [`V3_PYTHON_PLAYABILITY_REPAIR_20261114.md`](testing/V3_PYTHON_PLAYABILITY_REPAIR_20261114.md)
-for root-cause classification, exact commands and remaining runtime limits.
-Gameplay parity rows remain `IMPLEMENTED_UNVERIFIED` unless the precise server
-operation has separate database-backed acceptance evidence.
-
-### Godot gameplay verification — 2026-11-15
-
-The previous 45-script failure checkpoint is superseded by the current
-Godot 4.5.1 run: **103 scripts passed, 0 failed, 1 live-server script skipped
-without its opt-in environment, 104 total**. The command menu passed 206
-checks. The complete Python client suite passed 807/807; `tests.v2` passed
-259, skipped 7, and passed 227 subtests.
-
-The live disposable PostgreSQL journey exercised authenticated player UI
-navigation, turn consumption, scanning, docking, commodity purchase and sale,
-planet landing, harvesting, launch, feedback preview/submit/status, logout and
-reconnect. Database assertions after the run showed the ship held ORE 5 and
-ORG 2, while the planet's corresponding entity stock was depleted from ORE 3
-and ORG 2; the ship was back in sector 2 with `onplanet=false` and the player
-recorded no current planet. The exchange was driven through Godot menu actions.
-GitHub publication remained queue-only; no public issue was created.
-
-The landing failure was a V3 schema mismatch in Godot: `ship.status.onplanet`
-is a 0/1 flag, while `player.info.last_planet_id` carries the planet identity.
-Godot now requires both fields and active-ship identity before opening the
-surface or treating a refresh as proof of departure. The protocol text and
-fixtures now use the published schema. The headless live journey still prints
-renderer/ObjectDB resource-leak warnings on exit; gameplay assertions pass,
-but clean teardown remains unverified. Godot 4.5.2 compatibility is also not
-verified; the available runtime was 4.5.1.
-
-### Godot and StarPort integration checkpoint — 2026-11-14
-
-The Godot 4.5.2 command-menu regression passed 196 focused checks. A real
-Godot UI journey against disposable PostgreSQL registered player 108, refreshed
-starting state, warped from sector 1 to 2 with one turn consumed, and scanned
-the current sector. The runnable harness is
-`client/godot_client/godot/tests/live_disposable_journey_test.gd`; exact scope
-and transcript summary are in
-[`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
-This does not verify Godot trade, planets, ships, corporations, or reconnect.
-
-StarPort concurrent upgrade, concurrent upgrade/attack, idempotent attack
-retry, upgrade transaction rollback, destruction/stock rollback, and database
-restart persistence were exercised against the disposable PostgreSQL server.
-The injected destruction rollback kept the port active, stocks and turn count
-unchanged; its later retry retained the historical inactive port and zeroed
-stock without salvage. The restart preserved DB state, but the disposable game
-container entrypoint failed before serving protocol requests after restart.
-Thus database persistence is verified while game-server restart recovery is
-blocked. A scheduler shield tick overlapped one rollback observation, so no
-claim is made about exact shield conservation in that interval.
-
-The complete Godot suite remains red at `planet_command_response_test.gd` due
-fixtures that fail to settle prior authoritative refreshes and use mismatched
-planet identity. Python's full suite remains 802/802. Feedback reporting and
-GitHub integration were not implemented in this checkpoint; they are not
-represented as gameplay-complete. See the acceptance addendum for the exact
-scope and remaining verification limits.
-
-### Player feedback follow-up — 2026-11-14
-
-| ID | Description | Status | Implementation location | Test location / executed result | Commit | Remaining action |
-|---|---|---|---|---|---|---|
-| FEEDBACK-V3-01 | Player bug reports, suggestions and diagnostics | PARTIAL | `src/server_feedback.c`, migration `188_v3_player_feedback_outbox.sql`, `tools/feedback_github_publisher.py`, Python report/status workflows, Godot feedback form and `ProtocolTransport` diagnostic buffer | `docs/testing/V3_PLAYER_FEEDBACK_ACCEPTANCE_20261114.md`: ordinary Python preview/confirm/submit/status/diagnostics and ownership live on disposable PostgreSQL; exact preview bytes match the outbox; two-session duplicate, injected rollback, and planted metadata/diagnostic redaction verified; GitHub mocks cover create, reconciliation, failure, `Retry-After`, and label permission fallback; Python feedback UI passed against disposable PostgreSQL, and the Godot live UI completed preview, confirmed submission and ownership-scoped status retrieval in queue-only mode. The Godot report persisted as `pending`; no public issue was created. Current broader runs: 807 Python client tests and 259 `tests.v2` tests passed. | pending | Verify Godot 4.5.2 separately, exercise Godot planted-secret redaction through the live preview, test server submission rate boundaries/global contention, and validate GitHub App publication with authorised credentials before claiming live publication. |
-
-The Docker startup fix now uses a writable per-start runtime directory. A
-serving-container restart and post-restart authenticated status request passed
-against the disposable database; see the StarPort acceptance addendum. This
-does not substitute for replaying StarPort construction and scheduled delivery
-after restart.
-
-### Acceptance closeout — 2026-11-15
-
-This evidence supersedes the earlier Godot and StarPort blockers above.
-
-| Workstream | Status | Evidence |
-|---|---|---|
-| Godot regression/runtime | **PASS (Godot 4.5.2)** | `suite_client_regressions.py`: 104 passed, 0 failed, 1 skipped; Python client 807 passed. `command_menu_test.gd`: 206 checks. `planet_command_response_test.gd`: 115 checks. |
-| Godot player journey | **PASS against disposable PostgreSQL** | Actual `Main.tscn`, login/menu handlers and network transport completed navigation, turn use, scan, docking, commodity buy/sell, hardware, shipyard upgrade, planet landing/harvest/launch, corporation deposit, logout/reconnect, and local feedback submission. No error or resource-leak output. |
-| StarPort concurrency/restart | **PASS for exercised upgrade and attack cases** | Players 5764 and 5739 synchronized two upgrades on port 9; levels 1 and 2 committed once and same-key concurrent retries made no extra deductions. A second synchronized upgrade/attack pair serialized successfully: capacity 2→3, durability 10,000→9,350, credits/materials and 100-point retaliation matched both receipts. Post-restart `port.status` passed and SQL state remained unchanged. Exact transcripts and query results are recorded in `V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`. Earlier fault-injection rollback evidence remains in that report. |
-| Disposable fixture hygiene | **REPAIRED** | Test rig now clears the no-FK Exchange transaction ledger when reusing planet IDs and restarts the server after DB reset for full acceptance. Planet market fixture now cancels unrelated open orders at its selected port. The affected market lifecycle suite passed 29/29. |
-| GitHub live publication | **UNVERIFIED** | No project GitHub App publisher credentials were configured. Queue-only local reports and mock publication tests remain verified; no public issue was created. |
-| StarPort construction request replay after server restart | **PASS** | On current HEAD, an ordinary Python player started construction, the committed reply was dropped before the workflow received it, the V3 server container restarted, and the same surface workflow request key returned construction ID 2 with `idempotent_retry=true`. PostgreSQL retained one construction row and one deduction only: credits 500,000→400,000; ORE/ORG/EQU 2,000→1,000 each. See `docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md`, “Current-HEAD construction replay”. Scheduled-delivery restart replay remains untested. |
-
-The final complete server protocol regression executed **155 suites, 2,341
-cases passed, 0 failed, 4 skipped**; the one skipped suite declared those four
-cases. The Python client run passed 807 tests, and `pytest -q tests.v2` passed
-262 tests with 7 skips and 227 subtests. Godot 4.5.2 passed 104 client scripts,
-206 menu checks, and 115 planet-response checks; one live journey script is
-excluded from the suite and was executed separately against the disposable
-server. Exact StarPort restart and Godot journey evidence is in
-[`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
-Do not infer beta readiness from these subsystem passes: live GitHub publishing,
-scheduled-delivery replay after restart, other StarPort concurrency/rollback
-cases, live GitHub publication, and external deployment are still unverified.
-
-### Release-candidate audit — 2026-11-15
-
-StarPort scheduled-delivery replay and selected transaction rollback boundaries
-were exercised against a fresh PostgreSQL 16 database and a V3 image built from
-the current `d453d116` source tree. A construction received each of three
-deliveries across serving-process restarts; progress and material debits
-persisted exactly once, and the completed port/stock remained unchanged after
-another restart and authenticated Python requests. An injected fault during
-the second delivery preserved progress and all material balances; after
-removing the fault, restart/retry committed the delivery once. A separate
-ordinary Python construction attempt with an injected persistence failure left
-credits, materials and construction rows unchanged. See
-`docs/testing/V3_STARPORT_ACCEPTANCE_20261114.md`, “Scheduled-delivery restart
-and rollback”. StarPort remains `IMPLEMENTED_UNVERIFIED` because injection
-coverage is not exhaustive and transaction IDs were not captured.
-
-`docs/testing/V3_RELEASE_CANDIDATE_AUDIT_20261115.md` reviews deployment
-configuration, authentication, permissions, migrations, feedback security,
-recovery and rollback. It records external deployment as **BLOCKED** by
-unresolved credential rotation, target ownership/firewall review and designated
-QA authentication. The deleted `tests.v2/regression_report.json.tmp` remains
-untouched and unstaged; no recovery copy was used to overwrite the prior user
-file.
+Use `VERIFIED` only for the operation and conditions recorded in an executed
+acceptance report. Keep implementation, test-fixture, focused runtime and
+deployment claims separate. The report date and commit identify the source
+baseline; newer source changes require relevant tests to be rerun.

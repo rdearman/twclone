@@ -1,143 +1,69 @@
-# V3 StarPort acceptance — 14 November 2026
+# StarPort acceptance
 
-Status: **implementation and live acceptance evidence recorded; not marked VERIFIED**.
+Latest recorded evidence: 15 November 2026. All live cases used ordinary
+player workflows against isolated disposable PostgreSQL and a serving V3
+server. Direct SQL was limited to deterministic fixture setup, fault injection
+and read-only assertions. Numeric rates and costs are versioned V3 settings;
+where the decision register labels them noncanonical, no TWGS 3.13 parity is
+claimed.
 
-## Environment and rules
+## Construction and scheduled delivery
 
-- Server was built from the V3 working tree and run locally against disposable Docker PostgreSQL container `twclone-qa-prod182-20261114`, database `twclone_rates_game` on loopback port `55489`.
-- The existing beta and host PostgreSQL were not used or changed.
-- Players 107 and 108 were ordinary registered accounts. Initial resource/sector state was adjusted directly in this disposable database only to make the journey deterministic. Construction and upgrades were initiated through the Python client workflow code; the successful port attack journey also dispatched `combat_attack_port_flow` from the Python client against the running server.
-- Scheduler task due times were advanced in the disposable database to execute all three scheduled construction deliveries promptly. Delivery amounts and gameplay settlement were server-handled.
-- Numeric construction, delivery, upgrade, durability, defence and attack-turn defaults are configurable V3 values, explicitly labelled noncanonical in `docs/V3_GAMEPLAY_DECISIONS.md`. No TWGS 3.13 parity is claimed for those values.
+The Python player's surface workflow began construction after a lost successful
+reply. The V3 server was restarted, the player reauthenticated, and the same
+request key was retried. The retry returned construction ID **2** with
+`idempotent_retry=true`; PostgreSQL retained one construction row. Credits
+changed once, **500,000→400,000**, and planetary ORE/ORG/EQU each changed once,
+**2,000→1,000**.
 
-## Evidence
+Three scheduled deliveries were then run across serving-process restarts on a
+fresh PostgreSQL 16 database. Construction began with 10,000,000 credits and
+2,000 of each required material. Initial settlement left 9,900,000 credits
+and 1,000 each ORE/ORG/EQU. Each scheduled delivery consumed 100 of each
+material. After delivery three, construction was `completed`, port 190 was
+active in sector 151, and the planet retained 700 of each. A later restart
+and authenticated `player.my_info`/`ship.status` requests did not replay the
+completed delivery or change balances.
 
-| Journey | Result | Observed evidence |
-|---|---|---|
-| Fund a port from a planet | PASS | Python surface workflow debited 100,000 credits and 1,000 each ORE/ORG/EQU. Insufficient initial EQU refused construction; credits and all planet resources remained unchanged and no extra construction row appeared. |
-| Scheduled construction | PASS | Three scheduled deliveries completed; the selected class produced an active port and its expected fixed commodity buy/sell directions. Construction state and completed port ID persisted in PostgreSQL. |
-| Retry construction request | PASS with a caveat | Reusing the same player/request key was reconciled after correcting an advisory-lock SQL type mismatch. The construction row remained unique. The final replay response was not captured in a concise transcript, so exact response replay remains a verification follow-up. |
-| Upgrade port capacity | PASS | Python dock workflow upgraded ORE capacity level 1: player paid 10,000 credits, ship supplied 100 ORE, port petty cash increased by 10,000, and capacity increased by 1,000. The same idempotency key replay did not debit again. `port.info` reported `max_quantity=6000`. |
-| Upgrade rollback | PASS | A new level-2 request with no ORE was refused; credits, cargo, port cash and capacity level stayed unchanged. |
-| Protected-sector attack | PASS | Ordinary Python combat workflow in sector 1 received Captain Z refusal. The port and turns were unchanged; ship destruction/recovery occurred once. Retrying the same action key did not destroy another ship. |
-| Attack retaliation | PASS | In sector 20, the first ordinary Python attack reduced durability from 10,000 to 1,000, used one turn, and removed 1,000 fighters before hull damage. The follow-up attack reduced durability to zero, destroyed the port, and applied remaining retaliation to hull. |
-| Destruction and recovery | PASS | The second strike destroyed the attacking 100-hull ship; the player recovered in sector 1 in a replacement escape pod. No salvage was awarded. The port became inactive with durability zero and its commodity stock was set to zero. |
-| Concurrent destruction retry | PASS | Two concurrent requests carrying the same player/request key returned the same destruction receipt. Only one action/turn/retaliation settlement occurred. |
-| Restart persistence | PASS | After server restart, `sector.info` omitted the destroyed port and `port.info` refused access. PostgreSQL retained the inactive historical port row and zeroed stock. |
+| Scenario | Result |
+|---|---|
+| Delivery after restart | PASS; progress and material deduction persisted once |
+| Injected failure during delivery 2 | PASS rollback; progress remained 1 and all materials remained 900 |
+| Restart and retry after removing fault | PASS; progress advanced once to 2 and materials became 800 each |
+| Third delivery and completion | PASS; port 190 created once, materials became 700 each |
+| Restart after completion | PASS; receipt, stock and active port remained unchanged |
+| Construction persistence trigger failure | PASS rollback; credits/materials unchanged and no construction row persisted |
 
-## Regression results
+The five-second interval and advanced due timestamps were confined to the
+disposable database. No PostgreSQL transaction IDs were captured, and failures
+were not injected at every SQL statement boundary.
 
-- Focused tests: `python3 -m pytest -q tests.v2/test_starport_sector_and_pta_contract.py tests.v2/test_v3_planet_production_rates.py tests.v2/test_v3_photon_contract.py tests.v2/test_v3_toll_fighter_contract.py` — **14 passed**.
-- Python client syntax and menu JSON validation passed with `py_compile` and `json.tool`.
-- Full `python3 -m pytest -q tests.v2`: **243 passed, 7 failed, 6 skipped, 69 subtests passed** (18.7 seconds). Failures: one Ferengi fixture attempted localhost:5432 with stale credentials; three SHIP-02 catalog expectations disagree with the current catalog artifact; MySQL/PostgreSQL base-schema table parity reports six PG-only tables added by recent V3 work; an open-order expiry static test expects a comma-free PostgreSQL column line although the nullable `timestamptz` declaration has a trailing comma; and a ship-transfer source test expects an older source-text phrase. No assertion was weakened. The Ferengi test failed authentication before SQL mutation. These are not counted as StarPort acceptance failures.
-- Migration 187's partial unique index was applied twice to disposable PostgreSQL: the first application created it and replay succeeded with `IF NOT EXISTS`.
+## Capacity upgrades and port combat
 
-## Implementation notes and remaining verification
+See [`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](V3_GODOT_STARPORT_ACCEPTANCE_20261114.md)
+for synchronized concurrent upgrade/attack requests, same-key retry,
+transaction rollback, destruction and post-restart `port.status` evidence.
+The following Python player scenarios are also recorded from the focused
+acceptance run:
 
-- Construction and capacity upgrade are now ordinary-player workflows. Port class is fixed at completion; only one active port may occupy a sector. Upgrade cost/material/capacity progression comes from versioned rules. Migration 187 adds database uniqueness for active `ports.sector_id`, closing the concurrent active-port race.
-- Port combat uses separately persisted durability and defence; attack, turn debit, shield/fighter/hull retaliation, destruction, stock clearing, event and retry receipt are transactional. FedSpace Captain Z enforcement is applied before port damage.
-- The first attempt to force a rebuild invoked concurrent Autotools regeneration and failed in configure; the generated build-file changes were reverted. The regular build path was restored and the rebuilt server was then used for the live combat test. A disposable fixture initially attempted hull above the schema's 100-point bound and was rejected before gameplay; it was corrected to the valid 100-point maximum.
-- This evidence does not establish all possible concurrent upgrade/attack orderings, injected database rollback at every statement boundary, every port class mapping, or restart replay of construction receipts. Those remain follow-ups; therefore the tracker remains `IMPLEMENTED_UNVERIFIED`.
+- Upgrade charged 10,000 credits and 100 ORE once, increased capacity by one
+  level/1,000 units, and increased port petty cash by 10,000. Same-key replay
+  made no second debit.
+- Insufficient upgrade material was refused without changing credits, cargo,
+  port cash or capacity.
+- Captain Z refused the protected-sector port attack without changing the
+  port or turns; the player's destruction/recovery occurred once, and replay
+  did not destroy another ship.
+- In an unprotected sector, attack reduced durability from 10,000 to 1,000,
+  then a second strike destroyed the port. Retaliation consumed fighters,
+  then hull; destruction left an inactive historical record, zero stock and
+  no salvage. The attacker recovered in an escape pod.
+- Concurrent same-key attack retries returned one receipt and applied one
+  turn, retaliation and durability settlement.
 
-## Integration closure follow-up — 14 November 2026
+## Limits
 
-Using a separate disposable PostgreSQL database and the ordinary Python player
-workflow, the construction receipt gap above was closed. Player 106 initiated
-class 1 construction from the landed surface. The test client deliberately
-dropped the successful reply, the disposable game server was restarted, and
-the player retried with the same pending request key through the surface menu.
-The client printed construction ID 1 and PostgreSQL returned the same
-`construction_id=1`, `idempotent_retry=true`, with exactly one request row.
-The three scheduled deliveries then completed; PostgreSQL recorded
-`status=completed`, `deliveries_completed=3`, and `port_id=192`. Port 192 was
-active in sector 7 with `porttype_id=1`, durability 10,000, and defence 1,000.
-Delivery timestamps and the scheduler due time were advanced only in the
-disposable QA database to avoid waiting a day between deliveries.
-
-Concurrent upgrade retries, concurrent attack refusals, and rollback under
-injected database failure remain unverified. This follow-up therefore closes
-restart replay and delivery completion only; it does not promote StarPort to
-fully verified.
-
-## Current-HEAD construction replay — 15 November 2026
-
-The construction lost-reply/restart/retry case was repeated against a fresh
-PostgreSQL 16 container and a V3 server image built from current HEAD
-`eda8bf00f8a410dd5271fd7dea761c86e6b483fa` (image
-`sha256:1c898a2256f6e41073cd7bffa75ba9dcff771e900b97a81838e5e3ae44767`).
-Both services used a uniquely named Docker network; the game and PostgreSQL
-ports were bound to loopback only. Neither beta containers nor host PostgreSQL
-were used.
-
-An ordinary account registered through the Python client was landed on its
-fixture planet through `land_flow`. The test then used
-`planet_port_construct_flow` to start class 1 construction. The disposable
-client transport received the committed success frame and deliberately dropped
-it before returning it to the workflow, exercising the client's uncertain
-outcome path. The client retained the same pending request key. The game
-container was restarted; the player logged in again, and the Python client's
-authoritative login restoration confirmed the same player, ship, sector and
-landed planet before the same surface menu workflow retried the request.
-
-The retry returned `planet.port_construction_v1`, construction ID **2**, and
-`idempotent_retry=true`. PostgreSQL before and after retry showed the same
-construction ID, status `building`, and exactly one row for the player and
-planet. Credits remained at **400,000** from the initial **500,000**; planetary
-ORE, ORG and EQU each remained at **1,000** from the initial **2,000**. These
-balances show one 100,000-credit and 1,000-each-material deduction, with no
-second debit on replay. The PostgreSQL construction schema does not persist a
-transaction ID; no snapshot query ID is reported as the construction
-transaction ID.
-
-Sanitised client transcript and database snapshot summary were retained at
-`/tmp/twclone-starport-replay-acceptance-20261115.txt`.
-
-**Result: PASS** for construction lost-reply replay after a serving V3 process
-restart on current HEAD. This closes that specific replay case only. It does
-not promote all StarPort behavior to `VERIFIED`; concurrent and injected
-rollback cases remain separate acceptance requirements. GitHub App publisher
-configuration was absent, so this run created no public issue.
-
-## Scheduled-delivery restart and rollback — 15 November 2026
-
-The scheduler replay and two rollback boundaries were exercised on a fresh
-PostgreSQL 16 database and server image built from the `d453d116` source tree.
-The unique Docker network and server listener were isolated; the game port was
-bound to loopback `127.0.0.1:12783`, and PostgreSQL had no host publication.
-An ordinary player registered through the Python client. SQL only initialized
-the deterministic planet/player fixture, accelerated due timestamps in this
-disposable database, and installed/removes fault-injection triggers.
-Construction and landing used `sector_info_flow`, `land_flow`, and
-`planet_port_construct_flow`.
-
-Construction 1 in sector 151 completed all three scheduled deliveries. The
-server was restarted before each due delivery. Progress and planet inventory
-were observed at each checkpoint: construction settled 1,000 ORE/ORG/EQU up
-front, then each scheduled delivery debited exactly 100 of each; after three
-deliveries the construction was `completed`, port 190 was active, and the
-planet retained 700 of each commodity. A second restart plus ordinary Python
-login, `player.my_info`, and `ship.status` left the completed receipt, stock,
-and single active port unchanged.
-
-Before delivery 2, a PostgreSQL trigger raised on the EQU stock debit after
-the ORE and ORG statements. The scheduled transaction left progress at 1 and
-all three commodity balances at 900. After removing the trigger and restarting
-the server, the due delivery committed once, advancing progress to 2 and
-reducing each stock to 800. This demonstrates transaction rollback and retry
-of a delivery after server restart. The five-second interval was test-only;
-production delivery policy was not changed.
-
-A separate ordinary Python construction request ran with a PostgreSQL trigger
-that failed on persistence of the construction row after the server's
-transaction had begun settlement. The client received a generic error, credit
-balance remained 9,900,000, second-planet ORE/ORG/EQU stayed at 2,000 each,
-and no construction row was persisted. This confirms atomic rollback at that
-construction boundary.
-
-No PostgreSQL transaction IDs were captured. No failure was injected at every
-individual statement. Previously reported concurrent upgrade/attack and
-upgrade/destruction rollback cases remain documented in
-[`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
-This addendum closes the named scheduled-delivery replay and construction
-rollback checks, but does not claim exhaustive failure-boundary coverage or
-promote the complete StarPort feature to `VERIFIED`.
+The tested operations passed, but this evidence is not exhaustive across every
+port class, possible concurrency ordering, database statement failure or
+combat edge case. External beta remains blocked by the operational items in
+[`V3_RELEASE_CANDIDATE_AUDIT_20261115.md`](V3_RELEASE_CANDIDATE_AUDIT_20261115.md).

@@ -4,11 +4,10 @@ A socket-based, menu-driven, keyboard-led terminal client for the TWClone
 server. Used as the reference implementation for validating the real
 client/server protocol.
 
-For architecture, completed work, server-contract details, known
-limitations, and the continuation backlog, see the authoritative
-[development handover](../../docs/python-client-development-handover.md).
-For the current audit of player-facing news, notices, ship services, and
-server-dependent gameplay backlog, see the [v2 client gameplay audit](../../docs/V2_CLIENT_GAMEPLAY_BACKLOG.md).
+For current client architecture and implementation rules, see the concise
+[developer guide](../../docs/python-client-development-handover.md). The
+published request and response contracts live in
+[`docs/PROTOCOL.v3`](../../docs/PROTOCOL.v3/00_index.md).
 
 ## Setup
 
