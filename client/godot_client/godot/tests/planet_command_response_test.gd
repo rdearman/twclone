@@ -45,6 +45,9 @@ func _run() -> void:
 		"status": "ok", "type": "auth.session",
 		"data": {"session": "test-session", "player_id": 3},
 	})
+	# Planet reads are accepted only when the response also agrees with the
+	# player's freshly confirmed current sector.
+	app.client_state.sector = {"id": 20}
 	var fake_transport := FakeTransport.new()
 	app.transport = fake_transport
 	app.refresh_coordinator = FakeRefresh.new()
@@ -442,6 +445,24 @@ func _run() -> void:
 	_check(app._landed_planet_id == 0, "malformed explicit planet ID fell through to a nested alias")
 	_check(not app._landing_surface_ready and not app.gameplay_view.planet_workflow.visible, "malformed explicit planet ID left stale surface actions visible")
 	_check(app.refresh_coordinator.calls.size() == 1, "malformed explicit planet ID did not refresh authoritative state")
+	app.refresh_coordinator.calls.clear()
+	app._command_refresh_pending = false
+
+	app._landed_planet_id = 77
+	app._landing_surface_ready = true
+	app.gameplay_view.enter_planet_workflow(77)
+	await _settle_fake_planet_reads(app, fake_transport)
+	app.refresh_coordinator.calls.clear()
+	app._pending_game_commands["planet-info-sector-mismatch"] = {
+		"kind": "planet_info", "command": "planet.info", "label": "Planet information",
+	}
+	app._on_transport_reply("planet-info-sector-mismatch", {
+		"status": "ok", "type": "planet.info", "data": {"planet_id": 77, "sector_id": 21},
+	}, "planet.info")
+	_check(app._landed_planet_id == 0 and not app.gameplay_view.planet_workflow.visible,
+		"planet.info from a different sector exposed surface actions")
+	_check(app.refresh_coordinator.calls.size() == 1,
+		"planet.info sector mismatch did not reconcile authoritative location")
 	app.refresh_coordinator.calls.clear()
 	app._command_refresh_pending = false
 

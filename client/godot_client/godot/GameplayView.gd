@@ -1069,6 +1069,7 @@ func _add_object_actions(kind: String, object: Dictionary) -> void:
 			var port_data: Dictionary = object.get("data", {})
 			if _authoritative_object_id(port_data, ["port_id", "id"]) > 0:
 				_add_context_button("DOCK · OPEN PORT", true, _dispatch_context_action.bind({"label": "Dock · open port screen", "command": "port.info", "context_id": "port_id", "fixed": {}} , object))
+				_add_context_button("ATTACK THIS STARPORT", true, _dispatch_context_action.bind({"label": "Attack StarPort", "command": "combat.attack.port", "context_id": "port_id", "mutating": true}, object))
 			else:
 				_add_context_unavailable("DOCK · PORT ID UNAVAILABLE", "The sector response did not include a valid port ID, so the client cannot safely request port.info.")
 		"planet":

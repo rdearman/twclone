@@ -164,6 +164,28 @@ func _run() -> void:
 		"disconnected": false,
 		"hud": {"sector_id": 18, "ship_id": 75},
 		"freshness": {"sector": "fresh", "overall": "fresh"},
+		"sector": {"id": 18, "adjacent_sector_ids": [], "ports": [{"id": 93, "name": "Test Port"}], "planets": [], "ships": []},
+	})
+	for child in view.context_action_list.get_children():
+		child.free()
+	view.context_action_buttons.clear()
+	view._add_object_actions("port", {"kind": "port", "name": "Test Port", "data": {"port_id": 93}})
+	var port_attack_button := _context_button(view, "ATTACK THIS STARPORT")
+	_check(port_attack_button != null and not port_attack_button.disabled, "selected confirmed StarPort did not expose its attack workflow")
+	if port_attack_button != null:
+		var before_port_attack: int = command_calls.size()
+		port_attack_button.pressed.emit()
+		_check(commands._form_dialog.visible, "StarPort attack skipped its mutation confirmation")
+		commands._form_dialog.get_ok_button().pressed.emit()
+		_check(command_calls.size() == before_port_attack + 1 and command_calls.back().get("command") == "combat.attack.port", "StarPort attack action did not dispatch its canonical server command")
+		_check(command_calls.back().get("data", {}).get("port_id") == 93 and command_calls.back().get("mutating", false), "StarPort attack lost its authoritative port ID or mutation classification")
+	if command_calls.size() > 1:
+		command_calls.pop_back()
+	view.set_snapshot({
+		"authenticated": true,
+		"disconnected": false,
+		"hud": {"sector_id": 18, "ship_id": 75},
+		"freshness": {"sector": "fresh", "overall": "fresh"},
 		"sector": {"id": 18, "adjacent_sector_ids": [], "ports": [], "planets": [], "ships": [{"ship_id": 75, "name": "My Active Ship"}]},
 	})
 	for child in view.context_action_list.get_children():
