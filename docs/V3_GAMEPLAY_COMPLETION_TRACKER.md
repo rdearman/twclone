@@ -81,8 +81,9 @@ by itself close any of the 67 decision-register requirements.
   defaults. This verifies migrated configuration values; it does not verify
   every scheduled production tick, persisted remainder, or class-rate override.
 - Focused result: four PostgreSQL suites **136 passed, 0 failed**; production
-  rate migration suite **1 passed, 21 assertions**; server restart population
-  suites **20 passed**; Python client plus two
+  rate migration suite **1 passed, 21 assertions**; the expanded colonist
+  transfer and rate retest **27 passed**, including quantity/hold boundaries;
+  server restart population suites **20 passed**; Python client plus two
   focused server contracts **866 passed**; Godot 4.5.1 toll workflow **13
   checks passed**; existing slave-delivery/harvest/fighter/emancipation suite
   **49 passed**; engine regression script passed. These are focused gates, not

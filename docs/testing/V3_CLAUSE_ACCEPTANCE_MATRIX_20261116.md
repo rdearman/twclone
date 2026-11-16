@@ -41,7 +41,13 @@ These are independently testable behavior slices. They do not promote a parent r
 | `PARITY-TOLL-01/corporation protection` | Same-corporation toll fighters do not stop or charge a member | `suite_movement_transwarp_toll_edges.json::case-0043`, `case-0044` | VERIFIED |
 | `PARITY-TOLL-01/refusal encounter` | Refusal follows hostile-arrival combat, does not pay, and applies damage once | `suite_movement_transwarp_toll_edges.json::case-0055`–`case-0057` | VERIFIED |
 | `POP-02/remote population` | Remote colonist transfer is refused without changing either population pool | `suite_planet_colonist_transfers.json::case-0010`, `case-0011` | VERIFIED |
-| `POP-01/transfer rollback` | Failed colonist-to-slave transfer rolls back ship cargo and planet population | `suite_planet_colonist_transfers.json::case-0018`, `case-0019` | VERIFIED |
+| `POP-01/transfer rollback` | Failed colonist-to-slave transfer rolls back ship cargo and planet population | `suite_planet_colonist_transfers.json::case-0025`, `case-0026` | VERIFIED |
+
+Additional population acceptance slices executed in the same work batch:
+
+| Clause slice | Acceptance condition | Executed evidence | Result |
+|---|---|---|---|
+| `POP-01/transfer bounds` | Zero quantity, insufficient source population, and no remaining hold space are refused without changing either pool | `suite_planet_colonist_transfers.json::case-0013`–`case-0018` | VERIFIED |
 | `POP-01/transfer restart` | A committed ship/planet population transfer survives a serving-game-process restart and further transfers conserve the same total | `suite_planet_colonist_restart_prepare.json::case-0011`–`case-0012`; after actual server restart, `suite_planet_colonist_restart_verify.json::case-0005`–`case-0007` | VERIFIED |
 
 ## Clause ledger
@@ -56,7 +62,7 @@ These are independently testable behavior slices. They do not promote a parent r
 | `POP-02` | clause 1 | Evil players may buy slaves or choose enslavement on successful conquest | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `POP-02` | clause 2 | Neutral may inherit but cannot buy/enslave | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `POP-02` | clause 3 | Good cannot retain slaves after qualifying capture | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-02` | clause 4 | Never create remote planetary population without safe transport | VERIFIED | Remote pickup refusal and unchanged DB state: `suite_planet_colonist_transfers.json::case-0010`–`case-0011`; landed population transfers and rollback: `case-0013`–`case-0019`; current landed slave delivery and cargo/population state: `suite_planet_fighter_transfers.json::case-0043`–`case-0044`. |
+| `POP-02` | clause 4 | Never create remote planetary population without safe transport | VERIFIED | Remote pickup refusal and unchanged DB state: `suite_planet_colonist_transfers.json::case-0010`–`case-0011`; landed pickup/drop-off and conservation: `case-0020`–`case-0023`; current landed slave delivery and cargo/population state: `suite_planet_fighter_transfers.json::case-0043`–`case-0044`. |
 | `POP-03` | ORE output | floor(normal_output * 50 / 100) for ORE | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `POP-03` | ORG output | floor(normal_output * 50 / 100) for ORG | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `POP-03` | EQU output | floor(normal_output * 50 / 100) for EQU | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
@@ -306,6 +312,7 @@ No defaults were added for these blockers.
 ## Executed focused gates
 
 - Disposable PostgreSQL / actual V3 server: four focused suites, **136 passed, 0 failed** (`suite_combat_advanced.json` 44; `suite_movement_transwarp_toll_edges.json` 57; `suite_movement_transwarp_tolls.json` 15; `suite_planet_colonist_transfers.json` 20). The run retained response capture under `/tmp/twclone-v3-toll-population-verified-transcript.json`.
+- The colonist transfer suite was extended with zero, insufficient-population and full-hold boundaries and rerun with the production-rate suite: **27 passed, 0 failed** (26 colonist cases plus 1 rate suite; 21 rate assertions).
 - Disposable PostgreSQL / actual V3 server: existing landed slave delivery, harvest, fighter transfer, emancipation and access-control regression `suite_planet_fighter_transfers.json` — **49 passed, 0 failed**.
 - Disposable PostgreSQL / actual V3 server restart between suites using `--restart-between-suites`: population preparation **12 passed**, serving process stopped/restarted, then authenticated readback and another transfer **8 passed**. Both reports and sanitized protocol captures are under `/tmp/twclone-v3-colonist-restart-*`.
 - Disposable PostgreSQL / actual V3 server: `suite_planet_production_rate_values.json` **1 passed, 0 failed; 21 assertions passed**, validating the approved versioned noncanonical class-rate rows after migration.
