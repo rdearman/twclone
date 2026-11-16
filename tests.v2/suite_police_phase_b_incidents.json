@@ -128,6 +128,15 @@
       ]
     },
     {
+      "name": "Rig: make the next same-port robbery a distinct attempt",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE player_last_rob SET last_attempt_at = CURRENT_TIMESTAMP - INTERVAL '901 seconds' WHERE player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test B.3: Check wanted_level still zero after suspicion=1",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -161,6 +170,15 @@
       ]
     },
     {
+      "name": "Rig: make the third same-port robbery a distinct attempt",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE player_last_rob SET last_attempt_at = CURRENT_TIMESTAMP - INTERVAL '901 seconds' WHERE player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test B.6: Third robbery triggers promotion (suspicion >= 3)",
       "command": "port.rob",
       "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-3" },
@@ -182,11 +200,53 @@
       ]
     },
     {
-      "name": "Test C.1: Surrender with active incident should clear state (Phase B)",
+      "name": "Reconnect: logout after wanted promotion",
+      "command": "auth.logout",
+      "user": "phase_b_player",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reconnect: authenticate the same ordinary player",
+      "command": "auth.login",
+      "data": { "username": "phase_b_player", "passwd": "testpass" },
+      "user": "phase_b_player",
+      "save": { "session": "data.session_token" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Reconnect: police status retains wanted progression",
+      "command": "police.status",
+      "data": {},
+      "user": "phase_b_player",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.suspicion", "op": "equals", "value": 0 },
+        { "path": "data.wanted_level", "op": "equals", "value": 1 }
+      ]
+    },
+    {
+      "name": "Reconnect: database retains the same incident row",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT suspicion, wanted_level FROM cluster_player_status WHERE cluster_id = @{random_cluster_id} AND player_id = @{phase_b_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "equals", "value": 0 },
+        { "path": "data.rows.0.1", "op": "equals", "value": 1 }
+      ]
+    },
+    {
+      "name": "Test C.1: Surrender with active incident clears state",
       "command": "police.surrender",
       "data": {},
       "user": "phase_b_player",
-      "expect": { "status": "error" }
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.suspicion_after", "op": "equals", "value": 0 },
+        { "path": "data.wanted_level_after", "op": "equals", "value": 0 }
+      ]
     },
     {
       "name": "Test C.2: Verify incident cleared after surrender",

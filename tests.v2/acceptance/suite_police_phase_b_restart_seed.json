@@ -1,0 +1,144 @@
+{
+  "name": "Police Phase B - Restart Persistence Seed",
+  "version": "1.0.0",
+  "protocol_category": "23_Combat_Police",
+  "description": "Ordinary-player port robberies build a wanted incident that remains active for a serving-process restart readback.",
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "username": "robbery_restart_player",
+      "password": "testpass"
+    },
+    {
+      "name": "Rig: select a lawful port sector outside FedSpace",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id=cs.cluster_id JOIN ports p ON p.sector_id=cs.sector_id WHERE c.role='RANDOM' AND c.law_severity>0 AND cs.sector_id>10 ORDER BY cs.sector_id LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "robbery_restart_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: move ordinary player's active ship to lawful sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH active_ship AS (SELECT ship_id FROM players WHERE player_id=@{robbery_restart_player_player_id}), moved_ship AS (UPDATE ships SET sector_id=@{robbery_restart_sector} WHERE ship_id=(SELECT ship_id FROM active_ship) RETURNING ship_id) UPDATE players SET sector_id=@{robbery_restart_sector} WHERE player_id=@{robbery_restart_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: fund the selected port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH funded AS (UPDATE ports SET petty_cash=500000 WHERE sector_id=@{robbery_restart_sector} RETURNING port_id) SELECT port_id FROM funded LIMIT 1;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "robbery_restart_port_id": "data.rows.0.0" }
+    },
+    {
+      "name": "Rig: make ordinary player eligible to rob the port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET experience=10000, alignment=-300 WHERE player_id=@{robbery_restart_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Robbery 1: ordinary player completes a lawful robbery",
+      "command": "port.rob",
+      "user": "robbery_restart_player",
+      "data": {
+        "sector_id": "@{robbery_restart_sector}",
+        "port_id": "@{robbery_restart_port_id}",
+        "mode": "credits",
+        "idempotency_key": "police-restart-rob-1"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rob_result", "op": "equals", "value": "success" }
+      ]
+    },
+    {
+      "name": "Rig: expire fake-bust window for a distinct second offence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE player_last_rob SET last_attempt_at=CURRENT_TIMESTAMP-INTERVAL '901 seconds' WHERE player_id=@{robbery_restart_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Robbery 2: a second distinct offence persists",
+      "command": "port.rob",
+      "user": "robbery_restart_player",
+      "data": {
+        "sector_id": "@{robbery_restart_sector}",
+        "port_id": "@{robbery_restart_port_id}",
+        "mode": "credits",
+        "idempotency_key": "police-restart-rob-2"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rob_result", "op": "equals", "value": "success" }
+      ]
+    },
+    {
+      "name": "Rig: expire fake-bust window before threshold offence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE player_last_rob SET last_attempt_at=CURRENT_TIMESTAMP-INTERVAL '901 seconds' WHERE player_id=@{robbery_restart_player_player_id};"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Robbery 3: threshold offence promotes to wanted level one",
+      "command": "port.rob",
+      "user": "robbery_restart_player",
+      "data": {
+        "sector_id": "@{robbery_restart_sector}",
+        "port_id": "@{robbery_restart_port_id}",
+        "mode": "credits",
+        "idempotency_key": "police-restart-rob-3"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rob_result", "op": "equals", "value": "success" }
+      ]
+    },
+    {
+      "name": "Verify: incident is wanted one before restart",
+      "command": "police.status",
+      "user": "robbery_restart_player",
+      "data": {},
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.suspicion", "op": "equals", "value": 0 },
+        { "path": "data.wanted_level", "op": "equals", "value": 1 }
+      ]
+    },
+    {
+      "name": "Verify: authoritative incident row is ready for restart check",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.suspicion,s.wanted_level FROM cluster_player_status s JOIN cluster_sectors cs ON cs.cluster_id=s.cluster_id JOIN players p ON p.player_id=s.player_id AND p.sector_id=cs.sector_id WHERE s.player_id=@{robbery_restart_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "equals", "value": 0 },
+        { "path": "data.rows.0.1", "op": "equals", "value": 1 }
+      ]
+    },
+    {
+      "name": "Disconnect: logout before serving-process restart",
+      "command": "auth.logout",
+      "user": "robbery_restart_player",
+      "expect": { "status": "ok" }
+    }
+  ]
+}

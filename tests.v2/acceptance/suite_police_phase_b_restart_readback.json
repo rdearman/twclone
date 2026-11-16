@@ -1,0 +1,37 @@
+{
+  "name": "Police Phase B - Restart Persistence Readback",
+  "version": "1.0.0",
+  "protocol_category": "23_Combat_Police",
+  "description": "After the serving V3 process restarts, an ordinary player can authenticate and read the persisted wanted state created by three successful lawful port robberies.",
+  "tests": [
+    {
+      "setup": "macro_auth_user",
+      "username": "robbery_restart_player",
+      "password": "testpass"
+    },
+    {
+      "name": "Restart: ordinary player sees wanted state after fresh login",
+      "command": "police.status",
+      "user": "robbery_restart_player",
+      "data": {},
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.suspicion", "op": "equals", "value": 0 },
+        { "path": "data.wanted_level", "op": "equals", "value": 1 }
+      ]
+    },
+    {
+      "name": "Restart: authoritative PostgreSQL row retains wanted state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.suspicion,s.wanted_level FROM cluster_player_status s JOIN cluster_sectors cs ON cs.cluster_id=s.cluster_id JOIN players p ON p.player_id=s.player_id AND p.sector_id=cs.sector_id WHERE s.player_id=@{robbery_restart_player_player_id};"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "equals", "value": 0 },
+        { "path": "data.rows.0.1", "op": "equals", "value": 1 }
+      ]
+    }
+  ]
+}

@@ -283,9 +283,14 @@ def run_all():
 
     candidate_suites = discover_json_suites(base_dir)
     if args.suite:
-        requested = {os.path.abspath(os.path.join(os.getcwd(), item)) for item in args.suite}
-        candidate_suites = [path for path in candidate_suites
-                            if os.path.abspath(path) in requested]
+        base_path = Path(base_dir).resolve()
+        requested = []
+        for item in args.suite:
+            path = Path(item).resolve()
+            if base_path not in path.parents or not path.is_file():
+                parser.error(f"--suite must name an existing JSON file under {base_path}")
+            requested.append(str(path))
+        candidate_suites = sorted(set(requested))
 
     suites_to_run = []
     for path in candidate_suites:
