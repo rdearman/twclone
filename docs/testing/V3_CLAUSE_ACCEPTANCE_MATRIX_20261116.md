@@ -42,7 +42,7 @@ These are independently testable behavior slices. They do not promote a parent r
 | `PARITY-TOLL-01/refusal encounter` | Refusal follows hostile-arrival combat, does not pay, and applies damage once | `suite_movement_transwarp_toll_edges.json::case-0055`–`case-0057` | VERIFIED |
 | `POP-02/remote population` | Remote colonist transfer is refused without changing either population pool | `suite_planet_colonist_transfers.json::case-0010`, `case-0011` | VERIFIED |
 | `POP-01/transfer rollback` | Failed colonist-to-slave transfer rolls back ship cargo and planet population | `suite_planet_colonist_transfers.json::case-0018`, `case-0019` | VERIFIED |
-| `POP-01/transfer restart` | A committed ship/planet population transfer survives a serving-game-process restart and further transfers conserve the same total | `suite_planet_colonist_restart_prepare.json::case-0008`–`case-0009`; after actual server restart, `suite_planet_colonist_restart_verify.json::case-0004`–`case-0006` | VERIFIED |
+| `POP-01/transfer restart` | A committed ship/planet population transfer survives a serving-game-process restart and further transfers conserve the same total | `suite_planet_colonist_restart_prepare.json::case-0011`–`case-0012`; after actual server restart, `suite_planet_colonist_restart_verify.json::case-0005`–`case-0007` | VERIFIED |
 
 ## Clause ledger
 
