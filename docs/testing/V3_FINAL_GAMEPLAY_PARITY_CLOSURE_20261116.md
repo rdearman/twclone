@@ -119,6 +119,8 @@ Other regression results:
 - Godot client suite via `/home/rick/bin/gdot` (Godot **4.5.1**): **104 passed,
   0 failed, 1 skipped**. The skipped script is the live-disposable-journey
   script; live journey evidence is separately documented below.
+- Combined Python/Godot client regression rerun after the Godot state-refresh
+  fix: Python **807 passed**; Godot **104 passed, 0 failed, 1 skipped**.
 - Godot catalog: 13 assets, 0 warnings.
 - `make -C bin -j2`: passed with the repository's ASan/UBSan build flags.
 - `git diff --check`: passed.
@@ -138,15 +140,20 @@ canonical rig reset.
 The source-level and prior runtime evidence supports ordinary-player access to
 common Python and Godot workflows, but not complete parity through both clients.
 
-The latest recorded Godot live UI journey against disposable PostgreSQL
-covered registration/login, resources and ship, navigation/scan, port buy/sell,
-hardware purchase, shipyard upgrade, planet landing/harvest/launch, corporation
-creation/deposit, logout/reconnect, and feedback queueing. The detailed report
-is [`V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](V3_GODOT_STARPORT_ACCEPTANCE_20261114.md).
-That journey did not cover player-vs-player combat, destruction/recovery,
-planetary capture/citadel progression, or the entire corporation transfer
-workflow through Godot. This turn reran the Godot regression suite, but did
-not rerun that UI journey.
+The 16 November Godot live UI journey against disposable PostgreSQL passed
+navigation/scan, docking, port buy/sell, equipment purchase, shipyard upgrade,
+planet landing/harvest/launch, corporation operation, logout and reconnect.
+It used the real Godot scene, menu handlers and network transport. The
+acceptance harness also verifies server-confirmed messages and authoritative
+state refreshes. A stale cargo snapshot in the visible port workflow was
+repaired and covered by a regression test. SQL readback showed player 576 at
+sector 1 with ship 9141 active and not docked/on a planet, ship cargo and
+equipment updated, planet 700's ORE quantity changed, and corporation 112
+membership persisted. Full evidence is in
+[`V3_GODOT_LIVE_JOURNEY_ACCEPTANCE_20261116.md`](V3_GODOT_LIVE_JOURNEY_ACCEPTANCE_20261116.md).
+The journey still does not cover player-vs-player combat, destruction/recovery,
+planetary capture/citadel progression, or corporation transfers through
+Godot.
 
 Python has 807 passing client tests and prior ordinary-player workflow evidence
 recorded in the completion tracker and focused StarPort/feedback reports. This

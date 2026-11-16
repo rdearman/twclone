@@ -18,7 +18,7 @@ The latest recorded gates are:
 | Server protocol regression | 2,361 passed, 0 failed, 4 skipped | 155 suites; disposable PostgreSQL; TLS cases skipped on plain TCP |
 | Python client | 807 passed | `python3 -m pytest -q client/python_client/tests` |
 | `tests.v2` | 266 passed, 7 skipped, 227 subtests | `python3 -m pytest -q tests.v2/test_*.py` |
-| Godot 4.5.1 | 104 passed, 0 failed, 1 skipped | `/home/rick/bin/gdot` client regression run |
+| Godot 4.5.1 | 104 passed, 0 failed, 1 skipped | `/home/rick/bin/gdot` client regression run, repeated after port-workflow snapshot fix |
 | Godot command menu | 206 checks passed | Menu regression |
 | Planet response | 115 checks passed | Response/identity regression |
 
@@ -34,10 +34,13 @@ and persistence after restarting the serving game process. See
 
 ## Player-facing acceptance
 
-The live Godot journey against disposable PostgreSQL exercised registration
-and authentication, navigation and scanning, port trading, hardware purchase,
-shipyard upgrade, planet landing/harvest/launch, corporation deposit,
-logout/reconnect and queue-only feedback submission. Python journeys exercised
+The 16 November live Godot journey against disposable PostgreSQL exercised
+authentication, navigation and scanning, port trading, hardware purchase,
+shipyard upgrade, planet landing/harvest/launch, a corporation operation, and
+logout/reconnect. SQL confirmed persisted player, ship, planet and corporation
+state. It fixed and regression-tested stale cargo in an open port workflow.
+See [`testing/V3_GODOT_LIVE_JOURNEY_ACCEPTANCE_20261116.md`](testing/V3_GODOT_LIVE_JOURNEY_ACCEPTANCE_20261116.md).
+Earlier Godot journeys exercised registration and feedback queueing. Python journeys exercised
 ordinary-player workflows, including StarPort construction replay after a
 server restart. Refer to
 [`testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md`](testing/V3_GODOT_STARPORT_ACCEPTANCE_20261114.md),
