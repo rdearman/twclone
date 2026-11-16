@@ -94,6 +94,14 @@ in-scope rows remain obligations; source presence is not treated as proof.
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 
+The clause-level worklist is in
+[`V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`](V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md).
+It separates 227 candidate clauses from these parent counts, records ten
+small executable clauses verified in the latest focused run, and lists the
+three exact specification decisions still blocking acceptance. Clause
+evidence is not used to promote a parent requirement until all its clauses
+are covered.
+
 The verified Exchange rows refer to the exercised PostgreSQL planet-sale,
 port-purchase, settlement, accounting, idempotency, and ring-fencing paths.
 `MOVE-05`, `CORP-XFER-01`, FedSpace enforcement/MSL, PTA, harvest, and StarPort
