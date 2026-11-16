@@ -15,22 +15,22 @@ The latest recorded gates are:
 
 | Area | Result | Scope |
 |---|---:|---|
-| Server protocol regression | 2,352 passed, 3 failed, 4 skipped | 155 suites; current disposable PostgreSQL run; one failing police incident suite |
-| Python client | 807 passed | Current run |
-| `tests.v2` | 266 passed, 7 skipped, 227 subtests | Current regression harness run |
+| Server protocol regression | 2,361 passed, 0 failed, 4 skipped | 155 suites; disposable PostgreSQL; TLS cases skipped on plain TCP |
+| Python client | 807 passed | `python3 -m pytest -q client/python_client/tests` |
+| `tests.v2` | 266 passed, 7 skipped, 227 subtests | `python3 -m pytest -q tests.v2/test_*.py` |
 | Godot 4.5.1 | 104 passed, 0 failed, 1 skipped | `/home/rick/bin/gdot` client regression run |
 | Godot command menu | 206 checks passed | Menu regression |
 | Planet response | 115 checks passed | Response/identity regression |
 
-These are the latest reported counts, not a claim that every gameplay operation
+These are the latest executed counts, not a claim that every gameplay operation
 or deployment has been verified.
 
 The server run skipped the four TLS smoke cases because the disposable game
-listener was plain TCP. Its only failing suite was
-`suite_police_phase_b_incidents.json`: three assertions confirm that successful
-robbery does not persist the expected suspicion or wanted progression. This is
-a confirmed P0 gameplay defect, not a fixture correction. The exact report and
-sanitized transcript are linked from the parity-closure report.
+listener was plain TCP. The earlier three robbery assertions now pass. A
+focused live test verifies one suspicion point per successful lawful robbery,
+wanted promotion at the contract threshold, persistence after reauthentication,
+and persistence after restarting the serving game process. See
+[`V3_POLICE_ROBBERY_ACCEPTANCE_20261116.md`](testing/V3_POLICE_ROBBERY_ACCEPTANCE_20261116.md).
 
 ## Player-facing acceptance
 
@@ -49,6 +49,8 @@ That journey is a verified subset, not a complete continuous V3 gameplay loop.
 Combat/destruction/recovery, planetary capture and citadel progression, and the
 full corporation transfer workflow still lack live UI evidence through both
 clients. The latest parity-closure report lists the journey gaps separately.
+The robbery fix is verified at the server protocol/database level but does not
+by itself close any of the 67 decision-register requirements.
 
 ## Mechanics with focused acceptance evidence
 

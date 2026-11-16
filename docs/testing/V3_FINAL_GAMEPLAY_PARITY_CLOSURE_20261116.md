@@ -1,8 +1,8 @@
 # V3 final gameplay parity closure
 
 Reviewed: 16 November 2026  
-Starting commit: `4e60f9966b363529b20ab34bcb49b05b1d160a53`  
-Final documentation commit: this report and tracker reconciliation.
+Starting review baseline: `4e60f9966b363529b20ab34bcb49b05b1d160a53`
+Parity status refresh: 16 November 2026, after the robbery persistence fix.
 
 This report reconciles the approved decision register with the current source,
 the runnable client/server tests, and prior disposable-PostgreSQL acceptance
@@ -103,26 +103,18 @@ below are not implied by these rows.
 
 ## Executed regressions
 
-The final server run used an actual V3 server built from current source, a
-freshly rigged disposable PostgreSQL database, and the `tests.v2` JSON-RPC
-runner. It completed 155 suites: **154 passed, 1 failed**. It executed 2,355
-cases: **2,352 passed, 3 failed**. The four declared TLS cases were skipped
-because this isolated listener was plain TCP.
-
-The only failing suite was `suite_police_phase_b_incidents.json`. Its three
-failures are the same ordinary-player journey: three successful robberies in a
-lawful non-FedSpace sector leave suspicion at zero and never promote the player
-to wanted status. A focused instrumented disposable-server run showed the write
-helper returning success and reading suspicion `2` inside the transaction, but
-the post-commit read returned `0`; the protocol acceptance then observed `0`.
-The source also increments by two in this path while the published V3 police
-contract specifies one. This is a confirmed P0 server defect with the exact
-reproduction in that suite; its persistence/transaction root cause remains
-unresolved. Diagnostic logging used to isolate it was removed from source.
+The first run at this review baseline used an actual V3 server and disposable
+PostgreSQL. It completed 155 suites with 154 passed and 1 failed (2,352 passed,
+3 failed cases); the three failures exposed a lawful robbery persistence defect.
+That defect has now been fixed and the full server run was repeated. The current
+run completed all 155 suites: **2,361 passed, 0 failed, 4 skipped**. The four
+TLS cases were skipped because the isolated listener was plain TCP. Details and
+restart evidence are in
+[`V3_POLICE_ROBBERY_ACCEPTANCE_20261116.md`](V3_POLICE_ROBBERY_ACCEPTANCE_20261116.md).
 
 Other regression results:
 
-- Python client: **807 passed**.
+- Python client: **807 passed** (`python3 -m pytest -q client/python_client/tests`).
 - Python tests under `tests.v2`: **266 passed, 7 skipped, 227 subtests passed**.
 - Godot client suite via `/home/rick/bin/gdot` (Godot **4.5.1**): **104 passed,
   0 failed, 1 skipped**. The skipped script is the live-disposable-journey
@@ -166,14 +158,12 @@ JSON suite is not a substitute for that client journey.
 
 ### P0 — prevents a defensible playable-parity claim
 
-1. Repair lawful port-robbery incident persistence and the one-point suspicion
-   contract; rerun the ordinary-player police journey and rollback checks.
-2. Complete two-player ship combat through retreat, destruction, escape pod,
+1. Complete two-player ship combat through retreat, destruction, escape pod,
    replacement/recovery, and persisted assets through Python and Godot.
-3. Complete planet colonization, production ticks, harvesting, citadel upgrades,
+2. Complete planet colonization, production ticks, harvesting, citadel upgrades,
    capture, and planetary combat through both clients with conservation and
    restart assertions.
-4. Execute one continuous ordinary-player gameplay journey through each client;
+3. Execute one continuous ordinary-player gameplay journey through each client;
    current journeys cover meaningful but separate subsets.
 
 ### P1 — approved rules with remaining verification or specification
@@ -198,13 +188,14 @@ JSON suite is not a substitute for that client journey.
 
 ## Evidence files
 
-- Disposable live-suite report: `/tmp/twclone-parity-report-20261116-closure.json`
-- Sanitized protocol transcript: `/tmp/twclone-parity-responses-20261116-closure.jsonl`
-- Runner log: `/tmp/twclone-parity-run-20261116-closure.log`
+- Current full-suite report: `/tmp/twclone-robbery-parity-2afe35dc-full.json`
+- Current sanitized protocol transcript: `/tmp/twclone-robbery-parity-2afe35dc-full.jsonl`
+- Current full-suite runner log: `/tmp/twclone-robbery-parity-2afe35dc-full.log`
 - Current suite summary: [`V3_GAMEPLAY_COMPLETION_TRACKER.md`](../V3_GAMEPLAY_COMPLETION_TRACKER.md)
 - Approved mechanics: [`V3_GAMEPLAY_DECISIONS.md`](../V3_GAMEPLAY_DECISIONS.md)
 
-No gameplay source regression is claimed fixed for the lawful robbery incident.
-The tested work improves regression trustworthiness, fixes a Ferengi cache
-reinitialization defect after database re-rig/restore, and makes the live suite
-fixtures deterministic. This project is not at complete V3 parity yet.
+The lawful robbery persistence defect is fixed and accepted at server and
+PostgreSQL level. This does not close the broader combat, capture, client journey
+or outstanding decision-register gaps. The project is not at complete V3 parity
+yet; the 67-row classification above remains 13 VERIFIED, 44
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 3 BLOCKED, and 0 MISSING.
