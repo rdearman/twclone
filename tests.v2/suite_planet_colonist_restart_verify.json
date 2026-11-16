@@ -1,0 +1,11 @@
+{
+  "name": "Verify durable colonist state and continue after game-server restart",
+  "version": "2.0.0",
+  "tests": [
+    { "name": "Reauthenticate ordinary player and resolve active ship after restart", "setup": "macro_auth_user", "username": "colonist_restart_owner", "password": "qa-password" },
+    { "name": "Read persisted population after restart", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN p.population=22 AND p.colonists_unassigned=22 AND s.colonists=3 AND c.quantity=3 AND p.population+c.quantity=25 THEN 1 ELSE 0 END FROM planets p JOIN players pl ON pl.player_id=(SELECT player_id FROM players WHERE name='colonist_restart_owner') JOIN ships s ON s.ship_id=pl.ship_id JOIN ship_cargo c ON c.ship_id=s.ship_id AND c.commodity_code='COL' WHERE p.planet_id=977704" }, "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }] },
+    { "name": "Ordinary player picks up persisted colonists after restart", "command": "planet.colonists.set", "user": "colonist_restart_owner", "data": { "planet_id": 977704, "action": "pickup", "quantity": 3 }, "expect": { "status": "ok", "type": "planet.colonists.set" }, "asserts": [{ "path": "data.ship_colonists", "op": "==", "value": 6 }] },
+    { "name": "Post-restart transfer preserves population and cargo totals", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN p.population=19 AND p.colonists_unassigned=19 AND s.colonists=6 AND c.quantity=6 AND p.population+c.quantity=25 THEN 1 ELSE 0 END FROM planets p JOIN players pl ON pl.player_id=(SELECT player_id FROM players WHERE name='colonist_restart_owner') JOIN ships s ON s.ship_id=pl.ship_id JOIN ship_cargo c ON c.ship_id=s.ship_id AND c.commodity_code='COL' WHERE p.planet_id=977704" }, "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }] },
+    { "name": "Remove restart population fixture", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DELETE FROM planets WHERE planet_id=977704" }, "expect": { "status": "ok" } }
+  ]
+}

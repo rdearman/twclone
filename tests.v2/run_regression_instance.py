@@ -245,6 +245,8 @@ def main(argv=None):
     parser.add_argument("--template", default=str(ROOT / "bin" / "bigbang.json"))
     parser.add_argument("--sectors", type=int, default=int(os.environ.get("TWCLONE_REGRESSION_SECTORS", "500")))
     parser.add_argument("--keep-artifacts", action="store_true")
+    parser.add_argument("--restart-between-suites", action="store_true",
+                        help="restart the serving game process between selected suites while keeping the same disposable database")
     args = parser.parse_args(argv)
 
     template = json.load(open(args.template, encoding="utf-8"))
@@ -366,12 +368,47 @@ def main(argv=None):
             "--report", str(report_path),
             "--capture-responses", str(capture_path),
         ]
+        selected_suite_paths = []
         for suite in args.suite or []:
             suite_path = Path(suite)
             if not suite_path.is_absolute():
                 suite_path = ROOT / "tests.v2" / suite_path
-            runner.extend(("--suite", str(suite_path.resolve())))
-        result_code = subprocess.run(runner, cwd=ROOT, env=env, check=False).returncode
+            selected_suite_paths.append(suite_path.resolve())
+        if args.restart_between_suites and len(selected_suite_paths) > 1:
+            result_code = 0
+            for index, suite_path in enumerate(selected_suite_paths):
+                phase = f"suite-{index + 1:02d}-{suite_path.stem}"
+                phase_report = report_path.with_name(
+                    f"{report_path.stem}.{phase}{report_path.suffix}"
+                )
+                phase_capture = capture_path.with_name(
+                    f"{capture_path.stem}.{phase}{capture_path.suffix}"
+                )
+                phase_runner = [
+                    *runner, "--report", str(phase_report),
+                    "--capture-responses", str(phase_capture),
+                    "--suite", str(suite_path),
+                ]
+                result_code = subprocess.run(
+                    phase_runner, cwd=ROOT, env=env, check=False
+                ).returncode
+                if result_code != 0 or index == len(selected_suite_paths) - 1:
+                    break
+                terminate_process(server)
+                server = None
+                log.close()
+                log = open(server_log, "a", encoding="utf-8")
+                server = subprocess.Popen(
+                    [str(ROOT / "bin" / "server")], cwd=artifact_dir,
+                    env=env, stdout=log, stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                wait_for_port(args.host, args.port, server)
+        else:
+            for suite_path in selected_suite_paths:
+                runner.extend(("--suite", str(suite_path)))
+            result_code = subprocess.run(runner, cwd=ROOT, env=env,
+                                         check=False).returncode
     except Exception as error:
         print(f"REGRESSION BLOCKED: {error}", file=sys.stderr)
         blocked_path = report_path.with_name(report_path.name + ".tmp")

@@ -42,6 +42,7 @@ These are independently testable behavior slices. They do not promote a parent r
 | `PARITY-TOLL-01/refusal encounter` | Refusal follows hostile-arrival combat, does not pay, and applies damage once | `suite_movement_transwarp_toll_edges.json::case-0055`–`case-0057` | VERIFIED |
 | `POP-02/remote population` | Remote colonist transfer is refused without changing either population pool | `suite_planet_colonist_transfers.json::case-0010`, `case-0011` | VERIFIED |
 | `POP-01/transfer rollback` | Failed colonist-to-slave transfer rolls back ship cargo and planet population | `suite_planet_colonist_transfers.json::case-0018`, `case-0019` | VERIFIED |
+| `POP-01/transfer restart` | A committed ship/planet population transfer survives a serving-game-process restart and further transfers conserve the same total | `suite_planet_colonist_restart_prepare.json::case-0008`–`case-0009`; after actual server restart, `suite_planet_colonist_restart_verify.json::case-0004`–`case-0006` | VERIFIED |
 
 ## Clause ledger
 
@@ -306,6 +307,7 @@ No defaults were added for these blockers.
 
 - Disposable PostgreSQL / actual V3 server: four focused suites, **136 passed, 0 failed** (`suite_combat_advanced.json` 44; `suite_movement_transwarp_toll_edges.json` 57; `suite_movement_transwarp_tolls.json` 15; `suite_planet_colonist_transfers.json` 20). The run retained response capture under `/tmp/twclone-v3-toll-population-verified-transcript.json`.
 - Disposable PostgreSQL / actual V3 server: existing landed slave delivery, harvest, fighter transfer, emancipation and access-control regression `suite_planet_fighter_transfers.json` — **49 passed, 0 failed**.
+- Disposable PostgreSQL / actual V3 server restart between suites using `--restart-between-suites`: population preparation **12 passed**, serving process stopped/restarted, then authenticated readback and another transfer **8 passed**. Both reports and sanitized protocol captures are under `/tmp/twclone-v3-colonist-restart-*`.
 - Disposable PostgreSQL / actual V3 server: `suite_planet_production_rate_values.json` **1 passed, 0 failed; 21 assertions passed**, validating the approved versioned noncanonical class-rate rows after migration.
 - `gdot --headless --path client/godot_client/godot --script res://tests/toll_offer_workflow_test.gd` — **13 checks passed** (Godot 4.5.1). `XDG_DATA_HOME=/tmp/twclone-godot-xdg` was used because the default Godot user log path is not writable in this sandbox.
 - Python client plus focused server contracts: `python3 -m pytest -q client/python_client/tests tests.v2/test_planetary_server_contract.py tests.v2/test_v3_planet_production_rates.py` — **866 passed**.

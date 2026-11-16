@@ -72,14 +72,17 @@ by itself close any of the 67 decision-register requirements.
   changes atomically through the authoritative cargo layer. A PostgreSQL suite
   confirms remote refusal, pickup/drop-off conservation, and full rollback when
   a drop-off would mix colonists with slave population. This does not verify
-  the full acquisition/migration transition matrix or restart recovery for
-  every transition.
+  the full acquisition/migration transition matrix. A separate same-database
+  test stopped and restarted the serving V3 server between suites, then
+  authenticated the ordinary player, read the persisted population and
+  completed another conserving transfer.
 - **Production numeric rules:** the disposable database confirmed all 21
   built-in class/commodity rate rows for the seven approved noncanonical V3
   defaults. This verifies migrated configuration values; it does not verify
   every scheduled production tick, persisted remainder, or class-rate override.
 - Focused result: four PostgreSQL suites **136 passed, 0 failed**; production
-  rate migration suite **1 passed, 21 assertions**; Python client plus two
+  rate migration suite **1 passed, 21 assertions**; server restart population
+  suites **20 passed**; Python client plus two
   focused server contracts **866 passed**; Godot 4.5.1 toll workflow **13
   checks passed**; existing slave-delivery/harvest/fighter/emancipation suite
   **49 passed**; engine regression script passed. These are focused gates, not

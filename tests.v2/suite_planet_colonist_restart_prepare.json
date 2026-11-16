@@ -1,0 +1,15 @@
+{
+  "name": "Prepare durable colonist state before game-server restart",
+  "version": "2.0.0",
+  "tests": [
+    { "name": "Create ordinary player", "setup": "macro_auth_user", "username": "colonist_restart_owner", "password": "qa-password" },
+    { "name": "Remove prior population fixture", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DELETE FROM planets WHERE planet_id=977704" }, "expect": { "status": "ok" } },
+    { "name": "Create owned colonist planet", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,class,type,created_by,population,population_type,colonists_unassigned) VALUES(977704,1,'Colonist Restart QA',@{colonist_restart_owner_player_id},'player','M',1,@{admin_player_id},20,'COLONIST',20)" }, "expect": { "status": "ok" } },
+    { "name": "Land ship and set population cargo fixture", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE players SET sector_id=1,lastplanet=977704 WHERE name='colonist_restart_owner'" }, "expect": { "status": "ok" } },
+    { "name": "Set active ship landed with five colonists", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=1,onplanet=TRUE,holds=50,ore=0,organics=0,equipment=0,colonists=5,slaves=0,weapons=0,drugs=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='colonist_restart_owner')" }, "expect": { "status": "ok" } },
+    { "name": "Set authoritative ship cargo", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DELETE FROM ship_cargo WHERE ship_id=(SELECT ship_id FROM players WHERE name='colonist_restart_owner')" }, "expect": { "status": "ok" } },
+    { "name": "Insert five authoritative colonists", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) SELECT ship_id,'COL',5 FROM players WHERE name='colonist_restart_owner'" }, "expect": { "status": "ok" } },
+    { "name": "Ordinary player drops colonists before restart", "command": "planet.colonists.set", "user": "colonist_restart_owner", "data": { "planet_id": 977704, "action": "dropoff", "quantity": 2 }, "expect": { "status": "ok", "type": "planet.colonists.set" }, "asserts": [{ "path": "data.ship_colonists", "op": "==", "value": 3 }] },
+    { "name": "Persist balanced planet and ship quantities before restart", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN p.population=22 AND p.colonists_unassigned=22 AND s.colonists=3 AND c.quantity=3 AND p.population+c.quantity=25 THEN 1 ELSE 0 END FROM planets p JOIN players pl ON pl.player_id=@{colonist_restart_owner_player_id} JOIN ships s ON s.ship_id=pl.ship_id JOIN ship_cargo c ON c.ship_id=s.ship_id AND c.commodity_code='COL' WHERE p.planet_id=977704" }, "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }] }
+  ]
+}
