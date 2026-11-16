@@ -18,11 +18,13 @@ The latest recorded gates are:
 | Server protocol regression | 2,361 passed, 0 failed, 4 skipped | 155 suites; disposable PostgreSQL; TLS cases skipped on plain TCP |
 | Python client | 807 passed | `python3 -m pytest -q client/python_client/tests` |
 | `tests.v2` | 266 passed, 7 skipped, 227 subtests | `python3 -m pytest -q tests.v2/test_*.py` |
-| Godot 4.5.1 | 104 passed, 0 failed, 1 skipped | `/home/rick/bin/gdot` client regression run, repeated after port-workflow snapshot fix |
+| Godot 4.5.1 | 106 passed, 0 failed, 5 skipped | `/home/rick/bin/gdot`; five live-only scripts are executed separately against disposable PostgreSQL |
 | Godot command menu | 206 checks passed | Menu regression |
-| Planet response | 115 checks passed | Response/identity regression |
+| Planet response | 117 checks passed | Response, planet and sector identity regression |
 
-These are the latest executed counts, not a claim that every gameplay operation
+Latest rerun: Python remained **807 passed**; Godot reported **106 passed, 0
+failed, 5 live-only skipped** (111 scripts total). `tests.v2` ran **271 passed,
+2 skipped, 227 subtests passed**. These are the latest executed counts, not a claim that every gameplay operation
 or deployment has been verified.
 
 The server run skipped the four TLS smoke cases because the disposable game

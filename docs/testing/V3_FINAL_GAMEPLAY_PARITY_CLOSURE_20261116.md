@@ -115,12 +115,12 @@ restart evidence are in
 Other regression results:
 
 - Python client: **807 passed** (`python3 -m pytest -q client/python_client/tests`).
-- Python tests under `tests.v2`: **266 passed, 7 skipped, 227 subtests passed**.
-- Godot client suite via `/home/rick/bin/gdot` (Godot **4.5.1**): **104 passed,
-  0 failed, 1 skipped**. The skipped script is the live-disposable-journey
-  script; live journey evidence is separately documented below.
-- Combined Python/Godot client regression rerun after the Godot state-refresh
-  fix: Python **807 passed**; Godot **104 passed, 0 failed, 1 skipped**.
+- Python tests under `tests.v2`: **271 passed, 2 skipped, 227 subtests passed**.
+- Godot client suite via `/home/rick/bin/gdot` (Godot **4.5.1**): **106 passed,
+  0 failed, 5 skipped** (111 scripts); the five live-only scripts are run
+  separately against a disposable server and PostgreSQL database.
+- Latest combined Python/Godot regression rerun: Python **807 passed**; Godot
+  **106 passed, 0 failed, 5 live-only skipped**.
 - Godot catalog: 13 assets, 0 warnings.
 - `make -C bin -j2`: passed with the repository's ASan/UBSan build flags.
 - `git diff --check`: passed.
@@ -151,9 +151,22 @@ sector 1 with ship 9141 active and not docked/on a planet, ship cargo and
 equipment updated, planet 700's ORE quantity changed, and corporation 112
 membership persisted. Full evidence is in
 [`V3_GODOT_LIVE_JOURNEY_ACCEPTANCE_20261116.md`](V3_GODOT_LIVE_JOURNEY_ACCEPTANCE_20261116.md).
-The journey still does not cover player-vs-player combat, destruction/recovery,
-planetary capture/citadel progression, or corporation transfers through
-Godot.
+Additional live Godot journeys now cover two-player ship destruction and
+escape-pod recovery after a game-server restart (6 + 6 assertions), a persisted
+planet surface allocation and launch (6 assertions), and StarPort attack and
+destruction with defence retaliation, turn debit, stock destruction and a
+persisted attack receipt (7 assertions). The StarPort contextual menu now
+exposes the confirmed port attack command; an isolated retry test verifies
+that an ambiguous retry against the same port retains its idempotency key (5
+assertions). Python's actual menu workflow also destroyed a seeded StarPort
+and verified its inactive record and stock settlement. These are operation
+evidence, not full closure of the broader composite combat, planet, or port
+requirements; no requirement status is promoted in this update.
+
+The journeys still do not cover the full player-vs-player combat rules
+(retreat, damage/resource combinations and recovery alternatives), planetary
+capture/citadel progression and complete defences, or corporation-owned planet
+permissions through both clients.
 
 Python has 807 passing client tests and prior ordinary-player workflow evidence
 recorded in the completion tracker and focused StarPort/feedback reports. This
