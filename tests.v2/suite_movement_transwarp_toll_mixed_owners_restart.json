@@ -1,0 +1,10 @@
+{
+  "name": "Mixed-owner toll and escape-pod state survives game-server restart",
+  "version": "2.0.0",
+  "protocol_category": "21_Sector_and_Movement",
+  "tests": [
+    {"name":"Reauthenticate payer after serving process restart","command":"auth.login","user":"mixed_toll_payer","data":{"username":"mixed_toll_payer","passwd":"password"},"expect":{"status":"ok","type":"auth.session"},"asserts":[{"path":"data.current_sector","op":"==","value":20}]},
+    {"name":"Reauthenticate destroyed-ship owner after serving process restart","command":"auth.login","user":"mixed_toll_refuser","data":{"username":"mixed_toll_refuser","passwd":"password"},"expect":{"status":"ok","type":"auth.session"},"asserts":[{"path":"data.current_sector","op":"==","value":1}]},
+    {"name":"Verify mixed-owner payment and refusal outcomes persisted through restart","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT CASE WHEN (SELECT credits FROM players WHERE name='mixed_toll_payer')=996 AND (SELECT sector_id FROM players WHERE name='mixed_toll_payer')=20 AND (SELECT credits FROM players WHERE name='mixed_toll_owner_a')=1000000002 AND (SELECT credits FROM players WHERE name='mixed_toll_owner_b')=1000000002 AND (SELECT COUNT(*) FROM toll_passage_offers WHERE player_id=(SELECT player_id FROM players WHERE name='mixed_toll_payer') AND state='accepted' AND amount=4)=1 AND (SELECT credits FROM players WHERE name='mixed_toll_refuser')=1000 AND (SELECT state FROM toll_passage_offers WHERE player_id=(SELECT player_id FROM players WHERE name='mixed_toll_refuser') AND state='refused')='refused' AND (SELECT st.name FROM players p JOIN ships s ON s.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE p.name='mixed_toll_refuser')='Escape Pod' THEN 1 ELSE 0 END;"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":1}]}
+  ]
+}

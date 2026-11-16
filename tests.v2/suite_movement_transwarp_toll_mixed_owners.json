@@ -1,0 +1,539 @@
+{
+  "name": "Mixed-owner transwarp toll settlement, refusal destruction and recovery",
+  "version": "2.0.0",
+  "protocol_category": "21_Sector_and_Movement",
+  "tests": [
+    {
+      "name": "Register first toll owner",
+      "setup": "macro_auth_user",
+      "username": "mixed_toll_owner_a",
+      "password": "password"
+    },
+    {
+      "name": "Register second toll owner",
+      "setup": "macro_auth_user",
+      "username": "mixed_toll_owner_b",
+      "password": "password"
+    },
+    {
+      "name": "Register ordinary toll payer",
+      "setup": "macro_auth_user",
+      "username": "mixed_toll_payer",
+      "password": "password"
+    },
+    {
+      "name": "Register ordinary toll refuser",
+      "setup": "macro_auth_user",
+      "username": "mixed_toll_refuser",
+      "password": "password"
+    },
+    {
+      "name": "Create isolated transwarp routes and deterministic player balances [1/5]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES (1,20),(20,21) ON CONFLICT DO NOTHING"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create isolated transwarp routes and deterministic player balances [2/5]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits=1000000000 WHERE name IN ('mixed_toll_owner_a','mixed_toll_owner_b')"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create isolated transwarp routes and deterministic player balances [3/5]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits=1000,sector_id=1 WHERE name='mixed_toll_payer'"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create isolated transwarp routes and deterministic player balances [4/5]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits=1000,sector_id=20 WHERE name='mixed_toll_refuser'"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create isolated transwarp routes and deterministic player balances [5/5]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE turns SET turns_remaining=100 WHERE player_id IN (SELECT player_id FROM players WHERE name IN ('mixed_toll_payer','mixed_toll_refuser'))"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Clear isolated toll destination assets",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id IN (20,21);"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Equip payer transwarp, fuel, shields and deterministic active ship [1/2]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=1,has_transwarp=TRUE,holds=200,ore=100,shields=100,installed_shields=100,hull=100,fighters=0,destroyed=FALSE,onplanet=FALSE,ported=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='mixed_toll_payer')"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Equip payer transwarp, fuel, shields and deterministic active ship [2/2]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) SELECT ship_id,'ORE',100 FROM players WHERE name='mixed_toll_payer' ON CONFLICT(ship_id,commodity_code) DO UPDATE SET quantity=100"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Deploy two toll fighters for each independent owner",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) SELECT 20,player_id,0,2,2,3,0 FROM players WHERE name IN ('mixed_toll_owner_a','mixed_toll_owner_b');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Deploy payer's destination homing fighter",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) SELECT 20,player_id,0,2,1,2,0 FROM players WHERE name='mixed_toll_payer';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Mixed-owner offer totals all toll fighters",
+      "command": "move.transwarp",
+      "user": "mixed_toll_payer",
+      "data": {
+        "to_sector_id": 20
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.toll_offer_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.fighter_count",
+          "op": "==",
+          "value": 4
+        },
+        {
+          "path": "data.amount",
+          "op": "==",
+          "value": 4
+        }
+      ],
+      "save": {
+        "mixed_offer": "data.offer_id"
+      }
+    },
+    {
+      "name": "Accept mixed-owner toll and pass",
+      "command": "move.transwarp",
+      "user": "mixed_toll_payer",
+      "data": {
+        "to_sector_id": 20,
+        "toll_offer_id": "@{mixed_offer}",
+        "toll_accept": true
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.transwarp"
+      },
+      "asserts": [
+        {
+          "path": "data.sector_id",
+          "op": "==",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "name": "Verify split payment, fuel, turn and offer commit atomically",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits,p.sector_id,t.turns_remaining,c.quantity,o.state,o.amount,(SELECT COUNT(*) FROM toll_passage_payees py WHERE py.offer_id='@{mixed_offer}'),(SELECT SUM(py.amount) FROM toll_passage_payees py WHERE py.offer_id='@{mixed_offer}'),(SELECT credits FROM players WHERE name='mixed_toll_owner_a'),(SELECT credits FROM players WHERE name='mixed_toll_owner_b') FROM players p JOIN turns t ON t.player_id=p.player_id JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' JOIN toll_passage_offers o ON o.offer_id='@{mixed_offer}' WHERE p.name='mixed_toll_payer';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 996
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": 20
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": 499
+        },
+        {
+          "path": "data.rows.0.3",
+          "op": "==",
+          "value": 97
+        },
+        {
+          "path": "data.rows.0.4",
+          "op": "==",
+          "value": "accepted"
+        },
+        {
+          "path": "data.rows.0.5",
+          "op": "==",
+          "value": 4
+        },
+        {
+          "path": "data.rows.0.6",
+          "op": "==",
+          "value": 2
+        },
+        {
+          "path": "data.rows.0.7",
+          "op": "==",
+          "value": 4
+        },
+        {
+          "path": "data.rows.0.8",
+          "op": "==",
+          "value": 1000000002
+        },
+        {
+          "path": "data.rows.0.9",
+          "op": "==",
+          "value": 1000000002
+        }
+      ]
+    },
+    {
+      "name": "Retry accepted mixed-owner offer",
+      "command": "move.transwarp",
+      "user": "mixed_toll_payer",
+      "data": {
+        "to_sector_id": 20,
+        "toll_offer_id": "@{mixed_offer}",
+        "toll_accept": true
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.transwarp"
+      },
+      "asserts": [
+        {
+          "path": "data.idempotent_retry",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Verify retry did not duplicate either owner's credits or payer resources",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits,t.turns_remaining,c.quantity,(SELECT credits FROM players WHERE name='mixed_toll_owner_a'),(SELECT credits FROM players WHERE name='mixed_toll_owner_b') FROM players p JOIN turns t ON t.player_id=p.player_id JOIN ship_cargo c ON c.ship_id=p.ship_id AND c.commodity_code='ORE' WHERE p.name='mixed_toll_payer';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 996
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": 499
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": 97
+        },
+        {
+          "path": "data.rows.0.3",
+          "op": "==",
+          "value": 1000000002
+        },
+        {
+          "path": "data.rows.0.4",
+          "op": "==",
+          "value": 1000000002
+        }
+      ]
+    },
+    {
+      "name": "Prepare lethal refusal at a second destination [1/4]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) SELECT 21,player_id,0,2,1,3,0 FROM players WHERE name='mixed_toll_owner_a'"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Prepare lethal refusal at a second destination [2/4]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,ttl) SELECT 21,player_id,0,2,1,2,0 FROM players WHERE name='mixed_toll_refuser'"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Prepare lethal refusal at a second destination [3/4]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=20,has_transwarp=TRUE,holds=200,ore=50,shields=0,installed_shields=0,hull=1,fighters=0,destroyed=FALSE,onplanet=FALSE,ported=0 WHERE ship_id=(SELECT ship_id FROM players WHERE name='mixed_toll_refuser')"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Prepare lethal refusal at a second destination [4/4]",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) SELECT ship_id,'ORE',50 FROM players WHERE name='mixed_toll_refuser' ON CONFLICT(ship_id,commodity_code) DO UPDATE SET quantity=50"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Capture refuser's destroyed hull identity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ship_id FROM players WHERE name='mixed_toll_refuser';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "refuser_ship": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Refresh refuser's authenticated sector after deterministic setup",
+      "command": "auth.login",
+      "user": "mixed_toll_refuser",
+      "data": {
+        "username": "mixed_toll_refuser",
+        "passwd": "password"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "auth.session"
+      }
+    },
+    {
+      "name": "Refuser receives single-fighter offer",
+      "command": "move.transwarp",
+      "user": "mixed_toll_refuser",
+      "data": {
+        "to_sector_id": 21
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.toll_offer_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.fighter_count",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.amount",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "save": {
+        "refusal_offer": "data.offer_id"
+      }
+    },
+    {
+      "name": "Refusal triggers lethal hostile toll encounter",
+      "command": "move.transwarp",
+      "user": "mixed_toll_refuser",
+      "data": {
+        "to_sector_id": 21,
+        "toll_offer_id": "@{refusal_offer}",
+        "toll_accept": false
+      },
+      "expect": {
+        "status": "error",
+        "error_code": 402
+      },
+      "asserts": [
+        {
+          "path": "error.data.ship_destroyed",
+          "op": "==",
+          "value": true
+        },
+        {
+          "path": "error.data.current_sector_id",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Verify no refusal payment and one durable escape-pod recovery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT p.credits,p.sector_id,t.turns_remaining,CASE WHEN old.destroyed THEN 1 ELSE 0 END,old.hull,CASE WHEN pod.destroyed THEN 1 ELSE 0 END,st.name,ps.status,(SELECT COUNT(*) FROM ship_ownership so WHERE so.player_id=p.player_id AND so.ship_id=pod.ship_id AND so.is_primary=TRUE),o.state,o.amount,(SELECT credits FROM players WHERE name='mixed_toll_owner_a') FROM players p JOIN turns t ON t.player_id=p.player_id JOIN ships old ON old.ship_id=@{refuser_ship} JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id JOIN podded_status ps ON ps.player_id=p.player_id JOIN toll_passage_offers o ON o.offer_id='@{refusal_offer}' WHERE p.name='mixed_toll_refuser';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1000
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": 499
+        },
+        {
+          "path": "data.rows.0.3",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.4",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "path": "data.rows.0.5",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "path": "data.rows.0.6",
+          "op": "==",
+          "value": "Escape Pod"
+        },
+        {
+          "path": "data.rows.0.7",
+          "op": "==",
+          "value": "podded"
+        },
+        {
+          "path": "data.rows.0.8",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.9",
+          "op": "==",
+          "value": "refused"
+        },
+        {
+          "path": "data.rows.0.10",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.11",
+          "op": "==",
+          "value": 1000000002
+        }
+      ]
+    },
+    {
+      "name": "Reconnect ordinary refuser after destruction",
+      "command": "auth.login",
+      "user": "mixed_toll_refuser",
+      "data": {
+        "username": "mixed_toll_refuser",
+        "passwd": "password"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "auth.session"
+      }
+    },
+    {
+      "name": "Verify recovery remains after reauthentication",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN p.sector_id=1 AND old.destroyed=TRUE AND pod.destroyed=FALSE AND st.name='Escape Pod' AND ps.status='podded' AND o.state='refused' THEN 1 ELSE 0 END FROM players p JOIN ships old ON old.ship_id=@{refuser_ship} JOIN ships pod ON pod.ship_id=p.ship_id JOIN shiptypes st ON st.shiptypes_id=pod.type_id JOIN podded_status ps ON ps.player_id=p.player_id JOIN toll_passage_offers o ON o.player_id=p.player_id AND o.offer_id='@{refusal_offer}' WHERE p.name='mixed_toll_refuser';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

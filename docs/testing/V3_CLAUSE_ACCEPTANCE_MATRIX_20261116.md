@@ -40,6 +40,10 @@ These are independently testable behavior slices. They do not promote a parent r
 | `PARITY-TOLL-01/self protection` | A player's own toll fighters do not stop or charge that player | `suite_movement_transwarp_toll_edges.json::case-0029`, `case-0030` | VERIFIED |
 | `PARITY-TOLL-01/corporation protection` | Same-corporation toll fighters do not stop or charge a member | `suite_movement_transwarp_toll_edges.json::case-0043`, `case-0044` | VERIFIED |
 | `PARITY-TOLL-01/refusal encounter` | Refusal follows hostile-arrival combat, does not pay, and applies damage once | `suite_movement_transwarp_toll_edges.json::case-0055`–`case-0057` | VERIFIED |
+| `PARITY-TOLL-01/mixed-owner split` | Payment is split by toll-fighter owner; retry cannot duplicate credits, fuel, or turns | `suite_movement_transwarp_toll_mixed_owners.json::case-0027`–`case-0031` (42/42 suite cases passed) | VERIFIED |
+| `PARITY-TOLL-01/lethal refusal recovery` | Refusal pays nothing, hostile toll damage destroys the hull, and an owned escape pod survives reauthentication | `suite_movement_transwarp_toll_mixed_owners.json::case-0039`–`case-0041` | VERIFIED |
+| `PARITY-TOLL-01/restart persistence` | Accepted mixed-owner settlement and lethal refusal remain persisted after a serving-server restart | `suite_movement_transwarp_toll_mixed_owners_restart.json::case-0001`–`case-0003` (3/3 passed) | VERIFIED |
+| `PARITY-TOLL-01/Godot UI` | Actual Godot navigation form presents the server toll offer, accepts/refuses, refreshes state, and reconnects after process restart | `client/godot_client/godot/tests/live_transwarp_toll_test.gd`; Godot 4.5.1 exit 0; disposable PG offers `godot-0011`/`godot-0024`, split payees 159/160, credits 996, final sector 21; only refusal produced `combat.hit.fighters` | VERIFIED |
 | `POP-02/remote population` | Remote colonist transfer is refused without changing either population pool | `suite_planet_colonist_transfers.json::case-0010`, `case-0011` | VERIFIED |
 | `POP-01/transfer rollback` | Failed colonist-to-slave transfer rolls back ship cargo and planet population | `suite_planet_colonist_transfers.json::case-0025`, `case-0026` | VERIFIED |
 
@@ -54,14 +58,14 @@ Additional population acceptance slices executed in the same work batch:
 
 | Requirement | Clause | Acceptance condition | Clause status | Evidence / next action |
 |---|---|---|---|---|
-| `POP-01` | clause 1 | A planet is `COLONIST`, `SLAVE`, or `UNPOPULATED` | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-01` | clause 2 | never mixed | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-01` | clause 3 | Preserve counts and allocations | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-01` | clause 4 | Existing populated planets migrate as colonists | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-01` | clause 5 | empty planets remain unpopulated | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
+| `POP-01` | clause 1 | A planet is `COLONIST`, `SLAVE`, or `UNPOPULATED` | VERIFIED | `tests.v2/test_pg_migration_171_population_state.sql` ran against disposable PostgreSQL; assertions exercised all three classifications and passed. |
+| `POP-01` | clause 2 | never mixed | VERIFIED | Migration trigger test in `tests.v2/test_pg_migration_171_population_state.sql` preserved the single enum classification on populated, empty, and slave updates. |
+| `POP-01` | clause 3 | Preserve counts and allocations | VERIFIED | `tests.v2/test_pg_migration_171_population_state.sql` asserts population/allocation equality on migration and update; `suite_combat_advanced.json::case-0024`, `case-0029`, `case-0034`, `case-0039` assert acquisition preservation. |
+| `POP-01` | clause 4 | Existing populated planets migrate as colonists | VERIFIED | `tests.v2/test_pg_migration_171_population_state.sql` migration assertion: existing population 100 becomes `COLONIST`, unchanged. |
+| `POP-01` | clause 5 | empty planets remain unpopulated | VERIFIED | `tests.v2/test_pg_migration_171_population_state.sql` migration assertion: empty planet remains `UNPOPULATED`, population 0. |
 | `POP-02` | clause 1 | Evil players may buy slaves or choose enslavement on successful conquest | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `POP-02` | clause 2 | Neutral may inherit but cannot buy/enslave | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-02` | clause 3 | Good cannot retain slaves after qualifying capture | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
+| `POP-02` | clause 3 | Good cannot retain slaves after qualifying capture | VERIFIED | `suite_combat_advanced.json::case-0033`–`case-0034`: successful good capture liberates slaves and preserves population, allocations, treasury, and planetary stock. |
 | `POP-02` | clause 4 | Never create remote planetary population without safe transport | VERIFIED | Remote pickup refusal and unchanged DB state: `suite_planet_colonist_transfers.json::case-0010`–`case-0011`; landed pickup/drop-off and conservation: `case-0020`–`case-0023`; current landed slave delivery and cargo/population state: `suite_planet_fighter_transfers.json::case-0043`–`case-0044`. |
 | `POP-03` | ORE output | floor(normal_output * 50 / 100) for ORE | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `POP-03` | ORG output | floor(normal_output * 50 / 100) for ORG | VERIFIED | `tests.v2/test_slave_population_split.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
@@ -79,12 +83,12 @@ Additional population acceptance slices executed in the same work batch:
 | `POP-06` | clause 1 | Owner or authorized corporation management (Leader/Officer) converts all slaves to colonists atomically, preserving population and allocations | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `POP-06` | clause 2 | no turn/credit cost | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `POP-06` | clause 3 | no partial conversion | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-07` | clause 1 | Capture requires defeated defenses and successful invasion | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-07` | clause 2 | Evil explicitly chooses retain/enslave colonists | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-07` | clause 3 | good automatically liberates slaves | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-07` | clause 4 | neutral retains inherited slaves | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-07` | clause 5 | evil may retain them | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-07` | clause 6 | Planet resources/treasury remain with captured planet | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `POP-07` | clause 1 | Capture requires defeated defenses and successful invasion | VERIFIED | `suite_combat_advanced.json::case-0023`–`case-0024`: successful invasion followed by DB ownership/population/asset assertions. |
+| `POP-07` | clause 2 | Evil explicitly chooses retain/enslave colonists | VERIFIED | `suite_combat_advanced.json::case-0025`–`case-0029`: evil player explicitly selects enslavement; DB checks population type and ownership/defenses. |
+| `POP-07` | clause 3 | good automatically liberates slaves | VERIFIED | `suite_combat_advanced.json::case-0030`–`case-0034`: good capture converts slaves and conserves population/assets. |
+| `POP-07` | clause 4 | neutral retains inherited slaves | VERIFIED | `suite_combat_advanced.json::case-0035`–`case-0039`: neutral capture retains slave classification and planetary assets. |
+| `POP-07` | clause 5 | evil may retain them | VERIFIED | `suite_combat_advanced.json::case-0028`–`case-0029`: explicit evil enslavement succeeds and is persisted. |
+| `POP-07` | clause 6 | Planet resources/treasury remain with captured planet | VERIFIED | `suite_combat_advanced.json::case-0024`, `case-0034`, `case-0039` assert captured-planet assets, treasury, and population allocations remain attached. |
 | `POP-07` | clause 7 | No corporation-capture rule is inferred | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `HARV-01` | clause 1 | `planet.harvest` transfers accumulated ore/organics/equipment only to currently landed ship, capped to available holds | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` and disposable PostgreSQL harvest journey in `V3_GAMEPLAY_COMPLETION_TRACKER.md`. |
 | `HARV-01` | clause 2 | remainder stays on planet | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` and disposable PostgreSQL harvest journey in `V3_GAMEPLAY_COMPLETION_TRACKER.md`. |
@@ -289,7 +293,7 @@ The parent status is intentionally not copied onto every child clause. In partic
 
 | Requirement | Additional independently testable clause | Status | Evidence |
 |---|---|---|---|
-| `POP-01` | Complete capture/acquisition transitions among colonist, slave, and unpopulated states with counts and allocations preserved | DEFECTIVE_OR_INCOMPLETE | Decision register says complete acquisition/capture transitions are required; no end-to-end transition acceptance identified. |
+| `POP-01` | Complete capture/acquisition transitions among colonist, slave, and unpopulated states with counts and allocations preserved | DEFECTIVE_OR_INCOMPLETE | Populated colonist-to-slave, slave-to-colonist, and neutral inherited-slave transitions now pass `suite_combat_advanced.json::case-0023`–`case-0039`; unpopulated-planet acquisition transition remains without executable evidence, so the parent stays unpromoted. |
 | `EXC-09` | Demonstrate sustainable NPC/commodity balancing under normal production and market depletion | DEFECTIVE_OR_INCOMPLETE | Decision register explicitly leaves broader balancing required; no acceptance threshold is approved for a full balance pass. |
 | `PARITY-TOLL-01` | Toll offer and settlement on transwarp sector entry | VERIFIED | `suite_movement_transwarp_tolls.json` and `suite_movement_transwarp_toll_edges.json`; ordinary authenticated server requests and PostgreSQL state assertions listed above. |
 | `POP-05` | Approve daily recurrence interval, stoppage duration, and population-loss amount | BLOCKED | The V3 decision register leaves these three numeric policy values unset. |
@@ -298,7 +302,7 @@ The parent status is intentionally not copied onto every child clause. In partic
 | `COMBAT-01` | Ordinary-player ship destruction, escape-pod respawn, and recovery after server restart | VERIFIED | Godot live acceptance `live_two_player_combat_test.gd` and `live_combat_recovery_test.gd`; disposable PostgreSQL evidence recorded in the 16 Nov completion tracker. This does not verify all destruction side effects or independence from installed escape-pod equipment. |
 | `PARITY-PORT-ATTACK-01` | One ordinary-player StarPort attack destroys the seeded port, applies retaliation, consumes a turn, clears stock, and persists the attack receipt | VERIFIED | Godot `live_starport_attack_test.gd`; Python menu path and authoritative PostgreSQL readback recorded in the 16 Nov completion tracker. This does not cover every durability/defence or FedSpace case. |
 | `PARITY-PHOTON-01` | Adjacent eligible firing, ammo debit, same-request/concurrent retry, and expiry persistence | VERIFIED | `docs/testing/V3_PHOTON_ACCEPTANCE_20261114.md`, ordinary Python menu journey against disposable PostgreSQL. Shield/citadel suppression, defense neutralization at arrival, effect-expiry behavior, and fault rollback remain unverified. |
-| `PARITY-TOLL-01` | Normal-warp acceptance/refusal, atomic payment, insufficient-funds refusal, and duplicate/concurrent retry | VERIFIED | `docs/testing/V3_TOLL_FIGHTER_ACCEPTANCE_20261114.md`; ordinary Python warp workflow and PostgreSQL balances/receipts. Transwarp and self/same-corporation protection now also pass as detailed above. Mixed-owner toll settlement and destruction during refusal remain unverified. |
+| `PARITY-TOLL-01` | Normal/transwarp acceptance/refusal, owner-split atomic payment, insufficient-funds refusal, idempotent retry, and destruction recovery | VERIFIED | Normal toll suite plus the focused transwarp suites below; the new mixed-owner/restart tests and live Godot UI journey verify both settlement and recovery. |
 
 ## Exact remaining specification blockers
 
@@ -308,6 +312,15 @@ The parent status is intentionally not copied onto every child clause. In partic
 - `EXC-09`: no measurable numeric sustainability target or evaluation horizon is approved. The qualitative “enjoyable, sustainable” principle cannot be turned into a balancing pass/fail rule without an approved metric; no economy-balancing constant was invented.
 
 No defaults were added for these blockers.
+
+## Acceptance update — 2026-11-16
+
+- Full disposable PostgreSQL V3 regression: **2,462 passed, 37 failed, 4 skipped** across 161/162 executed suites (2,499 cases executed). The remaining failures are unrelated existing suite fixtures/timing: black-market restock timing (1), generated Quasar fixture absent (9), Police Phase B random-cluster fixture resolution (16), and Phase D1 lawful-cluster fixture resolution (8). Toll failures from this run were rerun and closed by the focused passes below; the full suite was not rerun after those fixture corrections.
+- Toll fixture corrections: `suite_combat_toll_fighters.json` and `suite_movement_transwarp_toll_edges.json` now pass **75/75** cases in a fresh serving-server run.
+- Mixed-owner transwarp toll acceptance: `suite_movement_transwarp_toll_mixed_owners.json` **42/42** and `suite_movement_transwarp_toll_mixed_owners_restart.json` **3/3**, with `--restart-between-suites`. SQL checks verify exact credit split, 3 Fuel Ore and one turn consumed, no duplicate settlement on replay, refusal without payment, ship destruction, escape-pod ownership, and post-restart persistence.
+- Population: `suite_combat_advanced.json` **44/44** passed in the full live-server run, including evil enslavement, good liberation, neutral slave retention, and planetary asset/treasury conservation. `suite_planet_colonist_transfers.json` **27/27** passed. Serving-process restart pair `suite_planet_colonist_restart_prepare.json` **12/12** and `suite_planet_colonist_restart_verify.json` **8/8** passed with a real game-server restart between suites; transfer rollback remains covered by cases 25–26.
+- Migration 171: `psql -f tests.v2/test_pg_migration_171_population_state.sql` passed in an isolated disposable schema, checking populated/empty migration classification, population/allocation conservation, legacy insertion classification, and slave state retention.
+- Godot live transwarp toll workflow: `gdot --headless --path client/godot_client/godot --script res://tests/live_transwarp_toll_test.gd` exited 0 with the live mode and fixture/restart marker environment enabled. SQL readback confirmed paid offer 4 credits split 2/2 between two owners, no paid-arrival fighter event, refused offer with no payment, refusal fighter event, and persisted player balance/sector after the serving-process restart.
 
 ## Executed focused gates
 

@@ -30,7 +30,16 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "DELETE FROM sector_assets WHERE sector_id = 2 AND owner_id <> @{toll_collector_player_id};"
+        "sql": "DELETE FROM sector_assets WHERE sector_id = 2;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Deploy only the collector's deterministic toll fighters",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets (sector_id, owner_id, corporation_id, asset_type, quantity, offensive_setting, deployed_at) VALUES (2, @{toll_collector_player_id}, 0, 2, 30, 3, now());"
       },
       "expect": { "status": "ok" }
     },
