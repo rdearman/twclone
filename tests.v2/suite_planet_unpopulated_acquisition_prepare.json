@@ -1,0 +1,110 @@
+{
+  "test_suite_name": "V3 Unpopulated Planet Acquisition Prepare",
+  "description": "Ordinary-player capture, ownership transfer, conservation, denial and transactional rollback for empty planets.",
+  "tests": [
+    { "name": "Setup: acquiring ordinary player", "setup": "macro_auth_user", "username": "v3_unpop_acquirer", "password": "qa-password" },
+    { "name": "Setup: former planet owner", "setup": "macro_auth_user", "username": "v3_unpop_former_owner", "password": "qa-password" },
+    { "name": "Setup: unrelated player", "setup": "macro_auth_user", "username": "v3_unpop_outsider", "password": "qa-password" },
+    {
+      "name": "Select a non-FedSpace sector",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT MIN(sector_id) FROM sectors WHERE sector_id > 10;" },
+      "expect": { "status": "ok" },
+      "save": { "planet_acq_sector": "data.rows.0.0" }
+    },
+    {
+      "name": "Fund player bank account for corporation charter",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE bank_accounts SET balance=100000 WHERE owner_type='player' AND owner_id=@{v3_unpop_acquirer_player_id} AND currency='CRD' AND is_active=TRUE;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Place players and ships at the test sector with combat capacity",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "UPDATE players SET sector_id=@{planet_acq_sector},lastplanet=0 WHERE player_id IN (@{v3_unpop_acquirer_player_id},@{v3_unpop_former_owner_player_id},@{v3_unpop_outsider_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Set active ships at the test sector with combat capacity", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "UPDATE ships SET sector_id=@{planet_acq_sector},onplanet=FALSE,fighters=100 WHERE ship_id IN (SELECT ship_id FROM players WHERE player_id IN (@{v3_unpop_acquirer_player_id},@{v3_unpop_former_owner_player_id},@{v3_unpop_outsider_player_id}));" }, "expect": { "status": "ok" } },
+    {
+      "name": "Create deterministic unpopulated planets with conserved assets",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "INSERT INTO planets (planet_id,sector_id,name,owner_id,owner_type,class,population,population_type,colonists_unassigned,colonists_ore,colonists_org,colonists_eq,colonists_weapons,fighters,ore_on_hand,organics_on_hand,equipment_on_hand,created_by,type) SELECT x.planet_id,@{planet_acq_sector},x.name,@{v3_unpop_former_owner_player_id},'player','M',0,'UNPOPULATED',0,0,0,0,0,10,123,234,345,@{admin_player_id},(SELECT MIN(planettypes_id) FROM planettypes) FROM (VALUES (977740,'Unpopulated Acquisition QA'),(977741,'Unpopulated Rollback QA'),(977742,'Unpopulated Conflicting Claim QA')) AS x(planet_id,name) ON CONFLICT (planet_id) DO UPDATE SET sector_id=EXCLUDED.sector_id,name=EXCLUDED.name,owner_id=EXCLUDED.owner_id,owner_type='player',population=0,population_type='UNPOPULATED',colonists_unassigned=0,colonists_ore=0,colonists_org=0,colonists_eq=0,colonists_weapons=0,fighters=10,ore_on_hand=123,organics_on_hand=234,equipment_on_hand=345;" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Seed citadel treasuries on both deterministic worlds", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "INSERT INTO citadels(planet_id,level,treasury,owner_id) VALUES (977740,1,456,@{v3_unpop_former_owner_player_id}),(977741,1,789,@{v3_unpop_former_owner_player_id}) ON CONFLICT (planet_id) DO UPDATE SET level=1,treasury=EXCLUDED.treasury,owner_id=EXCLUDED.owner_id;" }, "expect": { "status": "ok" } },
+    { "name": "Refresh acquirer session location", "command": "player.my_info", "user": "v3_unpop_acquirer", "expect": { "status": "ok" } },
+    { "name": "Reject missing planet identity", "command": "combat.attack_planet", "user": "v3_unpop_acquirer", "data": {}, "expect": { "status": "error" } },
+    {
+      "name": "Install a database constraint to inject failure after combat begins",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "ALTER TABLE planets ADD CONSTRAINT v3_unpop_capture_rollback CHECK (planet_id <> 977741 OR owner_id=@{v3_unpop_former_owner_player_id});" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Failed capture returns an error",
+      "command": "combat.attack_planet", "user": "v3_unpop_acquirer",
+      "data": { "planet_id": 977741, "enslave_colonists": false },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Capture failure rolls back fighters, population, ownership, stock, treasury and event",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.owner_id=@{v3_unpop_former_owner_player_id} AND p.owner_type='player' AND p.population=0 AND p.population_type='UNPOPULATED' AND p.colonists_unassigned+p.colonists_ore+p.colonists_org+p.colonists_eq+p.colonists_weapons=0 AND p.fighters=10 AND p.ore_on_hand=123 AND p.organics_on_hand=234 AND p.equipment_on_hand=345 AND c.treasury=789 AND s.fighters=100 AND NOT EXISTS (SELECT 1 FROM engine_events WHERE type='player.capture_planet.v1' AND payload LIKE '%977741%') THEN 1 ELSE 0 END FROM planets p JOIN citadels c USING(planet_id) JOIN players pl ON pl.player_id=@{v3_unpop_acquirer_player_id} JOIN ships s ON s.ship_id=pl.ship_id WHERE p.planet_id=977741;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    { "name": "Remove fault injection after rollback assertion", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "ALTER TABLE planets DROP CONSTRAINT v3_unpop_capture_rollback;" }, "expect": { "status": "ok" } },
+    {
+      "name": "Ordinary player captures an unpopulated planet",
+      "command": "combat.attack_planet", "user": "v3_unpop_acquirer",
+      "data": { "planet_id": 977740, "enslave_colonists": false },
+      "expect": { "status": "ok", "type": "combat.attack_planet" },
+      "asserts": [
+        { "path": "data.planet_id", "op": "==", "value": 977740 },
+        { "path": "data.captured", "op": "==", "value": true },
+        { "path": "data.attacker_remaining_fighters", "op": "==", "value": 90 },
+        { "path": "data.defender_remaining_fighters", "op": "==", "value": 0 }
+      ]
+    },
+    {
+      "name": "Capture preserves unpopulated state, zero allocations, stock and citadel treasury",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.owner_id=@{v3_unpop_acquirer_player_id} AND p.owner_type='player' AND p.population=0 AND p.population_type='UNPOPULATED' AND p.colonists_unassigned+p.colonists_ore+p.colonists_org+p.colonists_eq+p.colonists_weapons=0 AND p.fighters=0 AND p.ore_on_hand=123 AND p.organics_on_hand=234 AND p.equipment_on_hand=345 AND c.treasury=456 AND s.fighters=90 AND (SELECT COUNT(*) FROM engine_events WHERE type='player.capture_planet.v1' AND payload LIKE '%977740%')=1 THEN 1 ELSE 0 END FROM planets p JOIN citadels c USING(planet_id) JOIN players pl ON pl.player_id=@{v3_unpop_acquirer_player_id} JOIN ships s ON s.ship_id=pl.ship_id WHERE p.planet_id=977740;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    { "name": "Planet information response agrees with captured owner and unpopulated state", "command": "planet.info", "user": "v3_unpop_acquirer", "data": { "planet_id": 977740 }, "expect": { "status": "ok", "type": "planet.info" }, "asserts": [{ "path": "data.planet_id", "op": "==", "value": 977740 }, { "path": "data.owner_id", "op": "==", "value": "@{v3_unpop_acquirer_player_id}" }, { "path": "data.owner_type", "op": "==", "value": "player" }, { "path": "data.population", "op": "==", "value": 0 }, { "path": "data.population_type", "op": "==", "value": "UNPOPULATED" }, { "path": "data.fighters", "op": "==", "value": 0 }] },
+    { "name": "Former owner cannot transfer a captured planet", "command": "planet.transfer_ownership", "user": "v3_unpop_former_owner", "data": { "planet_id": 977740, "target_id": "@{v3_unpop_outsider_player_id}", "target_type": "player" }, "expect": { "status": "error" } },
+    {
+      "name": "Denied former-owner transfer leaves the captured state unchanged",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN owner_id=@{v3_unpop_acquirer_player_id} AND owner_type='player' AND population=0 AND population_type='UNPOPULATED' AND fighters=0 AND ore_on_hand=123 AND organics_on_hand=234 AND equipment_on_hand=345 THEN 1 ELSE 0 END FROM planets WHERE planet_id=977740;" },
+      "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    {
+      "name": "Inject a competing ownership change at the capture compare-and-set boundary",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "CREATE FUNCTION v3_qa_competing_planet_claim() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.ship_id=(SELECT ship_id FROM players WHERE player_id=@{v3_unpop_acquirer_player_id}) AND NEW.fighters<OLD.fighters THEN UPDATE planets SET owner_id=@{v3_unpop_outsider_player_id} WHERE planet_id=977742; END IF; RETURN NEW; END; $$;" },
+      "expect": { "status": "ok" }
+    },
+    { "name": "Install competing-claim trigger", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "CREATE TRIGGER v3_qa_competing_planet_claim BEFORE UPDATE OF fighters ON ships FOR EACH ROW EXECUTE FUNCTION v3_qa_competing_planet_claim();" }, "expect": { "status": "ok" } },
+    { "name": "Reject a stale capture after a competing owner change", "command": "combat.attack_planet", "user": "v3_unpop_acquirer", "data": { "planet_id": 977742, "enslave_colonists": false }, "expect": { "status": "error" } },
+    {
+      "name": "Competing ownership change and combat costs roll back atomically",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.owner_id=@{v3_unpop_former_owner_player_id} AND p.owner_type='player' AND p.population=0 AND p.population_type='UNPOPULATED' AND p.fighters=10 AND s.fighters=90 AND NOT EXISTS (SELECT 1 FROM engine_events WHERE type='player.capture_planet.v1' AND payload LIKE '%977742%') THEN 1 ELSE 0 END FROM planets p JOIN players pl ON pl.player_id=@{v3_unpop_acquirer_player_id} JOIN ships s ON s.ship_id=pl.ship_id WHERE p.planet_id=977742;" },
+      "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    { "name": "Remove competing-claim trigger", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DROP TRIGGER v3_qa_competing_planet_claim ON ships;" }, "expect": { "status": "ok" } },
+    { "name": "Remove competing-claim trigger function", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "DROP FUNCTION v3_qa_competing_planet_claim();" }, "expect": { "status": "ok" } },
+    { "name": "Create corporation through the player workflow", "command": "corp.create", "user": "v3_unpop_acquirer", "data": { "name": "Unpopulated World QA" }, "expect": { "status": "ok" }, "save": { "unpop_corp_id": "data.corp_id" } },
+    { "name": "Transfer the planet from player ownership to corporation ownership", "command": "planet.transfer_ownership", "user": "v3_unpop_acquirer", "data": { "planet_id": 977740, "target_id": "@{unpop_corp_id}", "target_type": "corp" }, "expect": { "status": "ok", "type": "planet.transfer_ownership.success" } },
+    { "name": "Verify corporation ownership and all empty-world assets after transfer", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN p.owner_id=@{unpop_corp_id} AND p.owner_type IN ('corp','corporation') AND p.population=0 AND p.population_type='UNPOPULATED' AND p.colonists_unassigned+p.colonists_ore+p.colonists_org+p.colonists_eq+p.colonists_weapons=0 AND p.ore_on_hand=123 AND p.organics_on_hand=234 AND p.equipment_on_hand=345 AND c.treasury=456 THEN 1 ELSE 0 END FROM planets p JOIN citadels c USING(planet_id) WHERE p.planet_id=977740;" }, "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }] },
+    { "name": "Corporation-owned planet info returns authoritative corporation ownership", "command": "planet.info", "user": "v3_unpop_acquirer", "data": { "planet_id": 977740 }, "expect": { "status": "ok", "type": "planet.info" }, "asserts": [{ "path": "data.planet_id", "op": "==", "value": 977740 }, { "path": "data.owner_id", "op": "==", "value": "@{unpop_corp_id}" }, { "path": "data.owner_type", "op": "==", "value": "corp" }, { "path": "data.population_type", "op": "==", "value": "UNPOPULATED" }] },
+    { "name": "Reject unsupported ownership target type", "command": "planet.transfer_ownership", "user": "v3_unpop_acquirer", "data": { "planet_id": 977740, "target_id": "@{v3_unpop_acquirer_player_id}", "target_type": "alliance" }, "expect": { "status": "error" } },
+    { "name": "Reject nonexistent ownership target", "command": "planet.transfer_ownership", "user": "v3_unpop_acquirer", "data": { "planet_id": 977740, "target_id": 2147483000, "target_type": "player" }, "expect": { "status": "error" } },
+    { "name": "Transfer ownership from corporation back to the ordinary player", "command": "planet.transfer_ownership", "user": "v3_unpop_acquirer", "data": { "planet_id": 977740, "target_id": "@{v3_unpop_acquirer_player_id}", "target_type": "player" }, "expect": { "status": "ok", "type": "planet.transfer_ownership.success" } },
+    { "name": "Persist final player owner and conserved planet state before restart", "command": "sys.raw_sql_exec", "user": "admin", "data": { "sql": "SELECT CASE WHEN p.owner_id=@{v3_unpop_acquirer_player_id} AND p.owner_type='player' AND p.population=0 AND p.population_type='UNPOPULATED' AND p.colonists_unassigned+p.colonists_ore+p.colonists_org+p.colonists_eq+p.colonists_weapons=0 AND p.fighters=0 AND p.ore_on_hand=123 AND p.organics_on_hand=234 AND p.equipment_on_hand=345 AND c.treasury=456 THEN 1 ELSE 0 END FROM planets p JOIN citadels c USING(planet_id) WHERE p.planet_id=977740;" }, "expect": { "status": "ok" }, "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }] },
+    { "name": "Logout after ownership transitions", "command": "auth.logout", "user": "v3_unpop_acquirer", "expect": { "status": "ok" } }
+  ]
+}

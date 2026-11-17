@@ -1,0 +1,32 @@
+{
+  "test_suite_name": "V3 Unpopulated Planet Acquisition Restart Verification",
+  "description": "Reauthenticate after the serving game process restarts and compare planet info with persisted PostgreSQL ownership and assets.",
+  "tests": [
+    { "name": "Reconnect acquiring player after server restart", "setup": "macro_auth_user", "username": "v3_unpop_acquirer", "password": "qa-password" },
+    { "name": "Reconnect former owner after server restart", "setup": "macro_auth_user", "username": "v3_unpop_former_owner", "password": "qa-password" },
+    { "name": "Authenticated player context survives restart", "command": "player.my_info", "user": "v3_unpop_acquirer", "expect": { "status": "ok" }, "asserts": [{ "path": "data.player.id", "op": "==", "value": "@{v3_unpop_acquirer_player_id}" }] },
+    {
+      "name": "Reconnected owner's planet response matches persisted ownership and empty population",
+      "command": "planet.info", "user": "v3_unpop_acquirer",
+      "data": { "planet_id": 977740 },
+      "expect": { "status": "ok", "type": "planet.info" },
+      "asserts": [
+        { "path": "data.planet_id", "op": "==", "value": 977740 },
+        { "path": "data.owner_id", "op": "==", "value": "@{v3_unpop_acquirer_player_id}" },
+        { "path": "data.owner_type", "op": "==", "value": "player" },
+        { "path": "data.population", "op": "==", "value": 0 },
+        { "path": "data.population_type", "op": "==", "value": "UNPOPULATED" },
+        { "path": "data.fighters", "op": "==", "value": 0 }
+      ]
+    },
+    { "name": "Former owner cannot read the newly owned unlanded planet", "command": "planet.info", "user": "v3_unpop_former_owner", "data": { "planet_id": 977740 }, "expect": { "status": "error" } },
+    {
+      "name": "Restart preserved population, assignments, stock, treasury, and exactly one capture event",
+      "command": "sys.raw_sql_exec", "user": "admin",
+      "data": { "sql": "SELECT CASE WHEN p.owner_id=@{v3_unpop_acquirer_player_id} AND p.owner_type='player' AND p.population=0 AND p.population_type='UNPOPULATED' AND p.colonists_unassigned+p.colonists_ore+p.colonists_org+p.colonists_eq+p.colonists_weapons=0 AND p.fighters=0 AND p.ore_on_hand=123 AND p.organics_on_hand=234 AND p.equipment_on_hand=345 AND c.treasury=456 AND (SELECT COUNT(*) FROM engine_events WHERE type='player.capture_planet.v1' AND payload LIKE '%977740%')=1 THEN 1 ELSE 0 END FROM planets p JOIN citadels c USING(planet_id) WHERE p.planet_id=977740;" },
+      "expect": { "status": "ok" },
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }]
+    },
+    { "name": "Logout after restart verification", "command": "auth.logout", "user": "v3_unpop_acquirer", "expect": { "status": "ok" } }
+  ]
+}

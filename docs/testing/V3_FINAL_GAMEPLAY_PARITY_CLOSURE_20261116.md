@@ -1,6 +1,6 @@
 # V3 final gameplay parity closure
 
-Reviewed: 16 November 2026  
+Reviewed: 17 November 2026
 Starting review baseline: `4e60f9966b363529b20ab34bcb49b05b1d160a53`
 Parity status refresh: 16 November 2026, after the robbery persistence fix.
 
@@ -22,7 +22,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 
 | Decision ID | Requirement area | Status |
 |---|---|---|
-| POP-01 | Population state and transitions | PARTIAL |
+| POP-01 | Population state and transitions | VERIFIED |
 | POP-02 | Acquisition and capture disposition | PARTIAL |
 | POP-03 | Slave productivity | IMPLEMENTED_UNVERIFIED |
 | POP-04 | Slave morale | IMPLEMENTED_UNVERIFIED |
@@ -90,9 +90,16 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count:** 13 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 3 BLOCKED,
+**Count (updated 17 November 2026):** 14 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 3 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
+
+`POP-01` is now VERIFIED following disposable-PostgreSQL capture of an
+unpopulated planet, preservation/rollback checks, player/corporation ownership
+transitions, and readback after an actual serving-server restart. Executed
+suite evidence and client response checks are recorded in the clause-level
+matrix. This promotes one parent requirement; the other classifications are
+unchanged.
 
 The clause-level worklist is in
 [`V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`](V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md).
@@ -225,5 +232,5 @@ JSON suite is not a substitute for that client journey.
 The lawful robbery persistence defect is fixed and accepted at server and
 PostgreSQL level. This does not close the broader combat, capture, client journey
 or outstanding decision-register gaps. The project is not at complete V3 parity
-yet; the 67-row classification above remains 13 VERIFIED, 44
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 3 BLOCKED, and 0 MISSING.
+yet; the 67-row classification above is 14 VERIFIED, 44
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 3 BLOCKED, and 0 MISSING.

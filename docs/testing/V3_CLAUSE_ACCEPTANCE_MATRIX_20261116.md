@@ -2,11 +2,11 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 16 November 2026, following commits `97f32ceb`, `0f8c9b21`, and `1c42d647`.
+Reviewed: 17 November 2026, after the unpopulated-planet acquisition acceptance run.
 
 ## Current measures
 
-- Parent requirements: 67 (13 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 3 BLOCKED; unchanged).
+- Parent requirements: 67 (14 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 3 BLOCKED). `POP-01` is promoted after its previously missing unpopulated acquisition transition passed database-backed acceptance.
 - Base clause rows: 227 (65 VERIFIED, 162 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 3 exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - Ten simple arithmetic/date clauses were executed in this run. They do not promote POP-03 or BANK-03 as whole requirements.
@@ -293,7 +293,7 @@ The parent status is intentionally not copied onto every child clause. In partic
 
 | Requirement | Additional independently testable clause | Status | Evidence |
 |---|---|---|---|
-| `POP-01` | Complete capture/acquisition transitions among colonist, slave, and unpopulated states with counts and allocations preserved | DEFECTIVE_OR_INCOMPLETE | Populated colonist-to-slave, slave-to-colonist, and neutral inherited-slave transitions now pass `suite_combat_advanced.json::case-0023`–`case-0039`; unpopulated-planet acquisition transition remains without executable evidence, so the parent stays unpromoted. |
+| `POP-01` | Complete capture/acquisition transitions among colonist, slave, and unpopulated states with counts and allocations preserved | VERIFIED | Existing populated-world transition cases `suite_combat_advanced.json::case-0023`–`case-0039`, together with disposable PostgreSQL `suite_planet_unpopulated_acquisition_prepare.json::case-0021`–`case-0044` and actual serving-server restart verification `suite_planet_unpopulated_acquisition_restart_verify.json::case-0008`–`case-0013`. The prepare/restart suites executed 57 cases, 0 failed. The prepare suite verifies empty population/allocations, planetary stock and treasury conservation, database-failure rollback, player↔corporation ownership transfer, former-owner denial, and an injected competing-claim conflict at capture settlement with complete transaction rollback. The restart suite reauthenticates ordinary players, checks authoritative `planet.info`, confirms former-owner access denial, and verifies persisted state and exactly one capture event. Python attack workflow tests: `client/python_client/tests/test_planet_workflows.py -k 'planet_attack'` (`9 passed, 69 deselected`); Godot `planet_command_response_test.gd` (`117 checks passed`). |
 | `EXC-09` | Demonstrate sustainable NPC/commodity balancing under normal production and market depletion | DEFECTIVE_OR_INCOMPLETE | Decision register explicitly leaves broader balancing required; no acceptance threshold is approved for a full balance pass. |
 | `PARITY-TOLL-01` | Toll offer and settlement on transwarp sector entry | VERIFIED | `suite_movement_transwarp_tolls.json` and `suite_movement_transwarp_toll_edges.json`; ordinary authenticated server requests and PostgreSQL state assertions listed above. |
 | `POP-05` | Approve daily recurrence interval, stoppage duration, and population-loss amount | BLOCKED | The V3 decision register leaves these three numeric policy values unset. |

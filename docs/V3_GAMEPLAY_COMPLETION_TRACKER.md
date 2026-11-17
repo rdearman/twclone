@@ -72,10 +72,22 @@ by itself close any of the 67 decision-register requirements.
   changes atomically through the authoritative cargo layer. A PostgreSQL suite
   confirms remote refusal, pickup/drop-off conservation, and full rollback when
   a drop-off would mix colonists with slave population. This does not verify
-  the full acquisition/migration transition matrix. A separate same-database
+  unrelated acquisition policy in `POP-02`. A separate same-database
   test stopped and restarted the serving V3 server between suites, then
   authenticated the ordinary player, read the persisted population and
   completed another conserving transfer.
+- **Unpopulated planet acquisition:** ordinary-player capture, database-failure
+  rollback, conservation of empty population/allocation state, commodity stock
+  and citadel treasury, player↔corporation ownership transfer, former-owner
+  denial, and authenticated planet readback after a serving-server restart
+  passed in disposable PostgreSQL. The prepare and restart verification suites
+  executed **57 cases, 0 failed**, including a stale competing-claim conflict
+  injected at the capture compare-and-set boundary. The failed capture rolled
+  back the conflicting ownership update and fighter debit. Focused client
+  response checks passed for
+  Python (**9 tests**) and Godot (**117 checks**). This closes the `POP-01`
+  acquisition transition clause; the separate `POP-02` purchase and capture
+  disposition clauses remain independently classified.
 - **Production numeric rules:** the disposable database confirmed all 21
   built-in class/commodity rate rows for the seven approved noncanonical V3
   defaults. This verifies migrated configuration values; it does not verify
