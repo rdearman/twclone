@@ -162,7 +162,7 @@
       "name": "Make hardware restock task due",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'port_hardware_restock';" },
+      "data": { "sql": "UPDATE cron_tasks SET schedule = 'every:5s', next_due_at = CURRENT_TIMESTAMP - INTERVAL '10 seconds', enabled = TRUE WHERE name = 'port_hardware_restock';" },
       "expect": { "status": "ok" }
     },
     {
@@ -179,6 +179,13 @@
       "asserts": [
         { "path": "data.rows.0.0", "op": "==", "value": 11 }
       ]
+    },
+    {
+      "name": "Restore the normal hardware restock schedule",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET schedule = 'daily@04:15Z', next_due_at = CURRENT_TIMESTAMP + INTERVAL '1 day' WHERE name = 'port_hardware_restock';" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "hardware.buy rejects unmapped item",

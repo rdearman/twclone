@@ -9,11 +9,18 @@
       "password": "testpass123"
     },
     {
-      "name": "Rig: Find a lawful cluster sector (law_severity > 0, not FedSpace)",
+      "name": "Rig: Remove stale D1 test-only ports",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ports WHERE name IN ('V3 QA D1 Lawful Port', 'V3 QA D1 Lawless Port');" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Ensure a port exists in a lawful non-Fed cluster sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN cluster_sectors cs ON cs.sector_id = s.sector_id JOIN clusters c ON cs.cluster_id = c.clusters_id JOIN ports p ON p.sector_id = s.sector_id WHERE c.law_severity > 0 AND c.role != 'FED' AND s.sector_id NOT BETWEEN 1 AND 10 ORDER BY s.sector_id LIMIT 1;"
+        "sql": "WITH chosen AS (SELECT c.clusters_id, cs.sector_id, c.law_severity FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'RANDOM' AND c.law_severity > 0 AND cs.sector_id > 10 ORDER BY c.clusters_id, cs.sector_id LIMIT 1), ensured_port AS (INSERT INTO ports (name, sector_id, type, porttype_id, petty_cash) SELECT 'V3 QA D1 Lawful Port', chosen.sector_id, 1, pt.porttype_id, 100000 FROM chosen CROSS JOIN porttypes pt WHERE pt.code = 'CLASS0' AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = chosen.sector_id AND p.is_active) RETURNING sector_id) SELECT chosen.sector_id, chosen.clusters_id, chosen.law_severity FROM chosen;"
       },
       "expect": { "status": "ok" },
       "save": { "lawful_sector": "data.rows.0.0", "lawful_cluster_id": "data.rows.0.1" }
@@ -143,11 +150,11 @@
       ]
     },
     {
-      "name": "Rig: Find a lawless (ORION) cluster sector",
+      "name": "Rig: Ensure a port exists in the lawless ORION cluster",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT s.sector_id, c.clusters_id, c.law_severity FROM sectors s JOIN cluster_sectors cs ON cs.sector_id = s.sector_id JOIN clusters c ON cs.cluster_id = c.clusters_id WHERE c.law_severity = 0 LIMIT 1;"
+        "sql": "WITH chosen AS (SELECT c.clusters_id, cs.sector_id, c.law_severity FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'ORION' AND c.law_severity = 0 ORDER BY cs.sector_id LIMIT 1), ensured_port AS (INSERT INTO ports (name, sector_id, type, porttype_id, petty_cash) SELECT 'V3 QA D1 Lawless Port', chosen.sector_id, 1, pt.porttype_id, 100000 FROM chosen CROSS JOIN porttypes pt WHERE pt.code = 'CLASS0' AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = chosen.sector_id AND p.is_active) RETURNING sector_id) SELECT chosen.sector_id, chosen.clusters_id, chosen.law_severity FROM chosen;"
       },
       "expect": { "status": "ok" },
       "save": { "lawless_sector": "data.rows.0.0", "lawless_cluster_id": "data.rows.0.1" }
@@ -266,6 +273,13 @@
       "expect": {
         "status": "ok"
       }
+    },
+    {
+      "name": "Cleanup: remove D1 test-only ports",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ports WHERE name IN ('V3 QA D1 Lawful Port', 'V3 QA D1 Lawless Port');" },
+      "expect": { "status": "ok" }
     }
   ]
 }

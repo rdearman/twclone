@@ -21,11 +21,18 @@
       "save": { "player_ship_id": "data.rows.0.0" }
     },
     {
-      "name": "Rig: Find a sector in RANDOM cluster (law_severity > 0)",
+      "name": "Rig: Remove stale test-only police port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ports WHERE name = 'V3 QA Phase B Police Port';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Ensure a port exists in a lawful RANDOM cluster sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id JOIN ports p ON p.sector_id = cs.sector_id WHERE c.role = 'RANDOM' AND c.law_severity > 0 AND cs.sector_id > 10 ORDER BY cs.sector_id LIMIT 1;"
+        "sql": "WITH chosen AS (SELECT c.clusters_id, cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'RANDOM' AND c.law_severity > 0 AND cs.sector_id > 10 ORDER BY c.clusters_id, cs.sector_id LIMIT 1), ensured_port AS (INSERT INTO ports (name, sector_id, type, porttype_id, petty_cash) SELECT 'V3 QA Phase B Police Port', chosen.sector_id, 1, pt.porttype_id, 100000 FROM chosen CROSS JOIN porttypes pt WHERE pt.code = 'CLASS0' AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = chosen.sector_id AND p.is_active) RETURNING sector_id) SELECT chosen.sector_id FROM chosen;"
       },
       "expect": { "status": "ok" },
       "save": { "random_sector": "data.rows.0.0" }
@@ -108,11 +115,27 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Capture configured robbery risk values",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT robbery_bust_chance_base, good_guy_bust_bonus, pro_criminal_bust_delta, evil_cluster_bust_bonus FROM law_enforcement WHERE law_enforcement_id = 1;" },
+      "expect": { "status": "ok" },
+      "save": { "old_bust_base": "data.rows.0.0", "old_good_bonus": "data.rows.0.1", "old_criminal_delta": "data.rows.0.2", "old_evil_bonus": "data.rows.0.3" }
+    },
+    {
+      "name": "Rig: Disable random busts for the successful robbery escalation scenario",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE law_enforcement SET robbery_bust_chance_base = 0, good_guy_bust_bonus = 0, pro_criminal_bust_delta = 0, evil_cluster_bust_bonus = 0 WHERE law_enforcement_id = 1;" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test B.1: Port robbery increments suspicion",
       "command": "port.rob",
       "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-1" },
       "user": "phase_b_player",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rob_result", "op": "equals", "value": "success" }, { "path": "data.credits_stolen", "op": "greater_than", "value": 0 } ]
     },
     {
       "name": "Test B.2: Verify suspicion incremented to 1 after robbery",
@@ -137,6 +160,13 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Restock the port before the second controlled robbery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ports SET petty_cash = 100000 WHERE port_id = @{robbery_port_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test B.3: Check wanted_level still zero after suspicion=1",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -154,7 +184,8 @@
       "command": "port.rob",
       "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-2" },
       "user": "phase_b_player",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rob_result", "op": "equals", "value": "success" }, { "path": "data.credits_stolen", "op": "greater_than", "value": 0 } ]
     },
     {
       "name": "Test B.5: Verify suspicion is 2 after second robbery",
@@ -179,11 +210,19 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Rig: Restock the port before the third controlled robbery",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE ports SET petty_cash = 100000 WHERE port_id = @{robbery_port_id};" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Test B.6: Third robbery triggers promotion (suspicion >= 3)",
       "command": "port.rob",
       "data": { "sector_id": "@{random_sector}", "port_id": "@{robbery_port_id}", "mode": "credits", "idempotency_key": "police-phase-b-rob-3" },
       "user": "phase_b_player",
-      "expect": { "status": "ok" }
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rob_result", "op": "equals", "value": "success" }, { "path": "data.credits_stolen", "op": "greater_than", "value": 0 } ]
     },
     {
       "name": "Test B.7: Verify promotion - wanted_level=1, suspicion resets",
@@ -198,6 +237,13 @@
         { "path": "incident_state.0", "op": "equals", "value": 0, "msg": "Suspicion should reset to 0 after promotion" },
         { "path": "incident_state.1", "op": "equals", "value": 1, "msg": "Wanted level should be 1 after threshold promotion" }
       ]
+    },
+    {
+      "name": "Rig: Restore configured robbery risk values",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE law_enforcement SET robbery_bust_chance_base = @{old_bust_base}, good_guy_bust_bonus = @{old_good_bonus}, pro_criminal_bust_delta = @{old_criminal_delta}, evil_cluster_bust_bonus = @{old_evil_bonus} WHERE law_enforcement_id = 1;" },
+      "expect": { "status": "ok" }
     },
     {
       "name": "Reconnect: logout after wanted promotion",
@@ -264,11 +310,11 @@
       ]
     },
     {
-      "name": "Rig: Find sector in Orion cluster (lawless)",
+      "name": "Rig: Ensure a port exists in the Orion cluster",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'ORION' LIMIT 1;"
+        "sql": "WITH chosen AS (SELECT c.clusters_id, cs.sector_id FROM cluster_sectors cs JOIN clusters c ON c.clusters_id = cs.cluster_id WHERE c.role = 'ORION' AND c.law_severity = 0 ORDER BY cs.sector_id LIMIT 1), ensured_port AS (INSERT INTO ports (name, sector_id, type, porttype_id, petty_cash) SELECT 'V3 QA Phase B Police Port', chosen.sector_id, 1, pt.porttype_id, 100000 FROM chosen CROSS JOIN porttypes pt WHERE pt.code = 'CLASS0' AND NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id = chosen.sector_id AND p.is_active) RETURNING sector_id) SELECT chosen.sector_id FROM chosen;"
       },
       "expect": { "status": "ok" },
       "save": { "orion_sector": "data.rows.0.0" }
@@ -338,6 +384,13 @@
       "asserts": [
         { "path": "error.code", "op": "equals", "value": 1410, "msg": "Lawless cluster should return ERR_NO_POLICE_PRESENCE" }
       ]
+    },
+    {
+      "name": "Cleanup: remove test-only police port",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "DELETE FROM ports WHERE name = 'V3 QA Phase B Police Port';" },
+      "expect": { "status": "ok" }
     }
   ]
 }

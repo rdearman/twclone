@@ -639,7 +639,7 @@ int db_ports_insert_real_bust(db_t *db, int port_id, int player_id) {
 
 
     /* 2. Try Insert if update affected 0 rows */
-    const char *q_ins = "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) VALUES ({1}, {2}, {3}, 'real', 1);";
+    const char *q_ins = "INSERT INTO port_busts (port_id, player_id, last_bust_at, bust_type, active) VALUES ({1}, {2}, {3}, 'real', TRUE);";
     char sql_ins[512]; sql_build(db, q_ins, sql_ins, sizeof(sql_ins));
     db_bind_t ins_params[] = { db_bind_i64(port_id), db_bind_i64(player_id), db_bind_timestamp_text(now_ts) };
     if (!db_exec(db, sql_ins, ins_params, 3, &err)) {

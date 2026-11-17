@@ -76,7 +76,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE turns SET turns_remaining=100 WHERE player_id IN (SELECT player_id FROM players WHERE name IN ('mixed_toll_payer','mixed_toll_refuser'))"
+        "sql": "UPDATE turns SET turns_remaining=500 WHERE player_id IN (SELECT player_id FROM players WHERE name IN ('mixed_toll_payer','mixed_toll_refuser'))"
       },
       "expect": {
         "status": "ok"

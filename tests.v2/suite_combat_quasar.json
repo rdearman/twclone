@@ -11,9 +11,23 @@
       "password": "password"
     },
     {
-      "name": "Rig: Find Quasar Planet",
+      "name": "Rig: Remove stale Quasar warp links",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "WITH safe_sector AS (SELECT s.sector_id FROM sectors s WHERE s.sector_id > 100 AND NOT EXISTS (SELECT 1 FROM planets p2 JOIN citadels c2 ON c2.planet_id = p2.planet_id WHERE p2.sector_id = s.sector_id AND c2.level >= 3 AND c2.qCannonSector > 0) ORDER BY s.sector_id DESC LIMIT 1), target AS (SELECT p.planet_id, safe_sector.sector_id FROM planets p JOIN citadels c ON p.planet_id = c.planet_id CROSS JOIN safe_sector WHERE c.level >= 3 AND c.qCannonSector > 0 AND c.qCannonAtmosphere > 0 ORDER BY p.planet_id LIMIT 1), moved AS (UPDATE planets p SET sector_id = t.sector_id FROM target t WHERE p.planet_id = t.planet_id RETURNING p.planet_id, t.sector_id) SELECT planet_id, sector_id FROM moved;" },
+      "data": { "sql": "DELETE FROM sector_warps WHERE (from_sector = 1 AND to_sector = 9999) OR (from_sector = 9999 AND to_sector = 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Remove stale Quasar acceptance planet",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM planets WHERE planet_id = 977730;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Rig: Create deterministic Quasar planet at sector 9999",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "INSERT INTO planets (planet_id, num, sector_id, name, owner_id, owner_type, class, type, created_by, fighters) SELECT 977730, 1, 9999, 'V3 Quasar Regression Planet', player_id, 'player', 'M', (SELECT planettypes_id FROM planettypes WHERE code = 'M' LIMIT 1), player_id, 0 FROM players WHERE name = 'admin' RETURNING planet_id, sector_id;" },
       "user": "admin",
       "expect": { "status": "ok" },
       "save": { "target_planet_id": "data.rows.0.0", "target_sector_id": "data.rows.0.1" }
@@ -32,7 +46,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE citadels SET qCannonSector = 1, qCannonAtmosphere = 1 WHERE planet_id = @{target_planet_id};"
+        "sql": "INSERT INTO citadels (planet_id, level, owner_id, qCannonSector, qCannonAtmosphere, militaryReactionLevel, planetaryShields) VALUES (@{target_planet_id}, 3, (SELECT player_id FROM players WHERE name = 'admin'), 1, 1, 0, 0) ON CONFLICT (planet_id) DO UPDATE SET level = 3, owner_id = EXCLUDED.owner_id, qCannonSector = 1, qCannonAtmosphere = 1, militaryReactionLevel = 0, planetaryShields = 0;"
       },
       "expect": { "status": "ok" }
     },
@@ -130,6 +144,20 @@
       "asserts": [
         { "path": "data.rows.0.0", "op": ">=", "value": 1 }
       ]
+    },
+    {
+      "name": "Cleanup: remove deterministic Quasar warp links",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM sector_warps WHERE (from_sector = 1 AND to_sector = 9999) OR (from_sector = 9999 AND to_sector = 1);" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Cleanup: remove deterministic Quasar planet",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "DELETE FROM planets WHERE planet_id = 977730;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
     }
   ]
 }

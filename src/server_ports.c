@@ -2813,9 +2813,12 @@ cmd_port_rob (client_ctx_t *ctx, json_t *root)
   double chance = p_base + p_player + p_cluster;
 
 
-  if (chance < 0.01)
+  /* A configured zero-risk test or game rule must remain zero; forcing a
+   * 1% floor made deterministic acceptance impossible and contradicted the
+   * explicit law-enforcement configuration. */
+  if (chance < 0.0)
     {
-      chance = 0.01;
+      chance = 0.0;
     }
   if (chance > 0.30)
     {
