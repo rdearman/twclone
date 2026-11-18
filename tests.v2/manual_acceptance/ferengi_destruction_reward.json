@@ -46,6 +46,50 @@
       }
     },
     {
+      "name": "Create Ferengi captain NPC fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) VALUES ('V3 Ferengi captain QA','$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',201,0,2,TRUE,1);"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create captain-class Dreadnought NPC ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ships(name,type_id,sector_id,holds,fighters,shields,hull,personality,destroyed) SELECT 'V3 Ferengi QA captain Dreadnought',shiptypes_id,201,10,0,100,100,'defensive',FALSE FROM shiptypes WHERE name='Ferengi Dreadnought';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Assign Dreadnought to the Ferengi captain NPC",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) SELECT (SELECT ship_id FROM ships WHERE name='V3 Ferengi QA captain Dreadnought'),(SELECT player_id FROM players WHERE name='V3 Ferengi captain QA'),1,TRUE;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Register distinct Dreadnought captain in Ferengi roster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ferengi_traders(trader_code,display_name,corporation_id,ship_id) SELECT 'v3_qa_captain','V3 QA Ferengi Captain',corporation_id,(SELECT ship_id FROM ships WHERE name='V3 Ferengi QA captain Dreadnought') FROM corporations WHERE tag='FENG';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
       "name": "Select an unprotected test sector",
       "command": "sys.raw_sql_exec",
       "user": "admin",
@@ -129,11 +173,11 @@
       }
     },
     {
-      "name": "Prepare an ordinary player and Ferengi NPC for a single lethal hit",
+      "name": "Prepare an ordinary player and Ferengi NPC for a nonlethal first hit",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE ships SET sector_id=@{battle_sector},shields=0,hull=10,destroyed=FALSE WHERE ship_id=@{ferengi_ship};"
+        "sql": "UPDATE ships SET sector_id=@{battle_sector},shields=100,hull=100,destroyed=FALSE WHERE ship_id=@{ferengi_ship};"
       },
       "expect": {
         "status": "ok"
@@ -193,6 +237,109 @@
       "data": {
         "username": "v3_bounty_hunter",
         "passwd": "P@ssword123"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Save strongest active Ferengi captain before the hostile encounter",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ft.ship_id FROM ferengi_traders ft JOIN ships s ON s.ship_id=ft.ship_id JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE ft.active=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE AND COALESCE(s.hull,0)>0 ORDER BY COALESCE(st.maxattack,0) DESC,COALESCE(s.hull,0) DESC,COALESCE(s.shields,0) DESC,ft.ferengi_trader_id LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "expected_ferengi_captain_ship": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Ordinary player attacks genuine Ferengi NPC without destroying it",
+      "command": "combat.attack",
+      "user": "v3_bounty_hunter",
+      "data": {
+        "target_ship_id": "@{ferengi_ship}"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Nonlethal attack posts one wanted bounty and the strongest captain receives hunt intelligence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT COUNT(*)=1 FROM bounties WHERE posted_by_type='npc' AND posted_by_id=(SELECT corporation_id FROM ferengi_traders WHERE ship_id=@{ferengi_ship}) AND target_type='player' AND target_id=(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND reward=5000 AND status='open')::int,(SELECT COUNT(*)=1 FROM npc_action_log WHERE idempotency_key='ferengi:hostile:'||(SELECT ferengi_trader_id FROM ferengi_traders WHERE ship_id=@{ferengi_ship})||':'||(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND status='completed')::int,EXISTS(SELECT 1 FROM npc_intelligence i WHERE i.target_player_id=(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND i.source='ferengi_hunt' AND i.npc_ship_id=@{expected_ferengi_captain_ship})::int;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Repeated nonlethal attack records no duplicate wanted bounty",
+      "command": "combat.attack",
+      "user": "v3_bounty_hunter",
+      "data": {
+        "target_ship_id": "@{ferengi_ship}"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Repeated attack preserves one bounty and one completed wanted action",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT COUNT(*)=1 FROM bounties WHERE posted_by_type='npc' AND target_type='player' AND target_id=(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND reward=5000)::int,(SELECT COUNT(*)=1 FROM npc_action_log WHERE idempotency_key='ferengi:hostile:'||(SELECT ferengi_trader_id FROM ferengi_traders WHERE ship_id=@{ferengi_ship})||':'||(SELECT player_id FROM players WHERE name='v3_bounty_hunter'))::int,(SELECT COUNT(*)=1 FROM npc_intelligence WHERE source='ferengi_hunt' AND target_player_id=(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND npc_ship_id=@{expected_ferengi_captain_ship})::int;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Set the genuinely damaged target up for the lethal destruction acceptance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull=10,shields=0 WHERE ship_id=@{ferengi_ship};"
       },
       "expect": {
         "status": "ok"

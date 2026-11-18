@@ -1,0 +1,131 @@
+{
+  "name": "BANK-04 prepare paid history and missing recipient",
+  "tests": [
+    {
+      "name": "Bootstrap disposable scheduler admin",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register order payer",
+      "setup": "macro_auth_user",
+      "username": "bank04_payer_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Register initial recipient",
+      "setup": "macro_auth_user",
+      "username": "bank04_recipient_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Deposit funds through authenticated bank workflow",
+      "command": "bank.deposit",
+      "user": "bank04_payer_qa",
+      "data": {
+        "amount": 50
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create daily recurring order to existing recipient",
+      "command": "bank.orders.create",
+      "user": "bank04_payer_qa",
+      "data": {
+        "recipient_player_id": "@bank04_recipient_qa_player_id",
+        "amount": 10,
+        "frequency": "daily",
+        "time_utc": "00:00"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "bank04_order_id": "data.order_id",
+        "bank04_due": "data.next_run_at"
+      }
+    },
+    {
+      "name": "Enable deterministic scheduler",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Schedule the bank handler at first occurrence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='bank_standing_orders_tick'),next_due_at=CASE WHEN name='bank_standing_orders_tick' THEN to_timestamp(@{bank04_due}) ELSE next_due_at END;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Advance actual bank scheduler to pay first occurrence",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": {
+        "now_s": "@{bank04_due}",
+        "confirm": true
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.tasks_run",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "First occurrence paid with two ledger legs and balances conserved",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*)=1 FROM bank_order_occurrences WHERE bank_orders_id=@{bank04_order_id} AND outcome='paid' AND amount=10) AND (SELECT COUNT(*)=2 FROM bank_transactions WHERE tx_group_id LIKE 'bank-order-'||@{bank04_order_id}||'-%') AND (SELECT balance=40 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='bank04_payer_qa') AND currency='CRD' AND is_active=TRUE) AND (SELECT balance=10 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='bank04_recipient_qa') AND currency='CRD' AND is_active=TRUE) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Simulate recipient later ceasing to exist",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE bank_orders SET to_id=99999999 WHERE bank_orders_id=@{bank04_order_id};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Schedule next occurrence before restart",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='bank_standing_orders_tick'),next_due_at=CASE WHEN name='bank_standing_orders_tick' THEN (SELECT next_run_at FROM bank_orders WHERE bank_orders_id=@{bank04_order_id}) ELSE next_due_at END;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

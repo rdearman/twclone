@@ -4,8 +4,10 @@ Reviewed: 18 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 18 November 2026:** 22 VERIFIED, 37
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Batch 2 promoted
+**Parity refresh — 18 November 2026:** 27 VERIFIED, 32
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Batch 3 promoted
+`HARV-02`, `HARV-03`, `BANK-04`, `TRADE-01`, and `NPC-FER-01` from focused
+disposable-PostgreSQL acceptance. Batch 2 promoted
 `POP-03`, `SHIP-03`, `BANK-02` and `V3-TOLL-RATE-01` from executed disposable
 PostgreSQL acceptance. `POP-07` remains IMPLEMENTED_UNVERIFIED: its final
 clause is a traceable design/scope constraint (“No corporation-capture rule
@@ -31,11 +33,25 @@ The Orion targeting
 decision remains PARTIAL: its 60-case PostgreSQL run passed, while safe-zone,
 protected-player, NPC-removal and genuine concurrent-arrival cases remain open.
 The approved ruleset 1.2 cycle unrest and Ferengi destruction reward passed
-focused PostgreSQL acceptance. `NPC-FER-01` is now IMPLEMENTED_UNVERIFIED because
-the existing penalty and pursuit clauses still lack clause-specific evidence.
+focused PostgreSQL acceptance. `NPC-FER-01` is VERIFIED by authenticated
+attack/wanted-list/pursuit/retry/destruction tests (45/45) and a serving-server
+restart/reconnect replay (6/6).
 POP-05's daily recurrence, stoppage-duration and population-loss numeric policy
 values remain the sole rules blocker. Exact evidence and limits are in the
 clause matrix and [`V3_RULESET_1_2.md`](V3_RULESET_1_2.md).
+
+
+Batch 3 evidence: `HARV-02` 40/40 confirms owner/Officer harvest, visitor/Member
+refusal, unchanged unauthorized state, and injected rollback. `HARV-03` 27/27
+confirms Exchange sale, rollback and sold-stock exclusion from harvest; a server
+restart/reconnect phase passed 8/8. `BANK-04` scheduler phases passed 17/17 and
+11/11 across a real serving-process restart. `TRADE-01` no-haggle/fixed quote
+passed 9/9, market-shock expiry passed 12/12, and deterministic settlement
+passed 43/43. Python planet workflow tests passed 79/79; Godot command menu
+passed 212 checks with Exchange sale dispatch covered. `POP-07` stays
+IMPLEMENTED_UNVERIFIED because its no-corporation-capture statement documents
+scope but does not define executable behavior; `SHIP-01` remains VERIFIED with
+its prior client-menu evidence. See the clause matrix for exact case IDs.
 
 The current requirement-by-requirement reconciliation is
 [`V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md`](testing/V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md).

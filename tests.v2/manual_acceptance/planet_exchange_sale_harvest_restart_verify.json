@@ -1,0 +1,66 @@
+{
+  "name": "HARV-03 sale stock and no-harvest state survive server restart",
+  "tests": [
+    {
+      "name": "Reauthenticate disposable administrator",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Reauthenticate ordinary owner after restart",
+      "setup": "macro_auth_user",
+      "username": "harv03_owner_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Resolve the accepted planet from durable state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT planet_id FROM planets WHERE name='HARV03 exchange acceptance';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "harv03_planet": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Reconnected owner cannot harvest previously sold units",
+      "command": "planet.harvest",
+      "user": "harv03_owner_qa",
+      "data": {
+        "planet_id": "@{harv03_planet}"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.harvest_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.ore_harvested",
+          "op": "==",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Restart preserves sale record, empty planet stock and paid owner credits",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*)=1 AND MIN(quantity)=10 FROM galactic_exchange_transactions WHERE planet_id=@{harv03_planet}) AND (SELECT quantity=0 FROM entity_stock WHERE entity_type='planet' AND entity_id=@{harv03_planet} AND commodity_code='ORE') AND (SELECT ore=0 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv03_owner_qa')) AND (SELECT credits=5000+(SELECT SUM(credits_paid) FROM galactic_exchange_transactions WHERE planet_id=@{harv03_planet}) FROM players WHERE name='harv03_owner_qa') THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

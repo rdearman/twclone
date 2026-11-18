@@ -2,7 +2,7 @@
 
 Reviewed: 18 November 2026
 Starting review baseline: `4e60f9966b363529b20ab34bcb49b05b1d160a53`
-Parity status refresh: 16 November 2026, after the robbery persistence fix.
+Parity status refresh: 18 November 2026, after parity closure batch 3.
 
 This report reconciles the approved decision register with the current source,
 the runnable client/server tests, and prior disposable-PostgreSQL acceptance
@@ -12,6 +12,15 @@ TW2002 player loop plus approved TWClone additions. The Galactic Exchange
 (`EXC-*`) is a V3 extension, not an original TW2002 mechanic. Versioned rates
 and costs under `V3-*` are configurable, noncanonical defaults; they do not
 establish TWGS 3.13 parity.
+
+
+## Parity closure batch 3 — 18 November 2026
+
+The next five small-gap parents are now verified: `HARV-02`, `HARV-03`, `BANK-04`, `TRADE-01`, and `NPC-FER-01`. Their exact clause-level test references, PostgreSQL state checks, restart results and client-menu evidence are in [`V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`](V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md). No gameplay server defect was found in those five paths. A missing Python and Godot `planet.market.sell` surface workflow was added and covered by focused client tests.
+
+The executed focused acceptance results were: HARV-02 40/40; HARV-03 27/27 plus restart 8/8; BANK-04 17/17 plus post-restart 11/11; TRADE-01 no-haggle 9/9, dynamic market shock 12/12, and deterministic market settlement 43/43; Ferengi attack/pursuit/reward 45/45 plus post-restart 6/6. Python planet workflow tests passed 79/79 and the Godot command menu passed 212 checks. No full 166-suite run was requested.
+
+`POP-07` stays IMPLEMENTED_UNVERIFIED: its final corporation-capture statement is a documentary scope constraint, not a behavior prohibition; the matrix's runtime-only verification policy still applies. `SHIP-01` stays VERIFIED; its earlier Python and Godot menu tests cover the required sale access. The updated parent total is **27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**.
 
 ## Requirement status
 
@@ -30,8 +39,8 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | POP-06 | Emancipation | IMPLEMENTED_UNVERIFIED |
 | POP-07 | Capture conversion | IMPLEMENTED_UNVERIFIED |
 | HARV-01 | Planet harvest capacity and accounting | VERIFIED |
-| HARV-02 | Planet harvest permissions | IMPLEMENTED_UNVERIFIED |
-| HARV-03 | Planet surplus to Exchange | IMPLEMENTED_UNVERIFIED |
+| HARV-02 | Planet harvest permissions | VERIFIED |
+| HARV-03 | Planet surplus to Exchange | VERIFIED |
 | EXC-01 | Exchange participants | VERIFIED |
 | EXC-02 | Exchange settlement | VERIFIED |
 | EXC-03 | Exchange ring-fencing | VERIFIED |
@@ -43,11 +52,11 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | EXC-09 | Broader economy balancing | PARTIAL |
 | SHIP-05 | Used-hull resale | IMPLEMENTED_UNVERIFIED |
 | INS-02 | Guaranteed insurance funding | IMPLEMENTED_UNVERIFIED |
-| TRADE-01 | No price-negotiation mechanic | IMPLEMENTED_UNVERIFIED |
+| TRADE-01 | No price-negotiation mechanic | VERIFIED |
 | BANK-01 | Standing-order scheduling | IMPLEMENTED_UNVERIFIED |
 | BANK-02 | Standing-order insufficient funds | VERIFIED |
 | BANK-03 | Monthly date boundary | VERIFIED |
-| BANK-04 | Invalid standing-order recipient | IMPLEMENTED_UNVERIFIED |
+| BANK-04 | Invalid standing-order recipient | VERIFIED |
 | BANK-05 | Standing-order settlement and races | IMPLEMENTED_UNVERIFIED |
 | PLAYER-01 | Online-player visibility | IMPLEMENTED_UNVERIFIED |
 | PLANET-01 | Planet production overview | IMPLEMENTED_UNVERIFIED |
@@ -57,7 +66,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | FED-01 | Captain Z enforcement | VERIFIED |
 | FED-02 | FedSpace MSL cleanup | VERIFIED |
 | FED-03 | ISS jurisdiction boundaries | IMPLEMENTED_UNVERIFIED |
-| NPC-FER-01 | Ferengi bounty and retaliation | IMPLEMENTED_UNVERIFIED |
+| NPC-FER-01 | Ferengi bounty and retaliation | VERIFIED |
 | NPC-ORI-01 | Orion blockade targeting | PARTIAL |
 | SHIP-01 | Ship-sale locations | VERIFIED |
 | SHIP-02 | Ship acquisition and ownership | IMPLEMENTED_UNVERIFIED |
@@ -90,7 +99,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count (updated 18 November 2026, parity closure batch 2):** 22 VERIFIED, 37 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
+**Count (updated 18 November 2026, parity closure batch 3):** 27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 
@@ -116,12 +125,13 @@ suite evidence and client response checks are recorded in the clause-level
 matrix. This promotes one parent requirement. On 18 November, the approved
 Orion targeting boundary resolved its specification blocker; focused live
 acceptance verified warp/transwarp hostility, allied protection, restart and
-retry behavior, so `NPC-ORI-01` moved from BLOCKED to PARTIAL. The ruleset 1.2
-Ferengi reward amount and funding source have since been approved and the
-reward passed authenticated PostgreSQL acceptance; `NPC-FER-01` moved from
-BLOCKED to IMPLEMENTED_UNVERIFIED because penalty/pursuit clauses remain
-untested. POP-05's separate per-cycle rule is compatible with its daily
-stoppage/loss contract, but the latter's numeric settings remain unset. See
+retry behavior, so `NPC-ORI-01` moved from BLOCKED to PARTIAL. At the time of batch 2, the ruleset 1.2 Ferengi reward amount and funding
+source had been approved and the reward passed authenticated PostgreSQL
+acceptance; `NPC-FER-01` moved from BLOCKED to IMPLEMENTED_UNVERIFIED because
+its penalty/pursuit clauses lacked clause-specific evidence. Batch 3 now closes
+those clauses and verifies `NPC-FER-01`, as recorded above. POP-05's separate
+per-cycle rule is compatible with its daily stoppage/loss contract, but the
+latter's numeric settings remain unset. See
 [`V3_RULESET_1_1.md`](../V3_RULESET_1_1.md) and the clause matrix. The remaining
 parent classifications otherwise remain unchanged.
 

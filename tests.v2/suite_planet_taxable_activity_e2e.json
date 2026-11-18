@@ -217,16 +217,34 @@
       "save": { "exchange_port_order_id": "data.rows.0.0" }
     },
     {
-      "name": "Make Exchange settlement due for port purchase",
+      "name": "Enable deterministic scheduler only in disposable acceptance database",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_market_settlement';" },
+      "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Wait for Exchange-to-port settlement",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Choose future synthetic time for the settlement tick",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint+300;" },
+      "expect": { "status": "ok" },
+      "save": { "market_settlement_at": "data.rows.0.0" }
+    },
+    {
+      "name": "Disable unrelated cron work and make only market settlement due",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=(name='daily_market_settlement'),next_due_at=CASE WHEN name='daily_market_settlement' THEN to_timestamp(@{market_settlement_at}) ELSE next_due_at END;" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Advance actual market settlement handler to its due time",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{market_settlement_at}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify Exchange-to-port commodity and credit conservation",
@@ -245,16 +263,27 @@
       ]
     },
     {
-      "name": "Retry settlement and verify Exchange sale is not duplicated",
+      "name": "Save synthetic retry time",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "UPDATE cron_tasks SET next_due_at = CURRENT_TIMESTAMP WHERE name = 'daily_market_settlement';" },
+      "data": { "sql": "SELECT @{market_settlement_at}+30;" },
+      "expect": { "status": "ok" },
+      "save": { "market_settlement_retry_at": "data.rows.0.0" }
+    },
+    {
+      "name": "Re-arm only settlement at synthetic retry time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE cron_tasks SET enabled=(name='daily_market_settlement'),next_due_at=CASE WHEN name='daily_market_settlement' THEN to_timestamp(@{market_settlement_retry_at}) ELSE next_due_at END;" },
       "expect": { "status": "ok" }
     },
     {
-      "name": "Wait for idempotent Exchange settlement retry",
-      "command": "delay",
-      "data": { "seconds": 65 }
+      "name": "Advance actual handler for idempotent settlement retry",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{market_settlement_retry_at}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.tasks_run", "op": ">", "value": 0 } ]
     },
     {
       "name": "Verify retry did not duplicate stock, credits, or trade receipt",

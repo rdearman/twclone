@@ -1,0 +1,414 @@
+{
+  "name": "HARV-02 live PostgreSQL permissions, conservation, retry and rollback",
+  "tests": [
+    {
+      "name": "Authenticate disposable fixture administrator",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register planet owner",
+      "setup": "macro_auth_user",
+      "username": "harv2_owner_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Register visitor and corporation manager",
+      "setup": "macro_auth_user",
+      "username": "harv2_visitor_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Create player-owned harvest planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,class,type,created_by,population,colonists_unassigned) SELECT 977711,1,'HARV2 Owner QA',player_id,'player','M',1,107,0,0 FROM players WHERE name='harv2_owner_qa' ON CONFLICT(planet_id) DO UPDATE SET owner_id=EXCLUDED.owner_id,owner_type='player',population=0,population_type='UNPOPULATED';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Land owner and visitor on isolated player planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=1,lastplanet=977711 WHERE name IN ('harv2_owner_qa','harv2_visitor_qa');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Confirm both player ships are landed with sufficient holds",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=1,ported=0,onplanet=TRUE,holds=20,ore=0,organics=0,equipment=0 WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('harv2_owner_qa','harv2_visitor_qa'));"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Configure owner planet ORE stock and capacity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planet_goods(planet_id,commodity,quantity,max_capacity,production_rate) VALUES(977711,'ORE',2,100,0) ON CONFLICT(planet_id,commodity) DO UPDATE SET max_capacity=100;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed owner planet accumulated ORE",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('planet',977711,'ORE',2,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=2;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Configure zero ORG and EQU rows required by the all-commodity harvest pass",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planet_goods(planet_id,commodity,quantity,max_capacity,production_rate) VALUES(977711,'ORG',0,100,0),(977711,'EQU',0,100,0) ON CONFLICT(planet_id,commodity) DO UPDATE SET quantity=0,max_capacity=100;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Planet owner can harvest controlled stock",
+      "command": "planet.harvest",
+      "user": "harv2_owner_qa",
+      "data": {
+        "planet_id": 977711
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.harvest_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.ore_harvested",
+          "op": "==",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Owner harvest persists stock and cargo atomically",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=0 FROM entity_stock WHERE entity_type='planet' AND entity_id=977711 AND commodity_code='ORE') AND (SELECT ore=2 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv2_owner_qa')) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Repeat harvest returns no stock and does not duplicate cargo",
+      "command": "planet.harvest",
+      "user": "harv2_owner_qa",
+      "data": {
+        "planet_id": 977711
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.harvest_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.ore_harvested",
+          "op": "==",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Set visitor onto player-owned planet for negative permission test",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET lastplanet=977711 WHERE name='harv2_visitor_qa';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Landed non-owner cannot harvest",
+      "command": "planet.harvest",
+      "user": "harv2_visitor_qa",
+      "data": {
+        "planet_id": 977711
+      },
+      "expect": {
+        "status": "error"
+      }
+    },
+    {
+      "name": "Denied harvest leaves planetary and visitor cargo unchanged",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=0 FROM entity_stock WHERE entity_type='planet' AND entity_id=977711 AND commodity_code='ORE') AND (SELECT ore=0 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv2_visitor_qa')) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Create corporation and authorized membership roles",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corporations(corporation_id,name,owner_id,tag) SELECT 97771,'HARV2 QA Corporation',player_id,'H2Q' FROM players WHERE name='harv2_owner_qa' ON CONFLICT(corporation_id) DO UPDATE SET owner_id=EXCLUDED.owner_id;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Add visitor as corporation Officer; creation already assigns owner as Leader",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corp_members(corporation_id,player_id,role) SELECT 97771,player_id,'Officer' FROM players WHERE name='harv2_visitor_qa' ON CONFLICT(corporation_id,player_id) DO UPDATE SET role=EXCLUDED.role;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create corporation-owned harvest planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,class,type,created_by,population,colonists_unassigned) VALUES(977712,1,'HARV2 Corp QA',97771,'corp','M',1,107,0,0) ON CONFLICT(planet_id) DO UPDATE SET owner_id=97771,owner_type='corp',population=0,population_type='UNPOPULATED';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Set authorized officer as landed on corporate planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET lastplanet=977712 WHERE name='harv2_visitor_qa';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create corporate ORE capacity and stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planet_goods(planet_id,commodity,quantity,max_capacity,production_rate) VALUES(977712,'ORE',2,100,0) ON CONFLICT(planet_id,commodity) DO UPDATE SET max_capacity=100;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed corporate planet ORE stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('planet',977712,'ORE',2,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=2;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Configure zero ORG and EQU rows on corporate planet",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planet_goods(planet_id,commodity,quantity,max_capacity,production_rate) VALUES(977712,'ORG',0,100,0),(977712,'EQU',0,100,0) ON CONFLICT(planet_id,commodity) DO UPDATE SET quantity=0,max_capacity=100;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Authorized corporation Officer can harvest",
+      "command": "planet.harvest",
+      "user": "harv2_visitor_qa",
+      "data": {
+        "planet_id": 977712
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.harvest_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.ore_harvested",
+          "op": "==",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Downgrade visitor to ordinary corporation Member",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE corp_members SET role='Member' WHERE corporation_id=97771 AND player_id=(SELECT player_id FROM players WHERE name='harv2_visitor_qa');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Restore one ORE unit to corporate planet for denial check",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('planet',977712,'ORE',1,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=1;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Ordinary corporation Member cannot withdraw by harvesting",
+      "command": "planet.harvest",
+      "user": "harv2_visitor_qa",
+      "data": {
+        "planet_id": 977712
+      },
+      "expect": {
+        "status": "error"
+      }
+    },
+    {
+      "name": "Member refusal preserves corporate stock and previous cargo",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=1 FROM entity_stock WHERE entity_type='planet' AND entity_id=977712 AND commodity_code='ORE') AND (SELECT ore=2 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv2_visitor_qa')) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Install controlled cargo failure function",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "CREATE OR REPLACE FUNCTION v3_harv2_fail_cargo() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.ship_id=(SELECT ship_id FROM players WHERE name='harv2_owner_qa') THEN RAISE EXCEPTION 'controlled HARV-02 rollback'; END IF; RETURN NEW; END $$;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Install cargo trigger for owner harvest rollback",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "CREATE TRIGGER v3_harv2_fail_cargo BEFORE INSERT OR UPDATE ON ship_cargo FOR EACH ROW EXECUTE FUNCTION v3_harv2_fail_cargo();"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Restore one ORE unit before injected rollback",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('planet',977711,'ORE',1,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=1;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Injected cargo write failure refuses owner harvest",
+      "command": "planet.harvest",
+      "user": "harv2_owner_qa",
+      "data": {
+        "planet_id": 977711
+      },
+      "expect": {
+        "status": "error"
+      }
+    },
+    {
+      "name": "Injected failure rolls planetary stock and ship cargo back",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=1 FROM entity_stock WHERE entity_type='planet' AND entity_id=977711 AND commodity_code='ORE') AND (SELECT ore=2 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv2_owner_qa')) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Drop HARV-02 fault trigger",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DROP TRIGGER v3_harv2_fail_cargo ON ship_cargo;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Drop HARV-02 fault function",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DROP FUNCTION v3_harv2_fail_cargo();"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

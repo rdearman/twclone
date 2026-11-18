@@ -1,0 +1,115 @@
+{
+  "name": "BANK-04 restart cancellation and completed-transfer finality",
+  "tests": [
+    {
+      "name": "Reauthenticate scheduler admin after serving-server restart",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Reauthenticate order owner after restart",
+      "setup": "macro_auth_user",
+      "username": "bank04_payer_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Read due occurrence after restart",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT bank_orders_id,EXTRACT(EPOCH FROM next_run_at)::bigint FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank04_payer_qa') ORDER BY bank_orders_id DESC LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "bank04_order_id": "data.rows.0.0",
+        "bank04_next_due": "data.rows.0.1"
+      }
+    },
+    {
+      "name": "Reschedule only standing-order handler at persisted due time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='bank_standing_orders_tick'),next_due_at=CASE WHEN name='bank_standing_orders_tick' THEN to_timestamp(@{bank04_next_due}) ELSE next_due_at END;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Run actual scheduler against now-missing recipient",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": {
+        "now_s": "@{bank04_next_due}",
+        "confirm": true
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.tasks_run",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Order is cancelled and historical completed transfer remains final",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT enabled=FALSE FROM bank_orders WHERE bank_orders_id=@{bank04_order_id}) AND (SELECT COUNT(*)=1 FROM bank_order_occurrences WHERE bank_orders_id=@{bank04_order_id} AND outcome='paid' AND amount=10) AND (SELECT COUNT(*)=1 FROM bank_order_occurrences WHERE bank_orders_id=@{bank04_order_id} AND outcome='cancelled_invalid_recipient' AND amount=10) AND (SELECT COUNT(*)=2 FROM bank_transactions WHERE tx_group_id LIKE 'bank-order-'||@{bank04_order_id}||'-%') AND (SELECT balance=40 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='bank04_payer_qa') AND currency='CRD' AND is_active=TRUE) AND (SELECT balance=10 FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='bank04_recipient_qa') AND currency='CRD' AND is_active=TRUE) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Payer can list the durably disabled order",
+      "command": "bank.orders.list",
+      "user": "bank04_payer_qa",
+      "data": {
+        "page": 1,
+        "limit": 20
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.orders.0.enabled",
+          "op": "==",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "No duplicate cancellation or reversed transfer after restart retry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*)=1 FROM bank_order_occurrences WHERE bank_orders_id=@{bank04_order_id} AND outcome='cancelled_invalid_recipient') AND (SELECT COUNT(*)=2 FROM bank_transactions WHERE tx_group_id LIKE 'bank-order-'||@{bank04_order_id}||'-%') THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

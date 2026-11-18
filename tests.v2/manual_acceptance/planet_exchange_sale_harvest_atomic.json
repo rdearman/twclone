@@ -1,0 +1,317 @@
+{
+  "name": "HARV-03 planet sale, rollback, settlement and post-sale harvest acceptance",
+  "tests": [
+    {
+      "name": "Bootstrap isolated test administrator",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register ordinary planetary owner",
+      "setup": "macro_auth_user",
+      "username": "harv03_owner_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Read Exchange liquidity setting",
+      "command": "sysop.config.get",
+      "user": "admin",
+      "data": {
+        "key": "galactic_exchange_liquidity_credits"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "old_liquidity": "data.value"
+      }
+    },
+    {
+      "name": "Fund Galactic Exchange for deterministic sale",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": {
+        "key": "galactic_exchange_liquidity_credits",
+        "value": 100000,
+        "confirm": true
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Choose unused sector outside Federation space",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT s.sector_id FROM sectors s WHERE s.sector_id>10 AND NOT EXISTS(SELECT 1 FROM planets p WHERE p.sector_id=s.sector_id) ORDER BY s.sector_id LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "harv03_sector": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Grant genesis torpedo",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET genesis=1 WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv03_owner_qa');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create planet through ordinary player command",
+      "command": "planet.create",
+      "user": "harv03_owner_qa",
+      "data": {
+        "sector_id": "@{harv03_sector}",
+        "name": "HARV03 exchange acceptance",
+        "owner_entity_type": "player"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "harv03_planet": "data.planet_id"
+      }
+    },
+    {
+      "name": "Seed planetary goods capacities for all harvestable commodities",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planet_goods(planet_id,commodity,quantity,max_capacity,production_rate) VALUES(@{harv03_planet},'ORE',10,100,0),(@{harv03_planet},'ORG',0,100,0),(@{harv03_planet},'EQU',0,100,0) ON CONFLICT(planet_id,commodity) DO UPDATE SET quantity=EXCLUDED.quantity,max_capacity=100;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed authoritative planetary ORE stock",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) VALUES('planet',@{harv03_planet},'ORE',10,0) ON CONFLICT(entity_type,entity_id,commodity_code) DO UPDATE SET quantity=10;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Build level-one citadel required by Exchange market rules",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO citadels(planet_id,level,treasury,owner_id) VALUES(@{harv03_planet},1,0,@harv03_owner_qa_player_id) ON CONFLICT(planet_id) DO UPDATE SET level=1,owner_id=EXCLUDED.owner_id;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Set planetary citadel level",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE planets SET citadel_level=1 WHERE planet_id=@{harv03_planet};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Capture balances before rollback and successful sale",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT credits FROM players WHERE name='harv03_owner_qa'),COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'),0);"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "harv03_credits_before": "data.rows.0.0",
+        "harv03_exchange_before": "data.rows.0.1"
+      }
+    },
+    {
+      "name": "Install controlled taxable-activity failure",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "CREATE OR REPLACE FUNCTION v3_harv03_fail_taxable_activity() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.planet_id=@{harv03_planet} THEN RAISE EXCEPTION 'controlled HARV-03 rollback'; END IF; RETURN NEW; END $$;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Enable taxable-activity fault injection",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "CREATE TRIGGER v3_harv03_fail_taxable_activity BEFORE INSERT ON planet_economic_activity FOR EACH ROW EXECUTE FUNCTION v3_harv03_fail_taxable_activity();"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Injected accounting failure rejects the Exchange sale",
+      "command": "planet.market.sell",
+      "user": "harv03_owner_qa",
+      "data": {
+        "planet_id": "@{harv03_planet}",
+        "commodity": "ORE",
+        "quantity": 10
+      },
+      "expect": {
+        "status": "error"
+      }
+    },
+    {
+      "name": "Failed sale rolls back stock, credits and Exchange transaction",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=10 FROM entity_stock WHERE entity_type='planet' AND entity_id=@{harv03_planet} AND commodity_code='ORE') AND COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'),0)=@{harv03_exchange_before} AND (SELECT credits=@{harv03_credits_before} FROM players WHERE name='harv03_owner_qa') AND NOT EXISTS(SELECT 1 FROM galactic_exchange_transactions WHERE planet_id=@{harv03_planet}) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Remove controlled accounting failure",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DROP TRIGGER v3_harv03_fail_taxable_activity ON planet_economic_activity;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Remove fault-injection function",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DROP FUNCTION v3_harv03_fail_taxable_activity();"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Sell ten planetary units directly to the Exchange",
+      "command": "planet.market.sell",
+      "user": "harv03_owner_qa",
+      "data": {
+        "planet_id": "@{harv03_planet}",
+        "commodity": "ORE",
+        "quantity": 10
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.market.sell"
+      },
+      "asserts": [
+        {
+          "path": "data.quantity_sold",
+          "op": "==",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "name": "Sale immediately reduces planet stock and settles Exchange inventory and player credits",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=0 FROM entity_stock WHERE entity_type='planet' AND entity_id=@{harv03_planet} AND commodity_code='ORE') AND COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'),0)=@{harv03_exchange_before}+10 AND (SELECT credits>@{harv03_credits_before} FROM players WHERE name='harv03_owner_qa') AND (SELECT COUNT(*)=1 FROM galactic_exchange_transactions WHERE planet_id=@{harv03_planet} AND quantity=10) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Land active ship on the confirmed planet with empty holds",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH landed AS (UPDATE players SET sector_id=(SELECT sector_id FROM planets WHERE planet_id=@{harv03_planet}),lastplanet=@{harv03_planet} WHERE name='harv03_owner_qa' RETURNING ship_id) UPDATE ships SET sector_id=(SELECT sector_id FROM planets WHERE planet_id=@{harv03_planet}),ported=0,onplanet=TRUE,holds=100,ore=0,organics=0,equipment=0 FROM landed WHERE ships.ship_id=landed.ship_id;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Harvest after sale returns none of the sold units",
+      "command": "planet.harvest",
+      "user": "harv03_owner_qa",
+      "data": {
+        "planet_id": "@{harv03_planet}"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "planet.harvest_v1"
+      },
+      "asserts": [
+        {
+          "path": "data.ore_harvested",
+          "op": "==",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Post-sale harvest leaves stock and ship cargo empty and preserves one sale",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT quantity=0 FROM entity_stock WHERE entity_type='planet' AND entity_id=@{harv03_planet} AND commodity_code='ORE') AND (SELECT ore=0 FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='harv03_owner_qa')) AND (SELECT COUNT(*)=1 FROM galactic_exchange_transactions WHERE planet_id=@{harv03_planet} AND quantity=10) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Restore Exchange liquidity setting",
+      "command": "sysop.config.set",
+      "user": "admin",
+      "data": {
+        "key": "galactic_exchange_liquidity_credits",
+        "value": "@old_liquidity",
+        "confirm": true
+      },
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

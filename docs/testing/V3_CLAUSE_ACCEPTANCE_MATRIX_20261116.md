@@ -2,12 +2,12 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 18 November 2026, after parity closure batch 2 focused PostgreSQL acceptance.
+Reviewed: 18 November 2026, after parity closure batch 3 focused PostgreSQL acceptance.
 
 ## Current measures
 
-- Parent requirements: 67 (22 VERIFIED, 37 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). This batch verified `POP-03`, `SHIP-03`, `BANK-02`, and `V3-TOLL-RATE-01`. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
-- Base clause rows: 227 (69 VERIFIED, 158 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
+- Parent requirements: 67 (27 VERIFIED, 32 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Batch 3 verified `HARV-02`, `HARV-03`, `BANK-04`, `TRADE-01`, and `NPC-FER-01`. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
+- Base clause rows: 227 (79 VERIFIED, 148 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
 
@@ -151,10 +151,10 @@ Additional population acceptance slices executed in the same work batch:
 | `HARV-01` | clause 3 | zero turns | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` and disposable PostgreSQL harvest journey in `V3_GAMEPLAY_COMPLETION_TRACKER.md`. |
 | `HARV-01` | clause 4 | no generation | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` and disposable PostgreSQL harvest journey in `V3_GAMEPLAY_COMPLETION_TRACKER.md`. |
 | `HARV-01` | clause 5 | atomic | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` and disposable PostgreSQL harvest journey in `V3_GAMEPLAY_COMPLETION_TRACKER.md`. |
-| `HARV-02` | clause 1 | Use existing authoritative ownership/corporation permissions | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `HARV-02` | clause 2 | no unrestricted withdrawal | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `HARV-03` | clause 1 | Planet surplus may be sold directly to Exchange | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `HARV-03` | clause 2 | sale immediately removes available planetary stock, so sold goods cannot later be harvested | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `HARV-02` | clause 1 | Use existing authoritative ownership/corporation permissions | VERIFIED | `manual_acceptance/harvest_permissions_atomic.json` 40/40 on disposable PostgreSQL: owner harvest and corporation Officer harvest succeed; ordinary visitor and corporation Member are refused; SQL reads confirm stock/cargo state. Cases 0016–0021, 0029–0033. |
+| `HARV-02` | clause 2 | no unrestricted withdrawal | VERIFIED | `manual_acceptance/harvest_permissions_atomic.json::case-0032`–`case-0033` deny Member harvest and preserve stock/cargo. Injected `ship_cargo` update failure is refused and rolls stock/cargo back (`case-0035`–`case-0039`). |
+| `HARV-03` | clause 1 | Planet surplus may be sold directly to Exchange | VERIFIED | `manual_acceptance/planet_exchange_sale_harvest_atomic.json` 27/27: ordinary player sale settles exact Exchange stock and credits; injected taxable-activity failure rolls stock/credits/transaction back (`case-0019`–`0023`). |
+| `HARV-03` | clause 2 | sale immediately removes available planetary stock, so sold goods cannot later be harvested | VERIFIED | `planet_exchange_sale_harvest_atomic.json::case-0023`–`0026`: sale reduces stock to zero; subsequent harvest returns zero. Restart pair `planet_exchange_sale_harvest_restart_verify.json::case-0007`–`0008` confirms zero harvest, one durable sale, stock/cargo and owner credits after serving-server restart. Python surface menu workflow: `test_planet_workflows.py::test_planet_exchange_sale_menu_confirms_receipt_and_refreshes`; Godot menu dispatch: `tests/command_menu_test.gd` (212 checks). |
 | `EXC-01` | clause 1 | Planets buy/sell Exchange goods | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus PostgreSQL sale→port-purchase readback cited by the parity closure. |
 | `EXC-01` | clause 2 | ports buy from Exchange | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus PostgreSQL sale→port-purchase readback cited by the parity closure. |
 | `EXC-01` | clause 3 | preserve compatible port, order and NPC trade paths | VERIFIED | `tests.v2/suite_bucket1_remainder_planet.json` plus PostgreSQL sale→port-purchase readback cited by the parity closure. |
@@ -188,8 +188,8 @@ Additional population acceptance slices executed in the same work batch:
 | `INS-02` | clause 3 | Exactly once | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `INS-02` | clause 4 | cargo/equipment excluded | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `INS-02` | clause 5 | escape pod independent | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `TRADE-01` | clause 1 | No haggling | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `TRADE-01` | clause 2 | Existing fixed-at-quote authoritative price and configured dynamic supply/demand/black-market pricing remain | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `TRADE-01` | clause 1 | No haggling | VERIFIED | `manual_acceptance/trade_fixed_quote_no_haggle.json` 9/9: ordinary player-facing quote is returned; `trade.haggle` is refused and SQL confirms no offer/trade side effects (case-0007–0009). |
+| `TRADE-01` | clause 2 | Existing fixed-at-quote authoritative price and configured dynamic supply/demand/black-market pricing remain | VERIFIED | `trade_fixed_quote_no_haggle.json::case-0007` verifies server quote values; `suite_market_shocks_e2e.json` 12/12 verifies scoped dynamic price change and return to baseline after scheduled expiry; `suite_planet_taxable_activity_e2e.json` 43/43 verifies deterministic market settlement, exact stock/credit transfer and idempotent replay. |
 | `BANK-01` | clause 1 | Daily, weekly, monthly at specified UTC time | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `BANK-01` | clause 2 | any existing player may be recipient | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `BANK-01` | clause 3 | ISO weekday numbering is used on the wire | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -204,8 +204,8 @@ Additional population acceptance slices executed in the same work batch:
 | `BANK-03` | configured-day retention | retain the originally configured day for future recurrence | VERIFIED | `bank_monthly_retention_prepare.json` + `bank_monthly_retention_restart_verify.json`, disposable PostgreSQL, 24/24 cases, actual server restart; SQL confirms `month_day=31`, one paid occurrence, exactly two bank ledger legs, and next occurrence on day 31. Authenticated `bank.orders.list` returns day 31 after restart. |
 | `BANK-03` | invalid month rejection | month 13 returns invalid schedule (epoch 0) | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `BANK-03` | invalid day rejection | day 0 returns invalid schedule (epoch 0) | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
-| `BANK-04` | clause 1 | If recipient no longer exists, cancel order automatically | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `BANK-04` | clause 2 | completed transfers remain final | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `BANK-04` | clause 1 | If recipient no longer exists, cancel order automatically | VERIFIED | `manual_acceptance/bank_invalid_recipient_prepare.json` 17/17 and `bank_invalid_recipient_restart_verify.json` 11/11 with `--restart-between-suites`: after a completed payment, next actual scheduler occurrence detects missing recipient and disables the order; transaction/occurrence state is read from PostgreSQL. |
+| `BANK-04` | clause 2 | completed transfers remain final | VERIFIED | Restart verification `bank_invalid_recipient_restart_verify.json::case-0009`–`0011` confirms the paid occurrence, both ledger legs and balances remain unchanged; one cancellation is recorded and retry does not reverse or duplicate the transfer. |
 | `BANK-05` | clause 1 | Create/list/cancel | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `BANK-05` | clause 2 | durable exact-once occurrence, atomic bank debit/credit/ledger | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `BANK-05` | clause 3 | cancellation serializes with execution | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -235,8 +235,8 @@ Additional population acceptance slices executed in the same work batch:
 | `FED-03` | clause 1 | ISS is distinct from Captain Z and may act only under explicit Federation jurisdiction/protected-asset rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `FED-03` | clause 2 | Captain Z violations do not also dispatch ISS | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `FED-03` | clause 3 | ISS pursuit is not part of the bounded approved work | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-FER-01` | clause 1 | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty | IMPLEMENTED_UNTESTED | Existing penalty implementation remains; no clause-specific live acceptance was run in this batch. |
-| `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | IMPLEMENTED_UNTESTED | Existing pursuit implementation remains; no clause-specific live acceptance was run in this batch. |
+| `NPC-FER-01` | clause 1 | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty | VERIFIED | `manual_acceptance/ferengi_destruction_reward.json` 45/45: genuine NPC nonlethal attack creates the Ferengi bounty, repeated attack creates no second bounty, destruction/reward and human-owned Ferengi-corporation exclusion are verified; authenticated balances and SQL ledger are checked. Cases 0030–0039, 0045. |
+| `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | VERIFIED | `ferengi_destruction_reward.json::case-0029`–`0033` snapshots the strongest active Ferengi captain before an ordinary player attack and verifies its `ferengi_hunt` intelligence, with no duplicate bounty/action on repeat. `ferengi_destruction_reward_restart.json` 6/6 confirms destruction/reward persistence and retry refusal after server restart. |
 | `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json`: 60/60 live cases passed, including warp/transwarp, allied exclusion, hostile damage, restart persistence and same-window idempotency. Safe-zone arrival, additional protected-player exclusions, NPC-removal race and genuinely concurrent arrivals remain unverified. |
 | `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | No behavior-change regression is claimed; no complete runtime personality matrix has been executed. |
 | `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | VERIFIED | `suite_ship_sale_v3.json` (18/18) plus `manual_acceptance/ship_sale_locations_v3.json` (19/19) against disposable PostgreSQL: StarDock, black-market and inventory-authorized facilities, sale audit, proceeds, used-inventory persistence and duplicate-sale rejection. Player-facing access: `client/python_client/tests/test_v3_shipyard_sale_request.py` (2/2); Godot `tests/command_menu_test.gd` emitted the selected `ship.sell` request from the roster sale action (206 checks passed, Godot 4.5.1). |
@@ -442,6 +442,18 @@ Godot loopback mock-server tests ran with local network permission and a writabl
   restart acceptance above. The existing penalty and pursuit clauses remain
   unverified.
 - No daily POP-05 policy defaults or economy balancing constants were added.
+
+
+## Acceptance update — 2026-11-18 parity closure batch 3
+
+- `HARV-02` is VERIFIED: `manual_acceptance/harvest_permissions_atomic.json` passed 40/40 on disposable PostgreSQL. Owner and corporation Officer permissions succeeded; visitor and corporation Member attempts were refused; authoritative stock/cargo reads confirmed no unauthorized withdrawal. A controlled `ship_cargo` update failure rolled harvest stock and cargo back.
+- `HARV-03` is VERIFIED: `manual_acceptance/planet_exchange_sale_harvest_atomic.json` passed 27/27, including failed-sale transaction rollback, successful Exchange settlement and a later harvest returning zero sold units. `planet_exchange_sale_harvest_restart_verify.json` passed 8/8 after a serving-server restart and reconnect. The Python surface workflow test passed and Godot command-menu regression passed 212 checks with `planet.market.sell` dispatch coverage.
+- `BANK-04` is VERIFIED: the first scheduler phase passed 17/17; after restarting the serving V3 process, the second phase passed 11/11. PostgreSQL confirms the paid transfer and its ledger legs remain final while a missing-recipient occurrence cancels once.
+- `TRADE-01` is VERIFIED: no-haggle/fixed quote acceptance passed 9/9; market shock dynamic pricing and expiry passed 12/12; deterministic market settlement/idempotent replay passed 43/43. The existing taxable-market fixture's wall-clock race was removed by advancing only the real settlement task under the test-only scheduler, keeping its exact quantity and balance assertions.
+- `NPC-FER-01` is VERIFIED: ordinary-player Ferengi attack/wanted-list/pursuit/retry/destruction acceptance passed 45/45; a separate real serving-server restart/reconnect phase passed 6/6. The fixture snapshots the highest-power captain before the attack so the target cannot accidentally be mistaken for its own pursuit vessel.
+- Focused Python planet workflow regression: 79 passed. Godot command-menu regression: 212 checks passed. The game server implementation was already present; no gameplay server defect was found in these five parents. Python and Godot client coverage was added for the missing planetary Exchange sale UI workflow.
+- `POP-07` remains IMPLEMENTED_UNVERIFIED: the corporation-capture sentence is a documentary scope constraint, not a runtime prohibition, and no behavior was invented to force a negative test. `SHIP-01` remains VERIFIED; the earlier Python/Godot sale-menu evidence already satisfies its required client access.
+- Classification moves from 22 VERIFIED / 37 IMPLEMENTED_UNVERIFIED / 7 PARTIAL / 1 BLOCKED to 27 / 32 / 7 / 1.
 
 ## Acceptance update — 2026-11-16
 

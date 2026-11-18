@@ -1,0 +1,83 @@
+{
+  "name": "TRADE-01 fixed authoritative quote and no negotiation protocol",
+  "tests": [
+    {
+      "name": "Bootstrap admin and trading player",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register ordinary fixed-price trader",
+      "setup": "macro_auth_user",
+      "username": "trade01_player_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Choose a valid port and commodity pair",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT pt.port_id,pt.commodity FROM port_trade pt JOIN ports p USING(port_id) WHERE p.port_id=2 ORDER BY pt.commodity LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Read authoritative dynamic quote",
+      "command": "trade.quote",
+      "user": "admin",
+      "data": {
+        "port_id": 2,
+        "commodity": "ORE",
+        "quantity": 1
+      },
+      "expect": {
+        "status": "ok",
+        "type": "trade.quote"
+      },
+      "asserts": [
+        {
+          "path": "data.buy_price",
+          "op": ">",
+          "value": 0
+        },
+        {
+          "path": "data.sell_price",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Negotiation endpoint is not part of V3 and is refused",
+      "command": "trade.haggle",
+      "user": "trade01_player_qa",
+      "data": {
+        "port_id": 2,
+        "commodity": "ORE",
+        "price": 1
+      },
+      "expect": {
+        "status": "error"
+      }
+    },
+    {
+      "name": "No negotiation-side price or trade records were created",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (NOT EXISTS(SELECT 1 FROM trade_offers WHERE sender_player_id=(SELECT player_id FROM players WHERE name='trade01_player_qa') AND status='pending'))::int;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}
