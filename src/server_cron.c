@@ -1367,6 +1367,38 @@ cmd_sys_cron_planet_tick_once (client_ctx_t *ctx, json_t *root)
 }
 
 int
+cmd_sys_cron_npc_step_once (client_ctx_t *ctx, json_t *root)
+{
+  if (ctx->player_id <= 0 ||
+      auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Permission denied", NULL);
+      return 0;
+    }
+
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Database unavailable");
+      return 0;
+    }
+
+  /* Acceptance/operations counterpart to the scheduled `npc_step` handler.
+   * It executes the same authoritative handler and leaves due-time policy to
+   * cron_tasks; it is restricted to SysOps like the existing planet tick. */
+  if (h_npc_step (db, (int64_t) time (NULL)) != 0)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "NPC cron step failed.");
+      return 0;
+    }
+  send_response_ok_take (ctx, root, "sys.cron.npc_step_once.success", NULL);
+  return 0;
+}
+
+int
 cmd_sys_cron_citadel_reap_once (client_ctx_t *ctx, json_t *root)
 {
   if (ctx->player_id <= 0 ||

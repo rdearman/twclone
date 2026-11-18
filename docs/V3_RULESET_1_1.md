@@ -21,17 +21,26 @@ it conflicts with an existing contract or lacks a necessary accounting rule.
 
 ## Evidence and compatibility
 
-Orion evidence is in `tests.v2/suite_orion_entry_attack_v3.json` and
-`tests.v2/suite_orion_entry_attack_v3_verify.json`, executed against a serving
-V3 process and an isolated disposable PostgreSQL database. The game process
-restarted between setup and gameplay. Both suites passed (27 and 35 expanded
-cases; 62 passed, 0 failed). See the 18 November acceptance update in
+Orion evidence is in `tests.v2/manual_acceptance/orion_entry_attack_prepare.json`
+and `orion_entry_attack_verify.json`, executed against one serving V3 process
+and an isolated disposable PostgreSQL database. The server started before the
+Orion faction fixture existed; the actual `h_npc_step` handler initialized the
+faction after it was added. Both suites passed (60 expanded cases, 0 failed).
+The ordinary players warped/transwarped; the SysOp-only
+`sys.cron.npc_step_once` test hook only invokes the same authoritative handler
+deterministically. See the 18 November acceptance update in
 `testing/V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`.
 
 The Orion repository now counts and controls only ships whose ownership player
 has `is_npc=TRUE`. No schema migration is needed. Existing human corporation
 assets are preserved; reconciliation may provision additional NPC ships if the
 actual NPC fleet is below its configured target.
+
+The NPC idempotency ledger now checks inserted-row counts. A duplicate
+`ON CONFLICT DO NOTHING` claim is not treated as a fresh action, preventing a
+replayed blockade request from applying combat damage a second time. Orion
+initialization also remains retryable when the server starts before faction
+records exist.
 
 No claim in this addendum establishes complete V3 parity. Parent requirements
 remain conservatively classified until every mandatory clause has executable

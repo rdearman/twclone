@@ -241,3 +241,12 @@ Cancel a pending/failed job.
 **Role**: `sysop`
 **Args**: `{ "job_id": 999 }`
 **Response**: `sysop.jobs.ack_v1` `{ "cancelled": true }`
+
+### `sys.cron.npc_step_once`
+Invoke the authoritative NPC scheduler handler once. This is an administrative
+operations/acceptance hook; it does not change scheduled task due times. The
+handler's normal NPC action idempotency and combat protections remain active.
+
+**Role**: SysOp
+**Request**: `{}`
+**Response**: `sys.cron.npc_step_once.success` `{}`

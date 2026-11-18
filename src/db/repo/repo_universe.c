@@ -1411,11 +1411,12 @@ repo_npc_action_claim (db_t *db, const char *idempotency_key,
         sector_id > 0 ? db_bind_i64 (sector_id) : db_bind_null (),
         db_bind_text (payload ? payload : "{}")
     };
-    if (!db_exec (db, sql, binds, 7, &err)) {
+    int64_t inserted = 0;
+    if (!db_exec_rows_affected (db, sql, binds, 7, &inserted, &err)) {
         if (err.code == ERR_DB_CONSTRAINT) return 0;
         return -1;
     }
-    return 1;
+    return inserted > 0 ? 1 : 0;
 }
 
 int

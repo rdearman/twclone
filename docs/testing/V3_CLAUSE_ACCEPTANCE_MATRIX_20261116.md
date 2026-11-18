@@ -181,7 +181,7 @@ Additional population acceptance slices executed in the same work batch:
 | `FED-03` | clause 3 | ISS pursuit is not part of the bounded approved work | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `NPC-FER-01` | clause 1 | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `suite_orion_entry_attack_v3.json` + `suite_orion_entry_attack_v3_verify.json`: ordinary warp/transwarp, allied exclusion, hostile combat damage, restart and same-window idempotent retry passed (62 executed cases across two suites, 0 failed). Safe-zone/protected-player and NPC-removal race cases remain unverified. |
+| `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `tests.v2/manual_acceptance/orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json`: ordinary warp/transwarp, allied exclusion, hostile combat damage, same-process initialization retry, duplicate scheduler request and ordinary-player denial of the SysOp test hook passed against disposable PostgreSQL (60 executed cases across two suites, 0 failed). Safe-zone/protected-player and NPC-removal race cases remain unverified. |
 | `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | No behavior-change regression is claimed; no complete runtime personality matrix has been executed. |
 | `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `SHIP-02` | clause 1 | `floor((hull base + installed equipment) * percentage)` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -315,16 +315,26 @@ The parent status is intentionally not copied onto every child clause. In partic
   exercised through a disposable PostgreSQL serving server. Ordinary warp and
   transwarp arrivals were both tested. The non-allied player's hull fell by
   exactly 10, the Orion corporation member was not attacked, and a same-window
-  `npc_step` retry did not repeat combat damage. The serving game process was
-  restarted between the fixture and gameplay suites. A secondary ship owned by
-  the human Orion member generated no Orion NPC action. Both suites passed:
-  27/27 expanded cases in preparation and 35/35 in post-restart acceptance.
+  handler retry did not repeat combat damage. The serving game process started
+  before Orion faction records were created; the live handler then retried
+  initialization and successfully controlled the seeded NPC fleet. A
+  secondary ship owned by the human Orion member generated no Orion NPC action.
+  Both suites passed: 60 executed cases, 0 failed, including refusal of the
+  SysOp-only scheduler hook to an ordinary player.
 - The run exposed that Orion roster queries counted human corporation members
   as NPC fleet vessels. `repo_universe_get_orion_ships` and the population
   reconciler now restrict control/counting to ships owned by `is_npc=TRUE`
   players. No migration is required. Existing human member ships are preserved;
   on the next population reconciliation, only actual NPC vessels count toward
   the configured Orion target, so the reconciler may add missing NPC ships.
+- The retry case exposed that `repo_npc_action_claim` treated a successful
+  `ON CONFLICT DO NOTHING` with zero inserted rows as a new claim. It now
+  returns a new claim only when `db_exec_rows_affected` reports an inserted row.
+  The test observed one 10-point hull loss, one completed blockade-action row,
+  and no additional hull loss or action after retry.
+- The acceptance invokes `sys.cron.npc_step_once` as a SysOp-only test/operations
+  hook to run the same authoritative `h_npc_step` handler deterministically;
+  ordinary players still perform both travel operations.
 - `NPC-ORI-01` is no longer specification-blocked. Its full parent requirement
   remains PARTIAL until safe-zone/protected-player, NPC-removal race, defense
   reinforcement and non-blockader behavior are covered.

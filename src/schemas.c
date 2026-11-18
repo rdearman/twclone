@@ -653,6 +653,7 @@ static schema_entry_t g_schema_table[] = {
   {"mail.delete", NULL, schema_mail_delete},
   {"sys.notice.create", NULL, schema_sys_notice_create},
   {"sys.cron.planet_tick_once", NULL, schema_placeholder},
+  {"sys.cron.npc_step_once", NULL, schema_placeholder},
   {"sys.cron.citadel_reap_once", NULL, schema_placeholder},
   {"notice.list", NULL, schema_notice_list},
   {"events.resume", NULL, schema_events_resume},

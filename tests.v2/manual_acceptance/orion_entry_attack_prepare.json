@@ -1,6 +1,6 @@
 {
   "test_suite_name": "V3 Orion Arrival Fixture Preparation",
-  "description": "Create deterministic ordinary players, Orion corp membership and a controlled disposable route; the regression runner restarts the serving server before verification.",
+  "description": "Create ordinary players, Orion corporation membership, NPC faction ships and a controlled route in disposable PostgreSQL. The serving server may have started before this optional fixture exists; its NPC tick retries Orion initialization.",
   "tests": [
     {
       "name": "Bootstrap disposable SysOp fixture session",
@@ -117,7 +117,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "INSERT INTO corporations(name,owner_id,tag,ship_personality) SELECT 'Orion Syndicate',player_id,'ORION','defensive' FROM players WHERE name='orion_arrival_allied';"
+        "sql": "INSERT INTO corporations(name,owner_id,tag,ship_personality) SELECT 'Orion Syndicate',player_id,'ORION','defensive' FROM players WHERE name='orion_arrival_allied' ON CONFLICT (upper(tag)) WHERE tag IS NOT NULL DO NOTHING;"
       },
       "expect": {
         "status": "ok"
@@ -135,7 +135,7 @@
       }
     },
     {
-      "name": "Seed the five-pilot NPC Orion faction roster and ships",
+      "name": "Seed five named Orion NPC pilots and their faction ships",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {

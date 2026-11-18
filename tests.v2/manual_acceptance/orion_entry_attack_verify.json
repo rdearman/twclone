@@ -1,6 +1,6 @@
 {
   "test_suite_name": "V3 Orion Arrival and Targeting Acceptance",
-  "description": "After a serving-server restart, ordinary-player warp and transwarp arrivals in the Orion center sector are tested against the real Orion blockader scheduler with authoritative combat and SQL state assertions.",
+  "description": "In the same serving V3 process, ordinary-player warp/transwarp arrivals are tested against the real Orion blockader scheduler. Confirms faction initialization retries after the world initially lacked Orion records.",
   "tests": [
     {
       "name": "Bootstrap disposable SysOp session",
@@ -102,11 +102,11 @@
       }
     },
     {
-      "name": "Position the NPC Orion blockader and keep four NPC patrols",
+      "name": "Stage the five QA Orion NPC ships as a blockader and patrols",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "WITH faction AS (SELECT s.ship_id,row_number() OVER(ORDER BY s.ship_id) AS n FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE JOIN corp_members cm ON cm.player_id=so.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE c.tag='ORION' AND COALESCE(s.destroyed,FALSE)=FALSE), changed AS (UPDATE ships s SET sector_id=@{orion_arrival_home},personality=CASE WHEN f.n=1 THEN 'blockader' ELSE 'defensive' END,shields=0,hull=100,destroyed=FALSE FROM faction f WHERE s.ship_id=f.ship_id RETURNING s.ship_id) SELECT COUNT(*) FROM changed;"
+        "sql": "WITH reset_fleet AS (UPDATE ships s SET sector_id=@{orion_arrival_home},personality='defensive',shields=0,hull=100,destroyed=FALSE FROM ship_ownership so JOIN players p ON p.player_id=so.player_id JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE so.ship_id=s.ship_id AND p.is_npc=TRUE AND c.tag='ORION' AND COALESCE(s.destroyed,FALSE)=FALSE AND s.name NOT LIKE 'Orion QA NPC hull %'), qa AS (UPDATE ships SET sector_id=@{orion_arrival_home},personality=CASE WHEN name='Orion QA NPC hull 1' THEN 'blockader' ELSE 'defensive' END WHERE name LIKE 'Orion QA NPC hull %' RETURNING ship_id) SELECT COUNT(*) FROM qa;"
       },
       "expect": {
         "status": "ok"
@@ -192,61 +192,31 @@
       }
     },
     {
-      "name": "Schedule immediate serving-engine NPC step",
+      "name": "Clear only this fixture fleet action receipts before its first controlled scheduler tick",
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "UPDATE cron_tasks SET enabled=TRUE,next_due_at=CURRENT_TIMESTAMP WHERE name='npc_step';"
+        "sql": "DELETE FROM npc_action_log WHERE faction='ORION' AND npc_ship_id IN (SELECT s.ship_id FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id JOIN players p ON p.player_id=so.player_id WHERE p.name LIKE 'Orion QA captain %');"
       },
       "expect": {
         "status": "ok"
       }
     },
     {
-      "name": "Verify npc_step is present and due",
-      "command": "sys.raw_sql_exec",
-      "user": "admin",
-      "data": {
-        "sql": "SELECT CASE WHEN COUNT(*)=1 AND BOOL_AND(enabled AND next_due_at<=CURRENT_TIMESTAMP) THEN 1 ELSE 0 END FROM cron_tasks WHERE name='npc_step';"
-      },
+      "name": "Ordinary player cannot invoke the SysOp NPC test hook",
+      "command": "sys.cron.npc_step_once",
+      "user": "orion_arrival_hostile",
       "expect": {
-        "status": "ok"
-      },
-      "asserts": [
-        {
-          "path": "data.rows.0.0",
-          "op": "==",
-          "value": 1
-        }
-      ]
-    },
-    {
-      "name": "Allow serving engine to run the isolated Orion scheduler",
-      "command": "delay",
-      "data": {
-        "seconds": 2
-      },
-      "expect": {
-        "status": "ok"
+        "status": "refused"
       }
     },
     {
-      "name": "Verify cron rescheduled npc_step after execution",
-      "command": "sys.raw_sql_exec",
+      "name": "Run the authoritative NPC scheduler handler through the SysOp acceptance hook",
+      "command": "sys.cron.npc_step_once",
       "user": "admin",
-      "data": {
-        "sql": "SELECT CASE WHEN next_due_at>CURRENT_TIMESTAMP THEN 1 ELSE 0 END FROM cron_tasks WHERE name='npc_step';"
-      },
       "expect": {
         "status": "ok"
-      },
-      "asserts": [
-        {
-          "path": "data.rows.0.0",
-          "op": "==",
-          "value": 1
-        }
-      ]
+      }
     },
     {
       "name": "Hostile arrival takes one NPC combat hit while Orion ally is untouched",
@@ -299,22 +269,9 @@
       }
     },
     {
-      "name": "Force idempotent scheduler retry",
-      "command": "sys.raw_sql_exec",
+      "name": "Retry the authoritative NPC handler within the same idempotency window",
+      "command": "sys.cron.npc_step_once",
       "user": "admin",
-      "data": {
-        "sql": "UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP WHERE name='npc_step';"
-      },
-      "expect": {
-        "status": "ok"
-      }
-    },
-    {
-      "name": "Allow retry tick",
-      "command": "delay",
-      "data": {
-        "seconds": 1
-      },
       "expect": {
         "status": "ok"
       }
@@ -324,7 +281,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT CASE WHEN (SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile'))=@{orion_hull_after} AND (SELECT COUNT(*) FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_hostile') AND sector_id=@{orion_arrival_home} AND status='completed')=1 THEN 1 ELSE 0 END;"
+        "sql": "SELECT CASE WHEN (SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile'))=@{orion_hull_after} THEN 1 ELSE 0 END, (SELECT COUNT(*) FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_hostile') AND sector_id=@{orion_arrival_home} AND status='completed');"
       },
       "expect": {
         "status": "ok"
@@ -332,6 +289,11 @@
       "asserts": [
         {
           "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.1",
           "op": "==",
           "value": 1
         }

@@ -568,7 +568,9 @@ ori_init_once (db_t *db)
       0)
     {
       LOGW ("[ori] Failed to find Orion Syndicate owner. Skipping.");
-      ori_initialized = true;
+      /* BigBang or a disposable/test world may add faction records after the
+       * server begins ticking. Keep initialization retryable so a missing
+       * startup record does not permanently disable Orion for this process. */
       return 0;
     }
 
