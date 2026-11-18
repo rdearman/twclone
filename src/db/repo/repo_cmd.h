@@ -240,7 +240,7 @@ int db_bank_get_transactions (db_t *db,
                               long long max_amount,
                               json_t **out_array);
 int db_bank_apply_interest (db_t *db);
-int db_bank_process_orders (db_t *db);
+int db_bank_process_orders (db_t *db, int64_t now_s);
 int db_bank_set_frozen_status (db_t *db,
                                const char *owner_type,
                                int owner_id,

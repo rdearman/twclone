@@ -2,14 +2,32 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 18 November 2026, after ruleset 1.2 acceptance.
+Reviewed: 18 November 2026, after BANK-03 live monthly recurrence acceptance.
 
 ## Current measures
 
-- Parent requirements: 67 (14 VERIFIED, 45 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). `POP-01` remains VERIFIED. `NPC-FER-01` moved from BLOCKED to IMPLEMENTED_UNVERIFIED because its numeric reward rule is approved and that path passed live PostgreSQL acceptance; existing retaliation and pursuit clauses remain unverified.
+- Parent requirements: 67 (15 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). `BANK-03` is now VERIFIED after a monthly day-31 order settled on the actual scheduled date, retained day 31 for the next recurrence, and remained visible after serving-server restart. `POP-01` remains VERIFIED. `NPC-FER-01` remains IMPLEMENTED_UNVERIFIED because retaliation and pursuit clauses are unverified.
 - Base clause rows: 227 (65 VERIFIED, 162 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 3 exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
-- Ten simple arithmetic/date clauses were executed in this run. They do not promote POP-03 or BANK-03 as whole requirements.
+- The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
+
+## BANK-03 monthly retention acceptance
+
+The monthly recurrence and configured-day retention clauses were exercised
+against disposable PostgreSQL using the actual bank scheduler and a serving
+game-server restart. `bank_monthly_retention_prepare.json` and
+`bank_monthly_retention_restart_verify.json` passed 24/24 cases. An ordinary
+player created a monthly order for day 31, funded its bank account, advanced
+the registered scheduler to the actual due date, and authenticated again after
+restart. PostgreSQL assertions confirmed exactly one paid occurrence, two
+ledger legs in its transaction group, one scheduled occurrence record, and a
+next run on day 31. The authenticated order list also returned `month_day=31`.
+
+This acceptance exposed two defects and they were fixed: the bank-order cron
+handler discarded the supplied scheduler timestamp and used wall-clock time;
+the PostgreSQL result-type mapper omitted `smallint` (OID 21), making saved
+monthly date fields appear as JSON null. The handler now forwards the scheduler
+timestamp, and PostgreSQL `smallint` results map to the integer database type.
 
 ## Ten smallest executable gaps closed in this run
 
@@ -145,7 +163,7 @@ Additional population acceptance slices executed in the same work batch:
 | `BANK-03` | 2100 century rule | 2100 is not a leap year; day 31 clamps to 2100-02-28 | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `BANK-03` | 2000 century rule | 2000 is a leap year; day 31 clamps to 2000-02-29 | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `BANK-03` | 30-day month clamp | April day 31 clamps to April 30 without changing the UTC time | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
-| `BANK-03` | configured-day retention | retain the originally configured day for future recurrence | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `BANK-03` | configured-day retention | retain the originally configured day for future recurrence | VERIFIED | `bank_monthly_retention_prepare.json` + `bank_monthly_retention_restart_verify.json`, disposable PostgreSQL, 24/24 cases, actual server restart; SQL confirms `month_day=31`, one paid occurrence, exactly two bank ledger legs, and next occurrence on day 31. Authenticated `bank.orders.list` returns day 31 after restart. |
 | `BANK-03` | invalid month rejection | month 13 returns invalid schedule (epoch 0) | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `BANK-03` | invalid day rejection | day 0 returns invalid schedule (epoch 0) | VERIFIED | `tests.v2/test_bank_schedule.c::main`; `tests.v2/run_engine_regressions.sh` PASS. |
 | `BANK-04` | clause 1 | If recipient no longer exists, cancel order automatically | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |

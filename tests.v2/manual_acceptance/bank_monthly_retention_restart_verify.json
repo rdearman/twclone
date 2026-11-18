@@ -1,0 +1,9 @@
+{
+  "name": "BANK-03 monthly configured-day retention restart verification",
+  "tests": [
+    {"name":"Reauthenticate SysOp after serving-server restart","setup":"macro_bootstrap_admin"},
+    {"name":"Reauthenticate ordinary order owner after serving-server restart","setup":"macro_auth_user","username":"bank_monthly_qa","password":"qa-password"},
+    {"name":"Read the persisted monthly standing order as its owner","command":"bank.orders.list","user":"bank_monthly_qa","data":{"page":1,"limit":20},"expect":{"status":"ok"},"asserts":[{"path":"data.orders.0.frequency","op":"==","value":"monthly"},{"path":"data.orders.0.month_day","op":"==","value":31}]},
+    {"name":"Assert settlement, occurrence idempotency, ledger receipts and original day after restart","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT CASE WHEN b.month_day=31 AND EXTRACT(DAY FROM b.next_run_at AT TIME ZONE 'UTC')=31 AND b.next_run_at>b.last_occurrence_at THEN 1 ELSE 0 END,(SELECT COUNT(*) FROM bank_order_occurrences o WHERE o.bank_orders_id=b.bank_orders_id AND o.outcome='paid' AND o.amount=1),(SELECT COUNT(*) FROM bank_order_occurrences o WHERE o.bank_orders_id=b.bank_orders_id AND o.outcome='paid' AND o.scheduled_for=b.last_occurrence_at AND o.amount=1),(SELECT COUNT(*) FROM bank_transactions t WHERE t.tx_group_id='bank-order-'||b.bank_orders_id||'-'||EXTRACT(EPOCH FROM b.last_occurrence_at)::bigint AND t.amount=1) FROM bank_orders b WHERE b.player_id=(SELECT player_id FROM players WHERE name='bank_monthly_qa');"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":1},{"path":"data.rows.0.1","op":"==","value":1},{"path":"data.rows.0.2","op":"==","value":1},{"path":"data.rows.0.3","op":"==","value":2}]}
+  ]
+}

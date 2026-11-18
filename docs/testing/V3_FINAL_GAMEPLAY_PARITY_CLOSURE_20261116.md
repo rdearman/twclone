@@ -46,7 +46,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | TRADE-01 | No price-negotiation mechanic | IMPLEMENTED_UNVERIFIED |
 | BANK-01 | Standing-order scheduling | IMPLEMENTED_UNVERIFIED |
 | BANK-02 | Standing-order insufficient funds | IMPLEMENTED_UNVERIFIED |
-| BANK-03 | Monthly date boundary | IMPLEMENTED_UNVERIFIED |
+| BANK-03 | Monthly date boundary | VERIFIED |
 | BANK-04 | Invalid standing-order recipient | IMPLEMENTED_UNVERIFIED |
 | BANK-05 | Standing-order settlement and races | IMPLEMENTED_UNVERIFIED |
 | PLAYER-01 | Online-player visibility | IMPLEMENTED_UNVERIFIED |
@@ -90,7 +90,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count (updated 18 November 2026):** 14 VERIFIED, 45 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
+**Count (updated 18 November 2026):** 15 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 

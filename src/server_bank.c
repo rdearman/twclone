@@ -854,13 +854,12 @@ server_bank_apply_interest (db_t *db, int64_t now_s)
 
 
 int
-db_bank_process_orders (db_t *db)
+db_bank_process_orders (db_t *db, int64_t now_s)
 {
-  if (!db)
+  if (!db || now_s <= 0)
     {
       return ERR_DB_CLOSED;
     }
-  int64_t now_s = (int64_t) time (NULL);
   char idcol[32];
   snprintf (idcol, sizeof idcol, "%s",
             db_backend (db) == DB_BACKEND_MYSQL ? "id" : "bank_orders_id");

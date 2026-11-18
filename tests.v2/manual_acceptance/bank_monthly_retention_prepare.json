@@ -1,0 +1,16 @@
+{
+  "name": "BANK-03 monthly configured-day retention prepare",
+  "tests": [
+    {"name":"Authenticate SysOp fixture operator","setup":"macro_bootstrap_admin"},
+    {"name":"Authenticate ordinary standing-order owner","setup":"macro_auth_user","username":"bank_monthly_qa","password":"qa-password"},
+    {"name":"Authenticate ordinary recipient","setup":"macro_auth_user","username":"bank_monthly_recipient_qa","password":"qa-password"},
+    {"name":"Remove prior monthly orders for this dedicated owner","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank_monthly_qa');"},"expect":{"status":"ok"}},
+    {"name":"Fund the payer's bank account for one scheduled settlement","command":"bank.deposit","user":"bank_monthly_qa","data":{"amount":1},"expect":{"status":"ok"}},
+    {"name":"Create monthly order retaining configured day 31","command":"bank.orders.create","user":"bank_monthly_qa","data":{"recipient_player_id":"@bank_monthly_recipient_qa_player_id","amount":1,"frequency":"monthly","time_utc":"08:15","day_of_month":31},"expect":{"status":"ok"},"asserts":[{"path":"data.frequency","op":"==","value":"monthly"},{"path":"data.next_run_at","op":">","value":0}],"save":{"bank_monthly_due":"data.next_run_at"}},
+    {"name":"Verify fixture persisted the original monthly day","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT CASE WHEN month_day=31 THEN 1 ELSE 0 END FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank_monthly_qa');"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":1}]},
+    {"name":"Enable isolated deterministic scheduler","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';"},"expect":{"status":"ok"}},
+    {"name":"Make only the actual bank scheduler task due at the monthly occurrence","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO cron_tasks(name,schedule,last_run_at,next_due_at,enabled,payload) SELECT 'bank_standing_orders_tick','every:60s',NULL,next_run_at,TRUE,NULL FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank_monthly_qa') ON CONFLICT(name) DO UPDATE SET schedule='every:60s',next_due_at=EXCLUDED.next_due_at,enabled=TRUE;"},"expect":{"status":"ok"}},
+    {"name":"Disable other scheduled tasks in this isolated acceptance database","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"UPDATE cron_tasks SET enabled=(name='bank_standing_orders_tick');"},"expect":{"status":"ok"}},
+    {"name":"Settle the monthly occurrence using the actual registered scheduler","command":"sys.cron.advance_to","user":"admin","data":{"now_s":"@{bank_monthly_due}","confirm":true},"expect":{"status":"ok"},"asserts":[{"path":"data.tasks_run","op":">","value":0}]}
+  ]
+}

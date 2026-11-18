@@ -1368,7 +1368,7 @@ h_bank_orders_tick (db_t *db, int64_t now_s)
 {
   if (!try_lock (db, "bank_standing_orders_tick", now_s))
     return 0;
-  int rc = db_bank_process_orders (db);
+  int rc = db_bank_process_orders (db, now_s);
   if (rc != 0)
     LOGE ("bank_standing_orders_tick: settlement failed: %d", rc);
   unlock (db, "bank_standing_orders_tick");

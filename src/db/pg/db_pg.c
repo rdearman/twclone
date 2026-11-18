@@ -371,7 +371,7 @@ static db_col_type_t pg_res_col_type_impl(const db_res_t *res, int col_idx) {
     Oid type = PQftype(((db_pg_res_impl_t*)res->impl)->pg_res, col_idx);
     switch (type) {
         case 16: return DB_TYPE_INTEGER; // BOOL in PG
-        case 20: case 23: return DB_TYPE_INTEGER;
+        case 20: case 21: case 23: return DB_TYPE_INTEGER;
         case 700: case 701: return DB_TYPE_FLOAT;
         case 25: case 1043: return DB_TYPE_TEXT;
         default: return DB_TYPE_UNKNOWN;
