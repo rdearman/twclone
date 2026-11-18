@@ -1,0 +1,220 @@
+{
+  "test_suite_name": "V3 Orion Arrival Fixture Preparation",
+  "description": "Create deterministic ordinary players, Orion corp membership and a controlled disposable route; the regression runner restarts the serving server before verification.",
+  "tests": [
+    {
+      "name": "Bootstrap disposable SysOp fixture session",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Setup Orion-arrival hostile player",
+      "setup": "macro_auth_user",
+      "username": "orion_arrival_hostile",
+      "password": "qa-password"
+    },
+    {
+      "name": "Setup Orion-arrival allied player",
+      "setup": "macro_auth_user",
+      "username": "orion_arrival_allied",
+      "password": "qa-password"
+    },
+    {
+      "name": "Read Orion controlled-sector center",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT center_sector FROM clusters WHERE role='ORION' LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "orion_arrival_home": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Read distinct non-FedSpace origin sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT MIN(sector_id) FROM sectors WHERE sector_id>10 AND sector_id<>@{orion_arrival_home};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "orion_arrival_origin": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Create a deterministic route to and from Orion space",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_warps(from_sector,to_sector) VALUES (@{orion_arrival_origin},@{orion_arrival_home}),(@{orion_arrival_home},@{orion_arrival_origin}) ON CONFLICT DO NOTHING;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Disable automatic NPC ticks while players enter",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=FALSE WHERE name='npc_step';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Defer unrelated due jobs in this isolated scheduler fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE name<>'npc_step' AND enabled=TRUE;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Place players and prepare ordinary warp and transwarp ships",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=@{orion_arrival_origin} WHERE name IN ('orion_arrival_hostile','orion_arrival_allied');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Set active ships at origin with transwarp and combat durability",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=@{orion_arrival_origin},has_transwarp=TRUE,shields=0,hull=100,fighters=100,ore=3,onplanet=FALSE,destroyed=FALSE WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied'));"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Synchronize the three Fuel Ore required by the one-hop transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) SELECT ship_id,'ORE',3 FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied') ON CONFLICT(ship_id,commodity_code) DO UPDATE SET quantity=3;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create the Orion corporation through the test fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corporations(name,owner_id,tag,ship_personality) SELECT 'Orion Syndicate',player_id,'ORION','defensive' FROM players WHERE name='orion_arrival_allied';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Link the allied ordinary player to Orion",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corp_members(corporation_id,player_id,role) SELECT c.corporation_id,p.player_id,'Officer' FROM corporations c CROSS JOIN players p WHERE c.tag='ORION' AND p.name='orion_arrival_allied' ON CONFLICT(corporation_id,player_id) DO NOTHING;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed the five-pilot NPC Orion faction roster and ships",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH roster AS (INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) SELECT 'Orion QA captain '||g,'$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',@{orion_arrival_home},100000,2,TRUE,1 FROM generate_series(1,5) g RETURNING player_id), members AS (INSERT INTO corp_members(corporation_id,player_id,role) SELECT c.corporation_id,r.player_id,'Officer' FROM corporations c CROSS JOIN roster r WHERE c.tag='ORION' RETURNING player_id), paired AS (SELECT player_id,row_number() OVER(ORDER BY player_id) AS n FROM members), added AS (INSERT INTO ships(name,type_id,sector_id,holds,fighters,shields,hull,personality) SELECT 'Orion QA NPC hull '||n,2,@{orion_arrival_home},10,100,0,100,CASE WHEN n=1 THEN 'blockader' ELSE 'defensive' END FROM paired RETURNING ship_id) INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) SELECT a.ship_id,p.player_id,1,TRUE FROM (SELECT ship_id,row_number() OVER(ORDER BY ship_id) AS n FROM added) a JOIN paired p USING(n);"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed a secondary human-owned ship in the Orion corporation outside faction NPC roster",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH added AS (INSERT INTO ships(name,type_id,sector_id,holds,fighters,shields,hull,personality) SELECT 'Human Orion member secondary ship',2,@{orion_arrival_origin},10,1,0,100,'offensive' RETURNING ship_id) INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) SELECT a.ship_id,p.player_id,1,FALSE FROM added a CROSS JOIN players p WHERE p.name='orion_arrival_allied';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Clear pre-existing disposable destination defenses",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id=@{orion_arrival_home};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed a homing fighter per arriving player without offensive engagement",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,deployed_at) SELECT @{orion_arrival_home},player_id,0,2,1,0,now() FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Seed homing fighters owned separately by each arriving player",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO sector_assets(sector_id,owner_id,corporation_id,asset_type,quantity,offensive_setting,deployed_at) SELECT @{orion_arrival_home},player_id,0,2,1,2,now() FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Remove unrelated toll offers from the disposable destination fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM sector_assets WHERE sector_id=@{orion_arrival_home} AND asset_type=2 AND offensive_setting=3;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Logout hostile player before the serving-server restart",
+      "command": "auth.logout",
+      "user": "orion_arrival_hostile",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Logout allied player before the serving-server restart",
+      "command": "auth.logout",
+      "user": "orion_arrival_allied",
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

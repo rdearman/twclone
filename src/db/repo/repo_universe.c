@@ -176,6 +176,7 @@ db_res_t* repo_universe_get_orion_ships(db_t *db, int owner_id, db_error_t *err)
                      "FROM ships s "
                      "LEFT JOIN shiptypes st ON st.shiptypes_id = s.type_id "
                      "JOIN ship_ownership so ON s.ship_id = so.ship_id "
+                     "JOIN players p ON p.player_id = so.player_id AND COALESCE(p.is_npc,FALSE)=TRUE "
                      "JOIN corp_members cm ON so.player_id = cm.player_id "
                      "JOIN corporations c ON cm.corporation_id = c.corporation_id "
                      "WHERE c.tag = 'ORION' AND COALESCE(s.destroyed,FALSE)=FALSE;";
@@ -225,6 +226,7 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
     const char *count_sql =
       "SELECT COUNT(*) FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id "
       "JOIN corp_members cm ON cm.player_id=so.player_id "
+      "JOIN players p ON p.player_id=so.player_id AND COALESCE(p.is_npc,FALSE)=TRUE "
       "JOIN corporations c ON c.corporation_id=cm.corporation_id "
       "WHERE c.tag='ORION' AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE";
     if (!db_query (db, count_sql, NULL, 0, &res, &err))

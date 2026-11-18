@@ -1,0 +1,357 @@
+{
+  "test_suite_name": "V3 Orion Arrival and Targeting Acceptance",
+  "description": "After a serving-server restart, ordinary-player warp and transwarp arrivals in the Orion center sector are tested against the real Orion blockader scheduler with authoritative combat and SQL state assertions.",
+  "tests": [
+    {
+      "name": "Bootstrap disposable SysOp session",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Reconnect hostile ordinary player after restart",
+      "setup": "macro_auth_user",
+      "username": "orion_arrival_hostile",
+      "password": "qa-password"
+    },
+    {
+      "name": "Reconnect allied ordinary player after restart",
+      "setup": "macro_auth_user",
+      "username": "orion_arrival_allied",
+      "password": "qa-password"
+    },
+    {
+      "name": "Read Orion controlled-sector center after restart",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT center_sector FROM clusters WHERE role='ORION' LIMIT 1;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "orion_arrival_home": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Read non-FedSpace route origin after restart",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT MIN(sector_id) FROM sectors WHERE sector_id>10 AND sector_id<>@{orion_arrival_home};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "orion_arrival_origin": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Disable NPC task while preparing player arrivals",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=FALSE WHERE name='npc_step';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Defer unrelated cron jobs for the focused real scheduler tick",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP+INTERVAL '1 day' WHERE name<>'npc_step' AND enabled=TRUE;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Put both ordinary players at the common route origin",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=@{orion_arrival_origin} WHERE name IN ('orion_arrival_hostile','orion_arrival_allied');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Prepare ships for normal warp and one-hop transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=@{orion_arrival_origin},has_transwarp=TRUE,shields=0,hull=100,fighters=100,ore=3,onplanet=FALSE,destroyed=FALSE WHERE ship_id IN (SELECT ship_id FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied'));"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Synchronize Fuel Ore for transwarp",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_cargo(ship_id,commodity_code,quantity) SELECT ship_id,'ORE',3 FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied') ON CONFLICT(ship_id,commodity_code) DO UPDATE SET quantity=3;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Position the NPC Orion blockader and keep four NPC patrols",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH faction AS (SELECT s.ship_id,row_number() OVER(ORDER BY s.ship_id) AS n FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE JOIN corp_members cm ON cm.player_id=so.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE c.tag='ORION' AND COALESCE(s.destroyed,FALSE)=FALSE), changed AS (UPDATE ships s SET sector_id=@{orion_arrival_home},personality=CASE WHEN f.n=1 THEN 'blockader' ELSE 'defensive' END,shields=0,hull=100,destroyed=FALSE FROM faction f WHERE s.ship_id=f.ship_id RETURNING s.ship_id) SELECT COUNT(*) FROM changed;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 5
+        }
+      ]
+    },
+    {
+      "name": "Refresh authoritative contexts after restart",
+      "command": "player.my_info",
+      "user": "orion_arrival_hostile",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Refresh allied player's authoritative context",
+      "command": "player.my_info",
+      "user": "orion_arrival_allied",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Orion member enters through normal warp and is protected from its blockader",
+      "command": "move.warp",
+      "user": "orion_arrival_allied",
+      "data": {
+        "to_sector_id": "@{orion_arrival_home}"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.result"
+      }
+    },
+    {
+      "name": "Non-allied player enters through transwarp",
+      "command": "move.transwarp",
+      "user": "orion_arrival_hostile",
+      "data": {
+        "to_sector_id": "@{orion_arrival_home}"
+      },
+      "expect": {
+        "status": "ok",
+        "type": "move.transwarp"
+      }
+    },
+    {
+      "name": "Both travel mechanisms reach Orion-controlled sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*) FROM players WHERE name IN ('orion_arrival_hostile','orion_arrival_allied') AND sector_id=@{orion_arrival_home})=2 THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Record hostile hull before NPC combat",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile');"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "orion_hull_before": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Schedule immediate serving-engine NPC step",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=TRUE,next_due_at=CURRENT_TIMESTAMP WHERE name='npc_step';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Verify npc_step is present and due",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=1 AND BOOL_AND(enabled AND next_due_at<=CURRENT_TIMESTAMP) THEN 1 ELSE 0 END FROM cron_tasks WHERE name='npc_step';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Allow serving engine to run the isolated Orion scheduler",
+      "command": "delay",
+      "data": {
+        "seconds": 2
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Verify cron rescheduled npc_step after execution",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN next_due_at>CURRENT_TIMESTAMP THEN 1 ELSE 0 END FROM cron_tasks WHERE name='npc_step';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Hostile arrival takes one NPC combat hit while Orion ally is untouched",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile'))<@{orion_hull_before} AND (SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_allied'))=100 AND (SELECT COUNT(*) FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_hostile') AND sector_id=@{orion_arrival_home} AND status='completed')=1 AND NOT EXISTS (SELECT 1 FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_allied')) THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Orion scheduler does not claim or move a human corporation member ship as an NPC",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=0 THEN 1 ELSE 0 END FROM npc_action_log l JOIN ship_ownership so ON so.ship_id=l.npc_ship_id JOIN players p ON p.player_id=so.player_id JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE c.tag='ORION' AND p.is_npc=FALSE;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Capture hull after first NPC action",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile');"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "orion_hull_after": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Force idempotent scheduler retry",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET next_due_at=CURRENT_TIMESTAMP WHERE name='npc_step';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Allow retry tick",
+      "command": "delay",
+      "data": {
+        "seconds": 1
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Same-window scheduler retry does not repeat combat damage",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT hull FROM ships WHERE ship_id=(SELECT ship_id FROM players WHERE name='orion_arrival_hostile'))=@{orion_hull_after} AND (SELECT COUNT(*) FROM npc_action_log WHERE faction='ORION' AND action_type='blockade_attack' AND target_player_id=(SELECT player_id FROM players WHERE name='orion_arrival_hostile') AND sector_id=@{orion_arrival_home} AND status='completed')=1 THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Logout hostile player",
+      "command": "auth.logout",
+      "user": "orion_arrival_hostile",
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Logout Orion-allied player",
+      "command": "auth.logout",
+      "user": "orion_arrival_allied",
+      "expect": {
+        "status": "ok"
+      }
+    }
+  ]
+}

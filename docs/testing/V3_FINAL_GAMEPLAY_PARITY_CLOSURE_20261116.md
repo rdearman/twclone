@@ -58,7 +58,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | FED-02 | FedSpace MSL cleanup | VERIFIED |
 | FED-03 | ISS jurisdiction boundaries | IMPLEMENTED_UNVERIFIED |
 | NPC-FER-01 | Ferengi bounty and retaliation | BLOCKED |
-| NPC-ORI-01 | Orion blockade targeting | BLOCKED |
+| NPC-ORI-01 | Orion blockade targeting | PARTIAL |
 | SHIP-01 | Ship-sale locations | IMPLEMENTED_UNVERIFIED |
 | SHIP-02 | Ship acquisition and ownership | IMPLEMENTED_UNVERIFIED |
 | SHIP-03 | Ship repair and upgrades | IMPLEMENTED_UNVERIFIED |
@@ -90,7 +90,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count (updated 17 November 2026):** 14 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 3 BLOCKED,
+**Count (updated 18 November 2026):** 14 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 2 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 
@@ -98,8 +98,12 @@ exclusions are described above; they are not parity failures.
 unpopulated planet, preservation/rollback checks, player/corporation ownership
 transitions, and readback after an actual serving-server restart. Executed
 suite evidence and client response checks are recorded in the clause-level
-matrix. This promotes one parent requirement; the other classifications are
-unchanged.
+matrix. This promotes one parent requirement. On 18 November, the approved
+Orion targeting boundary resolved its specification blocker; focused live
+acceptance verified warp/transwarp hostility, allied protection, restart and
+retry behavior, so `NPC-ORI-01` moved from BLOCKED to PARTIAL. See
+[`V3_RULESET_1_1.md`](../V3_RULESET_1_1.md) and the clause matrix. The remaining
+parent classifications are unchanged.
 
 The clause-level worklist is in
 [`V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`](V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md).
@@ -233,4 +237,4 @@ The lawful robbery persistence defect is fixed and accepted at server and
 PostgreSQL level. This does not close the broader combat, capture, client journey
 or outstanding decision-register gaps. The project is not at complete V3 parity
 yet; the 67-row classification above is 14 VERIFIED, 44
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 3 BLOCKED, and 0 MISSING.
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 2 BLOCKED, and 0 MISSING.

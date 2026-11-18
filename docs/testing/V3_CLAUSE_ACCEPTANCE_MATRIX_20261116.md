@@ -181,8 +181,8 @@ Additional population acceptance slices executed in the same work batch:
 | `FED-03` | clause 3 | ISS pursuit is not part of the bounded approved work | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `NPC-FER-01` | clause 1 | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
 | `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `NPC-ORI-01` | clause 1 | Blockader holds assigned home sector, respects target/faction/deployment restrictions, attacks eligible hostile ships and may reinforce using existing fighter/mine systems | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
+| `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `suite_orion_entry_attack_v3.json` + `suite_orion_entry_attack_v3_verify.json`: ordinary warp/transwarp, allied exclusion, hostile combat damage, restart and same-window idempotent retry passed (62 executed cases across two suites, 0 failed). Safe-zone/protected-player and NPC-removal race cases remain unverified. |
+| `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | No behavior-change regression is claimed; no complete runtime personality matrix has been executed. |
 | `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `SHIP-02` | clause 1 | `floor((hull base + installed equipment) * percentage)` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `SHIP-02` | clause 2 | default 60%, integer basis points | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -298,7 +298,6 @@ The parent status is intentionally not copied onto every child clause. In partic
 | `PARITY-TOLL-01` | Toll offer and settlement on transwarp sector entry | VERIFIED | `suite_movement_transwarp_tolls.json` and `suite_movement_transwarp_toll_edges.json`; ordinary authenticated server requests and PostgreSQL state assertions listed above. |
 | `POP-05` | Approve daily recurrence interval, stoppage duration, and population-loss amount | BLOCKED | The V3 decision register leaves these three numeric policy values unset. |
 | `NPC-FER-01` | Approve the canonical bounty amount | BLOCKED | Existing 5,000-credit source value is not an approved canonical rule. |
-| `NPC-ORI-01` | Define eligible hostile targets and alliance/faction targeting restrictions | BLOCKED | No approved targeting rule resolves this boundary. |
 | `COMBAT-01` | Ordinary-player ship destruction, escape-pod respawn, and recovery after server restart | VERIFIED | Godot live acceptance `live_two_player_combat_test.gd` and `live_combat_recovery_test.gd`; disposable PostgreSQL evidence recorded in the 16 Nov completion tracker. This does not verify all destruction side effects or independence from installed escape-pod equipment. |
 | `PARITY-PORT-ATTACK-01` | One ordinary-player StarPort attack destroys the seeded port, applies retaliation, consumes a turn, clears stock, and persists the attack receipt | VERIFIED | Godot `live_starport_attack_test.gd`; Python menu path and authoritative PostgreSQL readback recorded in the 16 Nov completion tracker. This does not cover every durability/defence or FedSpace case. |
 | `PARITY-PHOTON-01` | Adjacent eligible firing, ammo debit, same-request/concurrent retry, and expiry persistence | VERIFIED | `docs/testing/V3_PHOTON_ACCEPTANCE_20261114.md`, ordinary Python menu journey against disposable PostgreSQL. Shield/citadel suppression, defense neutralization at arrival, effect-expiry behavior, and fault rollback remain unverified. |
@@ -308,8 +307,35 @@ The parent status is intentionally not copied onto every child clause. In partic
 
 - `POP-05`: numerical daily recurrence interval, stoppage duration, and population-loss amount.
 - `NPC-FER-01`: approved bounty amount.
-- `NPC-ORI-01`: targeting/faction eligibility rules for the Orion Blockader.
 - `EXC-09`: no measurable numeric sustainability target or evaluation horizon is approved. The qualitative “enjoyable, sustainable” principle cannot be turned into a balancing pass/fail rule without an approved metric; no economy-balancing constant was invented.
+
+## Acceptance update — 2026-11-18
+
+- `NPC-ORI-01` hostile targeting was approved as a TWClone V3 project rule and
+  exercised through a disposable PostgreSQL serving server. Ordinary warp and
+  transwarp arrivals were both tested. The non-allied player's hull fell by
+  exactly 10, the Orion corporation member was not attacked, and a same-window
+  `npc_step` retry did not repeat combat damage. The serving game process was
+  restarted between the fixture and gameplay suites. A secondary ship owned by
+  the human Orion member generated no Orion NPC action. Both suites passed:
+  27/27 expanded cases in preparation and 35/35 in post-restart acceptance.
+- The run exposed that Orion roster queries counted human corporation members
+  as NPC fleet vessels. `repo_universe_get_orion_ships` and the population
+  reconciler now restrict control/counting to ships owned by `is_npc=TRUE`
+  players. No migration is required. Existing human member ships are preserved;
+  on the next population reconciliation, only actual NPC vessels count toward
+  the configured Orion target, so the reconciler may add missing NPC ships.
+- `NPC-ORI-01` is no longer specification-blocked. Its full parent requirement
+  remains PARTIAL until safe-zone/protected-player, NPC-removal race, defense
+  reinforcement and non-blockader behavior are covered.
+- The 2026-11-18 slave unrest approval conflicts with the already approved
+  `POP-05` behavior (persisted daily stoppage and possible population loss).
+  The new 0–100 per-production-cycle rule is therefore not substituted into
+  production code pending resolution of that exact contract conflict.
+- The 2026-11-18 Ferengi approval adds a 5,000-credit reward to the eligible
+  player who destroys a Ferengi ship. Existing `bounties` represent a liability
+  against a player and do not fund a killer reward. The reward is not coded
+  until an approved funding/accounting source is established.
 
 No defaults were added for these blockers.
 

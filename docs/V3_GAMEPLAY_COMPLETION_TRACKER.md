@@ -4,6 +4,15 @@ Reviewed: 16 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
+**Parity refresh — 18 November 2026:** 14 VERIFIED, 44
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 2 BLOCKED, 0 MISSING. The Orion targeting
+decision moved `NPC-ORI-01` from BLOCKED to PARTIAL after 62 focused live cases
+passed across a serving-server restart. The exact evidence and remaining
+Orion limitations are in the clause matrix and
+[`V3_RULESET_1_1.md`](V3_RULESET_1_1.md). The slave unrest contract conflict and
+Ferengi reward funding remain unresolved; no implementation was substituted
+for either.
+
 The current requirement-by-requirement reconciliation is
 [`V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md`](testing/V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md).
 It supersedes stale implementation-status remarks in older focused reports,
