@@ -250,3 +250,27 @@ handler's normal NPC action idempotency and combat protections remain active.
 **Role**: SysOp
 **Request**: `{}`
 **Response**: `sys.cron.npc_step_once.success` `{}`
+
+### `sys.cron.slave_unrest_once`
+Invoke the existing daily slave unrest scheduler handler once. This is an
+administrative operations/acceptance hook; it uses the configured POP-05
+recurrence, stoppage and population-loss values and retains the handler's
+transaction and idempotency behavior.
+
+**Role**: SysOp
+**Request**: `{}`
+**Response**: `sys.cron.slave_unrest_once.success` `{}`
+
+### `sys.cron.advance_to`
+Run due tasks through the same registered handlers and rescheduling code as
+the engine's normal cron loop, using an explicit future QA clock. This requires
+`config.test.deterministic_scheduler_enabled=1`; while set, the engine pauses
+wall-clock cron dispatch. Keep the setting absent or zero in normal operation.
+
+**Role**: SysOp
+**Request**: `{"advance_days":1,"confirm":true}` or
+`{"now_s":1795046400,"confirm":true}`
+**Bounds**: relative advance must be 1–30 days; absolute epochs must be within
+31 days in the future.
+**Response**: `sys.cron.advance_to.success` with the selected epoch and number
+of due tasks dispatched.

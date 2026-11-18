@@ -304,9 +304,9 @@ int db_combat_load_ship_full_locked(db_t *db, int ship_id, repo_combat_ship_full
 	  return -1;
       }
 
-    snprintf (sql_tmpl, sizeof (sql_tmpl),
-	      "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1}%s",
-	      lock_clause);
+	      snprintf (sql_tmpl, sizeof (sql_tmpl),
+		"SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1} AND COALESCE(s.destroyed,FALSE)=FALSE%s",
+		lock_clause);
     char sql[1024];
     if (sql_build (db, sql_tmpl, sql, sizeof (sql)) != 0)
       return -1;
@@ -331,7 +331,7 @@ int db_combat_load_ship_full_unlocked(db_t *db, int ship_id, repo_combat_ship_fu
     db_res_t *res = NULL;
     db_error_t err = {0};
     char sql[1024];
-    sql_build(db, "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1}", sql, sizeof(sql));
+    sql_build(db, "SELECT s.ship_id, s.hull, s.shields, s.fighters, s.sector_id, s.name, st.offense, st.defense, st.maxattack, op.player_id, cm.corporation_id FROM ships s JOIN shiptypes st ON s.type_id = st.shiptypes_id JOIN ship_ownership op ON op.ship_id = s.ship_id AND op.is_primary = TRUE LEFT JOIN corp_members cm ON cm.player_id = op.player_id WHERE s.ship_id = {1} AND COALESCE(s.destroyed,FALSE)=FALSE", sql, sizeof(sql));
     if (!db_query(db, sql, (db_bind_t[]){ db_bind_i64(ship_id) }, 1, &res, &err)) return -1;
     if (!db_res_step(res, &err)) { db_res_finalize(res); return -1; }
     out->id = (int)db_res_col_i32(res, 0, &err); out->hull = (int)db_res_col_i32(res, 1, &err);

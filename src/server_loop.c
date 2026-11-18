@@ -111,6 +111,7 @@ extern int cmd_player_get_topics (client_ctx_t * ctx, json_t * root);
 extern int cmd_player_set_topics (client_ctx_t * ctx, json_t * root);
 extern int cmd_sys_cron_planet_tick_once (client_ctx_t * ctx, json_t * root);
 extern int cmd_sys_cron_npc_step_once (client_ctx_t * ctx, json_t * root);
+extern int cmd_sys_cron_advance_to (client_ctx_t *ctx, json_t *root);
 extern int cmd_equity_dividend_set (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_accept (client_ctx_t * ctx, json_t * root);
 extern int cmd_trade_cancel (client_ctx_t * ctx, json_t * root);
@@ -717,6 +718,12 @@ static const command_entry_t k_command_registry[] = {
   {"sys.cron.npc_step_once", cmd_sys_cron_npc_step_once,
    "Trigger one authoritative NPC scheduler step", NULL, CMD_FLAG_HIDDEN,
    false, NULL},
+  {"sys.cron.slave_unrest_once", cmd_sys_cron_slave_unrest_once,
+   "Trigger one authoritative slave unrest scheduler step", NULL,
+   CMD_FLAG_HIDDEN, false, NULL},
+  {"sys.cron.advance_to", cmd_sys_cron_advance_to,
+   "Advance real due scheduler handlers to an isolated QA epoch", NULL,
+   CMD_FLAG_HIDDEN, false, NULL},
   {"sys.cron.citadel_reap_once", cmd_sys_cron_citadel_reap_once,
    "Trigger citadel construction reaper", NULL, 0, false, NULL},
   {"sys.raw_sql_exec", cmd_sys_raw_sql_exec,

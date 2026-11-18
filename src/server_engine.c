@@ -296,6 +296,71 @@ cron_next_due_from (int64_t now_s, const char *schedule)
   return now_s + 60;
 }
 
+int
+server_engine_run_due_cron_tasks (db_t *db, int64_t now_s, int limit)
+{
+  if (!db || now_s <= 0 || limit <= 0 || limit > 256) return -1;
+  db_error_t err;
+  db_error_clear (&err);
+  typedef struct
+  {
+    int64_t id;
+    char *name;
+    char *schedule;
+  } task_t;
+  task_t *tasks = calloc ((size_t) limit, sizeof *tasks);
+  if (!tasks) return -1;
+  db_res_t *res = repo_engine_get_pending_cron_tasks
+    (db, "{1}", now_s, limit, &err);
+  if (!res) { free (tasks); return err.code ? err.code : -1; }
+  int task_count = 0;
+  while (task_count < limit && db_res_step (res, &err))
+    {
+      tasks[task_count].id = db_res_col_i64 (res, 0, &err);
+      const char *name = db_res_col_text (res, 1, &err);
+      const char *schedule = db_res_col_text (res, 2, &err);
+      tasks[task_count].name = name ? strdup (name) : NULL;
+      tasks[task_count].schedule = schedule ? strdup (schedule) : NULL;
+      if (err.code || !tasks[task_count].name || !tasks[task_count].schedule)
+        break;
+      task_count++;
+    }
+  db_res_finalize (res);
+  if (err.code)
+    {
+      for (int i=0;i<limit;i++) { free(tasks[i].name); free(tasks[i].schedule); }
+      free (tasks);
+      return err.code;
+    }
+  int failures = 0;
+  for (int i = 0; i < task_count; i++)
+    {
+      cron_handler_fn handler = cron_find (tasks[i].name);
+      if (handler)
+        {
+          LOGI ("[cron] running task: %s", tasks[i].name);
+          if (handler (db, now_s) != 0)
+            {
+              LOGW ("[cron] task handler reported failure: %s", tasks[i].name);
+              failures++;
+            }
+        }
+      else
+        LOGW ("[cron] task '%s' has no registered handler", tasks[i].name);
+      int64_t next_due = cron_next_due_from (now_s, tasks[i].schedule);
+      if (repo_engine_update_cron_task_schedule
+            (db, "{2}", "{3}", tasks[i].id, now_s, next_due) != 0)
+        {
+          LOGE ("[cron] failed to reschedule task: %s", tasks[i].name);
+          failures++;
+        }
+      free (tasks[i].name);
+      free (tasks[i].schedule);
+    }
+  free (tasks);
+  return failures == 0 ? task_count : -1;
+}
+
 
 static eng_consumer_cfg_t G_CFG = {
   .batch_size = 200,
@@ -1031,84 +1096,16 @@ engine_main_loop (int shutdown_fd)
 	  const int LIMIT = CRON_BATCH_LIMIT;
 	  uint64_t now_s = (int64_t) time (NULL);
 
-	  const char *ts_fmt = sql_epoch_param_to_timestamptz (db_handle);
-	  char ts_expr[64];
-	  snprintf (ts_expr, sizeof (ts_expr), ts_fmt, "{1}");
-
-	  typedef struct
-	  {
-	    int64_t id;
-	    char *name;
-	    char *schedule;
-	  } task_t;
-
-	  task_t tasks[CRON_BATCH_LIMIT];
-	  int task_count = 0;
-
-	  db_res_t *res = NULL;
-
-	  if ((res =
-	       repo_engine_get_pending_cron_tasks (db_handle, ts_expr, now_s,
-						   LIMIT, &err)) != NULL)
+	  int deterministic_clock = 0;
+	  bool deterministic_enabled = repo_engine_get_config_int
+	    (db_handle, "test.deterministic_scheduler_enabled",
+	     &deterministic_clock) == 0 && deterministic_clock == 1;
+	  if (!deterministic_enabled)
 	    {
-	      while (db_res_step (res, &err) && task_count < LIMIT)
-		{
-		  tasks[task_count].id = db_res_col_i64 (res, 0, &err);
-		  const char *nm = db_res_col_text (res, 1, &err);
-		  const char *sch = db_res_col_text (res, 2, &err);
-
-
-		  tasks[task_count].name = nm ? strdup (nm) : NULL;
-		  tasks[task_count].schedule = sch ? strdup (sch) : NULL;
-		  task_count++;
-		}
-	      db_res_finalize (res);
-	    }
-
-	  for (int i = 0; i < task_count; i++)
-	    {
-	      int64_t id = tasks[i].id;
-	      const char *nm = tasks[i].name;
-	      const char *sch = tasks[i].schedule;
-
-	      /* run handler if registered */
-	      cron_handler_fn fn = cron_find (nm);
-
-
-	      if (fn)
-		{
-		  LOGI ("[cron] running task: %s", nm);
-		  fn (db_handle, now_s);
-		}
-	      else
-		{
-		  LOGW ("[cron] task '%s' has no registered handler", nm);
-		}
-
-	      /* reschedule deterministically */
-	      int64_t next_due = cron_next_due_from (now_s, sch);
-
-	      const char *ts_fmt_inner =
-		sql_epoch_param_to_timestamptz (db_handle);
-	      char ts_expr1[64];
-	      char ts_expr2[64];
-	      if (ts_fmt_inner)
-		{
-		  snprintf (ts_expr1, sizeof (ts_expr1), ts_fmt_inner, "{2}");
-		  snprintf (ts_expr2, sizeof (ts_expr2), ts_fmt_inner, "{3}");
-		}
-	      else
-		{
-		  strncpy (ts_expr1, "{2}", sizeof (ts_expr1));
-		  strncpy (ts_expr2, "{3}", sizeof (ts_expr2));
-		}
-
-	      repo_engine_update_cron_task_schedule (db_handle, ts_expr1,
-						     ts_expr2, id, now_s,
-						     next_due);
-
-	      free (tasks[i].name);
-	      free (tasks[i].schedule);
+	      int tasks_run = server_engine_run_due_cron_tasks
+		(db_handle, (int64_t) now_s, LIMIT);
+	      if (tasks_run < 0)
+		LOGE ("[cron] failed to fetch or run due scheduled tasks");
 	    }
 	  /* (keep anything else you want here; short, bounded work only) */
 	}

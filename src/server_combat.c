@@ -64,6 +64,8 @@ static int destroy_ship_in_transaction (db_t *db, client_ctx_t *ctx,
                                         ship_kill_cause_t cause, int sector_id);
 static int persist_ship_damage (db_t * db, combat_ship_t * ship,
 				int fighters_lost);
+static int settle_ferengi_destruction_reward (db_t *db, int ship_id,
+                                             int recipient_player_id);
 static int cmd_deploy_assets_list_internal (client_ctx_t * ctx, json_t * root,
 					    const char *list_type,
 					    const char *asset_key,
@@ -1231,6 +1233,51 @@ persist_ship_damage (db_t *db, combat_ship_t *ship, int fighters_lost)
 					ship->shields, fighters_lost);
 }
 
+/* Called only inside combat.attack's transaction. The NPC+FENG test excludes
+ * player-owned ships even when their corporation uses a Ferengi tag. */
+static int
+settle_ferengi_destruction_reward (db_t *db, int ship_id,
+                                   int recipient_player_id)
+{
+  if (!db || ship_id <= 0 || recipient_player_id <= 0) return -1;
+  db_error_t err = {0};
+  db_res_t *res = NULL;
+  char sql[512];
+  int destruction_sequence = 0;
+  if (sql_build (db,
+      "SELECT s.destruction_sequence, EXISTS (SELECT 1 FROM ship_ownership so JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE so.ship_id=s.ship_id AND so.is_primary=TRUE AND upper(COALESCE(c.tag,'')) IN ('FENG','FERENGI')) FROM ships s WHERE s.ship_id={1}",
+      sql, sizeof sql) != 0
+      || !db_query (db, sql, (db_bind_t[]){db_bind_i64 (ship_id)}, 1,
+                    &res, &err))
+    return -1;
+  bool eligible = false;
+  if (!db_res_step (res, &err))
+    { db_res_finalize (res); return -1; }
+  destruction_sequence = db_res_col_i32 (res, 0, &err);
+  eligible = db_res_col_bool (res, 1, &err);
+  db_res_finalize (res);
+  if (err.code != 0 || !eligible) return err.code == 0 ? 0 : -1;
+
+  int64_t claimed = 0;
+  if (sql_build (db,
+      "INSERT INTO ferengi_destruction_rewards(ship_id,destruction_sequence,recipient_player_id,amount,source) VALUES({1},{2},{3},5000,'system_generated') ON CONFLICT(ship_id,destruction_sequence) DO NOTHING",
+      sql, sizeof sql) != 0
+      || !db_exec_rows_affected (db, sql,
+          (db_bind_t[]){db_bind_i64 (ship_id),db_bind_i64 (destruction_sequence),
+                        db_bind_i64 (recipient_player_id)},
+          3, &claimed, &err))
+    return -1;
+  if (claimed == 0) return 0;
+  if (claimed != 1) return -1;
+
+  /* Player credits are the authenticated gameplay balance (`players.credits`),
+   * and this ledger row records the matching system-generated source. */
+  if (repo_players_add_credits_returning (db, recipient_player_id, 5000,
+                                           NULL) != 0)
+    return -1;
+  return 0;
+}
+
 int
 handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
 {
@@ -1347,6 +1394,20 @@ handle_ship_attack (client_ctx_t *ctx, json_t *root, json_t *data, db_t *db)
         .sector_id = ctx->sector_id
       };
       rc = handle_ship_destruction (db, &kill_ctx);
+    }
+  else if (def.hull <= 0 && def.player_id > 0 && defender_is_npc)
+    {
+      char destroy_sql[256];
+      int64_t changed = 0;
+      if (sql_build (db,
+          "UPDATE ships SET hull=0,shields=0,fighters=0,destroyed=TRUE,destruction_sequence=destruction_sequence+1 WHERE ship_id={1} AND COALESCE(destroyed,FALSE)=FALSE",
+          destroy_sql, sizeof destroy_sql) != 0
+          || !db_exec_rows_affected (db, destroy_sql,
+              (db_bind_t[]){db_bind_i64 (target_id)}, 1, &changed, &err)
+          || changed != 1)
+        rc = -1;
+      else
+        rc = settle_ferengi_destruction_reward (db, target_id, ctx->player_id);
     }
   else
     rc = persist_ship_damage (db, &def, 0);

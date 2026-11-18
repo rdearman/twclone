@@ -366,7 +366,7 @@ ori_move_all_ships (int64_t now_s)
                                   ship_id, port_id, current_sector,
                                   (int) (now_s / 900));
 
-      if (personality == SHIP_PERSONALITY_BLOCKADER)
+      if (personality == SHIP_PERSONALITY_BLOCKADER && current_sector > 10)
         {
           /* Blockaders hold their assigned home sector.  Their persistent
            * assets and attacks are independently claimed so a duplicated
@@ -446,15 +446,15 @@ ori_move_all_ships (int64_t now_s)
                             (ori_db, attack_key,
                              attack_rc == 0 ? "completed" : "failed", "{}");
                         }
-                      break;
                     }
                   db_res_finalize (targets);
                 }
             }
         }
 
-      if (personality == SHIP_PERSONALITY_OFFENSIVE
-          || personality == SHIP_PERSONALITY_LOOTER)
+      if (current_sector > 10
+          && (personality == SHIP_PERSONALITY_OFFENSIVE
+              || personality == SHIP_PERSONALITY_LOOTER))
         {
           db_error_t target_err;
           db_error_clear (&target_err);
@@ -466,7 +466,12 @@ ori_move_all_ships (int64_t now_s)
                 {
                   int target_player = db_res_col_i32 (targets, 0, &target_err);
                   int target_ship = h_get_active_ship_id (ori_db, target_player);
-                  if (target_ship <= 0 || target_ship == ship_id) continue;
+                  int target_is_orion = 0;
+                  if (target_ship <= 0 || target_ship == ship_id
+                      || repo_universe_ship_is_orion_owned
+                           (ori_db, target_ship, &target_is_orion) < 0
+                      || target_is_orion)
+                    continue;
                   char attack_key[128];
                   snprintf (attack_key, sizeof attack_key,
                             "orion:attack:%d:%d:%" PRId64, ship_id,
@@ -485,7 +490,6 @@ ori_move_all_ships (int64_t now_s)
                         (ori_db, ship_id, target_player, current_sector,
                          "same_sector_observation", now_s + 1800);
                     }
-                  break;
                 }
               db_res_finalize (targets);
             }

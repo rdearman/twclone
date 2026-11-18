@@ -11,6 +11,7 @@
 
 // local includes
 #include "server_cron.h"
+#include "server_engine.h"
 #include "server_log.h"
 #include "common.h"
 #include "server_players.h"
@@ -19,6 +20,7 @@
 #include "server_planets.h"
 #include "repo_citadel.h"
 #include "game_db.h"
+#include "db/repo/repo_engine.h"
 #include "server_config.h"
 #include "repo_market.h"	// For market order helpers
 #include "repo_cmd.h"		// For bank helpers
@@ -2153,6 +2155,97 @@ h_daily_slave_unrest (db_t *db, int64_t now_s)
     LOGE ("daily_slave_unrest: evaluation failed: %d", rc);
   unlock (db, "daily_slave_unrest");
   return rc;
+}
+
+int
+cmd_sys_cron_slave_unrest_once (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0
+      || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Permission denied", NULL);
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  if (!db)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Database unavailable");
+      return 0;
+    }
+  int rc = h_daily_slave_unrest (db, (int64_t) time (NULL));
+  if (rc != 0)
+    {
+      send_response_error (ctx, root, ERR_SERVER_ERROR,
+                           "Slave unrest cron tick failed");
+      return 0;
+    }
+  send_response_ok_take (ctx, root, "sys.cron.slave_unrest_once.success",
+                         NULL);
+  return 0;
+}
+
+int
+cmd_sys_cron_advance_to (client_ctx_t *ctx, json_t *root)
+{
+  if (!ctx || ctx->player_id <= 0
+      || auth_player_get_type (ctx->player_id) != PLAYER_TYPE_SYSOP)
+    {
+      send_response_refused_steal (ctx, root, ERR_PERMISSION_DENIED,
+                                   "Permission denied", NULL);
+      return 0;
+    }
+  db_t *db = game_db_get_handle ();
+  int enabled = 0;
+  if (!db || repo_engine_get_config_int
+      (db, "test.deterministic_scheduler_enabled", &enabled) != 0
+      || enabled != 1)
+    {
+      send_response_error (ctx, root, ERR_PERMISSION_DENIED,
+        "Deterministic scheduler is disabled; enable it only in isolated QA.");
+      return 0;
+    }
+  json_t *data = json_object_get (root, "data");
+  json_t *now_value = data ? json_object_get (data, "now_s") : NULL;
+  json_t *days_value = data ? json_object_get (data, "advance_days") : NULL;
+  json_t *confirm = data ? json_object_get (data, "confirm") : NULL;
+  int64_t wall_now = (int64_t) time (NULL);
+  int64_t now_s = 0;
+  if (json_is_integer (days_value))
+    {
+      int64_t days = (int64_t) json_integer_value (days_value);
+      if (days < 1 || days > 30)
+        days = 0;
+      else
+        now_s = wall_now + days * 86400;
+    }
+  else if (json_is_integer (now_value))
+    now_s = (int64_t) json_integer_value (now_value);
+  if (!json_is_true (confirm) || now_s <= wall_now
+      || now_s > wall_now + 31LL * 86400)
+    {
+      send_response_error (ctx, root, ERR_INVALID_ARG,
+        "Require confirm=true and advance_days 1..30 or an epoch within 31 days.");
+      return 0;
+    }
+  int tasks_run = server_engine_run_due_cron_tasks (db, now_s, 256);
+  if (tasks_run < 0)
+    {
+      send_response_error (ctx, root, ERR_DB_QUERY_FAILED,
+                           "Could not advance deterministic scheduler.");
+      return 0;
+    }
+  json_t *resp = json_pack ("{s:I,s:i}", "now_s", (json_int_t) now_s,
+                            "tasks_run", tasks_run);
+  if (!resp)
+    {
+      send_response_error (ctx, root, ERR_NOMEM,
+                           "Could not build scheduler response.");
+      return 0;
+    }
+  send_response_ok_take (ctx, root, "sys.cron.advance_to.success", &resp);
+  return 0;
 }
 
 
