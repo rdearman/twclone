@@ -2,11 +2,11 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 17 November 2026, after the unpopulated-planet acquisition acceptance run.
+Reviewed: 18 November 2026, after ruleset 1.2 acceptance.
 
 ## Current measures
 
-- Parent requirements: 67 (14 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 3 BLOCKED). `POP-01` is promoted after its previously missing unpopulated acquisition transition passed database-backed acceptance.
+- Parent requirements: 67 (14 VERIFIED, 45 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). `POP-01` remains VERIFIED. `NPC-FER-01` moved from BLOCKED to IMPLEMENTED_UNVERIFIED because its numeric reward rule is approved and that path passed live PostgreSQL acceptance; existing retaliation and pursuit clauses remain unverified.
 - Base clause rows: 227 (65 VERIFIED, 162 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 3 exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - Ten simple arithmetic/date clauses were executed in this run. They do not promote POP-03 or BANK-03 as whole requirements.
@@ -74,12 +74,12 @@ Additional population acceptance slices executed in the same work batch:
 | `POP-04` | clause 2 | No additional continuous output modifier | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `POP-04` | clause 3 | Preserve existing colonist rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `POP-04` | clause 4 | invent no dynamic colonist morale | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `POP-05` | clause 1 | Evaluate daily | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-05` | clause 2 | deterministic, persisted, restart/idempotency-safe | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-05` | clause 3 | May stop production and reduce slave population | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-05` | clause 4 | may not change ownership, destroy planets, liberate or convert population | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-05` | clause 5 | Configured loss is allocated proportionally across production assignments using deterministic largest-remainder integer allocation | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `POP-05` | clause 6 | exact total loss is preserved | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
+| `POP-05` | clause 1 | Evaluate daily | VERIFIED | `slave_unrest_daily_prepare.json` configured a one-day interval and ran the production handler against due and future events; 18/18 cases passed. |
+| `POP-05` | clause 2 | deterministic, persisted, restart/idempotency-safe | IMPLEMENTED_UNTESTED | `slave_unrest_daily_prepare.json` and `slave_unrest_daily_restart_verify.json` passed 30/30 cases for replay idempotency, restart persistence, recovery and rollback. Concurrent scheduler invocation remains untested, so this clause is not promoted. |
+| `POP-05` | clause 3 | May stop production and reduce slave population | VERIFIED | `slave_unrest_daily_prepare.json` asserts configured four-person loss, persistent stoppage and exact assigned-population result; restart suite verifies recovery without repeated loss. 30/30 combined. |
+| `POP-05` | clause 4 | may not change ownership, destroy planets, liberate or convert population | VERIFIED | Both POP-05 daily fixtures assert the planet remains present, player-owned and `SLAVE`-typed after loss and restart; 30/30 combined. |
+| `POP-05` | clause 5 | Configured loss is allocated proportionally across production assignments using deterministic largest-remainder integer allocation | VERIFIED | `slave_unrest_daily_prepare.json` asserts 4 lost from assignments 10/5/3/2 produces 8/4/2/2; `slave_unrest_daily_restart_verify.json` confirms persisted allocation and successful retry. |
+| `POP-05` | clause 6 | exact total loss is preserved | VERIFIED | `slave_unrest_daily_prepare.json` checks population 20→16 and one event with `applied_population_loss=4`; restart/retry suite checks exact single settlement. |
 | `POP-06` | clause 1 | Owner or authorized corporation management (Leader/Officer) converts all slaves to colonists atomically, preserving population and allocations | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `POP-06` | clause 2 | no turn/credit cost | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `POP-06` | clause 3 | no partial conversion | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -179,9 +179,9 @@ Additional population acceptance slices executed in the same work batch:
 | `FED-03` | clause 1 | ISS is distinct from Captain Z and may act only under explicit Federation jurisdiction/protected-asset rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `FED-03` | clause 2 | Captain Z violations do not also dispatch ISS | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `FED-03` | clause 3 | ISS pursuit is not part of the bounded approved work | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-FER-01` | clause 1 | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | IMPLEMENTED_UNTESTED | Implementation is present, but this clause lacks its own executed acceptance evidence. |
-| `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `tests.v2/manual_acceptance/orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json`: ordinary warp/transwarp, allied exclusion, hostile combat damage, same-process initialization retry, duplicate scheduler request and ordinary-player denial of the SysOp test hook passed against disposable PostgreSQL (60 executed cases across two suites, 0 failed). Safe-zone/protected-player and NPC-removal race cases remain unverified. |
+| `NPC-FER-01` | clause 1 | Attacking or destroying a Ferengi places offender on the Ferengi Empire wanted list with a bounty | IMPLEMENTED_UNTESTED | Existing penalty implementation remains; no clause-specific live acceptance was run in this batch. |
+| `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | IMPLEMENTED_UNTESTED | Existing pursuit implementation remains; no clause-specific live acceptance was run in this batch. |
+| `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json`: 60/60 live cases passed, including warp/transwarp, allied exclusion, hostile damage, restart persistence and same-window idempotency. Safe-zone arrival, additional protected-player exclusions, NPC-removal race and genuinely concurrent arrivals remain unverified. |
 | `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | No behavior-change regression is claimed; no complete runtime personality matrix has been executed. |
 | `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `SHIP-02` | clause 1 | `floor((hull base + installed equipment) * percentage)` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -297,7 +297,6 @@ The parent status is intentionally not copied onto every child clause. In partic
 | `EXC-09` | Demonstrate sustainable NPC/commodity balancing under normal production and market depletion | DEFECTIVE_OR_INCOMPLETE | Decision register explicitly leaves broader balancing required; no acceptance threshold is approved for a full balance pass. |
 | `PARITY-TOLL-01` | Toll offer and settlement on transwarp sector entry | VERIFIED | `suite_movement_transwarp_tolls.json` and `suite_movement_transwarp_toll_edges.json`; ordinary authenticated server requests and PostgreSQL state assertions listed above. |
 | `POP-05` | Approve daily recurrence interval, stoppage duration, and population-loss amount | BLOCKED | The V3 decision register leaves these three numeric policy values unset. |
-| `NPC-FER-01` | Approve the canonical bounty amount | BLOCKED | Existing 5,000-credit source value is not an approved canonical rule. |
 | `COMBAT-01` | Ordinary-player ship destruction, escape-pod respawn, and recovery after server restart | VERIFIED | Godot live acceptance `live_two_player_combat_test.gd` and `live_combat_recovery_test.gd`; disposable PostgreSQL evidence recorded in the 16 Nov completion tracker. This does not verify all destruction side effects or independence from installed escape-pod equipment. |
 | `PARITY-PORT-ATTACK-01` | One ordinary-player StarPort attack destroys the seeded port, applies retaliation, consumes a turn, clears stock, and persists the attack receipt | VERIFIED | Godot `live_starport_attack_test.gd`; Python menu path and authoritative PostgreSQL readback recorded in the 16 Nov completion tracker. This does not cover every durability/defence or FedSpace case. |
 | `PARITY-PHOTON-01` | Adjacent eligible firing, ammo debit, same-request/concurrent retry, and expiry persistence | VERIFIED | `docs/testing/V3_PHOTON_ACCEPTANCE_20261114.md`, ordinary Python menu journey against disposable PostgreSQL. Shield/citadel suppression, defense neutralization at arrival, effect-expiry behavior, and fault rollback remain unverified. |
@@ -305,9 +304,46 @@ The parent status is intentionally not copied onto every child clause. In partic
 
 ## Exact remaining specification blockers
 
-- `POP-05`: numerical daily recurrence interval, stoppage duration, and population-loss amount.
-- `NPC-FER-01`: approved bounty amount.
-- `EXC-09`: no measurable numeric sustainability target or evaluation horizon is approved. The qualitative “enjoyable, sustainable” principle cannot be turned into a balancing pass/fail rule without an approved metric; no economy-balancing constant was invented.
+- `POP-05`: numerical daily recurrence interval, stoppage duration, and population-loss amount remain unset. The per-production-cycle values in ruleset 1.2 are a compatible separate rule and do not replace POP-05.
+- `EXC-09`: the 30-day evaluation horizon is approved, but no numeric sustainability/balance criterion is approved. The qualitative principle cannot be used as a balancing pass/fail rule; no economic constant was tuned.
+
+## Ruleset 1.2 acceptance — 18 November 2026
+
+| Clause slice | Acceptance condition | Executed evidence | Result |
+|---|---|---|---|
+| `POP-05/production-cycle transition` | Slave cycles add 2 unrest; non-slave cycles subtract 1; level stays in 0–100; disruption chance is `min(floor(level/10),10)%` | `slave_unrest_production_prepare.json` + `slave_unrest_production_verify.json`, disposable PostgreSQL, 20/20 cases | VERIFIED |
+| `POP-05/production-cycle accounting` | Disruption skips current-cycle output without population loss; duplicate tick does not repeat event, output or unrest | `slave_unrest_production_verify.json::case-0002`–`case-0004`, disposable PostgreSQL | VERIFIED |
+| `NPC-FER-01/eligible destruction reward` | Genuine Ferengi NPC destruction credits exactly 5,000 system-generated gameplay credits once; player-owned Ferengi-corporation ship is ineligible | `ferengi_destruction_reward.json`, disposable PostgreSQL, 35/35 cases | VERIFIED |
+| `NPC-FER-01/reward restart` | Destruction sequence and reward persist after serving-server restart; retry cannot pay twice | `ferengi_destruction_reward_restart.json`, disposable PostgreSQL, 6/6 cases | VERIFIED |
+
+POP-05 daily acceptance passed 30/30 live PostgreSQL cases across
+`slave_unrest_daily_prepare.json` and
+`slave_unrest_daily_restart_verify.json`, with a serving-server restart between
+suites. It verified configured daily evaluation, proportional assignment loss,
+persistent stoppage and recovery, unchanged player ownership and `SLAVE`
+classification, idempotent replay, retry after rollback, and injected database
+failure rollback. Concurrent scheduler invocations remain untested; the parent
+POP-05 requirement remains BLOCKED because recurrence, stoppage duration and
+population-loss policy values are still unset.
+
+The deterministic 30-day simulation passed 64/64 cases in
+`economy_30_day_simulation.json`, using the actual registered scheduler
+handlers. Daily snapshots checked player/corporation/bank credits, planet and
+port stock, population, production remainders, reward counts, bank/corporation
+flows by mechanism, planetary output and bounded-state invariants. This does
+not establish economy-wide balance. `suite_black_market_hardware.json` passed
+34/34 after its restock deadline was advanced through the actual scheduler;
+the stock assertion is unchanged and the wall-clock wait is removed.
+
+Regression closure: the full disposable server run passed 2,621 cases in 165
+suites with zero failures; its aggregate run skipped the TLS suite because TLS
+configuration is enabled only when that suite is explicitly selected. The
+separate TLS-enabled run passed 4/4, so all 166/166 discovered suites executed
+with 2,625 passed and zero failed. Python client: 809 passed. `tests.v2` Python:
+274 passed, 7 skipped, 227 subtests passed. Godot 4.5.1 imported successfully;
+106 scripts passed, 0 failed and 6 live-mode scripts skipped (112 discovered).
+Godot loopback mock-server tests ran with local network permission and a writable
+`XDG_DATA_HOME` under `/tmp`.
 
 ## Acceptance update — 2026-11-18
 
@@ -338,16 +374,18 @@ The parent status is intentionally not copied onto every child clause. In partic
 - `NPC-ORI-01` is no longer specification-blocked. Its full parent requirement
   remains PARTIAL until safe-zone/protected-player, NPC-removal race, defense
   reinforcement and non-blockader behavior are covered.
-- The 2026-11-18 slave unrest approval conflicts with the already approved
-  `POP-05` behavior (persisted daily stoppage and possible population loss).
-  The new 0–100 per-production-cycle rule is therefore not substituted into
-  production code pending resolution of that exact contract conflict.
-- The 2026-11-18 Ferengi approval adds a 5,000-credit reward to the eligible
-  player who destroys a Ferengi ship. Existing `bounties` represent a liability
-  against a player and do not fund a killer reward. The reward is not coded
-  until an approved funding/accounting source is established.
-
-No defaults were added for these blockers.
+- Ruleset 1.2's production-cycle unrest is compatible with POP-05: the former
+  changes the 10-minute cycle level and may skip one cycle; POP-05 remains the
+  separate persisted daily stoppage, recovery and configured loss mechanism.
+  No conflict required overriding either rule. The 20/20 cycle acceptance is
+  recorded above; POP-05 daily parameters remain unset and its full lifecycle is
+  still unverified.
+- The approved Ferengi reward is independent from the existing wanted-list
+  penalty. Its 5,000 system-generated credits are recorded in a separate durable
+  reward ledger and passed the 35-case authenticated acceptance plus 6-case
+  restart acceptance above. The existing penalty and pursuit clauses remain
+  unverified.
+- No daily POP-05 policy defaults or economy balancing constants were added.
 
 ## Acceptance update — 2026-11-16
 

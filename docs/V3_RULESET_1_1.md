@@ -1,4 +1,9 @@
-# TWClone V3 ruleset 1.1 — approved decision addendum
+# TWClone V3 ruleset 1.1 — historical approved decision addendum
+
+Superseded for current mechanical decisions by
+[`V3_RULESET_1_2.md`](V3_RULESET_1_2.md). The implementation-blocked notes
+below record the state before the 18 November 2026 owner decisions; do not use
+them as the current blocker list.
 
 Date: 18 November 2026
 Base: the existing approved V3 contracts in `V3_GAMEPLAY_DECISIONS.md` and

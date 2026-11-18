@@ -1,17 +1,19 @@
 # V3 gameplay and acceptance status
 
-Reviewed: 16 November 2026. This is a concise current summary; detailed test
+Reviewed: 18 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 18 November 2026:** 14 VERIFIED, 44
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 2 BLOCKED, 0 MISSING. The Orion targeting
-decision moved `NPC-ORI-01` from BLOCKED to PARTIAL after 62 focused live cases
-passed across a serving-server restart. The exact evidence and remaining
-Orion limitations are in the clause matrix and
-[`V3_RULESET_1_1.md`](V3_RULESET_1_1.md). The slave unrest contract conflict and
-Ferengi reward funding remain unresolved; no implementation was substituted
-for either.
+**Parity refresh — 18 November 2026:** 14 VERIFIED, 45
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. The Orion targeting
+decision remains PARTIAL: its 60-case PostgreSQL run passed, while safe-zone,
+protected-player, NPC-removal and genuine concurrent-arrival cases remain open.
+The approved ruleset 1.2 cycle unrest and Ferengi destruction reward passed
+focused PostgreSQL acceptance. `NPC-FER-01` is now IMPLEMENTED_UNVERIFIED because
+the existing penalty and pursuit clauses still lack clause-specific evidence.
+POP-05's daily recurrence, stoppage-duration and population-loss numeric policy
+values remain the sole rules blocker. Exact evidence and limits are in the
+clause matrix and [`V3_RULESET_1_2.md`](V3_RULESET_1_2.md).
 
 The current requirement-by-requirement reconciliation is
 [`V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md`](testing/V3_FINAL_GAMEPLAY_PARITY_CLOSURE_20261116.md).
@@ -24,24 +26,30 @@ The latest recorded gates are:
 
 | Area | Result | Scope |
 |---|---:|---|
-| Server protocol regression | 2,361 passed, 0 failed, 4 skipped | 155 suites; disposable PostgreSQL; TLS cases skipped on plain TCP |
-| Python client | 807 passed | `python3 -m pytest -q client/python_client/tests` |
-| `tests.v2` | 266 passed, 7 skipped, 227 subtests | `python3 -m pytest -q tests.v2/test_*.py` |
-| Godot 4.5.1 | 106 passed, 0 failed, 5 skipped | `/home/rick/bin/gdot`; five live-only scripts are executed separately against disposable PostgreSQL |
+| Server protocol regression | 2,625 passed, 0 failed, 0 skipped | All 166 suites; disposable PostgreSQL; TLS suite separately configured and run |
+| Python client | 809 passed | `python3 -m pytest -q tests` in `client/python_client` |
+| `tests.v2` | 274 passed, 7 skipped, 227 subtests passed | `python3 -m pytest -q tests.v2` |
+| Godot 4.5.1 | 106 passed, 0 failed, 6 skipped | 112 scripts discovered by `suite_client_regressions.py`; skipped scripts require live acceptance mode |
 | Godot command menu | 206 checks passed | Menu regression |
 | Planet response | 117 checks passed | Response, planet and sector identity regression |
 
-Latest rerun: Python remained **807 passed**; Godot reported **106 passed, 0
-failed, 5 live-only skipped** (111 scripts total). `tests.v2` ran **271 passed,
-2 skipped, 227 subtests passed**. These are the latest executed counts, not a claim that every gameplay operation
-or deployment has been verified.
-
-The server run skipped the four TLS smoke cases because the disposable game
-listener was plain TCP. The earlier three robbery assertions now pass. A
+The full server regression reported **2,621 passed, 0 failed** across 165
+suites; the aggregate runner skipped its four TLS cases because TLS listener
+configuration is enabled only for explicitly selected TLS suites. The separate
+TLS-enabled run passed all 4 cases, accounting for **166/166 suites and 2,625
+passed cases with zero failures**. A
 focused live test verifies one suspicion point per successful lawful robbery,
 wanted promotion at the contract threshold, persistence after reauthentication,
 and persistence after restarting the serving game process. See
 [`V3_POLICE_ROBBERY_ACCEPTANCE_20261116.md`](testing/V3_POLICE_ROBBERY_ACCEPTANCE_20261116.md).
+
+The same run passed the slave production-cycle unrest suites (20/20), POP-05
+daily stoppage/loss/recovery and rollback suites (30/30 across a serving-server
+restart), Ferengi destruction reward and restart suites (41/41), Orion
+arrival/restart suites (60/60), and deterministic black-market restock
+acceptance (34/34). POP-05 concurrent scheduler invocation remains untested. The
+30-day actual-scheduler simulation passed 64/64 invariant checks; it does not
+establish a quantitative economy balance result.
 
 ## Player-facing acceptance
 

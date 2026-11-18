@@ -57,7 +57,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | FED-01 | Captain Z enforcement | VERIFIED |
 | FED-02 | FedSpace MSL cleanup | VERIFIED |
 | FED-03 | ISS jurisdiction boundaries | IMPLEMENTED_UNVERIFIED |
-| NPC-FER-01 | Ferengi bounty and retaliation | BLOCKED |
+| NPC-FER-01 | Ferengi bounty and retaliation | IMPLEMENTED_UNVERIFIED |
 | NPC-ORI-01 | Orion blockade targeting | PARTIAL |
 | SHIP-01 | Ship-sale locations | IMPLEMENTED_UNVERIFIED |
 | SHIP-02 | Ship acquisition and ownership | IMPLEMENTED_UNVERIFIED |
@@ -90,7 +90,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count (updated 18 November 2026):** 14 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 2 BLOCKED,
+**Count (updated 18 November 2026):** 14 VERIFIED, 45 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 
@@ -101,9 +101,14 @@ suite evidence and client response checks are recorded in the clause-level
 matrix. This promotes one parent requirement. On 18 November, the approved
 Orion targeting boundary resolved its specification blocker; focused live
 acceptance verified warp/transwarp hostility, allied protection, restart and
-retry behavior, so `NPC-ORI-01` moved from BLOCKED to PARTIAL. See
+retry behavior, so `NPC-ORI-01` moved from BLOCKED to PARTIAL. The ruleset 1.2
+Ferengi reward amount and funding source have since been approved and the
+reward passed authenticated PostgreSQL acceptance; `NPC-FER-01` moved from
+BLOCKED to IMPLEMENTED_UNVERIFIED because penalty/pursuit clauses remain
+untested. POP-05's separate per-cycle rule is compatible with its daily
+stoppage/loss contract, but the latter's numeric settings remain unset. See
 [`V3_RULESET_1_1.md`](../V3_RULESET_1_1.md) and the clause matrix. The remaining
-parent classifications are unchanged.
+parent classifications otherwise remain unchanged.
 
 The clause-level worklist is in
 [`V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`](V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md).
@@ -207,10 +212,13 @@ JSON suite is not a substitute for that client journey.
 
 ### P1 — approved rules with remaining verification or specification
 
-1. Decide and configure POP-05's recurrence interval, stoppage duration, and
-   population-loss amount. Effects remain disabled while values are unset.
-2. Approve the Ferengi bounty amount and Orion hostile/alliance targeting rules;
-   current code exists but those decisions are not canonicalized.
+1. Approve POP-05's daily recurrence interval, stoppage duration, and
+   population-loss amount; the cycle-level unrest values are already approved.
+   Daily effects remain disabled while values are unset.
+2. Verify existing Ferengi wanted-list penalty and captain pursuit behavior;
+   the separate 5,000-credit destruction reward is approved and runtime-tested.
+   Close Orion safe-zone/protected-player, NPC-removal and concurrent-arrival
+   acceptance cases.
 3. Verify bank standing orders, ship sale/recovery, sector defence combat,
    Federation/ISS boundaries, production persistence, photon full effect/expiry,
    toll transwarp/mixed ownership, and all required StarPort attack client paths.
@@ -236,5 +244,5 @@ JSON suite is not a substitute for that client journey.
 The lawful robbery persistence defect is fixed and accepted at server and
 PostgreSQL level. This does not close the broader combat, capture, client journey
 or outstanding decision-register gaps. The project is not at complete V3 parity
-yet; the 67-row classification above is 14 VERIFIED, 44
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 2 BLOCKED, and 0 MISSING.
+yet; the 67-row classification above is 14 VERIFIED, 45
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, and 0 MISSING.
