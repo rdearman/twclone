@@ -214,18 +214,24 @@ class JsonSuiteRunner:
             f"UPDATE players SET {match.group('set').strip()} WHERE {predicate};"
         )
 
-    def _get_user_client(self, username: str) -> TWClient:
+    def _get_user_client(self, username: str, reauthenticate: bool = True) -> TWClient:
         client = self.user_clients.get(username)
         if client is None or not client.is_connected(self.client_idle_timeout_seconds):
+            previous_token = client.session_token if client is not None else None
             if client is not None:
                 client.close()
             client = TWClient(self.host, self.port, timeout=self.timeout,
                             use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)
             client.connect()
             credentials = self.user_credentials.get(username)
-            if credentials and not client.login(*credentials):
+            if reauthenticate and credentials and not client.login(*credentials):
                 client.close()
                 raise ConnectionError(f"could not re-authenticate JSON test user {username}")
+            if not reauthenticate and previous_token:
+                # Some acceptance cases must prove that a revoked token fails
+                # on a fresh transport. Preserve that token without silently
+                # converting the check into a successful credential login.
+                client.session_token = previous_token
             self.user_clients[username] = client
         return self.user_clients[username]
 
@@ -448,7 +454,9 @@ class JsonSuiteRunner:
         if user == "admin":
             client = self._get_admin_client()
         elif user:
-            client = self._get_user_client(user)
+            client = self._get_user_client(
+                user, reauthenticate=not test.get("reuse_session_token", False)
+            )
         else:
             client = TWClient(self.host, self.port, timeout=self.timeout,
                             use_tls=self.use_tls, tls_skip_verify=self.tls_skip_verify)

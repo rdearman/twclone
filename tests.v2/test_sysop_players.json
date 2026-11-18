@@ -25,7 +25,7 @@
     {
       "name": "Search Players (SysOp)",
       "command": "sysop.players.search",
-      "data": { "query": "target" },
+      "data": { "query": "target_user" },
       "user": "sysop_admin",
       "expect": {
         "status": "ok",
@@ -69,6 +69,14 @@
             "kicked_count": 1
         }
       }
+    },
+    {
+        "name": "Old authenticated token is rejected after a forced disconnect",
+        "command": "player.my_info",
+        "user": "target_user",
+        "reuse_session_token": true,
+        "expect": { "status": "error", "error_code": 401 },
+        "comment": "Reconnect using the victim's pre-kick token; the durable session was invalidated, not merely its socket closed."
     },
     {
         "name": "Verify Player Disconnected",

@@ -6,7 +6,7 @@ Reviewed: 18 November 2026, after BANK-03 live monthly recurrence acceptance.
 
 ## Current measures
 
-- Parent requirements: 67 (15 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). `BANK-03` is now VERIFIED after a monthly day-31 order settled on the actual scheduled date, retained day 31 for the next recurrence, and remained visible after serving-server restart. `POP-01` remains VERIFIED. `NPC-FER-01` remains IMPLEMENTED_UNVERIFIED because retaliation and pursuit clauses are unverified.
+- Parent requirements: 67 (18 VERIFIED, 41 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). `BANK-03`, `V3-PLANET-RATE-01`, `SYS-07` and `SHIP-01` are now VERIFIED. `POP-01` remains VERIFIED. `NPC-FER-01` remains IMPLEMENTED_UNVERIFIED because retaliation and pursuit clauses are unverified.
 - Base clause rows: 227 (65 VERIFIED, 162 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 3 exact blocked decisions. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
@@ -28,6 +28,44 @@ handler discarded the supplied scheduler timestamp and used wall-clock time;
 the PostgreSQL result-type mapper omitted `smallint` (OID 21), making saved
 monthly date fields appear as JSON null. The handler now forwards the scheduler
 timestamp, and PostgreSQL `smallint` results map to the integer database type.
+
+## V3-PLANET-RATE-01 remainder acceptance
+
+The existing PostgreSQL migration test executed all 21 class/commodity default
+assertions. `planet_rate_remainder_prepare.json` and
+`planet_rate_remainder_restart_verify.json` passed 17/17 cases against the
+actual registered `planet_growth` handler. Three assigned workers per unit
+across ORE, ORG and EQU accumulated independent 1 and 2 worker remainders,
+persisted those values across an actual serving-server restart, and produced
+exactly one unit of each commodity on the third tick. Database state confirmed
+the three remainders returned to zero and exactly one production event per
+commodity existed. This closes the final configured-rate/remainder clause;
+the values remain noncanonical twclone defaults.
+
+## SYS-07 kick-token acceptance
+
+`tests.v2/test_sysop_players.json` passed against disposable PostgreSQL: 15/15
+cases, including the target's original token replayed on a fresh connection
+after a SysOp kick and a database assertion that no durable session remained.
+The initial check exposed two test-harness issues rather than server defects:
+the player search used a non-unique prefix and selected another user, and the
+JSON runner silently performed a fresh credential login after a forced socket
+close. The fixture now narrows the search to `target_user`; the runner has an
+explicit acceptance option to replay the cached token without auto-login.
+
+## SHIP-01 facility acceptance
+
+The focused live PostgreSQL run executed `suite_ship_sale_v3.json` (18/18) and
+`manual_acceptance/ship_sale_locations_v3.json` (19/19): 37 cases across two
+suites, zero failures. The first suite sold through a DB-classified StarDock,
+checked proceeds and durable used inventory, exercised the alias and rejected a
+duplicate payout. The second asserted the black-market and inventory-only
+facility flags directly, then sold ordinary owned hulls through each authorized
+facility and verified the sale audit and used-inventory rows. The initial
+combined facility-flag assertion failed because the SQL fixture obscured which
+flag was false; the replacement asserts each flag independently. Both sale
+paths themselves passed before and after that fixture correction. No gameplay
+defect was found.
 
 ## Ten smallest executable gaps closed in this run
 
@@ -201,7 +239,7 @@ Additional population acceptance slices executed in the same work batch:
 | `NPC-FER-01` | clause 2 | the most powerful Ferengi captain hunts that offender | IMPLEMENTED_UNTESTED | Existing pursuit implementation remains; no clause-specific live acceptance was run in this batch. |
 | `NPC-ORI-01` | clause 1 | Orion NPCs attack eligible non-allied players entering an Orion-controlled sector through supported travel, subject to established safe-zone and combat protections | IMPLEMENTED_UNTESTED | `orion_entry_attack_prepare.json` + `orion_entry_attack_verify.json`: 60/60 live cases passed, including warp/transwarp, allied exclusion, hostile damage, restart persistence and same-window idempotency. Safe-zone arrival, additional protected-player exclusions, NPC-removal race and genuinely concurrent arrivals remain unverified. |
 | `NPC-ORI-01` | clause 2 | other personalities retain behavior | IMPLEMENTED_UNTESTED | No behavior-change regression is claimed; no complete runtime personality matrix has been executed. |
-| `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `SHIP-01` | clause 1 | Sell at StarDock, authorized shipyards and evil/Orion shipyards using DB facility classifications and existing access rules | VERIFIED | `suite_ship_sale_v3.json` (18/18) plus `manual_acceptance/ship_sale_locations_v3.json` (19/19) against disposable PostgreSQL: StarDock, black-market and inventory-authorized facilities, sale audit, proceeds, used-inventory persistence and duplicate-sale rejection. |
 | `SHIP-02` | clause 1 | `floor((hull base + installed equipment) * percentage)` | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `SHIP-02` | clause 2 | default 60%, integer basis points | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `SHIP-02` | clause 3 | Cargo excluded | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -271,7 +309,7 @@ Additional population acceptance slices executed in the same work batch:
 | `V3-PLANET-RATE-01` | clause 5 | H 50/100/50 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
 | `V3-PLANET-RATE-01` | clause 6 | C 100/100/100 | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
 | `V3-PLANET-RATE-01` | clause 7 | U disabled | VERIFIED | `suite_planet_production_rate_values.json` PostgreSQL migration acceptance (21 assertions). Noncanonical twclone default. |
-| `V3-PLANET-RATE-01` | clause 8 | Integer remainder carries per planet and commodity | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `V3-PLANET-RATE-01` | clause 8 | Integer remainder carries per planet and commodity | VERIFIED | `planet_rate_remainder_prepare.json` + `planet_rate_remainder_restart_verify.json`, actual `planet_growth` handler, disposable PostgreSQL, 17/17 cases, real server restart; ORE/ORG/EQU each carry 1 then 2 assigned workers, then create one unit and clear remainder. Existing `suite_planet_production_rate_values.json` verifies all 21 migrated defaults. |
 | `V3-TOLL-RATE-01` | clause 1 | Default 1 credit per deployed toll fighter, charged once per attempted sector entry | VERIFIED | Three deployed toll fighters produced a 3-credit offer and single payment: `suite_movement_transwarp_tolls.json::case-0012`–`case-0015`. Noncanonical twclone default. |
 | `V3-TOLL-RATE-01` | clause 2 | configurable integer credits per fighter, minimum 0 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `V3-PHOTON-DURATION-01` | clause 1 | Default 600 seconds from successful launch | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
@@ -292,8 +330,8 @@ Additional population acceptance slices executed in the same work batch:
 | `CORP-XFER-01` | clause 2 | Sender and recipient must be current members of the same corporation and sector | VERIFIED | `tests.v2/suite_corp_member_asset_transfers.json`. |
 | `CORP-XFER-01` | clause 3 | Enforce source holdings, recipient hull capacities, and atomic conservation | VERIFIED | `tests.v2/suite_corp_member_asset_transfers.json`. |
 | `CORP-XFER-01` | clause 4 | no turn/credit fee | VERIFIED | `tests.v2/suite_corp_member_asset_transfers.json`. |
-| `SYS-07` | clause 1 | `sysop.player.kick` must invalidate every durable session for the target and disconnect active connections | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `SYS-07` | clause 2 | a subsequent request using an old token must be unauthenticated | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `SYS-07` | clause 1 | `sysop.player.kick` must invalidate every durable session for the target and disconnect active connections | VERIFIED | `tests.v2/test_sysop_players.json`: disposable PostgreSQL, target session count zero and forced connection closed; 15/15 cases. |
+| `SYS-07` | clause 2 | a subsequent request using an old token must be unauthenticated | VERIFIED | `tests.v2/test_sysop_players.json`: runner reconnects without reauthentication and replays the cached token; server returns 401; 15/15 cases. |
 | `CFG-01` | clause 1 | `shipyard_sale_factor_bp`, integer 0–10000, default 6000 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `CFG-01` | clause 2 | distinct from trade-in | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `CFG-02` | clause 1 | Fixed 50% | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |

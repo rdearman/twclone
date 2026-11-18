@@ -4,12 +4,21 @@ Reviewed: 18 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 18 November 2026:** 15 VERIFIED, 44
+**Parity refresh — 18 November 2026:** 18 VERIFIED, 41
 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. `BANK-03` is now
 VERIFIED: a day-31 monthly standing order settled once through the registered
 database scheduler, retained day 31 for its next recurrence, and remained
 visible with its original day after a serving-server restart. This acceptance
 also fixed scheduler-time propagation and PostgreSQL `smallint` JSON typing.
+`V3-PLANET-RATE-01` is also VERIFIED after migrated ratio defaults were
+asserted and per-commodity worker remainders persisted across restart and
+produced exactly one unit per ORE/ORG/EQU after three actual scheduler ticks.
+`SYS-07` is VERIFIED by a PostgreSQL-backed player-kick test that confirms the
+durable session is deleted, the active connection is closed, and the old token
+fails on a new connection without automatic reauthentication.
+`SHIP-01` is VERIFIED by 37 live PostgreSQL cases across StarDock,
+black-market and inventory-authorized ship-sale facilities, including durable
+sale accounting and duplicate-payout rejection.
 The Orion targeting
 decision remains PARTIAL: its 60-case PostgreSQL run passed, while safe-zone,
 protected-player, NPC-removal and genuine concurrent-arrival cases remain open.

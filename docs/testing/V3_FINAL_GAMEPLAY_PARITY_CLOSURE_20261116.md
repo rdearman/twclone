@@ -59,7 +59,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | FED-03 | ISS jurisdiction boundaries | IMPLEMENTED_UNVERIFIED |
 | NPC-FER-01 | Ferengi bounty and retaliation | IMPLEMENTED_UNVERIFIED |
 | NPC-ORI-01 | Orion blockade targeting | PARTIAL |
-| SHIP-01 | Ship-sale locations | IMPLEMENTED_UNVERIFIED |
+| SHIP-01 | Ship-sale locations | VERIFIED |
 | SHIP-02 | Ship acquisition and ownership | IMPLEMENTED_UNVERIFIED |
 | SHIP-03 | Ship repair and upgrades | IMPLEMENTED_UNVERIFIED |
 | SHIP-04 | Ship loss and recovery | IMPLEMENTED_UNVERIFIED |
@@ -78,19 +78,19 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | PARITY-TOLL-01 | Toll-fighter payment and passage | PARTIAL |
 | PARITY-TW-HOMING-01 | Transwarp homing fighter | IMPLEMENTED_UNVERIFIED |
 | MOVE-05 | Transwarp fuel debit | VERIFIED |
-| V3-PLANET-RATE-01 | Configured planet-class production ratios | IMPLEMENTED_UNVERIFIED |
+| V3-PLANET-RATE-01 | Configured planet-class production ratios | VERIFIED |
 | V3-TOLL-RATE-01 | Noncanonical toll rate | IMPLEMENTED_UNVERIFIED |
 | V3-PHOTON-DURATION-01 | Noncanonical photon duration | IMPLEMENTED_UNVERIFIED |
 | V3-PORT-BUILD-01 | Noncanonical port build/upgrade costs | IMPLEMENTED_UNVERIFIED |
 | V3-PORT-COMBAT-01 | Noncanonical port durability/defence | IMPLEMENTED_UNVERIFIED |
 | CORP-XFER-01 | Corporation member asset transfers | VERIFIED |
-| SYS-07 | Session invalidation on player kick | IMPLEMENTED_UNVERIFIED |
+| SYS-07 | Session invalidation on player kick | VERIFIED |
 | CFG-01 | Ship-sale factor configuration | IMPLEMENTED_UNVERIFIED |
 | CFG-02 | Fixed slave output multiplier | IMPLEMENTED_UNVERIFIED |
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count (updated 18 November 2026):** 15 VERIFIED, 44 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
+**Count (updated 18 November 2026):** 18 VERIFIED, 41 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
 
