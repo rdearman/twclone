@@ -1,0 +1,18 @@
+{
+  "name": "V3 slave unrest production-cycle setup",
+  "version": "1.0.0",
+  "tests": [
+    {"name":"Bootstrap disposable SysOp session","setup":"macro_bootstrap_admin"},
+    {"name":"Remove prior slave fixture","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM planets WHERE name='v3_unrest_slave_qa'"},"expect":{"status":"ok"}},
+    {"name":"Remove prior colonist fixture","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM planets WHERE name='v3_unrest_colonist_qa'"},"expect":{"status":"ok"}},
+    {"name":"Remove prior isolated type","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM planettypes WHERE code='V3_UNREST_QA'"},"expect":{"status":"ok"}},
+    {"name":"Create isolated production class","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planettypes(code,typeName,typeDescription) VALUES ('V3_UNREST_QA','V3 unrest acceptance','Disposable acceptance type')"},"expect":{"status":"ok"}},
+    {"name":"Configure ORE production","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planet_production(planet_type_id,commodity_code,base_prod_rate,base_cons_rate,workers_per_unit) SELECT planettypes_id,'ORE',4,0,100 FROM planettypes WHERE code='V3_UNREST_QA'"},"expect":{"status":"ok"}},
+    {"name":"Configure ORG production row","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planet_production(planet_type_id,commodity_code,base_prod_rate,base_cons_rate,workers_per_unit) SELECT planettypes_id,'ORG',0,0,100 FROM planettypes WHERE code='V3_UNREST_QA'"},"expect":{"status":"ok"}},
+    {"name":"Configure EQU production row","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planet_production(planet_type_id,commodity_code,base_prod_rate,base_cons_rate,workers_per_unit) SELECT planettypes_id,'EQU',0,0,100 FROM planettypes WHERE code='V3_UNREST_QA'"},"expect":{"status":"ok"}},
+    {"name":"Create slave production planet","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planets(sector_id,name,owner_id,owner_type,class,population,population_type,type,created_by,colonists_ore,slave_unrest_level,production_last_tick) SELECT 1,'v3_unrest_slave_qa',player_id,'player','M',100,'SLAVE',pt.planettypes_id,player_id,100,90,-1 FROM players CROSS JOIN planettypes pt WHERE players.name='System' AND pt.code='V3_UNREST_QA'"},"expect":{"status":"ok"}},
+    {"name":"Create colonist production planet","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planets(sector_id,name,owner_id,owner_type,class,population,population_type,type,created_by,colonists_ore,slave_unrest_level,production_last_tick) SELECT 1,'v3_unrest_colonist_qa',player_id,'player','M',100,'COLONIST',pt.planettypes_id,player_id,100,0,-1 FROM players CROSS JOIN planettypes pt WHERE players.name='System' AND pt.code='V3_UNREST_QA'"},"expect":{"status":"ok"}},
+    {"name":"Create production goods","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO planet_goods(planet_id,commodity,quantity,max_capacity,production_rate) SELECT p.planet_id,q.c,0,10000,0 FROM planets p CROSS JOIN (VALUES ('ORE'),('ORG'),('EQU')) q(c) WHERE p.name IN ('v3_unrest_slave_qa','v3_unrest_colonist_qa')"},"expect":{"status":"ok"}},
+    {"name":"Create production stock","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO entity_stock(entity_type,entity_id,commodity_code,quantity,price) SELECT 'planet',p.planet_id,q.c,0,0 FROM planets p CROSS JOIN (VALUES ('ORE'),('ORG'),('EQU')) q(c) WHERE p.name IN ('v3_unrest_slave_qa','v3_unrest_colonist_qa')"},"expect":{"status":"ok"}}
+  ]
+}

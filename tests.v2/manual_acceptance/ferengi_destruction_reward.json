@@ -1,0 +1,361 @@
+{
+  "name": "V3 Ferengi destruction bounty acceptance",
+  "tests": [
+    {
+      "name": "Create ordinary bounty hunter",
+      "setup": "macro_auth_user",
+      "username": "v3_bounty_hunter",
+      "password": "P@ssword123"
+    },
+    {
+      "name": "Create human Ferengi corporation ship owner",
+      "setup": "macro_auth_user",
+      "username": "v3_human_feng_owner",
+      "password": "P@ssword123"
+    },
+    {
+      "name": "Authenticate system fixture authority",
+      "command": "auth.login",
+      "user": "admin",
+      "data": {
+        "username": "System",
+        "passwd": "BOT"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Ensure current Ferengi fleet is provisioned",
+      "command": "sys.cron.npc_step_once",
+      "user": "admin",
+      "data": {},
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Ensure the standard FENG corporation exists for controlled fresh-world fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corporations(name,owner_id,tag) VALUES ('Ferengi Alliance',107,'FENG') ON CONFLICT DO NOTHING;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Select an unprotected test sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT 200;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "battle_sector": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Create NPC player for genuine Ferengi ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) VALUES ('V3 Ferengi QA NPC captain','$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',@{battle_sector},0,2,TRUE,1);"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Register NPC as FENG corporation member",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corp_members(corporation_id,player_id,role) SELECT corporation_id,(SELECT player_id FROM players WHERE name='V3 Ferengi QA NPC captain'),'Officer' FROM corporations WHERE tag='FENG';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create Ferengi Warship owned by NPC",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ships(name,type_id,sector_id,holds,fighters,shields,hull,personality,destroyed) SELECT 'V3 Ferengi QA warship',shiptypes_id,@{battle_sector},10,0,0,10,'defensive',FALSE FROM shiptypes WHERE name='Ferengi Warship';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Establish NPC ship ownership",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ship_ownership(ship_id,player_id,role_id,is_primary) SELECT (SELECT ship_id FROM ships WHERE name='V3 Ferengi QA warship'),(SELECT player_id FROM players WHERE name='V3 Ferengi QA NPC captain'),1,TRUE;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Register NPC ship in the existing Ferengi trader contract",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO ferengi_traders(trader_code,display_name,corporation_id,ship_id) SELECT 'v3_qa_reward','V3 QA Ferengi',corporation_id,(SELECT ship_id FROM ships WHERE name='V3 Ferengi QA warship') FROM corporations WHERE tag='FENG';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Resolve genuine Ferengi NPC ship identity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ship_id FROM ships WHERE name='V3 Ferengi QA warship';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "ferengi_ship": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Prepare an ordinary player and Ferengi NPC for a single lethal hit",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=@{battle_sector},shields=0,hull=10,destroyed=FALSE WHERE ship_id=@{ferengi_ship};"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Place player and active ship in same sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=@{battle_sector} WHERE name='v3_bounty_hunter';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Move attacker's ship into sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET sector_id=@{battle_sector},shields=100,hull=100 WHERE ship_id=(SELECT ship_id FROM players WHERE name='v3_bounty_hunter');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Set deterministic starting petty cash",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET credits=1234 WHERE name='v3_bounty_hunter';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Save starting authenticated gameplay credits",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT credits FROM players WHERE name='v3_bounty_hunter';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "credits_before": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Refresh hunter session at combat sector",
+      "command": "auth.login",
+      "user": "v3_bounty_hunter",
+      "data": {
+        "username": "v3_bounty_hunter",
+        "passwd": "P@ssword123"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Ordinary player destroys genuine Ferengi NPC",
+      "command": "combat.attack",
+      "user": "v3_bounty_hunter",
+      "data": {
+        "target_ship_id": "@{ferengi_ship}"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Authenticated player session reports exact 5000-credit award",
+      "command": "player.my_info",
+      "user": "v3_bounty_hunter",
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.player.credits",
+          "op": "==",
+          "value": "6234.00"
+        }
+      ]
+    },
+    {
+      "name": "Verify authoritative destruction and source/recipient ledger",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT destroyed AND hull=0 FROM ships WHERE ship_id=@{ferengi_ship})::int,(SELECT COUNT(*)=1 AND MIN(recipient_player_id)=(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND MIN(amount)=5000 AND MIN(source)='system_generated' FROM ferengi_destruction_rewards WHERE ship_id=@{ferengi_ship})::int,(SELECT credits=@{credits_before}+5000 FROM players WHERE name='v3_bounty_hunter')::int;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.1",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "path": "data.rows.0.2",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Retry after destruction is rejected and cannot award again",
+      "command": "combat.attack",
+      "user": "v3_bounty_hunter",
+      "data": {
+        "target_ship_id": "@{ferengi_ship}"
+      },
+      "expect": {
+        "status": "error"
+      }
+    },
+    {
+      "name": "Verify retry did not duplicate reward",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*) FROM ferengi_destruction_rewards WHERE ship_id=@{ferengi_ship})=1 AND (SELECT credits FROM players WHERE name='v3_bounty_hunter')=@{credits_before}+5000 THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Transfer test owner into existing FENG corporation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corp_members(corporation_id,player_id,role) SELECT c.corporation_id,p.player_id,'Officer' FROM corporations c CROSS JOIN players p WHERE c.tag='FENG' AND p.name='v3_human_feng_owner' ON CONFLICT(corporation_id,player_id) DO NOTHING;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create player-owned Ferengi-class target",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH human AS (SELECT player_id,ship_id FROM players WHERE name='v3_human_feng_owner'), moved_player AS (UPDATE players p SET sector_id=@{battle_sector} FROM human h WHERE p.player_id=h.player_id RETURNING p.player_id,p.ship_id), moved_ship AS (UPDATE ships s SET name='Human Ferengi corporation ship',type_id=(SELECT shiptypes_id FROM shiptypes WHERE name='Ferengi Warship'),sector_id=@{battle_sector},holds=10,fighters=0,shields=0,hull=10,personality='defensive',destroyed=FALSE FROM moved_player p WHERE s.ship_id=p.ship_id RETURNING s.ship_id) SELECT ship_id FROM moved_ship;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Resolve human-owned target identity",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT ship_id FROM players WHERE name='v3_human_feng_owner';"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "human_feng_ship_id": "data.rows.0.0"
+      }
+    },
+    {
+      "name": "Move ordinary bounty hunter to human target sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE players SET sector_id=@{battle_sector} WHERE name='v3_bounty_hunter';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Attack human-owned ship in FENG corporation",
+      "command": "combat.attack",
+      "user": "v3_bounty_hunter",
+      "data": {
+        "target_ship_id": "@{human_feng_ship_id}"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Human corporation ship receives no Ferengi NPC reward",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*) FROM ferengi_destruction_rewards r JOIN ships s USING(ship_id) JOIN ship_ownership so USING(ship_id) JOIN players p ON p.player_id=so.player_id WHERE p.name='v3_human_feng_owner')=0 AND (SELECT credits FROM players WHERE name='v3_bounty_hunter')=@{credits_before}+5000 THEN 1 ELSE 0 END;"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "name": "V3 Ferengi reward persistence and replay after server restart",
+  "tests": [
+    {
+      "name": "Reauthenticate SysOp after server restart",
+      "command": "auth.login",
+      "user": "admin",
+      "data": { "username": "System", "passwd": "BOT" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Resolve destroyed Ferengi ship identity and durable destruction sequence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT ship_id,destruction_sequence FROM ships WHERE name='V3 Ferengi QA warship';" },
+      "expect": { "status": "ok" },
+      "save": { "ferengi_ship": "data.rows.0.0", "destruction_sequence": "data.rows.0.1" }
+    },
+    {
+      "name": "Player reconnects after server restart",
+      "command": "auth.login",
+      "user": "v3_bounty_hunter",
+      "data": { "username": "v3_bounty_hunter", "passwd": "P@ssword123" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Authenticated player sees reward balance persisted",
+      "command": "player.my_info",
+      "user": "v3_bounty_hunter",
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.player.credits", "op": "==", "value": "6234.00" },
+        { "path": "data.player.sector", "op": "==", "value": 200 }
+      ]
+    },
+    {
+      "name": "Destroyed NPC remains unavailable after restart",
+      "command": "combat.attack",
+      "user": "v3_bounty_hunter",
+      "data": { "target_ship_id": "@{ferengi_ship}" },
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reward sequence has exactly one system-generated event and no duplicate credit",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN s.destroyed AND r.destruction_sequence=@{destruction_sequence} AND r.amount=5000 AND r.source='system_generated' AND r.recipient_player_id=(SELECT player_id FROM players WHERE name='v3_bounty_hunter') AND (SELECT COUNT(*) FROM ferengi_destruction_rewards WHERE ship_id=s.ship_id)=1 AND (SELECT credits FROM players WHERE name='v3_bounty_hunter')=6234 THEN 1 ELSE 0 END FROM ships s JOIN ferengi_destruction_rewards r USING(ship_id,destruction_sequence) WHERE s.ship_id=@{ferengi_ship};"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    }
+  ]
+}

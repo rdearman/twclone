@@ -232,8 +232,12 @@ class PlanetaryServerContractTests(unittest.TestCase):
 
     def test_orion_blockader_holds_home_and_uses_existing_defence_systems(self):
         blockader = self.universe.split(
-            "if (personality == SHIP_PERSONALITY_BLOCKADER)", 1
-        )[1].split("if (personality == SHIP_PERSONALITY_OFFENSIVE", 1)[0]
+            "if (personality == SHIP_PERSONALITY_BLOCKADER && current_sector > 10)", 1
+        )[1].split(
+            "if ((personality == SHIP_PERSONALITY_OFFENSIVE", 1
+        )[0]
+        self.assertIn("personality == SHIP_PERSONALITY_BLOCKADER && current_sector > 10",
+                      self.universe)
         self.assertIn("new_target = (ori_home_sector_id > 0)", blockader)
         self.assertIn("current_sector == ori_home_sector_id", blockader)
         self.assertIn("npc_deploy_defensive_fighter", blockader)
