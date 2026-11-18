@@ -1,0 +1,131 @@
+{
+  "name": "BANK-02 insufficient-funds occurrence setup",
+  "tests": [
+    {
+      "name": "Authenticate disposable bank scheduler operator",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Register ordinary standing-order owner",
+      "setup": "macro_auth_user",
+      "username": "bank_skip_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Register ordinary recipient",
+      "setup": "macro_auth_user",
+      "username": "bank_skip_recipient_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Remove old orders for the isolated owner",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "DELETE FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank_skip_qa');"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create the owner's zero-balance account using ordinary deposits and withdrawals",
+      "command": "bank.deposit",
+      "user": "bank_skip_qa",
+      "data": {
+        "amount": 1
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Withdraw the deposited credit so the scheduled order is underfunded",
+      "command": "bank.withdraw",
+      "user": "bank_skip_qa",
+      "data": {
+        "amount": 1
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Create daily order that cannot be paid at its first occurrence",
+      "command": "bank.orders.create",
+      "user": "bank_skip_qa",
+      "data": {
+        "recipient_player_id": "@bank_skip_recipient_qa_player_id",
+        "amount": 25,
+        "frequency": "daily",
+        "time_utc": "00:00"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "save": {
+        "bank_skip_order_id": "data.order_id",
+        "bank_skip_due": "data.next_run_at"
+      }
+    },
+    {
+      "name": "Enable deterministic clock for the actual registered bank scheduler",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Make only standing-order scheduler due at the configured occurrence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='bank_standing_orders_tick'),next_due_at=CASE WHEN name='bank_standing_orders_tick' THEN to_timestamp(@{bank_skip_due}) ELSE next_due_at END;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Run the actual bank scheduler at the first due time",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": {
+        "now_s": "@{bank_skip_due}",
+        "confirm": true
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.tasks_run",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Confirm one insufficient occurrence was skipped without debit, debt or cancellation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN b.enabled AND b.last_occurrence_at IS NOT NULL AND b.next_run_at>b.last_occurrence_at AND (SELECT COUNT(*) FROM bank_order_occurrences o WHERE o.bank_orders_id=b.bank_orders_id AND o.outcome='skipped_insufficient_funds' AND o.amount=25)=1 AND (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=b.player_id AND currency='CRD' AND is_active=TRUE)=0 AND NOT EXISTS(SELECT 1 FROM bank_transactions WHERE tx_group_id LIKE 'bank-order-'||b.bank_orders_id||'-%') THEN 1 ELSE 0 END FROM bank_orders b WHERE b.bank_orders_id=@{bank_skip_order_id};"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

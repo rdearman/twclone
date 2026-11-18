@@ -4,8 +4,16 @@ Reviewed: 18 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 18 November 2026:** 18 VERIFIED, 41
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. `BANK-03` is now
+**Parity refresh — 18 November 2026:** 22 VERIFIED, 37
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Batch 2 promoted
+`POP-03`, `SHIP-03`, `BANK-02` and `V3-TOLL-RATE-01` from executed disposable
+PostgreSQL acceptance. `POP-07` remains IMPLEMENTED_UNVERIFIED: its final
+clause is a traceable design/scope constraint (“No corporation-capture rule
+is inferred”), not an executable prohibition. The acceptance matrix requires
+runtime evidence for VERIFIED, so documentary evidence does not promote it and
+a negative test would invent a runtime rule. The completed batch and exact
+test references are recorded in the clause matrix.
+`BANK-03` is now
 VERIFIED: a day-31 monthly standing order settled once through the registered
 database scheduler, retained day 31 for its next recurrence, and remained
 visible with its original day after a serving-server restart. This acceptance

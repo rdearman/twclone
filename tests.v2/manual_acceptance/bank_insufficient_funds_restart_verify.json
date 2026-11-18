@@ -1,0 +1,114 @@
+{
+  "name": "BANK-02 persistence and next-occurrence recovery",
+  "tests": [
+    {
+      "name": "Reauthenticate the scheduler operator after server restart",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Reauthenticate the ordinary order owner after server restart",
+      "setup": "macro_auth_user",
+      "username": "bank_skip_qa",
+      "password": "qa-password"
+    },
+    {
+      "name": "Verify the skipped occurrence and active next recurrence survived restart",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN b.enabled AND (SELECT COUNT(*) FROM bank_order_occurrences o WHERE o.bank_orders_id=b.bank_orders_id AND o.outcome='skipped_insufficient_funds')=1 AND (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=b.player_id AND currency='CRD' AND is_active=TRUE)=0 AND b.next_run_at>b.last_occurrence_at THEN 1 ELSE 0 END,EXTRACT(EPOCH FROM b.next_run_at)::bigint FROM bank_orders b WHERE b.player_id=(SELECT player_id FROM players WHERE name='bank_skip_qa');"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "save": {
+        "bank_skip_next_due": "data.rows.0.1"
+      }
+    },
+    {
+      "name": "Order owner can still list the active recurring instruction",
+      "command": "bank.orders.list",
+      "user": "bank_skip_qa",
+      "data": {
+        "page": 1,
+        "limit": 20
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.orders.0.enabled",
+          "op": "==",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Fund account through ordinary player workflow for the next scheduled occurrence",
+      "command": "bank.deposit",
+      "user": "bank_skip_qa",
+      "data": {
+        "amount": 25
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Schedule the real bank handler at the next recurrence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='bank_standing_orders_tick'),next_due_at=CASE WHEN name='bank_standing_orders_tick' THEN to_timestamp(@{bank_skip_next_due}) ELSE next_due_at END;"
+      },
+      "expect": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "Advance the actual registered scheduler to the next recurrence",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": {
+        "now_s": "@{bank_skip_next_due}",
+        "confirm": true
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.tasks_run",
+          "op": ">",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "Verify next occurrence pays once and leaves the instruction active",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN b.enabled AND (SELECT COUNT(*) FROM bank_order_occurrences o WHERE o.bank_orders_id=b.bank_orders_id AND o.outcome='skipped_insufficient_funds')=1 AND (SELECT COUNT(*) FROM bank_order_occurrences o WHERE o.bank_orders_id=b.bank_orders_id AND o.outcome='paid' AND o.amount=25)=1 AND (SELECT COUNT(*) FROM bank_transactions WHERE tx_group_id LIKE 'bank-order-'||b.bank_orders_id||'-%' AND amount=25)=2 AND (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=b.player_id AND currency='CRD' AND is_active=TRUE)=0 THEN 1 ELSE 0 END FROM bank_orders b WHERE b.player_id=(SELECT player_id FROM players WHERE name='bank_skip_qa');"
+      },
+      "expect": {
+        "status": "ok"
+      },
+      "asserts": [
+        {
+          "path": "data.rows.0.0",
+          "op": "==",
+          "value": 1
+        }
+      ]
+    }
+  ]
+}

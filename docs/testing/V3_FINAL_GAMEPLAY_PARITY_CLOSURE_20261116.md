@@ -1,6 +1,6 @@
 # V3 final gameplay parity closure
 
-Reviewed: 17 November 2026
+Reviewed: 18 November 2026
 Starting review baseline: `4e60f9966b363529b20ab34bcb49b05b1d160a53`
 Parity status refresh: 16 November 2026, after the robbery persistence fix.
 
@@ -24,7 +24,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 |---|---|---|
 | POP-01 | Population state and transitions | VERIFIED |
 | POP-02 | Acquisition and capture disposition | PARTIAL |
-| POP-03 | Slave productivity | IMPLEMENTED_UNVERIFIED |
+| POP-03 | Slave productivity | VERIFIED |
 | POP-04 | Slave morale | IMPLEMENTED_UNVERIFIED |
 | POP-05 | Slave unrest configuration and scheduler | BLOCKED |
 | POP-06 | Emancipation | IMPLEMENTED_UNVERIFIED |
@@ -45,7 +45,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | INS-02 | Guaranteed insurance funding | IMPLEMENTED_UNVERIFIED |
 | TRADE-01 | No price-negotiation mechanic | IMPLEMENTED_UNVERIFIED |
 | BANK-01 | Standing-order scheduling | IMPLEMENTED_UNVERIFIED |
-| BANK-02 | Standing-order insufficient funds | IMPLEMENTED_UNVERIFIED |
+| BANK-02 | Standing-order insufficient funds | VERIFIED |
 | BANK-03 | Monthly date boundary | VERIFIED |
 | BANK-04 | Invalid standing-order recipient | IMPLEMENTED_UNVERIFIED |
 | BANK-05 | Standing-order settlement and races | IMPLEMENTED_UNVERIFIED |
@@ -61,7 +61,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | NPC-ORI-01 | Orion blockade targeting | PARTIAL |
 | SHIP-01 | Ship-sale locations | VERIFIED |
 | SHIP-02 | Ship acquisition and ownership | IMPLEMENTED_UNVERIFIED |
-| SHIP-03 | Ship repair and upgrades | IMPLEMENTED_UNVERIFIED |
+| SHIP-03 | Ship sale settlement effects | VERIFIED |
 | SHIP-04 | Ship loss and recovery | IMPLEMENTED_UNVERIFIED |
 | COMBAT-01 | Player ship combat | PARTIAL |
 | COMBAT-02 | Combat destruction and recovery | PARTIAL |
@@ -79,7 +79,7 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | PARITY-TW-HOMING-01 | Transwarp homing fighter | IMPLEMENTED_UNVERIFIED |
 | MOVE-05 | Transwarp fuel debit | VERIFIED |
 | V3-PLANET-RATE-01 | Configured planet-class production ratios | VERIFIED |
-| V3-TOLL-RATE-01 | Noncanonical toll rate | IMPLEMENTED_UNVERIFIED |
+| V3-TOLL-RATE-01 | Noncanonical toll rate | VERIFIED |
 | V3-PHOTON-DURATION-01 | Noncanonical photon duration | IMPLEMENTED_UNVERIFIED |
 | V3-PORT-BUILD-01 | Noncanonical port build/upgrade costs | IMPLEMENTED_UNVERIFIED |
 | V3-PORT-COMBAT-01 | Noncanonical port durability/defence | IMPLEMENTED_UNVERIFIED |
@@ -90,9 +90,24 @@ in-scope rows remain obligations; source presence is not treated as proof.
 | CFG-03 | Disabled-by-default slave unrest values | IMPLEMENTED_UNVERIFIED |
 | CFG-04 | Insurance configuration | IMPLEMENTED_UNVERIFIED |
 
-**Count (updated 18 November 2026):** 18 VERIFIED, 41 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
+**Count (updated 18 November 2026, parity closure batch 2):** 22 VERIFIED, 37 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED,
 0 MISSING; 2 additional IDs are explicitly out of V3 scope. The two V4
 exclusions are described above; they are not parity failures.
+
+Batch 2 used the clause matrix to complete the four smallest fully executable
+gaps: POP-03 production was exercised through the registered scheduler across
+a game-server restart (20/20 cases across setup/verification); SHIP-03 sale
+settlement and injected rollback passed 19/19; BANK-02 insufficient-funds
+skip and next scheduled payment passed 17/17 and 11/11 across a game-server
+restart; configurable toll-rate behavior passed 31/31. `POP-07` remains
+unverified because the final clause only constrains inference: the approved
+decision register says no corporation-capture rule is inferred, and the V3
+planet protocol defines no such mechanic. This traceability answers the design
+question, but under this report's executable-runtime criterion it cannot
+promote the clause; no negative test was added that could imply unsupported
+corporation-capture behavior. `SHIP-01` does not need additional accessibility
+work: the Python client workflow passed 2 focused tests and the Godot command
+menu test passed 206 checks including dispatch of the roster `ship.sell` action.
 
 `POP-01` is now VERIFIED following disposable-PostgreSQL capture of an
 unpopulated planet, preservation/rollback checks, player/corporation ownership
