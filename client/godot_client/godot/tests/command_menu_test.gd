@@ -192,6 +192,22 @@ func _run() -> void:
 	# Keep the surrounding legacy command-count assertions independent of this
 	# focused harvest dispatch check.
 	captured.resize(before_harvest)
+	var exchange_sale_button := _action_button(menu, "Sell planet surplus to Exchange")
+	_check(exchange_sale_button != null and not exchange_sale_button.disabled, "landed planet Exchange sale workflow was unavailable")
+	var before_exchange_sale := captured.size()
+	if exchange_sale_button != null:
+		exchange_sale_button.pressed.emit()
+		_check(menu._inline_form_panel.visible, "Exchange sale did not open its input and confirmation form")
+		if menu._inline_form_panel.visible:
+			(menu._form_fields["commodity"] as LineEdit).text = "ORE"
+			(menu._form_fields["quantity"] as LineEdit).text = "6"
+			menu._inline_submit.pressed.emit()
+	_check(captured.size() == before_exchange_sale + 1, "confirmed Exchange sale did not dispatch the server command")
+	if captured.size() > before_exchange_sale:
+		_check(captured[before_exchange_sale]["command"] == "planet.market.sell", "planet Exchange action dispatched the wrong command")
+		_check(captured[before_exchange_sale]["data"] == {"planet_id": 19, "commodity": "ORE", "quantity": 6}, "planet Exchange action did not bind the selected planet and entered values")
+		_check(captured[before_exchange_sale]["mutating"], "Exchange sale was not marked as a server mutation")
+	captured.resize(before_exchange_sale)
 	menu._choose_action({"label": "Planet information", "command": "planet.info", "context_id": "planet_id"})
 	_check(captured.size() == before_harvest + 1, "planet information did not emit a command")
 	if captured.size() > before_harvest:

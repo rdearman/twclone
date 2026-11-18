@@ -7176,6 +7176,49 @@ def planet_harvest_flow(ctx: Context):
     _refresh_planet_overview(ctx, planet_id)
 
 
+@register("planet_market_sell_flow")
+def planet_market_sell_flow(ctx: Context):
+    """Sell controlled planetary surplus to the Galactic Exchange."""
+    planet_id = _planet_id(ctx)
+    if planet_id is None:
+        print("Exchange sale requires a server-confirmed planetary landing.")
+        return
+    commodity = input("Commodity to sell (ORE, ORG, EQU): ").strip().upper()
+    if commodity not in {"ORE", "ORG", "EQU"}:
+        print("Choose ORE, ORG, or EQU.")
+        return
+    try:
+        quantity = int(input("Quantity to sell: ").strip())
+    except ValueError:
+        print("Quantity must be a positive whole number.")
+        return
+    if quantity <= 0:
+        print("Quantity must be a positive whole number.")
+        return
+    if input(f"Sell {quantity} {commodity} from planet {planet_id} to the Galactic Exchange? [y/N]: ").strip().lower() != "y":
+        print("Planetary Exchange sale cancelled.")
+        return
+    response = ctx.conn.rpc("planet.market.sell", {
+        "planet_id": planet_id, "commodity": commodity, "quantity": quantity,
+    })
+    ctx.state["last_rpc"] = response
+    if not isinstance(response, dict) or response.get("status") != "ok":
+        print(f"[Error] Planetary Exchange sale refused: {_planet_error(response)}")
+        return
+    data = get_data(response)
+    if (response.get("type") != "planet.market.sell" or not isinstance(data, dict)
+            or data.get("planet_id") != planet_id
+            or data.get("commodity") != commodity
+            or data.get("quantity_sold") != quantity
+            or type(data.get("total_credits_received")) is not int
+            or data["total_credits_received"] < 0):
+        print("[Error] Exchange sale was not confirmed by a matching receipt; refresh before relying on the result.")
+        return
+    print(f"Planetary Exchange sale confirmed: {quantity} {commodity}; received {data['total_credits_received']} credits.")
+    _refresh_planet_overview(ctx, planet_id)
+    _hud_rpc(ctx, "player.my_info", {})
+
+
 @register("planet_trade_port_flow")
 def planet_trade_port_flow(ctx: Context):
     """Sell accumulated planetary stock directly to a local buying port."""

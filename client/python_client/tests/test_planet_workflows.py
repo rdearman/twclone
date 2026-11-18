@@ -646,6 +646,36 @@ def test_planet_harvest_menu_runs_server_settlement(
     assert "Turns charged: 0" in output
 
 
+def test_planet_exchange_sale_menu_confirms_receipt_and_refreshes(
+    menus, ctx_factory, fake_conn, monkeypatch, capsys
+):
+    surface = {item["key"]: item for item in menus["SURFACE"]["options"]}
+    assert surface["e"]["action"] == {"pycall": "planet_market_sell_flow"}
+    ctx = ctx_factory()
+    ctx.state.update({"on_planet": True, "current_planet_id": 77})
+    fake_conn.queue("planet.market.sell", {
+        "status": "ok", "type": "planet.market.sell", "data": {
+            "planet_id": 77, "commodity": "ORE", "quantity_sold": 6,
+            "total_credits_received": 420,
+        },
+    })
+    fake_conn.queue("planet.info", _planet())
+    fake_conn.queue("player.my_info", {"status": "ok", "type": "player.info", "data": {"player": {"credits": "5420.00"}}})
+    answers = iter(["ORE", "6", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+
+    client.planet_market_sell_flow(ctx)
+
+    assert fake_conn.calls[0] == {
+        "command": "planet.market.sell",
+        "data": {"planet_id": 77, "commodity": "ORE", "quantity": 6},
+    }
+    assert [call["command"] for call in fake_conn.calls] == [
+        "planet.market.sell", "planet.info", "player.my_info",
+    ]
+    assert "6 ORE; received 420 credits" in capsys.readouterr().out
+
+
 def test_planet_overview_presents_authoritative_fields(ctx_factory, fake_conn, capsys):
     ctx = ctx_factory()
     _confirmed_landing(ctx)

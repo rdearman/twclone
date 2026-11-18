@@ -1722,6 +1722,25 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 			_request_planet_surface_records()
 			_refresh_after_command(["player", "ship"])
 			return
+		if command_name == "planet.market.sell":
+			var sale_request: Variant = operation.get("data", {})
+			var sale_planet_id := _authoritative_positive_id(sale_request.get("planet_id", 0)) if sale_request is Dictionary else 0
+			var sale_quantity: Variant = sale_request.get("quantity", null) if sale_request is Dictionary else null
+			var sale_commodity := str(sale_request.get("commodity", "")) if sale_request is Dictionary else ""
+			var sale_receipt_valid := response.get("type", null) == "planet.market.sell" and data is Dictionary \
+				and sale_planet_id != 0 and data.get("planet_id", null) == sale_planet_id \
+				and data.get("commodity", null) == sale_commodity \
+				and typeof(sale_quantity) == TYPE_INT and data.get("quantity_sold", null) == sale_quantity \
+				and typeof(data.get("total_credits_received", null)) == TYPE_INT and int(data.get("total_credits_received", -1)) >= 0
+			if not sale_receipt_valid:
+				gameplay_view.set_command_busy(false)
+				gameplay_view.show_notification("Planetary Exchange sale was not confirmed by a matching receipt; refreshing planet and player state.")
+				_reconcile_planet_surface_mutation()
+				return
+			gameplay_view.show_notification("Planetary Exchange sale confirmed · %d %s · %d credits received." % [sale_quantity, sale_commodity, int(data["total_credits_received"])])
+			_request_planet_surface_records()
+			_refresh_after_command(["player"])
+			return
 		if command_name == "planet.launch":
 			if not _launch_response_type_matches(response):
 				# A mismatched envelope cannot establish departure or authorize any
@@ -2031,7 +2050,7 @@ func _finish_command_reply(response: Dictionary, operation: Dictionary) -> void:
 func _is_planet_surface_mutation(command: String) -> bool:
 	return command in [
 		"planet.deposit", "planet.withdraw", "planet.harvest", "planet.fighters.transfer",
-		"planet.colonists.allocate", "planet.colonists.set",
+		"planet.colonists.allocate", "planet.colonists.set", "planet.market.sell",
 		"citadel.build", "citadel.upgrade", "planet.rename"
 	]
 

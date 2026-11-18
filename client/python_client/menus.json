@@ -341,6 +341,16 @@
           }
         },
         {
+          "key": "e",
+          "label": "(E) Sell Planet Surplus to Exchange",
+          "action": {
+            "pycall": "planet_market_sell_flow"
+          },
+          "show_if": [
+            "on_planet"
+          ]
+        },
+        {
           "key": "b",
           "label": "(B) Start StarPort Construction",
           "action": {
