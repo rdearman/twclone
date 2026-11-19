@@ -55,17 +55,68 @@
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Fund insurer",
+      "name": "Rig: Create empty system insurer reserve to exercise guaranteed payout",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO insurance_funds (owner_type,balance) VALUES ('system',100000);" },
+      "data": { "sql": "INSERT INTO insurance_funds (owner_type,balance) VALUES ('system',0);" },
       "user": "admin",
       "expect": { "status": "ok" }
     },
     {
-      "name": "Rig: Insure attacker's ship for hull-only payout",
+      "name": "Read the test system insurer fund ID",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "INSERT INTO insurance_policies (holder_type,holder_id,subject_type,subject_id,premium,payout,fund_id,start_ts,expiry_ts,active) SELECT 'player',@{attacker_player_player_id},'ship',1012,0,1000,(SELECT MAX(fund_id) FROM insurance_funds),EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint::text,(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::bigint+86400)::text,TRUE;" },
+      "data": { "sql": "SELECT MAX(fund_id) FROM insurance_funds WHERE owner_type='system' AND balance=0;" },
       "user": "admin",
+      "save": { "insurance_system_fund_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ordinary player buys hull-only policy for the owned ship",
+      "command": "insurance.policies.buy",
+      "data": { "subject_type": "ship", "subject_id": 1012, "duration": 86400, "premium": 0, "payout": 300, "fund_id": "@{insurance_system_fund_id}" },
+      "user": "attacker_player",
+      "save": { "attacker_insurance_policy_id": "data.policy_id" },
+      "asserts": [
+        { "path": "data.status", "op": "==", "value": "purchased" },
+        { "path": "data.policy_id", "op": ">", "value": 0 }
+      ],
+      "expect": { "status": "ok", "type": "insurance.policies.buy.response" }
+    },
+    {
+      "name": "Ordinary player buys a second policy above the remaining aggregate hull value",
+      "command": "insurance.policies.buy",
+      "data": { "subject_type": "ship", "subject_id": 1012, "duration": 86400, "premium": 0, "payout": 1000, "fund_id": "@{insurance_system_fund_id}" },
+      "user": "attacker_player",
+      "save": { "attacker_insurance_policy_2_id": "data.policy_id" },
+      "asserts": [
+        { "path": "data.status", "op": "==", "value": "purchased" },
+        { "path": "data.policy_id", "op": ">", "value": "@{attacker_insurance_policy_id}" }
+      ],
+      "expect": { "status": "ok", "type": "insurance.policies.buy.response" }
+    },
+    {
+      "name": "Ordinary player reads both active ship policies before destruction",
+      "command": "insurance.policies.list",
+      "data": {},
+      "user": "attacker_player",
+      "asserts": [
+        { "path": "data.policies.0.policy_id", "op": "==", "value": "@{attacker_insurance_policy_2_id}" },
+        { "path": "data.policies.1.policy_id", "op": "==", "value": "@{attacker_insurance_policy_id}" }
+      ],
+      "expect": { "status": "ok", "type": "insurance.policies.list.response" }
+    },
+    {
+      "name": "Load insured hull with cargo and installed shields excluded from coverage",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "UPDATE ships SET ore=10,installed_shields=25,shields=25 WHERE ship_id=1012;" },
+      "user": "admin",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Confirm excluded cargo and equipment are present before destruction",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN ore=10 AND installed_shields=25 AND shields=25 THEN 1 ELSE 0 END FROM ships WHERE ship_id=1012;" },
+      "user": "admin",
+      "asserts": [{ "path": "data.rows.0.0", "op": "==", "value": 1 }],
       "expect": { "status": "ok" }
     },
     {
@@ -95,7 +146,7 @@
     {
       "name": "Insured ship destruction credits bank once",
       "command": "sys.raw_sql_exec",
-      "data": { "sql": "SELECT (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{attacker_player_player_id} AND currency='CRD' AND is_active=TRUE)=@{attacker_bank_before}+1000 AND (SELECT COUNT(*) FROM insurance_claims c JOIN insurance_policies p ON p.insurance_policies_id=c.policy_id WHERE p.subject_id=1012 AND c.status='paid' AND c.event_id='ship-destruction-1012')=1 AND (SELECT COUNT(*) FROM bank_transactions WHERE idempotency_key='insurance-auto-1012-'||(SELECT insurance_policies_id::text FROM insurance_policies WHERE subject_id=1012 ORDER BY insurance_policies_id DESC LIMIT 1))=1;" },
+      "data": { "sql": "SELECT (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=@{attacker_player_player_id} AND currency='CRD' AND is_active=TRUE)=@{attacker_bank_before}+1000 AND (SELECT COUNT(*) FROM insurance_claims c JOIN insurance_policies p ON p.insurance_policies_id=c.policy_id WHERE p.subject_id=1012 AND c.status='paid' AND c.event_id='ship-destruction-1012' AND ((p.insurance_policies_id=@{attacker_insurance_policy_id} AND c.amount=300) OR (p.insurance_policies_id=@{attacker_insurance_policy_2_id} AND c.amount=700)))=2 AND (SELECT COUNT(*) FROM bank_transactions WHERE idempotency_key IN ('insurance-auto-1012-'||@{attacker_insurance_policy_id},'insurance-auto-1012-'||@{attacker_insurance_policy_2_id}) AND tx_type='INSURANCE_GUARANTEE' AND direction='CREDIT')=2 AND (SELECT COALESCE(SUM(amount),0) FROM bank_transactions WHERE idempotency_key IN ('insurance-auto-1012-'||@{attacker_insurance_policy_id},'insurance-auto-1012-'||@{attacker_insurance_policy_2_id}) AND tx_type='INSURANCE_GUARANTEE' AND direction='CREDIT')=1000 AND (SELECT balance FROM insurance_funds WHERE fund_id=@{insurance_system_fund_id})=0 AND 300<(SELECT st.basecost FROM ships s JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE s.ship_id=1012) AND 1000=(SELECT st.basecost FROM ships s JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE s.ship_id=1012);" },
       "user": "admin",
       "expect": { "status": "ok", "data": { "rows": [["t"]] } }
     }

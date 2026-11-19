@@ -4,8 +4,18 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 52 VERIFIED, 7
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 14
+**Parity refresh — 19 November 2026:** 55 VERIFIED, 5
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 15
+verified `INS-01`, `INS-02`, and `INS-03`. Disposable PostgreSQL acceptance
+passed 22/22 for policy eligibility, insured ship destruction, guaranteed
+underinsured settlement capped at hull replacement value, escape-pod
+independence, and claim idempotency; 40/40 for sale termination without a
+premium refund; and 22/22 for the separate economy/insurance rollback and
+retry workflow. Python insurance workflow tests passed 4/4, the combined
+Python client suite passed 834/834, and Godot 4.5.1 client regressions passed
+106 with 6 live-server-only scripts skipped. The Godot command menu passed
+240 checks, including insurance purchase/list/claim dispatch. Detailed clause
+evidence is in the matrix. Autonomous batch 14
 verified `BANK-05`. Disposable PostgreSQL acceptance passed 41/41 for ordinary
 create/list/cancel; 21/21 for cancellation racing settlement; 24/24 for
 injected settlement rollback and retry; 15/15 for 106 active orders without a

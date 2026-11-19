@@ -485,10 +485,39 @@ Python source-contract anchor also referenced an obsolete C function
 signature; it was updated to the current signature, after which the focused
 contract test passed **1/1**. No gameplay code was changed.
 
-Classification moved from **51 VERIFIED / 8 IMPLEMENTED_UNVERIFIED / 6
-PARTIAL / 1 BLOCKED** to **52 VERIFIED / 7 IMPLEMENTED_UNVERIFIED / 6
+Classification moved from **51 VERIFIED / 9 IMPLEMENTED_UNVERIFIED / 6
+PARTIAL / 1 BLOCKED** to **52 VERIFIED / 8 IMPLEMENTED_UNVERIFIED / 6
 PARTIAL / 1 BLOCKED**. Base clause totals are **140 VERIFIED / 87
 IMPLEMENTED_UNTESTED**. Next, close another independently executable narrow
 gap; insurance remains a candidate only after qualifying destruction and
 client-accessible policy purchase/claim are exercised, rather than relying on
 fixture-inserted claims.
+
+## Batch 15 — insurance lifecycle and both client workflows
+
+Verified `INS-01`, `INS-02`, and `INS-03`. The actual disposable-PostgreSQL
+`suite_combat_and_crime.json` passed **22/22**: ordinary players bought two
+hull policies, underwent a real ship destruction, received the exact 300 CRD
+underinsured payout plus 700 CRD up to the 1,000 CRD hull cap, retained the
+independent Escape Pod recovery, and produced identifiable once-only
+`INSURANCE_GUARANTEE` ledger entries despite an empty insurer reserve.
+`suite_economy_insurance.json` passed **22/22**, including invalid eligibility,
+atomic rollback, and retry idempotency. `suite_ship_sale_v3.json` passed
+**40/40** and confirmed voluntary sale deactivates the policy without refund.
+
+Python now exposes list, hull-policy purchase, and claim actions; focused
+workflow tests passed **4/4**. Godot exposes the same menu actions and dispatch
+coverage; `command_menu_test.gd` passed **240 checks**. Full Python client
+regressions passed **834/834**. The Godot 4.5.1 regression runner passed
+**106**, failed **0**, skipped **6** live-server-only scripts; catalogue
+validation reported 13 assets and zero warnings. The first sandboxed Python
+run showed six socket `EPERM` failures; rerunning with local socket permission
+passed the affected 12/12 tests and the complete client suite. This was an
+execution-environment restriction, not a code defect.
+
+No gameplay server defect was found. Classification moved from **52 VERIFIED
+/ 8 IMPLEMENTED_UNVERIFIED / 6 PARTIAL / 1 BLOCKED** to **55 VERIFIED / 5
+IMPLEMENTED_UNVERIFIED / 6 PARTIAL / 1 BLOCKED**. Base clause totals moved
+from **140 VERIFIED / 87 IMPLEMENTED_UNTESTED** to **153 VERIFIED / 74
+IMPLEMENTED_UNTESTED**. Exact evidence is recorded against the thirteen
+insurance clauses in the matrix.

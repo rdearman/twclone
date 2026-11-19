@@ -525,8 +525,31 @@ func _run() -> void:
 	menu._active_category = "TRADING"
 	menu._render_actions()
 	await process_frame
-	var insurance_buy_button := _action_button(menu, "Buy insurance · server stub")
-	_check(insurance_buy_button != null and insurance_buy_button.disabled, "stub insurance operation was presented as usable")
+	var insurance_list_button := _action_button(menu, "List hull insurance policies")
+	var insurance_buy_button := _action_button(menu, "Buy hull insurance policy")
+	var insurance_claim_button := _action_button(menu, "File server-created insurance claim")
+	_check(insurance_list_button != null and not insurance_list_button.disabled and insurance_buy_button != null and not insurance_buy_button.disabled and insurance_claim_button != null and not insurance_claim_button.disabled, "implemented insurance workflows stayed unavailable")
+	var insurance_actions: Array = CommandMenu.COMMANDS.get("NEWS & RECORDS", [])
+	var insurance_buy_action: Dictionary = {}
+	var insurance_claim_action: Dictionary = {}
+	for candidate in insurance_actions:
+		if str(candidate.get("command", "")) == "insurance.policies.buy": insurance_buy_action = candidate
+		if str(candidate.get("command", "")) == "insurance.claim.file": insurance_claim_action = candidate
+	var before_insurance := captured.size()
+	menu._choose_action(insurance_buy_action)
+	(menu._form_fields["subject_id"] as LineEdit).text = "42"
+	(menu._form_fields["duration"] as LineEdit).text = "3600"
+	(menu._form_fields["premium"] as LineEdit).text = "10"
+	(menu._form_fields["payout"] as LineEdit).text = "500"
+	(menu._form_fields["fund_id"] as LineEdit).text = "3"
+	menu._submit_form()
+	_check(captured.size() == before_insurance + 1 and captured.back()["command"] == "insurance.policies.buy" and captured.back()["data"] == {"subject_type": "ship", "subject_id": 42, "duration": 3600, "premium": 10, "payout": 500, "fund_id": 3}, "insurance purchase form did not emit the hull-only V3 request")
+	menu._choose_action(insurance_claim_action)
+	(menu._form_fields["claim_id"] as LineEdit).text = "9"
+	(menu._form_fields["event_id"] as LineEdit).text = "destruction-17"
+	(menu._form_fields["amount"] as LineEdit).text = "500"
+	menu._submit_form()
+	_check(captured.size() == before_insurance + 2 and captured.back()["command"] == "insurance.claim.file" and captured.back()["data"] == {"claim_id": 9, "event_id": "destruction-17", "amount": 500}, "insurance claim form did not emit the documented request")
 	var count_before_unavailable := captured.size()
 	menu._choose_action({"label": "Synthetic unavailable action", "unavailable_reason": "test unavailable"})
 	_check(captured.size() == count_before_unavailable, "unavailable action emitted a server command")

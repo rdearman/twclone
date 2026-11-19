@@ -1198,23 +1198,23 @@
       "options": [
         {
           "key": "l",
-          "label": "(L) List Policies · unavailable",
+          "label": "(L) List Policies",
           "action": {
-            "pycall": "insurance_unavailable_flow"
+            "pycall": "insurance_list_flow"
           }
         },
         {
           "key": "b",
-          "label": "(B) Buy Policy · unavailable",
+          "label": "(B) Buy Hull Policy",
           "action": {
-            "pycall": "insurance_unavailable_flow"
+            "pycall": "insurance_buy_flow"
           }
         },
         {
           "key": "c",
-          "label": "(C) File Claim · unavailable",
+          "label": "(C) File Claim",
           "action": {
-            "pycall": "insurance_unavailable_flow"
+            "pycall": "insurance_claim_flow"
           }
         },
         {

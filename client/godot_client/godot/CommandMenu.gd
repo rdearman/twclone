@@ -101,8 +101,9 @@ const COMMANDS := {
 		{"label": "News feed", "command": "news.get_feed"},
 		{"label": "Mark news read", "command": "news.mark_feed_read", "mutating": true},
 		{"label": "Insurance policies · server stub", "unavailable_reason": "Insurance persistence is not available from the authoritative server handler yet; no request will be sent."},
-		{"label": "Buy insurance · server stub", "unavailable_reason": "Insurance persistence is not available from the authoritative server handler yet; no request will be sent."},
-		{"label": "File insurance claim · server stub", "unavailable_reason": "Insurance persistence is not available from the authoritative server handler yet; no request will be sent."},
+		{"label": "List hull insurance policies", "command": "insurance.policies.list", "fixed": {}},
+		{"label": "Buy hull insurance policy", "command": "insurance.policies.buy", "fixed": {"subject_type": "ship"}, "fields": [["subject_id", FIELD_INT, "Owned ship ID", ""], ["duration", FIELD_INT, "Coverage duration in seconds", ""], ["premium", FIELD_NONNEGATIVE_INT, "Premium in whole credits", "0"], ["payout", FIELD_NONNEGATIVE_INT, "Hull payout in whole credits", "0"], ["fund_id", FIELD_INT, "Insurance fund ID", ""]], "mutating": true},
+		{"label": "File server-created insurance claim", "command": "insurance.claim.file", "fields": [["claim_id", FIELD_INT, "Server-created claim ID", ""], ["event_id", FIELD_TEXT, "Destruction event ID", ""], ["amount", FIELD_NONNEGATIVE_INT, "Approved amount in whole credits", "0"]], "mutating": true},
 		{"label": "Subscriptions", "command": "subscribe.list"},
 	],
 	"CORPORATION": [

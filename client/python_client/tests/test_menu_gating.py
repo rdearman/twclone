@@ -23,9 +23,6 @@ KNOWN_ABSENT_COMMANDS = {
 # Registered RPC names whose current server handlers explicitly return
 # ERR_NOT_IMPLEMENTED. Keep them out of ordinary player-facing menu paths.
 KNOWN_SERVER_STUBS = {
-    "insurance.policies.list",
-    "insurance.policies.buy",
-    "insurance.claim.file",
     "ship.sell",
     "ship.transfer",
     "ship.transfer_cargo",
@@ -339,18 +336,11 @@ def test_enter_ship_uses_selected_ship_inspection_contract(
     assert fake_conn.calls == [{"command": "ship.inspect", "data": {"ship_id": 99}}]
 
 
-def test_insurance_placeholder_actions_are_explicit_and_never_claim_success(
-    ctx_factory, fake_conn, capsys
-):
-    ctx = ctx_factory()
-    ctx.push("INSURANCE_MAIN")
-
-    for choice in ("l", "b", "c"):
-        client.handle_choice(ctx, choice)
-
-    output = capsys.readouterr().out
-    assert output.count("Insurance is unavailable") == 3
-    assert "do not persist policies or claims" in output
-    assert "No request was sent" in output
-    assert all(call["command"] in {"player.my_info", "corp.status"}
-               for call in fake_conn.calls)
+def test_insurance_menu_exposes_persistent_policy_and_claim_workflows(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    workflows = {option.get("action", {}).get("pycall")
+                 for option in _visible_options(menus["INSURANCE_MAIN"], ctx)
+                 if option.get("action", {}).get("pycall")}
+    assert workflows == {
+        "insurance_list_flow", "insurance_buy_flow", "insurance_claim_flow"
+    }

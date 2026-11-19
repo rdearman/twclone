@@ -105,6 +105,44 @@
       }
     },
     {
+      "name": "Seed system insurance fund for the ordinary player's hull policy",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "INSERT INTO insurance_funds(owner_type,balance) VALUES('system',100000);" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Read the system insurance fund ID",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT MAX(fund_id) FROM insurance_funds WHERE owner_type='system' AND balance=100000;" },
+      "save": { "sale_test_insurance_fund_id": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Player deposits premium funds through ordinary bank workflow",
+      "command": "bank.deposit",
+      "user": "ship_sale_v3",
+      "data": { "amount": 25 },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Buy active hull coverage through the ordinary-player workflow",
+      "command": "insurance.policies.buy",
+      "user": "ship_sale_v3",
+      "data": { "subject_type": "ship", "subject_id": "@{sale_test_active_ship_id}", "duration": 86400, "premium": 25, "payout": 500, "fund_id": "@{sale_test_insurance_fund_id}" },
+      "save": { "sale_test_policy_id": "data.policy_id" },
+      "expect": { "status": "ok", "type": "insurance.policies.buy.response" }
+    },
+    {
+      "name": "Capture the post-premium bank balance before voluntary sale",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=(SELECT player_id FROM players WHERE name='ship_sale_v3') AND currency='CRD' AND is_active=TRUE;" },
+      "save": { "sale_test_bank_after_premium": "data.rows.0.0" },
+      "expect": { "status": "ok" }
+    },
+    {
       "name": "Reject sale without explicit replacement",
       "command": "ship.sell",
       "user": "ship_sale_v3",
@@ -141,7 +179,7 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": {
-        "sql": "SELECT CASE WHEN p.ship_id = @{sale_test_replacement_ship_id} THEN 1 ELSE 0 END, s.ore, (SELECT COUNT(*) FROM ship_cargo c WHERE c.ship_id = @{sale_test_active_ship_id}), (SELECT COUNT(*) FROM shipyard_used_inventory u WHERE u.ship_id = @{sale_test_active_ship_id} AND u.port_id = @{sale_test_port_id}), (SELECT COUNT(*) FROM ship_ownership o WHERE o.ship_id = @{sale_test_active_ship_id}), CASE WHEN p.credits = @{sale_test_updated_credits} THEN 1 ELSE 0 END, CASE WHEN (SELECT proceeds FROM ship_sale_audit WHERE sale_id = @{sale_test_sale_id}) = @{sale_test_proceeds} THEN 1 ELSE 0 END FROM players p JOIN ships s ON s.ship_id = @{sale_test_active_ship_id} WHERE p.name = 'ship_sale_v3';"
+        "sql": "SELECT CASE WHEN p.ship_id = @{sale_test_replacement_ship_id} THEN 1 ELSE 0 END, s.ore, (SELECT COUNT(*) FROM ship_cargo c WHERE c.ship_id = @{sale_test_active_ship_id}), (SELECT COUNT(*) FROM shipyard_used_inventory u WHERE u.ship_id = @{sale_test_active_ship_id} AND u.port_id = @{sale_test_port_id}), (SELECT COUNT(*) FROM ship_ownership o WHERE o.ship_id = @{sale_test_active_ship_id}), CASE WHEN p.credits = @{sale_test_updated_credits} THEN 1 ELSE 0 END, CASE WHEN (SELECT proceeds FROM ship_sale_audit WHERE sale_id = @{sale_test_sale_id}) = @{sale_test_proceeds} THEN 1 ELSE 0 END, CASE WHEN (SELECT balance FROM bank_accounts WHERE owner_type='player' AND owner_id=p.player_id AND currency='CRD' AND is_active=TRUE)=@{sale_test_bank_after_premium} THEN 1 ELSE 0 END, (SELECT CASE WHEN active=FALSE AND premium=25 THEN 1 ELSE 0 END FROM insurance_policies WHERE insurance_policies_id=@{sale_test_policy_id}) FROM players p JOIN ships s ON s.ship_id = @{sale_test_active_ship_id} WHERE p.name = 'ship_sale_v3';"
       },
       "expect": { "status": "ok" },
       "asserts": [
@@ -151,7 +189,9 @@
         { "path": "data.rows.0.3", "op": "==", "value": 1 },
         { "path": "data.rows.0.4", "op": "==", "value": 0 },
         { "path": "data.rows.0.5", "op": "==", "value": 1 },
-        { "path": "data.rows.0.6", "op": "==", "value": 1 }
+        { "path": "data.rows.0.6", "op": "==", "value": 1 },
+        { "path": "data.rows.0.7", "op": "==", "value": 1 },
+        { "path": "data.rows.0.8", "op": "==", "value": 1 }
       ]
     },
     {

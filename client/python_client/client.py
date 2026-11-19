@@ -4070,11 +4070,90 @@ def stock_dividend_set_flow(ctx: Context):
 
 @register("insurance_buy_flow")
 def insurance_buy_flow(ctx: Context):
-    insurance_unavailable_flow(ctx)
+    """Buy hull-only coverage for a ship the server confirms the player owns."""
+    try:
+        subject_id = int(input("Owned ship ID to insure: ").strip())
+        duration = int(input("Coverage duration in seconds: ").strip())
+        premium = int(input("Premium in whole credits: ").strip())
+        payout = int(input("Hull payout in whole credits: ").strip())
+        fund_id = int(input("Insurance fund ID: ").strip())
+    except ValueError:
+        print("Ship, duration, premium, payout and fund ID must be whole numbers.")
+        return
+    if subject_id <= 0 or duration <= 0 or premium < 0 or payout < 0 or fund_id <= 0:
+        print("Ship, duration and fund ID must be positive; premium and payout cannot be negative.")
+        return
+    response = ctx.conn.rpc("insurance.policies.buy", {
+        "subject_type": "ship", "subject_id": subject_id,
+        "duration": duration, "premium": premium,
+        "payout": payout, "fund_id": fund_id,
+    })
+    ctx.state["last_rpc"] = response
+    data = get_data(response) if isinstance(response, dict) else None
+    if (isinstance(response, dict) and response.get("status") == "ok"
+            and response.get("type") == "insurance.policies.buy.response"
+            and isinstance(data, dict) and type(data.get("policy_id")) is int
+            and data["policy_id"] > 0 and data.get("status") == "purchased"):
+        print(f"Hull insurance policy {data['policy_id']} purchased for ship {subject_id}.")
+        return
+    error = response.get("error", {}) if isinstance(response, dict) else {}
+    message = error.get("message", "The server did not return a matching policy receipt.") if isinstance(error, dict) else str(error)
+    print(f"[Error] Hull insurance was not confirmed: {message}")
+    _pp(response)
+
+
+@register("insurance_list_flow")
+def insurance_list_flow(ctx: Context):
+    response = ctx.conn.rpc("insurance.policies.list", {})
+    ctx.state["last_rpc"] = response
+    data = get_data(response) if isinstance(response, dict) else None
+    if (not isinstance(response, dict) or response.get("status") != "ok"
+            or response.get("type") != "insurance.policies.list.response"
+            or not isinstance(data, dict) or not isinstance(data.get("policies"), list)):
+        print("[Error] The server did not return a valid insurance policy list.")
+        _pp(response)
+        return
+    policies = data["policies"]
+    if not policies:
+        print("No hull insurance policies are on file.")
+        return
+    print("\n--- Hull Insurance Policies ---")
+    for policy in policies:
+        if not isinstance(policy, dict):
+            print("[Error] Invalid policy row in server response.")
+            return
+        print(f"Policy {policy.get('policy_id')}: ship {policy.get('subject_id')}, "
+              f"payout {present_money(policy.get('payout'))}, "
+              f"active={bool(policy.get('active'))}, expires={policy.get('expiry_ts', 'never')}")
 
 @register("insurance_claim_flow")
 def insurance_claim_flow(ctx: Context):
-    insurance_unavailable_flow(ctx)
+    """Settle a server-created claim; destruction claims normally auto-settle."""
+    try:
+        claim_id = int(input("Server-created claim ID: ").strip())
+        amount = int(input("Approved whole-credit amount: ").strip())
+    except ValueError:
+        print("Claim ID and amount must be whole numbers.")
+        return
+    event_id = input("Destruction event ID: ").strip()
+    if claim_id <= 0 or amount < 0 or not event_id:
+        print("Claim ID must be positive, amount nonnegative, and event ID nonempty.")
+        return
+    response = ctx.conn.rpc("insurance.claim.file", {
+        "claim_id": claim_id, "event_id": event_id, "amount": amount,
+    })
+    ctx.state["last_rpc"] = response
+    data = get_data(response) if isinstance(response, dict) else None
+    if (isinstance(response, dict) and response.get("status") == "ok"
+            and response.get("type") == "insurance.claim.file.response"
+            and isinstance(data, dict) and data.get("claim_id") == claim_id
+            and data.get("status") == "settled"):
+        print(f"Insurance claim {claim_id} settled. Qualifying destruction claims normally settle automatically.")
+        return
+    error = response.get("error", {}) if isinstance(response, dict) else {}
+    message = error.get("message", "The server did not return a matching claim receipt.") if isinstance(error, dict) else str(error)
+    print(f"[Error] Insurance claim was not confirmed: {message}")
+    _pp(response)
 
 
 @register("insurance_unavailable_flow")
