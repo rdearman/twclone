@@ -4,8 +4,13 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 60 VERIFIED, 1
-IMPLEMENTED_UNVERIFIED, 5 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 24
+**Parity refresh — 19 November 2026:** 61 VERIFIED, 1
+IMPLEMENTED_UNVERIFIED, 4 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 26
+verified `COMBAT-02` using live ordinary-player planet-capture workflows in
+both Python and Godot against disposable PostgreSQL. The acceptance covered
+capture rollback, population and asset conservation, unrelated personal and
+corporate holdings, former-owner access refusal, and post-restart authoritative
+state. Exact cases and results are in the clause matrix. Autonomous batch 24
 reran and reconciled the Ferengi retaliation/reward acceptance, promoting
 `NPC-FER-01`. Autonomous batch 21
 verified `NPC-ORI-01` through concurrent/safe-zone arrival acceptance and a

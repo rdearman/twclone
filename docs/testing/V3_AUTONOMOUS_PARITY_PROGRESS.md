@@ -952,3 +952,50 @@ IMPLEMENTED_UNVERIFIED parent is `POP-07`; its remaining item is a documentary
 scope constraint with no runtime rule, so the matrix retains the proposed
 contract-evidence policy distinction and does not promote it without that
 policy being accepted.
+
+### Batch 26 — Planet capture through both clients
+
+Starting classification: **60 VERIFIED, 1 IMPLEMENTED_UNVERIFIED, 5 PARTIAL,
+1 BLOCKED**. Ending classification: **61 VERIFIED, 1
+IMPLEMENTED_UNVERIFIED, 4 PARTIAL, 1 BLOCKED**. Three base clauses moved from
+IMPLEMENTED_UNTESTED to VERIFIED.
+
+Before proceeding, checked the two Godot scripts named by the previous
+background terminals. Neither process was running, so no process was stopped.
+`persisted_planet_restore_test.gd` passed 8/8; `planet_command_response_test.gd`
+passed 117 checks. Their reported backtraces are not unresolved failures.
+
+On isolated disposable PostgreSQL, `planet_capture_godot_prepare.json` passed
+33/33 and `planet_capture_godot_restart_verify.json` passed 13/13 with a real
+serving-server restart between phases. The actual Godot `Main.tscn` journey
+used the PLANET command menu and real transport; `live_planet_capture_test.gd`
+passed 10 UI/network checks. It captured a populated, defended planet,
+confirmed the refreshed fighter/population outcome, and verified exact planet
+stock, citadel treasury, owner balances, corporation treasury, unrelated
+corporate sector asset, and one capture event after restart. A database CHECK
+fault injected during a second capture failed closed and left ownership,
+population, fighters, turns, treasury and event state unchanged.
+
+The actual Python client acceptance `planet_capture_python_prepare.json`
+passed 27/27. `planet_capture_python_journey.py` authenticated an ordinary
+player, loaded the real `DEPLOYMENT_MAIN` menu, selected its `(P) Attack Listed
+Planet` action and dispatched the production `combat_attack_planet_flow`
+handler; all 5 client workflow assertions passed. PostgreSQL confirmed
+authoritative capture, exact remaining fighters, conserved population
+allocations and planetary stock/treasury, unchanged attacker and former-owner
+balances, and exactly one capture and attack event. Its injected CHECK failure
+also proved rollback of turns, fighters and capture/event state.
+
+The new Python acceptance harness initially called `load_menus()` without its
+required path and copied the Godot journey's fighter-count expectation despite
+using a different fixture. These were acceptance-harness defects, corrected to
+load `client/python_client/menus.json` and assert the fixture's 90 surviving
+fighters. The successful rerun used a fresh disposable regression database.
+No gameplay server defect was found.
+
+Evidence and statuses are updated in `V3_CLAUSE_ACCEPTANCE_MATRIX_20261116.md`,
+`V3_GAMEPLAY_DECISIONS.md`, and the completion tracker. Next independently
+actionable partial requirement: inspect the photon combat-protection gap and
+its approved protocol targeting contract; do not invent ship-targeting
+semantics. Remaining requirements include four PARTIAL, `POP-07`
+IMPLEMENTED_UNVERIFIED, and one BLOCKED.
