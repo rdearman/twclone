@@ -4,9 +4,16 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 51 VERIFIED, 8
-IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 13
-verified `MOVE-03` and `MOVE-04`: a live disposable-PostgreSQL transwarp
+**Parity refresh — 19 November 2026:** 52 VERIFIED, 7
+IMPLEMENTED_UNVERIFIED, 6 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 14
+verified `BANK-05`. Disposable PostgreSQL acceptance passed 41/41 for ordinary
+create/list/cancel; 21/21 for cancellation racing settlement; 24/24 for
+injected settlement rollback and retry; 15/15 for 106 active orders without a
+cap; and 24/24 across monthly settlement and serving-server restart. Python
+standing-order workflow/menu checks passed 14/14 and Godot command-menu
+regression passed 238 checks. The four exact acceptance conditions and
+persisted-state assertions are recorded in the clause matrix. Autonomous
+batch 13 verified `MOVE-03` and `MOVE-04`: a live disposable-PostgreSQL transwarp
 journey returned `transwarp_complete`, persisted destination and exact fuel
 debit, and created no interruption event. The response and interruption
 assertions passed in `suite_movement_move_transwarp.json` (24/24); transaction

@@ -456,3 +456,39 @@ insurance settlement requirements, followed by `BANK-05`. Existing insurance
 evidence uses a fixture-inserted claim and does not prove ordinary-client
 purchase plus qualifying destruction, so it cannot promote the insurance
 parents by itself.
+
+## Batch 14 — BANK-05 standing-order settlement
+
+Verified all four BANK-05 clauses using ordinary players and disposable
+PostgreSQL. The existing `suite_economy_and_bank.json` passed **41/41** for
+create/list/cancel and owner checks. A new actual parallel-request scenario
+`bank_order_cancel_race.json` passed **21/21**; it raced authenticated
+cancellation against the registered scheduled settlement and verified either
+legal serialization, exact balances and ledger legs, then replayed the same
+occurrence to check idempotency. `bank_order_settlement_rollback.json` passed
+**24/24**, injecting a failure while writing the occurrence after account
+mutations; SQL confirmed full rollback, after which the deterministic task was
+requeued and the same occurrence settled exactly once. `bank_order_no_cap.json`
+passed **15/15**, with 105 seeded active orders, ordinary creation of a 106th,
+page-two visibility and authoritative count. Existing monthly prepare/restart
+acceptance passed **17/17 + 7/7** across an actual serving-server restart and
+confirmed one paid occurrence and two ledger legs.
+
+Python standing-order/menu checks passed **14/14** and Godot 4.5.1
+`command_menu_test.gd` passed **238 checks**, including standing-order create
+dispatch. The first rollback run exposed two acceptance-harness issues rather
+than a game defect: the test correctly received scheduler error 1004 on the
+injected fault, and the scheduler advanced its task cursor after reporting
+that failed run. The final case now expects that error, requeues the still
+unsettled deterministic occurrence, and verifies success on retry. A stale
+Python source-contract anchor also referenced an obsolete C function
+signature; it was updated to the current signature, after which the focused
+contract test passed **1/1**. No gameplay code was changed.
+
+Classification moved from **51 VERIFIED / 8 IMPLEMENTED_UNVERIFIED / 6
+PARTIAL / 1 BLOCKED** to **52 VERIFIED / 7 IMPLEMENTED_UNVERIFIED / 6
+PARTIAL / 1 BLOCKED**. Base clause totals are **140 VERIFIED / 87
+IMPLEMENTED_UNTESTED**. Next, close another independently executable narrow
+gap; insurance remains a candidate only after qualifying destruction and
+client-accessible policy purchase/claim are exercised, rather than relying on
+fixture-inserted claims.

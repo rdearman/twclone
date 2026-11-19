@@ -1,0 +1,14 @@
+{
+  "name": "BANK-05 no arbitrary active standing-order cap",
+  "tests": [
+    {"name":"Authenticate SysOp fixture operator","setup":"macro_bootstrap_admin"},
+    {"name":"Authenticate ordinary standing-order owner","setup":"macro_auth_user","username":"bank05_no_cap_owner","password":"qa-password"},
+    {"name":"Authenticate ordinary recipient","setup":"macro_auth_user","username":"bank05_no_cap_recipient","password":"qa-password"},
+    {"name":"Remove prior dedicated active orders","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"DELETE FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank05_no_cap_owner');"},"expect":{"status":"ok"}},
+    {"name":"Seed 105 valid active orders as deterministic test fixture","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"INSERT INTO bank_orders(player_id,kind,schedule,next_run_at,enabled,amount,currency,to_entity,to_id,memo,frequency,utc_hour,utc_minute,weekday,month_day) SELECT p.player_id,'recurring','daily',CURRENT_TIMESTAMP+INTERVAL '1 day',TRUE,1,'CRD','player',r.player_id,'acceptance fixture '||g,'daily',12,0,NULL,NULL FROM players p CROSS JOIN players r CROSS JOIN generate_series(1,105) AS g WHERE p.name='bank05_no_cap_owner' AND r.name='bank05_no_cap_recipient';"},"expect":{"status":"ok"}},
+    {"name":"Confirm all 105 seeded orders are active","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT COUNT(*) FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank05_no_cap_owner') AND enabled=TRUE;"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":105}]},
+    {"name":"Ordinary player creates a 106th active order with no cap refusal","command":"bank.orders.create","user":"bank05_no_cap_owner","data":{"recipient_player_id":"@bank05_no_cap_recipient_player_id","amount":1,"frequency":"daily","time_utc":"12:01"},"expect":{"status":"ok","type":"bank.orders.created"},"save":{"bank05_no_cap_new_order":"data.order_id"}},
+    {"name":"Owner can list the second page beyond the first 100 rows","command":"bank.orders.list","user":"bank05_no_cap_owner","data":{"page":2,"limit":100},"expect":{"status":"ok","type":"bank.orders.list_v1"},"asserts":[{"path":"data.orders.0.order_id","op":">","value":0},{"path":"data.orders.5.order_id","op":"==","value":"@{bank05_no_cap_new_order}"}]},
+    {"name":"Assert 106 enabled persisted orders and the new ordinary-player order","command":"sys.raw_sql_exec","user":"admin","data":{"sql":"SELECT CASE WHEN COUNT(*)=106 AND COUNT(*) FILTER(WHERE bank_orders_id=@{bank05_no_cap_new_order} AND enabled)=1 THEN 1 ELSE 0 END FROM bank_orders WHERE player_id=(SELECT player_id FROM players WHERE name='bank05_no_cap_owner') AND enabled=TRUE;"},"expect":{"status":"ok"},"asserts":[{"path":"data.rows.0.0","op":"==","value":1}]}
+  ]
+}

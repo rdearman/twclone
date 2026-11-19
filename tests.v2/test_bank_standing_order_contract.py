@@ -6,7 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_concurrent_stale_due_order_is_skipped_after_row_lock():
     source = (ROOT / "src/server_bank.c").read_text(encoding="utf-8")
-    processor = source.split("db_bank_process_orders (db_t *db)", 1)[1].split(
+    processor = source.split(
+        "db_bank_process_orders (db_t *db, int64_t now_s)", 1
+    )[1].split(
         "cmd_bank_orders_create", 1
     )[0]
 
