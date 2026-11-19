@@ -3259,6 +3259,75 @@ def pretty_print_bank_leaderboard(ctx):
     else:
         print("No bank leaderboard data available.")
 
+@register("bank_order_create_flow")
+def bank_order_create_flow(ctx: Context):
+    """Create a recurring payment using the documented V3 schedule fields."""
+    try:
+        recipient_player_id = int(input("Recipient player ID: ").strip())
+        amount = int(input("Amount in whole credits: ").strip())
+    except ValueError:
+        print("Recipient and amount must be whole numbers.")
+        return
+    if recipient_player_id <= 0 or amount <= 0:
+        print("Recipient player ID and amount must be positive.")
+        return
+    frequency = input("Frequency (daily, weekly, monthly): ").strip().lower()
+    if frequency not in {"daily", "weekly", "monthly"}:
+        print("Frequency must be daily, weekly or monthly.")
+        return
+    time_utc = input("Execution time in UTC (HH:MM): ").strip()
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_utc):
+        print("Execution time must use 24-hour HH:MM UTC format.")
+        return
+    payload = {
+        "recipient_player_id": recipient_player_id,
+        "amount": amount,
+        "frequency": frequency,
+        "time_utc": time_utc,
+    }
+    if frequency == "weekly":
+        try:
+            weekday = int(input("ISO weekday (Monday=1 through Sunday=7): ").strip())
+        except ValueError:
+            print("ISO weekday must be a whole number from 1 to 7.")
+            return
+        if not 1 <= weekday <= 7:
+            print("ISO weekday must be from 1 to 7.")
+            return
+        payload["weekday"] = weekday
+    elif frequency == "monthly":
+        try:
+            day_of_month = int(input("Day of month (1–31): ").strip())
+        except ValueError:
+            print("Day of month must be a whole number from 1 to 31.")
+            return
+        if not 1 <= day_of_month <= 31:
+            print("Day of month must be from 1 to 31.")
+            return
+        payload["day_of_month"] = day_of_month
+
+    response = ctx.conn.rpc("bank.orders.create", payload)
+    ctx.state["last_rpc"] = response
+    data = get_data(response) if isinstance(response, dict) else None
+    valid_receipt = (
+        isinstance(response, dict) and response.get("status") == "ok"
+        and response.get("type") == "bank.orders.created"
+        and isinstance(data, dict)
+        and type(data.get("order_id")) is int and data["order_id"] > 0
+        and data.get("recipient_player_id") == recipient_player_id
+        and data.get("amount") == amount
+        and data.get("frequency") == frequency
+        and data.get("time_utc") == time_utc
+        and type(data.get("next_run_at")) is int and data["next_run_at"] > 0
+    )
+    if valid_receipt:
+        print(f"Standing order {data['order_id']} scheduled for {frequency} at {time_utc} UTC.")
+        return
+    error = response.get("error", {}) if isinstance(response, dict) else {}
+    message = error.get("message", "The server did not return a matching schedule receipt.") if isinstance(error, dict) else str(error)
+    print(f"[Error] Standing order was not confirmed: {message}")
+    _pp(response)
+
 @register("pretty_print_corp_status")
 def pretty_print_corp_status(ctx):
     resp = ctx.state.get("last_rpc")

@@ -816,6 +816,35 @@ func _run() -> void:
 	var mail_display := menu.format_result("Read mail by ID", {"id": 44, "sender_name": "Nova", "subject": "Welcome", "body": "Meet at the dock"})
 	_check(mail_display.contains("Mail #44") and mail_display.contains("Meet at the dock"), "mail read did not render the authoritative message body")
 	_check(menu.format_result("Read mail by ID", {"id": "44", "body": "forged"}).contains("no authoritative message ID"), "mail read accepted a schema-mismatched ID")
+	var bank_order_action: Dictionary = {}
+	for candidate in CommandMenu.COMMANDS.get("FINANCES", []):
+		if str(candidate.get("command", "")) == "bank.orders.create":
+			bank_order_action = candidate
+	_check(not bank_order_action.is_empty(), "finances menu does not expose standing-order creation")
+	if not bank_order_action.is_empty():
+		menu._choose_action(bank_order_action)
+		_check(menu._form_fields.has("recipient_player_id") and menu._form_fields.has("time_utc") and menu._form_fields.has("weekday") and menu._form_fields.has("day_of_month"), "standing-order form does not expose the published schedule fields")
+		menu._form_fields["recipient_player_id"].text = "43"
+		menu._form_fields["amount"].text = "250"
+		menu._form_fields["frequency"].text = "weekly"
+		menu._form_fields["time_utc"].text = "08:15"
+		menu._form_fields["weekday"].text = "7"
+		menu._form_fields["day_of_month"].text = ""
+		var before_bank_order := captured.size()
+		menu._submit_form()
+		_check(captured.size() == before_bank_order + 1 and captured.back()["command"] == "bank.orders.create", "valid weekly standing-order form did not dispatch")
+		if captured.size() > before_bank_order:
+			_check(captured.back()["data"] == {"recipient_player_id": 43, "amount": 250, "frequency": "weekly", "time_utc": "08:15", "weekday": 7}, "weekly form did not emit the exact V3 field names and ISO weekday")
+		menu._choose_action(bank_order_action)
+		menu._form_fields["recipient_player_id"].text = "43"
+		menu._form_fields["amount"].text = "250"
+		menu._form_fields["frequency"].text = "daily"
+		menu._form_fields["time_utc"].text = "08:15"
+		menu._form_fields["weekday"].text = ""
+		menu._form_fields["day_of_month"].text = ""
+		var before_daily_order := captured.size()
+		menu._submit_form()
+		_check(captured.size() == before_daily_order + 1 and captured.back()["data"] == {"recipient_player_id": 43, "amount": 250, "frequency": "daily", "time_utc": "08:15"}, "daily form included conditional schedule fields or omitted required V3 fields")
 	menu.queue_free()
 	await process_frame
 	if failures.is_empty():

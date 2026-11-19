@@ -129,6 +129,14 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Persist daily UTC time and existing-player recipient",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN frequency='daily' AND utc_hour=23 AND utc_minute=59 AND to_entity='player' AND to_id=@{bank_target_player_id} THEN 1 ELSE 0 END FROM bank_orders WHERE bank_orders_id=@{bank_order_id};" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
       "name": "List only the authenticated player's standing order",
       "command": "bank.orders.list",
       "data": { "page": 1, "limit": 20 },
@@ -166,6 +174,43 @@
       "expect": { "status": "ok" }
     },
     {
+      "name": "Persist weekly UTC time, ISO weekday and existing-player recipient",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN frequency='weekly' AND utc_hour=12 AND utc_minute=30 AND weekday=1 AND to_entity='player' AND to_id=@{bank_target_player_id} THEN 1 ELSE 0 END FROM bank_orders WHERE bank_orders_id=(SELECT MAX(bank_orders_id) FROM bank_orders WHERE player_id=@{bank_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Create Sunday weekly standing order using ISO weekday 7",
+      "command": "bank.orders.create",
+      "data": { "recipient_player_id": "@bank_target_player_id", "amount": 10, "frequency": "weekly", "time_utc": "12:30", "weekday": 7 },
+      "user": "bank_user",
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Persist ISO Sunday as weekday 7",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN frequency='weekly' AND weekday=7 AND utc_hour=12 AND utc_minute=30 THEN 1 ELSE 0 END FROM bank_orders WHERE bank_orders_id=(SELECT MAX(bank_orders_id) FROM bank_orders WHERE player_id=@{bank_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
+    },
+    {
+      "name": "Reject weekly weekday zero outside ISO numbering",
+      "command": "bank.orders.create",
+      "data": { "recipient_player_id": "@bank_target_player_id", "amount": 10, "frequency": "weekly", "time_utc": "12:30", "weekday": 0 },
+      "user": "bank_user",
+      "expect": { "status": "error" }
+    },
+    {
+      "name": "Reject weekly weekday eight outside ISO numbering",
+      "command": "bank.orders.create",
+      "data": { "recipient_player_id": "@bank_target_player_id", "amount": 10, "frequency": "weekly", "time_utc": "12:30", "weekday": 8 },
+      "user": "bank_user",
+      "expect": { "status": "error" }
+    },
+    {
       "name": "Create a monthly standing order retaining day 31",
       "command": "bank.orders.create",
       "data": { "recipient_player_id": "@bank_target_player_id", "amount": 10, "frequency": "monthly", "time_utc": "08:15", "day_of_month": 31 },
@@ -175,6 +220,14 @@
         { "path": "data.next_run_at", "op": ">", "value": 0 }
       ],
       "expect": { "status": "ok" }
+    },
+    {
+      "name": "Persist monthly UTC time, retained day 31 and existing-player recipient",
+      "command": "sys.raw_sql_exec",
+      "data": { "sql": "SELECT CASE WHEN frequency='monthly' AND utc_hour=8 AND utc_minute=15 AND month_day=31 AND to_entity='player' AND to_id=@{bank_target_player_id} THEN 1 ELSE 0 END FROM bank_orders WHERE bank_orders_id=(SELECT MAX(bank_orders_id) FROM bank_orders WHERE player_id=@{bank_user_player_id});" },
+      "user": "admin",
+      "expect": { "status": "ok" },
+      "asserts": [ { "path": "data.rows.0.0", "op": "==", "value": 1 } ]
     },
     {
       "name": "Unauthenticated standing-order listing is refused",

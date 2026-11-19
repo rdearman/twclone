@@ -121,6 +121,13 @@ def test_shipyard_menu_exposes_used_hull_purchase(ctx_factory, menus):
     assert "shipyard_used_purchase_flow" in workflows
 
 
+def test_bank_menu_exposes_standing_order_creation(ctx_factory, menus):
+    ctx = ctx_factory(debug=False)
+    workflows = {option.get("action", {}).get("pycall")
+                 for option in _visible_options(menus["BANK"], ctx)}
+    assert "bank_order_create_flow" in workflows
+
+
 def test_corporation_member_can_reach_leave_workflow(ctx_factory, menus):
     ctx = ctx_factory()
     ctx.state["in_corporation"] = True

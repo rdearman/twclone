@@ -94,7 +94,7 @@ const COMMANDS := {
 		{"label": "Bank history", "command": "bank.history"},
 		{"label": "Bank leaderboard", "command": "bank.leaderboard"},
 		{"label": "Standing orders", "command": "bank.orders.list"},
-		{"label": "Create standing order", "command": "bank.orders.create", "fields": [["recipient_id", FIELD_INT, "Recipient player ID", ""], ["amount", FIELD_INT, "Amount", ""], ["frequency", FIELD_TEXT, "Payment frequency", "daily"]], "mutating": true},
+		{"label": "Create standing order", "command": "bank.orders.create", "fields": [["recipient_player_id", FIELD_INT, "Recipient player ID", ""], ["amount", FIELD_INT, "Amount in whole credits", ""], ["frequency", FIELD_TEXT, "Frequency: daily, weekly, or monthly", "daily"], ["time_utc", FIELD_TEXT, "Execution time in UTC (HH:MM)", "12:00"], ["weekday", FIELD_INT, "ISO weekday for weekly orders (1=Monday, 7=Sunday; leave blank otherwise)", ""], ["day_of_month", FIELD_INT, "Day 1–31 for monthly orders (leave blank otherwise)", ""]], "mutating": true},
 		{"label": "Cancel standing order", "command": "bank.orders.cancel", "fields": [["order_id", FIELD_INT, "Standing order ID", ""]], "mutating": true},
 	],
 	"NEWS & RECORDS": [
@@ -1756,6 +1756,7 @@ func _confirm_logout() -> void:
 func _submit_form() -> void:
 	var data: Dictionary = get_meta("pending_data", {}).duplicate(true)
 	var password_values: Dictionary = {}
+	var bank_order_form := str(_form_action.get("command", "")) == "bank.orders.create"
 	for key in _form_fields:
 		var control: Control = _form_fields[key]
 		if control is CheckBox:
@@ -1765,6 +1766,8 @@ func _submit_form() -> void:
 			if str(_field_type(key)) != "password":
 				text = text.strip_edges()
 			if text.is_empty():
+				if bank_order_form and key in ["weekday", "day_of_month"]:
+					continue
 				_add_unavailable("Every visible field must be completed before sending.")
 				return
 			if str(_field_type(key)) in [FIELD_INT, FIELD_NONNEGATIVE_INT]:
@@ -1777,6 +1780,24 @@ func _submit_form() -> void:
 				data[key] = text
 				if str(_field_type(key)) == "password":
 					password_values[key] = text
+	if bank_order_form:
+		var frequency := str(data.get("frequency", "")).to_lower()
+		if frequency not in ["daily", "weekly", "monthly"]:
+			_add_unavailable("Choose daily, weekly, or monthly for a standing order.")
+			return
+		if frequency == "weekly":
+			if not data.has("weekday") or int(data["weekday"]) < 1 or int(data["weekday"]) > 7:
+				_add_unavailable("Weekly orders require an ISO weekday from 1 (Monday) through 7 (Sunday).")
+				return
+			data.erase("day_of_month")
+		elif frequency == "monthly":
+			if not data.has("day_of_month") or int(data["day_of_month"]) < 1 or int(data["day_of_month"]) > 31:
+				_add_unavailable("Monthly orders require a day of month from 1 through 31.")
+				return
+			data.erase("weekday")
+		else:
+			data.erase("weekday")
+			data.erase("day_of_month")
 	if str(_form_action.get("command", "")) == "auth.change_password":
 		if password_values.get("new_password", "") != password_values.get("confirm_password", ""):
 			_add_unavailable("Password change cancelled: the new passwords do not match.")

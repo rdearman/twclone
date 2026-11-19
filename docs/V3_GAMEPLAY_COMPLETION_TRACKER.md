@@ -4,8 +4,18 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 44 VERIFIED, 15
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 8
+**Parity refresh — 19 November 2026:** 45 VERIFIED, 14
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 9
+verified `BANK-01`. A 41-case live PostgreSQL suite demonstrated daily,
+weekly and monthly schedule persistence at their specified UTC times, existing
+player recipients, ISO weekday endpoints/rejection, and monthly day-31
+retention. The existing 24-case scheduled monthly restart acceptance confirms
+day 31 survives a short-month execution and server restart. The client checks
+found standing-order creation inaccessible in Python and incorrectly wired in
+Godot; both now provide the full V3 schedule fields, with validation for
+weekly/monthly conditional fields. Python workflow tests passed 31/31 and
+Godot's command-menu suite passed 236 checks. Exact evidence is in the clause
+matrix and autonomous progress log. Autonomous batch 8
 verified `SHIP-05` through a 35-case live PostgreSQL used-hull and sale
 acceptance. The purchase retained the original hull identity, condition and
 equipment, transferred primary ownership and active-ship identity atomically,

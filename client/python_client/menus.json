@@ -876,6 +876,13 @@
           }
         },
         {
+          "key": "c",
+          "label": "(C) Create standing order",
+          "action": {
+            "pycall": "bank_order_create_flow"
+          }
+        },
+        {
           "key": "d",
           "label": "(D) Deposit",
           "action": {

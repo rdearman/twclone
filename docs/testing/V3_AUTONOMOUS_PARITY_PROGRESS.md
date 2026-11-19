@@ -154,6 +154,29 @@ BLOCKED**. No database migration was needed. Python and Godot both expose the
 used inventory at the shipyard, require player confirmation, submit the
 inventory identifier, and rely on an authoritative matching server receipt.
 
+## Batch 9 — BANK-01 standing-order schedules and client access
+
+`BANK-01` is VERIFIED. `suite_economy_and_bank.json` passed **41/41** against
+disposable PostgreSQL. It exercised daily, weekly and monthly order creation
+between two ordinary players; SQL confirmed the exact persisted UTC hour and
+minute, recipient, ISO Monday=1 and Sunday=7 values, rejection of weekdays 0
+and 8, and monthly `month_day=31`. Existing `bank_monthly_retention_prepare`
+and `bank_monthly_retention_restart_verify` evidence passed **24/24** across a
+serving-server restart, confirming day 31 remains configured after a
+short-month settlement.
+
+Client inspection found real access defects: Python offered order listing but
+no create workflow, while Godot sent `recipient_id` and omitted required
+`time_utc`, weekday and month-day fields. Python now has an interactive,
+validated standing-order flow and menu entry. Godot sends canonical
+`recipient_player_id` and `time_utc`, conditionally requires ISO weekday or
+month day, and omits the irrelevant field. Python tests passed **31/31** and
+Godot command-menu tests passed **236 checks**.
+
+Classification moved from 44 VERIFIED / 15 IMPLEMENTED_UNVERIFIED / 7 PARTIAL
+/ 1 BLOCKED to **45 VERIFIED / 14 IMPLEMENTED_UNVERIFIED / 7 PARTIAL / 1
+BLOCKED**. No server behavior defect or schema migration was required.
+
 ## Batch 3 — NPC population and Ferengi fleet acceptance
 
 The live repository already recorded completion of batches 1 and 2. The
