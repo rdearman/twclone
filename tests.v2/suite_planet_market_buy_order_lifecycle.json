@@ -71,10 +71,10 @@
       "save": { "market_planet_id": "data.planet_id" }
     },
     {
-      "name": "Create an isolated port for the sell-side fixture",
+      "name": "Choose a real port for the sell-side fixture",
       "command": "sys.raw_sql_exec",
       "user": "admin",
-      "data": { "sql": "WITH available AS (SELECT sector_id FROM sectors s WHERE NOT EXISTS (SELECT 1 FROM ports p WHERE p.sector_id=s.sector_id AND p.is_active=TRUE) ORDER BY sector_id LIMIT 1) INSERT INTO ports(name,sector_id,type) SELECT 'QA planet market isolated seller',sector_id,1 FROM available RETURNING port_id;" },
+      "data": { "sql": "SELECT port_id FROM ports WHERE is_active=TRUE ORDER BY port_id LIMIT 1;" },
       "save": { "market_seller_port_id": "data.rows.0.0" }
     },
     {
@@ -163,6 +163,21 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Save Exchange ORE before isolating the test order book",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "SELECT COALESCE((SELECT quantity FROM entity_stock WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE'),0);" },
+      "expect": { "status": "ok" },
+      "save": { "market_exchange_ore_before": "data.rows.0.0" }
+    },
+    {
+      "name": "Disable ring-fenced Exchange ORE while asserting the port seller",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE entity_stock SET quantity=0 WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE';" },
       "expect": { "status": "ok" }
     },
     {
@@ -393,6 +408,13 @@
       "command": "sys.raw_sql_exec",
       "user": "admin",
       "data": { "sql": "DROP FUNCTION qa_delay_market_settlement();" },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore Exchange ORE after isolated settlement acceptance",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": { "sql": "UPDATE entity_stock SET quantity=@{market_exchange_ore_before} WHERE entity_type='exchange' AND entity_id=1 AND commodity_code='ORE';" },
       "expect": { "status": "ok" }
     }
   ]

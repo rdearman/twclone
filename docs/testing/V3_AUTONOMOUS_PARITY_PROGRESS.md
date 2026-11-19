@@ -17,21 +17,31 @@ passed again (`persisted_planet_restore_test.gd`: 8/8;
 The full disposable server run discovered 174 suites, executed 173, and
 reported **2,857 passed, 8 failed, 4 skipped** (2,865 executed cases). Four
 market-suite failures were test-environment defects: the test hard-coded
-parallel ports 12530/12531 instead of using the runner ports, and its seller
-fixture reused a production port/order book. The JSON runner now accepts a
-second server port and a per-request `server: "second"` selector; the market
-acceptance creates an isolated port. The focused fresh-PostgreSQL run passed
+parallel ports 12530/12531 instead of using runner ports, and Exchange
+ring-fenced ORE inventory could outrank the intended port sell order. The JSON
+runner now accepts a second server port and a per-request `server: "second"`
+selector; the market acceptance snapshots and temporarily clears Exchange
+ORE, then restores it. Its real-port and exact stock/credit assertions remain
+intact. The focused fresh-PostgreSQL run passed
 `suite_planet_market_buy_order_lifecycle.json` **54/54**, including both
-actual V3 server processes in the concurrent settlement case.
+actual V3 server processes in the concurrent settlement case. A sequential
+market then fixed-port run passed **54/54 and 28/28**, confirming fixture
+isolation.
 
 The other four failed cases are known context/order problems in the generic
 all-suites invocation: the BigBang roster case runs after the generic rig has
 replaced BigBang data, and the restart-verification suite runs before its
 population-preparation suite and without a serving-process restart. Each
-scenario previously passed in its required isolated context; they must be
-counted as separate ordered acceptance phases in the next comprehensive gate.
-The full suite was not rerun after the market/runner correction in this
-batch, so the aggregate gate is not claimed green.
+scenario previously passed in its required isolated context; they were counted
+as separate ordered acceptance phases in the comprehensive gate below.
+
+The corrected regression ran in four contexts: **170/170 general suites,
+2,834/2,834 cases; BigBang roster, 1/1 suite and 2/2 cases; NPC target plus
+serving-server restart verification, 2/2 suites and 36/36 cases; TLS, 1/1 suite
+and 4/4 cases**. Combined result: **174/174 suites, 2,876 passed, 0 failed,
+0 skipped**. The contexts are necessary because the BigBang roster must run
+before the generic fixture rig, NPC verification must follow its preparation
+and a real game-server restart, and TLS uses a dedicated configuration.
 
 The full-run server log also exposed a real concurrent-notice defect:
 `db_notice_mark_seen` caught a duplicate-key error from a competing system
@@ -42,14 +52,14 @@ simultaneous acknowledgements from two authenticated sessions and the
 single-row persistence assertion. No duplicate-key or aborted-transaction
 error appeared in that focused server log. `make -j4` passed; `pytest -q
 tests.v2` passed **277**, skipped **7**, and passed **227 subtests** when run
-with local socket access. Python/Godot gameplay classifications did not
-change.
+with local socket access. The full Python/Godot client runner passed Python
+**834/834** and Godot **106 passed, 0 failed, 7 skipped** (the seven live
+server scripts require explicit live acceptance mode); all 113 Godot scripts
+were accounted for. Python/Godot gameplay classifications did not change.
 
-No parent requirement is promoted by this regression work. Next: run the
-context-sensitive NPC scenarios in their required order, rerun the broad
-server gate after the fixture/runner correction, then close the remaining
-Orion safe-zone/protection/race acceptance without inventing a player
-protection rule absent from the approved contract.
+No parent requirement is promoted by this regression work. Next: close the
+remaining Orion safe-zone/protection/race acceptance without inventing a
+player protection rule absent from the approved contract.
 
 ## Starting checkpoint
 
