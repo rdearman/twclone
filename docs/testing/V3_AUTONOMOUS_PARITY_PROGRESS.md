@@ -126,3 +126,57 @@ Next candidate set, pending exact-clause and evidence review:
 These are candidate selections, not verified results. Existing evidence will
 be reused only if it exercises each mandatory clause. No deployment,
 production or release work is in scope.
+
+## Batch 3 — NPC population and Ferengi fleet acceptance
+
+The live repository already recorded completion of batches 1 and 2. The
+current batch closed the five next candidates from that queue, including the
+three population/fleet requirements. Starting from the recorded 36 VERIFIED /
+23 IMPLEMENTED_UNVERIFIED / 7 PARTIAL / 1 BLOCKED, the ending classification is
+**39 VERIFIED / 20 IMPLEMENTED_UNVERIFIED / 7 PARTIAL / 1 BLOCKED**.
+
+### Requirements verified
+
+- `NPC-POP-01`: target formula and minimum, 250 distinct stable Ferengi names,
+  repeated reconciliation without duplicate identities, sentinel combat-state
+  preservation, and state after serving-server restart.
+- `NPC-POP-02`: Orion target and minimum, 100 distinct stable names in the full
+  BigBang world after a server restart, five configured Orion ship classes,
+  effective personality precedence, and captain/ship sector consistency.
+- `NPC-POP-03`: five NPC-only Ferengi ship classes, exact deterministic
+  100/75/40/25/10 allocation over 250 traders, and preserved Warship catalogue
+  values.
+
+### Executed evidence
+
+- Ordinary isolated PostgreSQL fixture: `suite_npc_population_targets_v3.json`
+  **32/32** and `suite_npc_population_restart_verify_v3.json` **4/4**. The
+  serving game process restarted between suites.
+- Full migrated BigBang isolated PostgreSQL world:
+  `suite_npc_population_targets_v3.json` **32/32**,
+  `suite_npc_population_restart_verify_v3.json` **4/4**, and
+  `suite_npc_population_bigbang_roster_v3.json` **2/2**, with a server restart
+  between suites.
+- Python focused regressions: `test_v3_faction_rosters.py` and
+  `test_mysql_migration_portability.py`: **18 passed, 206 subtests passed**.
+- `make -j4`: passed.
+
+### Defects fixed
+
+- Orion initialization passed the owner player's ID to a repository routine
+  that requires the Orion corporation ID, causing member-link failure. The
+  initializer now resolves and passes the corporation ID separately.
+- Orion ship deployment updated the captain's active ship but not the
+  captain's sector. The active-sector consistency trigger exposed the mismatch;
+  deployment now updates both fields in the same transaction.
+- A diagnostic acceptance query treated SQL `NULL` text as integer `0` through
+  the SysOp raw-SQL serializer. The acceptance now checks effective personality
+  using the approved ship override, corporation default, ship-type default,
+  balanced fallback precedence. No migration was added for a defect that the
+  database evidence did not show.
+
+Changes remain uncommitted at this progress update. The three newly verified
+clauses are recorded in the matrix and decision register. The next candidates
+are `EXC-05` concurrent settlement, then the smallest outstanding bank/economy
+and NPC behavior clauses; the separate Orion safe-zone/protected-player,
+removal-race, and concurrent-arrival clauses remain open.

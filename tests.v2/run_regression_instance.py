@@ -231,6 +231,8 @@ def main(argv=None):
                         help="Run only this JSON suite; repeatable")
     parser.add_argument("--skip-rig-ports", action="store_true",
                         help="Keep BigBang-generated ports instead of applying fixture port rows")
+    parser.add_argument("--skip-database-rig", action="store_true",
+                        help="Keep the complete BigBang-populated disposable database without applying test_rig fixtures")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=12483)
     parser.add_argument("--s2s-port", type=int, default=43218)
@@ -338,15 +340,18 @@ def main(argv=None):
                 f"diagnostics:\n{diagnostics}; see {artifact_dir}"
             )
 
-        rig = run([
-            sys.executable, str(ROOT / "tests.v2" / "rig_db.py"),
-            "--config", str(ROOT / "tests.v2" / "test_rig.json"),
-            "--reset", "--dbname", dbname, "--host", args.pg_host,
-            "--port", str(args.pg_port), "--user", pg_user,
-            *( ["--skip-ports"] if args.skip_rig_ports else [] ),
-        ], cwd=ROOT, env=env)
-        if rig.returncode != 0:
-            raise RuntimeError(f"fixture rigging failed with status {rig.returncode}")
+        if args.skip_database_rig:
+            print("DATABASE FIXTURES: preserving the isolated BigBang world; test_rig not applied")
+        else:
+            rig = run([
+                sys.executable, str(ROOT / "tests.v2" / "rig_db.py"),
+                "--config", str(ROOT / "tests.v2" / "test_rig.json"),
+                "--reset", "--dbname", dbname, "--host", args.pg_host,
+                "--port", str(args.pg_port), "--user", pg_user,
+                *( ["--skip-ports"] if args.skip_rig_ports else [] ),
+            ], cwd=ROOT, env=env)
+            if rig.returncode != 0:
+                raise RuntimeError(f"fixture rigging failed with status {rig.returncode}")
 
         if tls_test:
             configure_disposable_test_tls(

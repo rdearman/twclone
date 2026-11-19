@@ -74,6 +74,7 @@ static int64_t g_iss_last_patrol_s = 0;
 static db_t *ori_db = NULL;
 static bool ori_initialized = false;
 static int ori_owner_id = -1;
+static int ori_corporation_id = -1;
 static int ori_home_sector_id = -1;
 
 /* ============ ISS Helper Function Forward Declarations ============ */
@@ -553,7 +554,7 @@ ori_init_once (db_t *db)
 {
   if (ori_initialized)
     {
-      return (ori_owner_id != -1);
+      return (ori_owner_id != -1 && ori_corporation_id != -1);
     }
   if (!db)
     {
@@ -569,7 +570,8 @@ ori_init_once (db_t *db)
 
   /* Step 1: Find the Orion Syndicate owner ID from corporation tag */
   if (repo_universe_get_corp_owner_by_tag (db, "ORION", &ori_owner_id) !=
-      0)
+      0 || repo_universe_get_corp_id_by_tag (db, "ORION",
+                                              &ori_corporation_id) != 0)
     {
       LOGW ("[ori] Failed to find Orion Syndicate owner. Skipping.");
       /* BigBang or a disposable/test world may add faction records after the
@@ -590,7 +592,7 @@ ori_init_once (db_t *db)
   LOGI ("[ori]: Orion Syndicate owner ID is %d, Home Sector is %d",
 	ori_owner_id, ori_home_sector_id);
   if (repo_universe_ensure_orion_population
-      (db, ori_owner_id, ori_home_sector_id) != 0)
+      (db, ori_corporation_id, ori_home_sector_id) != 0)
     LOGW ("[ori]: Could not reconcile configured Orion population");
   ori_initialized = true;
   return 1;

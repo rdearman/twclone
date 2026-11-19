@@ -39,6 +39,7 @@ int repo_universe_ensure_orion_population(db_t *db, int corporation_id,
                                            int home_sector);
 int repo_universe_update_ship_target(db_t *db, int ship_id, int target_sector);
 int repo_universe_get_corp_owner_by_tag(db_t *db, const char *tag, int *owner_id_out);
+int repo_universe_get_corp_id_by_tag(db_t *db, const char *tag, int *corporation_id_out);
 int repo_universe_get_port_sector_by_id_name(db_t *db, int port_id, const char *name, int *sector_out);
 int repo_universe_get_cluster_center_sector_by_role(db_t *db, const char *role, int *sector_out);
 db_res_t* repo_universe_search_index(db_t *db, const char *q, int limit, int offset, int search_type, db_error_t *err);

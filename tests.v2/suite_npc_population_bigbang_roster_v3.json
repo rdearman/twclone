@@ -1,0 +1,24 @@
+{
+  "name": "V3 BigBang Orion canonical roster persistence",
+  "version": "2.0.0",
+  "protocol_category": "22_NPC_Faction_Population",
+  "description": "Checks the full migrated Orion roster in a disposable BigBang world before test_rig replaces world records.",
+  "tests": [
+    {
+      "name": "Authenticate in the isolated BigBang world",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "At least 100 distinct named Orion NPC identities persist as faction members",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)>=100 AND COUNT(DISTINCT p.name)>=100 THEN 1 ELSE 0 END FROM players p JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE c.tag='ORION' AND p.is_npc=TRUE;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

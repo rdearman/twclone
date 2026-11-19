@@ -1,0 +1,330 @@
+{
+  "name": "V3 Ferengi and Orion population targets and roster acceptance",
+  "version": "2.0.0",
+  "protocol_category": "22_NPC_Faction_Population",
+  "description": "Checks live disposable-server faction population targets, stable named rosters, deterministic Ferengi class allocation, and retained Warship values.",
+  "tests": [
+    {
+      "name": "Authenticate acceptance database operator",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Enable deterministic scheduler advancement only in this disposable database",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO config(key,value,type) VALUES('test.deterministic_scheduler_enabled','1','int') ON CONFLICT(key) DO UPDATE SET value='1',type='int';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create the missing Orion faction fixture required by NPC reconciliation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corporations(name,owner_id,tag,description) SELECT 'Orion Syndicate',@{admin_player_id},'ORION','Disposable acceptance fixture' WHERE NOT EXISTS(SELECT 1 FROM corporations WHERE tag='ORION');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create Orion home-sector fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO clusters(name,role,kind,center_sector,law_severity,alignment) SELECT 'Orion Syndicate','ORION','syndicate',3,1,-80 WHERE NOT EXISTS(SELECT 1 FROM clusters WHERE role='ORION');"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Restore canonical Orion ship classes removed by the generic fixture reset",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO shiptypes(name,default_personality,enabled) VALUES ('Orion Heavy Fighter Patrol','offensive',TRUE),('Orion Scout/Looter','looter',TRUE),('Orion Contraband Runner','looter',TRUE),('Orion Smuggler''s Kiss','looter',TRUE),('Orion Black Market Guard','blockader',TRUE) ON CONFLICT(name) DO UPDATE SET default_personality=EXCLUDED.default_personality,enabled=TRUE;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Seed five canonical, unassigned Orion captains for the empty test world",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO players(name,passwd,sector_id,credits,type,is_npc,commission_id) SELECT v.name,'$argon2id$v=19$m=65536,t=3,p=1$m9e+qkJe5du1SC25jkIB0A$fd2PpiLEjU5d2AXlAf1nznGko41GPU7Z2jxX3gX0QZE',3,100000,2,TRUE,1 FROM (VALUES ('Zydras Heavy Cruiser'),('Krell Scout'),('Vex Contraband Runner'),('Jaxx Smuggler'),('Sira Market Guard')) AS v(name) WHERE NOT EXISTS(SELECT 1 FROM players p WHERE p.name=v.name);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Attach unassigned named NPCs to the isolated Orion faction fixture",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO corp_members(corporation_id,player_id,role) SELECT c.corporation_id,p.player_id,'Officer' FROM corporations c CROSS JOIN players p WHERE c.tag='ORION' AND p.is_npc=TRUE AND p.ship_id IS NULL AND NOT EXISTS(SELECT 1 FROM corp_members cm WHERE cm.corporation_id=c.corporation_id AND cm.player_id=p.player_id) ON CONFLICT DO NOTHING;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Create the documented Ferengi homeworld fixture at planet ID 2",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "INSERT INTO planets(planet_id,sector_id,name,owner_id,owner_type,class,type,created_by) SELECT 2,2,'Ferengi Homeworld',owner_id,'corp','M',(SELECT planettypes_id FROM planettypes WHERE code='M'),owner_id FROM corporations WHERE tag='FENG' ON CONFLICT(planet_id) DO UPDATE SET sector_id=2,name='Ferengi Homeworld',owner_id=EXCLUDED.owner_id,owner_type='corp';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Select a near-future due time for actual NPC initialization",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT floor(extract(epoch from now()))::bigint+20;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "npc_due": "data.rows.0.0" }
+    },
+    {
+      "name": "Make only the actual NPC scheduler due in the isolated database",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET enabled=(name='npc_step'),next_due_at=CASE WHEN name='npc_step' THEN to_timestamp(@{npc_due}) ELSE next_due_at END;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Choose an advance time inside the scheduler safety window",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT @{npc_due}+10;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "npc_now": "data.rows.0.0" }
+    },
+    {
+      "name": "Run the registered NPC initialization scheduler",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{npc_now}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.tasks_run", "op": ">", "value": 0 }
+      ]
+    },
+    {
+      "name": "Ferengi active population matches configured target",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH universe AS (SELECT COUNT(*)::int AS sectors FROM sectors), cfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='ferengi.population.percent'),2) AS pct), target AS (SELECT GREATEST(3,CEIL(universe.sectors*cfg.pct/100.0)::int) AS n FROM universe CROSS JOIN cfg), active AS (SELECT COUNT(*)::int AS n FROM ferengi_traders WHERE active=TRUE) SELECT CASE WHEN target.n=active.n THEN 1 ELSE 0 END FROM target,active;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Ferengi canonical roster has 250 stable distinct named identities",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=250 AND COUNT(DISTINCT display_name)=250 AND COUNT(DISTINCT trader_code)=250 THEN 1 ELSE 0 END FROM ferengi_trader_definitions;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Observe Ferengi class counts for allocation acceptance evidence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FILTER(WHERE st.name='Ferengi Trade Master'),COUNT(*) FILTER(WHERE st.name='Ferengi Cruiser'),COUNT(*) FILTER(WHERE st.name='Ferengi Interceptor'),COUNT(*) FILTER(WHERE st.name='Ferengi Warship'),COUNT(*) FILTER(WHERE st.name='Ferengi Dreadnought') FROM ferengi_trader_definitions d JOIN shiptypes st ON st.shiptypes_id=d.ship_type_id WHERE d.active=TRUE;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Ferengi class allocation uses deterministic cumulative boundaries",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=250 AND COUNT(*) FILTER(WHERE st.name='Ferengi Trade Master')=100 AND COUNT(*) FILTER(WHERE st.name='Ferengi Cruiser')=75 AND COUNT(*) FILTER(WHERE st.name='Ferengi Interceptor')=40 AND COUNT(*) FILTER(WHERE st.name='Ferengi Warship')=25 AND COUNT(*) FILTER(WHERE st.name='Ferengi Dreadnought')=10 THEN 1 ELSE 0 END FROM ferengi_trader_definitions d JOIN shiptypes st ON st.shiptypes_id=d.ship_type_id WHERE d.active=TRUE;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Existing Ferengi Warship catalogue values remain canonical",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN basecost=150000 AND maxattack=5000 AND initialholds=20 AND maxholds=100 AND maxfighters=15000 AND turns=5 AND maxmines=20 AND maxphotons=1 THEN 1 ELSE 0 END FROM shiptypes WHERE name='Ferengi Warship';"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "All five Ferengi ship classes remain NPC-only",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=5 AND BOOL_AND(can_purchase=FALSE) AND BOOL_AND(has_escape_pod=FALSE) THEN 1 ELSE 0 END FROM shiptypes WHERE name IN ('Ferengi Trade Master','Ferengi Cruiser','Ferengi Interceptor','Ferengi Warship','Ferengi Dreadnought');"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Observe Orion player and ship counts for initialization acceptance evidence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT (SELECT COUNT(*) FROM players p WHERE p.is_npc=TRUE AND p.ship_id IS NULL),(SELECT COUNT(*) FROM corp_members cm JOIN corporations c USING(corporation_id) JOIN players p USING(player_id) WHERE c.tag='ORION' AND p.is_npc=TRUE),(SELECT COUNT(*) FROM ships s JOIN ship_ownership so USING(ship_id) JOIN corp_members cm USING(player_id) JOIN corporations c USING(corporation_id) JOIN players p USING(player_id) WHERE c.tag='ORION' AND p.is_npc=TRUE AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Orion active population matches configured target",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH universe AS (SELECT COUNT(*)::int AS sectors FROM sectors), cfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='orion.population.basis_points'),50) AS bp,COALESCE((SELECT value::int FROM config WHERE key='orion.population.minimum'),5) AS minimum), target AS (SELECT GREATEST(cfg.minimum,CEIL(universe.sectors*cfg.bp/10000.0)::int) AS n FROM universe CROSS JOIN cfg), active AS (SELECT COUNT(DISTINCT s.ship_id)::int AS n FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id AND so.is_primary=TRUE JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE AND p.sector_id=s.sector_id JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id AND c.tag='ORION' WHERE COALESCE(s.destroyed,FALSE)=FALSE) SELECT CASE WHEN target.n=active.n THEN 1 ELSE 0 END FROM target,active;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Orion canonical roster contains distinct persistent captain identities",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=5 AND COUNT(DISTINCT name)=5 THEN 1 ELSE 0 END FROM players WHERE is_npc=TRUE AND name IN ('Zydras Heavy Cruiser','Krell Scout','Vex Contraband Runner','Jaxx Smuggler','Sira Market Guard');"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Observe persistent Orion class and personality assignments",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT st.name,s.personality,COALESCE(st.default_personality,'balanced') FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id AND so.is_primary=TRUE JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id AND c.tag='ORION' JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE COALESCE(s.destroyed,FALSE)=FALSE ORDER BY s.ship_id;"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Orion live NPCs retain valid persisted personalities and configured ship classes",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)>=5 AND COUNT(DISTINCT st.shiptypes_id)=5 AND BOOL_AND(COALESCE(s.personality,c.ship_personality,st.default_personality,'balanced') IN ('balanced','offensive','defensive','looter','blockader')) AND BOOL_AND(st.name IN ('Orion Heavy Fighter Patrol','Orion Scout/Looter','Orion Contraband Runner','Orion Smuggler''s Kiss','Orion Black Market Guard')) THEN 1 ELSE 0 END FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id AND so.is_primary=TRUE JOIN players p ON p.player_id=so.player_id AND p.is_npc=TRUE JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id AND c.tag='ORION' JOIN shiptypes st ON st.shiptypes_id=s.type_id WHERE COALESCE(s.destroyed,FALSE)=FALSE;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Set sentinel combat state on one established Ferengi ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull=77,shields=33,fighters=42 WHERE ship_id=(SELECT ship_id FROM ferengi_traders WHERE active=TRUE ORDER BY ferengi_trader_id LIMIT 1);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Set sentinel combat state on one established Orion ship",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE ships SET hull=76,shields=34,fighters=41 WHERE ship_id=(SELECT s.ship_id FROM ships s JOIN ship_ownership so USING(ship_id) JOIN corp_members cm USING(player_id) JOIN corporations c USING(corporation_id) WHERE c.tag='ORION' AND so.is_primary=TRUE ORDER BY s.ship_id LIMIT 1);"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Choose a second deterministic NPC scheduler occurrence",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT floor(extract(epoch from now()))::bigint+20;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "npc_due2": "data.rows.0.0" }
+    },
+    {
+      "name": "Schedule the second actual NPC reconciliation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "UPDATE cron_tasks SET next_due_at=to_timestamp(@{npc_due2}) WHERE name='npc_step';"
+      },
+      "expect": { "status": "ok" }
+    },
+    {
+      "name": "Choose a second scheduler advancement time",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT @{npc_due2}+10;"
+      },
+      "expect": { "status": "ok" },
+      "save": { "npc_now2": "data.rows.0.0" }
+    },
+    {
+      "name": "Replay actual NPC initialization after state has been established",
+      "command": "sys.cron.advance_to",
+      "user": "admin",
+      "data": { "now_s": "@{npc_now2}", "confirm": true },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.tasks_run", "op": ">", "value": 0 }
+      ]
+    },
+    {
+      "name": "Repeated reconciliation creates no duplicate Ferengi or Orion NPC ships",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH universe AS (SELECT COUNT(*)::int AS sectors FROM sectors), fcfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='ferengi.population.percent'),2) AS pct), ftarget AS (SELECT GREATEST(3,CEIL(universe.sectors*fcfg.pct/100.0)::int) AS n FROM universe CROSS JOIN fcfg), ocfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='orion.population.basis_points'),50) AS bp,COALESCE((SELECT value::int FROM config WHERE key='orion.population.minimum'),5) AS minimum), otarget AS (SELECT GREATEST(ocfg.minimum,CEIL(universe.sectors*ocfg.bp/10000.0)::int) AS n FROM universe CROSS JOIN ocfg), f AS (SELECT COUNT(*)::int AS n,COUNT(DISTINCT ship_id)::int AS unique_n FROM ferengi_traders WHERE active=TRUE), o AS (SELECT COUNT(DISTINCT s.ship_id)::int AS n FROM ships s JOIN ship_ownership so USING(ship_id) JOIN corp_members cm USING(player_id) JOIN corporations c USING(corporation_id) WHERE c.tag='ORION' AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE) SELECT CASE WHEN f.n=ftarget.n AND f.unique_n=f.n AND o.n=otarget.n THEN 1 ELSE 0 END FROM f,o,ftarget,otarget;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Ferengi re-reconciliation preserves established ship combat state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM ships WHERE hull=77 AND shields=33 AND fighters=42;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Orion re-reconciliation preserves established ship combat state",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT COUNT(*) FROM ships WHERE hull=76 AND shields=34 AND fighters=41;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

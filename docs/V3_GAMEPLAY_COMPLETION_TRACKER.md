@@ -4,8 +4,15 @@ Reviewed: 19 November 2026. This is a concise current summary; detailed test
 logs and transactions belong in the linked acceptance reports. Do not infer
 that an entire subsystem is verified from a focused scenario.
 
-**Parity refresh — 19 November 2026:** 36 VERIFIED, 23
-IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 2 promoted
+**Parity refresh — 19 November 2026:** 39 VERIFIED, 20
+IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED, 0 MISSING. Autonomous batch 3
+verified Ferengi and Orion NPC population reconciliation and the Ferengi fleet
+catalogue (`NPC-POP-01` through `NPC-POP-03`) against disposable PostgreSQL,
+including full BigBang roster evidence and serving-server restart. The focused
+run found and fixed Orion initialization defects: the routine passed the owner
+player ID where a corporation ID was required, and it assigned the new ship
+without updating the captain's sector. Exact clause evidence is in the matrix.
+Autonomous batch 2 promoted
 `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04` from focused
 disposable-PostgreSQL acceptance. The market test exposed fixture contamination
 from unrelated higher-priority ORE orders; its fixture now isolates the book

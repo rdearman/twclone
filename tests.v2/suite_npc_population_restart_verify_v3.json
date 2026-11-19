@@ -1,0 +1,48 @@
+{
+  "name": "V3 Ferengi and Orion population restart persistence",
+  "version": "2.0.0",
+  "protocol_category": "22_NPC_Faction_Population",
+  "description": "Runs after the acceptance harness restarts the serving V3 game server; checks targets, unique identities, and preserved ship state in the same disposable PostgreSQL database.",
+  "tests": [
+    {
+      "name": "Authenticate after serving game-server restart",
+      "setup": "macro_bootstrap_admin"
+    },
+    {
+      "name": "Ferengi and Orion target populations persist without duplicate ship identities",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "WITH universe AS (SELECT COUNT(*)::int AS sectors FROM sectors), fcfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='ferengi.population.percent'),2) AS pct), ftarget AS (SELECT GREATEST(3,CEIL(universe.sectors*fcfg.pct/100.0)::int) AS n FROM universe CROSS JOIN fcfg), ocfg AS (SELECT COALESCE((SELECT value::int FROM config WHERE key='orion.population.basis_points'),50) AS bp,COALESCE((SELECT value::int FROM config WHERE key='orion.population.minimum'),5) AS minimum), otarget AS (SELECT GREATEST(ocfg.minimum,CEIL(universe.sectors*ocfg.bp/10000.0)::int) AS n FROM universe CROSS JOIN ocfg), f AS (SELECT COUNT(*)::int AS n,COUNT(DISTINCT ship_id)::int AS distinct_n FROM ferengi_traders WHERE active=TRUE), o AS (SELECT COUNT(DISTINCT s.ship_id)::int AS n FROM ships s JOIN ship_ownership so USING(ship_id) JOIN corp_members cm USING(player_id) JOIN corporations c USING(corporation_id) WHERE c.tag='ORION' AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE) SELECT CASE WHEN f.n=ftarget.n AND f.distinct_n=f.n AND o.n=otarget.n THEN 1 ELSE 0 END FROM f,o,ftarget,otarget;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Established NPC ship state survives server restart and startup reconciliation",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN (SELECT COUNT(*) FROM ships WHERE hull=77 AND shields=33 AND fighters=42)=1 AND (SELECT COUNT(*) FROM ships WHERE hull=76 AND shields=34 AND fighters=41)=1 THEN 1 ELSE 0 END;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    },
+    {
+      "name": "Orion captain ownership remains consistent with active ship sector",
+      "command": "sys.raw_sql_exec",
+      "user": "admin",
+      "data": {
+        "sql": "SELECT CASE WHEN COUNT(*)=5 AND BOOL_AND(p.sector_id=s.sector_id) THEN 1 ELSE 0 END FROM ships s JOIN ship_ownership so ON so.ship_id=s.ship_id JOIN players p ON p.player_id=so.player_id JOIN corp_members cm ON cm.player_id=p.player_id JOIN corporations c ON c.corporation_id=cm.corporation_id WHERE c.tag='ORION' AND so.is_primary=TRUE AND COALESCE(s.destroyed,FALSE)=FALSE;"
+      },
+      "expect": { "status": "ok" },
+      "asserts": [
+        { "path": "data.rows.0.0", "op": "==", "value": 1 }
+      ]
+    }
+  ]
+}

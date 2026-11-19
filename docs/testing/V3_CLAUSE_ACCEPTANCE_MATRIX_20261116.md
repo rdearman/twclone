@@ -2,12 +2,12 @@
 
 Working matrix derived from the approved decision register and the 67-row parity closure. Parent requirement status is separate from clause evidence: passing one clause does not promote its parent. “Implemented but untested” means an implementation path exists but no clause-specific executed acceptance is recorded.
 
-Reviewed: 19 November 2026, after autonomous parity batch 1.
+Reviewed: 19 November 2026, after autonomous parity batch 3.
 
 ## Current measures
 
-- Parent requirements: 67 (36 VERIFIED, 23 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`. EXC-05's placement/fill/retry clauses passed, but its separate concurrent settlement acceptance is still outstanding. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
-- Base clause rows: 227 (107 VERIFIED, 120 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
+- Parent requirements: 67 (39 VERIFIED, 20 IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED). Autonomous batch 1 verified `CFG-01`, `CFG-02`, `CFG-04`, `EXC-04`, and `V3-PHOTON-DURATION-01`; batch 2 verified `CFG-03`, `SHIP-02`, `SHIP-04`, and `POP-04`; batch 3 verified `NPC-POP-01`, `NPC-POP-02`, and `NPC-POP-03`. EXC-05's placement/fill/retry clauses passed, but its separate concurrent settlement acceptance is still outstanding. `POP-07` remains IMPLEMENTED_UNVERIFIED because its corporation-capture sentence is a documentary scope constraint, and this matrix defines VERIFIED as executable runtime evidence.
+- Base clause rows: 227 (116 VERIFIED, 111 IMPLEMENTED_UNTESTED). Addenda identify further independently verified behavior slices, concrete incomplete behaviors, and the 1 exact blocked decision. These clause counts do not replace the 67 parent requirement counts.
 - The initial 227 rows split the approved statements by sentence and semicolon. Compound statements are further separated where acceptance evidence distinguishes behavior; remaining compound rows are explicitly a working decomposition and should be refined when their acceptance tests are selected.
 - The earlier ten arithmetic/date checks did not promote their parents; the later BANK-03 monthly-retention acceptance below completed that requirement.
 
@@ -294,15 +294,15 @@ unverified.
 | `PLANET-01` | clause 2 | `planet.info` detailed management | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `PLANET-01` | clause 3 | appropriate population/production/morale | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
 | `PLANET-01` | clause 4 | treasury only owner/authorized corporation member | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-01` | clause 1 | Active target is 2% of universe sectors, minimum 3 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-01` | clause 2 | canonical roster has at least 250 stable, individually named identities | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-01` | clause 3 | reconciliation is idempotent and preserves established NPC state | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-02` | clause 1 | Active target is 0.5% of sectors, minimum 5 | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-02` | clause 2 | canonical roster has at least 100 distinct stable names | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-02` | clause 3 | existing personalities and ship classes remain | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-03` | clause 1 | Five NPC-only classes: Trade Master/Cruiser/Interceptor/Warship/Dreadnought | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-03` | clause 2 | allocation 40/30/16/10/4 percent with deterministic counts summing exactly to target population | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
-| `NPC-POP-03` | clause 3 | retain existing Warship values | IMPLEMENTED_UNTESTED | No executed clause-specific acceptance reference recorded yet. |
+| `NPC-POP-01` | clause 1 | Active target is 2% of universe sectors, minimum 3 | VERIFIED | `suite_npc_population_targets_v3.json::case-0013`; actual `npc_step` on disposable PostgreSQL matched the configured formula against sector and active-trader counts. |
+| `NPC-POP-01` | clause 2 | canonical roster has at least 250 stable, individually named identities | VERIFIED | `suite_npc_population_targets_v3.json::case-0014`; 250 distinct display names and trader codes read from the migrated canonical roster. |
+| `NPC-POP-01` | clause 3 | reconciliation is idempotent and preserves established NPC state | VERIFIED | `suite_npc_population_targets_v3.json::case-0029`–`case-0032`, `suite_npc_population_restart_verify_v3.json::case-0002`–`case-0003`; a second actual scheduler run and serving-server restart retained target counts, unique ship IDs and sentinel hull/shield/fighter values. |
+| `NPC-POP-02` | clause 1 | Active target is 0.5% of sectors, minimum 5 | VERIFIED | `suite_npc_population_targets_v3.json::case-0020`, `suite_npc_population_restart_verify_v3.json::case-0002`; the configured formula matched live active Orion ships before and after serving-server restart. |
+| `NPC-POP-02` | clause 2 | canonical roster has at least 100 distinct stable names | VERIFIED | `suite_npc_population_bigbang_roster_v3.json::case-0002` passed against the complete migrated BigBang world after a serving-server restart; SQL confirmed at least 100 distinct named Orion NPC members. |
+| `NPC-POP-02` | clause 3 | existing personalities and ship classes remain | VERIFIED | `suite_npc_population_targets_v3.json::case-0021`–`case-0023`, `suite_npc_population_restart_verify_v3.json::case-0004`; acceptance checked distinct configured Orion classes and effective personality precedence (ship override, corporation default, ship-type default, balanced fallback), then confirmed captain/ship sector consistency after restart. |
+| `NPC-POP-03` | clause 1 | Five NPC-only classes: Trade Master/Cruiser/Interceptor/Warship/Dreadnought | VERIFIED | `suite_npc_population_targets_v3.json::case-0018`; all five catalogue entries were present and each was non-purchasable with no escape pod. |
+| `NPC-POP-03` | clause 2 | allocation 40/30/16/10/4 percent with deterministic counts summing exactly to target population | VERIFIED | `suite_npc_population_targets_v3.json::case-0016`; the 250-entry active roster returned exact deterministic counts 100/75/40/25/10, summing to target. |
+| `NPC-POP-03` | clause 3 | retain existing Warship values | VERIFIED | `suite_npc_population_targets_v3.json::case-0017`; authoritative SQL confirmed the approved Ferengi Warship costs, attack, holds, fighter, turn, mine and photon values. |
 | `FED-01` | clause 1 | Overt aggression in sectors 1–10 triggers immediate Captain Z intervention, destroying attacker ship and podding player | VERIFIED | `tests.v2/suite_fedspace_aggression_captainz.json`. |
 | `FED-01` | clause 2 | no travel delay or duplicate ISS dispatch | VERIFIED | `tests.v2/suite_fedspace_aggression_captainz.json`. |
 | `FED-02` | clause 1 | BigBang-generated `msl_sectors` is authoritative and unchanged during game | VERIFIED | `tests.v2/suite_fedspace_msl_asset_enforcement.json`. |
@@ -518,6 +518,31 @@ Godot loopback mock-server tests ran with local network permission and a writabl
   restart acceptance above. The existing penalty and pursuit clauses remain
   unverified.
 - No daily POP-05 policy defaults or economy balancing constants were added.
+
+## Acceptance update — 2026-11-19 NPC population batch
+
+- `NPC-POP-01` through `NPC-POP-03` are VERIFIED. Acceptance ran against both
+  the ordinary disposable PostgreSQL fixture and the complete migrated
+  BigBang world. Each world ran the 32-case target/fleet suite; serving-server
+  restart verification passed 4/4 in each world, and the full BigBang roster
+  check passed 2/2. The restart cases authenticated again through the restarted
+  game server and read persisted authoritative rows.
+- The target suite proves Ferengi 2%/minimum-3 and Orion 0.5%/minimum-5 active
+  populations, 250 unique Ferengi identities, 100+ stable Orion identities,
+  the 40/30/16/10/4 class allocation, NPC-only classes, retained Warship
+  values, idempotent scheduler replay, and preservation of sentinel combat
+  state. It also checks Orion class/personality precedence and captain/ship
+  sector consistency.
+- The run found two Orion initializer defects and fixed them: wrong corporation
+  identifier passed when linking deployed captains, and captain sector not
+  updated with the newly deployed ship. The raw-SQL diagnostic's display of a
+  null text field as integer zero was a serializer quirk; acceptance now checks
+  effective personality via the approved precedence chain. No unsupported
+  legacy migration was retained.
+- Focused Python checks: 18 passed, 206 subtests passed. `make -j4` passed.
+- Parent classification after this batch: **39 VERIFIED, 20
+  IMPLEMENTED_UNVERIFIED, 7 PARTIAL, 1 BLOCKED**. Clause classification:
+  **116 VERIFIED, 111 IMPLEMENTED_UNTESTED** of the 227 base rows.
 
 
 ## Acceptance update — 2026-11-18 parity closure batch 3

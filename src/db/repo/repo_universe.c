@@ -235,23 +235,43 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
     if (db_res_step (res, &err)) current = db_res_col_i32 (res, 0, &err);
     db_res_finalize (res);
 
-    static const char *const personalities[] =
-      {"offensive", "defensive", "looter", "blockader", "balanced"};
+    static const char *const orion_shiptypes[] =
+      {"Orion Heavy Fighter Patrol", "Orion Scout/Looter",
+       "Orion Contraband Runner", "Orion Smuggler's Kiss",
+       "Orion Black Market Guard"};
     while (current < target)
       {
-        const char *personality = personalities[current % 5];
+        const char *shiptype_name = orion_shiptypes[current % 5];
         int type_id = 0;
+        char personality[32] = "balanced";
         char type_sql[512];
         if (sql_build (db,
-                       "SELECT shiptypes_id FROM shiptypes WHERE enabled=TRUE "
-                       "AND default_personality={1} ORDER BY shiptypes_id LIMIT 1",
+                       "SELECT shiptypes_id,COALESCE(default_personality,'balanced') "
+                       "FROM shiptypes WHERE enabled=TRUE AND name={1} "
+                       "ORDER BY shiptypes_id LIMIT 1",
                        type_sql, sizeof type_sql) != 0 ||
-            !db_query (db, type_sql, (db_bind_t[]){db_bind_text (personality)},
+            !db_query (db, type_sql, (db_bind_t[]){db_bind_text (shiptype_name)},
                        1, &res, &err))
+          {
+            LOGE ("[ori] failed to query configured ship type '%s': %s",
+                  shiptype_name, err.message);
             return err.code ? err.code : -1;
-        if (db_res_step (res, &err)) type_id = db_res_col_i32 (res, 0, &err);
+          }
+        if (db_res_step (res, &err))
+          {
+            type_id = db_res_col_i32 (res, 0, &err);
+            const char *stored_personality = db_res_col_text (res, 1, &err);
+            if (stored_personality && *stored_personality)
+              snprintf (personality, sizeof personality, "%s",
+                        stored_personality);
+          }
         db_res_finalize (res);
-        if (type_id <= 0) return -1;
+        if (type_id <= 0)
+          {
+            LOGE ("[ori] configured ship type '%s' is unavailable or disabled",
+                  shiptype_name);
+            return -1;
+          }
 
         int64_t player_id = 0, ship_id = 0;
         char name[96] = {0};
@@ -264,7 +284,11 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
           "ORDER BY p.player_id LIMIT 1",
           roster_sql, sizeof roster_sql);
         if (!db_query (db, roster_sql, NULL, 0, &res, &err))
+          {
+            LOGE ("[ori] failed to query unassigned captain roster: %s",
+                  err.message);
             return err.code ? err.code : -1;
+          }
         if (db_res_step (res, &err))
           {
             player_id = db_res_col_i64 (res, 0, &err);
@@ -272,10 +296,19 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
           }
         db_res_finalize (res);
         res = NULL;
-        if (player_id <= 0 || name[0] == '\0') return -1;
+        if (player_id <= 0 || name[0] == '\0')
+          {
+            LOGE ("[ori] population target requires another captain but the named roster is exhausted");
+            return -1;
+          }
 
         db_error_t tx_err;
-        if (!db_tx_begin (db, DB_TX_DEFAULT, &tx_err)) return tx_err.code;
+        if (!db_tx_begin (db, DB_TX_DEFAULT, &tx_err))
+          {
+            LOGE ("[ori] failed to begin captain deployment transaction: %s",
+                  tx_err.message);
+            return tx_err.code;
+          }
         int spawn_sector = home_sector;
         (void) repo_universe_get_random_unprotected_sector (db, &spawn_sector);
         if (spawn_sector <= 10) spawn_sector = home_sector;
@@ -291,7 +324,12 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
               (db_bind_t[]){db_bind_text (name), db_bind_i64 (type_id),
                              db_bind_i64 (spawn_sector), db_bind_text (personality)},
               4, "ship_id", &ship_id, &err))
-          { db_tx_rollback (db, &tx_err); return err.code ? err.code : -1; }
+          {
+            LOGE ("[ori] failed to create ship type=%d for captain=%lld: %s",
+                  type_id, (long long) player_id, err.message);
+            db_tx_rollback (db, &tx_err);
+            return err.code ? err.code : -1;
+          }
 
         char ownership_sql[512], member_sql[512], update_sql[512];
         sql_build (db,
@@ -301,7 +339,8 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
           "INSERT INTO corp_members (corporation_id,player_id,role) "
           "VALUES ({1},{2},'Officer') ON CONFLICT DO NOTHING",
           member_sql, sizeof member_sql);
-        sql_build (db, "UPDATE players SET ship_id={1} WHERE player_id={2}",
+        sql_build (db,
+                   "UPDATE players SET ship_id={1},sector_id={2} WHERE player_id={3}",
                    update_sql, sizeof update_sql);
         if (!db_exec (db, ownership_sql,
                       (db_bind_t[]){db_bind_i64 (ship_id), db_bind_i64 (player_id)},
@@ -310,9 +349,17 @@ repo_universe_ensure_orion_population (db_t *db, int corporation_id,
                       (db_bind_t[]){db_bind_i64 (corporation_id), db_bind_i64 (player_id)},
                       2, &err) ||
             !db_exec (db, update_sql,
-                      (db_bind_t[]){db_bind_i64 (ship_id), db_bind_i64 (player_id)},
-                      2, &err) || !db_tx_commit (db, &tx_err))
-          { db_tx_rollback (db, &tx_err); return err.code ? err.code : -1; }
+                      (db_bind_t[]){db_bind_i64 (ship_id),
+                                     db_bind_i64 (spawn_sector),
+                                     db_bind_i64 (player_id)},
+                      3, &err) || !db_tx_commit (db, &tx_err))
+          {
+            LOGE ("[ori] failed to link ship=%lld to captain=%lld: %s",
+                  (long long) ship_id, (long long) player_id,
+                  err.message[0] ? err.message : tx_err.message);
+            db_tx_rollback (db, &tx_err);
+            return err.code ? err.code : -1;
+          }
         current++;
       }
     return 0;
@@ -364,6 +411,33 @@ int repo_universe_get_corp_owner_by_tag(db_t *db, const char *tag, int *owner_id
     }
     if (res) db_res_finalize(res);
     return err.code ? err.code : -1;
+}
+
+int
+repo_universe_get_corp_id_by_tag (db_t *db, const char *tag,
+                                  int *corporation_id_out)
+{
+    if (!db || !tag || !corporation_id_out) return -1;
+    db_res_t *res = NULL;
+    db_error_t err;
+    db_error_clear (&err);
+    char sql[512];
+    if (sql_build (db,
+                   "SELECT corporation_id FROM corporations WHERE tag={1}",
+                   sql, sizeof sql) != 0 ||
+        !db_query (db, sql, (db_bind_t[]){db_bind_text (tag)}, 1, &res, &err))
+      {
+        if (res) db_res_finalize (res);
+        return err.code ? err.code : -1;
+      }
+    if (!db_res_step (res, &err))
+      {
+        db_res_finalize (res);
+        return err.code ? err.code : -1;
+      }
+    *corporation_id_out = db_res_col_i32 (res, 0, &err);
+    db_res_finalize (res);
+    return err.code ? err.code : 0;
 }
 
 int repo_universe_get_port_sector_by_id_name(db_t *db, int port_id, const char *name, int *sector_out) {
